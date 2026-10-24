@@ -1,0 +1,1651 @@
+{
+	"model": "sonnet",
+	"a": {
+		"21": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 20,
+								"why": "The title of #20 already includes `acceptedTypes(machine, state)` as the way for a caller to ask first, so #21 asks for the same change. I couldn't see #20's full body, so this rests on its title."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.019066800000000002,
+						"ms": 4047,
+						"tokens": 5185
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 20,
+								"why": "The title of #20 already asks for both the accepted set on NoCellError and a public acceptedTypes(machine, state) so a caller can ask first. That is the same change #21 asks for, and #20 is open."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.005253899999999999,
+						"ms": 5108,
+						"tokens": 5218
+					}
+				]
+			}
+		],
+		"46": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a concrete collapse child of the export-map grilling (#43/#41): move eleven resilience modules internal, retype their Cmds onto Cmd.define (from #44), update importers, and write a changeset. It is new work that no open plan covers, so it needs its own plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0262895,
+						"ms": 2712,
+						"tokens": 7509
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a concrete build ticket: move eleven modules into an internal folder, retype their Cmds onto Cmd.define, rewrite six importers, trim exports and the MAINTAINING.md table, and add a changeset. It is a child of the #43 grilling umbrella and depends on the kernel work in #44, but it is not a duplicate and it adds work of its own. No no-rule applies."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0058429,
+						"ms": 4430,
+						"tokens": 7765
+					}
+				]
+			}
+		],
+		"66": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It's a real bug in what the package ships. The withX wrappers drop machine.cmds, so the boundary parse in run silently stops for wrapped machines. #44 fenced the wrappers out on purpose and #46 only moves and retypes them, so this is separate work. The plan can lean toward having the wrappers forward cmds, with a test that wraps a cmds machine and checks a malformed _ok becomes _err."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.047831799999999994,
+						"ms": 5979,
+						"tokens": 11944
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real bug in what the package ships. Wrapping a machine with withDeadline, withResilience or withTelemetry drops `cmds`, so the boundary parse silently stops running. No other ticket covers it, and #44 explicitly fenced the batteries out. The open question of forwarding `cmds` in each wrapper or deriving it in `run` can be carried by a plan with a lean."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0082554,
+						"ms": 5980,
+						"tokens": 11922
+					}
+				]
+			}
+		],
+		"107": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A published entry point names types in its signatures but doesn't export them. That is a real gap in what the package ships. The fix is clear: add type-only re-exports and update the how-to. No open plan covers it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0346155,
+						"ms": 3626,
+						"tokens": 9454
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The published signatures of `@demlik/tea/parity` name `Trace` and `RecorderOptions`, but consumers can't import them. That's a real gap in what the package ships, and the fix is small: type-only re-exports plus a how-to edit. No open plan covers it, because #73 and #81 are docs import sweeps and this is a new export."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.005068700000000001,
+						"ms": 3617,
+						"tokens": 9503
+					}
+				]
+			}
+		],
+		"206": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It is a real bug in what the package ships. Under TS 7, `layer` infers `K` as `string`, so every provider graph with dependencies fails to typecheck. The ticket gives a concrete one-line fix (`const K`) and says the existing `deps.test-d.ts` rejections must still fire. #201 is a longer-term redesign, not this fix, so this is not part of that plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0386156,
+						"ms": 4077,
+						"tokens": 10068
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real bug in what the package ships. Under TS 7, `layer`'s `K` widens to `string`, so every provider with dependencies fails. The fix is a small one: add `const` to `K`, and keep the rejections in `deps.test-d.ts`. #201 is a separate, longer-term redesign, so this ticket is not folded into it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.005186499999999999,
+						"ms": 5043,
+						"tokens": 10075
+					}
+				]
+			}
+		],
+		"212": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It is a mechanical sweep that switches nine examples to the published battery specifiers. Every door exists as of #211, and #205 deliberately limited its scope to one example, so this work is separate and no open ticket carries it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0385388,
+						"ms": 4300,
+						"tokens": 10050
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Examples still copy deep `src/internal/` paths that won't resolve from an installed package, and the doors now exist, so a mechanical import sweep is real work. #205 deliberately scoped this out, so it is its own change and not part of that plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.005786400000000001,
+						"ms": 3933,
+						"tokens": 10064
+					}
+				]
+			}
+		],
+		"360": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It reports a real wrong-default problem in what code-graph ships: ‹product›-specific names in the published rules. #349 only fixed `contracts`, and #344 is a sync, not this narrowing. The fix is clear: narrow the defaults and add a snapshot test and a changeset. The ticket says to land it after #344 because both touch the same file."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0605464,
+						"ms": 3978,
+						"tokens": 15499
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "‹product›-specific names in published code-graph defaults are a real wrong-default bug in what the package ships, and #349 set the precedent. It is separate work from the #344 sync: it narrows the defaults, adds a snapshot test and a changeset, and only needs to run after #344 merges."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0071486,
+						"ms": 4453,
+						"tokens": 15583
+					}
+				]
+			}
+		],
+		"389": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real gap in what backlog-sweep ships: the evidence in github.ts and evidence.ts omits whether a linked PR closes the issue or only references it, and that is the cause of the false already_done calls. Plan #388 changes how `propose` treats already_done verdicts, which is a different change in different code, so this one gets its own plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.062511,
+						"ms": 5460,
+						"tokens": 14541
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 388,
+								"why": "Adding a closes/partial relation per linked PR to the evidence is a real change in github.ts and evidence.ts. It targets the cause of the false already_done calls that #388 is fixing, so it fits as part of that plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.008727200000000001,
+						"ms": 4310,
+						"tokens": 14493
+					}
+				]
+			}
+		],
+		"390": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 389,
+								"why": "Adding summary booleans (allMentionedPathsGone, linkedPullRequestClosedUnmerged) to the backlog-sweep evidence and the obsolete criterion is real work. It is a different signal from #389's closing-vs-partial PR fact, but it edits the same evidence code in the same pass, so it adds to plan #389."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0581946,
+						"ms": 4360,
+						"tokens": 14700
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 389,
+								"why": "Real gap in backlog-sweep evidence, and nothing on main fixes it. It adds derived facts (all named paths gone, linked PR closed unmerged) to the same `gatherEvidence` evidence and verdict criteria that plan #389 is already changing for linked PR facts. It is a different fact from #389's, so it is part of that plan rather than a duplicate."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.007104500000000001,
+						"ms": 5574,
+						"tokens": 14668
+					}
+				]
+			}
+		],
+		"391": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It proposes a new `backlog-sweep duplicates` command, backed by a prototype that found real duplicate groups. The other open backlog-sweep plans (#388, #389, #390) cover evidence and proposal fixes, not a whole-backlog duplicate pass. The design is clear enough for a plan to carry."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.055129500000000005,
+						"ms": 2817,
+						"tokens": 14698
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A new `backlog-sweep duplicates` command is a new feature backed by measured results (9 real groups, no false merges). It reuses the existing TF-IDF index and pairwise verdict question. It isn't covered by plans #388–#390, which only fix proposal and evidence issues."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0047274,
+						"ms": 4299,
+						"tokens": 14687
+					}
+				]
+			}
+		],
+		"392": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The README for backlog-sweep lacks measured reliability of each verdict; this is a doc change in a shipped package. It's distinct from the code-change plans #388-#391, so it starts its own plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0563239,
+						"ms": 2595,
+						"tokens": 14705
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The README for backlog-sweep lacks reliability numbers and the refuted experiments, which is a wrong/missing doc in what the package ships. A builder can add the 'What it can decide' table; it is separate from the code-change plans #388-#391."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0044186,
+						"ms": 2442,
+						"tokens": 14720
+					}
+				]
+			}
+		],
+		"393": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It's a real gap in what code-graph ships: `--boundaries` skips imports from code outside every declared feature, so incremental adoption has a hole. No other ticket or plan covers it. The suggested B4 rule with the shared/lib exemption and the existing ceiling ratchet is concrete enough for a plan to carry."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.059809,
+						"ms": 3180,
+						"tokens": 15320
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It is a real gap in what code-graph ships: `--boundaries` skips imports whose importer sits outside every declared feature, so incremental adoption leaves the wall open. No other ticket or plan covers it. The ticket suggests a concrete rule (B4), a ratchet and fixture tests, so a builder can plan it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0056798000000000005,
+						"ms": 3170,
+						"tokens": 15312
+					}
+				]
+			}
+		],
+		"412": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real gap in code-graph's boundary ratchet. A flat per-scope count lets one new crossing hide behind an unrelated fix, and re-recording the count is an unreviewed way to loosen it. No other ticket or open plan covers it, since #393 and #394 only added the B4 rule. The ticket names a concrete design (a per-edge ledger, auto-pruning, and a `--reason` flag to add entries), so a plan can carry it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0682125,
+						"ms": 4206,
+						"tokens": 17207
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real gap in code-graph's boundary ratchet. A flat count lets a new crossing hide behind an unrelated fix, and re-recording can loosen the ceiling with no review. No other ticket covers it, and #393/#394 only added the B4 rule. The per-edge ledger is a concrete design the plan can carry, so no owner ruling is needed first."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.007650700000000001,
+						"ms": 3892,
+						"tokens": 17118
+					}
+				]
+			}
+		],
+		"413": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a new, real gap in `move apply`. It stages renames and import rewrites together, so a single commit can lose rename detection. No other ticket or plan covers it. Whether apply makes two commits or stages in two phases can be settled in the plan with a lean toward the two-commit suggestion."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0686849,
+						"ms": 5194,
+						"tokens": 17175
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "How should `structure-sweep move apply` keep git rename history intact, given that it stages today and never commits?",
+								"options": [
+									"Make apply create two commits itself: one of pure renames, then one of import rewrites, heals and formatting",
+									"Keep apply staging-only, but add a mode or flag that does the renames as a separate step, so the user commits the renames first and the rewrites second",
+									"Leave the code as it is and document the two-commit workflow in the README",
+									"Reject the ticket: the history loss is not shown to matter for this tool's moves"
+								],
+								"why": "The problem is real: renames mixed with import edits can cut `--follow` history. But the fix would change apply from staging to committing, or add a new step, and that is a policy choice for the owners. No existing ticket or plan covers it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0089096,
+						"ms": 6006,
+						"tokens": 17261
+					}
+				]
+			}
+		],
+		"424": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Stage 3 of the lowering pipeline (#422) needs a lexicon file, schema, proposer and resolver, and none of that exists. It is new work of its own, like #423 for stage 2, and it follows the existing propose-then-review precedent, so a builder can plan it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.07403480000000001,
+						"ms": 4495,
+						"tokens": 18627
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No other ticket covers a lexicon file, schema, proposer or resolver. It is stage 3 of the #422 pipeline, but it is separate work like #423, so it has no plan to join. The ticket gives a clear model (schema'd file, fingerprint in the cache key, propose-style command, unmapped atoms stay unresolved), so it can go straight to a plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0085364,
+						"ms": 4866,
+						"tokens": 18732
+					}
+				]
+			}
+		],
+		"425": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 422,
+								"why": "This is stage 4 of the lowering pipeline in umbrella #422. code-graph has SCCs in scc.ts but emits no condensed DAG, and no pass summarizes callees bottom-up. The deterministic condensation step can be planned now, and the stage 5 labels it consumes can come later."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0750085,
+						"ms": 5068,
+						"tokens": 18753
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Stage 4 of the lowering pipeline is its own piece of work, like the sibling stage tickets #423 and #424, which have separate plans. It needs a deterministic SCC condensation output from code-graph plus a closed callee-fact union (confident label or `unknown`). The design is concrete and the suggested step is buildable. Stage 5 is a dependency, not a reason to say no."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0089953,
+						"ms": 6330,
+						"tokens": 18824
+					}
+				]
+			}
+		],
+		"426": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Stage 5 of the #422 pipeline is a new Jev question that labels each lowered branch (rule, defence, plumbing, re-derived or could-be-data) with an evidence step. Stages 2, 3 and 4 each have their own plan (#423, #424, #425), and no open plan covers this question. It moves #414's question set and folds in #410, so it is not a duplicate of either."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.07604520000000001,
+						"ms": 4445,
+						"tokens": 19086
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It adds a new Jev question set (rule/defence/plumbing/re-derived/could-be-data with an evidence step) that no existing ticket builds. Like the other stage tickets #423–#425, it is its own piece of work under the #422 umbrella, not a duplicate. It also takes over #414's question set and #410's evidence-first ask for this stage."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.009373699999999999,
+						"ms": 5025,
+						"tokens": 19217
+					}
+				]
+			}
+		],
+		"444": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 397,
+								"why": "After the engine swap in PR #443, resolveExportOrigin on the in-process graph starts and stops a tsgo process per call. That is a real regression in what code-graph ships. It is a leftover of the engine move that plan #397 covers, and the fix is to hold one session with an explicit dispose."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.07181749999999999,
+						"ms": 4507,
+						"tokens": 18624
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 397,
+								"why": "The engine swap in PR #443 (lane #397) left `resolveExportOrigin` starting a tsgo process on every call. That is a real cost in what the package ships, and it is part of the same engine-swap work. The fix is to hold one session with an explicit dispose, so a plan can carry it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0069978,
+						"ms": 4527,
+						"tokens": 18597
+					}
+				]
+			}
+		],
+		"468": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real false-positive bug in what code-graph ships: `--unreachable` lists framework entry points as dead. No other ticket or open plan covers it. The suggested fix is a closed set of per-framework conventions, so a builder can plan it with fixtures."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0694215,
+						"ms": 3405,
+						"tokens": 18217
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "code-graph's `--unreachable` reports framework entry points (Next.js page, layout and route exports) as dead. That is a real false-positive bug in what the package ships, and no other ticket covers it. The ticket suggests a closed convention set per framework, which a plan can carry."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.004103900000000001,
+						"ms": 3303,
+						"tokens": 18231
+					}
+				]
+			}
+		],
+		"473": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The structure-sweep README says --redact keeps path aliases, but the code turns in-repo aliases into ids. That is a wrong doc in a shipped package, so the README needs a rewrite. #471 changes the divergence check in code, not this sentence, so this is its own small docs change."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.070192,
+						"ms": 5178,
+						"tokens": 17532
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The README says --redact keeps path aliases, but the code turns in-repo aliases into ids. That is a wrong doc in a shipped package, so it needs a fix. #471 covers the divergence check, not this README sentence, so this is its own small docs change."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.007475300000000001,
+						"ms": 4560,
+						"tokens": 17416
+					}
+				]
+			}
+		],
+		"494": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 493,
+								"why": "#493 reports the same problem: `structure-sweep pairs` ships both full sources for every candidate pair, with the same 9,140 pairs and about 9.7M tokens on the same monorepo. It is still open and has a plan. #494's per-anchor Choice batching is one way to fix it, so it belongs on #493."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0631808,
+						"ms": 4165,
+						"tokens": 16008
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 493,
+								"why": "#493 is open and reports the same problem: `structure-sweep pairs` ships both full sources for every candidate pair, with the same 9,140-pair and ~9.7M-token ‹product› numbers. Plan #493 already covers it, so the per-anchor Choice idea belongs there."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0085473,
+						"ms": 4006,
+						"tokens": 16040
+					}
+				]
+			}
+		],
+		"524": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It adds new boundary kinds B17-B19 (binding outside driven adapter, worker call cycle, cross-workspace relative import) that code-graph doesn't judge today. It is a separate release from #523's B11-B14, so it is its own work."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0702277,
+						"ms": 4279,
+						"tokens": 17761
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "B17-B19 are new ledger kinds that need building, and the ticket already states its design decisions. It is Part C of a series, but it ships as its own minor release separate from #523's B11-B14 (Part B), so it is not part of that plan."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.007308200000000001,
+						"ms": 4250,
+						"tokens": 17782
+					}
+				]
+			}
+		],
+		"569": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The new spawn/tell helpers are reachable only from one how-to index line, so the docs need links from the README and the Effect-engine how-to, and maybe a glossary entry. No open plan covers this, and no earlier ticket asked for it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.07489470000000001,
+						"ms": 3773,
+						"tokens": 19051
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Docs for the new spawn and tell helpers are hard to find: one how-to index link, nothing in the README, glossary or Effect-engine how-to. That is a real gap in what the package ships. The fix is clear: add links and maybe a glossary line. No open plan covers it, and the generator question can be carried with a lean."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0074492,
+						"ms": 4191,
+						"tokens": 19136
+					}
+				]
+			}
+		],
+		"575": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Three code-graph test files still spell long timeouts per test, so a new test added to them can time out at 45s. This is real, small work, and it lies outside #573's named files, which PR #574 is already closing. The durable-agent file conflicts with #573's criterion 5, but the plan can carry that with a lean to leave it untouched."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0798094,
+						"ms": 5695,
+						"tokens": 19778
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 573,
+								"why": "Three code-graph test files still spell a per-test long timeout, the same slip #573 removes elsewhere, so a new slow test there times out at 45s. This adds missed cases to #573's work. The durable-agent file conflicts with criterion 5, so the plan can leave it alone."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.007450600000000001,
+						"ms": 4399,
+						"tokens": 19590
+					}
+				]
+			}
+		],
+		"682": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket asks for a concrete rename (door to impure in code-graph, to subpath in tea), an ADR superseding 0023's naming, exporting the schema, and deriving BOUNDARY_KINDS. ADR 0016 already covers a hard break in a minor at 0.x, so a plan can carry this with a lean. No open plan covers it."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0978402,
+						"ms": 3939,
+						"tokens": 24546
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It's a real vocabulary rename across code-graph and tea. The ticket names the target words, which code-graph's docs and its existing impure-* kinds already use, and ADR 0016 already covers a breaking removal in a minor at 0.x. It overlaps no open plan, so a builder can plan it, with a new ADR to supersede the naming in ADR 0023."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.009551200000000001,
+						"ms": 5399,
+						"tokens": 24683
+					}
+				]
+			}
+		],
+		"717": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 715,
+								"why": "A partial port scope silently leaving folders unjudged breaks the fail-closed promise, and it's a gap in the port layout work that #715 covers. The fix is to refuse at load and drop the dead `index`/`unknown` zone rows, so it adds to plan #715."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.10220060000000002,
+						"ms": 3972,
+						"tokens": 25612
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": 715,
+								"why": "It is a real fail-closed gap in the port layout that #715 added: a partial port scope is accepted and part of the hexagon goes unjudged. It adds a missing case, a refusal at load plus dropping the dead `index` and `unknown` zone rows, to the work plan #715 covers. Nothing needs an owner's ruling, because the fix follows the existing exit-2 refusal for mixed scopes."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.010156499999999999,
+						"ms": 4993,
+						"tokens": 25776
+					}
+				]
+			}
+		]
+	},
+	"b": {
+		"1919": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"rule": "not_work",
+								"reason": "won't do: not a work item",
+								"why": "The ticket only says 'check this link' with an external webhook.site URL. It asks for no change to the repo, so there's nothing to build. I did not open the link."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0493016,
+						"ms": 3769,
+						"tokens": 12980
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"rule": "not_work",
+								"reason": "won't do: not a work item",
+								"why": "The ticket only holds an external webhook.site link and asks for no change to the repo. It is not a work item."
+							}
+						},
+						"error": null,
+						"usd": 0.0039678000000000005,
+						"ms": 2281,
+						"tokens": 12964,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4017": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket reports a real defect: review-head-* worktree paths have no session segment, so the #2785 idle reclaim can never match. #4004 covers only the missing --lock, not the unreachable reclaim, so this isn't a duplicate. The open question (add a session segment or reclaim on another key) is one a plan can settle with a lean, so it doesn't need an owner ruling."
+							}
+						},
+						"error": null,
+						"usd": 0.0567984,
+						"ms": 4052,
+						"tokens": 14415,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The review-head worktree path has no owner segment, so the #2785 idle-reclaim can never match. That is a real under-reaping bug. #4004 only covers the missing --lock, which is a smaller part of this ticket. The open question (session segment or another key) can go into a plan with a lean."
+							}
+						},
+						"error": null,
+						"usd": 0.0047273,
+						"ms": 3698,
+						"tokens": 14367,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4065": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4014,
+								"why": "#4014 (open) already reports subprocess-spawning pipeline-cli tests timing out at vitest's 5s default under load; this ticket is the same flake seen in more files."
+							}
+						},
+						"error": null,
+						"usd": 0.0519055,
+						"ms": 2768,
+						"tokens": 13856,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4014,
+								"why": "#4014 already reports subprocess-spawning pipeline-cli tests timing out at vitest's 5s default under load; this ticket reports the same problem in the class-probe and guard-content-probe tests."
+							}
+						},
+						"error": null,
+						"usd": 0.0035790000000000006,
+						"ms": 2650,
+						"tokens": 13873,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4579": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4573,
+								"why": "#4573 asks for the same change: convert write-code's sourced scripts and the SKILL.md/repair.md fences to executed/stdout form under ADR 0232. The script count differs (26 vs 30), but the scope is the same."
+							}
+						},
+						"error": null,
+						"usd": 0.057172,
+						"ms": 3494,
+						"tokens": 14654,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4573,
+								"why": "#4573 is the open ticket for converting write-code's sourced scripts and its SKILL.md/repair.md fences to the executed form under ADR 0232. #4579 asks for the same conversion; only the script count differs (30 vs 26), probably because PR #4578 added three extractions. The wt_preflight contract-change concern belongs on #4573."
+							}
+						},
+						"error": null,
+						"usd": 0.0061079,
+						"ms": 3862,
+						"tokens": 14676,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4610": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A stated invariant in the intake contract ('nine' canonicals, all in this file) is false against the validator's eleven, and two live in ship-it/SKILL.md. It's a small doc fix that needs a plan and a builder. #4607 only touches fences, so it doesn't cover this."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0513535,
+						"ms": 2845,
+						"tokens": 13769
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A stated invariant in the intake contract (nine canonicals, all in this file) is now false versus the validator's eleven, with two living in ship-it/SKILL.md. It's a small doc fix, not covered by #4607's fence scope, and no open ticket or plan carries it."
+							}
+						},
+						"error": null,
+						"usd": 0.0045331,
+						"ms": 2581,
+						"tokens": 13766,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4934": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "Should build-epic's fresh-per-commit subagents run in git worktrees or in the primary checkout? The answer decides whether the four worktree-guard and worktree-sweep hooks are ported or retired.",
+								"options": [
+									"Worktrees: keep per-commit subagents in worktrees, so the four hooks are ported.",
+									"Primary checkout: run every per-commit subagent in the primary checkout, and retire the hooks only where evidence shows the crash mode is gone."
+								],
+								"why": "The ticket is a real work item that a founder ruling is holding. The worktree-vs-primary decision belongs to the build-epic authoring session (flagged on #4912), and a port and a retirement are opposite answers depending on it. It is not a duplicate of #4927 (its parent) or #4815."
+							}
+						},
+						"error": null,
+						"usd": 0.0542757,
+						"ms": 4970,
+						"tokens": 13688,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "Do build-epic's fresh-per-commit conductor subagents run in worktrees or in the primary checkout? The four worktree-hook verdicts (worktree-guard pre-file, pre-bash, enter, and reap/worktree-sweep) depend on the answer.",
+								"options": [
+									"Worktrees: keep the worktree model, so the four hooks are re-graded PORT",
+									"Primary checkout: every per-commit subagent runs there, so hooks whose crash mode no longer exists are re-graded RETIRE, with per-hook evidence"
+								],
+								"why": "The ticket is a deliberate hold. A founder ruling on 2026-08-08 deferred the worktree-vs-primary decision to the build-epic authoring session (#4912), and no work may start before it. It is not a duplicate: #4927 is its parent and #4815 audits different machinery. Because an owner must choose before anything can be built, the next step is a ruling."
+							}
+						},
+						"error": null,
+						"usd": 0.0082868,
+						"ms": 5037,
+						"tokens": 13743,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5056": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 reports the same bug: kp_branch_pin reads every finished same-session lane's worktree as live-lane, so repair is permanently blocked. It is still open."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0500795,
+						"ms": 2736,
+						"tokens": 13398
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 reports the same defect: kp_branch_pin classifies every finished same-session lane worktree as live-lane, which permanently blocks repair. #5056 adds the crew-dispatch detail and the repro, but it is the same problem."
+							}
+						},
+						"error": null,
+						"usd": 0.0052825,
+						"ms": 2932,
+						"tokens": 13439,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5059": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 reports the same problem: kp_branch_pin reads a finished same-session sibling lane as live-lane, so repair is permanently blocked. #5056 and #5042 describe the same refusal, and #4868 is the earliest of them."
+							}
+						},
+						"error": null,
+						"usd": 0.052500500000000005,
+						"ms": 10615,
+						"tokens": 13500,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 already reports the same problem: kp_branch_pin reads a finished same-session sibling lane as live-lane, so repair is permanently blocked. #5056 and #5042 describe the same collision."
+							}
+						},
+						"error": null,
+						"usd": 0.0035279000000000005,
+						"ms": 3084,
+						"tokens": 13461,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5806": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "A valid Closes keyword didn't auto-close on one queue merge but did on another, and the cause is unknown. Someone has to compare the two PRs' closingIssuesReferences and see whether the link ever existed. The fix (a ship-skill assertion, or checking issue state after merge) depends on that finding."
+							}
+						},
+						"error": null,
+						"usd": 0.0484341,
+						"ms": 3668,
+						"tokens": 12497,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "A valid Closes keyword didn't auto-close on one queue merge but did on another, and the cause is unknown. Someone has to compare closingIssuesReferences for the two PRs and test whether a body edit or other references broke the link. The finding then decides whether the ship skill or the driver needs a change."
+							}
+						},
+						"error": null,
+						"usd": 0.0057981000000000005,
+						"ms": 3624,
+						"tokens": 12512,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5878": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5811,
+								"why": "#5811 is still open and reports the same flaw in `lane prove`. It says the verb proves a no-PR outcome from any recent comment. This ticket describes that same gap, with no author or marker check on the diagnosis comment."
+							}
+						},
+						"error": null,
+						"usd": 0.0502478,
+						"ms": 4450,
+						"tokens": 12798,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5811,
+								"why": "#5811 is still open and already reports that lane prove proves a no-PR outcome from any recent comment. This ticket describes the same weakness in traceDiagnosis, with no author or marker check."
+							}
+						},
+						"error": null,
+						"usd": 0.0053725000000000005,
+						"ms": 2990,
+						"tokens": 12668,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5887": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5829,
+								"why": "#5829 (lane prove range arms: artifact proof for epic children without a per-child PR) already covers deciding and implementing what a child's DONE claims in `lane prove` under the one-PR epic shape."
+							}
+						},
+						"error": null,
+						"usd": 0.049797100000000004,
+						"ms": 2840,
+						"tokens": 12990,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5829,
+								"why": "#5829 (lane prove range arms: artifact proof for epic children without a per-child PR) asks for the same change. Both want `lane prove` to stop requiring a per-child PR for a child DONE and to claim a range or local landing instead."
+							}
+						},
+						"error": null,
+						"usd": 0.004669100000000001,
+						"ms": 3100,
+						"tokens": 13001,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5945": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "Not a duplicate: #5941, #5818 and #5799 are different count divergences. §8 and ADR 0249 disagree on the number of ship-gate parts. Nobody yet knows whether the doc lost the eval gate or the ADR describes one that never landed there. Reading the history of §8 and #5526 answers that before any fix or ruling."
+							}
+						},
+						"error": null,
+						"usd": 0.0533259,
+						"ms": 5623,
+						"tokens": 13338,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "§8 lists two gates while ADR 0249 says it keeps three, and the ticket doesn't know which side is wrong. Reading the git history of §8 and the eval-layer removal (#5526) should settle that, and only then can the fix be chosen. No other ticket covers this: #5941, #5818 and #5799 are about counts elsewhere in the doc."
+							}
+						},
+						"error": null,
+						"usd": 0.0060272,
+						"ms": 4032,
+						"tokens": 13133,
+						"problems": []
+					}
+				]
+			}
+		],
+		"6062": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "How should a build claim held by a dead session be recoverable in-band?",
+								"options": [
+									"Give the build claim a TTL so a stale marker expires on its own",
+									"Add a `build claim --takeover` that proves the holder is dead (no ledger movement since the marker) before taking over",
+									"Add a sweep verb that retracts stale claim markers, like `lane stale` does for lanes"
+								],
+								"why": "The wedge is real: a dead session's marker blocks the issue and no verb can clear it. The fix changes claim ownership and race semantics, and the ticket names three different shapes, so an owner has to pick one before a builder starts. No existing ticket covers it; #5928 is the triage claim, and #6060 is about lane and epic namespaces."
+							}
+						},
+						"error": null,
+						"usd": 0.0490576,
+						"ms": 4810,
+						"tokens": 12370,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "How should a build claim held by a dead session be recoverable in-band?",
+								"options": [
+									"Give the build claim a TTL, as triage claim got in #5928, so a stale marker expires on its own",
+									"Add a `build claim --takeover` that proves the holder is dead (no ledger movement since the marker) before taking the claim",
+									"Add a sweep verb, like `lane stale` but for the claim side, that retracts markers whose holder is dead"
+								],
+								"why": "This is a real wedge: a lost-race claim from a dead session has no in-band remedy, and no other ticket covers the build-claim side. The ticket itself lists TTL, takeover and sweep as options, and each is a different policy and trade-off, so an owner has to choose before a builder starts."
+							}
+						},
+						"error": null,
+						"usd": 0.0067615999999999996,
+						"ms": 4389,
+						"tokens": 12303,
+						"problems": []
+					}
+				]
+			}
+		],
+		"6363": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The front-door contract's `status settings` transcripts are stale (4 keys against 7 in the registry), and no test checks them. That is a wrong doc in what the package ships. The fix is to re-render the transcripts and add a drift test, or to stop enumerating keys. A plan can carry that choice. No other open ticket covers this file or these transcripts, and #6301 and #6348 are related but different."
+							}
+						},
+						"error": null,
+						"usd": 0.049762999999999995,
+						"ms": 4540,
+						"tokens": 12623,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The front-door contract's `status settings` transcripts show 4 keys while the registry has 7, and no test catches the drift. That is a real wrong doc in what the package ships. #6301 covers skill prose restating config values, but not these verb-output transcripts or a registry-to-contract drift check. The plan can choose between re-rendering the transcripts with a test and dropping the key enumeration."
+							}
+						},
+						"error": null,
+						"usd": 0.007404399999999999,
+						"ms": 4601,
+						"tokens": 12664,
+						"problems": []
+					}
+				]
+			}
+		],
+		"6382": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket reports a real stale docblock in governed-roots.ts, and no other ticket or open plan covers it. #6296's acceptance criteria barred editing that module, so this is a small comment-only fix for a builder."
+							}
+						},
+						"error": null,
+						"usd": 0.048235799999999995,
+						"ms": 4196,
+						"tokens": 12417,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The docblock in governed-roots.ts is stale and a small comment-only fix is needed. #6296's own criteria keep this key module untouched, so no open ticket carries it, and no other ticket covers this file's comment."
+							}
+						},
+						"error": null,
+						"usd": 0.006099,
+						"ms": 4065,
+						"tokens": 12450,
+						"problems": []
+					}
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,156 @@
+{
+	"note": "Experiment 133, part A. What really happened to each kamp-us/demlik ticket, read by hand from its closing comment and the merged pull request, before any sort answer was seen. A `fold` ticket was folded by triage into another ticket (`into`) that was still open when this one was filed, and its work landed in that ticket's pull request. Where two targets are right, both are listed: 424 to 426 shipped bundled with #423, which was one stage of the open umbrella #422. A `control` ticket was filed while a related ticket it names (`near`) was open, and got a plan and a merged pull request of its own; that pull request closes no other ticket. Controls are a seeded draw (seed 133) from the 88 demlik tickets that fit, with #430 skipped on the hand read: #422's closing comment counts it as part of #422. `why` is a few words.",
+	"fold": {
+		"389": { "into": [388], "why": "criteria rows (#389) in #388; PR 486" },
+		"390": { "into": [388], "why": "criteria rows (#390) in #388; PR 486" },
+		"391": { "into": [388], "why": "criteria rows (#391) in #388; PR 486" },
+		"392": { "into": [388], "why": "criteria rows (#392) in #388; PR 486" },
+		"413": { "into": [411], "why": "criteria rows (#413) in #411's block; PR 449" },
+		"424": { "into": [423, 422], "why": "bundled with #423 as lowering pipeline part 2; PR 450" },
+		"425": { "into": [423, 422], "why": "bundled with #423 as lowering pipeline part 2; PR 450" },
+		"426": { "into": [423, 422], "why": "bundled with #423 as lowering pipeline part 2; PR 450" },
+		"444": { "into": [412], "why": "bundled with #412: one tsgo session; PR 446" },
+		"473": { "into": [467], "why": "the (#473) criteria row in #467; PR 474" },
+		"494": { "into": [493], "why": "the (#494) criteria rows in #493; PR 495" },
+		"717": { "into": [714], "why": "folded into #714's PR: same files; PR 718" },
+		"21": { "into": [20], "why": "folded into #20 weeks after filing, one lane ships both; PR 195" }
+	},
+	"control": {
+		"412": { "near": [397], "why": "own PR 446 (it also carried the fold of #444)" },
+		"66": { "near": [44], "why": "own PR 79" },
+		"212": { "near": [205], "why": "own PR 213" },
+		"575": { "near": [573], "why": "own PR 578, a follow-up to #573" },
+		"360": { "near": [344, 345], "why": "own PR 378" },
+		"46": { "near": [43], "why": "own PR 74" },
+		"107": { "near": [51, 50, 73], "why": "own PR 109" },
+		"569": { "near": [567, 568], "why": "own PR 580" },
+		"393": { "near": [384, 387], "why": "own PR 399" },
+		"524": { "near": [523], "why": "own PR 528" },
+		"468": { "near": [448], "why": "own PR 476 (it also carried the fold of #448)" },
+		"206": { "near": [201], "why": "own PR 208" },
+		"682": { "near": [607], "why": "own PR 683" }
+	},
+	"needsInfoNote": "Experiment 133, part B. A seeded draw (seed 133) of 15 from the 51 closed kamp-us/phoenix tickets that ever carried `status:needs-info` (one triage self-test left out), read by hand from triage's comments and what came after, before any sort answer was seen. `end`: built by a merged PR, closed for no answer, closed as not worth doing (`no`), or closed as a duplicate or as covered by an open ticket. `asked`: what the label was waiting on. `answered`: someone gave it. `who`: who held what triage was waiting on: the filer, the code (or the GitHub API: something a scout with read access finds), an owner's ruling on a real question, or an owner's permission only, where triage already knew the answer and a rule (a ticket filed without the agent footer is never closed by triage) kept it from acting. `changed`: the missing fact moved the ticket away from what its own text asks for (a refuted premise turned a fix into a no, or a dup into a fold). `why` is a few words.",
+	"needsInfo": {
+		"1919": {
+			"end": "no_answer",
+			"asked": "what the report is: the body was one external link",
+			"answered": false,
+			"changed": false,
+			"who": "filer",
+			"why": "no defect, no surface in the repo; closed minutes later with no answer"
+		},
+		"4017": {
+			"end": "no",
+			"asked": "the headline claim, which triage read as refuted",
+			"answered": true,
+			"changed": false,
+			"who": "code",
+			"why": "re-triage from source: the claim holds by another path; typed chore, later killed with its campaign"
+		},
+		"4065": {
+			"end": "duplicate",
+			"asked": "any scope left once the open fix for #4014 lands",
+			"answered": true,
+			"changed": false,
+			"who": "code",
+			"why": "dup of #4014; re-triage found the fix landed and closed it"
+		},
+		"4579": {
+			"end": "duplicate",
+			"asked": "whether a hand-filed ticket may be closed as covered by #4573",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "covered by #4573 from the start; the owner said all filings come from agents"
+		},
+		"4610": {
+			"end": "no",
+			"asked": "the filer's call after triage refuted the premise",
+			"answered": true,
+			"changed": true,
+			"who": "code",
+			"why": "the count in the doc is right for that file; closed, premise refuted"
+		},
+		"4934": {
+			"end": "built",
+			"asked": "a ruling the ticket itself said it was held for",
+			"answered": true,
+			"changed": false,
+			"who": "owner_ruling",
+			"why": "the ruling came the next day; then graded and closed"
+		},
+		"5056": {
+			"end": "duplicate",
+			"asked": "whether a ticket with no agent footer may be closed as a dup of #4868",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "dup of #4868; owner ruled such tickets agent-filed"
+		},
+		"5059": {
+			"end": "duplicate",
+			"asked": "same as #5056",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "dup of #4868; same ruling"
+		},
+		"5806": {
+			"end": "no",
+			"asked": "whether anything remains after the timeline refuted the report",
+			"answered": false,
+			"changed": true,
+			"who": "code",
+			"why": "the API timeline shows both closes alike; killed in a sweep, never recurred"
+		},
+		"5878": {
+			"end": "duplicate",
+			"asked": "permission to close as a dup of #5811",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "dup of #5811 finding 2, filed hours earlier"
+		},
+		"5887": {
+			"end": "duplicate",
+			"asked": "permission to close as covered by #5829",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "dup of #5829, which owns the surface"
+		},
+		"5945": {
+			"end": "duplicate",
+			"asked": "permission to close as a dup of #5526",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "dup of #5526; an owner ruling on the fix went onto #5526"
+		},
+		"6062": {
+			"end": "no",
+			"asked": "one owner word to close as covered by a standing ruling",
+			"answered": true,
+			"changed": false,
+			"who": "owner_permission",
+			"why": "covered by the ruling on #5752 and open #5795"
+		},
+		"6363": {
+			"end": "no",
+			"asked": "a human look after the premise failed on main",
+			"answered": false,
+			"changed": true,
+			"who": "code",
+			"why": "filed from a branch: nothing on main; closed in a p2 purge"
+		},
+		"6382": {
+			"end": "duplicate",
+			"asked": "a human to fold it into its open parent #6296",
+			"answered": false,
+			"changed": true,
+			"who": "code",
+			"why": "filed from #6296's branch; on main it is part of open #6296; killed in a sweep"
+		}
+	}
+}
