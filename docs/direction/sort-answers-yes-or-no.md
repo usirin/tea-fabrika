@@ -2,6 +2,11 @@
 
 Decided 2026-10-18.
 
+*Renamed 2026-10-24: in the new pipeline this step is called **triage**, the
+industry's word for it. It takes a ticket from the ledger and triages it to its
+next step. "Sort" had no written reason; it came from "triage only sorts" on
+2026-10-18. Which answers triage gives is being looked at again.*
+
 ## What was decided
 
 - **Sort answers yes or no.** There is no "later", no snooze and no priority.
