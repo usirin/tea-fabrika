@@ -1,0 +1,279 @@
+{
+	"experiment": 128,
+	"boxes": {
+		"none": {
+			"box": "none",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed 57b2c211",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					215.15,
+					209.97,
+					213.77,
+					216.59,
+					218.34
+				],
+				"median": 215.15
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.23,
+				"outsideMedianMs": 0.42
+			},
+			"key": {
+				"keyStaysOut": false,
+				"callWorks": true,
+				"net": true,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": true,
+				"keyFileHit": true,
+				"scanned": 0,
+				"fileHits": 0,
+				"greeting": "hello probe, signed d8e8c351",
+				"home": "",
+				"tmp": "<job>/tmp"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "SIGKILL"
+					},
+					"endedMs": 3.44,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": false,
+					"boxProcessAlive": false,
+					"containerThere": null,
+					"gone": true
+				}
+			}
+		},
+		"srt": {
+			"box": "srt",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed 0144f321",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					325.33,
+					320.46,
+					323.87,
+					321.03,
+					312.75
+				],
+				"median": 321.03
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.23,
+				"outsideMedianMs": 0.42
+			},
+			"key": {
+				"keyStaysOut": true,
+				"callWorks": true,
+				"net": false,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 0,
+				"fileHits": 0,
+				"greeting": "hello probe, signed 2fa06e1c",
+				"home": "",
+				"tmp": "/tmp/claude"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "exit 1: Process killed by signal: SIGKILL"
+					},
+					"endedMs": 6.85,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": false,
+					"boxProcessAlive": false,
+					"containerThere": null,
+					"gone": true
+				}
+			}
+		},
+		"docker": {
+			"box": "docker",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed 836b529e",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					329.19,
+					334.77,
+					338.2,
+					321.82,
+					317.18
+				],
+				"median": 329.19
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.71,
+				"outsideMedianMs": 1.37
+			},
+			"key": {
+				"keyStaysOut": true,
+				"callWorks": true,
+				"net": false,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 0,
+				"fileHits": 0,
+				"greeting": "hello probe, signed fd5e2a42",
+				"home": "/home/node",
+				"tmp": "/tmp"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "exit 137"
+					},
+					"endedMs": 91.29,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": null,
+					"boxProcessAlive": false,
+					"containerThere": false,
+					"gone": true
+				}
+			}
+		}
+	},
+	"inProcess": {
+		"startMedianMs": 0.37,
+		"startMs": [
+			5.23,
+			0.53,
+			0.37,
+			0.33,
+			0.34
+		],
+		"callMedianMs": 0.01
+	},
+	"sizes": {
+		"fabrika": {
+			"wall": 100,
+			"runner": 78,
+			"host": 175,
+			"total": 353
+		},
+		"box": {
+			"boxed": 116,
+			"all": 197
+		}
+	},
+	"date": "2026-10-24",
+	"node": "v26.12.0",
+	"docker": {
+		"buildMs": 138,
+		"installMs": 6638
+	},
+	"dockerClean": {
+		"containers": 0,
+		"left": {
+			"containers": 0,
+			"volumes": 0,
+			"images": 0
+		}
+	}
+}
