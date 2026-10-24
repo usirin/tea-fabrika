@@ -60,5 +60,5 @@ describe("localLedger", () => {
 		} finally {
 			await Effect.runPromise(Scope.close(third.scope, Exit.void));
 		}
-	}, 60_000);
+	});
 });

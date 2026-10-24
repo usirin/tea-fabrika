@@ -382,7 +382,7 @@ describe("a plan's task, reviewed on this machine as each head lands", () => {
 			}),
 		);
 		expect(ghCalled).toBe(false);
-	}, 60_000);
+	});
 });
 
 describe("the local code host", () => {

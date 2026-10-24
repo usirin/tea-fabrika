@@ -393,6 +393,8 @@ describe("whole turns on the fake agent", () => {
 		} finally {
 			holder.kill("SIGKILL");
 		}
+		// A real limit, not room for a slow machine: the holder lets the lock go after 30 s, so the
+		// test must end well before that, or it no longer tests a held copy.
 	}, 15_000);
 
 	it("under the guard: kill -9 of the run's process mid turn stops the guard and the agent, and frees the copy", async () => {
@@ -426,7 +428,7 @@ describe("whole turns on the fake agent", () => {
 			}).pipe(Effect.scoped, Effect.provide(nodeServices)),
 		);
 		expect(t.stop).toBe("end_turn");
-	}, 20_000);
+	});
 
 	it("under the guard, with the copy free: the turn runs as without it", async () => {
 		const folder = scratch();

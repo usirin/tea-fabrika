@@ -307,9 +307,7 @@ const gather = (dir: string, text: string) =>
 	);
 
 describe("facts from a repo at HEAD, with git and code-graph", () => {
-	it("finds where each name is declared, its signature, its callers and the subpaths that publish it", {
-		timeout: 60_000,
-	}, async () => {
+	it("finds where each name is declared, its signature, its callers and the subpaths that publish it", async () => {
 		const dir = await factsRepo();
 		const pack = await gather(
 			dir,
@@ -362,9 +360,7 @@ describe("facts from a repo at HEAD, with git and code-graph", () => {
 		expect(pack.refs).toEqual(["#3"]);
 	});
 
-	it("reads a doc page the report names: the test that names it, and the exported names its code calls", {
-		timeout: 60_000,
-	}, async () => {
+	it("reads a doc page the report names: the test that names it, and the exported names its code calls", async () => {
 		const dir = await factsRepo();
 		// The page as the report writes it, from the package: not at HEAD, and the same path deeper down is.
 		const pack = await gather(dir, "`greet` is shown wrong in `docs/how-to/greet-many.md`.");

@@ -130,7 +130,7 @@ describe("supervisor", () => {
 		expect(out.sup?.restarted).toBe(1);
 		expect(out.sup?.phase).toBe("running");
 		expect(events.filter((e) => e.ev === "tea_error" && e.phase !== "reduce")).toEqual([]);
-	}, 30_000);
+	});
 
 	it("sets a poison message aside after three crashes, and the count goes on without it", async () => {
 		const events: HostEvent[] = [];
@@ -155,7 +155,7 @@ describe("supervisor", () => {
 		expect(out.dead.length).toBe(1);
 		expect(out.sup?.restarted).toBe(3);
 		expect(out.sup?.phase).toBe("running");
-	}, 30_000);
+	});
 
 	it("with dead letters off, the poison runs it past its intensity and the tree goes down", async () => {
 		const events: HostEvent[] = [];
@@ -186,7 +186,7 @@ describe("supervisor", () => {
 		expect(supExit?.data).toContain("shutdown");
 		// c:2 never crashed: it went down over its link, with its supervisor's reason.
 		expect(kinds(out.c2Rows, "exited")[0]?.data).toContain("shutdown");
-	}, 30_000);
+	});
 
 	it("refuses a spec that one poison message would bring down, and other specs that cannot work", () => {
 		expect(supervisor("s", {...SPEC, intensity: 1}).ok).toBe(false);

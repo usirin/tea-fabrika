@@ -1358,7 +1358,6 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 			);
 			expect(wrong).toEqual([]);
 		},
-		120_000,
 	);
 });
 

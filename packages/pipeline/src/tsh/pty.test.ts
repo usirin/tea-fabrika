@@ -46,13 +46,13 @@ describe.skipIf(EXPECT === undefined)("tsh on a terminal", () => {
 		const {out, status} = await script("session.exp");
 		expect(out, out).not.toContain("CHECK FAILED");
 		expect(status).toBe(0);
-	}, 60_000);
+	});
 
 	it("killed with kill -9, opened again: the job is there, and attach by run id goes on from its total", async () => {
 		const {out, status} = await script("kept.exp");
 		expect(out, out).not.toContain("CHECK FAILED");
 		expect(status).toBe(0);
-	}, 60_000);
+	});
 });
 
 describe("tsh from a script", () => {
@@ -66,7 +66,7 @@ describe("tsh from a script", () => {
 		expect((await shell("sh", `printf 'say --text a\\nseq --to 2\\n' | "$TSH"`)).out).toBe(
 			"a\n1\n2\n",
 		);
-	}, 60_000);
+	});
 
 	it.each([
 		["true", 0],
@@ -77,28 +77,20 @@ describe("tsh from a script", () => {
 		["true; false", 1],
 		["exit 9", 9],
 		["say --text hello | ship --mode read", 1],
-	])(
-		"exits with the status of its last line: %j is %i",
-		async (line, want) => {
-			expect((await shell("sh", `"$TSH" -c '${line}'`)).status).toBe(want);
-		},
-		30_000,
-	);
+	])("exits with the status of its last line: %j is %i", async (line, want) => {
+		expect((await shell("sh", `"$TSH" -c '${line}'`)).status).toBe(want);
+	});
 
-	it.skipIf(ZSH === undefined)(
-		"is a command in zsh: tsh -c 'x' && echo ok",
-		async () => {
-			const ok = await shell(ZSH as string, `"$TSH" -c 'seq --to 1' && echo ok || echo no`);
-			expect(ok.out).toBe("1\nok\n");
-			const no = await shell(ZSH as string, `"$TSH" -c 'false' && echo ok || echo no`);
-			expect(no.out).toBe("no\n");
-			// The first line says which fabrika.toml was read, and the run's picks under it; then the failure, and nothing else.
-			expect(no.err).toMatch(
-				/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+tsh: false failed: false always fails\n$/,
-			);
-		},
-		30_000,
-	);
+	it.skipIf(ZSH === undefined)("is a command in zsh: tsh -c 'x' && echo ok", async () => {
+		const ok = await shell(ZSH as string, `"$TSH" -c 'seq --to 1' && echo ok || echo no`);
+		expect(ok.out).toBe("1\nok\n");
+		const no = await shell(ZSH as string, `"$TSH" -c 'false' && echo ok || echo no`);
+		expect(no.out).toBe("no\n");
+		// The first line says which fabrika.toml was read, and the run's picks under it; then the failure, and nothing else.
+		expect(no.err).toMatch(
+			/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+tsh: false failed: false always fails\n$/,
+		);
+	});
 
 	it("refuses a second tsh on the same home while the first runs", async () => {
 		const shared = home();
@@ -110,5 +102,5 @@ describe("tsh from a script", () => {
 		expect(second.status).toBe(2);
 		expect(second.err).toContain("One tsh per home");
 		await first;
-	}, 30_000);
+	});
 });

@@ -3,7 +3,7 @@ import {checkCalls, checkHost, checkMonitors, checkSupervisor} from "./tea-host.
 
 // The machines of the host (../../host), every law in every Msg order up to the bound, and every
 // planted mistake caught by the law it should break. Each walk is bounded by states, not time, so
-// its timeout only has to outlast a busy machine.
+// the suite's one time limit (vitest.config.ts) only has to outlast a busy machine.
 
 describe("the tea-host machines", () => {
 	it("the host holds every law, and each planted mistake breaks its law", () => {
@@ -11,14 +11,14 @@ describe("the tea-host machines", () => {
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
 		expect(r.planted.length).toBe(19);
-	}, 120_000);
+	});
 
 	it("the call module holds every law, and each planted mistake breaks its law", () => {
 		const r = checkCalls(6);
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
 		expect(r.planted.length).toBe(7);
-	}, 120_000);
+	});
 
 	it("the supervisor holds every law under each strategy, and each planted mistake breaks its law", () => {
 		const r = checkSupervisor(5);
@@ -26,12 +26,12 @@ describe("the tea-host machines", () => {
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
 		expect(r.planted.length).toBe(25);
 		expect(r.laws.length).toBe(21);
-	}, 120_000);
+	});
 
 	it("the monitor module holds every law, and each planted mistake breaks its law", () => {
 		const r = checkMonitors(7);
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
 		expect(r.planted.length).toBe(10);
-	}, 60_000);
+	});
 });

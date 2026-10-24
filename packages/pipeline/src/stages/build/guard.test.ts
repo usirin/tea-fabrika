@@ -102,7 +102,7 @@ describe("the builder stops with its run", () => {
 		// The copy is free: a new builder starts without waiting.
 		const b = start(lock, 0);
 		expect((await agentOf(b)).every(alive)).toBe(true);
-	}, 30_000);
+	});
 
 	it("the SDK's own stop (SIGTERM to the guard) stops all three", async () => {
 		const a = start(lockIn(), 5);
@@ -110,14 +110,14 @@ describe("the builder stops with its run", () => {
 		a.proc.kill("SIGTERM");
 		expect(await until(() => !pids.some(alive), 8_000)).toBe(true);
 		expect((await a.line("guard-exit"))[1]).not.toBe("0");
-	}, 30_000);
+	});
 
 	it("an agent that ends by itself leaves nothing behind", async () => {
 		const a = start(lockIn(), 5, "end");
 		const pids = await agentOf(a);
 		expect((await a.line("guard-exit"))[1]).toBe("0");
 		expect(await until(() => !pids.some(alive), 8_000)).toBe(true);
-	}, 30_000);
+	});
 });
 
 describe("one builder per working copy", () => {
@@ -132,7 +132,7 @@ describe("one builder per working copy", () => {
 		expect(said.join(" ")).toContain("held by another live builder");
 		expect(b.lines.some((l) => l.startsWith("agent"))).toBe(false);
 		expect(pids.every(alive)).toBe(true);
-	}, 30_000);
+	});
 
 	it("after kill -9, a new builder takes the copy over once the old one is gone, never beside it", async () => {
 		const lock = lockIn();
@@ -146,7 +146,7 @@ describe("one builder per working copy", () => {
 		// The moment the new agent stands, none of the old processes does.
 		expect(old.filter(alive)).toEqual([]);
 		await agentOf(b);
-	}, 40_000);
+	});
 
 	it("a lock left by a crash does not wedge: a dead holder holds nothing, whatever the file says", async () => {
 		const lock = lockIn();
@@ -160,7 +160,7 @@ describe("one builder per working copy", () => {
 
 		const b = start(lock, 1);
 		expect((await agentOf(b)).every(alive)).toBe(true);
-	}, 30_000);
+	});
 
 	it("the lock goes with the agent: with its guard killed alone, the agent still holds the copy", async () => {
 		const lock = lockIn();
@@ -172,7 +172,7 @@ describe("one builder per working copy", () => {
 
 		const b = start(lock, 1);
 		expect(Number((await b.line("guard-exit"))[1])).toBe(HELD);
-	}, 30_000);
+	});
 });
 
 describe("the guard's parts", () => {

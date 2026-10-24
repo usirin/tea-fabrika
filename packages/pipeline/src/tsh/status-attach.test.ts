@@ -88,5 +88,5 @@ describe("status lines across a kill", () => {
 			"      queue  #2 now, 1 waiting",
 			"      build  #2 round 1: builder at work, run 2",
 		]);
-	}, 60_000);
+	});
 });

@@ -38,19 +38,19 @@ describe("the pipeline's laws", () => {
 		const rs = await lawsOn(layerHttp({url, ledger: "pipeline-laws"}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs).toHaveLength(5);
-	}, 60_000);
+	});
 
 	it("hold on node:sqlite, four connections to one file", async () => {
 		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs).toHaveLength(5);
-	}, 60_000);
+	});
 
 	it("hold in memory", async () => {
 		const rs = await lawsOn(layerMemory());
 		expect(broken(rs)).toEqual([]);
 		expect(rs).toHaveLength(5);
-	}, 60_000);
+	});
 });
 
 describe("a planted mistake", () => {
@@ -62,7 +62,7 @@ describe("a planted mistake", () => {
 			),
 		);
 		expect(brokenLaws(rs)).toContain("P2");
-	}, 60_000);
+	});
 
 	it("a ledger that hands back one ticket's facts as another's breaks P1", async () => {
 		// Every row read from a ticket's stream comes back under the next ticket's name.
@@ -87,5 +87,5 @@ describe("a planted mistake", () => {
 		const rs = await lawsOn(misread);
 		expect(brokenLaws(rs)).toContain("P1");
 		expect(broken(rs).find((r) => r.law.startsWith("P1"))?.numbers).toMatch(/read from/);
-	}, 60_000);
+	});
 });

@@ -12,5 +12,12 @@ export default defineConfig({
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 		],
+		// One time limit for every test, chosen from measured times, not vitest's 5 s default,
+		// which turned main red 6 times for slow tests and found no bug (experiment 125).
+		// Measured on 2026-10-24: the slowest test in 128 CI runs took 17.9 s (60 s is 3.3 times
+		// that); with two whole suites side by side on one laptop, the slowest took 28.4 s (60 s
+		// is 2.1 times that). A test does not set its own limit to get room on a busy machine; if
+		// tests grow slower, measure again and change this number.
+		testTimeout: 60_000,
 	},
 });

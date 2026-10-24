@@ -62,7 +62,7 @@ const READY: ShipFacts = {
 };
 const reads = readShipFacts({pr: pbt.PR});
 
-describe("ship, as property tests", {timeout: 30_000}, () => {
+describe("ship, as property tests", () => {
 	it("the real machine holds every law, today's five and the two new ones", () => {
 		expect(breaks(pbt.RUN_2, ship)).toEqual([]);
 	});
