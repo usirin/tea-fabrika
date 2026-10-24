@@ -12,9 +12,8 @@
 			"!video",
 			// The custom rules themselves: a `.grit` file is not something biome formats.
 			"!biome-plugins",
-			// The ledgers of `pnpm lint:dead` and `lint:size`: code-graph writes them, in its own layout.
-			"!unreachable-ledger.json",
-			"!smell-ledger.json"
+			// The ledger of `pnpm lint:dead`: code-graph writes it, in its own layout.
+			"!unreachable-ledger.json"
 		]
 	},
 	"assist": {
