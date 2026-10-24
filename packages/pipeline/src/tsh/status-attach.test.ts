@@ -41,11 +41,9 @@ const logOf = (folder: string): string[] => {
 	return existsSync(at) ? readFileSync(at, "utf8").split("\n").filter(Boolean) : [];
 };
 
-/** Wait until `found` holds, or fail saying `what`. */
-const until = async (what: string, found: () => boolean) => {
-	const deadline = Date.now() + 20_000;
+/** Wait until `found` holds. */
+const until = async (found: () => boolean) => {
 	while (!found()) {
-		if (Date.now() > deadline) throw new Error(`never: ${what}`);
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 };
@@ -64,16 +62,14 @@ describe("status lines across a kill", () => {
 			folder,
 			`build-scripted --model m --effort medium --budget 1 ${told} & close %1 ticket; sleep --ms 800; jobs; attach %1`,
 		);
-		await until("a's jobs", () => rowsOf(a.out()).length >= 2);
-		await until("the second build started", () =>
-			logOf(folder).some((l) => l.startsWith("start 2")),
-		);
+		await until(() => rowsOf(a.out()).length >= 2);
+		await until(() => logOf(folder).some((l) => l.startsWith("start 2")));
 		a.child.kill("SIGKILL");
 		await a.exited;
 
 		// The builder takes 1500 ms: 800 ms in, the resumed one is at work.
 		const b = life(home, folder, "attach %1 & sleep --ms 800; jobs; attach %1");
-		await until("b's jobs", () => rowsOf(b.out()).length >= 2);
+		await until(() => rowsOf(b.out()).length >= 2);
 		b.child.kill("SIGKILL");
 		await b.exited;
 

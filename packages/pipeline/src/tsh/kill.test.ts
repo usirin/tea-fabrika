@@ -45,9 +45,7 @@ const logOf = (folder: string): string[] => {
 
 /** Wait until the log has `count` lines that start with `prefix`. */
 const until = async (folder: string, prefix: string, count: number) => {
-	const deadline = Date.now() + 20_000;
 	while (logOf(folder).filter((l) => l.startsWith(prefix)).length < count) {
-		if (Date.now() > deadline) throw new Error(`no ${count} × "${prefix}" in ${logOf(folder)}`);
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 };

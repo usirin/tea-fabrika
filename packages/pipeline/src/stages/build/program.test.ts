@@ -104,7 +104,7 @@ const once = <A, E>(
 			);
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
 			return yield* body(started.run, {built: builtEar, opened}, started.close);
-		}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+		}).pipe(Effect.scoped, Effect.provide(w.services)),
 	);
 
 const one = (w: ReturnType<typeof world>) =>

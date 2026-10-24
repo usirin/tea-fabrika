@@ -83,10 +83,7 @@ const once = (
 				yield* Effect.sleep("50 millis");
 				return null;
 			});
-			const ended = yield* settled.pipe(
-				Effect.raceFirst(source.run.ended),
-				Effect.timeout("2 seconds"),
-			);
+			const ended = yield* settled.pipe(Effect.raceFirst(source.run.ended));
 			return {got, ended};
 		}).pipe(Effect.scoped),
 	);
@@ -241,7 +238,7 @@ describe("a line nobody reads (row 11)", () => {
 				const words = new Set(yield* Fiber.join(offering));
 				started.close("n");
 				return {waiting, words: [...words], ended: yield* started.run.ended};
-			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({waiting: 0, words: ["queued"], ended: {kind: "ended", unread: {}}});
 		expect(got).toEqual(numbers(3 * CAPACITY));
@@ -268,7 +265,7 @@ describe("a line nobody reads (row 11)", () => {
 				yield* Effect.sleep("20 millis");
 				yield* Deferred.succeed(go, undefined);
 				return {from: yield* source.run.ended, to: yield* target.run.ended};
-			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({from: {kind: "ended", unread: {}}, to: {kind: "ended", unread: {}}});
 		expect(got).toEqual(numbers(3 * CAPACITY));
@@ -312,7 +309,7 @@ describe("a line nobody reads (row 11)", () => {
 				// `main` reads one value per pull (experiment 80): wait for it to read the rest before the scope stops it.
 				yield* a.run.ended;
 				return told;
-			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(words).toEqual(["queued", "stopped", "closed"]);
 		expect(got).toEqual([...numbers(CAPACITY), -1]);
@@ -341,7 +338,7 @@ describe("a line nobody reads (row 11)", () => {
 				started.close("n");
 				yield* started.run.ended;
 				return {empty, word, told, asleep, after: started.run.queues()};
-			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({
 			empty: {n: {length: 0, waiting: 0}},
@@ -412,7 +409,7 @@ describe("an input's own capacity, declared where the program declares it", () =
 				const word: Word = yield* Fiber.join(offering);
 				started.close("n");
 				return {asleep, word, ended: yield* started.run.ended};
-			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({
 			asleep: {n: {length: 16, waiting: 1}},

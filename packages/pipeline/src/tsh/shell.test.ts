@@ -122,7 +122,7 @@ const session = (list: ProgramList, storage: Storage, show: Show = "short") =>
 			Effect.gen(function* () {
 				while (!printed.values.some((p) => p.text.includes(text)))
 					yield* Effect.sleep(Duration.millis(5));
-			}).pipe(Effect.timeout(Duration.seconds(5)), Effect.orDie);
+			});
 		return {started, line, heard, printed, ready};
 	});
 

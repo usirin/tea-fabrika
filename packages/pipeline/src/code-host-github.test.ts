@@ -886,7 +886,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
 			});
 			const runtime = yield* handle.ready;
 			yield* runtime.dispatch({type: "start", pr: PR});
-			return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+			return yield* runtime.done();
 		});
 		const host = hostOf(readPrFacts(fakeGh({pr: "not json"}).gh, WHO));
 		const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));

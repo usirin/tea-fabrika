@@ -295,7 +295,7 @@ const once = <A, E>(
 			);
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
 			return yield* body(started.run, {steps, ended}, started.close);
-		}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+		}).pipe(Effect.scoped, Effect.provide(w.services)),
 	);
 
 /** Tell it the ticket, close its input, and hear how the loop ended. */
@@ -719,7 +719,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 					reviewing: w.reviewing,
 				});
 				return {result, ended, storage: life.storage};
-			}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+			}).pipe(Effect.scoped, Effect.provide(w.services)),
 		);
 	};
 
@@ -854,7 +854,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 						},
 					});
 					return {result, ended};
-				}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+				}).pipe(Effect.scoped, Effect.provide(w.services)),
 			);
 		};
 

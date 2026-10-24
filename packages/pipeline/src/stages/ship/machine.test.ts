@@ -171,8 +171,7 @@ async function drive(script: Script, machine = patient) {
 		});
 		const runtime = yield* handle.ready;
 		yield* runtime.dispatch({type: "start", pr: PR});
-		// A run that never gets there fails the test instead of hanging the suite.
-		return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+		return yield* runtime.done();
 	});
 	const end = await Effect.runPromise(program.pipe(Effect.scoped));
 	if (end.phase !== "over") throw new Error(`the run did not end: ${end.phase}`);

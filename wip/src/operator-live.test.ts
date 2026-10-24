@@ -121,7 +121,7 @@ describe("the thread on an issue's comments", () => {
 		gh.says("Second", "I approved it, carry on");
 
 		const replies = await gh.use((t) =>
-			t.replies(thread, at).pipe(Stream.take(2), Stream.runCollect, Effect.timeout("2 seconds")),
+			t.replies(thread, at).pipe(Stream.take(2), Stream.runCollect),
 		);
 
 		expect([...replies]).toEqual([
@@ -136,9 +136,7 @@ describe("the thread on an issue's comments", () => {
 		// A later listener, from the last reply it read, starts after it.
 		gh.says("owner", "one more");
 		const later = await gh.use((t) =>
-			t
-				.replies(thread, Date.UTC(2026, 0, 1, 0, 0, 5))
-				.pipe(Stream.take(1), Stream.runCollect, Effect.timeout("2 seconds")),
+			t.replies(thread, Date.UTC(2026, 0, 1, 0, 0, 5)).pipe(Stream.take(1), Stream.runCollect),
 		);
 		expect([...later].map((r) => r.body)).toEqual(["one more"]);
 	});

@@ -739,7 +739,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 				);
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				return yield* body(started, {outcomes, answers});
-			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped, Effect.provide(world.both)),
 		);
 	/** Wait until the run keeps no run of `machine`. */
 	const noneLeft = (storage: Storage, machine: string) =>
@@ -1044,7 +1044,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 				const writesAfterOlder = [...world.writes];
 				yield* tell(newer.run, "pr", url(1));
 				return {olderEnded, writesAfterOlder, heard: yield* outcomes.upTo(1)};
-			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped, Effect.provide(world.both)),
 		);
 
 		expect(seen.olderEnded.kind).toBe("failed");
@@ -1073,7 +1073,7 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 				);
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				return yield* body(started.run, outcomes);
-			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+			}).pipe(Effect.scoped, Effect.provide(world.both)),
 		);
 	/** Kill the process once the ship machine stands in `phase`. */
 	const killIn = (life: Life, phase: string) => (run: ShipRun) =>

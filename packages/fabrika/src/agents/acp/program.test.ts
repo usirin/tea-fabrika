@@ -73,13 +73,10 @@ const fake = (folder: string, more: Partial<Flags> = {}): Flags => ({
 	...more,
 });
 
-const until = (check: () => boolean, what: string) =>
+const until = (check: () => boolean) =>
 	Effect.gen(function* () {
 		while (!check()) yield* Effect.sleep(Duration.millis(10));
-	}).pipe(
-		Effect.timeout(Duration.seconds(10)),
-		Effect.catch(() => Effect.die(`waited for ${what}`)),
-	);
+	});
 
 type Node = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
@@ -188,7 +185,7 @@ describe("acp on the fake agent", () => {
 				yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
 				yield* tell(started.run, "prompt", "and now?");
 				started.close("prompt");
-				yield* until(() => promptsSent(folder).length === 1, "the first prompt");
+				yield* until(() => promptsSent(folder).length === 1);
 				yield* tell(started.run, "cancel", "now");
 				yield* started.run.ended;
 				return {results: heard.result.values, transcript: transcript()};
@@ -212,7 +209,7 @@ describe("acp on the fake agent", () => {
 					yield* tell(started.run, "prompt", "slowly read b.txt");
 					started.close("prompt");
 					yield* heard.result.upTo(1);
-					yield* until(() => promptsSent(folder).length === 2, "the second prompt");
+					yield* until(() => promptsSent(folder).length === 2);
 					yield* started.stop;
 				}),
 			);

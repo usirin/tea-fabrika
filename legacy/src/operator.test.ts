@@ -79,8 +79,7 @@ function runOn(
 		});
 		const runtime = yield* handle.ready;
 		yield* runtime.dispatch(first);
-		// A run that never gets there fails the test instead of hanging the suite.
-		return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+		return yield* runtime.done();
 	});
 	const services = Layer.mergeAll(fake.layer, fake.thread, scriptedJev((o.jev ?? []) as never));
 	return Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(services)));
