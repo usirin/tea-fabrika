@@ -31,6 +31,13 @@ test:
     ACP adapter, an agent loop run as a library, bash, plugins, tests.
   - No harness needs box code of its own. A new harness works in every box
     the day it works at all.
+- **No fence lives inside a harness** (decided 2026-10-24). A Claude Code
+  hook, the Agent SDK's Bash sandbox or a harness's own tool list works for
+  that harness only, and every harness reaches ours through ACP. The box is
+  the fence: what a program may read, write or reach is set by its box.
+  - ACP's `session/request_permission` lets our side see and answer a tool
+    call from any harness. It is not a wall: the agent decides when to ask.
+  - A harness fence may stay as a second layer. Nothing counts on it.
 - **The box itself is an outside tool. fabrika only starts a program as a
   child process inside it.**
   - The box is one layer of a `Sandbox` service: `Sandbox.docker` (a fresh
