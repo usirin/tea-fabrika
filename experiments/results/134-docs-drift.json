@@ -1,0 +1,365 @@
+{
+	"model": "claude-sonnet-5-5",
+	"runs": {
+		"491-cohesion": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc comment on `SplitCandidate` (lines 100-104) still says the same thing. `coChangedPairs` in score.ts cuts each change set to labelled paths and keeps it only when `set.length >= 2 && set.length <= maxFiles`. The per-feature score in `scoreCoChange` uses `predictedPairs([...active].filter(inF), ...)` as the denominator. That counts same-scope pairs among the feature's files touched by a kept change set, and files no kept change set touched are left out. The numerator is the co-changed pairs with both files in the feature. `splitCandidates` sets `cohesion: f.precision`, so cohesion equals the feature's per-feature precision."
+			},
+			"error": null,
+			"usd": 0.0680151,
+			"ms": 5560,
+			"tokens": 15964
+		},
+		"603-tests": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (lines 247–252) still says `testFiles` globs match the scope-relative or repo-relative path. `matchesGlobs` in test-role.ts tests both `file` and `inScope(scope, file)`. The excluded-rule list was revised from B6–B10, B13, B15–B17 to B6–B8, B10, B15–B17, but the claim is the same. The `false` rows in `JUDGES_TEST_FILES` (application-imports-adapter, impure, driving-reaches-driven, unknown-zone, index-not-exports-only, application-import-outside-allowlist, binding-outside-driven-adapter) fit that list. The other rows are `true`, which matches \"other import and ownership rules still apply\". The mapping from kind names to B-numbers is partly inferred."
+			},
+			"error": null,
+			"usd": 0.0479778,
+			"ms": 10891,
+			"tokens": 10561
+		},
+		"589-layout": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README now is a short entry page. It covers invocation, a goal/command table, links, and checkout instructions. Lines 46-49 send readers to `docs/reference/boundaries.md` and `docs/how-to/enforce-boundaries.md`. The hexagon, `features`, zones and `layout: rules` opt-out text is not in the visible lines, and the elided lines 24-44 are a command table and a link list. The code at `rules.ts` also differs from the statement: `scopeZoning` and `layoutOf` pick \"per-feature\" or \"port\" from the `features` folder names, and no `layout: rules` opt-out appears."
+			},
+			"error": null,
+			"usd": 0.049949099999999996,
+			"ms": 8266,
+			"tokens": 12176
+		},
+		"399-b4": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The note on the doc says neither \"B4\" nor \"outside-imports-feature-internal\" appears anywhere in packages/code-graph/README.md. The shown part now sends readers to docs/reference/cli.md for details, so the B4 statement is no longer made there. The code (`case \"elsewhere\"` returning `outside-imports-feature-internal`, and `case \"lib\"` returning `lib-imports-feature`) still behaves as described, but the doc statement itself has gone."
+			},
+			"error": null,
+			"usd": 0.0321134,
+			"ms": 4349,
+			"tokens": 8046
+		},
+		"505-forms": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README lines shown (26-70) don't contain the wildcard statement. They are a command table, scope notes and links. Layer details now seem to live in the linked `docs/reference/layers.md` (line 48). The statement could still sit in the unseen lines 1-25, but that's unlikely for a README whose usage table starts at line 26. The code in `classify.ts` still matches the old wording: `segmentSource` maps a whole `*` to `[^/]+` and an inner `*` to `[^/]*`. `**` becomes `(?:[^/]+/)*`, and other characters are regex-escaped. The README no longer makes the claim."
+			},
+			"error": null,
+			"usd": 0.0387992,
+			"ms": 6391,
+			"tokens": 9383
+		},
+		"505-rank": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README no longer makes this statement. None of \"depth\", \"literalSegments\", \"literalChars\" or \"specific\" appears anywhere in the file, and the first 40 lines are about invocation and report commands. The code in classify.ts (`specificityOf`, `compareSpecificity`) still ranks by depth, then literal segments, then literal characters, but the doc text has been removed or moved out of this file."
+			},
+			"error": null,
+			"usd": 0.0361053,
+			"ms": 3551,
+			"tokens": 9132
+		},
+		"505-tie": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The note says neither \"LayerTieError\" nor \"tie\" appears anywhere in `packages/code-graph/README.md`, so the README no longer makes this statement. The README now sends readers to `docs/reference/cli.md` for \"every flag, scope rule, and exit code\", so the text probably moved there. The code still behaves as described: `layerOf` throws `LayerTieError`, and `runLayerGate` reports it and returns 2. The claim just isn't in this doc any more."
+			},
+			"error": null,
+			"usd": 0.036365299999999996,
+			"ms": 4385,
+			"tokens": 9084
+		},
+		"571-omit": {
+			"answer": {
+				"verdict": "holds",
+				"why": "Line 378 of the doc still says that omitting `decidedBy` means a listed read-only driven file is licensed for any driving file, with `ScopeAllowance.decidedBy` as `null` and the decision in `drivenReadsOf` after the write check. The code agrees. `readAllowanceOf` sets `decidedBy` to `null` when it is `undefined`. In `drivenReadsOf`, the write check (`reads.writes.get(target)`) comes before `if (decidedBy === null) return LICENSED;`. The schema marks `decidedBy` as `.optional()`, and nothing adds a second key or flag."
+			},
+			"error": null,
+			"usd": 0.09703250000000001,
+			"ms": 4479,
+			"tokens": 24064
+		},
+		"571-empty": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (line 378) still says \"Omission is the only spelling: `decidedBy: []` exits 2 as an allowance that grants nothing.\" In `declaration.ts`, `allowanceIssues` skips the check when `decidedBy === undefined` (line 89) and calls `empty(\"decidedBy\", decidedBy)` otherwise. An empty list therefore gives the \"an allowance that grants nothing\" message (lines 78-80), and `shapeDeclarationIssue` is described as the rules-file check that exits 2."
+			},
+			"error": null,
+			"usd": 0.0878364,
+			"ms": 4155,
+			"tokens": 21869
+		},
+		"571-write": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README no longer makes this statement. The note says none of \"firstWrite\", \"write\" or \"decidedBy\" appears in it, and the 40 lines shown are only an invocation guide with no `decidedBy` or write-rule text. The code still behaves as the statement described: `drivenReadsOf` returns `{ licensed: false, write }` for a listed file with a write before it checks `decidedBy`, and a null `decidedBy` licenses only listed read-only files. But the doc no longer says so, at least in the part shown."
+			},
+			"error": null,
+			"usd": 0.0402312,
+			"ms": 4312,
+			"tokens": 10066
+		},
+		"581-imports": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc at lines 156-157 still says step 3 goes in a third file and imports `Scope` as a value and `Exit` because it opens and closes the parent's scope. The code block at lines 160-167 opens with the same imports (`run`, `Effect, Exit, Scope`, `parent`, and `Children, spawnWorker, stopWorker`). The test in pages-typecheck.test.ts (lines 229-255) checks that losing `Exit` or `Scope` as a value fails, which agrees with the statement."
+			},
+			"error": null,
+			"usd": 0.0507681,
+			"ms": 3994,
+			"tokens": 12833
+		},
+		"126-names": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc still says this at lines 79-83, in nearly the same words, and the adapter reads `t.cmdType` and `t.args` (lines 103-105). In `tool.ts`, `ToolDef` exposes `readonly args: StandardSchemaV1<unknown, Args>`, described as \"the bare `args` schema the router parses a call against\". The `input` schema is what parses the model's `args`, as the comment says. The shown code doesn't define `cmdType`. It is presumably inherited from `CmdDef<Name, ...>`, since a tool is a `Cmd.define`d constructor."
+			},
+			"error": null,
+			"usd": 0.0674678,
+			"ms": 6997,
+			"tokens": 16519
+		},
+		"234-drive": {
+			"answer": {
+				"verdict": "holds",
+				"why": "Doc lines 272-277 still say `drive` runs the machine the way the runtime does: it folds the Msg, hands every Cmd to the real handler, feeds each settle Msg back, and stops when quiet, with no runtime, clock or socket. It returns the settled `state` **and** the `trace`. `drive-loop.ts` agrees: `DriveResult` has `state` and `trace`, rounds drain Msgs and then Cmds, and the loop settles when nothing is pending. The only change is the import path, now `@demlik/tea/testing/promise` (with an effect twin), because `testing/index.ts` says `drive` has one form per engine. The behaviour described is unchanged."
+			},
+			"error": null,
+			"usd": 0.0606107,
+			"ms": 6789,
+			"tokens": 14774
+		},
+		"134-done": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (lines 359-362) still says a finished run keeps its `run` slice and `output`, that `conversation` is `null` because the transcript is cleared on retire, and that the conversation is present mid-run. The code agrees. In `advanceStage`, when `runSlice.phase === \"done\"` it returns `{ ...s, run: runSlice, conversation: null, output: terminatingTurn }`. The `start` and `turn` code keeps a conversation while the run is in flight. The only change is that the clause \"the terminating turn `runtime.result()` reads\" is no longer in this sentence. The doc now covers it separately at lines 372-374, and that doesn't change the claim."
+			},
+			"error": null,
+			"usd": 0.0427927,
+			"ms": 3886,
+			"tokens": 10815
+		},
+		"628-exit3": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc still has the statement (lines 243-247). `runApiView` in cli.ts agrees with it. Any error that isn't an `ApiInputError` goes to `run.report(crashLine(error))` and returns `API_CRASH_EXIT` (3). `crashLine` gives one line, `unexpected error: <message>`, with whitespace collapsed and no stack. Output is emitted only after the outcome succeeds, so nothing reaches stdout on a crash. `run.emit(payload)` is inside the try, so an unwritable `--out` file would exit 3 unless `emit` throws `ApiInputError`; the shown code doesn't say. The `code-graph: ` prefix is presumably added by `report`, which isn't shown. Exit 1 comes only from the ratchet's `verdict.passed` check, so it means a miss."
+			},
+			"error": null,
+			"usd": 0.047188799999999996,
+			"ms": 5041,
+			"tokens": 11503
+		},
+		"475-inventory": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README still says (lines 731-734) that inventory writes `.structure-sweep/inventory.json` and `.structure-sweep/inventory.md` and nothing else, calls no model or network, needs no `TYPESAFE_API_KEY`, and runs no other command. The code agrees. cli.ts only reads input files, builds the inventory, and writes the `--out` and `--report` files with `writeFileSync` (lines 89-90). It imports no Jev client or other commands, and the usage text says \"Runs no other command; no Jev call, no network.\""
+			},
+			"error": null,
+			"usd": 0.0618787,
+			"ms": 7185,
+			"tokens": 15529
+		},
+		"350-events": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc still lists the same six events with the same fields (lines 28-38: BrainStarted with turn/purpose/model/payload, TurnSettled with turn and usage, ToolStarted with callId/name/args, ToolFailed with callId/name/failure, RunDone with status). The code agrees: the `AgentEvent` union in machine.ts has the same six types and fields, and `AgentEventHead` carries `runId` and `at`. The doc uses a table instead of a sentence, but the claim is the same."
+			},
+			"error": null,
+			"usd": 0.04882140000000001,
+			"ms": 2944,
+			"tokens": 12363
+		},
+		"290-settle": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (lines 6-8) still says `settle` hands back the settled slice and the result together, so the result can't be read before the call has settled. The code agrees. `settle` returns a `SettleResult` with `call`, `cmds` and `outcome` in one record. Its doc comment says the value is reachable \"ONLY through `outcome`\", so a hand-wired cell can't fold the answer in before the slice has settled."
+			},
+			"error": null,
+			"usd": 0.043618699999999996,
+			"ms": 4500,
+			"tokens": 11079
+		},
+		"495-anchor": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README (line 329-332) still says anchor mode is the default, with the same ordering and dealing rules. The code agrees: `anchorMenus` in cap.ts sorts functions by pair count descending with ties to the lower `path:function` key, and each function takes only pairs not yet in `dealt`. In cli.ts, `mode` is \"pairwise\" only if `--pairwise` is set, so anchor is the default, and `clientFor` asks once per anchor."
+			},
+			"error": null,
+			"usd": 0.0654586,
+			"ms": 4058,
+			"tokens": 16444
+		},
+		"398-consolidate": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README still says it (lines 579-582): no model, no network, no TYPESAFE_API_KEY, writes only consolidate.json and consolidate.md, byte-identical JSON. In cli.ts the only writes are `writeFileSync(outPath, ...)` and `writeFileSync(reportPath, ...)` (lines 124-125), and the plan is built from on-disk inputs plus a read-only git line count. The JSON is a plain `JSON.stringify(plan, null, 1)` with no timestamps in the plan, so it should be deterministic. The imports show no Jev or network use. I didn't see the cut-off part of cli.ts (lines 28-103), but nothing visible contradicts the statement."
+			},
+			"error": null,
+			"usd": 0.0618512,
+			"ms": 4529,
+			"tokens": 15243
+		},
+		"95-demo": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README (line 90) still says the command runs `src/internal/flow/workflow/demo.test.ts`, which drives both scenarios and prints the narration. `packages/tea/package.json` line 143 defines `\"demo:saga\": \"vitest run src/internal/flow/workflow/demo.test.ts\"`, so the `pnpm --filter @demlik/tea demo:saga` command on line 87 runs that file."
+			},
+			"error": null,
+			"usd": 0.0375711,
+			"ms": 3693,
+			"tokens": 9630
+		},
+		"351-refuse": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (lines 73-75) still says a refusal, or a throwing `load` or `migrate`, stops the run with a `StoreRefusedError` and nothing is written. `restore.ts` agrees. It wraps `store.migrate(await store.load())` in a try/catch and rethrows a `StoreRefusedError` (line 22), and it throws on a `Refusal` (line 27). Its docstring says the caller then writes nothing, so unreadable bytes are never overwritten. The code shown doesn't include the `ready` rejection itself, but the docstring says boot reads the store through this function."
+			},
+			"error": null,
+			"usd": 0.029517000000000005,
+			"ms": 4024,
+			"tokens": 7613
+		},
+		"487-refine": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README still says this at lines 169-172. In refine-cli.ts, the usage text says \"No model call, no network\", and the command only reads the verdicts and sweep JSON files with readJson. It writes the report, history, sample list and prompt (the `writes` array, lines 131-136), never edits the config, and imports only `fileListRefusal` (a path check) from the sweep module, so it never runs `sweep`."
+			},
+			"error": null,
+			"usd": 0.0701709,
+			"ms": 6978,
+			"tokens": 17206
+		},
+		"236-family": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc's index row for `DEFAULT_RESILIENT_NAME` (line 49) still says \"The family every unnamed knob speaks\", now spelling the names as `resilient_run` / `resilient_run_ok` / `resilient_run_err`. The statement's own `resilient_ok` / `resilient_err` spellings have been corrected to match the code. In the source, `DEFAULT_RESILIENT_NAME = \"resilient\"` and the compile-time checks at lines 248-253 build `resilient_run`, `resilient_run_ok` and `resilient_run_err` from it, so the claim is the same and the code agrees."
+			},
+			"error": null,
+			"usd": 0.07720389999999999,
+			"ms": 7554,
+			"tokens": 18824
+		},
+		"178-transcript": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (lines 112-117) still says a finished run's Model clears `conversation` to `null` and that `transcript()` is a collector over the `onEvent` stream, so you fold nothing yourself. The code agrees. transcript.ts's header says a run reaching `phase: \"done\"` clears `conversation` to `null` on purpose, and calls `transcript` a \"COLLECTOR over the event stream that already exists\". Its `onEvent` handler folds `TurnSettled`, `ToolSettled` and `RunDone` for the caller."
+			},
+			"error": null,
+			"usd": 0.0485009,
+			"ms": 4373,
+			"tokens": 12269
+		},
+		"459-data": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README no longer has the `--data` bullet. Its only nod to the feature is the intro's \"storage access\" in line 5. The flag table (lines 22-33) has no `--data` row. The flag-by-flag detail now lives in the linked docs/reference/cli.md and analyses.md, which weren't shown. The code in `data/extract.ts` still builds a `DataReport` with edges, binding kind and access, so the feature exists, but this README doesn't make the statement."
+			},
+			"error": null,
+			"usd": 0.039629199999999996,
+			"ms": 6070,
+			"tokens": 10003
+		},
+		"105-banner": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README (line 95) still shows the sample output opening with \"tea workflow — Saga rollback demo (deterministic)\". The code in demo.ts `narrateDemo` (line 476) pushes exactly that string as its header, between the \"=\" rules, so the code agrees."
+			},
+			"error": null,
+			"usd": 0.0289864,
+			"ms": 3016,
+			"tokens": 7639
+		},
+		"526-ledger": {
+			"answer": {
+				"verdict": "gone",
+				"why": "The README no longer contains the statement. The note says none of \"B13\", \"B9\" or \"kind\" appears anywhere in the file. The visible lines 1-40 only cover invocation and the report table, and the only boundary mention is the `code-graph . --boundaries` row. The ledger code still exists in `ledger.ts`, but it keys entries by kind names such as `cross-feature` and `unknown-zone` instead of B-numbers. The doc has dropped or rewritten the B1–B14 ledger description."
+			},
+			"error": null,
+			"usd": 0.0438625,
+			"ms": 3882,
+			"tokens": 11012
+		},
+		"553-schema": {
+			"answer": {
+				"verdict": "holds",
+				"why": "README lines 12-13 still say \"`Cmd.define` takes any Standard Schema, so bring the schema library you already use\". The code in core.ts agrees. Its header (lines 19-20) says \"`Cmd.define` accepts any Standard Schema (zod, Effect Schema through `Schema.toStandardSchemaV1`, …), and it imports no schema library\", and lines 207-210 say `input` and `ok` are Standard Schemas. The only import is the type-only `StandardSchemaV1`."
+			},
+			"error": null,
+			"usd": 0.0516045,
+			"ms": 3040,
+			"tokens": 13040
+		},
+		"303-replay": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc (line 21) still carries the same sentence, word for word. The JSDoc in expect-replay-deterministic.ts (lines 14-16) matches it. The code replays under two distinct stubbed `Date.now`/`Math.random` ambients (lines 38-39) and compares both `state` and `cmds` (lines 40-49), as described."
+			},
+			"error": null,
+			"usd": 0.034739599999999995,
+			"ms": 4715,
+			"tokens": 9003
+		},
+		"C2-redact": {
+			"answer": {
+				"verdict": "unsure",
+				"why": "The README still says at lines 203-204 that \"Package specifiers (`zod`, `@scope/pkg`) and path aliases are kept, as are exported names, comments and string literals.\" The code shown is only `specifierResolver` in module-syntax.ts. It resolves an alias to `repo`, `external` or `unknown` for `--redact`, but it doesn't show whether a resolved alias is rewritten or left as written. I can't tell if the statement holds without the redaction code that uses these results."
+			},
+			"error": null,
+			"usd": 0.0724488,
+			"ms": 7359,
+			"tokens": 17510
+		},
+		"C1-cohesion": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README still says at lines 188-189 that split candidates are features of at least 4 files, ranked by cohesion with the lowest first. In `refine.ts`, `splitCandidates` drops features with `f.files < MIN_SPLIT_FILES` and sorts by `a.cohesion - b.cohesion`, so lowest comes first. The `SplitCandidate` doc comment describes cohesion as the feature's precision: \"of the same-scope file pairs inside it, the share some commit changed together\". The value of `MIN_SPLIT_FILES` isn't shown, so I'm assuming it is 4."
+			},
+			"error": null,
+			"usd": 0.0597934,
+			"ms": 4883,
+			"tokens": 14711
+		},
+		"C3-interpret": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc still has the line `interpret: { [K in C[\"type\"]]: (cmd, ctx) => Promise<M | void> }` (line 190) and the comment \"returning void means no follow-up Msg\" (line 279). The code agrees. The `core.ts` edge comment says it will \"mint a def's outcome into its `_ok` / `_err` Msg, or pass a hand-written Cmd's return through\". The `runtime-types.ts` \"follow-up\" phase describes \"a follow-up Msg an interpret handler returned\". A `Cmd.define` handler returns an Outcome that the engine turns into a Msg, so the result is still one follow-up Msg. I did not see the actual `interpret` type declaration, so I'm relying on those comments."
+			},
+			"error": null,
+			"usd": 0.0973588,
+			"ms": 6011,
+			"tokens": 23603
+		},
+		"C1-cohesion+whole": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The README still carries this statement at lines 188-189, and `splitCandidates` in refine.ts agrees. It drops features with `f.files < MIN_SPLIT_FILES` (4), sets `cohesion: f.precision`, and sorts ascending by cohesion. Precision is the share of same-scope pairs inside the feature that were co-changed, as the doc says. One nuance: score.ts counts pairs only among files a kept change set touched, which the doc leaves out. That doesn't make the statement false."
+			},
+			"error": null,
+			"usd": 0.0785053,
+			"ms": 4785,
+			"tokens": 19331
+		},
+		"C2-redact+whole": {
+			"answer": {
+				"verdict": "holds",
+				"why": "The doc at line 203-204 still says \"Package specifiers (`zod`, `@scope/pkg`) and path aliases are kept, as are exported names, comments and string literals.\" The code shown agrees on the specifier part. In `specifierResolver`, a path that resolves outside the repo or into `node_modules` gives `external`, and an alias gives a repo path only when it resolves to a tracked file, so only relative specifiers are turned into ids. The shown code doesn't contradict the claims about exported names, comments or string literals."
+			},
+			"error": null,
+			"usd": 0.0774563,
+			"ms": 5196,
+			"tokens": 19341
+		},
+		"C3-interpret+whole": {
+			"answer": {
+				"verdict": "drifted",
+				"why": "The doc still has the line at 190: `interpret: { [K in C[\"type\"]]: (cmd, ctx) => Promise<M | void> }`. In `pure/core.ts`, `InterpretCell` now resolves to `Promise<M | readonly M[] | void>` for hand-written Cmds. The comment there says \"A list is dispatched in order as follow-ups (#324)\", and `followUps()` handles arrays. A `Cmd.define`d Cmd's cell returns an `Outcome` or nothing, not a Msg. So \"one follow-up Msg or nothing\" is no longer accurate."
+			},
+			"error": null,
+			"usd": 0.3563369,
+			"ms": 6180,
+			"tokens": 87096
+		}
+	}
+}
