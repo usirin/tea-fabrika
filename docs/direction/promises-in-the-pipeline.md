@@ -12,11 +12,12 @@ type Promise = {
 	covers: readonly Covers[]; // filled in once the code exists
 };
 
-// The five steps, built from the primitives we have. No new primitive.
+// The five steps, built from the primitives we have. No new primitive. In loop order.
 const writeChecks = draft("checks_write", {input: PromisesAndCode, ok: Checks}); // not the builder
-const killMutants = check("checks_kill_mutants", {/* each break Stryker makes is caught by a check */});
 const today = check("checks_today", {/* new: red on today's code. kept: green on it */});
+// ... build ...
 const hold = check("checks_hold", {/* every check green on the built code */});
+const killMutants = check("checks_kill_mutants", {/* after the build: every mutant Stryker makes is caught */});
 const inStep = check("checks_in_step", {/* every record's prints match the code */});
 ```
 
@@ -33,40 +34,54 @@ const inStep = check("checks_in_step", {/* every record's prints match the code 
   behavior the ticket adds, such as the lane-hang fix. A kept promise is one
   today's code already keeps and the ticket must not break, such as "an ended
   run sends nothing", or anything a cleanup ticket touches.
-- **The [five steps](./five-steps-for-every-check.md) become parts of the
-  loop,** each built from the existing primitives
+- **The [five steps](./five-steps-for-every-check.md) become six parts of
+  the loop,** each built from the existing primitives
   ([Reuse before special rules](./reuse-before-special-rules.md)):
   1. **Plan.** Draft proposes the promises. The owner approves them.
   2. **Tool.** Code picks it from the promise's kind. No agent.
   3. **Verify writer.** An agent that is not the builder
      ([Nobody grades their own work](./nobody-grades-their-own-work.md))
-     drafts each check. A mutation tool such as Stryker, not the writer,
-     makes the planted breaks: small edits to the lines the promise covers.
-     Mutation testing calls each one a mutant, and a check that fails on it
-     kills it. Code checks that every mutant is killed. A mutant the
-     typecheck refuses does not count, and the repo's own tests run first:
-     the new check is graded on what they miss (experiment 121's hand check,
-     2026-10-24). A writer that picked
-     its own breaks could pick easy ones, which is grading its own work
-     (decided 2026-10-23). Then it runs each check on today's code: a new promise's check
-     must be red there, red first, and a kept promise's check must be green.
-     For a kept promise, the planted break alone shows the check can fail.
+     drafts each check, before any code is built. Then it runs each check on
+     today's code: a new promise's check must be red there, red first, and a
+     kept promise's check must be green.
   4. **Build.** The builder works until every check is green. A diff that
      touches a check asks the owner
      ([Nobody writes their own exam](./nobody-writes-their-own-exam.md)).
-  5. **Ship.** Every promise green and in step, by experiment 117's gate,
+  5. **Mutation test, after the build.** All code, no agent.
+     - A mutation tool such as Stryker, not the writer, makes the planted
+       breaks: small edits to the lines the build changed and the lines each
+       kept promise covers. Mutation testing calls each one a mutant, and a
+       check that fails on it kills it. A writer that picked its own breaks
+       could pick easy ones, which is grading its own work (decided
+       2026-10-23).
+     - It runs after the build, not before (2026-10-24): for a new promise,
+       the lines do not exist until the build writes them.
+     - A mutant the typecheck refuses does not count, and the repo's own
+       tests run first: the new check is graded on what they miss
+       (experiment 121's hand check, 2026-10-24).
+     - **Every mutant that lives blocks the pull request** (decided
+       2026-10-24). It goes back to the verify writer.
+     - **The one way out is Stryker's own disable comment** on that line,
+       with a reason. Some mutants change nothing, and no program can decide
+       that in general: testing calls it the equivalent mutant problem. So
+       code does not try. A disable comment changes the exam, so a diff that
+       adds one asks the owner, with the line quoted. No agent judges
+       "harmless".
+  6. **Ship.** Every promise green and in step, by experiment 117's gate,
      before the merge.
 
 The answers, in the [five verbs](./outcome-names.md):
 
 ```
 plan           promises drafted              ask:owner:approval
-verify writer  a mutant survived             send:verify_writer:mutant_survived
-               a new promise already green   ask:owner:already_kept
+verify writer  a new promise already green   ask:owner:already_kept
                a kept promise red today      ask:owner:not_kept
-               every mutant killed, as today done
+               every check as the plan says  done
 build          every check green             done
                the diff touches a check      ask:owner:check_change
+mutation test  every mutant killed           done
+               a mutant survived             send:verify_writer:mutant_survived
+               the diff disables a mutant    ask:owner:check_change
 ship           a promise red or out of step  send:builder:promise_red
 ```
 
