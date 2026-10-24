@@ -650,7 +650,7 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 					from: yield* source.run.ended,
 					to: yield* target.run.ended,
 				};
-			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({
 			waiting: {sent: WINDOW, got: WINDOW},
@@ -698,7 +698,7 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 				const before = got.length;
 				yield* Deferred.succeed(go, undefined);
 				return {from, sent, before, to: yield* target.run.ended};
-			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({
 			from: {kind: "ended", unread: {}},

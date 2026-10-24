@@ -216,7 +216,7 @@ describe("a machine whose Cmds are defined from Effect schemas and from zod, sid
 			});
 			const runtime = yield* handle.ready;
 			yield* runtime.dispatch({type: "start", id: "7"});
-			return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+			return yield* runtime.done();
 		});
 		const live = () => Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(jev())));
 

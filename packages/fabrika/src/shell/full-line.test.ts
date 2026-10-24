@@ -51,19 +51,14 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 				return {status: all[told - 1]?.status, out: printed.values.slice(from).map((p) => p.text)};
 			});
 		/** `jobs`, again and again, until its rows pass `until`. */
-		const jobsUntil = (until: (rows: readonly string[]) => boolean) => {
-			let last: readonly string[] = [];
-			return Effect.gen(function* () {
+		const jobsUntil = (until: (rows: readonly string[]) => boolean) =>
+			Effect.gen(function* () {
 				for (;;) {
-					last = (yield* line("jobs")).out;
-					if (until(last)) return last;
+					const rows = (yield* line("jobs")).out;
+					if (until(rows)) return rows;
 					yield* Effect.sleep(Duration.millis(5));
 				}
-			}).pipe(
-				Effect.timeout(Duration.seconds(3)),
-				Effect.catch(() => Effect.die(`jobs never got there; it showed:\n${last.join("\n")}`)),
-			);
-		};
+			});
 		return {started, line, jobsUntil};
 	});
 

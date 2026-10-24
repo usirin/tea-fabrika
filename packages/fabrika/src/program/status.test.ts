@@ -81,7 +81,7 @@ const counted = (s: {readonly n: number; readonly done: boolean}) =>
 const until = (ready: () => boolean) =>
 	Effect.gen(function* () {
 		while (!ready()) yield* Effect.sleep(Duration.millis(2));
-	}).pipe(Effect.timeout(Duration.seconds(5)), Effect.orDie);
+	});
 
 const byId = (copies: readonly Copy[]) => [...copies].sort((x, y) => x.id.localeCompare(y.id));
 
@@ -219,10 +219,7 @@ describe("status lines: one row per copy", () => {
 							? {id, line: "finished at 0", live: false}
 							: {id, line: `at ${steps.get(id)}`, live: true},
 					);
-				yield* until(() => JSON.stringify(byId(view.copies())) === JSON.stringify(want())).pipe(
-					Effect.timeout(Duration.seconds(2)),
-					Effect.catchCause(() => Effect.void),
-				);
+				yield* until(() => JSON.stringify(byId(view.copies())) === JSON.stringify(want()));
 				const end = yield* started.run.ended.pipe(Effect.timeoutOption(Duration.millis(20)));
 				// How the run ended, if it did, in one line: the first of its cause.
 				const ended = Option.getOrNull(

@@ -173,7 +173,7 @@ function runOn(
 		});
 		const runtime = yield* handle.ready;
 		yield* runtime.dispatch(first);
-		return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+		return yield* runtime.done();
 	});
 	const services = Layer.mergeAll(fake.layer, fake.thread, scriptedJev([] as never), host.layer);
 	return Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(services)));
@@ -517,7 +517,7 @@ describe("with the switch off, nothing changes", () => {
 					seen.push(...Object.values(s.turns).map((turn) => turn.state.phase));
 			});
 			yield* runtime.dispatch({type: "start", run: "r1", lane: "42", knobs});
-			return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
+			return yield* runtime.done();
 		});
 		// No `CodeHost` and no `CodeHostWrites` are provided: with the switch off the machine needs neither.
 		const end = await Effect.runPromise(

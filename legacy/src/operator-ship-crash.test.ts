@@ -333,9 +333,7 @@ function runOnce(
 		scriptedJev([]),
 		w.gh.layer,
 	);
-	return Effect.runPromise(
-		body.pipe(Effect.scoped, Effect.provide(services), Effect.timeout("4 seconds")),
-	);
+	return Effect.runPromise(body.pipe(Effect.scoped, Effect.provide(services)));
 }
 
 /**

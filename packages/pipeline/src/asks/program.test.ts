@@ -17,12 +17,7 @@ const run = <A, E>(
 	body: Effect.Effect<A, E, any>,
 	layer: ReturnType<typeof memoryLedger>["layer"],
 ) =>
-	Effect.runPromise(
-		body.pipe(Effect.scoped, Effect.provide(layer), Effect.timeout("5 seconds")) as Effect.Effect<
-			A,
-			unknown
-		>,
-	);
+	Effect.runPromise(body.pipe(Effect.scoped, Effect.provide(layer)) as Effect.Effect<A, unknown>);
 
 const NOBODY_HOLDS = {holds: 0};
 const INPUTS = [

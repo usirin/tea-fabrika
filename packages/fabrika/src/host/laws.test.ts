@@ -22,7 +22,7 @@ beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
-}, 60_000);
+});
 afterAll(async () => {
 	await mf.dispose();
 	rmSync(dir, {recursive: true, force: true});

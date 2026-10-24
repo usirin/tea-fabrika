@@ -3,7 +3,7 @@ import {noSpend} from "@kampus/fabrika/agents/claude";
 import {runEnv} from "@kampus/fabrika/agents/sandbox";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {beforeAll, describe, expect, it} from "vitest";
 import {memoryLedger} from "./asks/ledger.ts";
 import {bookOf, foldLedger} from "./asks/rules.ts";
 import {runChild} from "./child.ts";
@@ -200,15 +200,16 @@ beforeAll(async () => {
 	);
 	// The stand-in comes first on the PATH for the rest of this file: every process started here finds it.
 	process.env.PATH = `${world.root}/bin:${world.path ?? ""}`;
-});
-
-afterAll(async () => {
-	process.env.PATH = world.path;
-	await onNode(
-		Effect.gen(function* () {
-			yield* (yield* FileSystem.FileSystem).remove(world.root, {recursive: true});
-		}),
-	);
+	// Undone after this file's tests. Vitest runs it only if the set-up got this far, so a set-up
+	// that failed shows its own error, not a second one from undoing what was never made.
+	return async () => {
+		process.env.PATH = world.path;
+		await onNode(
+			Effect.gen(function* () {
+				yield* (yield* FileSystem.FileSystem).remove(world.root, {recursive: true});
+			}),
+		);
+	};
 });
 
 // ---------------------------------------------------------------- the reviewer

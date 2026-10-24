@@ -48,7 +48,6 @@ describe("the ui-verification pack", () => {
 			}).pipe(
 				Effect.scoped,
 				Effect.provide(Layer.mergeAll(fakeShots("shots"), Layer.succeed(Seen, {patterns: SEEN}))),
-				Effect.timeout("5 seconds"),
 			),
 		);
 		expect(cleared.values).toEqual([{plan: PLAN, task: T1, build: 1, by: BY}]);

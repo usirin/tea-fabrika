@@ -48,22 +48,16 @@ const session = (list: ProgramList) =>
 		 * `jobs`, again and again, until a row of it has `text`. Only its rows: a job's own output
 		 * printed while `jobs` ran is left out.
 		 */
-		const jobsShowing = (text: string) => {
-			let last: readonly string[] = [];
-			return Effect.gen(function* () {
+		const jobsShowing = (text: string) =>
+			Effect.gen(function* () {
 				for (;;) {
 					const out = (yield* line("jobs")).out.filter(
 						(row) => row.startsWith("      ") || /^\[\d+\] (running|detached) /.test(row),
 					);
-					last = out;
 					if (out.some((row) => row.includes(text))) return out;
 					yield* Effect.sleep(Duration.millis(5));
 				}
-			}).pipe(
-				Effect.timeout(Duration.seconds(3)),
-				Effect.catch(() => Effect.die(`jobs never showed ${text}; it showed:\n${last.join("\n")}`)),
-			);
-		};
+			});
 		return {started, line, jobsShowing};
 	});
 

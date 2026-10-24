@@ -2,7 +2,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {runEnv} from "@kampus/fabrika/agents/sandbox";
 import {Effect, FileSystem, Path, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {beforeAll, describe, expect, it} from "vitest";
 import {runChild} from "./child.ts";
 import {changeChecksOf, type LocalChecks, shipChecksOf, withLocalChecks} from "./local-checks.ts";
 import type {CodeHost} from "./services.ts";
@@ -108,14 +108,14 @@ beforeAll(async () => {
 			return {root, work, passing, failing};
 		}),
 	);
-});
-
-afterAll(async () => {
-	await onNode(
-		Effect.gen(function* () {
-			yield* (yield* FileSystem.FileSystem).remove(world.root, {recursive: true});
-		}),
-	);
+	// Undone after this file's tests, and only if the set-up got this far (see code-host-local).
+	return async () => {
+		await onNode(
+			Effect.gen(function* () {
+				yield* (yield* FileSystem.FileSystem).remove(world.root, {recursive: true});
+			}),
+		);
+	};
 });
 
 /** GitHub as it reads a repository with no CI: no check has ever reported, so pending. */

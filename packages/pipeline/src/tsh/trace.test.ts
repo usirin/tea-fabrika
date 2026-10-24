@@ -63,7 +63,7 @@ const session = (list: ProgramList, storage: Storage) =>
 			Effect.gen(function* () {
 				while (!printed.values.some((p) => p.text.includes(text)))
 					yield* Effect.sleep(Duration.millis(5));
-			}).pipe(Effect.timeout(Duration.seconds(5)), Effect.orDie);
+			});
 		return {started, line, heard};
 	});
 

@@ -456,9 +456,7 @@ describe("a failure tea reports ends the run, never the process", () => {
 		});
 		// Before: tea's default rethrew the failure on a macrotask, and done() waited for ever.
 		const called = await Effect.runPromise(
-			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}).pipe(
-				Effect.timeout("2 seconds"),
-			),
+			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}),
 		);
 		const words = `job run j failed (tea's "sub"): the work's feed broke`;
 		expect(seen).toEqual([`Error: ${words}`]);

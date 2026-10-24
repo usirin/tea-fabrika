@@ -78,10 +78,8 @@ const prompts = (folder: string) => {
 	return existsSync(at) ? readFileSync(at, "utf8").split("\n").filter(Boolean) : [];
 };
 
-const until = async (check: () => boolean, what: string) => {
-	const deadline = Date.now() + 20_000;
+const until = async (check: () => boolean) => {
 	while (!check()) {
-		if (Date.now() > deadline) throw new Error(`waited for ${what}`);
 		await new Promise((resolve) => setTimeout(resolve, 25));
 	}
 };
@@ -105,11 +103,11 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 			// The kill lands in turn 2 with all three prompts kept. A prompt is kept once acp reads it
 			// off its line, at its own pace: on a busy machine prompt 2 can reach the agent before
 			// prompt 3 is kept, and a kill then loses prompt 3 (tsh tells a line once). So wait on both.
-			await until(() => prompts(folder).length === 2, "the second prompt");
+			await until(() => prompts(folder).length === 2);
 			await until(() => {
 				const s = kept(home);
 				return s !== null && s.told === 3 && s.turns === 1;
-			}, "all three prompts kept, in turn 2");
+			});
 			a.child.kill("SIGKILL");
 			await a.exited;
 

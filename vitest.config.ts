@@ -19,5 +19,10 @@ export default defineConfig({
 		// is 2.1 times that). A test does not set its own limit to get room on a busy machine; if
 		// tests grow slower, measure again and change this number.
 		testTimeout: 60_000,
+		// The same limit for a `beforeAll` or `afterAll`, for the same reason, not vitest's 10 s
+		// default, which failed a git set-up on CI once with no bug (code-host-local). A hook is
+		// set-up for its tests, so it gets their limit. Measured on 2026-10-24 with three whole
+		// suites side by side: no file's hooks took more than 1.5 s in all.
+		hookTimeout: 60_000,
 	},
 });

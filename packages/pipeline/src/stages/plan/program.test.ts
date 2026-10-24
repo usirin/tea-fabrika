@@ -113,7 +113,7 @@ const planOne = (w: ReturnType<typeof world>) =>
 			started.close("ticket");
 			yield* started.run.ended;
 			return planned.values;
-		}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+		}).pipe(Effect.scoped, Effect.provide(w.services)),
 	);
 
 describe("plan: the user's job", () => {

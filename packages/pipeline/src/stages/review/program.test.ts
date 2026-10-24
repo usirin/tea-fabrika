@@ -755,7 +755,6 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 			}).pipe(
 				Effect.scoped,
 				Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer, memoryRecord().layer)),
-				Effect.timeout("2 seconds"),
 			),
 		);
 		return {seen, calls};
@@ -956,7 +955,6 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 						recordOn(disk),
 					),
 				),
-				Effect.timeout("5 seconds"),
 			),
 		).then(() => shipped);
 	return {go, kill, review: reviewLife.storage, ship: shipLife.storage};
