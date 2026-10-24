@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import {describe, expect, it} from "@effect/vitest";
 import type {AnyRun} from "@kampus/fabrika";
 import {memoryStorage, type Storage} from "@kampus/fabrika";
 import type {AnswerBody} from "@kampus/pipeline/asks/ask";
@@ -21,7 +22,6 @@ import {numbered} from "@kampus/pipeline/stages/plan/ids";
 import {criteriaIn} from "@kampus/pipeline/stages/plan/lines";
 import {revisionOfDraft} from "@kampus/pipeline/stages/plan/plan";
 import {Effect, FileSystem, Path} from "effect";
-import {describe, expect, it} from "vitest";
 import {DESK, markerOf, threadOf} from "./comment.ts";
 import {fileOf} from "./markdown.ts";
 import {answerOf} from "./reply.ts";
@@ -114,11 +114,14 @@ const stopAll = (h: Host) =>
 		for (const p of h.wired.packs) yield* p.running.stop;
 	});
 
-/** Wait until `check` holds. */
-const until = <E, R>(check: Effect.Effect<boolean, E, R>) =>
+/** Wait until `check` holds. Stopped mid-wait (the test's time limit, or a cancel), it says `what`, and `seen()`. */
+const until = <E, R>(what: string, check: Effect.Effect<boolean, E, R>, seen = () => "") =>
 	Effect.gen(function* () {
 		while (!(yield* check)) yield* Effect.sleep("5 millis");
-	});
+	}).pipe(
+		// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for and saw last.
+		Effect.onInterrupt(() => Effect.logError(`timed out waiting for ${what}${seen()}`)),
+	);
 
 /** The ids the desk's inbox shows, top to bottom, read back from what the view wrote. */
 const inboxIds = (folder: string, view: View) =>
@@ -153,6 +156,7 @@ const pageOf = (folder: string, view: View, id: string, where: string) =>
 /** Wait until the page for one ask says `text`. */
 const pageSays = (folder: string, view: View, id: string, where: string, text: string) =>
 	until(
+		`the page of ${id} to say ${text}`,
 		pageOf(folder, view, id, where).pipe(
 			Effect.map((page) => page.includes(text)),
 			Effect.orElseSucceed(() => false),
@@ -164,20 +168,25 @@ const openIds = (disk: ReturnType<typeof memoryLedger>) =>
 const answeredCount = (disk: ReturnType<typeof memoryLedger>) =>
 	disk.read().filter((e) => e.fact.type === "answered").length;
 
-const shows = (folder: string, view: View, ids: () => readonly string[]) =>
-	until(
-		Effect.map(inboxIds(folder, view), (shown) => JSON.stringify(shown) === JSON.stringify(ids())),
+const shows = (folder: string, view: View, ids: () => readonly string[]) => {
+	let shown: readonly string[] = [];
+	return until(
+		`the desk to show ${ids().length} asks`,
+		Effect.map(inboxIds(folder, view), (now) => {
+			shown = now;
+			return JSON.stringify(now) === JSON.stringify(ids());
+		}),
+		() => `; it shows ${shown.length}: ${shown.join(", ")}`,
 	);
+};
 
 const run = <A, E>(body: (disk: ReturnType<typeof memoryLedger>) => Effect.Effect<A, E, any>) => {
 	const disk = memoryLedger();
-	return Effect.runPromise(
-		body(disk).pipe(
-			Effect.scoped,
-			Effect.provide(disk.layer),
-			Effect.provide(NodeServices.layer),
-		) as Effect.Effect<A>,
-	);
+	return body(disk).pipe(
+		Effect.scoped,
+		Effect.provide(disk.layer),
+		Effect.provide(NodeServices.layer),
+	) as Effect.Effect<A>;
 };
 
 /** A ticket's plan, by the ticket's name: where its asks are shown. */
@@ -239,13 +248,17 @@ const sixPlans = (view: View) =>
 
 			h.reply(v2, `/change ${added} the list stays sorted when the suite runs a second time`);
 			yield* shows(folder, view, () => []);
-			yield* until(Effect.sync(() => answeredCount(disk) === 7));
+			yield* until(
+				"the change to be kept",
+				Effect.sync(() => answeredCount(disk) === 7),
+			);
 			const closed = yield* pageOf(folder, view, v2, at);
 			expect(closed).toContain(`change ${added}`);
 
 			// The second pack heard the same, and the core knew neither.
 			const fs = yield* FileSystem.FileSystem;
 			yield* until(
+				"the log to have every ask and answer",
 				Effect.map(
 					fs.readFileString(`${folder}/asks.log`).pipe(Effect.orElseSucceed(() => "")),
 					(log) => log.split("\n").filter((l) => l !== "").length === 14,
@@ -257,65 +270,91 @@ const sixPlans = (view: View) =>
 	);
 
 describe("the owner's desk, wired from one config line", () => {
-	it("the six 86b plans as approvals on markdown, one changed after approval shown as only what changed", async () => {
-		const facts = await sixPlans("markdown");
-		expect(facts.filter((f) => f.type === "answered").map((f) => f.answer.kind)).toEqual([
-			"approve",
-			"approve",
-			"approve",
-			"approve",
-			"approve",
-			"no",
-			"change",
-		]);
-	});
-
-	it("the same answers on the comment stand-in leave the same ledger: the view swaps, the core does not change", async () => {
-		const [md, comment] = [await sixPlans("markdown"), await sixPlans("comment")];
-		expect(comment).toEqual(md);
-	});
-
-	it("a stuck task answered keep going 3: counted from review rounds after the answer, out of rounds it asks again", async () => {
-		await run((disk) =>
+	it.live(
+		"the six 86b plans as approvals on markdown, one changed after approval shown as only what changed",
+		() =>
 			Effect.gen(function* () {
-				const folder = yield* project;
-				const view = "comment";
-				const h = yield* host(folder, tomlOf(folder, [DESK_PACK, LOG_PACK], view), memoryStorage());
-				const plans = plans86b();
-				for (const p of plans) yield* h.core.tell("planned", p);
-				yield* shows(folder, view, () => plans.map((p) => planId(p.ticket, 1)));
-				for (const p of plans) h.reply(planId(p.ticket, 1), "/approve");
-				yield* until(Effect.sync(() => answeredCount(disk) === 6));
-
-				const plan = nameOf(urlOf("367"));
-				for (const open of [4, 3, 3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
-				const first = stuckId(plan, T1, 1);
-				yield* shows(folder, view, () => [first]);
-				expect(yield* pageOf(folder, view, first, plan)).toContain("4 → 3 → 3 → 3");
-
-				// The wrong kind of answer is refused by the core, and the desk says why on the same comment.
-				h.reply(first, "/approve");
-				yield* until(
-					Effect.map(pageOf(folder, view, first, plan), (body) => body.includes("was not taken")),
-				);
-
-				h.reply(first, "/keep-going 3");
-				yield* shows(folder, view, () => []);
-				yield* until(Effect.sync(() => answeredCount(disk) === 7));
-				for (const open of [3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
-				yield* until(Effect.sync(() => disk.read().length === 6 + 6 + 4 + 1 + 2));
-				expect(yield* inboxIds(folder, view)).toEqual([]);
-				yield* h.core.tell("reviewed", {plan, task: T1, open: 3});
-				const again = stuckId(plan, T1, 2);
-				yield* shows(folder, view, () => [again]);
-				expect(yield* pageOf(folder, view, again, plan)).toContain("the rounds you gave are spent");
-
-				h.reply(again, "/reword c3 When the suite runs twice, both runs pass");
-				yield* shows(folder, view, () => []);
-				yield* stopAll(h);
+				const facts = yield* sixPlans("markdown");
+				expect(facts.filter((f) => f.type === "answered").map((f) => f.answer.kind)).toEqual([
+					"approve",
+					"approve",
+					"approve",
+					"approve",
+					"approve",
+					"no",
+					"change",
+				]);
 			}),
-		);
-	});
+	);
+
+	it.live(
+		"the same answers on the comment stand-in leave the same ledger: the view swaps, the core does not change",
+		() =>
+			Effect.gen(function* () {
+				const [md, comment] = [yield* sixPlans("markdown"), yield* sixPlans("comment")];
+				expect(comment).toEqual(md);
+			}),
+	);
+
+	it.live(
+		"a stuck task answered keep going 3: counted from review rounds after the answer, out of rounds it asks again",
+		() =>
+			run((disk) =>
+				Effect.gen(function* () {
+					const folder = yield* project;
+					const view = "comment";
+					const h = yield* host(
+						folder,
+						tomlOf(folder, [DESK_PACK, LOG_PACK], view),
+						memoryStorage(),
+					);
+					const plans = plans86b();
+					for (const p of plans) yield* h.core.tell("planned", p);
+					yield* shows(folder, view, () => plans.map((p) => planId(p.ticket, 1)));
+					for (const p of plans) h.reply(planId(p.ticket, 1), "/approve");
+					yield* until(
+						"six approvals",
+						Effect.sync(() => answeredCount(disk) === 6),
+					);
+
+					const plan = nameOf(urlOf("367"));
+					for (const open of [4, 3, 3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
+					const first = stuckId(plan, T1, 1);
+					yield* shows(folder, view, () => [first]);
+					expect(yield* pageOf(folder, view, first, plan)).toContain("4 → 3 → 3 → 3");
+
+					// The wrong kind of answer is refused by the core, and the desk says why on the same comment.
+					h.reply(first, "/approve");
+					yield* until(
+						"the refusal on the comment",
+						Effect.map(pageOf(folder, view, first, plan), (body) => body.includes("was not taken")),
+					);
+
+					h.reply(first, "/keep-going 3");
+					yield* shows(folder, view, () => []);
+					yield* until(
+						"keep going kept",
+						Effect.sync(() => answeredCount(disk) === 7),
+					);
+					for (const open of [3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
+					yield* until(
+						"two rounds kept",
+						Effect.sync(() => disk.read().length === 6 + 6 + 4 + 1 + 2),
+					);
+					expect(yield* inboxIds(folder, view)).toEqual([]);
+					yield* h.core.tell("reviewed", {plan, task: T1, open: 3});
+					const again = stuckId(plan, T1, 2);
+					yield* shows(folder, view, () => [again]);
+					expect(yield* pageOf(folder, view, again, plan)).toContain(
+						"the rounds you gave are spent",
+					);
+
+					h.reply(again, "/reword c3 When the suite runs twice, both runs pass");
+					yield* shows(folder, view, () => []);
+					yield* stopAll(h);
+				}),
+			),
+	);
 
 	const branches: readonly {readonly text: string; readonly answer: AnswerBody}[] = [
 		{
@@ -357,8 +396,8 @@ describe("the owner's desk, wired from one config line", () => {
 	];
 
 	for (const branch of branches)
-		it(`demlik #68 ruled through the desk: ${branch.text.slice(6, 23).trim()}`, async () => {
-			await run((disk) =>
+		it.live(`demlik #68 ruled through the desk: ${branch.text.slice(6, 23).trim()}`, () =>
+			run((disk) =>
 				Effect.gen(function* () {
 					const folder = yield* project;
 					const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
@@ -375,35 +414,40 @@ describe("the owner's desk, wired from one config line", () => {
 					expect(disk.read().at(-1)?.fact).toEqual({type: "answered", id, answer: branch.answer});
 					yield* stopAll(h);
 				}),
-			);
-		});
+			),
+		);
 });
 
 describe("the core without the desk", () => {
-	it("with the desk off the core runs; its asks wait in the ledger, and the desk shows them all when it is turned on", async () => {
-		await run((disk) =>
-			Effect.gen(function* () {
-				const folder = yield* project;
-				const storage = memoryStorage();
-				const off = yield* host(folder, tomlOf(folder, []), storage);
-				expect(off.wired.packs).toEqual([]);
-				for (const p of plans86b()) yield* off.core.tell("planned", p);
-				for (const {ruling} of RULINGS) yield* off.core.tell("ruling", ruling);
-				yield* until(Effect.sync(() => openIds(disk).length === 10));
-				yield* stopAll(off);
-				const fs = yield* FileSystem.FileSystem;
-				expect(yield* fs.exists(`${folder}/desk`)).toBe(false);
+	it.live(
+		"with the desk off the core runs; its asks wait in the ledger, and the desk shows them all when it is turned on",
+		() =>
+			run((disk) =>
+				Effect.gen(function* () {
+					const folder = yield* project;
+					const storage = memoryStorage();
+					const off = yield* host(folder, tomlOf(folder, []), storage);
+					expect(off.wired.packs).toEqual([]);
+					for (const p of plans86b()) yield* off.core.tell("planned", p);
+					for (const {ruling} of RULINGS) yield* off.core.tell("ruling", ruling);
+					yield* until(
+						"ten asks kept",
+						Effect.sync(() => openIds(disk).length === 10),
+					);
+					yield* stopAll(off);
+					const fs = yield* FileSystem.FileSystem;
+					expect(yield* fs.exists(`${folder}/desk`)).toBe(false);
 
-				const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
-				yield* shows(folder, "markdown", () => openIds(disk));
-				expect(yield* inboxIds(folder, "markdown")).toHaveLength(10);
-				yield* stopAll(on);
-			}),
-		);
-	});
+					const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
+					yield* shows(folder, "markdown", () => openIds(disk));
+					expect(yield* inboxIds(folder, "markdown")).toHaveLength(10);
+					yield* stopAll(on);
+				}),
+			),
+	);
 
-	it("a plan written again before it is answered: the desk shows the new version only", async () => {
-		await run((disk) =>
+	it.live("a plan written again before it is answered: the desk shows the new version only", () =>
+		run((disk) =>
 			Effect.gen(function* () {
 				const folder = yield* project;
 				const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
@@ -413,7 +457,10 @@ describe("the core without the desk", () => {
 				const p393 = plans.find((p) => numberOf(p.ticket) === "393");
 				if (p393 === undefined) return yield* Effect.die(new Error("no 393"));
 				yield* h.core.tell("planned", p393);
-				yield* until(Effect.sync(() => openIds(disk).includes(planId(p393.ticket, 2))));
+				yield* until(
+					"v2 kept",
+					Effect.sync(() => openIds(disk).includes(planId(p393.ticket, 2))),
+				);
 				yield* shows(folder, "markdown", () => openIds(disk));
 				yield* pageSays(
 					folder,
@@ -424,35 +471,40 @@ describe("the core without the desk", () => {
 				);
 				yield* stopAll(h);
 			}),
-		);
-	});
+		),
+	);
 
-	it("an ask answered while the desk was off is gone from the desk when it is turned on again", async () => {
-		await run((disk) =>
-			Effect.gen(function* () {
-				const folder = yield* project;
-				const storage = memoryStorage();
-				const plans = plans86b();
-				const first = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
-				for (const p of plans) yield* first.core.tell("planned", p);
-				yield* shows(folder, "markdown", () => plans.map((p) => planId(p.ticket, 1)));
-				yield* stopAll(first);
+	it.live(
+		"an ask answered while the desk was off is gone from the desk when it is turned on again",
+		() =>
+			run((disk) =>
+				Effect.gen(function* () {
+					const folder = yield* project;
+					const storage = memoryStorage();
+					const plans = plans86b();
+					const first = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
+					for (const p of plans) yield* first.core.tell("planned", p);
+					yield* shows(folder, "markdown", () => plans.map((p) => planId(p.ticket, 1)));
+					yield* stopAll(first);
 
-				// The owner answers from somewhere else (a command line) while the desk is off.
-				const off = yield* host(folder, tomlOf(folder, []), storage);
-				const id = planId(urlOf("367"), 1);
-				yield* off.core.tell("answer", {id, answer: {kind: "approve"}});
-				yield* until(Effect.sync(() => answeredCount(disk) === 1));
-				yield* stopAll(off);
+					// The owner answers from somewhere else (a command line) while the desk is off.
+					const off = yield* host(folder, tomlOf(folder, []), storage);
+					const id = planId(urlOf("367"), 1);
+					yield* off.core.tell("answer", {id, answer: {kind: "approve"}});
+					yield* until(
+						"the answer kept",
+						Effect.sync(() => answeredCount(disk) === 1),
+					);
+					yield* stopAll(off);
 
-				const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
-				yield* shows(folder, "markdown", () => openIds(disk));
-				expect(yield* inboxIds(folder, "markdown")).not.toContain(id);
-				yield* pageSays(folder, "markdown", id, nameOf(urlOf("367")), "no longer waiting");
-				yield* stopAll(on);
-			}),
-		);
-	});
+					const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
+					yield* shows(folder, "markdown", () => openIds(disk));
+					expect(yield* inboxIds(folder, "markdown")).not.toContain(id);
+					yield* pageSays(folder, "markdown", id, nameOf(urlOf("367")), "no longer waiting");
+					yield* stopAll(on);
+				}),
+			),
+	);
 });
 
 describe("what the host refuses before anything starts", () => {
@@ -464,28 +516,34 @@ describe("what the host refuses before anything starts", () => {
 			}),
 		);
 
-	it("a pack that is not installed where packs are found", async () => {
-		expect(await refusal(() => 'packs = ["@acme/not-here"]\n')).toMatchObject({
-			_tag: "pack_refused",
-			name: "@acme/not-here",
-			why: "no package @acme/not-here is installed where packs are found",
-		});
-	});
+	it.live("a pack that is not installed where packs are found", () =>
+		Effect.gen(function* () {
+			expect(yield* refusal(() => 'packs = ["@acme/not-here"]\n')).toMatchObject({
+				_tag: "pack_refused",
+				name: "@acme/not-here",
+				why: "no package @acme/not-here is installed where packs are found",
+			});
+		}),
+	);
 
-	it("a pack whose own settings do not fit, named by the pack", async () => {
-		const why = await refusal(
-			() => `packs = ["${DESK_PACK}"]\n\n[pack."${DESK_PACK}"]\nview = "slack"\n`,
-		);
-		expect(why).toMatchObject({_tag: "pack_refused", name: DESK_PACK});
-		expect(String((why as {why: string}).why)).toContain("its settings");
-	});
+	it.live("a pack whose own settings do not fit, named by the pack", () =>
+		Effect.gen(function* () {
+			const why = yield* refusal(
+				() => `packs = ["${DESK_PACK}"]\n\n[pack."${DESK_PACK}"]\nview = "slack"\n`,
+			);
+			expect(why).toMatchObject({_tag: "pack_refused", name: DESK_PACK});
+			expect(String((why as {why: string}).why)).toContain("its settings");
+		}),
+	);
 
-	it("a package that is not a pack", async () => {
-		expect(await refusal(() => 'packs = ["effect"]\n')).toMatchObject({
-			_tag: "pack_refused",
-			name: "effect",
-		});
-	});
+	it.live("a package that is not a pack", () =>
+		Effect.gen(function* () {
+			expect(yield* refusal(() => 'packs = ["effect"]\n')).toMatchObject({
+				_tag: "pack_refused",
+				name: "effect",
+			});
+		}),
+	);
 });
 
 describe("two packs through the core alone: ui-verification raises a check, the desk shows it", () => {
@@ -519,6 +577,7 @@ describe("two packs through the core alone: ui-verification raises a check, the 
 	const raised = (disk: ReturnType<typeof memoryLedger>, build: number) =>
 		Effect.gen(function* () {
 			yield* until(
+				`the check of build ${build}`,
 				Effect.sync(() =>
 					disk.read().some((e) => e.fact.type === "check_raised" && e.fact.build === build),
 				),
@@ -526,8 +585,8 @@ describe("two packs through the core alone: ui-verification raises a check, the 
 			expect(shippedOf(disk).filter((s) => s.build === build)).toEqual([]);
 		});
 
-	it("nothing a user sees changed: no ask, it ships as usual", async () => {
-		await run((disk) =>
+	it.live("nothing a user sees changed: no ask, it ships as usual", () =>
+		run((disk) =>
 			Effect.gen(function* () {
 				const {folder, h, plan} = yield* approved367();
 				yield* h.core.tell("build", {
@@ -535,67 +594,80 @@ describe("two packs through the core alone: ui-verification raises a check, the 
 					task: T1,
 					changes: ["packages/tea/src/fold.ts", "docs/fold.md"],
 				});
-				yield* until(Effect.sync(() => shippedOf(disk).length === 1));
+				yield* until(
+					"the build shipped",
+					Effect.sync(() => shippedOf(disk).length === 1),
+				);
 				expect(shippedOf(disk)).toEqual([{task: T1, build: 1}]);
 				expect(yield* inboxIds(folder, "markdown")).toEqual([]);
 				expect(openIds(disk)).toEqual([]);
 				yield* stopAll(h);
 			}),
-		);
-	});
+		),
+	);
 
-	it("something a user sees changed: the desk shows the check with its pictures; yes ships it", async () => {
-		await run((disk) =>
-			Effect.gen(function* () {
-				const {folder, h, plan} = yield* approved367();
-				yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
-				yield* raised(disk, 1);
-				const id = checkOf(plan, 1);
-				yield* shows(folder, "markdown", () => [id]);
-				const page = yield* pageOf(folder, "markdown", id, plan);
-				expect(page).toContain("[before](");
-				expect(page).toContain("[after](");
-				expect(page).toContain("src/ui/inbox.tsx");
-				// Held while the owner looks.
-				expect(shippedOf(disk)).toEqual([]);
-				h.reply(id, "/yes");
-				yield* until(Effect.sync(() => shippedOf(disk).length === 1));
-				expect(shippedOf(disk)).toEqual([{task: T1, build: 1}]);
-				yield* stopAll(h);
-			}),
-		);
-	});
+	it.live(
+		"something a user sees changed: the desk shows the check with its pictures; yes ships it",
+		() =>
+			run((disk) =>
+				Effect.gen(function* () {
+					const {folder, h, plan} = yield* approved367();
+					yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
+					yield* raised(disk, 1);
+					const id = checkOf(plan, 1);
+					yield* shows(folder, "markdown", () => [id]);
+					const page = yield* pageOf(folder, "markdown", id, plan);
+					expect(page).toContain("[before](");
+					expect(page).toContain("[after](");
+					expect(page).toContain("src/ui/inbox.tsx");
+					// Held while the owner looks.
+					expect(shippedOf(disk)).toEqual([]);
+					h.reply(id, "/yes");
+					yield* until(
+						"the build shipped",
+						Effect.sync(() => shippedOf(disk).length === 1),
+					);
+					expect(shippedOf(disk)).toEqual([{task: T1, build: 1}]);
+					yield* stopAll(h);
+				}),
+			),
+	);
 
-	it("no, with a note: the note is a new criterion, the task is built again, and that build is checked", async () => {
-		await run((disk) =>
-			Effect.gen(function* () {
-				const {folder, h, plan} = yield* approved367();
-				yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
-				yield* raised(disk, 1);
-				const first = checkOf(plan, 1);
-				yield* shows(folder, "markdown", () => [first]);
-				const note = "When the inbox is empty, it says Nothing waits, not a blank page";
-				h.reply(first, `/no ${note}`);
-				yield* shows(folder, "markdown", () => []);
-				yield* pageSays(folder, "markdown", first, plan, `no: ${note}`);
-				const criteria = criteriaOf(foldLedger(disk.read()), plan, T1);
-				// The note gets the next id the plan's book gives, after task 1's four.
-				expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: T1});
-				expect(shippedOf(disk)).toEqual([]);
+	it.live(
+		"no, with a note: the note is a new criterion, the task is built again, and that build is checked",
+		() =>
+			run((disk) =>
+				Effect.gen(function* () {
+					const {folder, h, plan} = yield* approved367();
+					yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
+					yield* raised(disk, 1);
+					const first = checkOf(plan, 1);
+					yield* shows(folder, "markdown", () => [first]);
+					const note = "When the inbox is empty, it says Nothing waits, not a blank page";
+					h.reply(first, `/no ${note}`);
+					yield* shows(folder, "markdown", () => []);
+					yield* pageSays(folder, "markdown", first, plan, `no: ${note}`);
+					const criteria = criteriaOf(foldLedger(disk.read()), plan, T1);
+					// The note gets the next id the plan's book gives, after task 1's four.
+					expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: T1});
+					expect(shippedOf(disk)).toEqual([]);
 
-				yield* h.core.tell("build", {
-					plan,
-					task: T1,
-					changes: ["src/ui/inbox.tsx", "src/ui/empty.css"],
-				});
-				yield* raised(disk, 2);
-				const second = checkOf(plan, 2);
-				yield* shows(folder, "markdown", () => [second]);
-				h.reply(second, "/yes");
-				yield* until(Effect.sync(() => shippedOf(disk).length === 1));
-				expect(shippedOf(disk)).toEqual([{task: T1, build: 2}]);
-				yield* stopAll(h);
-			}),
-		);
-	});
+					yield* h.core.tell("build", {
+						plan,
+						task: T1,
+						changes: ["src/ui/inbox.tsx", "src/ui/empty.css"],
+					});
+					yield* raised(disk, 2);
+					const second = checkOf(plan, 2);
+					yield* shows(folder, "markdown", () => [second]);
+					h.reply(second, "/yes");
+					yield* until(
+						"build 2 shipped",
+						Effect.sync(() => shippedOf(disk).length === 1),
+					);
+					expect(shippedOf(disk)).toEqual([{task: T1, build: 2}]);
+					yield* stopAll(h);
+				}),
+			),
+	);
 });

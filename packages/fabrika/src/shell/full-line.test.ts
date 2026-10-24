@@ -1,5 +1,5 @@
+import {describe, expect, it} from "@effect/vitest";
 import {Deferred, Duration, Effect, Layer, Schema, Stream} from "effect";
-import {describe, expect, it} from "vitest";
 import {ear} from "../program/ear.ts";
 import {listed} from "../program/listed.ts";
 import {CAPACITY, defineProgram, start, tell} from "../program/program.ts";
@@ -51,42 +51,53 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 				return {status: all[told - 1]?.status, out: printed.values.slice(from).map((p) => p.text)};
 			});
 		/** `jobs`, again and again, until its rows pass `until`. */
-		const jobsUntil = (until: (rows: readonly string[]) => boolean) =>
-			Effect.gen(function* () {
+		const jobsUntil = (until: (rows: readonly string[]) => boolean) => {
+			let last: readonly string[] = [];
+			return Effect.gen(function* () {
 				for (;;) {
-					const rows = (yield* line("jobs")).out;
-					if (until(rows)) return rows;
+					last = (yield* line("jobs")).out;
+					if (until(last)) return last;
 					yield* Effect.sleep(Duration.millis(5));
 				}
-			});
+			}).pipe(
+				// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for and saw last.
+				Effect.onInterrupt(() =>
+					Effect.logError(`jobs never got there; it showed:\n${last.join("\n")}`),
+				),
+			);
+		};
 		return {started, line, jobsUntil};
 	});
 
 describe("jobs shows a full line", () => {
-	it("seq piped into a reader that stopped: seq waits for room, lazy's input is full; both rows go once lazy reads", async () => {
-		const seen = await Effect.runPromise(
+	it.live(
+		"seq piped into a reader that stopped: seq waits for room, lazy's input is full; both rows go once lazy reads",
+		() =>
 			Effect.gen(function* () {
-				const go = yield* Deferred.make<void>();
-				const hold = yield* Deferred.make<void>();
-				const {started, line, jobsUntil} = yield* session(go, hold);
-				expect((yield* line("seq --to 3000 | lazy &")).status).toBe(0);
-				const stuck = yield* jobsUntil((rows) => rows.some((r) => r.includes("waiting for room")));
-				yield* Deferred.succeed(go, undefined);
-				// Read when the reader has drained the line: seq has ended and lazy holds on, so the job is still in the table.
-				const moving = yield* jobsUntil(
-					(rows) => rows.length === 1 && rows[0]?.startsWith("[1] running") === true,
-				);
-				yield* Deferred.succeed(hold, undefined);
-				started.close("line");
-				yield* started.run.ended;
-				return {stuck, moving};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen.stuck).toEqual([
-			"[1] running   seq --to 3000 | lazy",
-			"      seq   waiting for room: lazy's input n is full",
-			`      lazy  input n full: ${CAPACITY} unread, 1 waiting`,
-		]);
-		expect(seen.moving).toEqual(["[1] running   seq --to 3000 | lazy"]);
-	});
+				const seen = yield* Effect.gen(function* () {
+					const go = yield* Deferred.make<void>();
+					const hold = yield* Deferred.make<void>();
+					const {started, line, jobsUntil} = yield* session(go, hold);
+					expect((yield* line("seq --to 3000 | lazy &")).status).toBe(0);
+					const stuck = yield* jobsUntil((rows) =>
+						rows.some((r) => r.includes("waiting for room")),
+					);
+					yield* Deferred.succeed(go, undefined);
+					// Read when the reader has drained the line: seq has ended and lazy holds on, so the job is still in the table.
+					const moving = yield* jobsUntil(
+						(rows) => rows.length === 1 && rows[0]?.startsWith("[1] running") === true,
+					);
+					yield* Deferred.succeed(hold, undefined);
+					started.close("line");
+					yield* started.run.ended;
+					return {stuck, moving};
+				}).pipe(Effect.scoped);
+				expect(seen.stuck).toEqual([
+					"[1] running   seq --to 3000 | lazy",
+					"      seq   waiting for room: lazy's input n is full",
+					`      lazy  input n full: ${CAPACITY} unread, 1 waiting`,
+				]);
+				expect(seen.moving).toEqual(["[1] running   seq --to 3000 | lazy"]);
+			}),
+	);
 });

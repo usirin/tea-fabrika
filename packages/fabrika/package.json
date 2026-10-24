@@ -138,6 +138,7 @@
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
 		"@demlik/tea": "catalog:",
 		"@effect/opentelemetry": "catalog:",
+		"@effect/vitest": "catalog:",
 		"@opentelemetry/api": "catalog:",
 		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
 		"@opentelemetry/resources": "catalog:",

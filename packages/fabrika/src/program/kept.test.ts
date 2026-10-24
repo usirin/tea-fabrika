@@ -1,8 +1,8 @@
 import {Cmd, type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
+import {describe, expect, it} from "@effect/vitest";
 import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
-import {describe, expect, it} from "vitest";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
 import {memoryStorage, type Storage} from "./storage.ts";
@@ -433,37 +433,45 @@ describe("a run its parent left unfinished", () => {
 });
 
 describe("a failure tea reports ends the run, never the process", () => {
-	it("a Listen whose stream fails: the parent's done() dies with the cause, tea's phase named, and the program run ends failed with it", async () => {
-		const w = {
-			...world(),
-			// A defect, as the world's type has no error: tea treats a stream that dies as one that fails.
-			subscribe: {job_work: () => Stream.die(new Error("the work's feed broke"))},
-		};
-		const seen: string[] = [];
-		const program = defineProgram({
-			name: "job",
-			description: "Waits on its toy job, whose work fails.",
-			inputs: {},
-			outputs: {},
-			machines: {job: jobKind(w)},
-			main: ({machines}) =>
-				Effect.gen(function* () {
-					const runtime = yield* machines.job.get(ID).start(START);
-					const end = yield* runtime.done().pipe(Effect.exit);
-					seen.push(Exit.isFailure(end) ? (Cause.pretty(end.cause).split("\n")[0] ?? "") : "done");
-					yield* end;
-				}).pipe(Effect.scoped),
-		});
-		// Before: tea's default rethrew the failure on a macrotask, and done() waited for ever.
-		const called = await Effect.runPromise(
-			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}),
-		);
-		const words = `job run j failed (tea's "sub"): the work's feed broke`;
-		expect(seen).toEqual([`Error: ${words}`]);
-		expect(endOf(called).kind).toBe("failed");
-		expect(endOf(called).why).toContain(words);
-		expect(w.writes).toEqual([]);
-	});
+	it.live(
+		"a Listen whose stream fails: the parent's done() dies with the cause, tea's phase named, and the program run ends failed with it",
+		() =>
+			Effect.gen(function* () {
+				const w = {
+					...world(),
+					// A defect, as the world's type has no error: tea treats a stream that dies as one that fails.
+					subscribe: {job_work: () => Stream.die(new Error("the work's feed broke"))},
+				};
+				const seen: string[] = [];
+				const program = defineProgram({
+					name: "job",
+					description: "Waits on its toy job, whose work fails.",
+					inputs: {},
+					outputs: {},
+					machines: {job: jobKind(w)},
+					main: ({machines}) =>
+						Effect.gen(function* () {
+							const runtime = yield* machines.job.get(ID).start(START);
+							const end = yield* runtime.done().pipe(Effect.exit);
+							seen.push(
+								Exit.isFailure(end) ? (Cause.pretty(end.cause).split("\n")[0] ?? "") : "done",
+							);
+							yield* end;
+						}).pipe(Effect.scoped),
+				});
+				// Before: tea's default rethrew the failure on a macrotask, and done() waited for ever.
+				const called = yield* call(
+					program,
+					{},
+					{keeping: {id: "job:r1", storage: memoryStorage()}},
+				);
+				const words = `job run j failed (tea's "sub"): the work's feed broke`;
+				expect(seen).toEqual([`Error: ${words}`]);
+				expect(endOf(called).kind).toBe("failed");
+				expect(endOf(called).why).toContain(words);
+				expect(w.writes).toEqual([]);
+			}),
+	);
 
 	it("a last save that fails as the run closes (tea's stop-save): the program run ends failed, and nothing is thrown at the process", async () => {
 		let broke = false;

@@ -19,6 +19,7 @@
 	},
 	"devDependencies": {
 		"@effect/platform-node": "catalog:",
+		"@effect/vitest": "catalog:",
 		"@tea-fabrika/ask-log": "workspace:*",
 		"@types/node": "catalog:",
 		"typescript": "catalog:",
