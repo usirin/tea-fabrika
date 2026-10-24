@@ -2,6 +2,10 @@
 
 Decided 2026-10-22. How the page loads a window is **open**.
 
+*Replaced 2026-10-24 by [The GUI is an Electron app first](./the-gui-is-electron-first.md):
+the app is Electron from the start, with no local port and no secret. The
+typed views below carry over unchanged.*
+
 ```ts
 // A sketch. One Node process runs the programs and serves the page.
 //   the fabrika app   http://localhost:<port>, tmux-like panes, each starts with tsh

@@ -73,6 +73,9 @@ opt-in restart backoff, and resending a dead letter.
   the gui page is a client, a view over one WebSocket, and the fabrika app's
   Node process is the host it talks to. Whether a page can attach to more
   than one host, and tsh, are still open.*
+  *Changed 2026-10-24 by [Electron first](./the-gui-is-electron-first.md): the
+  host runs in Electron's main process, and the window talks to it over one
+  MessagePort, not a WebSocket.*
 - **Where a host's config lives.** Not in `tsh.toml`, which is tsh's alone.
   One part is settled (experiment 107): which ledger fabrika's tsh opens is
   the repository's pick, `[ledger] at` in its
