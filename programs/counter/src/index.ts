@@ -7,7 +7,7 @@ import {Effect, Schema, Stream} from "effect";
 // React here: a host that runs it with no window, such as tsh in a terminal, never loads any.
 //
 //   tsh> counter            in the fabrika app, its window takes over; +1, +1, done:
-//   counter 2               what it sends, and tsh is back
+//   2                       what it sends, and tsh is back
 //
 //   viewOf(counter).of({n: 2})   {n: 2}
 
