@@ -511,3 +511,96 @@ listed when a write-up or the direction note repeats it.
 | `stuck:proof_refused` | the proof no longer holds, or none was made | none | ok | follows `Proof` |
 | `stuck:checks_stuck` | checks still running at the limit | `timed_out` | differs | `stuck:checks_timed_out`. 70% |
 | `stuck:queue_silent`, `head_moving`, `enqueue_failed`, `merge_failed`, `read_failed` | the other stops | none needed | ok | the outcome names note already asks whether `stuck` should cover writes that failed |
+
+## 7. The parent, or lane
+
+`packages/pipeline/src/stages/lane/` (the machine that takes an approved plan
+to one pull request) and `packages/pipeline/src/hosted/` (each stage as a
+program on the host).
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| lane / `lane` / `Lane` | the parent that takes one approved plan to one merged PR | a parent workflow ([Temporal, child workflows](https://docs.temporal.io/child-workflows)); a supervisor ([Erlang, supervisor](https://www.erlang.org/doc/system/sup_princ.html)); a Kanban swimlane is a row on a board | differs | keep `lane`, with the gloss "a plan's parent workflow". 55%: "parent" is the plainer word, and the docs already say it |
+| `Lane` (state type) | the lane machine's state | Elm's Model | two-ideas | `LaneState`. 80% |
+| state `phase`: `idle`, `reading`, `waiting`, `starting`, `running`, `noting`, `planning`, `opening`, `over` | where the lane is | state | ok | |
+| state `lane`, `job`, `at`, `pr`, `asks`, `flow`, `child`, `asked`, `outcome`, `report` | what each phase holds | none needed | ok | `job` and `at` follow their rows below |
+| `LaneJob` | the lane's input | workflow input | two-ideas | `LaneInput`, after `PlanInput`. "Job" is also plan's criterion and the host's scheduled job. 85% |
+| `LaneJob.plan` | the plan id | none needed | ok | |
+| `LaneJob.settings` / `.agents` / `.agents.plan`, `.build`, `.review` | the shared agent settings, and each step's own | per-step config | ok | |
+| `LaneJob.usd` | one child's dollar cap | budget | two-words | `budget`, as `Settings.budget` says. 75% |
+| `LaneJob.rubrics` | the rubric folder | rubric | ok | |
+| `LaneJob.at` | the first commit date, in seconds | epoch seconds; a commit's author date ([git commit, date formats](https://git-scm.com/docs/git-commit)) | two-ideas | `epoch`: `at` is also a place (`Found.at`), a commit to read at (`PlanTicket.at`) and a file (`Pointer.at`). 70% |
+| `LANE_STEPS: plan, build, review` / `LaneStep` | the steps that run an agent | none needed | ok | |
+| `CHILDREN: plan, catchup, build, review, ship` / `ChildKind` / `kindOf` | the kinds of child a lane starts | child specs ([Erlang, supervisor child spec](https://www.erlang.org/doc/system/sup_princ.html#child-specification)) | two-ideas | `ChildType`: `kind` is the outcome tag, the review kind and the program kind. 55% |
+| `childOf` / `offsetOf` / `jobFor` / `agentFor` | a child's name, its date offset, its input, its settings | none needed | ok | `jobFor` → `inputFor`, after the `*Job` pick |
+| `Flow` / `.flow: round, final, drop, ship, plan` | where the lane is in one piece of work | none | differs | the tag key is `flow` here, `go` in `Next`, `answer` in gates, `kind` in outcomes. One key: `kind`. 65% |
+| `Flow.task`, `.round`, `.open`, `.step`, `.head` | which task, which round, what is open, which step, at what head | none needed | ok | |
+| `"final"` / `finals` | the last review over the whole book | a final review; acceptance review | ok | |
+| `"drop"` / `dropped` | take a removed task's commits off the branch | revert ([git revert](https://git-scm.com/docs/git-revert)) | differs | `revert`, git's word. 70% |
+| `Flow.run` / `ships` | which ship run | attempt | ok | |
+| `Flow.version` / `.folds` | the plan version to make, and the tickets folded in | none | two-ideas | see `fold` in section 8 |
+| catch-up / `catchup` | the branch takes main in, or a removed task's commits come out | update branch ([GitHub, keeping a PR in sync](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/keeping-your-pull-request-in-sync-with-the-base-branch)); rebase or merge from base | differs | `sync`, GitHub's own idea ("update branch"). 55% |
+| `ChildEnd` / `.outcome` / `.outcome.kind` / `.outcome.why` / `.head` / `.open` | how a child ended, as the lane reads its row | exit reason ([Erlang, exit signals](https://www.erlang.org/doc/system/ref_man_processes.html)) | ok | |
+| `readLane` / `startChild` / `noteRound` / `openPr` / `notePlan` | the lane's moves | none needed | ok | |
+| `startChild` input `child`, `usd`, `job` | the child's name, cap, input | child spec | two-words | `usd` → `budget`; `job` → `input`. 75% |
+| `startChild` answer `started` | it was started now, not found already there | none needed | ok | |
+| `noteRound` input `plan`, `task`, `child`, `open` | one count for the stall rule | none needed | ok | |
+| stall rule | stop a loop once the list of open things stops shrinking | none found (searched Temporal, OTP, Agile): a progress check | ok | the asks core's word, glossed |
+| `openPr` input `plan`, `head`, `title`, `body` / answer `url` | open the plan's one PR | create a pull request ([GitHub REST, pulls](https://docs.github.com/en/rest/pulls/pulls)) | ok | |
+| `notePlan` input `plan`, `child`, `folds` / err `no_plan` | keep a re-plan as the next version | none needed | ok | |
+| `ChildSub` / `OwnerSub` / `childSub` / `ownerSub` | wait on a child's row; wait on the owner's answer | Sub ([Elm guide](https://guide.elm-lang.org/effects/time.html)) | ok | |
+| `LaneMsg`: `start`, `resume`, `child_over`, `owner_moved` | what the lane hears | Msg; child exit; signal ([Temporal, signals](https://docs.temporal.io/sending-messages)) | ok | |
+| `LaneReport` / `.rounds` / `.finals` / `.pr` / `.problems` | what a lane leaves besides its outcome | result | ok | |
+| `LaneView` / `laneViewOf` | what the lane reads before each step | read model ([Microsoft, CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs)) | ok | |
+| `LaneView.approved`, `.closed` | the plan is approved; it was closed | none needed | ok | |
+| `LaneView.waiting` | the plan's open asks, by id | pending human tasks | ok | |
+| `LaneView.tasks` / `TaskState` / `.task` / `.settled` / `.open` | each live task and whether every criterion passed | none needed | two-ideas | `TaskState` is the name a task machine's state should take (section 3): `TaskStatus`. 70% |
+| `LaneView.removed` | tasks the owner took out | none needed | ok | |
+| `LaneView.planOpen` / `.planTodo` | the plan's own criteria failed, and not passed yet | none needed | ok | follows the `Goal` pick |
+| `LaneView.head` / `.behind` / `.met` | the branch now; main has a commit it lacks; every live criterion passed at head | behind ([GitHub, compare](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-comparing-branches-in-pull-requests)) | ok | |
+| `LaneView.pr` / `PrState` / `.url` / `.state` / `.head` | the plan's PR | pull request | ok | |
+| `LaneView.tickets`, `.version`, `.folds`, `.title`, `.summary` | the tickets it closes, the newest version, unplanned folds, the words | none needed | ok | |
+| `Outside` (`lane/view.ts`) / `Outside` (`hosted/outside.ts`) | what the code host says, as an interface; and the code host service | none | two-ideas | the service → `CodeHost`, which `services.ts` already names; the interface → `HostRead`. 75% |
+| `LaneAt` / `START` | the counts a lane's children are named from | none | differs | `LaneCounts`: "at" says nothing here. 70% |
+| `LaneAt.rounds`, `.finals`, `.fixedAt`, `.dropped`, `.ships` | rounds per task, last reviews, when a round went to the plan's own criteria, reverted tasks, ship runs | none needed | ok | |
+| `Next` / `next` / `.go` | the one pure choice of the next step | a decider ([Chassaing, functional event sourcing decider](https://thinkbeforecoding.com/post/2021/12/17/functional-event-sourcing-decider)) | differs | tag key `go` → `kind`. 60% |
+| `Next.go: done, skip, wait, plan, drop, round, final, open, ship, stuck` and keys `pr`, `head`, `why`, `asks`, `version`, `folds`, `task`, `round`, `open`, `fix`, `run` | each next step and what it carries | none needed | ok | |
+| `prBody` | the plan's PR text | PR description | ok | |
+| `done` `pr`, `head`; `skip:closed`, `skip:emptied` | the lane's endings | none needed | ok | |
+| `stuck:read_failed`, `plan_failed`, `catchup_failed`, `build_failed`, `review_failed`, `ship_failed`, `open_failed` | how a lane stops | none needed | two-ideas | `stuck:review_failed` here means the review child got stuck; `send:builder:review_failed` in review and ship means a criterion failed. `stuck:review_stuck`, or `<step>_stuck` for all. 70% |
+| `Stage` / `hostedStage` / `hosted<Stage>` | one pipeline stage as a program on the host | an activity worker; a durable entity | ok | |
+| `Stage.kind` | the stage's name | entity type | two-ideas | see the `kind` row, section 9 |
+| `Stage.job` | the codec for its input | input | two-ideas | `input`. 80% |
+| `Stage.boot`, `.over`, `.idle`, `.start`, `.resume`, `.finish`, `.agent` | how to boot, end and start it | lifecycle callbacks | ok | `finish` is ship's tidy-up word too |
+| `JOB_ID = "job"` | the id the input is cast in under | none | two-ideas | `INPUT_ID = "input"`. 80% |
+| `BuildJob`, `CatchupJob`, `PlanJob` (hosted), `ReviewJob`, `LocalReviewJob`, `ShipJob`, `SortJob`, `TaskJob` | each hosted stage's input | workflow input | two-ideas | `<Stage>Input`. `PlanJob` is exported twice: plan's task criterion and hosted plan's input. 90% |
+| `StageNote` / `AgentNote` / `WriteNote` / `.ev` | what a stage, agent or write says to the harness | log event | differs | tag key `ev` → `kind`, as the other tags. 55% |
+| `fence` | the lease's fencing number | fencing token ([Kleppmann, 2016](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)) | ok | |
+| `holder` / `ttlMs` (`Hosting`) | this host's name; the lease length | lease holder and TTL ([Kubernetes, leases](https://kubernetes.io/docs/concepts/architecture/leases/)) | ok | |
+| `outcomeOf` / `readOutcome` / outcome row | the stream a stage's outcome row is in | result | ok | |
+| `jsonJournal` / journal | a machine's saved state stream | journal; event log | ok | |
+| `AgentAsk` / `.id` / `.brief` | one ask to an agent child | a request with a correlation id ([EIP, correlation identifier](https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html)) | two-ideas | `AgentRequest`. 70% |
+| `askAgent` / `Asked` / `.how: answered, limit` / `.answer` | send the ask, wait for its answer | request-reply | ok | `how` is one more tag key |
+| `Turn` / `.answer` / `.cost` / `.agent: real, stub` | what one agent turn left | turn | ok | `cost` here, `spend` in `Ran`, `Usage` after the pick: one word. 70% |
+| `agentOf` / `answersOf` / `askingOf` / `agentProgram` / `quiet` | the agent child's names, streams and program | child process | ok | |
+| `Standing: wanted, withdrawn, unsaid` (local) | how the stage stands on an ask | cancelled ([Temporal, cancellation](https://docs.temporal.io/activities)) | ok | `Standing` is also the criteria book's export: a local type here |
+| `digest` / `asWritten` | a hash of a text; a codec that takes text as written | digest | ok | |
+| `Idempotency` / `gate` / `GateOptions` / `once` | every outside write goes out at most once per key, under the lease | idempotency key ([Stripe](https://docs.stripe.com/api/idempotent_requests)); outbox ([microservices.io, transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html)) | two-ideas | `gate` here is a write guard; build, review and ship call a pure readiness check a gate. `guardWrites`. 60% |
+| `Key` / `.text` / `.name` / `.fence` / `KeyRefused` / `useKey` / `markerOf` / `marked` | a key only this gate can make, and its marker in a text | idempotency key | ok | |
+| `Write` / `.op` / `.subject` / `.answer` / `writesOf` | one write that leaves the ledger | command ([Fowler, CQRS](https://martinfowler.com/bliki/CQRS.html)) | ok | |
+| `intent:<key>` / `done:<key>` rows | before and after a send | write-ahead intent | ok | |
+| `Faults` / `noFaults` / `faults` / `turnFaultMs` | named points where a planted fault may stop the process | fault injection; FoundationDB's Buggify ([FoundationDB, simulation](https://apple.github.io/foundationdb/testing.html)) | ok | |
+| `Hosting` / `.agent` / `.hold` / `.say` / `.listen` | how a lane is served | none needed | ok | |
+| `deliver` / `deliverProgram` / `liveDelivery` / `serveLane` / `Delivered` | serve one lane and its children until the scope ends | run a workflow | differs | `runLane` / `LaneResult`: "deliver" is a third verb for one lane run. 55% |
+| `Delivered.plan`, `.outcome`, `.name` | the program answer's keys | none needed | ok | |
+| `serveChildren` / `childrenOf` | the `<parent>/children` stream | children | ok | renamed from `kid` on 2026-10-22 |
+| `Landing` (`hosted/outside.ts`) `.at: none, queued, merged` / `.commit` | where a PR stands after a ship write | none needed | two-ideas | ship's `Landing` is `whole` or `part`; this is a merge state: `MergeState`. Tag `at` → `kind`. 70% |
+| `EnqueueAnswer` | the enqueue's answer | none needed | ok | ship's `enqueue` lists the same words plus `stale` |
+| `Repo` / `repoText` / `repoOfPlan` | owner and name | repository ([GitHub REST, repos](https://docs.github.com/en/rest/repos/repos)) | ok | |
+| `gitOn` / `Git` / `GIT_FIRST` / `branchHeadAt` / `pushWith` / `copyAt` / `commitEnv` | the git calls the hosted stages make | git | ok | |
+| `Issues` / `CloseReason: not_planned, duplicate` / `gitHubIssues` | close an issue with a reason | `state_reason`: completed, not_planned, duplicate ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | |
+| `BuildWork` / `BuildAnswer` / `ResolveAnswer` / `resolveTurn` | the hosted build's and catch-up's agent turns | none needed | ok | |
+| `foldedPlanHost` / `childPlanner` / `childReviewer` / `childSorter` | stage services that read through the ledger's fold, or run under a child | none needed | ok | |
+| `readingIn` / `localReviewTurn` / `LocalChecks` / `targetOf` | the local review's reads | none needed | ok | |
+| `verdictOf` (`hosted/review.ts`) | the review's verdict from an over state | none needed | two-ideas | a second `verdictOf` (build's ACP permission answer): rename that one |
+| `Ending: row_done, row_stuck, no_row` / `Variant: today, fixed` / `Seen` / `laneEnds` / `runCase` / `LIMIT_MS` | experiment 116's lane-end property and its stand-ins | a property-based test ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)) | ok | |
