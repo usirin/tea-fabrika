@@ -23,9 +23,9 @@ itself. Confidence 70%.**
   real reply.
 - **#367 (span times) and #355 (notes once):** the agent's check caught the
   same mutants as the PR's own tests, no more and no fewer.
-- **The tests that existed before each fix caught little:** 6 of 88 valid
-  mutants on #483, 7 of 11 on #367, 2 of 6 on #355. The agent's check added
-  22, 1 and 2 over them.
+- **The tests that existed before each fix** caught 6 of 88 valid mutants on
+  #483, 7 of 11 on #367 and 2 of 6 on #355. The agent's check added 22, 1 and
+  2 over them.
 - **The PR's tests caught 38 on #483 that the agent's check missed.** By hand,
   all 38 are outside the promise: the account error text the same ticket
   added, the `[redacted]` marker's wording, and keeping the rest of the body.
