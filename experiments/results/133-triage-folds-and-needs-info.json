@@ -248,7 +248,7 @@
 								"answer": "yes",
 								"next": "plan",
 								"partOf": null,
-								"why": "It reports a real wrong-default problem in what code-graph ships: [one user's product]-specific names in the published rules. #349 only fixed `contracts`, and #344 is a sync, not this narrowing. The fix is clear: narrow the defaults and add a snapshot test and a changeset. The ticket says to land it after #344 because both touch the same file."
+								"why": "It reports a real wrong-default problem in what code-graph ships: ‹product›-specific names in the published rules. #349 only fixed `contracts`, and #344 is a sync, not this narrowing. The fix is clear: narrow the defaults and add a snapshot test and a changeset. The ticket says to land it after #344 because both touch the same file."
 							}
 						},
 						"problems": [],
@@ -267,7 +267,7 @@
 								"answer": "yes",
 								"next": "plan",
 								"partOf": null,
-								"why": "[One user's product]-specific names in published code-graph defaults are a real wrong-default bug in what the package ships, and #349 set the precedent. It is separate work from the #344 sync: it narrows the defaults, adds a snapshot test and a changeset, and only needs to run after #344 merges."
+								"why": "‹product›-specific names in published code-graph defaults are a real wrong-default bug in what the package ships, and #349 set the precedent. It is separate work from the #344 sync: it narrows the defaults, adds a snapshot test and a changeset, and only needs to run after #344 merges."
 							}
 						},
 						"problems": [],
@@ -831,7 +831,7 @@
 							"sort": {
 								"answer": "duplicate",
 								"of": 493,
-								"why": "#493 is open and reports the same problem: `structure-sweep pairs` ships both full sources for every candidate pair, with the same 9,140-pair and ~9.7M-token [one user's product] numbers. Plan #493 already covers it, so the per-anchor Choice idea belongs there."
+								"why": "#493 is open and reports the same problem: `structure-sweep pairs` ships both full sources for every candidate pair, with the same 9,140-pair and ~9.7M-token ‹product› numbers. Plan #493 already covers it, so the per-anchor Choice idea belongs there."
 							}
 						},
 						"problems": [],

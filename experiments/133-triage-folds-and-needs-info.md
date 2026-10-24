@@ -122,6 +122,9 @@ saidOf(reply.sort);                                        // "fold" when partOf
   second try was needed. 1.22M tokens billed. Median 4.2 seconds a sort.
 - One field row per sort in `field/runs.jsonl`, and notes 2026-10-24-01 and
   2026-10-24-02.
+- **One edit to the saved answers before publishing:** in 3 sorter answers
+  (`why` on #360 twice and on #494 once), one product name was replaced with
+  `‹product›`. Nothing else in the results file was changed.
 
 ## Part A: what came back
 
