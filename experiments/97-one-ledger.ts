@@ -27,7 +27,6 @@
 import {spawn} from "node:child_process";
 import {existsSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {join} from "node:path";
-// biome-ignore lint/plugin: law 10 reads the Durable Object's own file; nothing here fakes D1.
 import {DatabaseSync} from "node:sqlite";
 import {Effect, Fiber, Stream} from "effect";
 import {Miniflare} from "miniflare";
