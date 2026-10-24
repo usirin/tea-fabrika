@@ -60,13 +60,27 @@ const inStep = check("checks_in_step", {/* every record's prints match the code 
        tests run first: the new check is graded on what they miss
        (experiment 121's hand check, 2026-10-24).
      - **Every mutant that lives blocks the pull request** (decided
-       2026-10-24). It goes back to the verify writer.
+       2026-10-24). It goes back to the verify writer, which adds tests
+       until it is killed.
+     - **The writer gets every mutant that lives, whether a promise is about
+       its line or not** (decided 2026-10-24). Code cannot tell which lines a
+       promise is about: a promise's check runs nearly every changed line
+       ([experiment 123](../../experiments/123-check-layer-timings.md)). Meta's
+       ACH works the same way: an agent writes tests to kill the mutants that
+       live ([Meta, 2025](https://arxiv.org/abs/2501.12862)). A
+       harmless rewrite can make a new mutant; it goes back the same way.
+     - **A fixed skip list leaves out kinds of mutant that make no useful
+       test,** such as error and log text, with Stryker's own ignore plugins.
+       This is Google's "arid nodes"
+       ([Google, 2021](https://arxiv.org/abs/2102.11378)). The
+       list is part of the exam: a diff that changes it asks the owner.
+       Experiment 124 tests the loop and the list.
      - **The one way out is Stryker's own disable comment** on that line,
        with a reason. Some mutants change nothing, and no program can decide
        that in general: testing calls it the equivalent mutant problem. So
-       code does not try. A disable comment changes the exam, so a diff that
-       adds one asks the owner, with the line quoted. No agent judges
-       "harmless".
+       code does not try. The writer answers such a mutant with its reason,
+       not a test. A disable comment changes the exam, so a diff that adds
+       one asks the owner, with the line quoted. No agent judges "harmless".
   6. **Ship.** Every promise green and in step, by experiment 117's gate,
      before the merge.
 
@@ -82,6 +96,7 @@ build          every check green             done
 mutation test  every mutant killed           done
                a mutant survived             send:verify_writer:mutant_survived
                the diff disables a mutant    ask:owner:check_change
+               the diff edits the skip list  ask:owner:check_change
 ship           a promise red or out of step  send:builder:promise_red
 ```
 
@@ -116,6 +131,8 @@ ship           a promise red or out of step  send:builder:promise_red
 
 ## Not decided here
 
+- What is on the skip list, and how many rounds and dollars the loop takes
+  to reach no mutant left (experiment 124).
 - Whether the verify writer is its own stage or a slot in build
   ([One parent, stages as slots](./one-parent-stages-as-slots.md)).
 - The name "verify writer".
