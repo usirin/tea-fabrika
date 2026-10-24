@@ -1,0 +1,2637 @@
+{
+	"experiment": 122,
+	"date": "2026-10-24",
+	"stryker": "9.6.1",
+	"sample": {
+		"seed": 119120,
+		"size": 150
+	},
+	"claudeCode": "2.1.310 (Claude Code)",
+	"tickets": [
+		{
+			"ticket": "kamp-us/demlik#355",
+			"pr": "https://github.com/kamp-us/demlik/pull/375",
+			"promise": "Every note an agent makes is reported exactly once.",
+			"is": "new",
+			"test": "packages/tea/src/agent/notes-once.promise.test.ts",
+			"writer": {
+				"model": [
+					"claude-opus-5-5"
+				],
+				"asked": "claude-opus-5-5",
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"turns": 8,
+				"error": false,
+				"costUsd": 0.3385216,
+				"tokens": {
+					"input": 16,
+					"output": 5770,
+					"cacheRead": 125328,
+					"cacheWrite": 24749
+				},
+				"ms": 69355,
+				"apiMs": 65736,
+				"denied": [],
+				"answer": "I wrote the test at **`packages/tea/src/agent/notes-once.promise.test.ts`**, and it fails on the code in this folder for the reason the ticket describes.\n\n**What the property says:** the test drives the agent's verbs by hand (`start` → `turn` with tool calls → `toolOk`/`toolErr` → final `turn`), with a generated number of turns and calls and a random pass/fail for each call. After every agent step it adds a generated number of parent-only folds that leave the agent slice alone. For any such run:\n- each note is reported exactly once: one `BrainStarted` per brain call, one `ToolStarted` per call, one `ToolFailed` per failed call, one `RunDone`;\n- `agentEvents` returns nothing for the parent's own folds;\n- the full event stream equals the stream from the same run with no parent folds.\n\n**The failure here:** the per-note counts passed, then fast-check failed on its first run and shrank to this counterexample:\n\n```\nCounterexample: [{\"toolTurns\":[],\"folds\":[0,1,0,…]}]\nAssertionError: expected [ { type: 'RunDone', …(3) } ] to deeply equal []\n  at notes-once.promise.test.ts:137  expect(embedded.fromFolds).toEqual([])\n```\n\nThat run is the smallest case of the bug: `start`, then the answering `turn` that ends the run, then one parent fold. That fold reported `RunDone` a second time, because `state.lifecycle` still held the previous transition's notes.\n\nThe test only uses names that exist today: `createAgent`, the door verbs, `init`, `isSettled` and `agentEvents(msg, state)`. It doesn't depend on whether the builder puts the fix in the projector or in the Model. `tsc --noEmit` reports no errors in the file. I created only this one file.",
+				"transcript": {
+					"calls": 7,
+					"byTool": {
+						"Read": 0,
+						"Write": 1,
+						"Edit": 0,
+						"Glob": 0,
+						"Grep": 0,
+						"Bash": 6
+					},
+					"written": [
+						"packages/tea/src/agent/notes-once.promise.test.ts"
+					],
+					"outside": [],
+					"reached": [],
+					"commands": [
+						"cd packages/tea/src/agent && ls && sed -n 520,640p machine.ts && grep -n \"lifecycle\" index.ts | head -60",
+						"cd packages/tea/src/agent && sed -n 1630,1720p index.ts && sed -n 1,120p agent-events.test.ts && ls fixtures",
+						"sed -n 1630,1720p index.ts && sed -n 1,140p agent-events.test.ts && ls fixtures",
+						"sed -n 1,200p lifecycle-events.test.ts; grep -n \"default\" machine.ts | head; grep -n \"function projectOwn\" -A40 machine.ts | head -60",
+						"grep -n \"^  function \\(start\\|turn\\|toolOk\\|toolErr\\|init\\)\\b\" -A25 index.ts | head -150",
+						"cd ../.. && node_modules/.bin/vitest run src/agent/notes-once.promise.test.ts 2>&1 | head -60; node_modules/.bin/tsc --noEmit -p . 2>&1 | grep notes-once"
+					]
+				}
+			},
+			"grade": {
+				"written": true,
+				"otherFiles": [],
+				"lines": 144,
+				"fastCheck": {
+					"asserts": 1,
+					"properties": 1,
+					"arbitraries": [
+						"record",
+						"array",
+						"boolean",
+						"nat"
+					],
+					"numRuns": [
+						"200"
+					]
+				},
+				"red": true,
+				"redRuns": [
+					true,
+					true,
+					true
+				],
+				"green": true,
+				"greenRuns": [
+					true,
+					true,
+					true
+				],
+				"baseFailure": "FAIL  src/agent/notes-once.promise.test.ts > every note an agent makes is reported exactly once > parent-only folds report nothing, and each note reads once\nError: Property failed after 1 tests\n{ seed: 42, path: \"0:0:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0\", endOnFailure: true }\nCounterexample: [{\"toolTurns\":[],\"folds\":[0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]\nShrunk 31 time(s)\nGot AssertionError: expected [ { type: 'RunDone', …(3) } ] to deeply equal []\n\nHint: Enable verbose mode in order to have the list of all failing values encountered during the run\n    135|\n    136|         // A parent's own transition reports none of them again.\n    137|         expect(embedded.fromFolds).toEqual([]);\n       |                                    ^\n    138|         expect(embedded.stream).toEqual(doorsOnly.stream);\n    139|       }),\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯",
+				"mergeFailure": null,
+				"baseMs": [
+					794,
+					706,
+					592
+				],
+				"mergeMs": [
+					766,
+					587,
+					593
+				],
+				"importChange": null
+			},
+			"testSource": "import fc from \"fast-check\";\nimport { describe, expect, it } from \"vitest\";\nimport {\n  type AgentEvent,\n  type AgentMachineMsg,\n  type AgentState,\n  type AgentTurn,\n  agentEvents,\n  createAgent,\n  type Schema,\n  type ToolCall,\n} from \"./index\";\n\n// ---------------------------------------------------------------------------\n// Promise: every note an agent makes is reported exactly once.\n//\n// A host that embeds the agent's verbs by hand folds its own Msgs too, and\n// those leave the agent slice untouched. Projecting such a transition must not\n// report the previous door's notes again: the stream a host sees, with any\n// number of parent-only folds interleaved, is the stream the doors alone made,\n// and that stream holds one event per note.\n// ---------------------------------------------------------------------------\n\ntype Purpose = \"act\";\ninterface Outputs extends Record<Purpose, AgentTurn> {\n  readonly act: AgentTurn;\n}\ntype ToolCmd = { readonly type: \"run_tool\" } & ToolCall;\ntype M = AgentMachineMsg<Purpose, Outputs, string>;\ntype S = AgentState<string, Purpose, Outputs, string>;\n\nconst turnSchema: Schema<AgentTurn> = { parse: (v) => v as AgentTurn };\n\nfunction makeAgent() {\n  return createAgent<string, Purpose, Outputs, string, ToolCmd>({\n    stages: [\"only\"],\n    model: () => ({\n      withStructuredOutput<T>(_s: Schema<T>) {\n        return { invoke: async (): Promise<T> => ({}) as T };\n      },\n    }),\n    schemas: { act: turnSchema },\n    turnOf: () => \"act\",\n    toolOf: (c) => ({ type: \"run_tool\", ...c }),\n    rng: () => 0,\n  });\n}\n\n// A parent's own Msgs, which the agent has never heard of.\nconst hostAgentMsg = { type: \"host_agent_step\" } as unknown as M;\nconst hostTick = { type: \"host_tick\" } as unknown as M;\n\n// One scenario: some tool-asking turns (each call ok or failing), then an\n// answer that ends the run; after every door, some parent-only folds.\nconst scenario = fc.record({\n  toolTurns: fc.array(fc.array(fc.boolean(), { minLength: 1, maxLength: 3 }), {\n    maxLength: 3,\n  }),\n  folds: fc.array(fc.nat({ max: 3 }), { minLength: 40, maxLength: 40 }),\n});\n\ntype Step = (s: S) => S;\n\nfunction stepsOf(\n  agent: ReturnType<typeof makeAgent>,\n  toolTurns: readonly (readonly boolean[])[],\n): Step[] {\n  let at = 0;\n  const tick = () => ++at;\n  const steps: Step[] = [(s) => agent.start(s, \"run-1\", tick())[0]];\n  toolTurns.forEach((calls, t) => {\n    const toolCalls: ToolCall[] = calls.map((_, i) => ({\n      callId: `t${t}c${i}`,\n      name: \"search\",\n      args: { i },\n    }));\n    steps.push((s) => agent.turn(s, { content: \"ask\", toolCalls }, tick())[0]);\n    calls.forEach((ok, i) => {\n      const callId = `t${t}c${i}`;\n      steps.push((s) =>\n        ok\n          ? agent.toolOk(s, callId, `ok:${callId}`, tick())[0]\n          : agent.toolErr(s, callId, \"boom\", tick())[0],\n      );\n    });\n  });\n  steps.push(\n    (s) => agent.turn(s, { content: \"done\", toolCalls: [] }, tick())[0],\n  );\n  return steps;\n}\n\n/** Drive the doors, projecting each one and `folds[i]` parent folds after it. */\nfunction drive(\n  toolTurns: readonly (readonly boolean[])[],\n  folds: readonly number[],\n) {\n  const agent = makeAgent();\n  const project = agentEvents<string, Purpose, Outputs, string>();\n  const stream: AgentEvent<string>[] = [];\n  const fromFolds: AgentEvent<string>[] = [];\n  let s: S = agent.init();\n  stepsOf(agent, toolTurns).forEach((step, i) => {\n    s = step(s);\n    stream.push(...project(hostAgentMsg, s));\n    for (let f = 0; f < (folds[i] ?? 0); f++) {\n      // The parent folds its own Msg; the agent slice is left as it was.\n      const out = project(hostTick, s);\n      fromFolds.push(...out);\n      stream.push(...out);\n    }\n  });\n  return { stream, fromFolds, settled: agent.isSettled(s) };\n}\n\ndescribe(\"every note an agent makes is reported exactly once\", () => {\n  it(\"parent-only folds report nothing, and each note reads once\", () => {\n    fc.assert(\n      fc.property(scenario, ({ toolTurns, folds }) => {\n        const doorsOnly = drive(toolTurns, []);\n        const embedded = drive(toolTurns, folds);\n\n        // The run went where the scenario says, ending on its answer.\n        expect(doorsOnly.settled).toBe(true);\n\n        // One event per note: a brain start per turn asked for, a tool start\n        // per call, a failure per failing call, one ending.\n        const count = (type: AgentEvent<string>[\"type\"]) =>\n          doorsOnly.stream.filter((e) => e.type === type).length;\n        const calls = toolTurns.flat();\n        expect(count(\"BrainStarted\")).toBe(toolTurns.length + 1);\n        expect(count(\"ToolStarted\")).toBe(calls.length);\n        expect(count(\"ToolFailed\")).toBe(calls.filter((ok) => !ok).length);\n        expect(count(\"RunDone\")).toBe(1);\n\n        // A parent's own transition reports none of them again.\n        expect(embedded.fromFolds).toEqual([]);\n        expect(embedded.stream).toEqual(doorsOnly.stream);\n      }),\n      { numRuns: 200 },\n    );\n  });\n});\n",
+			"mutate": {
+				"mutate": [
+					"packages/tea/src/agent/agent-tool.ts:151-154",
+					"packages/tea/src/agent/agent-tool.ts:158-158",
+					"packages/tea/src/agent/index.ts:1647-1648",
+					"packages/tea/src/agent/index.ts:1652-1655",
+					"packages/tea/src/agent/internal.ts:94-97",
+					"packages/tea/src/agent/internal.ts:168-171",
+					"packages/tea/src/agent/machine.ts:556-562",
+					"packages/tea/src/agent/machine.ts:583-589",
+					"packages/tea/src/agent/machine.ts:619-622"
+				],
+				"copies": [
+					"packages/tea/src/agent/agent-tool.base122.test.ts"
+				],
+				"withAgent": true,
+				"testFiles": [
+					"packages/tea/src/agent/agent-tool.test.ts",
+					"packages/tea/src/agent/embedded-host.test.ts"
+				],
+				"related": {
+					"packages/tea": [
+						"src/deletable-store.test.ts",
+						"src/fenced-store.test.ts",
+						"src/agent/agent-events.test.ts",
+						"src/agent/agent-tool.base122.test.ts",
+						"src/agent/agent-tool.test.ts",
+						"src/agent/agent.test.ts",
+						"src/agent/cancellation.test.ts",
+						"src/agent/compaction.test.ts",
+						"src/agent/content.test.ts",
+						"src/agent/define-agent.test.ts",
+						"src/agent/embedded-host.test.ts",
+						"src/agent/late-settle.test.ts",
+						"src/agent/lifecycle-events.test.ts",
+						"src/agent/notes-once.promise.test.ts",
+						"src/agent/tool-budget.test.ts",
+						"src/agent/tool-resilience.test.ts",
+						"src/agent/tool.test.ts",
+						"src/agent/transcript.test.ts",
+						"src/agent/usage.test.ts",
+						"src/do/agent-host.test.ts",
+						"src/do/boot-resume.test.ts",
+						"src/do/do-store-serialize.test.ts",
+						"src/do/host.test.ts",
+						"src/do/idempotent-effect.test.ts",
+						"src/do/projection.test.ts",
+						"src/otel/otel.test.ts",
+						"src/docs/tutorial/anthropic-usage.test.ts",
+						"src/docs/how-to/delegate-to-a-sub-agent.test.ts",
+						"src/docs/how-to/supply-the-agents-model.test.ts",
+						"src/docs/how-to/trace-in-langfuse.test.ts",
+						"src/internal/flow/workflow/do.test.ts"
+					]
+				}
+			},
+			"mutants": {
+				"tally": {
+					"total": 8,
+					"counted": 8,
+					"sampled": false,
+					"refused": 2,
+					"valid": 6,
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"killed": 4,
+					"byA": 2,
+					"byB": 4,
+					"byC": 4,
+					"cNotA": 2,
+					"cNotB": 0,
+					"bNotC": 0,
+					"bNotA": 2,
+					"cNotAB": 0,
+					"abNotC": 0,
+					"killedNoTest": 0,
+					"survived": 2
+				},
+				"tests": {
+					"a": 21,
+					"b": 2,
+					"c": 1,
+					"kept": 0
+				},
+				"changedWhy": {
+					"added": 2,
+					"changed": 0,
+					"kept": 0,
+					"not found": 0,
+					"file would not load": 0
+				},
+				"rows": [
+					{
+						"id": "0",
+						"file": "packages/tea/src/agent/agent-tool.ts",
+						"line": 158,
+						"mutator": "ObjectLiteral",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "3",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 620,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "1",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 619,
+						"mutator": "LogicalOperator",
+						"replacement": "state.lifecycle && []",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 24,
+						"byAgent": [
+							"every note an agent makes is reported exactly once parent-only folds report nothing, and each note reads once"
+						]
+					},
+					{
+						"id": "2",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 619,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[\"Stryker was here\"]",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "4",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 620,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 3,
+						"byAgent": [
+							"every note an agent makes is reported exactly once parent-only folds report nothing, and each note reads once"
+						]
+					},
+					{
+						"id": "5",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 620,
+						"mutator": "LogicalOperator",
+						"replacement": "outbox.length === 0 && projected.has(outbox)",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 3,
+						"byAgent": [
+							"every note an agent makes is reported exactly once parent-only folds report nothing, and each note reads once"
+						]
+					},
+					{
+						"id": "6",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 620,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "7",
+						"file": "packages/tea/src/agent/machine.ts",
+						"line": 620,
+						"mutator": "EqualityOperator",
+						"replacement": "outbox.length !== 0",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 24,
+						"byAgent": [
+							"every note an agent makes is reported exactly once parent-only folds report nothing, and each note reads once"
+						]
+					}
+				]
+			},
+			"minutes": {
+				"setup": 0.2,
+				"write": 1.2,
+				"grade": 0.1,
+				"mutants": 0.4
+			}
+		},
+		{
+			"ticket": "kamp-us/demlik#367",
+			"pr": "https://github.com/kamp-us/demlik/pull/370",
+			"promise": "A span's start and end are the run clock's instant, however long the process has been up.",
+			"is": "new",
+			"test": "packages/tea/src/otel/span-time.promise.test.ts",
+			"writer": {
+				"model": [
+					"claude-opus-5-5"
+				],
+				"asked": "claude-opus-5-5",
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"turns": 9,
+				"error": false,
+				"costUsd": 0.28883559999999997,
+				"tokens": {
+					"input": 18,
+					"output": 4041,
+					"cacheRead": 166998,
+					"cacheWrite": 21818
+				},
+				"ms": 51090,
+				"apiMs": 45131,
+				"denied": [],
+				"answer": "I wrote the test at **`packages/tea/src/otel/span-time.promise.test.ts`**. It fails on the code in this folder, as it should. I haven't seen it pass yet, because the fix hasn't been built.\n\n**What the property says:** For any run-clock start time `at`, and any later step times, the run, brain and tool spans written by `agentSpans` must start and end at exactly the `HrTime` of that event's `at`, `[Math.trunc(ms/1e3), (ms%1e3)*1e6]`. Generated values fall in three ranges: below the process's current `performance.now()` (the range OTel misreads), small values up to 100 000, and real epoch-ms values.\n\n**Failure seen here** (`node_modules/.bin/vitest run src/otel/span-time.promise.test.ts`):\n\n```\nAssertionError: expected [ 1792802302, 969532959 ] to deeply equal [ +0, +0 ]\n❯ span-time.promise.test.ts:108  expect(root.startTime).toEqual(hr(brainAt));\n```\n\nfast-check shrank the failure to `at = 0`. The root span started at \"process start\" in epoch time instead of at `[0, 0]`, which is the bug the plan describes.\n\n- **Why it will fail every time:** at least one generated value is always below `performance.now()`, so the test doesn't depend on how long the worker has been up.\n- **Why it should pass after the build:** OTel uses an `HrTime` start time unchanged. If the fix passes a `Date` instead, OTel turns it into exactly the `HrTime` the test expects, since the test only uses whole milliseconds. I worked this out from how OTel reads times; I didn't build the fix to try it.\n- **Names it relies on:** only ones that exist today: `agentSpans`, `AgentEvent`, the `@opentelemetry/sdk-trace-base` exporter and provider classes, and the `HrTime` type.\n- **Typecheck:** `tsc -p tsconfig.test.json` reports no errors for this file. I didn't change any other file.",
+				"transcript": {
+					"calls": 8,
+					"byTool": {
+						"Read": 0,
+						"Write": 1,
+						"Edit": 0,
+						"Glob": 0,
+						"Grep": 0,
+						"Bash": 7
+					},
+					"written": [
+						"packages/tea/src/otel/span-time.promise.test.ts"
+					],
+					"outside": [],
+					"reached": [],
+					"commands": [
+						"cd packages/tea/src/otel && ls && cat index.ts && sed -n 1,140p otel.test.ts",
+						"cd .. && grep -rn \"RunDone\\|TurnSettled\\|BrainStarted\\|AgentEndedStatus\" agent/*.ts | grep -v test | head -30; ls ../node_modules | head -30",
+						"sed -n 455,500p agent/machine.ts; grep -n \"AgentEndedStatus =\" -A8 agent/types.ts",
+						"grep -rn \"AgentEndedStatus\" -A6 agent/types.ts | head -20",
+						"grep -n \"kind: \\\"done\\\"\\|kind: \\\"cancelled\\\"\" agent/types.ts | head",
+						"cd .. && node_modules/.bin/vitest run src/otel/span-time.promise.test.ts 2>&1 | tail -40",
+						"grep -n typecheck package.json; ls tsconfig*; node_modules/.bin/tsc -p tsconfig.test.json --noEmit 2>&1 | grep span-time | head"
+					]
+				}
+			},
+			"grade": {
+				"written": true,
+				"otherFiles": [],
+				"lines": 120,
+				"fastCheck": {
+					"asserts": 1,
+					"properties": 1,
+					"arbitraries": [
+						"oneof",
+						"integer",
+						"array"
+					],
+					"numRuns": [
+						"200"
+					]
+				},
+				"red": true,
+				"redRuns": [
+					true,
+					true,
+					true
+				],
+				"green": true,
+				"greenRuns": [
+					true,
+					true,
+					true
+				],
+				"baseFailure": "FAIL  src/otel/span-time.promise.test.ts > span time is the run clock's instant > every span starts and ends at the exact HrTime of its event's `at`\nError: Property failed after 3 tests\n{ seed: 42, path: \"2:0:0:0:0:0\", endOnFailure: true }\nCounterexample: [0,[0,0,0,0]]\nShrunk 5 time(s)\nGot AssertionError: expected [ 1792802387, 798339356 ] to deeply equal [ +0, +0 ]\n\nHint: Enable verbose mode in order to have the list of all failing values encountered during the run\n    106|\n    107|           // The run span opens on the first event it sees.\n    108|           expect(root.startTime).toEqual(hr(brainAt));\n       |                                  ^\n    109|           expect(root.endTime).toEqual(hr(doneAt));\n    110|           expect(brain.startTime).toEqual(hr(brainAt));\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯",
+				"mergeFailure": null,
+				"baseMs": [
+					822,
+					628,
+					603
+				],
+				"mergeMs": [
+					800,
+					620,
+					596
+				],
+				"importChange": null
+			},
+			"testSource": "import type { HrTime } from \"@opentelemetry/api\";\nimport {\n  BasicTracerProvider,\n  InMemorySpanExporter,\n  SimpleSpanProcessor,\n} from \"@opentelemetry/sdk-trace-base\";\nimport fc from \"fast-check\";\nimport { describe, expect, it } from \"vitest\";\nimport type { AgentEvent } from \"../agent/index\";\nimport { agentSpans } from \"./index\";\n\n// ---------------------------------------------------------------------------\n// Promise: a span's start and end are the run clock's instant, however long\n// the process has been up. `at` is epoch ms; OTel must never rebase it onto\n// `performance.timeOrigin` because it happens to be <= `performance.now()`.\n// ---------------------------------------------------------------------------\n\nconst hr = (ms: number): HrTime => [Math.trunc(ms / 1e3), (ms % 1e3) * 1e6];\n\nfunction tracer() {\n  const exporter = new InMemorySpanExporter();\n  const provider = new BasicTracerProvider({\n    spanProcessors: [new SimpleSpanProcessor(exporter)],\n  });\n  return { exporter, tracer: provider.getTracer(\"span-time-promise\") };\n}\n\n// Clock values both below the process's uptime (the range OTel would read as\n// performance-relative) and in the epoch-ms range a `Date.now()` clock gives.\nconst instant = () =>\n  fc.oneof(\n    fc.integer({ min: 0, max: Math.max(0, Math.floor(performance.now()) - 1) }),\n    fc.integer({ min: 0, max: 100_000 }),\n    fc.integer({ min: 1_500_000_000_000, max: 2_500_000_000_000 }),\n  );\n\ndescribe(\"span time is the run clock's instant\", () => {\n  it(\"every span starts and ends at the exact HrTime of its event's `at`\", () => {\n    fc.assert(\n      fc.property(\n        instant(),\n        fc.array(fc.integer({ min: 0, max: 5_000 }), {\n          minLength: 4,\n          maxLength: 4,\n        }),\n        (start, steps) => {\n          const [d1 = 0, d2 = 0, d3 = 0, d4 = 0] = steps;\n          const brainAt = start + d1;\n          const settledAt = brainAt + d2;\n          const toolAt = settledAt + d3;\n          const doneAt = toolAt + d4;\n          const toolEndAt = doneAt;\n          const runId = \"run-time\";\n          const { exporter, tracer: t } = tracer();\n          const spans = agentSpans<string>({ tracer: t, name: \"clock\" });\n          const events: AgentEvent<string>[] = [\n            {\n              type: \"BrainStarted\",\n              runId,\n              at: brainAt,\n              turn: 0,\n              purpose: \"act\",\n              model: \"m\",\n              payload: {},\n            },\n            {\n              type: \"TurnSettled\",\n              runId,\n              at: settledAt,\n              turn: { content: \"x\", toolCalls: [] },\n            },\n            {\n              type: \"ToolStarted\",\n              runId,\n              at: toolAt,\n              callId: \"c1\",\n              name: \"probe\",\n              args: {},\n            },\n            {\n              type: \"ToolSettled\",\n              runId,\n              at: toolEndAt,\n              callId: \"c1\",\n              result: \"ok\",\n            },\n            {\n              type: \"RunDone\",\n              runId,\n              at: doneAt,\n              status: { kind: \"done\", output: null },\n            },\n          ];\n          for (const e of events) spans.onEvent(e);\n          spans.end();\n\n          const finished = exporter.getFinishedSpans();\n          const named = (n: string) => {\n            const s = finished.find((x) => x.name === n);\n            if (s === undefined) throw new Error(`no span ${n}`);\n            return s;\n          };\n          const root = named(\"invoke_agent clock\");\n          const brain = named(\"chat m\");\n          const tool = named(\"execute_tool probe\");\n\n          // The run span opens on the first event it sees.\n          expect(root.startTime).toEqual(hr(brainAt));\n          expect(root.endTime).toEqual(hr(doneAt));\n          expect(brain.startTime).toEqual(hr(brainAt));\n          expect(brain.endTime).toEqual(hr(settledAt));\n          expect(tool.startTime).toEqual(hr(toolAt));\n          expect(tool.endTime).toEqual(hr(toolEndAt));\n        },\n      ),\n      { numRuns: 200 },\n    );\n  });\n});\n",
+			"mutate": {
+				"mutate": [
+					"packages/tea/src/otel/index.ts:27-34",
+					"packages/tea/src/otel/index.ts:40-40",
+					"packages/tea/src/otel/index.ts:44-44",
+					"packages/tea/src/otel/index.ts:106-107",
+					"packages/tea/src/otel/index.ts:164-165",
+					"packages/tea/src/otel/index.ts:167-167",
+					"packages/tea/src/otel/index.ts:198-199",
+					"packages/tea/src/otel/index.ts:201-201",
+					"packages/tea/src/otel/index.ts:225-226",
+					"packages/tea/src/otel/index.ts:228-229",
+					"packages/tea/src/otel/index.ts:236-236",
+					"packages/tea/src/otel/index.ts:244-245",
+					"packages/tea/src/otel/index.ts:247-247",
+					"packages/tea/src/otel/index.ts:270-270",
+					"packages/tea/src/otel/index.ts:282-282",
+					"packages/tea/src/otel/index.ts:339-369",
+					"packages/tea/src/otel/index.ts:394-394",
+					"packages/tea/src/otel/index.ts:408-408",
+					"packages/tea/src/otel/index.ts:420-420",
+					"packages/tea/src/otel/index.ts:425-425"
+				],
+				"copies": [
+					"packages/tea/src/otel/otel.base122.test.ts"
+				],
+				"withAgent": true,
+				"testFiles": [
+					"packages/tea/src/otel/otel.test.ts"
+				],
+				"related": {
+					"packages/tea": [
+						"src/otel/otel.base122.test.ts",
+						"src/otel/otel.test.ts",
+						"src/otel/span-time.promise.test.ts",
+						"src/docs/how-to/trace-in-langfuse.test.ts"
+					]
+				}
+			},
+			"mutants": {
+				"tally": {
+					"total": 15,
+					"counted": 15,
+					"sampled": false,
+					"refused": 4,
+					"valid": 11,
+					"statuses": {
+						"CompileError": 4,
+						"Survived": 3,
+						"Killed": 8
+					},
+					"killed": 8,
+					"byA": 7,
+					"byB": 8,
+					"byC": 8,
+					"cNotA": 1,
+					"cNotB": 0,
+					"bNotC": 0,
+					"bNotA": 1,
+					"cNotAB": 0,
+					"abNotC": 0,
+					"killedNoTest": 0,
+					"survived": 3
+				},
+				"tests": {
+					"a": 9,
+					"b": 2,
+					"c": 1,
+					"kept": 8
+				},
+				"changedWhy": {
+					"added": 1,
+					"changed": 1,
+					"kept": 8,
+					"not found": 0,
+					"file would not load": 0
+				},
+				"rows": [
+					{
+						"id": "1",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 344,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "0",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 229,
+						"mutator": "ObjectLiteral",
+						"replacement": "{}",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "2",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 345,
+						"mutator": "ArithmeticOperator",
+						"replacement": "at * 1_000",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 4,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "3",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 346,
+						"mutator": "ArithmeticOperator",
+						"replacement": "(at - seconds * 1_000) / 1_000_000",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 3,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "4",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 346,
+						"mutator": "ArithmeticOperator",
+						"replacement": "at + seconds * 1_000",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 3,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "5",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 346,
+						"mutator": "ArithmeticOperator",
+						"replacement": "seconds / 1_000",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 3,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "6",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 4,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "7",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "9",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "8",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "EqualityOperator",
+						"replacement": "nanos !== 1_000_000_000",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 4,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "11",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "10",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 347,
+						"mutator": "ArithmeticOperator",
+						"replacement": "seconds - 1",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "12",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 358,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "13",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 361,
+						"mutator": "ObjectLiteral",
+						"replacement": "{}",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 8,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					},
+					{
+						"id": "14",
+						"file": "packages/tea/src/otel/index.ts",
+						"line": 366,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 20,
+						"byAgent": [
+							"span time is the run clock's instant every span starts and ends at the exact HrTime of its event's `at`"
+						]
+					}
+				]
+			},
+			"minutes": {
+				"setup": 0.2,
+				"write": 0.9,
+				"grade": 0.1,
+				"mutants": 0.3
+			}
+		},
+		{
+			"ticket": "kamp-us/demlik#483",
+			"pr": "https://github.com/kamp-us/demlik/pull/484",
+			"promise": "A Jev client error never carries the API key.",
+			"is": "new",
+			"test": "packages/structure-sweep/test/jev-key.promise.test.ts",
+			"writer": {
+				"model": [
+					"claude-opus-5-5"
+				],
+				"asked": "claude-opus-5-5",
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"turns": 12,
+				"error": false,
+				"costUsd": 0.4148448,
+				"tokens": {
+					"input": 24,
+					"output": 6863,
+					"cacheRead": 216044,
+					"cacheWrite": 29285
+				},
+				"ms": 86719,
+				"apiMs": 83167,
+				"denied": [],
+				"answer": "I wrote the test at `packages/structure-sweep/test/jev-key.promise.test.ts`, and it fails on today's code as it should. That's the only file I created.\n\n**What the property says:** For any made-up key (`tsk_FAKE_…`), any status from 400 to 599, and any JSON error body that repeats the key anywhere in its values (`error.message`/`code`/`type`, a fake authorization header, or nested data), neither Jev client lets the key out. It checks two places, for both the structure-sweep and backlog-sweep clients (backlog-sweep through `../../backlog-sweep/src/jev.js`):\n1. The body that `fetchPost(key)` returns.\n2. The `JevAskError` that `httpJevClient` throws: its message, its string form, and all its own fields (`reason`, and `detail` once that exists).\n\n`fetch` is replaced with a fake, so there's no network.\n\n**Failure seen here:** 2 of 4 tests failed, one per client, on the `fetchPost` check:\n- structure-sweep: after shrinking, `{\"status\":400,\"body\":{\"error\":{\"type\":\"tsk_FAKE_-yZV…\"}}}`. The returned body still contains the key (\"expected '{\"error\":{\"type\":\"tsk_FAKE_…' not to contain 'tsk_FAKE_…'\").\n- backlog-sweep: `{\"status\":400,\"body\":{\"request\":{\"headers\":{\"authorization\":\"tsk_FAKE_a_AA0A0-0000A__a\"}}}}`, same failure.\n\nThe two thrown-error checks pass today. That's because `decodeJevReply` in `@demlik/tea/jev` throws away the body for any non-2xx response, so `JevAskError` only carries the status. They're there to catch a leak once the build adds `detail`, which is built from the body's `error.message`/`code`.\n\n**Two limits:**\n- The test only covers replies with status 400 or above, which is what the plan covers. A key in a 200 reply, or in a thrown `fetch` error, isn't tested.\n- The key only appears in values, never as an object key.\n\n`tsc --noEmit` on the package reports no errors.",
+				"transcript": {
+					"calls": 11,
+					"byTool": {
+						"Read": 1,
+						"Write": 1,
+						"Edit": 0,
+						"Glob": 0,
+						"Grep": 1,
+						"Bash": 8
+					},
+					"written": [
+						"packages/structure-sweep/test/jev-key.promise.test.ts"
+					],
+					"outside": [],
+					"reached": [
+						{
+							"tool": "Bash",
+							"what": "cd <work>/483/writer/packages; ls; ls backlog-sweep/src backlog-sweep/test; readlink -f structure-sweep/node_modules/@demlik/tea; grep -n \"http\\|status\\|body\\|JEV_ENDPOINT\" tea/src/jev*.ts | head -60; ls structure-sweep/src/pairs; grep -rn \"Questions\\b.*=\" backlog-sweep/src | head"
+						}
+					],
+					"commands": [
+						"cd packages; cat structure-sweep/src/jev.ts; diff structure-sweep/src/jev.ts backlog-sweep/src/jev.ts; cat structure-sweep/test/jev.test.ts; ls backlog-sweep/node_modules/.bin structure-sweep/node_modules | head -30",
+						"cd packages; ls; ls backlog-sweep/src backlog-sweep/test; readlink -f structure-sweep/node_modules/@demlik/tea; grep -n \"http\\|status\\|body\\|JEV_ENDPOINT\" tea/src/jev*.ts | head -60; ls structure-sweep/src/pairs; grep -rn \"Questions\\b.*=\" backlog-sweep/src | head",
+						"cd packages; cat tea/package.json | grep -A3 '\"./jev\"'; f=$(ls tea/src/jev/*.ts tea/src/jev.ts 2>/dev/null); echo $f; grep -n \"status\\|body\\|JEV_ENDPOINT =\\|_tag:\" $f | head -60; sed -n 1,45p backlog-sweep/src/verdict.ts",
+						"cd packages; grep -n \"status\\|body\\|JEV_ENDPOINT\\|_tag\\|export function\\|export const\" tea/src/jev/index.ts | head -80; ls tea/dist/jev | head -3",
+						"cd packages; cat tea/src/jev/index.ts | head -30; ls tea/src/jev; cat structure-sweep/vitest.config.* 2>/dev/null; ls tea",
+						"cd packages/tea/src/internal/jev; ls; grep -n \"export function decodeJevReply\\|export function jevAskErrOf\\|export function classifyStatus\\|JevAskErr =\\|body\" *.ts | head -50",
+						"cd packages/structure-sweep && node_modules/.bin/vitest run test/jev-key.promise.test.ts 2>&1 | grep -v \"^\\s*$\" | head -70",
+						"ls tsconfig*; node_modules/.bin/tsc --noEmit -p tsconfig.json 2>&1 | head -20; git -C .. status --short"
+					]
+				}
+			},
+			"grade": {
+				"written": true,
+				"otherFiles": [],
+				"lines": 174,
+				"fastCheck": {
+					"asserts": 2,
+					"properties": 2,
+					"arbitraries": [
+						"string",
+						"oneof",
+						"constant",
+						"tuple",
+						"integer",
+						"boolean",
+						"letrec",
+						"array",
+						"dictionary",
+						"record",
+						"constantFrom"
+					],
+					"numRuns": [
+						"200",
+						"200"
+					]
+				},
+				"red": true,
+				"redRuns": [
+					true,
+					true,
+					true
+				],
+				"green": true,
+				"greenRuns": [
+					true,
+					true,
+					true
+				],
+				"baseFailure": "FAIL  test/jev-key.promise.test.ts > a Jev client error never carries the API key > structure-sweep: fetchPost's error body for a status >= 400 holds no key\nError: Property failed after 1 tests\n{ seed: 2134537037, path: \"0:0:0:0:0:0:0:0:0:0:0:0:1:0:1:0:0\", endOnFailure: true }\nCounterexample: [{\"key\":\"tsk_FAKE__-00AAa-0__0Aaa-\",\"status\":400,\"body\":{\"error\":{\"type\":\"Bearer tsk_FAKE__-00AAa-0__0Aaa- and again tsk_FAKE__-00AAa-0__0Aaa-\"}}}]\nShrunk 16 time(s)\nGot AssertionError: expected '{\"error\":{\"type\":\"Bearer tsk_FAKE__-0…' not to contain 'tsk_FAKE__-00AAa-0__0Aaa-'\n    at <work>/483/base/packages/structure-sweep/test/jev-key.promise.test.ts:151:56\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at AsyncProperty.run (file://<work>/483/base/node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/property/AsyncProperty.generic.js:46:28)\n    at asyncRunIt (file://<work>/483/base/node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/Runner.js:33:21)\n    at <work>/483/base/packages/structure-sweep/test/jev-key.promise.test.ts:142:7\n    at file://<work>/483/base/node_modules/.pnpm/vitest@5.0.1_@opentelemetry+api@1.9.1_@types+node@22.20.1_happy-dom@20.11.2_vite@8.2.2__a6c82fa485865894bd2f6c33d4db61b7/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:20\n\nHint: Enable verbose mode in order to have the list of all failing values encountered during the run\n ❯ test/jev-key.promise.test.ts:151:56\n    149|           });\n    150|           expect(reply.status).toBe(status);\n    151|           expect(JSON.stringify(reply.body) ?? \"\").not.toContain(key);\n       |                                                        ^\n    152|         }),\n    153|         { numRuns: 200 },\n ❯ AsyncProperty.run ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/property/AsyncProperty.generic.js:46:28\n ❯ asyncRunIt ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/Runner.js:33:21\n ❯ test/jev-key.promise.test.ts:142:7\n ❯ buildError ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/utils/RunDetailsFormatter.js:126:15\n ❯ asyncThrowIfFailed ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/utils/RunDetailsFormatter.js:143:11\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯\n\n FAIL  test/jev-key.promise.test.ts > a Jev client error never carries the API key > backlog-sweep: fetchPost's error body for a status >= 400 holds no key\nError: Property failed after 2 tests\n{ seed: 853372205, path: \"1:0:0:0:0:0:0:0:0:0:0:0:1:1\", endOnFailure: true }\nCounterexample: [{\"key\":\"tsk_FAKE_0--aaa-a-aAA_A__\",\"status\":400,\"body\":{\"request\":{\"extra\":\"tsk_FAKE_0--aaa-a-aAA_A__\"}}}]\nShrunk 13 time(s)\nGot AssertionError: expected '{\"request\":{\"extra\":\"tsk_FAKE_0--aaa-…' not to contain 'tsk_FAKE_0--aaa-a-aAA_A__'\n    at <work>/483/base/packages/structure-sweep/test/jev-key.promise.test.ts:151:56\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at AsyncProperty.run (file://<work>/483/base/node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/property/AsyncProperty.generic.js:46:28)\n    at asyncRunIt (file://<work>/483/base/node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/Runner.js:33:21)\n    at <work>/483/base/packages/structure-sweep/test/jev-key.promise.test.ts:142:7\n    at file://<work>/483/base/node_modules/.pnpm/vitest@5.0.1_@opentelemetry+api@1.9.1_@types+node@22.20.1_happy-dom@20.11.2_vite@8.2.2__a6c82fa485865894bd2f6c33d4db61b7/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2783:20\n\nHint: Enable verbose mode in order to have the list of all failing values encountered during the run\n ❯ test/jev-key.promise.test.ts:151:56\n    149|           });\n    150|           expect(reply.status).toBe(status);\n    151|           expect(JSON.stringify(reply.body) ?? \"\").not.toContain(key);\n       |                                                        ^\n    152|         }),\n    153|         { numRuns: 200 },\n ❯ AsyncProperty.run ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/property/AsyncProperty.generic.js:46:28\n ❯ asyncRunIt ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/Runner.js:33:21\n ❯ test/jev-key.promise.test.ts:142:7\n ❯ buildError ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/utils/RunDetailsFormatter.js:126:15\n ❯ asyncThrowIfFailed ../../node_modules/.pnpm/fast-check@3.23.2/node_modules/fast-check/lib/esm/check/runner/utils/RunDetailsFormatter.js:143:11\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯",
+				"mergeFailure": null,
+				"baseMs": [
+					724,
+					581,
+					530
+				],
+				"mergeMs": [
+					669,
+					535,
+					536
+				],
+				"importChange": null
+			},
+			"testSource": "import fc from \"fast-check\";\nimport { afterEach, describe, expect, it, vi } from \"vitest\";\nimport {\n  fetchPost as backlogFetchPost,\n  httpJevClient as backlogHttpJevClient,\n} from \"../../backlog-sweep/src/jev.js\";\nimport { questions as backlogQuestions } from \"../../backlog-sweep/src/verdict.js\";\nimport { fetchPost, httpJevClient } from \"../src/jev.js\";\nimport { pairQuestions } from \"../src/pairs/questions.js\";\n\n// Promise: a Jev client error never carries the API key — not in the error body\n// `fetchPost` hands back for a status >= 400, and not in the `JevAskError` the\n// client throws from it, even when the upstream body echoes the key.\n\nconst clients = [\n  {\n    name: \"structure-sweep\",\n    fetchPost,\n    ask: (post: ReturnType<typeof fetchPost>) =>\n      httpJevClient({ questions: pairQuestions, model: \"jev-1\", post, ...fast }),\n  },\n  {\n    name: \"backlog-sweep\",\n    fetchPost: backlogFetchPost,\n    ask: (post: ReturnType<typeof backlogFetchPost>) =>\n      backlogHttpJevClient({\n        questions: backlogQuestions,\n        model: \"jev-1\",\n        post,\n        ...fast,\n      }),\n  },\n] as const;\n\nconst fast = {\n  sleep: async () => {},\n  retry: {\n    baseMs: 1,\n    factor: 2,\n    capMs: 1,\n    maxAttempts: 2,\n    jitter: \"none\",\n  },\n} as const;\n\n/** A made-up key: a fixed prefix no generated filler contains, then random characters. */\nconst fakeKey = fc\n  .stringMatching(/^[A-Za-z0-9_-]{16,40}$/)\n  .map((tail) => `tsk_FAKE_${tail}`);\n\nconst filler = fc.string({ maxLength: 12 }).filter((s) => !s.includes(\"tsk_\"));\n\n/** A string that may echo the key, with text either side of it. */\nconst echoing = (key: string) =>\n  fc.oneof(\n    filler,\n    fc.constant(key),\n    fc.tuple(filler, filler).map(([a, b]) => `${a}${key}${b}`),\n    fc\n      .tuple(filler, filler)\n      .map(([a, b]) => `${a}Bearer ${key} and again ${key}${b}`),\n  );\n\n/** A JSON error body shaped like a provider error, with the key echoed anywhere in its values. */\nconst errorBody = (key: string) => {\n  const leaf = fc.oneof(\n    echoing(key),\n    fc.integer(),\n    fc.boolean(),\n    fc.constant(null),\n  );\n  const { tree } = fc.letrec((tie) => ({\n    tree: fc.oneof(\n      { depthSize: \"small\", withCrossShrink: true },\n      leaf,\n      fc.array(tie(\"tree\"), { maxLength: 3 }),\n      fc.dictionary(\n        fc.string({ maxLength: 6 }).filter((k) => !k.includes(\"tsk_\")),\n        tie(\"tree\"),\n        { maxKeys: 3 },\n      ),\n    ),\n  }));\n  return fc.record(\n    {\n      error: fc.record(\n        { message: echoing(key), code: echoing(key), type: echoing(key) },\n        { requiredKeys: [] },\n      ),\n      request: fc.record(\n        {\n          headers: fc.record({ authorization: echoing(key) }),\n          extra: tree,\n        },\n        { requiredKeys: [] },\n      ),\n    },\n    { requiredKeys: [] },\n  );\n};\n\nconst status = fc.oneof(\n  fc.constantFrom(400, 401, 402, 403, 404, 422, 429, 500, 529),\n  fc.integer({ min: 400, max: 599 }),\n);\n\nconst scenario = fakeKey.chain((key) =>\n  fc.record({ key: fc.constant(key), status, body: errorBody(key) }),\n);\n\nfunction serveOnce(reply: { status: number; body: unknown }) {\n  vi.stubGlobal(\n    \"fetch\",\n    vi.fn(\n      async () =>\n        new Response(JSON.stringify(reply.body), {\n          status: reply.status,\n          headers: { \"content-type\": \"application/json\" },\n        }),\n    ),\n  );\n}\n\n/** Everything an error can show: its message, its string form and its own fields. */\nfunction exposed(error: unknown): string {\n  if (!(error instanceof Error)) return String(error);\n  const fields: Record<string, unknown> = {};\n  for (const name of Object.getOwnPropertyNames(error)) {\n    if (name === \"stack\") continue;\n    fields[name] = (error as unknown as Record<string, unknown>)[name];\n  }\n  return [error.message, String(error), JSON.stringify(fields)].join(\"\\n\");\n}\n\nafterEach(() => {\n  vi.unstubAllGlobals();\n});\n\ndescribe(\"a Jev client error never carries the API key\", () => {\n  for (const client of clients) {\n    it(`${client.name}: fetchPost's error body for a status >= 400 holds no key`, async () => {\n      await fc.assert(\n        fc.asyncProperty(scenario, async ({ key, status, body }) => {\n          serveOnce({ status, body });\n          const reply = await client.fetchPost(key)({\n            state: {},\n            model: \"jev-1\",\n            questions: {},\n          });\n          expect(reply.status).toBe(status);\n          expect(JSON.stringify(reply.body) ?? \"\").not.toContain(key);\n        }),\n        { numRuns: 200 },\n      );\n    });\n\n    it(`${client.name}: the thrown JevAskError holds no key`, async () => {\n      await fc.assert(\n        fc.asyncProperty(scenario, async ({ key, status, body }) => {\n          serveOnce({ status, body });\n          const ask = client.ask(client.fetchPost(key));\n          const thrown = await ask({ a: 1 }).then(\n            () => undefined,\n            (error: unknown) => error,\n          );\n          expect(thrown).toBeInstanceOf(Error);\n          expect(exposed(thrown)).not.toContain(key);\n        }),\n        { numRuns: 200 },\n      );\n    });\n  }\n});\n",
+			"mutate": {
+				"mutate": [
+					"packages/backlog-sweep/src/jev.ts:42-50",
+					"packages/backlog-sweep/src/jev.ts:54-88",
+					"packages/backlog-sweep/src/jev.ts:101-102",
+					"packages/backlog-sweep/src/jev.ts:105-105",
+					"packages/backlog-sweep/src/jev.ts:138-138",
+					"packages/backlog-sweep/src/jev.ts:140-142",
+					"packages/backlog-sweep/src/jev.ts:150-150",
+					"packages/structure-sweep/src/jev.ts:42-50",
+					"packages/structure-sweep/src/jev.ts:54-88",
+					"packages/structure-sweep/src/jev.ts:101-102",
+					"packages/structure-sweep/src/jev.ts:105-105",
+					"packages/structure-sweep/src/jev.ts:138-138",
+					"packages/structure-sweep/src/jev.ts:140-142",
+					"packages/structure-sweep/src/jev.ts:150-150"
+				],
+				"copies": [
+					"packages/structure-sweep/test/jev.base122.test.ts"
+				],
+				"withAgent": true,
+				"testFiles": [
+					"packages/backlog-sweep/test/jev.test.ts",
+					"packages/structure-sweep/test/jev.test.ts"
+				],
+				"related": {
+					"packages/structure-sweep": [
+						"test/index-surface.test.ts",
+						"test/jev-key.promise.test.ts",
+						"test/jev.base122.test.ts",
+						"test/jev.test.ts",
+						"test/large-feature-choice.test.ts",
+						"test/non-ascii-paths.test.ts",
+						"test/pairs.test.ts",
+						"test/propose.test.ts",
+						"test/root-scope.test.ts",
+						"test/sweep-extraction.test.ts",
+						"test/sweep-files.test.ts",
+						"test/sweep-nominated.test.ts",
+						"test/sweep-redact.test.ts",
+						"test/sweep.test.ts"
+					],
+					"packages/backlog-sweep": [
+						"test/jev.test.ts"
+					]
+				}
+			},
+			"mutants": {
+				"tally": {
+					"total": 126,
+					"counted": 126,
+					"sampled": false,
+					"refused": 38,
+					"valid": 88,
+					"statuses": {
+						"CompileError": 38,
+						"Killed": 64,
+						"Survived": 24
+					},
+					"killed": 64,
+					"byA": 6,
+					"byB": 60,
+					"byC": 26,
+					"cNotA": 22,
+					"cNotB": 4,
+					"bNotC": 38,
+					"bNotA": 54,
+					"cNotAB": 4,
+					"abNotC": 38,
+					"killedNoTest": 0,
+					"survived": 24
+				},
+				"tests": {
+					"a": 2,
+					"b": 13,
+					"c": 4,
+					"kept": 1
+				},
+				"changedWhy": {
+					"added": 12,
+					"changed": 1,
+					"kept": 1,
+					"not found": 0,
+					"file would not load": 0
+				},
+				"rows": [
+					{
+						"id": "3",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 58,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "4",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "BooleanLiteral",
+						"replacement": "isRecord(body)",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "5",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "6",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "8",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 61,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "1",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "``",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "0",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "``",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "15",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "24",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 69,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "2",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "7",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 61,
+						"mutator": "MethodExpression",
+						"replacement": "[error.message, error.code, body.error]",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "32",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "36",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 74,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "37",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "9",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "10",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "41",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "42",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "43",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof value !== \"string\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "44",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "46",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 77,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "47",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 77,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "49",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 79,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "50",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 79,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "51",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 81,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "11",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "12",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof part === \"string\" || part !== \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "13",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "14",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof part !== \"string\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 2,
+						"byAgent": []
+					},
+					{
+						"id": "16",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "17",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "EqualityOperator",
+						"replacement": "part === \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "18",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "19",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "20",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "21",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "EqualityOperator",
+						"replacement": "parts.length !== 0",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "23",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 66,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "22",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 66,
+						"mutator": "MethodExpression",
+						"replacement": "parts.join(\"; \")",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "25",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "26",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "28",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "27",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof value === \"object\" && value !== null || !Array.isArray(value)",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "29",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof value === \"object\" || value !== null",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "31",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof value !== \"object\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "30",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "33",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": false,
+						"c": true,
+						"killers": 1,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "34",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "EqualityOperator",
+						"replacement": "value === null",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "35",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "BooleanLiteral",
+						"replacement": "Array.isArray(value)",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "39",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "EqualityOperator",
+						"replacement": "secret !== \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key backlog-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "38",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "40",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "45",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "48",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 78,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "52",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 81,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 4,
+						"byAgent": []
+					},
+					{
+						"id": "53",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 82,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "54",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 101,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "55",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "56",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key backlog-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "57",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "EqualityOperator",
+						"replacement": "response.status > 400",
+						"status": "Killed",
+						"a": false,
+						"b": false,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key backlog-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "58",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "EqualityOperator",
+						"replacement": "response.status < 400",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key backlog-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key backlog-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "59",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "60",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "61",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "EqualityOperator",
+						"replacement": "reply.status > 400",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "62",
+						"file": "packages/backlog-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "EqualityOperator",
+						"replacement": "reply.status < 400",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "66",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 58,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "67",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "BooleanLiteral",
+						"replacement": "isRecord(body)",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "68",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "69",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 59,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "71",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 61,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "78",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "87",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 69,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "95",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "99",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 74,
+						"mutator": "BlockStatement",
+						"replacement": "{}",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "100",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "104",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "105",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "106",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof value !== \"string\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "107",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "109",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 77,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "110",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 77,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "112",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 79,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "113",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 79,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "114",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 81,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "CompileError",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "64",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "``",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "63",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "``",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": false,
+						"killers": 3,
+						"byAgent": []
+					},
+					{
+						"id": "72",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "73",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "65",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 50,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "70",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 61,
+						"mutator": "MethodExpression",
+						"replacement": "[error.message, error.code, body.error]",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "77",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof part !== \"string\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 2,
+						"byAgent": []
+					},
+					{
+						"id": "75",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof part === \"string\" || part !== \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "74",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "76",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "82",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "80",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "EqualityOperator",
+						"replacement": "part === \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "79",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "81",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 62,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "85",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 66,
+						"mutator": "MethodExpression",
+						"replacement": "parts.join(\"; \")",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "84",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "EqualityOperator",
+						"replacement": "parts.length !== 0",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "83",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 64,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "86",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 66,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "89",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "90",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof value === \"object\" && value !== null || !Array.isArray(value)",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "88",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "91",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "92",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "LogicalOperator",
+						"replacement": "typeof value === \"object\" || value !== null",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "96",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": false,
+						"b": false,
+						"c": true,
+						"killers": 1,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "93",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Killed",
+						"a": true,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "94",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "EqualityOperator",
+						"replacement": "typeof value !== \"object\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "97",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "EqualityOperator",
+						"replacement": "value === null",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "98",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 70,
+						"mutator": "BooleanLiteral",
+						"replacement": "Array.isArray(value)",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 7,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key"
+						]
+					},
+					{
+						"id": "102",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "EqualityOperator",
+						"replacement": "secret !== \"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key structure-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "101",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "111",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 78,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "108",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 76,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 1,
+						"byAgent": []
+					},
+					{
+						"id": "103",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 75,
+						"mutator": "StringLiteral",
+						"replacement": "\"Stryker was here!\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "115",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 81,
+						"mutator": "ArrayDeclaration",
+						"replacement": "[]",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 4,
+						"byAgent": []
+					},
+					{
+						"id": "116",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 82,
+						"mutator": "StringLiteral",
+						"replacement": "\"\"",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "118",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "119",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key structure-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "117",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 101,
+						"mutator": "ArrowFunction",
+						"replacement": "() => undefined",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "121",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "EqualityOperator",
+						"replacement": "response.status < 400",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": true,
+						"killers": 6,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key structure-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "123",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "ConditionalExpression",
+						"replacement": "false",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					},
+					{
+						"id": "120",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 105,
+						"mutator": "EqualityOperator",
+						"replacement": "response.status > 400",
+						"status": "Killed",
+						"a": false,
+						"b": false,
+						"c": true,
+						"killers": 2,
+						"byAgent": [
+							"a Jev client error never carries the API key structure-sweep: fetchPost's error body for a status >= 400 holds no key",
+							"a Jev client error never carries the API key structure-sweep: the thrown JevAskError holds no key"
+						]
+					},
+					{
+						"id": "122",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "ConditionalExpression",
+						"replacement": "true",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "124",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "EqualityOperator",
+						"replacement": "reply.status > 400",
+						"status": "Survived",
+						"a": false,
+						"b": false,
+						"c": false,
+						"killers": 0,
+						"byAgent": []
+					},
+					{
+						"id": "125",
+						"file": "packages/structure-sweep/src/jev.ts",
+						"line": 141,
+						"mutator": "EqualityOperator",
+						"replacement": "reply.status < 400",
+						"status": "Killed",
+						"a": false,
+						"b": true,
+						"c": false,
+						"killers": 5,
+						"byAgent": []
+					}
+				]
+			},
+			"minutes": {
+				"setup": 0.3,
+				"write": 1.5,
+				"grade": 0.1,
+				"mutants": 5.1
+			}
+		}
+	]
+}
