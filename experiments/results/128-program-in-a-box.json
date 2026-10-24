@@ -1,0 +1,422 @@
+{
+	"experiment": 128,
+	"boxes": {
+		"none": {
+			"box": "none",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed 53e31438",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					214.24,
+					209.79,
+					210.37,
+					215.27,
+					214.54
+				],
+				"median": 214.24
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.24,
+				"outsideMedianMs": 0.42
+			},
+			"key": {
+				"keyStaysOut": false,
+				"callWorks": true,
+				"net": true,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": true,
+				"keyFileHit": true,
+				"scanned": 0,
+				"fileHits": 0,
+				"call": "hello probe, signed af38e8ff",
+				"home": "",
+				"tmp": "<job>/tmp"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "SIGKILL"
+					},
+					"endedMs": 2.81,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": false,
+					"boxProcessAlive": false,
+					"containerThere": null,
+					"gone": true
+				}
+			},
+			"cmdWall": {
+				"works": {
+					"ok": true,
+					"stamped": {
+						"words": 3,
+						"sigRight": true
+					},
+					"empty": {
+						"why": "empty",
+						"sig": null
+					},
+					"handlerRan": 1,
+					"cmdFrames": 1,
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"call": {
+					"calls": 20,
+					"insideMedianMs": 0.18,
+					"outsideMedianMs": 0.52
+				},
+				"key": {
+					"keyStaysOut": false,
+					"callWorks": true,
+					"net": true,
+					"env": false,
+					"procEnv": false,
+					"keyFileRead": true,
+					"keyFileHit": true,
+					"scanned": 0,
+					"fileHits": 0,
+					"call": "714fad8f",
+					"home": "",
+					"tmp": "<job>/tmp"
+				},
+				"wrongShape": {
+					"inside": "refused in the box",
+					"host": "no: Expected string; Expected number",
+					"cmdFramesHeard": 1,
+					"handlerRan": 0
+				}
+			}
+		},
+		"srt": {
+			"box": "srt",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed b729c63d",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					340.79,
+					348.2,
+					331.03,
+					311.63,
+					316.47
+				],
+				"median": 331.03
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.23,
+				"outsideMedianMs": 0.39
+			},
+			"key": {
+				"keyStaysOut": true,
+				"callWorks": true,
+				"net": false,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 0,
+				"fileHits": 0,
+				"call": "hello probe, signed ebc4e048",
+				"home": "",
+				"tmp": "/tmp/claude"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "exit 1: Process killed by signal: SIGKILL"
+					},
+					"endedMs": 5.68,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": false,
+					"boxProcessAlive": false,
+					"containerThere": null,
+					"gone": true
+				}
+			},
+			"cmdWall": {
+				"works": {
+					"ok": true,
+					"stamped": {
+						"words": 3,
+						"sigRight": true
+					},
+					"empty": {
+						"why": "empty",
+						"sig": null
+					},
+					"handlerRan": 1,
+					"cmdFrames": 1,
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"call": {
+					"calls": 20,
+					"insideMedianMs": 0.19,
+					"outsideMedianMs": 0.49
+				},
+				"key": {
+					"keyStaysOut": true,
+					"callWorks": true,
+					"net": false,
+					"env": false,
+					"procEnv": false,
+					"keyFileRead": false,
+					"keyFileHit": false,
+					"scanned": 0,
+					"fileHits": 0,
+					"call": "3c7538b5",
+					"home": "",
+					"tmp": "/tmp/claude"
+				},
+				"wrongShape": {
+					"inside": "refused in the box",
+					"host": "no: Expected string; Expected number",
+					"cmdFramesHeard": 1,
+					"handlerRan": 0
+				}
+			}
+		},
+		"docker": {
+			"box": "docker",
+			"works": {
+				"double": {
+					"ok": true,
+					"heard": [
+						2,
+						4,
+						6
+					],
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"greet": {
+					"ok": true,
+					"text": "hello ada, signed 854be971",
+					"ended": {
+						"kind": "ended"
+					}
+				}
+			},
+			"start": {
+				"ms": [
+					316.62,
+					315.46,
+					307.68,
+					316.21,
+					320.65
+				],
+				"median": 316.21
+			},
+			"call": {
+				"calls": 20,
+				"insideMedianMs": 0.76,
+				"outsideMedianMs": 1.37
+			},
+			"key": {
+				"keyStaysOut": true,
+				"callWorks": true,
+				"net": false,
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 0,
+				"fileHits": 0,
+				"call": "hello probe, signed 980f9eb0",
+				"home": "/home/node",
+				"tmp": "/tmp"
+			},
+			"edges": {
+				"wrongShape": {
+					"words": {
+						"half": "bad_shape",
+						"text": "bad_shape",
+						"noInput": "no_cell"
+					},
+					"framesCrossed": 0,
+					"badFlags": "bad_shape"
+				},
+				"killed": {
+					"how": "SIGKILL to the runner",
+					"ended": {
+						"kind": "gone",
+						"why": "exit 137"
+					},
+					"endedMs": 83.28,
+					"tellAfter": "stopped"
+				},
+				"scopeClosed": {
+					"thereBefore": true,
+					"runnerAlive": null,
+					"boxProcessAlive": false,
+					"containerThere": false,
+					"gone": true
+				}
+			},
+			"cmdWall": {
+				"works": {
+					"ok": true,
+					"stamped": {
+						"words": 3,
+						"sigRight": true
+					},
+					"empty": {
+						"why": "empty",
+						"sig": null
+					},
+					"handlerRan": 1,
+					"cmdFrames": 1,
+					"ended": {
+						"kind": "ended"
+					}
+				},
+				"call": {
+					"calls": 20,
+					"insideMedianMs": 0.68,
+					"outsideMedianMs": 1.54
+				},
+				"key": {
+					"keyStaysOut": true,
+					"callWorks": true,
+					"net": false,
+					"env": false,
+					"procEnv": false,
+					"keyFileRead": false,
+					"keyFileHit": false,
+					"scanned": 0,
+					"fileHits": 0,
+					"call": "9cf63507",
+					"home": "/home/node",
+					"tmp": "/tmp"
+				},
+				"wrongShape": {
+					"inside": "refused in the box",
+					"host": "no: Expected string; Expected number",
+					"cmdFramesHeard": 1,
+					"handlerRan": 0
+				}
+			}
+		}
+	},
+	"inProcess": {
+		"startMedianMs": 0.37,
+		"startMs": [
+			5,
+			0.43,
+			0.33,
+			0.33,
+			0.37
+		],
+		"callMedianMs": 0.01,
+		"stampMedianMs": 0.03
+	},
+	"sizes": {
+		"fabrika": {
+			"wall": 116,
+			"runner": 87,
+			"host": 188,
+			"cmdWall": 91,
+			"total": 482
+		},
+		"walls": {
+			"rpc": {
+				"shared": 65,
+				"perService": 10,
+				"newSchemasPerMethod": 1
+			},
+			"cmd": {
+				"shared": 91,
+				"perCmd": 0,
+				"newSchemasPerCmd": 0
+			}
+		},
+		"box": {
+			"boxed": 116,
+			"all": 197
+		}
+	},
+	"date": "2026-10-24",
+	"node": "v26.12.0",
+	"docker": {
+		"buildMs": 139,
+		"installMs": 6529
+	},
+	"dockerClean": {
+		"containers": 0,
+		"left": {
+			"containers": 0,
+			"volumes": 0,
+			"images": 0
+		}
+	}
+}
