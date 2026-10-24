@@ -1,0 +1,1106 @@
+{
+	"note": "Experiment 134. Part A: 30 doc statements merged kamp-us/demlik PRs added or changed, 9 from the PRs that closed the tickets behind experiment 86's plans and 21 from a seeded draw of docs-touching PRs merged before 2026-10-17 (one statement each: the first claim about the package's own code in the first doc that describes code; PRs with no such claim skipped, see the write-up). `mine` is my own read of the doc and the code on demlik main at `main`, made before any reader answer was seen. Part B: closed tickets whose title names a doc, read by hand; all of them in demlik, a seeded draw in phoenix.",
+	"main": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+	"statements": [
+		{
+			"id": "399-b4",
+			"pr": 399,
+			"from": "86",
+			"merged": "2026-09-25",
+			"at": "28b8dbb",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "`--boundaries` ... **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`. `lib` importers are judged by B3, not B4.",
+			"code": ["packages/code-graph/src/boundaries/analyze.ts"],
+			"find": ["B4", "outside-imports-feature-internal"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "#592 (2026-10-08) cut the 1,600-line README to a short page; the flag table left it. The rule is restated in docs/reference/boundaries.md and SPEC.md, and holds there, with the composition-root exception #589 added and wrote into the README the day before the cut."
+		},
+		{
+			"id": "491-cohesion",
+			"pr": 491,
+			"from": "86",
+			"merged": "2026-09-26",
+			"at": "03e177c",
+			"doc": "packages/structure-sweep/src/propose/refine.ts",
+			"now": "packages/structure-sweep/src/propose/refine.ts",
+			"says": "A kept change set is a commit cut to its labelled files, kept when it holds 2..`maxFiles` of them. `cohesion` takes the feature's files that at least one kept change set touched and, of the same-scope pairs among them, gives the share some kept change set changed together; a feature file no kept change set touched is left out. It equals the feature's per-feature `precision` in `refine.json` (its `features` entry).",
+			"code": [
+				"packages/structure-sweep/src/propose/refine.ts",
+				"packages/structure-sweep/src/score/score.ts"
+			],
+			"find": ["cohesion", "precision", "kept change set", "predictedPairs"],
+			"mine": "holds",
+			"why": "Neither refine.ts nor score/ changed since the PR; `cohesion: f.precision` still sets it."
+		},
+		{
+			"id": "505-forms",
+			"pr": 505,
+			"from": "86",
+			"merged": "2026-09-29",
+			"at": "0280414",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "Three wildcards widen [a layer pattern]: `*` as a whole segment matches one segment of one or more characters; `*` inside a segment matches zero or more characters, never `/`; `**` as a whole segment matches zero or more whole segments. Every other character is literal: `?`, `[...]`, `{a,b}` and a leading `!` match themselves, so there is no negation and no alternation.",
+			"code": ["packages/code-graph/src/layers/classify.ts"],
+			"find": ["ANY_SEGMENTS", "REGEX_SPECIAL", "**", "wildcard"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592; docs/reference/layers.md restates the three forms and the literal rule, and classify.ts agrees."
+		},
+		{
+			"id": "505-rank",
+			"pr": 505,
+			"from": "86",
+			"merged": "2026-09-29",
+			"at": "0280414",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "When several patterns claim one file, the most SPECIFIC wins. Specificity compares three keys in order, and the higher value wins at the first key that differs: 1. depth, the number of segments other than `**`; 2. literal segments, the number of segments with no `*` in them; 3. literal characters, the number of characters other than `*` and `/`.",
+			"code": ["packages/code-graph/src/layers/classify.ts"],
+			"find": ["depth", "literalSegments", "literalChars", "specific"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592; layers.md restates the order, and classify.ts sorts by depth, then literal segments, then literal characters."
+		},
+		{
+			"id": "505-tie",
+			"pr": 505,
+			"from": "86",
+			"merged": "2026-09-29",
+			"at": "0280414",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "When the most specific patterns for one file tie on all three keys and belong to different layers, `--layers` refuses rather than pick one: exit code 2, one line naming the file and both patterns, and no census or violations.",
+			"code": [
+				"packages/code-graph/src/layers/classify.ts",
+				"packages/code-graph/src/layers/gate.ts"
+			],
+			"find": ["LayerTieError", "tie"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592; layers.md keeps a shorter form (\"a tie between different layers is rejected\"), and LayerTieError still names the file and both patterns."
+		},
+		{
+			"id": "571-omit",
+			"pr": 571,
+			"from": "86",
+			"merged": "2026-10-04",
+			"at": "5029103",
+			"doc": "packages/code-graph/SPEC.md",
+			"now": "packages/code-graph/SPEC.md",
+			"says": "`decidedBy` is optional: a scope's entry that leaves it out says the reads of the scope decide nothing, so a listed read-only driven file is licensed for any driving file of its feature, whatever else that file imports (`ScopeAllowance.decidedBy` is then `null`, decided in `drivenReadsOf` after the write check, with no second key or flag).",
+			"code": [
+				"packages/code-graph/src/boundaries/zones/reads.ts",
+				"packages/code-graph/src/boundaries/shape/schema.ts"
+			],
+			"find": ["decidedBy", "drivenReadsOf", "LICENSED"],
+			"mine": "holds",
+			"why": "The SPEC sentence is unchanged; reads.ts sets `decidedBy` to null when it is left out and returns LICENSED after the write check."
+		},
+		{
+			"id": "571-empty",
+			"pr": 571,
+			"from": "86",
+			"merged": "2026-10-04",
+			"at": "5029103",
+			"doc": "packages/code-graph/SPEC.md",
+			"now": "packages/code-graph/SPEC.md",
+			"says": "Omission is the only spelling: `decidedBy: []` exits 2 as an allowance that grants nothing.",
+			"code": ["packages/code-graph/src/boundaries/shape/declaration.ts"],
+			"find": ["decidedBy", "empty("],
+			"mine": "holds",
+			"why": "declaration.ts still reports an empty `decidedBy` as a declaration issue (exit 2) and skips the check when it is undefined."
+		},
+		{
+			"id": "571-write",
+			"pr": 571,
+			"from": "86",
+			"merged": "2026-10-04",
+			"at": "5029103",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "[With `decidedBy` left out] The write rule below holds either way, and omission never licenses `application/` or a file the entry does not list. [The write rule: a listed file that holds a data site with `write` access is B8 for every driving file that imports it, as if undeclared.]",
+			"code": ["packages/code-graph/src/boundaries/zones/reads.ts"],
+			"find": ["firstWrite", "write", "decidedBy"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592. SPEC.md and reads.ts still say and do it: a listed file with a write is never licensed."
+		},
+		{
+			"id": "581-imports",
+			"pr": 581,
+			"from": "86",
+			"merged": "2026-10-04",
+			"at": "d5663f0",
+			"doc": "packages/tea/docs/how-to/run-many-machines.md",
+			"now": "packages/tea/docs/how-to/run-many-machines.md",
+			"says": "This goes in a third file beside the other two. It imports `Scope` as a value and `Exit` with it, because it opens the parent's scope and closes it. [Its code block opens with] import { run } from \"@demlik/tea/effect\"; import { Effect, Exit, Scope } from \"effect\"; import { parent } from \"./parent-and-workers\"; import { type Children, spawnWorker, stopWorker } from \"./parent-and-workers-effect\";",
+			"code": ["packages/tea/src/docs/pages-typecheck.test.ts", "packages/tea/src/effect/index.ts"],
+			"find": ["run-many-machines", "Use it", "Scope", "run,"],
+			"mine": "holds",
+			"why": "The step 3 text and imports are unchanged, and the same PR put the page under pages-typecheck.test.ts, so a break would fail the build."
+		},
+		{
+			"id": "126-names",
+			"pr": 126,
+			"from": "draw",
+			"merged": "2026-09-07",
+			"at": "b3f648d",
+			"doc": "docs/tutorial/build-a-durable-agent.md",
+			"now": "packages/tea/docs/tutorial/build-a-durable-agent.md",
+			"says": "A tool is declared below with a name and an `input:` schema; on this side of the seam those two are `cmdType` and `args`: `cmdType` because a tool is a command constructor, `args` because the schema names what the *model's* arguments are parsed against. Same two things, and the adapter reads them under those names.",
+			"code": ["packages/tea/src/agent/tool.ts"],
+			"find": ["cmdType", "args", "AnyToolDef"],
+			"mine": "holds",
+			"why": "AnyToolDef still carries `args` and the cmdType of its Cmd def; the adapter on the page reads `t.cmdType` and `t.args`."
+		},
+		{
+			"id": "234-drive",
+			"pr": 234,
+			"from": "draw",
+			"merged": "2026-09-22",
+			"at": "f5cea99",
+			"doc": "docs/how-to/ask-jev-a-typed-question.md",
+			"now": "packages/tea/docs/how-to/ask-jev-a-typed-question.md",
+			"says": "`drive` from `@demlik/tea/testing` runs the machine the way the runtime does: fold the Msg, hand every emitted Cmd to the real interpret handler, feed each settle Msg back, stop when the machine is quiet, with no runtime, no clock and no socket anywhere on the path. It returns the settled `state` **and** the `trace`: every Cmd dispatched and every Msg folded, in order.",
+			"code": ["packages/tea/src/testing/drive-loop.ts", "packages/tea/src/testing/index.ts"],
+			"find": ["drive", "DriveResult", "trace"],
+			"mine": "gone",
+			"fate": "kept",
+			"why": "#362 (2026-09-24) moved `drive` out of `./testing` into `./testing/promise` and `./testing/effect`, and edited this sentence in the same PR. The rest of the claim still holds."
+		},
+		{
+			"id": "134-done",
+			"pr": 134,
+			"from": "draw",
+			"merged": "2026-09-07",
+			"at": "aab219c",
+			"doc": "docs/tutorial/build-a-durable-agent.md",
+			"now": "packages/tea/docs/tutorial/build-a-durable-agent.md",
+			"says": "A finished run keeps its `run` slice and `output`, the terminating turn `runtime.result()` reads; `conversation` is `null`, because the transcript is cleared when the run retires. Open `agent.json` mid-run and the conversation is there: it is the retire that drops it.",
+			"code": ["packages/tea/src/agent/index.ts"],
+			"find": ["conversation: null", "retire", "result()"],
+			"mine": "holds",
+			"why": "The sentence lost the `runtime.result()` clause in an edit, but says the same; agent/index.ts still sets `conversation: null` and keeps `output` on retire."
+		},
+		{
+			"id": "628-exit3",
+			"pr": 628,
+			"from": "draw",
+			"merged": "2026-10-11",
+			"at": "b45811c",
+			"doc": "packages/code-graph/docs/reference/cli.md",
+			"now": "packages/code-graph/docs/reference/cli.md",
+			"says": "Exit 3 for any other error inside the run, in all three: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. ... An `--out` file that cannot be written exits 3, not 2. Exit 1 therefore always means a ratchet miss, never a crash.",
+			"code": ["packages/code-graph/src/api/cli.ts"],
+			"find": ["API_CRASH_EXIT", "unexpected error", "Exit 3", "emit"],
+			"mine": "holds",
+			"why": "api/cli.ts returns API_CRASH_EXIT (3) for anything but an input error, with the emit inside the same try; the paragraph is unchanged."
+		},
+		{
+			"id": "475-inventory",
+			"pr": 475,
+			"from": "draw",
+			"merged": "2026-09-26",
+			"at": "35bdcc2",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "[`structure-sweep inventory`] writes `.structure-sweep/inventory.json` and `.structure-sweep/inventory.md` and nothing else. It calls no model and no network, needs no `TYPESAFE_API_KEY`, and runs no other command: not `sweep`, `pairs`, `consolidate` or `code-graph`; running those stays the caller's job.",
+			"code": ["packages/structure-sweep/src/inventory/cli.ts"],
+			"find": ["writeFileSync", "inventory.json", "import"],
+			"mine": "holds",
+			"why": "The CLI writes the two files and imports no model or network code; it reads git for line counts, as it did at merge, which the sentence's list does not cover."
+		},
+		{
+			"id": "350-events",
+			"pr": 350,
+			"from": "draw",
+			"merged": "2026-09-24",
+			"at": "039b3de",
+			"doc": "packages/tea/docs/how-to/show-a-run-in-progress.md",
+			"now": "packages/tea/docs/how-to/show-a-run-in-progress.md",
+			"says": "Six events arrive in the order the kernel produces them, each carrying the run's `runId` and the `at` of the transition behind it: `BrainStarted` (`turn`, the request's `purpose`, `model` and `payload`), `TurnSettled` (`turn` and `usage` when the provider reported it), `ToolStarted` (`callId`, `name`, `args`), `ToolSettled`, `ToolFailed` (`callId`, `name`, and the `failure`), `RunDone` (`status`).",
+			"code": ["packages/tea/src/agent/machine.ts"],
+			"find": ["AGENT_EVENT_TYPES", "BrainStarted", "TurnSettled", "AgentEventHead"],
+			"mine": "holds",
+			"why": "AGENT_EVENT_TYPES still lists those six, and each event type carries the fields the table names."
+		},
+		{
+			"id": "290-settle",
+			"pr": 290,
+			"from": "draw",
+			"merged": "2026-09-23",
+			"at": "4f60603",
+			"doc": "docs/how-to/hand-wire-a-resilient-call.md",
+			"now": "packages/tea/docs/how-to/hand-wire-a-resilient-call.md",
+			"says": "The one thing you cannot get wrong is the settle order: `settle` hands back the settled slice and the result together, so there is no way to read the result before the call has settled.",
+			"code": ["packages/tea/src/internal/resilience/resilient-call/index.ts"],
+			"find": ["SettleResult", "SettleOutcome", "settle("],
+			"mine": "holds",
+			"why": "SettleResult is still `{ call, cmds, outcome }`, and the outcome is only read off it."
+		},
+		{
+			"id": "495-anchor",
+			"pr": 495,
+			"from": "draw",
+			"merged": "2026-09-26",
+			"at": "168762a",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "**Anchor mode is the default.** Each pair is dealt to one of its two functions, the **anchor**, and Jev is asked once per anchor rather than once per pair. Functions are taken in order of how many pairs they appear in, most first, a tie going to the lower `path:function`. Each takes every pair not already dealt to an earlier anchor, so no pair is asked twice.",
+			"code": [
+				"packages/structure-sweep/src/pairs/cap.ts",
+				"packages/structure-sweep/src/pairs/cli.ts"
+			],
+			"find": ["anchorMenus", "byText", "dealt", "pairwise"],
+			"mine": "holds",
+			"why": "anchorMenus sorts by pair count, then by text, and skips dealt pairs; --pairwise is still the opt-in. The sentence after it, on what the anchor is asked, changed with #500 in the same PR as the code."
+		},
+		{
+			"id": "603-tests",
+			"pr": 603,
+			"from": "draw",
+			"merged": "2026-10-10",
+			"at": "26d22c9",
+			"doc": "packages/code-graph/docs/reference/boundaries.md",
+			"now": "packages/code-graph/docs/reference/boundaries.md",
+			"says": "`testFiles` globs match a file's scope-relative path or its repository-relative path. ... Matched tests are excluded from B6–B10, B13, and B15–B17; other import and ownership rules still apply.",
+			"code": ["packages/code-graph/src/boundaries/zones/test-role.ts"],
+			"find": ["JUDGES_TEST_FILES", "testFiles", "Matched tests"],
+			"mine": "gone",
+			"fate": "kept",
+			"why": "#683 (2026-10-16) removed the door rules B9 and B13 and #687 (2026-10-17) added B20; each PR edited this sentence. It now says B6–B8, B10 and B15–B17, which matches JUDGES_TEST_FILES."
+		},
+		{
+			"id": "398-consolidate",
+			"pr": 398,
+			"from": "draw",
+			"merged": "2026-09-25",
+			"at": "e7297d8",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "[`structure-sweep consolidate`] calls no model and no network, needs no `TYPESAFE_API_KEY`, and changes no source file: it writes `.structure-sweep/consolidate.json` and a markdown summary `.structure-sweep/consolidate.md`, nothing else. The same inputs give byte-identical JSON.",
+			"code": ["packages/structure-sweep/src/consolidate/cli.ts"],
+			"find": ["writeFileSync", "consolidate.json", "import"],
+			"mine": "holds",
+			"why": "The CLI writes those two files and nothing else; the paragraph gained a clause about business rules later, which does not change this claim."
+		},
+		{
+			"id": "95-demo",
+			"pr": 95,
+			"from": "draw",
+			"merged": "2026-09-06",
+			"at": "fde81ee",
+			"doc": "src/internal/flow/workflow/README.md",
+			"now": "packages/tea/src/internal/flow/workflow/README.md",
+			"says": "This runs `src/internal/flow/workflow/demo.test.ts`, which drives both scenarios and prints the narration.",
+			"code": ["packages/tea/package.json"],
+			"find": ["demo:saga", "demo.test"],
+			"mine": "holds",
+			"why": "The folder moved into packages/tea with the monorepo, and the path is right from the package root, where `demo:saga` runs `vitest run src/internal/flow/workflow/demo.test.ts`."
+		},
+		{
+			"id": "351-refuse",
+			"pr": 351,
+			"from": "draw",
+			"merged": "2026-09-24",
+			"at": "127a1aa",
+			"doc": "packages/tea/docs/how-to/make-durable.md",
+			"now": "packages/tea/docs/how-to/make-durable.md",
+			"says": "A refusal, or a `load` or `migrate` that throws, stops the run: `ready` rejects with a `StoreRefusedError` and nothing is written, so the saved bytes are never overwritten by a fresh boot.",
+			"code": ["packages/tea/src/internal/engine/restore.ts"],
+			"find": ["StoreRefusedError", "Refusal"],
+			"mine": "holds",
+			"why": "restore.ts throws StoreRefusedError on a Refusal and on a throw from load or migrate, and its comment says the caller writes nothing."
+		},
+		{
+			"id": "487-refine",
+			"pr": 487,
+			"from": "draw",
+			"merged": "2026-09-26",
+			"at": "f68e2e3",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "One step of the refine loop over a drafted vocabulary. Like `propose`, it calls no model and no network and reads no API key: it diagnoses, and the editing is left to you or your coding agent. `sweep` is the only paid step in the loop, and `refine` never runs it: it writes the files to sweep and reads the sweep back.",
+			"code": ["packages/structure-sweep/src/propose/refine-cli.ts"],
+			"find": ["import", "sweep", "TYPESAFE"],
+			"mine": "holds",
+			"why": "refine-cli.ts imports no Jev client and no network code; it only reads a sweep file it is given."
+		},
+		{
+			"id": "236-family",
+			"pr": 236,
+			"from": "draw",
+			"merged": "2026-09-22",
+			"at": "38cf090",
+			"doc": "docs/reference/resilience.md",
+			"now": "packages/tea/docs/reference/resilience.md",
+			"says": "`DEFAULT_RESILIENT_NAME`: The family every unnamed knob speaks: `resilient_run` / `resilient_ok` / `resilient_err`.",
+			"code": ["packages/tea/src/internal/resilience/resilient-call/index.ts"],
+			"find": ["DEFAULT_RESILIENT_NAME", "resilient_run"],
+			"mine": "gone",
+			"fate": "kept",
+			"why": "#291 (2026-09-23) renamed the settle Msgs to `resilient_run_ok` / `resilient_run_err` and edited the doc comment this generated page is built from, in the same PR."
+		},
+		{
+			"id": "178-transcript",
+			"pr": 178,
+			"from": "draw",
+			"merged": "2026-09-09",
+			"at": "6c5f321",
+			"doc": "docs/how-to/show-a-run-in-progress.md",
+			"now": "packages/tea/docs/how-to/show-a-run-in-progress.md",
+			"says": "A finished run's Model clears `conversation` to `null`. ... The turns are still worth keeping, and `transcript()` keeps them: it is a collector over the `onEvent` stream you already have, so you fold nothing yourself.",
+			"code": ["packages/tea/src/agent/transcript.ts"],
+			"find": ["transcript", "onEvent", "collector"],
+			"mine": "holds",
+			"why": "transcript.ts still exports the collector, wired as an onEvent listener; the how-to paragraph is unchanged."
+		},
+		{
+			"id": "459-data",
+			"pr": 459,
+			"from": "draw",
+			"merged": "2026-09-26",
+			"at": "9ed000f",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "`--data`: Data edges: every call site on a D1 / Durable Object / KV / R2 / queue binding, per function, with the binding kind, name and access (`read` / `write` / `unknown`). `--json` emits the `DataReport`; `--graph --data` puts it on the graph as `data`.",
+			"code": ["packages/code-graph/src/data/extract.ts"],
+			"find": ["DataReport", "--data", "access"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592; docs/reference/analyses.md restates it and holds."
+		},
+		{
+			"id": "105-banner",
+			"pr": 105,
+			"from": "draw",
+			"merged": "2026-09-06",
+			"at": "4846c4e",
+			"doc": "src/internal/flow/workflow/README.md",
+			"now": "packages/tea/src/internal/flow/workflow/README.md",
+			"says": "[Sample output of the demo opens with] tea workflow — Saga rollback demo (deterministic)",
+			"code": ["packages/tea/src/internal/flow/workflow/demo.ts"],
+			"find": ["Saga rollback demo"],
+			"mine": "holds",
+			"why": "demo.ts still prints that line, and the README sample shows it."
+		},
+		{
+			"id": "526-ledger",
+			"pr": 526,
+			"from": "draw",
+			"merged": "2026-10-02",
+			"at": "006b1a3",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "[`boundary-ledger.json`] carries: one entry per crossing import (B1-B4, B6, B8, and B12 and B14 between libraries), per world-door use (B5, B7, B9, a door used by name in `rules/`, and B13, a pure library's door or world library), and per entry no rule places (B10, a feature's entry in no zone, and B11, a package under a library root that no library names).",
+			"code": ["packages/code-graph/src/boundaries/ledger.ts"],
+			"find": ["B13", "B9", "kind"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README in #592. Had it stayed, #683 (2026-10-16) would have made it false: the door kinds B5, B9 and B13 are gone, and SPEC.md was edited in that PR to match."
+		},
+		{
+			"id": "553-schema",
+			"pr": 553,
+			"from": "draw",
+			"merged": "2026-10-04",
+			"at": "e674787",
+			"doc": "packages/tea/README.md",
+			"now": "packages/tea/README.md",
+			"says": "`Cmd.define` takes any Standard Schema, so bring the schema library you already use.",
+			"code": ["packages/tea/src/pure/core.ts"],
+			"find": ["Standard Schema", "StandardSchemaV1", "Cmd.define"],
+			"mine": "holds",
+			"why": "pure/core.ts types the schema as StandardSchemaV1 and imports no schema library."
+		},
+		{
+			"id": "589-layout",
+			"pr": 589,
+			"from": "draw",
+			"merged": "2026-10-07",
+			"at": "656ae73",
+			"doc": "packages/code-graph/README.md",
+			"now": "packages/code-graph/README.md",
+			"says": "A scope that declares `features` is a hexagon: its features are laid out in the zones below, and every rule of this section judges it, with no second list to remember. The `layout` key is only the opt-out: a scope it names `rules` keeps the `rules/` layout above.",
+			"code": ["packages/code-graph/src/boundaries/rules.ts"],
+			"find": ["layout", "LAYOUTS", "rules"],
+			"mine": "gone",
+			"fate": "moved",
+			"why": "Left the README the next day in #592. Had it stayed, a later change would have made it false: SPEC.md now says the rules file has no `layout` key and naming it exits 2."
+		},
+		{
+			"id": "303-replay",
+			"pr": 303,
+			"from": "draw",
+			"merged": "2026-09-24",
+			"at": "caced3c",
+			"doc": "docs/reference/testing.md",
+			"now": "packages/tea/docs/reference/testing.md",
+			"says": "`expectReplayDeterministic`: Assert that replaying `opts.msgs` is a pure function of the Msg log: the final state and every emitted Cmd come out the same under two different global wall-clocks and RNG seeds.",
+			"code": ["packages/tea/src/testing/expect-replay-deterministic.ts"],
+			"find": ["expectReplayDeterministic", "wall-clock", "RNG"],
+			"mine": "holds",
+			"why": "The function and its doc comment, which this generated page prints, are unchanged in meaning."
+		},
+		{
+			"id": "C1-cohesion",
+			"pr": 489,
+			"from": "control",
+			"rev": "6a563a580aa1f3797c1a1d095b70b7d531ae1d95",
+			"merged": "2026-09-26",
+			"at": "6a563a5",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "**split candidates**: features of at least 4 files ranked by **cohesion**, lowest first: of the same-scope file pairs inside the feature, the share some commit changed together.",
+			"code": [
+				"packages/structure-sweep/src/propose/refine.ts",
+				"packages/structure-sweep/src/score/score.ts"
+			],
+			"find": ["cohesion", "precision", "kept change set", "predictedPairs"],
+			"mine": "drifted",
+			"why": "A known drift, read at the commit before its fix (#489, for ticket #488). The code counts only files some kept change set touched, and only change sets cut to 2..maxFiles labelled files, not any commit."
+		},
+		{
+			"id": "C2-redact",
+			"pr": 474,
+			"from": "control",
+			"rev": "c9bee15894920e4e7d48ddff60cf990a2d873804",
+			"merged": "2026-09-26",
+			"at": "c9bee15",
+			"doc": "packages/structure-sweep/README.md",
+			"now": "packages/structure-sweep/README.md",
+			"says": "With `--redact`: package specifiers (`zod`, `@scope/pkg`) and path aliases are kept, as are exported names, comments and string literals.",
+			"code": ["packages/structure-sweep/src/module-syntax.ts"],
+			"find": ["alias", "redact", "node_modules", "unknown"],
+			"mine": "drifted",
+			"why": "A known drift, read at the commit before its fix (#474). The code already resolved tsconfig path aliases under --redact and replaced them with ids; only node_modules specifiers and builtins were kept."
+		},
+		{
+			"id": "C3-interpret",
+			"pr": 366,
+			"from": "control",
+			"rev": "d530b6e8b4153e7ab650ce93ea17b80d5b327b80",
+			"merged": "2026-09-24",
+			"at": "d530b6e",
+			"doc": ".patterns/tea/elm-canon.md",
+			"now": ".patterns/tea/elm-canon.md",
+			"says": "`interpret: { [K in C[\"type\"]]: (cmd, ctx) => Promise<M | void> }`, so an interpreter cell returns one follow-up Msg or nothing.",
+			"code": ["packages/tea/src/pure/core.ts", "packages/tea/src/runtime-types.ts"],
+			"find": ["interpret", "readonly M[]", "Promise<"],
+			"mine": "drifted",
+			"why": "A known drift, read at the commit before its fix (#366, for ticket #339). The runtime already accepted a list of Msgs from a cell."
+		}
+	],
+	"tickets": [
+		{
+			"repo": "kamp-us/demlik",
+			"closed": 392,
+			"hits": 61,
+			"read": [
+				{
+					"n": 681,
+					"kind": "not"
+				},
+				{
+					"n": 669,
+					"kind": "not"
+				},
+				{
+					"n": 608,
+					"kind": "not"
+				},
+				{
+					"n": 573,
+					"kind": "not"
+				},
+				{
+					"n": 569,
+					"kind": "not"
+				},
+				{
+					"n": 561,
+					"kind": "not"
+				},
+				{
+					"n": 559,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 551,
+					"kind": "not"
+				},
+				{
+					"n": 550,
+					"kind": "not"
+				},
+				{
+					"n": 549,
+					"kind": "not"
+				},
+				{
+					"n": 548,
+					"kind": "not"
+				},
+				{
+					"n": 547,
+					"kind": "not"
+				},
+				{
+					"n": 545,
+					"kind": "not"
+				},
+				{
+					"n": 544,
+					"kind": "not"
+				},
+				{
+					"n": 543,
+					"kind": "unclear",
+					"fixed": true
+				},
+				{
+					"n": 542,
+					"kind": "unclear",
+					"fixed": true
+				},
+				{
+					"n": 541,
+					"kind": "not"
+				},
+				{
+					"n": 538,
+					"kind": "not"
+				},
+				{
+					"n": 537,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 518,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 501,
+					"kind": "not"
+				},
+				{
+					"n": 490,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 488,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 473,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 468,
+					"kind": "not"
+				},
+				{
+					"n": 458,
+					"kind": "not"
+				},
+				{
+					"n": 407,
+					"kind": "not"
+				},
+				{
+					"n": 392,
+					"kind": "not"
+				},
+				{
+					"n": 361,
+					"kind": "not"
+				},
+				{
+					"n": 357,
+					"kind": "not"
+				},
+				{
+					"n": 356,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 339,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 337,
+					"kind": "not"
+				},
+				{
+					"n": 284,
+					"kind": "not"
+				},
+				{
+					"n": 272,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 240,
+					"kind": "not"
+				},
+				{
+					"n": 219,
+					"kind": "not"
+				},
+				{
+					"n": 179,
+					"kind": "not"
+				},
+				{
+					"n": 151,
+					"kind": "not"
+				},
+				{
+					"n": 150,
+					"kind": "not"
+				},
+				{
+					"n": 148,
+					"kind": "not"
+				},
+				{
+					"n": 133,
+					"kind": "not"
+				},
+				{
+					"n": 124,
+					"kind": "not"
+				},
+				{
+					"n": 120,
+					"kind": "not"
+				},
+				{
+					"n": 119,
+					"kind": "not"
+				},
+				{
+					"n": 118,
+					"kind": "not"
+				},
+				{
+					"n": 116,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 113,
+					"kind": "not"
+				},
+				{
+					"n": 111,
+					"kind": "not"
+				},
+				{
+					"n": 102,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 89,
+					"kind": "drift",
+					"fixed": false
+				},
+				{
+					"n": 88,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 83,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 81,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 73,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 61,
+					"kind": "not"
+				},
+				{
+					"n": 60,
+					"kind": "not"
+				},
+				{
+					"n": 53,
+					"kind": "not"
+				},
+				{
+					"n": 51,
+					"kind": "not"
+				},
+				{
+					"n": 37,
+					"kind": "not"
+				},
+				{
+					"n": 4,
+					"kind": "not"
+				}
+			]
+		},
+		{
+			"repo": "kamp-us/phoenix",
+			"closed": 6412,
+			"hits": 1356,
+			"read": [
+				{
+					"n": 10370,
+					"kind": "not"
+				},
+				{
+					"n": 10343,
+					"kind": "not"
+				},
+				{
+					"n": 10242,
+					"kind": "not"
+				},
+				{
+					"n": 10107,
+					"kind": "not"
+				},
+				{
+					"n": 10055,
+					"kind": "not"
+				},
+				{
+					"n": 9741,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 9280,
+					"kind": "not"
+				},
+				{
+					"n": 9046,
+					"kind": "not"
+				},
+				{
+					"n": 8643,
+					"kind": "not"
+				},
+				{
+					"n": 8551,
+					"kind": "not"
+				},
+				{
+					"n": 8495,
+					"kind": "not"
+				},
+				{
+					"n": 8214,
+					"kind": "not"
+				},
+				{
+					"n": 8144,
+					"kind": "not"
+				},
+				{
+					"n": 7865,
+					"kind": "not"
+				},
+				{
+					"n": 6946,
+					"kind": "born",
+					"fixed": true
+				},
+				{
+					"n": 6795,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 6787,
+					"kind": "not"
+				},
+				{
+					"n": 6706,
+					"kind": "drift",
+					"fixed": false
+				},
+				{
+					"n": 6507,
+					"kind": "not"
+				},
+				{
+					"n": 6282,
+					"kind": "not"
+				},
+				{
+					"n": 6016,
+					"kind": "not"
+				},
+				{
+					"n": 5798,
+					"kind": "not"
+				},
+				{
+					"n": 5724,
+					"kind": "not"
+				},
+				{
+					"n": 5657,
+					"kind": "not"
+				},
+				{
+					"n": 5624,
+					"kind": "not"
+				},
+				{
+					"n": 5473,
+					"kind": "not"
+				},
+				{
+					"n": 5332,
+					"kind": "not"
+				},
+				{
+					"n": 5320,
+					"kind": "not"
+				},
+				{
+					"n": 5275,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 5260,
+					"kind": "drift",
+					"fixed": false
+				},
+				{
+					"n": 4849,
+					"kind": "not"
+				},
+				{
+					"n": 4723,
+					"kind": "not"
+				},
+				{
+					"n": 4707,
+					"kind": "not"
+				},
+				{
+					"n": 4700,
+					"kind": "not"
+				},
+				{
+					"n": 4600,
+					"kind": "not"
+				},
+				{
+					"n": 4581,
+					"kind": "not"
+				},
+				{
+					"n": 4575,
+					"kind": "not"
+				},
+				{
+					"n": 4481,
+					"kind": "not"
+				},
+				{
+					"n": 4391,
+					"kind": "not"
+				},
+				{
+					"n": 4360,
+					"kind": "not"
+				},
+				{
+					"n": 4328,
+					"kind": "not"
+				},
+				{
+					"n": 4284,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 4199,
+					"kind": "drift",
+					"fixed": false
+				},
+				{
+					"n": 4193,
+					"kind": "not"
+				},
+				{
+					"n": 4161,
+					"kind": "not"
+				},
+				{
+					"n": 3922,
+					"kind": "not"
+				},
+				{
+					"n": 3672,
+					"kind": "not"
+				},
+				{
+					"n": 3660,
+					"kind": "not"
+				},
+				{
+					"n": 3659,
+					"kind": "not"
+				},
+				{
+					"n": 3646,
+					"kind": "not"
+				},
+				{
+					"n": 3562,
+					"kind": "not"
+				},
+				{
+					"n": 3281,
+					"kind": "not"
+				},
+				{
+					"n": 3247,
+					"kind": "not"
+				},
+				{
+					"n": 3042,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 2971,
+					"kind": "not"
+				},
+				{
+					"n": 2872,
+					"kind": "not"
+				},
+				{
+					"n": 2860,
+					"kind": "not"
+				},
+				{
+					"n": 2627,
+					"kind": "not"
+				},
+				{
+					"n": 2524,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 2510,
+					"kind": "not"
+				},
+				{
+					"n": 2366,
+					"kind": "not"
+				},
+				{
+					"n": 2297,
+					"kind": "not"
+				},
+				{
+					"n": 2067,
+					"kind": "not"
+				},
+				{
+					"n": 1864,
+					"kind": "not"
+				},
+				{
+					"n": 1747,
+					"kind": "not"
+				},
+				{
+					"n": 1694,
+					"kind": "not"
+				},
+				{
+					"n": 1610,
+					"kind": "not"
+				},
+				{
+					"n": 1423,
+					"kind": "not"
+				},
+				{
+					"n": 1375,
+					"kind": "not"
+				},
+				{
+					"n": 1312,
+					"kind": "not"
+				},
+				{
+					"n": 966,
+					"kind": "not"
+				},
+				{
+					"n": 884,
+					"kind": "not"
+				},
+				{
+					"n": 802,
+					"kind": "not"
+				},
+				{
+					"n": 633,
+					"kind": "not"
+				},
+				{
+					"n": 456,
+					"kind": "not"
+				},
+				{
+					"n": 428,
+					"kind": "not"
+				},
+				{
+					"n": 376,
+					"kind": "drift",
+					"fixed": true
+				},
+				{
+					"n": 359,
+					"kind": "not"
+				},
+				{
+					"n": 310,
+					"kind": "not"
+				},
+				{
+					"n": 273,
+					"kind": "not"
+				}
+			]
+		}
+	]
+}
