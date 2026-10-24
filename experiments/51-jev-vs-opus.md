@@ -179,6 +179,10 @@ third ask ends "a sentence saying so", and I added what "so" is. The first
 five cases ran alone, the answers looked sane, and the same five were run
 again with the rest.
 
+Later, on 2026-10-24: in `51-cases.json`, one product name inside a quoted
+tool message was replaced with `‹product›`, to keep it out of this public
+repo. Nothing else changed, and no answer depended on it.
+
 ## What this does not show
 
 - **That Jev is right.** It shows Jev agrees with Opus. On `ruling-03` they
