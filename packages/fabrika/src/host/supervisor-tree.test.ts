@@ -760,7 +760,10 @@ describe("dead letters", () => {
 				const first = yield* redrive("p:1", rev, "ops");
 				const second = yield* redrive("p:1", rev, "ops");
 				const notDead = yield* redrive("p:1", rev + 100, "ops");
-				yield* sleep(300);
+				// Wait until p:1 has taken the resent copy, the last row of its inbox: then every
+				// message has been taken, however long a busy machine needs to get there.
+				const copy = first.how === "sent" ? first.rev : -1;
+				yield* until(Effect.map(savedState("p:1", Count), (s) => (s.state?.cursor ?? 0) >= copy));
 				return {
 					listed,
 					first,

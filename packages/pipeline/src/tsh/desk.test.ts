@@ -204,7 +204,8 @@ describe("the owner's desk in tsh", () => {
 
 		const run = await tsh(at, ["desk"]);
 		expect(run.err.split("\n")[0]).toBe(`fabrika.toml: ${clone}@main (${commit.slice(0, 7)})`);
-		expect(run.status).toBe(0);
+		// It ended 1 once, with two whole suites side by side, and what tsh said was lost: say it.
+		expect(run.status, run.err).toBe(0);
 		// The pack is found, and its paths read, from the folder tsh starts in: never from the clone.
 		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(existsSync(join(clone, "pages"))).toBe(false);

@@ -1,9 +1,9 @@
-import type {Sub} from "@demlik/tea";
+import type {Sub, TimerSub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
 import {type Reply, Thread} from "@kampus/pipeline/combos";
 import {Worktrees} from "@kampus/pipeline/worktrees";
-import {Effect, Layer, Stream} from "effect";
+import {Duration, Effect, Layer, Schedule, Stream} from "effect";
 import {
 	type DriverFact,
 	Fabrika,
@@ -67,6 +67,11 @@ const SHELLS: Readonly<Record<string, Shell>> = {
 
 const NO_SPEND: Spend = {costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: 0};
 const PERSON = "person";
+
+/** The Msg a turn's merge-queue clock sends when it runs out. */
+type QueueStalled = Extract<OperatorMsg, {readonly type: "queue_stalled"}>;
+const isQueueStalled = (msg: unknown): msg is QueueStalled =>
+	typeof msg === "object" && msg !== null && "type" in msg && msg.type === "queue_stalled";
 
 /** One park the machine met, and what it did about it. */
 export interface ParkMet {
@@ -321,6 +326,37 @@ export function recordedLane(name: string, lane: CompiledLane, log: readonly Log
 		}
 	}
 
+	/**
+	 * The merge queue has nothing more to show the task: its next real event is no wait the queue
+	 * Listen passes over, and no landing, ejection or park it reads. Only the machine's own clock
+	 * moves it on from here: to the stall the log records next, or to the log's end.
+	 */
+	function stalled(task: string): boolean {
+		const w = at(task);
+		if (w.s.state !== "ship:queued") return false;
+		const next = head(task);
+		if (next === null) return true;
+		if (["DONE", "FAIL", "LAP", "BLOCKED"].includes(next.event)) return false;
+		return !(next.event === "WIP" && stepTask(compiled(task), w.s, next).to === "ship:queued");
+	}
+
+	/**
+	 * tea's `timer`, with the merge queue's stall clock run by the log: it runs out once the queue
+	 * has nothing more to show (`stalled`), never before. On the wall clock it ran out while a busy
+	 * machine was still reading the queue's waits, and the replay diverged on a landing. Every other
+	 * clock is tea's own, on the replay's short knobs.
+	 */
+	const timer = <M>(sub: TimerSub<M>): Stream.Stream<M> => {
+		const {ms, msg} = sub.deps;
+		if (!isQueueStalled(msg)) return Stream.fromEffect(Effect.as(Effect.sleep(ms), msg));
+		return Stream.fromEffect(
+			Effect.sync(() => stalled(msg.key)).pipe(
+				Effect.repeat({until: (out) => out, schedule: Schedule.spaced(Duration.millis(1))}),
+				Effect.as(msg),
+			),
+		);
+	};
+
 	const unknown = Effect.fail({_tag: "unknown"} as const);
 
 	const layer = Layer.succeed(Fabrika, {
@@ -449,6 +485,7 @@ export function recordedLane(name: string, lane: CompiledLane, log: readonly Log
 		layer: Layer.mergeAll(layer, worktrees),
 		thread,
 		shellRunner,
+		timer,
 		seen,
 		/** How many of the log's events have landed, of how many. */
 		landed: () => total - Object.values(world).reduce((n, w) => n + w.rest.length, 0),
@@ -489,7 +526,10 @@ export interface Replay {
 	readonly total: number;
 }
 
-/** Knobs for a replay: nothing in a log needs waiting for, so every clock is short. */
+/**
+ * Knobs for a replay: nothing in a log needs waiting for, so every clock is short. The merge
+ * queue's stall clock is the log's own (`timer` in `recordedLane`), so its knob is not read.
+ */
 export const replayKnobs: Knobs = {
 	...defaultKnobs,
 	slots: 4,
@@ -523,7 +563,11 @@ export async function replayLane(
 		const handle = yield* run(createOperator(knobs.slots), {
 			ctx: undefined,
 			interpret: operatorInterpret("replay"),
-			subscribe: {...operatorSubscribe({pollMs: 1, shell: NO_SHELLS}), shell: recorded.shellRunner},
+			subscribe: {
+				...operatorSubscribe({pollMs: 1, shell: NO_SHELLS}),
+				shell: recorded.shellRunner,
+				timer: recorded.timer,
+			},
 			terminal: (s: Operator) => s.phase === "ended",
 		});
 		const runtime = yield* handle.ready;

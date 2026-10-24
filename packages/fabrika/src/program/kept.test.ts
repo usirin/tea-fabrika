@@ -1,6 +1,6 @@
 import {Cmd, type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {Cause, Effect, Exit, Schema, Stream} from "effect";
+import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
 import {mortalDisk} from "./mortal.ts";
@@ -213,12 +213,16 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 		const lives = [world(), world(), world()];
 		for (const w of lives.slice(0, 2)) {
 			// A life stopped as soon as its work started: before it answered, as a kill leaves it.
+			// The stop waits on the work's start, not on a clock: a busy machine takes longer to get there.
 			const stopped = await Effect.runPromise(
-				call(
-					jobProgram({...w, subscribe: {job_work: (sub) => stall(w, sub)}}),
-					{},
-					{keeping: {id: "job:r1", storage}, stopOn: Effect.sleep("20 millis")},
-				),
+				Effect.gen(function* () {
+					const working = yield* Deferred.make<void>();
+					return yield* call(
+						jobProgram({...w, subscribe: {job_work: (sub) => stall(w, sub, working)}}),
+						{},
+						{keeping: {id: "job:r1", storage}, stopOn: Deferred.await(working)},
+					);
+				}),
 			);
 			expect(endOf(stopped).kind).toBe("stopped");
 		}
@@ -498,8 +502,14 @@ describe("a failure tea reports ends the run, never the process", () => {
 	});
 });
 
-/** The work's Listen in a life that is stopped before it answers: it starts, and never answers. */
-const stall = (w: World, sub: WorkSub): Stream.Stream<JobMsg> =>
+/**
+ * The work's Listen in a life that is stopped before it answers: it starts, says so on `working`
+ * when given one, and never answers.
+ */
+const stall = (w: World, sub: WorkSub, working?: Deferred.Deferred<void>): Stream.Stream<JobMsg> =>
 	Stream.fromEffect(
-		Effect.sync(() => w.started.push(sub.deps.run)).pipe(Effect.andThen(Effect.never)),
+		Effect.sync(() => w.started.push(sub.deps.run)).pipe(
+			Effect.andThen(working === undefined ? Effect.void : Deferred.succeed(working, undefined)),
+			Effect.andThen(Effect.never),
+		),
 	);
