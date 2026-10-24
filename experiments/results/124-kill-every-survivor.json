@@ -1,0 +1,930 @@
+{
+	"experiment": 124,
+	"date": "2026-10-24",
+	"node": "v26.12.0",
+	"stryker": "10.1.1, vitest runner, perTest coverage, TypeScript checker",
+	"model": "claude-opus-5-5",
+	"claudeCode": "2.1.310 (Claude Code)",
+	"budgetPerCallUsd": 4,
+	"spentUsd": 0.8563086,
+	"skipList": "// Experiment 124's skip list: the text of an error or a log line.\nconst endsError = (node) => node != null && node.type === \"Identifier\" && /Error$/.test(node.name);\nconst why = (call) => {\n  const callee = call.node.callee;\n  if (call.isNewExpression() && endsError(callee)) return \"error text\";\n  if (!call.isCallExpression()) return undefined;\n  if (endsError(callee)) return \"error text\";\n  if (callee.type === \"Super\") {\n    const owner = call.findParent((p) => p.isClassDeclaration() || p.isClassExpression());\n    if (owner != null && endsError(owner.node.superClass)) return \"error text\";\n  }\n  if (callee.type === \"MemberExpression\" && callee.object.type === \"Identifier\" && callee.object.name === \"console\")\n    return \"log text\";\n  return undefined;\n};\nexport const strykerPlugins = [\n  {\n    kind: \"Ignore\",\n    name: \"arid\",\n    value: {\n      shouldIgnore(path) {\n        const parent = path.parentPath;\n        if (parent == null || path.listKey !== \"arguments\") return undefined;\n        if (!parent.isCallExpression() && !parent.isNewExpression()) return undefined;\n        const found = why(parent);\n        return found === undefined ? undefined : `arid: ${found}`;\n      },\n    },\n  },\n];\n",
+	"tickets": [
+		{
+			"ticket": "kamp-us/demlik#355",
+			"promise": "Every note an agent makes is reported exactly once.",
+			"test": "packages/tea/src/agent/notes-once.promise.test.ts",
+			"skip": {
+				"ignored": [],
+				"ignoredNotIn122": [],
+				"of122": {
+					"all": {
+						"mutants": 6,
+						"uncaught": 2,
+						"killedByOneGroup": 0
+					},
+					"skipped": {
+						"mutants": 0,
+						"uncaught": 0,
+						"killedByOneGroup": 0
+					}
+				},
+				"stringLiteral122": {
+					"mutants": 0,
+					"uncaught": 0,
+					"killedByOneGroup": 0
+				},
+				"skippedRows": []
+			},
+			"loops": [
+				{
+					"label": "loop",
+					"stryker": [
+						{
+							"label": "loop-0",
+							"seconds": 20,
+							"statuses": {
+								"CompileError": 2,
+								"Killed": 5,
+								"NoCoverage": 1,
+								"Survived": 1
+							},
+							"reused": null,
+							"uncaught": [
+								"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+								"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+							]
+						},
+						{
+							"label": "loop-1",
+							"seconds": 22,
+							"statuses": {
+								"CompileError": 2,
+								"Killed": 6,
+								"Survived": 1
+							},
+							"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+2 -1); Result: 2 of 9 mutant result(s) are reused.",
+							"uncaught": [
+								"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+							]
+						}
+					],
+					"truth": {
+						"seconds": 19,
+						"statuses": {
+							"CompileError": 2,
+							"Killed": 6,
+							"Survived": 1
+						},
+						"uncaught": [
+							{
+								"key": "packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false",
+								"claimed": true
+							}
+						]
+					},
+					"rounds": [
+						{
+							"round": 1,
+							"asked": 2,
+							"usd": 0.14485119999999999,
+							"usage": {
+								"input_tokens": 12,
+								"cache_creation_input_tokens": 10732,
+								"cache_read_input_tokens": 69336,
+								"output_tokens": 2254,
+								"output_tokens_details": {
+									"thinking_tokens": 666
+								},
+								"server_tool_use": {
+									"web_search_requests": 0,
+									"web_fetch_requests": 0
+								},
+								"service_tier": "standard",
+								"cache_creation": {
+									"ephemeral_1h_input_tokens": 10732,
+									"ephemeral_5m_input_tokens": 0
+								},
+								"inference_geo": "global",
+								"iterations": [
+									{
+										"input_tokens": 2,
+										"output_tokens": 677,
+										"cache_read_input_tokens": 15200,
+										"cache_creation_input_tokens": 632,
+										"cache_creation": {
+											"ephemeral_5m_input_tokens": 0,
+											"ephemeral_1h_input_tokens": 632
+										},
+										"type": "message"
+									}
+								],
+								"speed": "standard",
+								"fallback_credit": null
+							},
+							"turns": 6,
+							"seconds": 32,
+							"isError": false,
+							"denials": 0,
+							"touched": [],
+							"checkExit": 0,
+							"answers": [
+								{
+									"id": "M1",
+									"answer": "test",
+									"test": "a state saved before the outbox existed a mid-run state with no lifecycle field reports no notes",
+									"mutant": "packages/tea/src/agent/machine.ts:619:39 ArrayDeclaration: [] => [\"Stryker was here\"]"
+								},
+								{
+									"id": "M2",
+									"answer": "cannot",
+									"why": "With an empty outbox the mutant skips the early return, adds the empty array to the private WeakSet `projected`, and runs the loop zero times, so it returns the same `events` as the original. The only extra effect is a WeakSet entry for an empty array, and that entry can never change output: an empty outbox reports nothing whether or not it is in the set. A WeakSet can't be counted or listed from outside, so no test can see the difference.",
+									"mutant": "packages/tea/src/agent/machine.ts:620:9 ConditionalExpression: outbox.length === 0 => false"
+								}
+							],
+							"reply": "I added one test for M1. M2 is equivalent to the real code, so no test can catch it. Both tests in the file pass, and the original promise check is unchanged.\n\n**M1** (`state.lifecycle ?? []` becomes `[\"Stryker was here\"]`): no test ever gave the projector a state without a `lifecycle` field, which is what a state saved before the outbox existed looks like. With the mutant, that fallback becomes one string \"note\". The string has no `kind`, so the switch in `projectNote` matches no case and returns `undefined`. The check `event !== null` lets `undefined` through, so the projector would return `[undefined]` instead of `[]`. The new test starts a run, removes `lifecycle` from the state, and checks that projecting both a host Msg and the agent's Msg gives exactly `[]`. I used `toStrictEqual` so an array holding `undefined` can't count as equal to an empty one.\n\n**M2** (`outbox.length === 0 || …` becomes `false || …`): for an empty outbox, the mutant skips the early return. It then adds that empty array to `projected` (a `WeakSet`) and runs the loop zero times. Either way the projector returns the same `events`. The only side effect is the array being in the `WeakSet`, and an empty outbox gives nothing to report whether it's in there or not. A `WeakSet` also can't be counted or listed from outside.\n\n```json\n[{\"id\": \"M1\", \"answer\": \"test\", \"test\": \"a state saved before the outbox existed a mid-run state with no lifecycle field reports no notes\"},\n {\"id\": \"M2\", \"answer\": \"cannot\", \"why\": \"With an empty outbox the mutant skips the early return, adds the empty array to the private WeakSet `projected`, and runs the loop zero times, so it returns the same `events` as the original. The only extra effect is a WeakSet entry for an empty array, and that entry can never change output: an empty outbox reports nothing whether or not it is in the set. A WeakSet can't be counted or listed from outside, so no test can see the difference.\"}]\n```",
+							"grade": {
+								"addedLines": 8,
+								"removedLines": 0,
+								"testsBefore": [
+									"parent-only folds report nothing, and each note reads once"
+								],
+								"testsAfter": [
+									"parent-only folds report nothing, and each note reads once",
+									"a mid-run state with no lifecycle field reports no notes"
+								],
+								"testsDropped": [],
+								"sourceLiterals": [],
+								"sourceLinesCopied": [],
+								"file": "packages/tea/src/agent/notes-once.promise.test.ts"
+							}
+						}
+					],
+					"overall": {
+						"addedLines": 8,
+						"removedLines": 0,
+						"testsBefore": [
+							"parent-only folds report nothing, and each note reads once"
+						],
+						"testsAfter": [
+							"parent-only folds report nothing, and each note reads once",
+							"a mid-run state with no lifecycle field reports no notes"
+						],
+						"testsDropped": [],
+						"sourceLiterals": [],
+						"sourceLinesCopied": [],
+						"file": "packages/tea/src/agent/notes-once.promise.test.ts"
+					},
+					"claimed": [
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					],
+					"checkThrice": [
+						0,
+						0,
+						0
+					]
+				}
+			]
+		},
+		{
+			"ticket": "kamp-us/demlik#367",
+			"promise": "A span's start and end are the run clock's instant, however long the process has been up.",
+			"test": "packages/tea/src/otel/span-time.promise.test.ts",
+			"skip": {
+				"ignored": [],
+				"ignoredNotIn122": [],
+				"of122": {
+					"all": {
+						"mutants": 11,
+						"uncaught": 3,
+						"killedByOneGroup": 0
+					},
+					"skipped": {
+						"mutants": 0,
+						"uncaught": 0,
+						"killedByOneGroup": 0
+					}
+				},
+				"stringLiteral122": {
+					"mutants": 0,
+					"uncaught": 0,
+					"killedByOneGroup": 0
+				},
+				"skippedRows": []
+			},
+			"loops": [
+				{
+					"label": "loop",
+					"stryker": [
+						{
+							"label": "loop-0",
+							"seconds": 19,
+							"statuses": {
+								"NoCoverage": 3,
+								"Killed": 15,
+								"CompileError": 4,
+								"Survived": 1
+							},
+							"reused": null,
+							"uncaught": [
+								"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+								"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+								"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1",
+								"packages/tea/src/otel/index.ts:394:45:CallExpression:;"
+							]
+						},
+						{
+							"label": "loop-1",
+							"seconds": 14,
+							"statuses": {
+								"Killed": 19,
+								"CompileError": 4
+							},
+							"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+4 -1); Result: 7 of 23 mutant result(s) are reused.",
+							"uncaught": []
+						}
+					],
+					"truth": {
+						"seconds": 18,
+						"statuses": {
+							"Killed": 19,
+							"CompileError": 4
+						},
+						"uncaught": []
+					},
+					"rounds": [
+						{
+							"round": 1,
+							"asked": 4,
+							"usd": 0.2854314,
+							"usage": {
+								"input_tokens": 18,
+								"cache_creation_input_tokens": 18736,
+								"cache_read_input_tokens": 156457,
+								"output_tokens": 5209,
+								"output_tokens_details": {
+									"thinking_tokens": 802
+								},
+								"server_tool_use": {
+									"web_search_requests": 0,
+									"web_fetch_requests": 0
+								},
+								"service_tier": "standard",
+								"cache_creation": {
+									"ephemeral_1h_input_tokens": 18736,
+									"ephemeral_5m_input_tokens": 0
+								},
+								"inference_geo": "global",
+								"iterations": [
+									{
+										"input_tokens": 2,
+										"output_tokens": 888,
+										"cache_read_input_tokens": 23515,
+										"cache_creation_input_tokens": 321,
+										"cache_creation": {
+											"ephemeral_5m_input_tokens": 0,
+											"ephemeral_1h_input_tokens": 321
+										},
+										"type": "message"
+									}
+								],
+								"speed": "standard",
+								"fallback_credit": null
+							},
+							"turns": 12,
+							"seconds": 71,
+							"isError": false,
+							"denials": 0,
+							"touched": [],
+							"checkExit": 0,
+							"answers": [
+								{
+									"id": "M1",
+									"answer": "test",
+									"test": "span time is the run clock's instant > a settle with no brain start opens a CLIENT chat span at the settle's `at`",
+									"mutant": "packages/tea/src/otel/index.ts:229:13 ObjectLiteral: { kind: SpanKind.CLIENT } => {}"
+								},
+								{
+									"id": "M2",
+									"answer": "test",
+									"test": "span time is the run clock's instant > a sub-ms `at` that rounds up to a whole second carries into the seconds",
+									"mutant": "packages/tea/src/otel/index.ts:347:10 ConditionalExpression: nanos === 1_000_000_000 => false"
+								},
+								{
+									"id": "M3",
+									"answer": "test",
+									"test": "span time is the run clock's instant > a sub-ms `at` that rounds up to a whole second carries into the seconds",
+									"mutant": "packages/tea/src/otel/index.ts:347:37 ArithmeticOperator: seconds + 1 => seconds - 1"
+								},
+								{
+									"id": "M4",
+									"answer": "test",
+									"test": "span time is the run clock's instant > a child still open when the run finishes ends at the RunDone's `at`",
+									"mutant": "packages/tea/src/otel/index.ts:394:45 CallExpression: endSpan(span, at); => ;"
+								}
+							],
+							"reply": "I added three tests to `packages/tea/src/otel/span-time.promise.test.ts`, and each of the four mutants now has a test that should kill it. All 4 tests in the file pass on the current code. I didn't run the mutants: the rules don't allow changing source files, so the kills are worked out from the code.\n\nThe original property test is unchanged.\n\nBefore writing them I confirmed one thing: the OTel SDK passes an `HrTime` through unchanged. Given `startTime: [0, 1e9]`, the exported span still reads `[0, 1000000000]`. So a wrong `spanTime` result shows up in the exported spans and can be caught.\n\n- **M2 and M3 (the rounding carry at `index.ts:347`):** an `at` of `999.9999999` rounds to exactly 1e9 nanoseconds. The real code turns that into `[1, 0]`. With M2 the span would get `[0, 1000000000]`; with M3 it would get `[-1, 0]`. A second value, `1_999.9999999`, should give `[2, 0]` for the run span's end. The test also checks that every span's nanoseconds stay below 1e9. I kept to small values here because large epoch values can't hold this sub-millisecond detail in a JavaScript number.\n- **M1 (`index.ts:229`):** a `TurnSettled` with no `BrainStarted` before it must still produce a `chat` span whose kind is `SpanKind.CLIENT`. With the mutant, the span falls back to the SDK default, `INTERNAL`.\n- **M4 (`index.ts:394`):** a brain span and a tool span still open at a `done` `RunDone` must end at the `RunDone`'s `at` (30), without `tea.run.detached`. With the mutant, nothing ends them at that point. The final `end()` call never runs in this test, so the children are never exported and the lookups fail.\n\n```json\n[{\"id\": \"M1\", \"answer\": \"test\", \"test\": \"span time is the run clock's instant > a settle with no brain start opens a CLIENT chat span at the settle's `at`\"},\n {\"id\": \"M2\", \"answer\": \"test\", \"test\": \"span time is the run clock's instant > a sub-ms `at` that rounds up to a whole second carries into the seconds\"},\n {\"id\": \"M3\", \"answer\": \"test\", \"test\": \"span time is the run clock's instant > a sub-ms `at` that rounds up to a whole second carries into the seconds\"},\n {\"id\": \"M4\", \"answer\": \"test\", \"test\": \"span time is the run clock's instant > a child still open when the run finishes ends at the RunDone's `at`\"}]\n```",
+							"grade": {
+								"addedLines": 45,
+								"removedLines": 1,
+								"testsBefore": [
+									"every span starts and ends at the exact HrTime of its event's `at`"
+								],
+								"testsAfter": [
+									"every span starts and ends at the exact HrTime of its event's `at`",
+									"a sub-ms `at` that rounds up to a whole second carries into the seconds",
+									"a settle with no brain start opens a CLIENT chat span at the settle's `at`",
+									"a child still open when the run finishes ends at the RunDone's `at`"
+								],
+								"testsDropped": [],
+								"sourceLiterals": [
+									"@opentelemetry/api",
+									"chat",
+									"tea.run.detached"
+								],
+								"sourceLinesCopied": [],
+								"file": "packages/tea/src/otel/span-time.promise.test.ts"
+							}
+						}
+					],
+					"overall": {
+						"addedLines": 45,
+						"removedLines": 1,
+						"testsBefore": [
+							"every span starts and ends at the exact HrTime of its event's `at`"
+						],
+						"testsAfter": [
+							"every span starts and ends at the exact HrTime of its event's `at`",
+							"a sub-ms `at` that rounds up to a whole second carries into the seconds",
+							"a settle with no brain start opens a CLIENT chat span at the settle's `at`",
+							"a child still open when the run finishes ends at the RunDone's `at`"
+						],
+						"testsDropped": [],
+						"sourceLiterals": [
+							"@opentelemetry/api",
+							"chat",
+							"tea.run.detached"
+						],
+						"sourceLinesCopied": [],
+						"file": "packages/tea/src/otel/span-time.promise.test.ts"
+					},
+					"claimed": [],
+					"checkThrice": [
+						0,
+						0,
+						0
+					]
+				}
+			]
+		},
+		{
+			"ticket": "kamp-us/demlik#483",
+			"promise": "A Jev client error never carries the API key.",
+			"test": "packages/structure-sweep/test/jev-key.promise.test.ts",
+			"skip": {
+				"ignored": [
+					"packages/backlog-sweep/src/jev.ts:50:11 StringLiteral arid: error text",
+					"packages/backlog-sweep/src/jev.ts:50:53 StringLiteral arid: error text",
+					"packages/backlog-sweep/src/jev.ts:50:69 StringLiteral arid: error text",
+					"packages/structure-sweep/src/jev.ts:50:11 StringLiteral arid: error text",
+					"packages/structure-sweep/src/jev.ts:50:53 StringLiteral arid: error text",
+					"packages/structure-sweep/src/jev.ts:50:69 StringLiteral arid: error text"
+				],
+				"ignoredNotIn122": [],
+				"of122": {
+					"all": {
+						"mutants": 88,
+						"uncaught": 24,
+						"killedByOneGroup": 40
+					},
+					"skipped": {
+						"mutants": 6,
+						"uncaught": 2,
+						"killedByOneGroup": 3
+					}
+				},
+				"stringLiteral122": {
+					"mutants": 16,
+					"uncaught": 8,
+					"killedByOneGroup": 7
+				},
+				"skippedRows": [
+					{
+						"key": "packages/backlog-sweep/src/jev.ts:50:53:StringLiteral:``",
+						"mutator": "StringLiteral",
+						"status": "Killed",
+						"groups": "b"
+					},
+					{
+						"key": "packages/backlog-sweep/src/jev.ts:50:11:StringLiteral:``",
+						"mutator": "StringLiteral",
+						"status": "Killed",
+						"groups": "b"
+					},
+					{
+						"key": "packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"mutator": "StringLiteral",
+						"status": "Survived",
+						"groups": ""
+					},
+					{
+						"key": "packages/structure-sweep/src/jev.ts:50:53:StringLiteral:``",
+						"mutator": "StringLiteral",
+						"status": "Killed",
+						"groups": "b"
+					},
+					{
+						"key": "packages/structure-sweep/src/jev.ts:50:11:StringLiteral:``",
+						"mutator": "StringLiteral",
+						"status": "Killed",
+						"groups": "ab"
+					},
+					{
+						"key": "packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"mutator": "StringLiteral",
+						"status": "Survived",
+						"groups": ""
+					}
+				]
+			},
+			"loops": [
+				{
+					"label": "loop",
+					"stryker": [
+						{
+							"label": "loop-0",
+							"seconds": 49,
+							"statuses": {
+								"Ignored": 6,
+								"CompileError": 38,
+								"Killed": 60,
+								"Survived": 22,
+								"Timeout": 2
+							},
+							"reused": null,
+							"uncaught": [
+								"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+								"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+								"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+								"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+								"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+								"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+								"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+								"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+								"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+								"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+								"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+								"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+								"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+								"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+								"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+								"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+								"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+								"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+								"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+								"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+								"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+								"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+							]
+						},
+						{
+							"label": "loop-1",
+							"seconds": 32,
+							"statuses": {
+								"Ignored": 6,
+								"Killed": 82,
+								"CompileError": 38,
+								"Timeout": 2
+							},
+							"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+20 -2); Result: 60 of 128 mutant result(s) are reused.",
+							"uncaught": []
+						}
+					],
+					"truth": {
+						"seconds": 50,
+						"statuses": {
+							"Ignored": 6,
+							"CompileError": 38,
+							"Killed": 82,
+							"Timeout": 2
+						},
+						"uncaught": []
+					},
+					"rounds": [
+						{
+							"round": 1,
+							"asked": 22,
+							"usd": 0.314386,
+							"usage": {
+								"input_tokens": 14,
+								"cache_creation_input_tokens": 20499,
+								"cache_read_input_tokens": 117790,
+								"output_tokens": 6339,
+								"output_tokens_details": {
+									"thinking_tokens": 1810
+								},
+								"server_tool_use": {
+									"web_search_requests": 0,
+									"web_fetch_requests": 0
+								},
+								"service_tier": "standard",
+								"cache_creation": {
+									"ephemeral_1h_input_tokens": 20499,
+									"ephemeral_5m_input_tokens": 0
+								},
+								"inference_geo": "global",
+								"iterations": [
+									{
+										"input_tokens": 2,
+										"output_tokens": 2703,
+										"cache_read_input_tokens": 23320,
+										"cache_creation_input_tokens": 2279,
+										"cache_creation": {
+											"ephemeral_5m_input_tokens": 0,
+											"ephemeral_1h_input_tokens": 2279
+										},
+										"type": "message"
+									}
+								],
+								"speed": "standard",
+								"fallback_credit": null
+							},
+							"turns": 7,
+							"seconds": 64,
+							"isError": false,
+							"denials": 0,
+							"touched": [],
+							"checkExit": 0,
+							"answers": [
+								{
+									"id": "M1",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail skips empty parts",
+									"mutant": "packages/backlog-sweep/src/jev.ts:62:59 ConditionalExpression: part !== \"\" => true"
+								},
+								{
+									"id": "M2",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail skips empty parts",
+									"mutant": "packages/backlog-sweep/src/jev.ts:62:68 StringLiteral: \"\" => \"Stryker was here!\""
+								},
+								{
+									"id": "M3",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail is absent when the body names nothing",
+									"mutant": "packages/backlog-sweep/src/jev.ts:64:10 ConditionalExpression: parts.length === 0 => false"
+								},
+								{
+									"id": "M4",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: an empty key leaves the error body untouched",
+									"mutant": "packages/backlog-sweep/src/jev.ts:75:7 ConditionalExpression: secret === \"\" => false"
+								},
+								{
+									"id": "M5",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: an empty key leaves the error body untouched",
+									"mutant": "packages/backlog-sweep/src/jev.ts:75:18 StringLiteral: \"\" => \"Stryker was here!\""
+								},
+								{
+									"id": "M6",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: redaction keeps the rest of the body, arrays and keys included",
+									"mutant": "packages/backlog-sweep/src/jev.ts:78:22 ArrowFunction: (item) => redactSecret(item, secret) => () => undefined"
+								},
+								{
+									"id": "M7",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: redaction keeps the rest of the body, arrays and keys included",
+									"mutant": "packages/backlog-sweep/src/jev.ts:82:32 StringLiteral: \"[redacted]\" => \"\""
+								},
+								{
+									"id": "M8",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a body that is not JSON reads as an empty object",
+									"mutant": "packages/backlog-sweep/src/jev.ts:101:55 ArrowFunction: () => ({}) => () => undefined"
+								},
+								{
+									"id": "M9",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a success body is passed through as is",
+									"mutant": "packages/backlog-sweep/src/jev.ts:105:13 ConditionalExpression: response.status >= 400 => true"
+								},
+								{
+									"id": "M10",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a failed reply below 400 carries no detail",
+									"mutant": "packages/backlog-sweep/src/jev.ts:141:13 ConditionalExpression: reply.status >= 400 => true"
+								},
+								{
+									"id": "M11",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a status of exactly 400 carries the detail",
+									"mutant": "packages/backlog-sweep/src/jev.ts:141:13 EqualityOperator: reply.status >= 400 => reply.status > 400"
+								},
+								{
+									"id": "M12",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail skips empty parts",
+									"mutant": "packages/structure-sweep/src/jev.ts:62:59 ConditionalExpression: part !== \"\" => true"
+								},
+								{
+									"id": "M13",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail skips empty parts",
+									"mutant": "packages/structure-sweep/src/jev.ts:62:68 StringLiteral: \"\" => \"Stryker was here!\""
+								},
+								{
+									"id": "M14",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail is absent when the body names nothing",
+									"mutant": "packages/structure-sweep/src/jev.ts:64:10 ConditionalExpression: parts.length === 0 => false"
+								},
+								{
+									"id": "M15",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: an empty key leaves the error body untouched",
+									"mutant": "packages/structure-sweep/src/jev.ts:75:7 ConditionalExpression: secret === \"\" => false"
+								},
+								{
+									"id": "M16",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: an empty key leaves the error body untouched",
+									"mutant": "packages/structure-sweep/src/jev.ts:75:18 StringLiteral: \"\" => \"Stryker was here!\""
+								},
+								{
+									"id": "M17",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: redaction keeps the rest of the body, arrays and keys included",
+									"mutant": "packages/structure-sweep/src/jev.ts:78:22 ArrowFunction: (item) => redactSecret(item, secret) => () => undefined"
+								},
+								{
+									"id": "M18",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: redaction keeps the rest of the body, arrays and keys included",
+									"mutant": "packages/structure-sweep/src/jev.ts:82:32 StringLiteral: \"[redacted]\" => \"\""
+								},
+								{
+									"id": "M19",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: a body that is not JSON reads as an empty object",
+									"mutant": "packages/structure-sweep/src/jev.ts:101:55 ArrowFunction: () => ({}) => () => undefined"
+								},
+								{
+									"id": "M20",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: a success body is passed through as is",
+									"mutant": "packages/structure-sweep/src/jev.ts:105:13 ConditionalExpression: response.status >= 400 => true"
+								},
+								{
+									"id": "M21",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: a failed reply below 400 carries no detail",
+									"mutant": "packages/structure-sweep/src/jev.ts:141:13 ConditionalExpression: reply.status >= 400 => true"
+								},
+								{
+									"id": "M22",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail > structure-sweep: a status of exactly 400 carries the detail",
+									"mutant": "packages/structure-sweep/src/jev.ts:141:13 EqualityOperator: reply.status >= 400 => reply.status > 400"
+								}
+							],
+							"reply": "I added nine tests per client (18 in all) to `packages/structure-sweep/test/jev-key.promise.test.ts`. All 22 tests in the file pass on this code, and the original promise checks are unchanged. Both `src/jev.ts` files are byte-identical, so each test runs once per client and kills the matching mutant in both packages.\n\nWhy each mutant dies, judging from the code (I didn't run any mutants, as the rules say):\n- **M1/M2, M12/M13** (empty parts kept): a 401 body of `{error:{message:\"\", code:\"invalid_key\"}}` gives detail `\"invalid_key\"`. Under either mutant the empty message is kept, so the detail becomes `\"; invalid_key\"`.\n- **M3/M14** (always join): when message and code are both empty, the real code leaves detail `undefined`; the mutant gives `\"\"`.\n- **M4/M5, M15/M16** (empty-key guard): with an empty key, the real code returns the body untouched. The mutants call `replaceAll(\"\", \"[redacted]\")`, which inserts `[redacted]` between every character. M5/M16 are also killed by a key that is literally `\"Stryker was here!\"`: the real code redacts it, the mutant leaves it.\n- **M6/M17** (array items become `undefined`): the redacted body must equal the expected structure exactly, including `[\"plain\", \"[redacted]\", 7, [\"x[redacted]y\"]]`.\n- **M7/M18** (object key replaced with `\"\"`): the body key `k_<key>` must come back as `k_[redacted]`, not `k_`.\n- **M8/M19**: a 500 response whose body isn't JSON must read as `{}`, not `undefined`.\n- **M9/M20**: a 200 body that echoes the key is passed through unchanged, so redacting success bodies too would fail.\n- **M10/M21**: a failing reply with status 200 (the answers don't decode) or 302 (counted as terminal) has an error-shaped body. The real code leaves detail `undefined`; under the mutant it would read `\"looks like an error\"`.\n- **M11/M22**: at exactly status 400, the real code sets the detail to `\"bad request\"`; with `> 400` it would be `undefined`.\n\nThe test names below are in vitest's full-name form, `describe > test`.\n\n```json\n[{\"id\": \"M1\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail skips empty parts\"},\n {\"id\": \"M2\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail skips empty parts\"},\n {\"id\": \"M3\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: the detail is absent when the body names nothing\"},\n {\"id\": \"M4\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: an empty key leaves the error body untouched\"},\n {\"id\": \"M5\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: an empty key leaves the error body untouched\"},\n {\"id\": \"M6\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: redaction keeps the rest of the body, arrays and keys included\"},\n {\"id\": \"M7\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: redaction keeps the rest of the body, arrays and keys included\"},\n {\"id\": \"M8\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a body that is not JSON reads as an empty object\"},\n {\"id\": \"M9\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a success body is passed through as is\"},\n {\"id\": \"M10\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a failed reply below 400 carries no detail\"},\n {\"id\": \"M11\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > backlog-sweep: a status of exactly 400 carries the detail\"},\n {\"id\": \"M12\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail skips empty parts\"},\n {\"id\": \"M13\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail skips empty parts\"},\n {\"id\": \"M14\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: the detail is absent when the body names nothing\"},\n {\"id\": \"M15\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: an empty key leaves the error body untouched\"},\n {\"id\": \"M16\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: an empty key leaves the error body untouched\"},\n {\"id\": \"M17\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: redaction keeps the rest of the body, arrays and keys included\"},\n {\"id\": \"M18\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: redaction keeps the rest of the body, arrays and keys included\"},\n {\"id\": \"M19\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: a body that is not JSON reads as an empty object\"},\n {\"id\": \"M20\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: a success body is passed through as is\"},\n {\"id\": \"M21\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: a failed reply below 400 carries no detail\"},\n {\"id\": \"M22\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail > structure-sweep: a status of exactly 400 carries the detail\"}]\n```",
+							"grade": {
+								"addedLines": 67,
+								"removedLines": 0,
+								"testsBefore": [
+									"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+									"${client.name}: the thrown JevAskError holds no key"
+								],
+								"testsAfter": [
+									"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+									"${client.name}: the thrown JevAskError holds no key",
+									"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+									"${client.name}: an empty key leaves the error body untouched",
+									"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+									"${client.name}: a success body is passed through as is",
+									"${client.name}: a body that is not JSON reads as an empty object",
+									"${client.name}: the detail skips empty parts",
+									"${client.name}: the detail is absent when the body names nothing",
+									"${client.name}: a status of exactly 400 carries the detail",
+									"${client.name}: a failed reply below 400 carries no detail"
+								],
+								"testsDropped": [],
+								"sourceLiterals": [
+									"[redacted]"
+								],
+								"sourceLinesCopied": [],
+								"file": "packages/structure-sweep/test/jev-key.promise.test.ts"
+							}
+						}
+					],
+					"overall": {
+						"addedLines": 67,
+						"removedLines": 0,
+						"testsBefore": [
+							"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+							"${client.name}: the thrown JevAskError holds no key"
+						],
+						"testsAfter": [
+							"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+							"${client.name}: the thrown JevAskError holds no key",
+							"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+							"${client.name}: an empty key leaves the error body untouched",
+							"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+							"${client.name}: a success body is passed through as is",
+							"${client.name}: a body that is not JSON reads as an empty object",
+							"${client.name}: the detail skips empty parts",
+							"${client.name}: the detail is absent when the body names nothing",
+							"${client.name}: a status of exactly 400 carries the detail",
+							"${client.name}: a failed reply below 400 carries no detail"
+						],
+						"testsDropped": [],
+						"sourceLiterals": [
+							"[redacted]"
+						],
+						"sourceLinesCopied": [],
+						"file": "packages/structure-sweep/test/jev-key.promise.test.ts"
+					},
+					"claimed": [],
+					"checkThrice": [
+						0,
+						0,
+						0
+					]
+				},
+				{
+					"label": "rewrite",
+					"stryker": [
+						{
+							"label": "rewrite-0",
+							"seconds": 14,
+							"statuses": {
+								"Ignored": 6,
+								"CompileError": 38,
+								"Killed": 81,
+								"Timeout": 2,
+								"Survived": 1
+							},
+							"reused": "Mutants: 1 files changed (+4 -4); Tests: 0 files changed (+0 -0); Result: 118 of 128 mutant result(s) are reused.",
+							"uncaught": [
+								"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status >= 399"
+							]
+						},
+						{
+							"label": "rewrite-1",
+							"seconds": 15,
+							"statuses": {
+								"Ignored": 6,
+								"CompileError": 38,
+								"Killed": 82,
+								"Timeout": 2
+							},
+							"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+2 -2); Result: 117 of 128 mutant result(s) are reused.",
+							"uncaught": []
+						}
+					],
+					"truth": {
+						"seconds": 48,
+						"statuses": {
+							"Ignored": 6,
+							"CompileError": 38,
+							"Killed": 82,
+							"Timeout": 2
+						},
+						"uncaught": []
+					},
+					"rounds": [
+						{
+							"round": 1,
+							"asked": 1,
+							"usd": 0.11163999999999999,
+							"usage": {
+								"input_tokens": 6,
+								"cache_creation_input_tokens": 10104,
+								"cache_read_input_tokens": 30920,
+								"output_tokens": 1230,
+								"output_tokens_details": {
+									"thinking_tokens": 178
+								},
+								"server_tool_use": {
+									"web_search_requests": 0,
+									"web_fetch_requests": 0
+								},
+								"service_tier": "standard",
+								"cache_creation": {
+									"ephemeral_1h_input_tokens": 10104,
+									"ephemeral_5m_input_tokens": 0
+								},
+								"inference_geo": "global",
+								"iterations": [
+									{
+										"input_tokens": 2,
+										"output_tokens": 390,
+										"cache_read_input_tokens": 15727,
+										"cache_creation_input_tokens": 1146,
+										"cache_creation": {
+											"ephemeral_5m_input_tokens": 0,
+											"ephemeral_1h_input_tokens": 1146
+										},
+										"type": "message"
+									}
+								],
+								"speed": "standard",
+								"fallback_credit": null
+							},
+							"turns": 5,
+							"seconds": 14,
+							"isError": false,
+							"denials": 0,
+							"touched": [],
+							"checkExit": 0,
+							"answers": [
+								{
+									"id": "M1",
+									"answer": "test",
+									"test": "how fetchPost redacts an error body and the client reads its detail structure-sweep: a failed reply below 400 carries no detail",
+									"mutant": "packages/structure-sweep/src/jev.ts:141:13 EqualityOperator: reply.status > 399 => reply.status >= 399"
+								}
+							],
+							"reply": "I added a test case that kills M1. All 22 tests in the file pass on the current code.\n\n**M1** (`reply.status > 399` changed to `>= 399` at `src/jev.ts:141`): the test \"a failed reply below 400 carries no detail\" now checks status 399 as well as 200 and 302. With the real code, a 399 reply has no `detail` on the thrown error. With the mutant, the error gets `detail = \"looks like an error\"` from the reply body, so the `toBeUndefined()` check fails. Status 400 was already covered by \"a status of exactly 400 carries the detail\", so both sides of the cutoff are now tested.\n\nI didn't run the mutant, because the rules forbid changing source. The kill comes from reading the code.\n\nI left the promise's check (the property tests) unchanged.\n\n```json\n[{\"id\": \"M1\", \"answer\": \"test\", \"test\": \"how fetchPost redacts an error body and the client reads its detail structure-sweep: a failed reply below 400 carries no detail\"}]\n```",
+							"grade": {
+								"addedLines": 1,
+								"removedLines": 1,
+								"testsBefore": [
+									"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+									"${client.name}: the thrown JevAskError holds no key",
+									"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+									"${client.name}: an empty key leaves the error body untouched",
+									"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+									"${client.name}: a success body is passed through as is",
+									"${client.name}: a body that is not JSON reads as an empty object",
+									"${client.name}: the detail skips empty parts",
+									"${client.name}: the detail is absent when the body names nothing",
+									"${client.name}: a status of exactly 400 carries the detail",
+									"${client.name}: a failed reply below 400 carries no detail"
+								],
+								"testsAfter": [
+									"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+									"${client.name}: the thrown JevAskError holds no key",
+									"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+									"${client.name}: an empty key leaves the error body untouched",
+									"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+									"${client.name}: a success body is passed through as is",
+									"${client.name}: a body that is not JSON reads as an empty object",
+									"${client.name}: the detail skips empty parts",
+									"${client.name}: the detail is absent when the body names nothing",
+									"${client.name}: a status of exactly 400 carries the detail",
+									"${client.name}: a failed reply below 400 carries no detail"
+								],
+								"testsDropped": [],
+								"sourceLiterals": [],
+								"sourceLinesCopied": [],
+								"file": "packages/structure-sweep/test/jev-key.promise.test.ts"
+							}
+						}
+					],
+					"overall": {
+						"addedLines": 1,
+						"removedLines": 1,
+						"testsBefore": [
+							"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+							"${client.name}: the thrown JevAskError holds no key",
+							"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+							"${client.name}: an empty key leaves the error body untouched",
+							"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+							"${client.name}: a success body is passed through as is",
+							"${client.name}: a body that is not JSON reads as an empty object",
+							"${client.name}: the detail skips empty parts",
+							"${client.name}: the detail is absent when the body names nothing",
+							"${client.name}: a status of exactly 400 carries the detail",
+							"${client.name}: a failed reply below 400 carries no detail"
+						],
+						"testsAfter": [
+							"${client.name}: fetchPost's error body for a status >= 400 holds no key",
+							"${client.name}: the thrown JevAskError holds no key",
+							"${client.name}: redaction keeps the rest of the body, arrays and keys included",
+							"${client.name}: an empty key leaves the error body untouched",
+							"${client.name}: a key that happens to be \"Stryker was here!\" is still redacted",
+							"${client.name}: a success body is passed through as is",
+							"${client.name}: a body that is not JSON reads as an empty object",
+							"${client.name}: the detail skips empty parts",
+							"${client.name}: the detail is absent when the body names nothing",
+							"${client.name}: a status of exactly 400 carries the detail",
+							"${client.name}: a failed reply below 400 carries no detail"
+						],
+						"testsDropped": [],
+						"sourceLiterals": [],
+						"sourceLinesCopied": [],
+						"file": "packages/structure-sweep/test/jev-key.promise.test.ts"
+					},
+					"claimed": [],
+					"checkThrice": [
+						0,
+						0,
+						0
+					]
+				}
+			]
+		}
+	]
+}
