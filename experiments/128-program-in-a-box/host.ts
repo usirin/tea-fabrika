@@ -18,6 +18,7 @@ import * as NodeStream from "@effect/platform-node/NodeStream";
 import {type AnyProgram, type BadShape, type Program, readFlags, type Word} from "@kampus/fabrika";
 import {Deferred, Effect, Exit, type Scope, Stream} from "effect";
 import {type Box, boxed, type Started} from "./box.ts";
+import {answer, type Handlers, type Outside} from "./cmd-wall.ts";
 import {type Boxable, type Down, line, type Routes, readUp, serve} from "./wall.ts";
 
 /** Where a box runs, and how the runner is reached inside it. */
@@ -42,8 +43,9 @@ export type BoxEnded =
 
 type In<P extends AnyProgram> = keyof P["inputs"] & string;
 type Out<P extends AnyProgram> = keyof P["outputs"] & string;
-/** The services a program asks for: the host provides their real layers. */
-type ServicesOf<P> = P extends Program<any, any, any, any, any, infer R> ? R : never;
+/** The services a program asks for: the host provides their real layers. `Outside` is the box's own. */
+type ServicesOf<P> =
+	P extends Program<any, any, any, any, any, infer R> ? Exclude<R, Outside> : never;
 
 export interface BoxedRun<P extends AnyProgram> {
 	readonly id: string;
@@ -63,6 +65,8 @@ export interface BoxedRunning<P extends AnyProgram> {
 	readonly box: Started;
 	/** Frames written to the box's stdin so far. */
 	readonly sent: () => number;
+	/** `cmd` frames read from the box so far. */
+	readonly cmds: () => number;
 }
 
 const RUNNER = "experiments/128-program-in-a-box/runner.ts";
@@ -72,8 +76,11 @@ export const startBoxed = <P extends AnyProgram>(
 	entry: Boxable<P>,
 	flags: unknown,
 	given: {readonly [K in Out<P>]?: (value: unknown) => void} = {},
+	handlers: Handlers = {},
 ): Effect.Effect<BoxedRunning<P> | BadShape, never, Scope.Scope | ServicesOf<P>> =>
 	Effect.gen(function* () {
+		const scope = yield* Effect.scope;
+		let cmds = 0;
 		const program = entry.program;
 		const read = readFlags(program, flags);
 		if (read.kind === "bad_shape") return read;
@@ -160,6 +167,13 @@ export const startBoxed = <P extends AnyProgram>(
 					}
 					case "rpc":
 						return routes.get(frame.wall)?.(frame.msg) ?? Effect.void;
+					case "cmd":
+						cmds++;
+						// Its own fiber, so a slow handler does not hold up the frames behind it.
+						return answer(entry.cmds, handlers, frame).pipe(
+							Effect.flatMap(write),
+							Effect.forkIn(scope),
+						);
 				}
 			}),
 			Effect.ignore,
@@ -213,5 +227,6 @@ export const startBoxed = <P extends AnyProgram>(
 			),
 			box,
 			sent: () => sent,
+			cmds: () => cmds,
 		} satisfies BoxedRunning<P>;
 	});

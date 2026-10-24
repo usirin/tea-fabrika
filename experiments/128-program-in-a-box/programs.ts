@@ -11,9 +11,12 @@
 import {readdirSync, readFileSync, statSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {defineMachine} from "@demlik/tea";
+import {Cmd, run} from "@demlik/tea/effect";
 import {defineProgram, flag, input, output} from "@kampus/fabrika";
 import {Context, Effect, Schema, Stream} from "effect";
 import {Rpc, RpcGroup} from "effect/rpc";
+import {Outside, outside} from "./cmd-wall.ts";
 import {boxable, type Wall} from "./wall.ts";
 
 // ---------------------------------------------------------------- the service
@@ -78,6 +81,133 @@ export const greet = boxable(
 	[greeterWall],
 );
 
+// ---------------------------------------------------------------- the Cmd wall
+
+/** Runs inside the box: counts the words of a text. */
+export const countWords = Cmd.define("count_words", {
+	input: Schema.Struct({text: Schema.String}),
+	ok: Schema.Int,
+	err: ["empty"],
+});
+
+/** Keyed: signs a text and its count with the host's key. It runs on the host. */
+export const stamp = Cmd.define("stamp", {
+	input: Schema.Struct({text: Schema.String, words: Schema.Int}),
+	ok: Schema.Struct({sig: Schema.String}),
+	err: ["refused"],
+});
+
+interface Tally {
+	readonly text: string;
+	readonly words: number | null;
+	readonly sig: string | null;
+	readonly why: string | null;
+}
+const blank: Tally = {text: "", words: null, sig: null, why: null};
+type Step = readonly [Tally, readonly ReturnType<typeof countWords | typeof stamp>[]];
+
+/** One text: count its words in here, then have the host stamp it. */
+const tally = defineMachine({
+	types: {
+		model: {} as Tally,
+		msg: {} as {readonly type: "got"; readonly text: string},
+		ctx: undefined,
+	},
+	cmds: [countWords, stamp],
+	init: (loaded) => [loaded ?? blank, []],
+	update: {
+		got: (_, m): Step => [{...blank, text: m.text}, [countWords({text: m.text})]],
+		count_words_ok: (s, m): Step => [
+			{...s, words: m.value},
+			[stamp({text: s.text, words: m.value})],
+		],
+		stamp_ok: (s, m): Step => [{...s, sig: m.value.sig}, []],
+		count_words_err: (s, m): Step => [{...s, why: m.error._tag}, []],
+		stamp_err: (s, m): Step => [{...s, why: m.error._tag}, []],
+	},
+});
+
+/** Runs `tally` on one text, `stamp` outside, and says how long the stamp took from in here. */
+const tallyOne = (text: string) =>
+	Effect.gen(function* () {
+		let ms = 0;
+		const handle = yield* run(tally, {
+			ctx: undefined,
+			interpret: {
+				count_words: (c: ReturnType<typeof countWords>) => {
+					const words = c.text.split(/\s+/).filter((w) => w !== "").length;
+					return words === 0 ? Effect.fail({_tag: "empty" as const}) : Effect.succeed(words);
+				},
+				stamp: (c: ReturnType<typeof stamp>) => {
+					const t0 = performance.now();
+					return outside(stamp)(c).pipe(
+						Effect.ensuring(Effect.sync(() => (ms = performance.now() - t0))),
+					);
+				},
+			},
+			terminal: (s) => s.sig !== null || s.why !== null,
+		});
+		const runtime = yield* handle.ready;
+		yield* runtime.dispatch({type: "got", text});
+		const end = yield* runtime.done();
+		return {...end, ms};
+	}).pipe(Effect.scoped);
+
+const Stamped = Schema.Struct({
+	text: Schema.String,
+	words: Schema.NullOr(Schema.Number),
+	sig: Schema.NullOr(Schema.String),
+	why: Schema.NullOr(Schema.String),
+	ms: Schema.Number,
+});
+
+/** A tea machine in the box with one Cmd inside and one, keyed, outside. */
+export const stamped = boxable(
+	import.meta.url,
+	"stamped",
+	defineProgram({
+		name: "stamped",
+		description: "Counts the words of each text it is told, and has the host stamp it.",
+		inputs: {text: input(Schema.String, "A text to count and stamp.")},
+		outputs: {stamped: output(Stamped, "The text, its count, the host's stamp, the stamp's ms.")},
+		main: ({inputs, send}) =>
+			inputs.text.pipe(
+				Stream.runForEach((text) => Effect.flatMap(tallyOne(text), (t) => send("stamped", t))),
+			),
+	}),
+	[],
+	[stamp],
+);
+
+const Forged = Schema.Struct({inside: Schema.String, host: Schema.String});
+
+/**
+ * Sends a `stamp` of the wrong shape twice: once through `outside`, which refuses it in the
+ * box, and once around it, straight on the channel, as a broken box could.
+ */
+export const forge = boxable(
+	import.meta.url,
+	"forge",
+	defineProgram({
+		name: "forge",
+		description: "Tries to send a stamp of the wrong shape, through the wall and around it.",
+		inputs: {},
+		outputs: {forged: output(Forged, "What each try came back with.")},
+		main: ({send}) =>
+			Effect.gen(function* () {
+				const bad = {type: "stamp", text: 7, words: "many"} as never;
+				const inside = yield* outside(stamp)(bad).pipe(
+					Effect.exit,
+					Effect.map((e) => (e._tag === "Success" ? "sent" : "refused in the box")),
+				);
+				const host = yield* (yield* Outside).send("stamp", {text: 7, words: "many"});
+				yield* send("forged", {inside, host: host.kind === "no" ? `no: ${host.why}` : host.kind});
+			}),
+	}),
+	[],
+	[stamp],
+);
+
 // ---------------------------------------------------------------- the key probe
 
 /** What the probe found, inside the box. */
@@ -94,8 +224,8 @@ const Report = Schema.Struct({
 	fileHits: Schema.Number,
 	/** An HTTPS request to example.com got any answer: the box has a network. */
 	net: Schema.Boolean,
-	/** The one Greeter call: it still works. */
-	greeting: Schema.String,
+	/** The one call across the wall, a greeting or a stamp: it still works. */
+	call: Schema.String,
 	home: Schema.String,
 	tmp: Schema.String,
 });
@@ -151,51 +281,85 @@ const walk = (root: string, depth: number, max: number): string[] => {
 	return found;
 };
 
-/** Looks for the key from inside the box, then calls Greeter once. */
+const probeFlags = {
+	hash: flag(Schema.String, "The SHA-256 of the key to look for. Never the key."),
+	keyFile: flag(Schema.String, "Where the host keeps the key, to try to read it."),
+};
+
+/** Looks for the key from inside the box, then makes one call across the wall. */
+const look = <E, R>(
+	flags: {readonly hash: string; readonly keyFile: string},
+	call: Effect.Effect<string, E, R>,
+) =>
+	Effect.gen(function* () {
+		const env = yield* holds(Object.values(process.env).join("\n"), flags.hash);
+		const proc = readOr("/proc/self/environ");
+		const key = readOr(flags.keyFile);
+		const home = process.env.HOME ?? "";
+		const files = [
+			...walk(tmpdir(), 3, 500),
+			...(home === "" || home === "/" ? [] : walk(home, 2, 500)),
+		];
+		let fileHits = 0;
+		for (const f of files) if (yield* holds(readOr(f) ?? "", flags.hash)) fileHits++;
+		const net = yield* Effect.promise(() =>
+			fetch("https://example.com", {signal: AbortSignal.timeout(3_000)}).then(
+				() => true,
+				() => false,
+			),
+		);
+		return {
+			net,
+			env,
+			procEnv: proc !== null && (yield* holds(proc.replaceAll("\0", "\n"), flags.hash)),
+			keyFileRead: key !== null,
+			keyFileHit: key !== null && (yield* holds(key, flags.hash)),
+			scanned: files.length,
+			fileHits,
+			call: yield* call,
+			home,
+			tmp: tmpdir(),
+		};
+	});
+
+/** The probe whose one call is Greeter's, over the RPC wall. */
 export const probe = boxable(
 	import.meta.url,
 	"probe",
 	defineProgram({
 		name: "probe",
 		description: "Looks for the host's key in its own environment and files, then greets once.",
-		flags: {
-			hash: flag(Schema.String, "The SHA-256 of the key to look for. Never the key."),
-			keyFile: flag(Schema.String, "Where the host keeps the key, to try to read it."),
-		},
+		flags: probeFlags,
 		inputs: {},
 		outputs: {report: output(Report, "What was found, and the greeting.")},
 		main: ({flags, send}) =>
-			Effect.gen(function* () {
-				const env = yield* holds(Object.values(process.env).join("\n"), flags.hash);
-				const proc = readOr("/proc/self/environ");
-				const key = readOr(flags.keyFile);
-				const home = process.env.HOME ?? "";
-				const files = [
-					...walk(tmpdir(), 3, 500),
-					...(home === "" || home === "/" ? [] : walk(home, 2, 500)),
-				];
-				let fileHits = 0;
-				for (const f of files) if (yield* holds(readOr(f) ?? "", flags.hash)) fileHits++;
-				const net = yield* Effect.promise(() =>
-					fetch("https://example.com", {signal: AbortSignal.timeout(3_000)}).then(
-						() => true,
-						() => false,
-					),
-				);
-				const greeter = yield* Greeter;
-				yield* send("report", {
-					net,
-					env,
-					procEnv: proc !== null && (yield* holds(proc.replaceAll("\0", "\n"), flags.hash)),
-					keyFileRead: key !== null,
-					keyFileHit: key !== null && (yield* holds(key, flags.hash)),
-					scanned: files.length,
-					fileHits,
-					greeting: yield* greeter.greet("probe"),
-					home,
-					tmp: tmpdir(),
-				});
-			}),
+			Effect.flatMap(
+				look(
+					flags,
+					Effect.flatMap(Greeter, (g) => g.greet("probe")),
+				),
+				(r) => send("report", r),
+			),
 	}),
 	[greeterWall],
+);
+
+/** The probe whose one call is a `stamp`, over the Cmd wall. */
+export const probeCmd = boxable(
+	import.meta.url,
+	"probeCmd",
+	defineProgram({
+		name: "probeCmd",
+		description: "Looks for the host's key in its own environment and files, then stamps once.",
+		flags: probeFlags,
+		inputs: {},
+		outputs: {report: output(Report, "What was found, and the stamp.")},
+		main: ({flags, send}) =>
+			Effect.flatMap(
+				look(flags, tallyOne("probe").pipe(Effect.map((t) => t.sig ?? `no stamp: ${t.why}`))),
+				(r) => send("report", r),
+			),
+	}),
+	[],
+	[stamp],
 );

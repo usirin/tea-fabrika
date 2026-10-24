@@ -5,6 +5,7 @@
 //   env -u TYPESAFE_API_KEY SRT=<srt bin> node experiments/128-program-in-a-box.ts run srt
 //   env -u TYPESAFE_API_KEY node experiments/128-program-in-a-box.ts run docker
 //   env -u TYPESAFE_API_KEY node experiments/128-program-in-a-box.ts clean
+//   ... run <box> cmd     the Cmd wall's measurements alone, kept beside the rest
 //
 // `SRT` is the `srt` CLI of `@anthropic-ai/sandbox-runtime` 0.0.81, installed in a scratch
 // folder outside the repo, as in experiment 127. Docker builds a Node + pnpm image from a
@@ -19,10 +20,11 @@
 //
 // The parts (experiments/128-program-in-a-box/):
 //   wall.ts     fabrika's part: the frames, the stand-in maker and the host's server for a wall
+//   cmd-wall.ts fabrika's part: the Cmd wall, a tea Cmd run on the host
 //   runner.ts   fabrika's part: the runner inside the box
 //   host.ts     fabrika's part: startBoxed
 //   box.ts      the box tool's part: experiment 127's boxed(), the srt settings, the image
-//   programs.ts double, greet, probe, and the Greeter service
+//   programs.ts double, greet, probe, the Greeter service; stamped, forge, probeCmd
 
 import {execFileSync} from "node:child_process";
 import {createHash, createHmac, randomBytes} from "node:crypto";
@@ -48,8 +50,18 @@ import {
 	prepareDocker,
 	srtSettings,
 } from "./128-program-in-a-box/box.ts";
+import {answer, Outside} from "./128-program-in-a-box/cmd-wall.ts";
 import {type BoxedRunning, type Place, startBoxed} from "./128-program-in-a-box/host.ts";
-import {double, Greeter, greet, probe} from "./128-program-in-a-box/programs.ts";
+import {
+	double,
+	forge,
+	Greeter,
+	greet,
+	probe,
+	probeCmd,
+	stamp,
+	stamped,
+} from "./128-program-in-a-box/programs.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = realpathSync(join(HERE, ".."));
@@ -81,6 +93,16 @@ const realGreeter = Layer.sync(Greeter, () => {
 		greet: (name) => Effect.sync(() => `hello ${name}, signed ${sign(secret, name)}`),
 	});
 });
+
+/** The real `stamp` handler, for the Cmd wall: it holds the key too, and runs on the host only. */
+let stamps = 0;
+const handlers = {
+	stamp: (c: ReturnType<typeof stamp>) =>
+		Effect.sync(() => {
+			stamps++;
+			return {sig: sign(process.env[KEY_NAME] ?? "", `${c.text}:${c.words}`)};
+		}),
+};
 
 // ---------------------------------------------------------------- places
 
@@ -256,11 +278,16 @@ const roundTrips = (place: Place, n = 20) =>
 		}),
 	);
 
-/** The probe looks for the key from inside, then greets once. */
-const keyCheck = (place: Place) =>
+/** The probe looks for the key from inside, then makes its one call: a greeting, or a stamp. */
+const keyCheck = (place: Place, wall: "rpc" | "cmd" = "rpc") =>
 	run(
 		Effect.gen(function* () {
-			const p = running(yield* startBoxed(place, probe, {hash: keyHash, keyFile}));
+			const flags = {hash: keyHash, keyFile};
+			const p = running(
+				wall === "rpc"
+					? yield* startBoxed(place, probe, flags)
+					: yield* startBoxed(place, probeCmd, flags, {}, handlers),
+			);
 			const report = (yield* next(p, "report")) as Record<string, unknown>;
 			yield* p.run.ended;
 			const home = String(report.home);
@@ -269,9 +296,11 @@ const keyCheck = (place: Place) =>
 				report.procEnv === false &&
 				report.keyFileHit === false &&
 				report.fileHits === 0;
+			const expected =
+				wall === "rpc" ? `hello probe, signed ${sign(key, "probe")}` : sign(key, "probe:1");
 			return {
 				keyStaysOut: out,
-				callWorks: report.greeting === `hello probe, signed ${sign(key, "probe")}`,
+				callWorks: report.call === expected,
 				...report,
 				home: home.startsWith(homedir()) ? home.replace(homedir(), "~") : home,
 				tmp: String(report.tmp).replace(job, "<job>"),
@@ -353,6 +382,76 @@ const edges = async (place: Place) => {
 	};
 };
 
+type Stamped = {
+	text: string;
+	words: number | null;
+	sig: string | null;
+	why: string | null;
+	ms: number;
+};
+
+/** The Cmd wall: a tea machine in the box, `count_words` run inside, `stamp` run on the host. */
+const cmdWall = async (place: Place, n = 20) => {
+	const works = await run(
+		Effect.gen(function* () {
+			const before = stamps;
+			const s = running(yield* startBoxed(place, stamped, {}, {}, handlers));
+			const first = next(s, "stamped");
+			yield* s.run.tell("text", "two words here");
+			const one = (yield* first) as Stamped;
+			const second = next(s, "stamped");
+			yield* s.run.tell("text", "   ");
+			const empty = (yield* second) as Stamped;
+			s.close("text");
+			const ended = yield* s.run.ended;
+			return {
+				ok:
+					one.words === 3 &&
+					one.sig === sign(key, "two words here:3") &&
+					empty.why === "empty" &&
+					empty.sig === null &&
+					stamps - before === 1 &&
+					ended.kind === "ended",
+				stamped: {words: one.words, sigRight: one.sig === sign(key, "two words here:3")},
+				empty: {why: empty.why, sig: empty.sig},
+				handlerRan: stamps - before,
+				cmdFrames: s.cmds(),
+				ended,
+			};
+		}),
+	);
+	const call = await run(
+		Effect.gen(function* () {
+			const s = running(yield* startBoxed(place, stamped, {}, {}, handlers));
+			const inside: number[] = [];
+			const outside: number[] = [];
+			for (let i = 0; i <= n; i++) {
+				const reply = next(s, "stamped");
+				const t0 = performance.now();
+				yield* s.run.tell("text", `text number ${i}`);
+				const t = (yield* reply) as Stamped;
+				if (i === 0) continue;
+				outside.push(performance.now() - t0);
+				inside.push(t.ms);
+			}
+			s.close("text");
+			yield* s.run.ended;
+			return {calls: n, insideMedianMs: median(inside), outsideMedianMs: median(outside)};
+		}),
+	);
+	const wrongShape = await run(
+		Effect.gen(function* () {
+			const before = stamps;
+			const f = running(yield* startBoxed(place, forge, {}, {}, handlers));
+			const forged = (yield* next(f, "forged")) as {inside: string; host: string};
+			yield* f.run.ended;
+			// Two tries; only the one sent around `outside` reaches the host, and the host refuses it.
+			return {...forged, cmdFramesHeard: f.cmds(), handlerRan: stamps - before};
+		}),
+	);
+	return {works, call, key: await keyCheck(place, "cmd"), wrongShape};
+};
+
 /** The same program on the host, in-process, with `start`: the baseline. */
 const inProcess = async () => {
 	const startMs: number[] = [];
@@ -396,7 +495,38 @@ const inProcess = async () => {
 			return median(inside);
 		}),
 	);
-	return {startMedianMs: median(startMs), startMs: startMs.map(r2), callMedianMs: rtt};
+	// `stamped` in-process: its `Outside` hands each Cmd straight to the host's `answer`.
+	const here = Layer.succeed(Outside, {
+		send: (name, input) => answer([stamp], handlers, {id: 0, name, input}),
+	});
+	const stampMs = await run(
+		Effect.gen(function* () {
+			const inside: number[] = [];
+			let got = yield* Deferred.make<number>();
+			const s = running(
+				yield* start(
+					stamped.program,
+					{},
+					{stamped: (t) => Deferred.doneUnsafe(got, Exit.succeed(t.ms))},
+				),
+			);
+			for (let i = 0; i <= 20; i++) {
+				got = yield* Deferred.make<number>();
+				yield* s.run.tell("text", `text number ${i}`);
+				const ms = yield* Deferred.await(got);
+				if (i > 0) inside.push(ms);
+			}
+			s.close("text");
+			yield* s.run.ended;
+			return median(inside);
+		}).pipe(Effect.provide(here)),
+	);
+	return {
+		startMedianMs: median(startMs),
+		startMs: startMs.map(r2),
+		callMedianMs: rtt,
+		stampMedianMs: stampMs,
+	};
 };
 
 // ---------------------------------------------------------------- sizes
@@ -419,8 +549,34 @@ const sizes = () => {
 		runner: codeLines(read("runner.ts")),
 		host: codeLines(read("host.ts")),
 	};
+	// The two walls. RPC: the Wall type, standIn and serve in wall.ts, and per service its RPC
+	// group and its Wall value. Cmd: all of cmd-wall.ts; per Cmd, nothing but its name in a list.
+	const wall = read("wall.ts");
+	const programs = read("programs.ts");
+	const between = (text: string, a: string, b: string) => {
+		const i = text.indexOf(a);
+		return text.slice(i, text.indexOf(b, i));
+	};
+	const rpcShared =
+		codeLines(between(wall, "export interface Wall", "/**\n * A program a box")) +
+		codeLines(wall.slice(wall.indexOf("/** Where an `rpc` frame")));
+	const rpcPerService = codeLines(
+		between(
+			programs,
+			"export const GreeterRpcs",
+			"// ----------------------------------------------------------------",
+		),
+	);
 	return {
-		fabrika: {...fabrika, total: fabrika.wall + fabrika.runner + fabrika.host},
+		fabrika: {
+			...fabrika,
+			cmdWall: codeLines(read("cmd-wall.ts")),
+			total: fabrika.wall + fabrika.runner + fabrika.host + codeLines(read("cmd-wall.ts")),
+		},
+		walls: {
+			rpc: {shared: rpcShared, perService: rpcPerService, newSchemasPerMethod: 1},
+			cmd: {shared: codeLines(read("cmd-wall.ts")), perCmd: 0, newSchemasPerCmd: 0},
+		},
 		box: {boxed: codeLines(boxedOnly), all: codeLines(box)},
 	};
 };
@@ -430,9 +586,11 @@ const sizes = () => {
 const load = (): Record<string, unknown> =>
 	existsSync(RESULTS) ? JSON.parse(readFileSync(RESULTS, "utf8")) : {experiment: 128, boxes: {}};
 
-const one = async (name: BoxName) => {
+/** All the measurements for one box, or with `only` "cmd" the Cmd wall's alone, kept beside the rest. */
+const one = async (name: BoxName, only: string | undefined, was: unknown) => {
 	const place = placeOf(name);
-	const out: Record<string, unknown> = {box: name};
+	const out: Record<string, unknown> =
+		only === "cmd" && typeof was === "object" && was !== null ? {...was} : {box: name};
 	const step = async (label: string, f: () => Promise<unknown>) => {
 		try {
 			out[label] = await f();
@@ -441,16 +599,19 @@ const one = async (name: BoxName) => {
 		}
 		console.log(label, JSON.stringify(out[label]));
 	};
-	await step("works", () => works(place));
-	await step("start", () => startTimes(place));
-	await step("call", () => roundTrips(place));
-	await step("key", () => keyCheck(place));
-	await step("edges", () => edges(place));
+	if (only !== "cmd") {
+		await step("works", () => works(place));
+		await step("start", () => startTimes(place));
+		await step("call", () => roundTrips(place));
+		await step("key", () => keyCheck(place));
+		await step("edges", () => edges(place));
+	}
+	await step("cmdWall", () => cmdWall(place));
 	return out;
 };
 
 const main = async () => {
-	const [mode, which] = process.argv.slice(2);
+	const [mode, which, only] = process.argv.slice(2);
 	if (mode === "clean") return console.log(cleanDocker(DOCKER));
 	if (mode !== "run" || !BOXES.some((b) => b === which))
 		throw new Error(`usage: run ${BOXES.join("|")} | clean`);
@@ -460,7 +621,7 @@ const main = async () => {
 	try {
 		if (name === "docker") data.docker = prepareDocker(REPO, DOCKER);
 		if (name === "none") data.inProcess = await inProcess();
-		data.boxes[name] = await one(name);
+		data.boxes[name] = await one(name, only, data.boxes[name]);
 		data.sizes = sizes();
 		data.date = new Date().toISOString().slice(0, 10);
 		data.node = process.version;

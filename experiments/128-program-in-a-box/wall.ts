@@ -10,15 +10,29 @@
 //                 {kind: "rpc", wall, msg}            msg: an RpcServer answer
 //   box -> host   {kind: "hi", pid} | {kind: "out", name, value} | {kind: "end", how, why?}
 //                 {kind: "rpc", wall, msg}            msg: an RpcClient request
+//
+// The Cmd wall (./cmd-wall.ts) is a second way across, on the same channel:
+//
+//   box -> host   {kind: "cmd", id, name, input}      a tea Cmd that runs on the host
+//   host -> box   {kind: "ok", id, value} | {kind: "err", id, tag} | {kind: "no", id, why}
 
 import {fileURLToPath} from "node:url";
 import type {AnyProgram} from "@kampus/fabrika";
 import {type Context, Effect, Layer, Queue, Schema} from "effect";
 import {type Rpc, RpcClient, type RpcGroup, RpcSerialization, RpcServer} from "effect/rpc";
+import type {Keyed} from "./cmd-wall.ts";
 
 // ---------------------------------------------------------------- frames
 
 const Rpcf = Schema.Struct({kind: Schema.Literal("rpc"), wall: Schema.String, msg: Schema.Unknown});
+
+/** The Cmd wall's answers (./cmd-wall.ts): one per `cmd` frame, by its id. */
+export const Answer = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("ok"), id: Schema.Number, value: Schema.Unknown}),
+	Schema.Struct({kind: Schema.Literal("err"), id: Schema.Number, tag: Schema.String}),
+	Schema.Struct({kind: Schema.Literal("no"), id: Schema.Number, why: Schema.String}),
+]);
+export type Answer = typeof Answer.Type;
 
 /** What the host writes to the box's stdin. */
 export const Down = Schema.Union([
@@ -26,6 +40,7 @@ export const Down = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("close"), name: Schema.String}),
 	Schema.Struct({kind: Schema.Literal("stop")}),
 	Rpcf,
+	...Answer.members,
 ]);
 export type Down = typeof Down.Type;
 
@@ -38,6 +53,12 @@ export const Up = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("out"), name: Schema.String, value: Schema.Unknown}),
 	Schema.Struct({kind: Schema.Literal("end"), how: How, why: Schema.optional(Schema.String)}),
 	Rpcf,
+	Schema.Struct({
+		kind: Schema.Literal("cmd"),
+		id: Schema.Number,
+		name: Schema.String,
+		input: Schema.Unknown,
+	}),
 ]);
 export type Up = typeof Up.Type;
 
@@ -66,12 +87,14 @@ export type AnyWall = Wall<any, any, any>;
 /**
  * A program a box can start: the program, the file that exports it under `name`, and the
  * services that cross its wall. The runner loads `file` inside the box and runs `name`.
+ * `cmds`: the Cmds that run outside, on the host (./cmd-wall.ts).
  */
 export interface Boxable<P extends AnyProgram> {
 	readonly file: string;
 	readonly name: string;
 	readonly program: P;
 	readonly walls: readonly AnyWall[];
+	readonly cmds: readonly Keyed[];
 }
 
 export const boxable = <P extends AnyProgram>(
@@ -79,7 +102,8 @@ export const boxable = <P extends AnyProgram>(
 	name: string,
 	program: P,
 	walls: readonly AnyWall[] = [],
-): Boxable<P> => ({file: fileURLToPath(url), name, program, walls});
+	cmds: readonly Keyed[] = [],
+): Boxable<P> => ({file: fileURLToPath(url), name, program, walls, cmds});
 
 /** Where an `rpc` frame for one wall goes, on the side that reads it. */
 export type Routes = Map<string, (msg: unknown) => Effect.Effect<void>>;

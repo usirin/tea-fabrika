@@ -5,6 +5,7 @@
 // It loads the program, reads its flags, starts it with a stand-in for each service that
 // crosses the wall, and then speaks frames (./wall.ts): each `tell` and `close` line on stdin
 // goes to the run, each output goes to stdout as an `out` line, and the end as an `end` line.
+// A machine's keyed Cmds go out through `Outside` (./cmd-wall.ts), and their answers come back.
 // The program's own `start` checks the flags and every told value again, with its own schemas.
 // stdin's end (the host is gone) stops the run, as an Erlang peer halts when its link drops.
 
@@ -13,6 +14,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import {type AnyProgram, memoryStorage, start} from "@kampus/fabrika";
 import {Cause, Effect, Exit, Fiber, Layer, Queue, Stdio, Stream} from "effect";
+import {outsideLayer, type Waiting} from "./cmd-wall.ts";
 import {type Boxable, line, type Routes, readDown, standIn, type Up} from "./wall.ts";
 
 const main = Effect.gen(function* () {
@@ -35,8 +37,12 @@ const main = Effect.gen(function* () {
 		);
 
 	const routes: Routes = new Map();
+	const waiting: Waiting = new Map();
 	const services = yield* Layer.build(
-		Layer.mergeAll(Layer.empty, ...entry.walls.map((w) => standIn(w, write, routes))),
+		Layer.mergeAll(
+			outsideLayer(write, waiting),
+			...entry.walls.map((w) => standIn(w, write, routes)),
+		),
 	);
 	yield* write({kind: "hi", pid: process.pid});
 
@@ -71,6 +77,10 @@ const main = Effect.gen(function* () {
 					return started.stop;
 				case "rpc":
 					return routes.get(frame.wall)?.(frame.msg) ?? Effect.void;
+				case "ok":
+				case "err":
+				case "no":
+					return Effect.sync(() => waiting.get(frame.id)?.(frame));
 			}
 		}),
 		Effect.andThen(started.stop),

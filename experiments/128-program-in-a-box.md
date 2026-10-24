@@ -10,23 +10,30 @@ used from inside the box while the key stays outside? And how big is fabrika's o
 - **It works.** `double` and a program that calls a `Greeter` service ran right in none, srt and
   Docker, every run.
 - **Start costs about a third of a second.** From `startBoxed` to the first output, median of 5:
-  215 ms with no box, 321 ms in srt, 329 ms in Docker. In-process `start` takes 0.4 ms. About
+  214 ms with no box, 331 ms in srt, 316 ms in Docker. In-process `start` takes 0.4 ms. About
   155 ms of every boxed start is Node loading `@kampus/fabrika` itself.
 - **A service call through the wall is under 1 ms.** Median of 20, measured inside the box
-  around the call: 0.23 ms none, 0.23 ms srt, 0.71 ms Docker. In-process: 0.01 ms.
+  around the call: 0.24 ms none, 0.23 ms srt, 0.76 ms Docker. In-process: 0.01 ms.
+- **A second wall, for tea Cmds, works as well and needs no new schema.** A tea machine in the
+  box runs one Cmd inside and hands the keyed one to the host, which runs the real handler.
+  Same speed as the RPC wall (0.18, 0.19, 0.68 ms a Cmd), the key stayed out, and a wrong-shaped
+  Cmd was refused before it crossed. It reuses each Cmd's own schemas, where the RPC wall needs
+  one RPC form per service method. **Lean: the Cmd wall for machines, the RPC wall only for a
+  service a program calls outside a machine.** Confidence 75%. See [The Cmd wall](#the-cmd-wall).
 - **The key stays out.** In srt and Docker, the probe found no key in its environment, in
   `/proc/self/environ` or in any file it could reach, and could not read the host's key file.
   Its Greeter call still came back signed with the key. With no box, the probe read the key
   file: a plain child process is no box.
 - **The edges hold.** A wrong-shaped input is refused before it crosses (0 frames written). A
-  killed runner ends the host's handle in 3 to 7 ms (91 ms in Docker, most of it the
+  killed runner ends the host's handle in 3 to 6 ms (83 ms in Docker, most of it the
   `docker exec` that did the kill). When the host's scope closes, the box is gone in all three.
 - **Neither real box needs a network.** Every service call goes over stdio, so Docker ran with
   `--network none` and srt with no allowed host. The probe's request to `example.com` failed in
   both, and went through with no box.
-- **fabrika's part is 353 lines of code; the box's `boxed()` is 116.** fabrika's part is the
-  frames and walls (100), the runner (78) and the host side (175). It is not smaller than the box
-  part: it is three times bigger. Most of it restates `start`'s handle and its types.
+- **fabrika's part is 482 lines of code with both walls; the box's `boxed()` is 116.** The frames
+  and RPC wall (116), the Cmd wall (91), the runner (87) and the host side (188). Without the
+  Cmd wall it was 353. It is not smaller than the box part: it is three to four times bigger.
+  Much of it restates `start`'s handle and its types.
 - **$0.** No model, no agent, no real key. Docker's set-up (image, with its layers already
   cached, and the Linux `node_modules` volume) took about 7 s.
 
@@ -56,7 +63,11 @@ yield* started.run.ended;                              // {kind: "ended"}
   - `host.ts`: `startBoxed`;
   - `box.ts`: experiment 127's `boxed()`, copied with four changes (below), plus the srt
     settings and the Docker image;
-  - `programs.ts`: `double`, `greet`, `probe` and the `Greeter` service.
+  - `cmd-wall.ts`: the Cmd wall, `outside` (the box side of a Cmd) and `answer` (the host side);
+  - `programs.ts`: `double`, `greet`, `probe` and the `Greeter` service; for the Cmd wall,
+    `stamped` (a tea machine), `forge` and `probeCmd`.
+- **tea** (`@demlik/tea` 0.21.0): `defineMachine`, and `Cmd.define` and `run` from
+  `@demlik/tea/effect`, as they are.
 - **The script** `experiments/128-program-in-a-box.ts` runs every measurement and writes
   `results/128-program-in-a-box.json`.
 - **srt** is `@anthropic-ai/sandbox-runtime` 0.0.81, installed in a scratch folder outside the
@@ -187,32 +198,34 @@ interface BoxedRunning<P> {
 | | none | srt | Docker |
 |---|---|---|---|
 | `double` and `greet` work | yes, yes | yes, yes | yes, yes |
-| Start to first output, median of 5 | 215 ms | 321 ms | 329 ms |
-| One service call, inside, median of 20 | 0.23 ms | 0.23 ms | 0.71 ms |
-| Tell to heard, with the call, median of 20 | 0.42 ms | 0.42 ms | 1.37 ms |
+| Start to first output, median of 5 | 214 ms | 331 ms | 316 ms |
+| One service call, inside, median of 20 | 0.24 ms | 0.23 ms | 0.76 ms |
+| Tell to heard, with the call, median of 20 | 0.42 ms | 0.39 ms | 1.37 ms |
 | Key in env, `/proc` env or files reached | no | no | no |
 | Host's key file readable | **yes** | no | no |
 | Call still works, signed with the key | yes | yes | yes |
 | `example.com` reachable | yes | no | no |
 | Wrong shape: frames that crossed | 0 | 0 | 0 |
-| Runner killed: handle ended | `gone`, 3.4 ms | `gone`, 6.9 ms | `gone`, 91 ms |
+| Runner killed: handle ended | `gone`, 2.8 ms | `gone`, 5.7 ms | `gone`, 83 ms |
 | Scope closed: box gone | yes | yes | yes |
 
 In-process `start` on the host, for scale: 0.37 ms to the first output, 0.01 ms a Greeter call.
 
 ### Start time
 
-- 215 ms with no box. Most of it is Node loading the program's imports: in a fresh Node,
+- 214 ms with no box. Most of it is Node loading the program's imports: in a fresh Node,
   `import("@kampus/fabrika")` took 155 ms and `effect/rpc` 24 ms more.
-- srt adds about 105 ms, Docker about 115 ms (image already built, a fresh container each start).
+- srt adds about 115 ms, Docker about 100 ms (image already built, a fresh container each start).
+  A first run, before the Cmd wall was added, gave 215, 321 and 329 ms: the order of srt and
+  Docker is noise.
   127 saw the same size of cost: 175 ms for srt, 140 ms for Docker.
 - A guess, not measured: a runner bundled to one file would cut most of the 155 ms.
 
 ### The service call
 
 - Inside the box, a Greeter call is a frame out, the host's RPC server, the real Greeter, and a
-  frame back: 0.23 ms over pipes, 0.71 ms through Docker's stdio forwarding.
-- Tell to heard adds one more crossing each way: 0.42 ms and 1.37 ms.
+  frame back: 0.23 ms over pipes, 0.76 ms through Docker's stdio forwarding.
+- Tell to heard adds one more crossing each way: about 0.4 ms and 1.37 ms.
 - So a wall costs well under a millisecond a call. A real service (GitHub, a model) takes 100 ms
   to minutes, so the wall is lost in it.
 
@@ -251,10 +264,11 @@ Lines of code: not blank, not only a comment, counted by the script after `pnpm 
 
 | Part | File | Lines |
 |---|---|---|
-| fabrika: frames, `Wall`, `standIn`, `serve`, `boxable` | `wall.ts` | 100 |
-| fabrika: the runner | `runner.ts` | 78 |
-| fabrika: `startBoxed` and its handle | `host.ts` | 175 |
-| **fabrika in all** | | **353** |
+| fabrika: frames, `Wall`, `standIn`, `serve`, `boxable` | `wall.ts` | 116 |
+| fabrika: the Cmd wall, `outside`, `answer` | `cmd-wall.ts` | 91 |
+| fabrika: the runner | `runner.ts` | 87 |
+| fabrika: `startBoxed` and its handle | `host.ts` | 188 |
+| **fabrika in all** | | **482** (353 before the Cmd wall) |
 | box tool: `boxed()` and its types | `box.ts` | 116 |
 | box tool: with srt settings, Docker image and clean-up | `box.ts` | 197 |
 
@@ -272,14 +286,133 @@ Lines of code: not blank, not only a comment, counted by the script after `pnpm 
   a read-only mark and may name a volume; Docker gets `--network none`; the srt settings and the
   Docker image are made for this runner.
 
+## The Cmd wall
+
+A second way across, tried after the RPC wall worked. **It works in all three boxes, at the
+same speed, with no new schema per Cmd.**
+
+### How it works
+
+A tea machine names each effect as a Cmd, and `run(machine, {interpret})` says who runs it. In
+the box, the interpret entry of a keyed Cmd is `outside(def)`. The Cmd itself does not change.
+
+```ts
+// programs.ts: two Cmds, Effect schemas, through tea's own Cmd.define.
+export const countWords = Cmd.define("count_words", {
+	input: Schema.Struct({text: Schema.String}), ok: Schema.Int, err: ["empty"],
+});
+export const stamp = Cmd.define("stamp", {                  // keyed: it runs on the host
+	input: Schema.Struct({text: Schema.String, words: Schema.Int}),
+	ok: Schema.Struct({sig: Schema.String}), err: ["refused"],
+});
+
+// One text: count its words in here, then have the host stamp it.
+const tally = defineMachine({
+	types: {model: {} as Tally, msg: {} as {type: "got"; text: string}, ctx: undefined},
+	cmds: [countWords, stamp],
+	init: (loaded) => [loaded ?? blank, []],
+	update: {
+		got: (_, m) => [{...blank, text: m.text}, [countWords({text: m.text})]],
+		count_words_ok: (s, m) => [{...s, words: m.value}, [stamp({text: s.text, words: m.value})]],
+		stamp_ok: (s, m) => [{...s, sig: m.value.sig}, []],
+		count_words_err: (s, m) => [{...s, why: m.error._tag}, []],
+		stamp_err: (s, m) => [{...s, why: m.error._tag}, []],
+	},
+});
+
+// In the box: count_words runs here, stamp goes out.
+run(tally, {ctx: undefined, interpret: {count_words: countHere, stamp: outside(stamp)}, terminal});
+
+// On the host: the real handler, the one that reads the key.
+startBoxed(place, stamped, {}, {}, {stamp: (c) => Effect.sync(() => ({sig: sign(key, `${c.text}:${c.words}`)}))});
+```
+
+- **`outside(def)`** (in `cmd-wall.ts`) reads the Cmd with `def.schema.input`, the schema the
+  Cmd was defined with. A Cmd it refuses never crosses: that is a bug in the machine, so it dies
+  in the box. One it takes goes out as a `cmd` frame on the same stdio channel, and waits.
+- **The host's `answer`** reads the input again with the same schema (the box is not trusted),
+  runs the real handler, and reads its value with `def.schema.ok` before it goes back. A failure
+  with a declared tag goes back as `err`; anything else as `no`, which dies in the box.
+- **tea reads the `ok` value once more** with the def's own `ok` schema when the Cmd settles.
+- The frames are four small ones, with a number to match each answer to its Cmd:
+
+```ts
+// box -> host
+{kind: "cmd", id: 0, name: "stamp", input: {text: "two words here", words: 3}}
+// host -> box
+{kind: "ok", id: 0, value: {sig: "3c7538b5"}}
+{kind: "err", id: 0, tag: "refused"}
+{kind: "no", id: 0, why: "Expected string; Expected number"}
+```
+
+- No encoding step: tea's Effect `Cmd.define` takes only schemas whose two sides are one type,
+  so a Cmd's JSON is the Cmd.
+
+### What came back
+
+| | none | srt | Docker |
+|---|---|---|---|
+| Works: 3 words, stamp signed with the key, empty text `err` "empty" with no stamp | yes | yes | yes |
+| One keyed Cmd, inside, median of 20 | 0.18 ms | 0.19 ms | 0.68 ms |
+| Tell to heard, one machine run a text, median of 20 | 0.52 ms | 0.49 ms | 1.54 ms |
+| Key stays out (the same probe, its call a `stamp`) | no (key file read) | yes | yes |
+| Wrong shape through `outside`: refused in the box | yes | yes | yes |
+| Wrong shape around `outside`: host says `no`, handler runs | `no`, 0 runs | `no`, 0 runs | `no`, 0 runs |
+
+In-process, with the host's `answer` called straight: 0.03 ms a stamp.
+
+- A keyed Cmd costs the same as an RPC call: 0.18 against 0.24 ms, 0.68 against 0.76 ms in
+  Docker. Tell to heard is about 0.1 ms more, because `stamped` starts a fresh machine run for
+  each text.
+- **The `forge` program tried both ways to send a bad `stamp`** (`text: 7, words: "many"`).
+  Through `outside` it was refused in the box: the host heard one `cmd` frame in all, the
+  second try. That one was sent straight on the channel, as a broken box could, and the host
+  refused it with `no` before the handler ran.
+- The probe with a `stamp` found the key in the same places as before: nowhere in srt and
+  Docker, the key file with no box. The key's place does not change with the wall.
+
+### The two walls side by side
+
+| | RPC wall | Cmd wall |
+|---|---|---|
+| What crosses | a service method call | a tea Cmd |
+| New schemas, for each method or Cmd | one RPC form (payload and success) | none: the Cmd's own `input` and `ok` |
+| Lines for each service or Cmd | 10 (`GreeterRpcs` and `greeterWall`) | 0 (its name in the program's `cmds` list) |
+| Lines shared by all | 65 in `wall.ts`, built on `effect/rpc` | 91 in `cmd-wall.ts`, plus 38 of frames and glue |
+| Checks on the host | Effect RPC decodes the payload | the Cmd's `input` schema, then `ok` on the way back |
+| Who uses it | any Effect code that does `yield* Greeter` | only a tea machine's interpret |
+| Interrupts, spans, streams | Effect RPC's own | none: not built |
+| One call, inside, Docker | 0.76 ms | 0.68 ms |
+
+**Lean: use the Cmd wall for a tea machine, and keep the RPC wall only for a service a program
+calls outside a machine. Confidence 75%.**
+
+- **Why.** A Cmd is already the place where a tea machine meets the world. It is data, with its
+  schemas on it, and `interpret` already says who runs it. Moving it to the host changes one
+  interpret entry and nothing in the machine. This is Elm's own shape: the program returns Cmds
+  and the runtime performs them; here part of the runtime is on the host. The RPC wall restates,
+  for each method, types the service already has, and needs a `Wall` value to map between them.
+- **What it costs.** The Cmd wall's shared part is bigger (about 130 lines against about 75),
+  because it does its own checks and its own ids where the RPC wall borrows Effect's. It has no
+  interrupt: a Cmd cut off in the box is not stopped on the host. No span crosses it, and it
+  carries no streams. A program that does not run a machine cannot use it.
+- **The doubt, and what would settle it.** Under 80% because the Cmd wall has not met what
+  Effect RPC handles for free. A run where the box is killed mid-Cmd, a Cmd whose handler takes
+  seconds, and two Cmds in flight at once would show whether its ids and its missing interrupt
+  hold up. A wrong `ok` from the host was not tried either: the host checks it, and tea would
+  check it again, but neither was seen to refuse one.
+
 ## Verdict
 
 - **Boxing a whole program works, with fabrika's `start` unchanged inside.** Worth building as
   `startBoxed` beside `start`. Confidence 80%.
   - Why: three boxes, one runner, one set of frames; every measure held; the box costs about
     110 ms at start and under 1 ms a call.
-  - Cost: about 350 lines here, of which perhaps 250 would stay once the handle reuses `start`'s
-    types. Plus each service a program uses needs a `Wall` (an RPC group and two small maps).
+  - Cost: about 350 lines here for the RPC wall alone, of which perhaps 250 would stay once the
+    handle reuses `start`'s types. Plus each service a program uses needs a `Wall` (an RPC group
+    and two small maps). The Cmd wall adds about 130 lines once, and nothing per Cmd.
+- **For a tea machine, cross with the Cmd wall.** Confidence 75%; see
+  [The two walls side by side](#the-two-walls-side-by-side).
 - **Prefer srt or Docker over none.** A plain child process kept the key out of its environment
   only because the host chose what to hand it. It could still read the key file.
 - **Under 80% on one point: whether stdio is the transport to keep.** It worked and needs no
@@ -290,7 +423,7 @@ Lines of code: not blank, not only a comment, counted by the script after `pnpm 
 
 ## What it cannot tell us
 
-- **Toy programs only.** `double`, `greet` and the probe. No program with machines, no kept run:
+- **Toy programs only.** `double`, `greet`, the probes and one two-Cmd machine. No kept run:
   the runner gives every run a memory storage inside the box, so nothing outlives the box. How a
   kept run's storage crosses the wall (as another service?) is open.
 - **The boxed handle is smaller than `start`'s.** It has no `offer`, no `Full` (a full line inside
@@ -306,5 +439,8 @@ Lines of code: not blank, not only a comment, counted by the script after `pnpm 
 - **Start time is to the first output of `double`,** with Docker's image already built and the
   repo's `node_modules` in a volume. A real program loads more.
 - **One service, one method, one call at a time.** No streams, no concurrent calls, no service
-  that fails, no call cut off by a kill.
+  that fails, no call cut off by a kill. The same holds for the Cmd wall: one keyed Cmd, one at
+  a time, and its `err` path seen only through the Cmd that ran inside (`count_words`).
+- **The Cmd wall was tried with one machine run per text.** A long machine that keeps Cmds in
+  flight, a restart that re-sends one, and an Act Cmd whose intent must be kept were not tried.
 - **Every number is from five or twenty runs** on one quiet machine.
