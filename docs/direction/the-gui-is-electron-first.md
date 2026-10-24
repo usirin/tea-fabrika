@@ -1,12 +1,19 @@
 # The GUI is an Electron app first
 
 Decided 2026-10-24. Replaces [The GUI is a local web page first](./the-gui-is-a-local-web-page-first.md)
-of 2026-10-22. How the window loads a program's window code is still **open**.
+of 2026-10-22.
+
+```text
+1. fabrika opens as a single window with tsh
+2. tsh comes with the owner's programs loaded
+3. the owner runs a program
+4. if that program has a GUI, it takes over the window; when it ends, tsh is back
+```
 
 ```ts
 // A sketch. One Electron app. No local port, so no secret.
 //   main process   Node: runs the host and every program, the process the web note had
-//   the window     Electron's renderer: tmux-like panes, each starts with tsh. Sandboxed, no Node.
+//   the window     Electron's renderer: tsh, or the GUI of a program tsh started. Sandboxed, no Node.
 //   between them   one MessagePort, carrying the same two message types as before
 
 type ToPage = {type: "view"; pane: PaneId; data: unknown /* typed by the program's view schema */};
@@ -95,17 +102,21 @@ ipcRenderer.once("port", (e) => {
   the host relies on, such as `node:sqlite` or the ledger's child process. The
   first run of the app settles it.
 
-## Still open
+## How a program's window code gets in
 
-- **How the window loads a program's window code.** Three ways:
-  - built in: the app's bundle holds every window it knows. Simplest. A new
-    package means rebuilding the app;
-  - loaded at run time: the app serves each window as its own file, over its
-    own protocol, without React inside, and an
-    [import map](https://www.mercedes-benz.io/2023/01/05/you-might-not-need-module-federation-orchestrate-your-microfrontends-at-runtime-with-import-maps)
-    hands every window the one React;
-  - one sandboxed frame per window, as VS Code does with its webviews. A
-    window cannot reach another pane. Each frame loads its own React.
+- **Built into the app's bundle, for now** (2026-10-24, a build detail, not a
+  product one). The programs tsh comes with are known when the app is built,
+  so their windows are bundled with it. A new program means rebuilding the
+  app.
+- **Later, when a program comes from outside the app's own build,** it is
+  loaded at run time instead: the app serves each window as its own file,
+  over its own protocol, without React inside, and an
+  [import map](https://www.mercedes-benz.io/2023/01/05/you-might-not-need-module-federation-orchestrate-your-microfrontends-at-runtime-with-import-maps)
+  hands every window the one React. Only the loader changes; a window stays
+  the same React component on `<package>/window`.
+- **A window someone else wrote** may need its own sandboxed frame, as VS
+  Code does with its webviews, so it cannot reach the rest of the app. That
+  question comes with the first such window.
 
 ## What would change it
 
