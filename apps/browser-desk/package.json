@@ -1,0 +1,33 @@
+{
+	"name": "@tea-fabrika/gui",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "An experimental browser and Sandbox desk over Fabrika programs.",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p .",
+		"build": "node build.ts",
+		"start": "node src/main.ts",
+		"check:browser": "node check-browser.mjs"
+	},
+	"dependencies": {
+		"@kampus/fabrika": "workspace:*",
+		"@tea-fabrika/terminal": "workspace:*",
+		"@demlik/tea": "catalog:",
+		"effect": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:",
+		"ws": "8.21.3"
+	},
+	"devDependencies": {
+		"@effect/vitest": "catalog:",
+		"@types/node": "catalog:",
+		"playwright": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"@types/ws": "8.18.2",
+		"esbuild": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

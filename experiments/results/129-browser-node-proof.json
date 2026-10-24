@@ -1,0 +1,67 @@
+{
+  "source": "bf3e370d623a214635186d9c20b096a2ad1a825b",
+  "node": "v26.2.0",
+  "cases": [
+    {
+      "name": "UI action reaches a real program and saved view",
+      "count": 1
+    },
+    {
+      "name": "Malformed JSON and undeclared action refused",
+      "unchangedCount": 1
+    },
+    {
+      "name": "Same message id sent twice counts once",
+      "count": 2
+    },
+    {
+      "name": "Program advances with every browser closed",
+      "before": 2,
+      "after": 3,
+      "clients": 0,
+      "pid": 31952
+    },
+    {
+      "name": "Fresh browser and refresh see current saved state",
+      "count": 7
+    },
+    {
+      "name": "Abrupt Node exit preserves state and open browser reconnects",
+      "beforePid": 31952,
+      "afterPid": 70749,
+      "count": 7,
+      "beforeFence": 2,
+      "afterFence": 21
+    },
+    {
+      "name": "Missing token, stale token and foreign Origin are refused",
+      "status": 403
+    },
+    {
+      "name": "Recovered program accepts action and refresh reads saved state",
+      "count": 8
+    },
+    {
+      "name": "Narrow browser view has no horizontal overflow",
+      "width": 320,
+      "contentWidth": 320
+    }
+  ],
+  "pageErrors": [],
+  "scope": "Local experiment; one React window and a real Fabrika-hosted TEA counter on SQLite. Restart tested after the timer job completed. No agent, cloud, R2, or package-window discovery proof.",
+  "checkoutChecks": {
+    "typecheck": "passed",
+    "lint": {
+      "result": "failed",
+      "errors": 1368,
+      "warnings": 3595
+    },
+    "test": {
+      "result": "failed",
+      "passed": 1077,
+      "failed": 1,
+      "case": "src/lane-replay.test.ts: merge queue, expected same, received diverged"
+    },
+    "boundary": "These checks ran against the older dirty working checkout, not the pinned isolated source. No library source was changed by this experiment."
+  }
+}

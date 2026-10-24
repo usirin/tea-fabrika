@@ -1,0 +1,30 @@
+{
+	"name": "@tea-fabrika/terminal",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/program.ts",
+		"./view": "./src/view.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@kampus/fabrika": "workspace:*",
+		"@demlik/tea": "catalog:",
+		"effect": "catalog:",
+		"@lydell/node-pty": "1.2.0-beta.15",
+		"ghostty-web": "0.4.0"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"react": "catalog:",
+		"typescript": "catalog:"
+	}
+}

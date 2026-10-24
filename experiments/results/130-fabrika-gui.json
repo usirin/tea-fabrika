@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "name": "New desk starts real tsh and runs its typed pipe"
+    },
+    {
+      "name": "counter replaces tsh in the same pane and accepts an action"
+    },
+    {
+      "name": "Native terminal accepts keyboard input and browser paste"
+    },
+    {
+      "name": "Ctrl-C returns to the shell and one Escape reaches native input"
+    },
+    {
+      "name": "Returning through tsh keeps the same terminal process and output"
+    },
+    {
+      "name": "Hidden counter advances and finishes while every browser is closed",
+      "countObservedWithoutViewer": 2
+    },
+    {
+      "name": "Fresh attach and reload preserve saved count, hidden panes and live shell"
+    },
+    {
+      "name": "320px layout has no horizontal overflow"
+    },
+    {
+      "name": "Node crash resumes hidden work to its original target; browser reconnects and terminal gets a new shell"
+    },
+    {
+      "name": "Origin, startup token, malformed input, unknown action and wrong program are refused"
+    }
+  ],
+  "pageErrors": [],
+  "node": "v26.2.0",
+  "base": "806a9c7419fc7d793e0c010829cfecb5d148bace",
+  "scope": "Local tsh-first GUI, durable counter and pane records, ephemeral native Terminal. No provider or cloud run.",
+  "checks": {
+    "install": "frozen offline passed",
+    "browser": "ten cases passed",
+    "existingSuite": "2193 passed with TERM=xterm-256color and maxWorkers=2",
+    "newIntegration": "real tsh validation passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "fullSuite": {
+      "files": 140,
+      "tests": 2194,
+      "term": "xterm-256color",
+      "maxWorkers": 2
+    },
+    "plantedBreak": {
+      "copy": "separate disposable host",
+      "change": "serve only current pane kind, ignore other started programs",
+      "result": "failed as intended",
+      "case": "resumed hidden job"
+    }
+  }
+}

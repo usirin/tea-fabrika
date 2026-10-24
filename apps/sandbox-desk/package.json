@@ -1,0 +1,24 @@
+{
+	"name": "@tea-fabrika/gui-cloud",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p .",
+		"build": "node build.ts"
+	},
+	"dependencies": {
+		"@cloudflare/sandbox": "1.0.1",
+		"effect": "catalog:",
+		"jose": "6.2.12"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@cloudflare/workers-types": "5.20261018.1",
+		"esbuild": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:",
+		"wrangler": "4.151.1"
+	}
+}

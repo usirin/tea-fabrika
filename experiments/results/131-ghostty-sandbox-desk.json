@@ -1,0 +1,36 @@
+{
+	"library": "806a9c7419fc7d793e0c010829cfecb5d148bace",
+	"ghostty": "0.4.0",
+	"sandbox": "1.0.1",
+	"wrangler": "4.151.1",
+	"checks": {
+		"typecheck": "passed",
+		"lint": "passed",
+		"testFiles": 142,
+		"tests": 2200,
+		"browserJourneys": 10,
+		"linuxHost": "passed",
+		"linuxNativePty": "passed",
+		"linuxQuietAndReopen": "passed"
+	},
+	"cloud": {
+		"deployed": true,
+		"anonymousAccess": "login required",
+		"workersDev": false,
+		"previewUrls": false,
+		"originalDeskSettings": "unchanged",
+		"authenticatedBrowser": "passed",
+		"r2Replacement": "passed",
+		"stoppedBeforeRestore": true,
+		"kernelBootChanged": true,
+		"fileSha256Before": "9c38d4d8ae2c89a1535a7b2e4fd773f9cf43b80d65075e9f5f87492b1053a6c8",
+		"fileSha256After": "9c38d4d8ae2c89a1535a7b2e4fd773f9cf43b80d65075e9f5f87492b1053a6c8",
+		"counterAfterDisconnect": 5,
+		"counterAfterRestore": 5,
+		"existingFilesPreserved": true,
+		"secondOwner": "not exercised live"
+	},
+	"modelCalls": 0,
+	"modelUsd": 0,
+	"infrastructureUsd": null
+}

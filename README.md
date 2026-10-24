@@ -256,6 +256,10 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app`: the fabrika app, a
     walking skeleton. One Electron window running tsh; a program with a window takes it over
     until it ends.
+  - [`apps/browser-desk`](./apps/browser-desk/README.md), `@tea-fabrika/gui`: an experimental
+    browser/Sandbox preview with native terminals, multiple panes and recovery checks.
+  - [`apps/sandbox-desk`](./apps/sandbox-desk/README.md), `@tea-fabrika/gui-cloud`: the preview's
+    private Access gateway, Linux image and R2 save/restore lifecycle.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
 - `docs/`: drafts too: [`skill-map.md`](./docs/skill-map.md),
   [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)
