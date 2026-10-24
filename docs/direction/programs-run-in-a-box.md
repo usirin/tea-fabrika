@@ -103,6 +103,13 @@ test:
   forwards only the model's one path, for allowed models, under a cap for
   that box. Anything in the box can still spend through it, up to the cap, so
   the cap is the guard against spend, not the box.
+  - The relay holds an API key, not a subscription login. Anthropic asks
+    anyone building on Claude Code or the Agent SDK to use an API key, and
+    bars others from holding or passing on a subscription's token
+    ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance)). A relay
+    that adds a subscription token to each call does exactly that.
+  - 137 used a subscription login, so it shows only that the wiring works. A
+    run with an API key is not done yet.
 
 ```ts
 // A sketch of the service. Not built.
@@ -163,8 +170,10 @@ The doubt is the edges nobody has run yet, listed below.
 - **The edges of the Cmd wall.** A box killed in the middle of a Cmd, a Cmd
   that takes seconds, and two Cmds at once are not tried. A Cmd cut off inside
   the box is not yet stopped outside.
-- **The proxy and a subscription login.** Answered by experiment 137: a
-  subscription login works through the relay, with no API key.
+- **The proxy and a subscription login.** Experiment 137 showed it works
+  through the relay. Anthropic's terms do not allow it for a product
+  ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance)), so the
+  relay takes an API key. Not yet run with one.
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is
