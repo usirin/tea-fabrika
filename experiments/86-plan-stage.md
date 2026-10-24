@@ -234,6 +234,11 @@ added. Use a replay ticket that took two PRs, or a small epic. Measure:
 
 Run each arm twice: 490 shows the planner's spread.
 
+Later, on 2026-10-24: in the plan for #393, in `86-plans/393.md` and
+`results/86b-plans.json`, one product name the planner copied from the ticket
+was replaced with `‹product›` in two places, to keep it out of this public
+repo. Nothing else changed.
+
 ## What this cannot tell us
 
 - Six tickets, all from two packages. One reader judged caught or missed, from

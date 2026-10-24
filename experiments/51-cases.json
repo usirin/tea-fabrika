@@ -641,7 +641,7 @@
 			"lane": "kamp-us/demlik#537",
 			"source": "builder's report, operator run on #537",
 			"texts": {
-				"note": "**What happened**\n- `build tree --require-clean`: exit 0, tree is `<working copy>`.\n- `build eligible 537`: `eligible`, standalone, no blockers.\n- `build claim 537`: **exit 20**, refused before any marker was written. Its words:\n  - `campaigns: 2 active — Binclusive agent migration (#3), Code coordinates (#4).`\n  - `out of scope — the active campaigns pin milestones #3, #4 and this issue's home is 1; flip that campaign's ## Campaigns state cell to active, or claim it with an explicit override.`\n  - `nothing was written — #537 carries no marker from this run; pass --override \"<reason>\" --override-lane \"<lane>\" to claim it anyway.`",
+				"note": "**What happened**\n- `build tree --require-clean`: exit 0, tree is `<working copy>`.\n- `build eligible 537`: `eligible`, standalone, no blockers.\n- `build claim 537`: **exit 20**, refused before any marker was written. Its words:\n  - `campaigns: 2 active — ‹product› agent migration (#3), Code coordinates (#4).`\n  - `out of scope — the active campaigns pin milestones #3, #4 and this issue's home is 1; flip that campaign's ## Campaigns state cell to active, or claim it with an explicit override.`\n  - `nothing was written — #537 carries no marker from this run; pass --override \"<reason>\" --override-lane \"<lane>\" to claim it anyway.`",
 				"stage": "A builder wrote this when it stopped without building anything. Another builder would start next."
 			},
 			"did": "blocks",

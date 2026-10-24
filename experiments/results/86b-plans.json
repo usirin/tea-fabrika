@@ -141,7 +141,7 @@
 			"stories": [
 				{
 					"id": "s1",
-					"who": "a repo owner switching on `--boundaries` one feature at a time (e.g. Binclusive with only `access-gates` declared)",
+					"who": "a repo owner switching on `--boundaries` one feature at a time (e.g. ‹product› with only `access-gates` declared)",
 					"want": "code outside every declared feature that imports a feature's internals (anything but its index.ts) to be reported as a violation",
 					"why": "declaring a feature actually walls it off on day one, not only against other declared features"
 				},
@@ -313,7 +313,7 @@
 						"Counted in a separate ceiling of its own"
 					],
 					"lean": "On by default, in the same count",
-					"why": "the ticket asks for the same ratchet, and closing the hole is the point. The cost is a one-time EXCEEDED in repos that already recorded ceilings (Binclusive wants this). The job criterion and the upgrade-note criterion depend on this choice"
+					"why": "the ticket asks for the same ratchet, and closing the hole is the point. The cost is a one-time EXCEEDED in repos that already recorded ceilings (‹product› wants this). The job criterion and the upgrade-note criterion depend on this choice"
 				},
 				{
 					"ask": "Which files count as 'outside' for B4: only files under src (including files directly in src, like its index.ts), or also files elsewhere in the scope (tests, scripts, scope-root config)?",
