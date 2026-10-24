@@ -131,3 +131,42 @@ a promise stage would inherit.
 | disable comment | `// Stryker disable` on one line, with a reason | the same ([Stryker, disable mutants](https://stryker-mutator.io/docs/stryker-js/disable-mutants/)) | ok | |
 | `ask:owner:already_kept`, `ask:owner:not_kept`, `ask:owner:check_change` | the plan was wrong about today's code, or a diff touches a check | none found | differs | follow the `new`/`kept` pick: `already_holds`, `regression`. 50% |
 | `send:builder:promise_red` | ship found a promise red or out of step | failed required check | differs | follows the `Promise` pick |
+
+## 3. Build
+
+`packages/pipeline/src/stages/build/` (one ticket, one pull request) and
+`stages/task/` (one task of a plan, a commit on the plan's branch).
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| `Built` (`form.ts`) / `Built` (`program.ts`) | the builder's form at the end of its run; and the program's answer for one build | none for the pair: two exports, one name, two shapes | two-ideas | the form → `BuildForm`; the program's answer → `BuildResult`. 80% |
+| `PlanState` (`build/ticket.ts`) | how a ticket's plan stands on the ledger: `approved`, `not_approved`, `none`, `unknown` | approval status ([GitHub, review states](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | two-ideas | `PlanApproval`. `PlanState` is also the plan machine's state type. 80% |
+| `readTicket` | a Gather in plan and in build, and a plain read in `build/ticket.ts` | none needed | two-ideas | `planTicket`, `buildTicket` as Cmds; the read helper stays `readTicket`. 60% |
+| `BuildAsk` / `TaskAsk` | the machine's input: ticket, round, what is still open | workflow input | two-ideas | `BuildInput`, `TaskInput`, with plan's pick. 70% |
+| `Build` / `Task` (state types) | the build and task machines' state | Elm's Model; plan calls its own `PlanState` | two-ideas | `BuildState`, `TaskState`. `Task` is also plan's task schema. 85% |
+| `Task` (the machine) | builds one task of an approved plan onto the plan's branch | a sub-task ([GitHub, sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues)) | ok | keep: the same idea as plan's `Task`, once the state type moves |
+| `round` | which review-and-build pass this is, 1 first | iteration; review round | ok | |
+| `Item` / `open` | one thing a review left open, told to the next round | an unresolved review thread ([GitHub, resolving conversations](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/commenting-on-a-pull-request#resolving-conversations)); a finding | differs | `Finding`; key `open` stays. 65% |
+| `says`, `where`, `wants` (in `Item`) | why it is open, where it shows, what would close it | comment body, location, suggested change | ok | `says` matches the promise's `says` |
+| `BuildBrief` / `briefOf` | what one builder run is handed | prompt context | ok | |
+| `session` (brief) | the builder's conversation id | session id ([Claude Agent SDK, sessions](https://docs.anthropic.com/en/docs/claude-code/sdk/sdk-sessions)) | ok | plan's `key` should follow this one |
+| `tree` / `copyTree` / `Copied` | the working copy on the ticket's branch | working tree ([git glossary](https://git-scm.com/docs/gitglossary#def_working_tree)); a git worktree | ok | `copyTree` → `makeTree`, since it may find an old one. 50% |
+| `summary`, `deviations`, `ran`, `left` (form) | what the change does, where it departs from the ticket, what it ran, what it could not do | PR description; deviations; known limitations | ok | `summary` is also plan's summary, the same idea |
+| `answer` (in `BuildGate`, `BuildDrafted`) | the tag that says which case a union is | a discriminant: `_tag` in Effect ([Effect, Data.TaggedEnum](https://effect.website/docs/data-types/data/)); `kind` in outcomes | two-words | `kind`, as outcomes use. 60%: Effect's `_tag` is the other choice |
+| `BuildGate` / `buildGate` / `taskGate` / `TaskGate` | a pure Check before work: go, or the one reason not to | a guard ([XState, guards](https://stately.ai/docs/guards)) | differs | keep `gate`: plain, and ship's "gate" is the same idea. But `guard` already means the process lock below. 60% |
+| `guard` / `guarded` / `HOLD` / `HELD` / `lockOf` | a lock and a timeout around the builder's commands | a file lock or mutex ([Wikipedia, file locking](https://en.wikipedia.org/wiki/File_locking)) | two-ideas | `lock`, `locked`. "Guard" is the state-machine word for a gate. 70% |
+| `harness` / `HARNESSES: sdk, acp` / `builderHarness` | what runs the agent | agent harness | ok | |
+| `Verdict` / `verdictOf` (`builder-acp.ts`) | how one permission ask was answered: allow or refuse | permission decision ([ACP, request permission](https://agentclientprotocol.com/protocol/tool-calls#requesting-permission)) | two-ideas | `Permission` / `permissionOf`. A fourth `Verdict` in the repo. 75% |
+| `answer` (`builder-acp.ts`) | reply to one permission ask | respond | two-ideas | `respond`. 55% |
+| `HAND_IN` / `report_build` / `Report` | how the builder hands its form in, as a tool call | structured output via a tool ([Anthropic, tool use](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview)) | ok | |
+| `checksOf` / `hookSettings` / `Checked` / `builderCheck` / `builderRefusal` | commands the builder ran, logged by a hook; a refusal of a tool call | hooks ([Claude Code, hooks](https://docs.anthropic.com/en/docs/claude-code/hooks)) | two-ideas | `ranOf`, `Ran`: these are runs, not the Check move. 55% |
+| `MAX_RUNS` (build, task) vs `tries` (plan) | the most builder runs in a round | attempts ([Temporal, retry policy](https://docs.temporal.io/encyclopedia/retry-policies)) | two-words | one word: `tries`, or `attempts` everywhere. 65% |
+| `Failed: broke, misfit, over_budget` | how a builder run failed | crash, invalid output, budget | ok | |
+| `Commit` / `PrBody` / `messageText` / `bodyText` | the commit message and the pull request text | the same (git, GitHub) | ok | |
+| `inert` / `BREAK` | a zero-width space that stops an `@` mention from notifying | escaping | ok | |
+| `branchOf` (`build/<n>`) / `planBranchOf` (`plan/<n>`) | the branch name for a ticket or a plan | branch | ok | |
+| `TaskView` / `taskViewOf` / `Heads` | what the ledger says about one task, with branch heads | read model ([Microsoft, CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs)) | ok | |
+| `withPlan` / `planStateOf` / `planStateIn` | read how a ticket's plan stands | follows `PlanApproval` | differs | `planApprovalOf`. 75% |
+| build: `skip:not_ready`; task: `skip:not_approved` | no approved plan yet | the same idea, two words | two-words | one word in both, `not_approved`. 75% |
+| build `stuck` names: `read_failed`, `no_criteria`, `criteria_unknown`, `copy_failed`, `draft_failed`, `over_budget`, `no_change`, `push_failed`, `open_failed` | how a build stops | the five verbs | ok | |
+| `buildKind`, `buildProgram`, `buildToTheEnd` | the program and kind | see section 9 | ok | |
