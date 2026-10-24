@@ -12,6 +12,19 @@ Decided 2026-10-18.
   in the doc comment and the package README.
 - **One word per idea.** Two names for one thing, or one name for two things,
   is a bug to fix.
+- **A word may lean a little differently in two domains** (decided
+  2026-10-24), as long as it holds inside each one and carries over at the
+  boundary without misleading. One meaning everywhere still comes first.
+
+  ```ts
+  // Fine: both mean "take it in", each in its own world.
+  {answer: "accept", to: "plan"}   // triage takes a ticket in (Linear's word)
+  {kind: "accept"}                 // refine: the owner takes a stuck draft as it is
+  ```
+
+- **Proposed 2026-10-24: the settled names live in a glossary,** `.glossary/`
+  in the shape the fabrika glossary skill keeps: one term, one row, one
+  meaning. It is the "short glossary page" below.
 
 ## Still to do
 
