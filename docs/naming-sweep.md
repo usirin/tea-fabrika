@@ -604,3 +604,60 @@ program on the host).
 | `readingIn` / `localReviewTurn` / `LocalChecks` / `targetOf` | the local review's reads | none needed | ok | |
 | `verdictOf` (`hosted/review.ts`) | the review's verdict from an over state | none needed | two-ideas | a second `verdictOf` (build's ACP permission answer): rename that one |
 | `Ending: row_done, row_stuck, no_row` / `Variant: today, fixed` / `Seen` / `laneEnds` / `runCase` / `LIMIT_MS` | experiment 116's lane-end property and its stand-ins | a property-based test ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)) | ok | |
+
+## 8. Triage, still `sort` in code
+
+`packages/pipeline/src/stages/sort/` and `hosted/sort.ts`: one new ticket in, one answer out
+(duplicate, no, or yes with a next step).
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| sort / `sort` / `Sort*` | read one new ticket and answer duplicate, no, or yes with a route | triage ([Linear, triage](https://linear.app/docs/triage); GitHub's `needs-triage` habit) | differs | `triage`, the word every tracker uses; the docs already say "triage, still `sort` in code". 80% |
+| `SortAsk` / `.ticket` / `.tries` | the stage's input | workflow input | two-ideas | `TriageInput`, after `PlanInput`. 85% |
+| `readTicket` (`sort_ticket`) / `readContext` (`sort_context`) / `writeOne` (`sort_write`) | the stage's moves | none needed | ok | `readTicket` is also exported by other stages under the same name: fine inside each folder |
+| `SortTicket` / `.url`, `.number`, `.state: open, closed`, `.title`, `.body` | the ticket as read | issue ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | |
+| `Earlier` / `.number`, `.title`, `.state`, `.reason` | the repo's other tickets, to find a duplicate | none needed | ok | `reason` is the close comment; GitHub's own is `state_reason`. Fine |
+| `OpenPlan` / `.number`, `.tickets`, `.summary`, `.approved` | an open plan the ticket may be part of | a parent issue ([GitHub, sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues)) | ok | |
+| `SortContext` / `.earlier` / `.plans` | what the sorter reads besides the ticket | none needed | ok | |
+| `Settings` / `.model`, `.effort`, `.budget`, `.note` | the sorter's settings | none needed | ok | the same shape is exported by five stages as `Settings`: see section 9 |
+| `SortAnswer` / `SortReply` / `.sort` | the answer, and the object the agent hands back holding it | structured output ([Claude Agent SDK, structured outputs](https://docs.claude.com/en/docs/agent-sdk/structured-outputs)) | ok | |
+| `.answer: duplicate, no, yes` | the answer's tag | resolution ([GitHub, default labels](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels#about-default-labels): duplicate, invalid, wontfix) | ok | one more tag key; see section 9 |
+| `Duplicate` / `.of` / `.why` | the same change or problem as an earlier ticket | duplicate ([GitHub, marking duplicates](https://docs.github.com/en/issues/tracking-your-work-with-issues/administering-issues/marking-issues-or-pull-requests-as-a-duplicate)) | ok | |
+| `No` / `.rule` / `.reason` / `.why` | not worth doing, by one of the bar's rules | won't fix; close as not planned | ok | `reason` (the line on the ticket) and `why` (for the reader) sit side by side; a gloss is enough |
+| bar / `NO_RULES` / `NoRule` / `NoRuleId` / `NO_RULE_IDS` / `ruleOf` | the repo's seven ways a ticket is a no | a definition of ready, turned around ([Agile Alliance, definition of ready](https://www.agilealliance.org/glossary/definition-of-ready/)) | ok | |
+| `NoRule.id`, `.rule`, `.reason`, `.needsCode`, `.example` | each rule's id, words, reason line, whether code must show it, and an example | none needed | ok | |
+| `already_fixed`, `target_removed`, `carried`, `replaced`, `settled_no`, `pipeline_tool`, `not_work` | the seven rule ids | won't fix reasons | differs | `carried` is a duplicate by another name; `pipeline_tool` names one tool: `upstream`, the word for a bug that belongs in another repo. 60% |
+| `STILL_YES` / `.rule`, `.example` | four cases that look like a no and are a yes | none found (searched Linear, GitHub, Scrum guides) | ok | |
+| `leadOf` / `barLines` | the reason's first words; the bar as brief lines | none needed | ok | |
+| `YesPlan` / `.next: plan` / `.partOf` | worth doing, and a plan comes next; maybe as part of an open plan | a sub-issue's parent ([Linear, parent and sub-issues](https://linear.app/docs/parent-and-sub-issues)) | ok | `partOf` is two words: `parent`, the trackers' word. 65% |
+| `YesRuling` / `.next: ruling` / `.ask` / `.options` | the owner must choose first, with the question and its options | a decision ([MADR](https://adr.github.io/madr/)) | differs | `ruling` is a court word; trackers and ADRs say "decision". `decision`. 55%: "ruling" is plain English and the asks core uses it everywhere |
+| `YesRuling.ask` | the question | question | two-ideas | `ask` is a verb, a ledger record and an input name already (section 1): `question`. 75% |
+| `YesResearch` / `.next: research` / route `research` | worth doing, and it ends in a finding, not a PR | spike ([Extreme Programming, spike](http://www.extremeprogramming.org/rules/spike.html)) | differs | keep `research`: a spike is code you throw away, and research may only read. Gloss it as "a spike, or reading". 60% |
+| `.next` | which route a yes takes | none | ok | |
+| `ROUTES` / `plan`, `ruling`, `research` | the three routes, as the brief says them | none needed | ok | |
+| `Said` / `saidOf` | an answer in one word: duplicate, no, fold, plan, ruling, research | none needed | ok | |
+| fold / `fold` (write `op`) / `plan:fold` | the ticket joins an open plan, which grows by one ticket | add a sub-issue ([GitHub, sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues)) | collides | `fold` is also the event-sourcing word for reading a stream into state (`foldLedger`, `Folded`, `foldedPlanHost`), and both live in the asks core. `attach`, or `join`. 75% |
+| `Brief` / `.ticket`, `.context`, `.note` | what the sorter is told | prompt | ok | |
+| `promptOf` / `promptFor` / `sortProblems` | the prompt, its retry form, and the Check | none needed | ok | |
+| `sortDraft` / `refine` | the Draft and its refine loop | evaluator-optimizer ([Anthropic, building effective agents](https://www.anthropic.com/engineering/building-effective-agents)) | ok | see `createRefineLoop` in section 9 |
+| `SortWrite` / `.op: comment, label, close, link, fold, ruling` | one write the answer makes | command | ok | `link` writes a comment on the plan: `comment_plan`, or fold it into `comment`. 55% |
+| `SortWrite.ticket`, `.body`, `.label`, `.plan`, `.reason`, `.ask`, `.options`, `.why` | each write's fields | GitHub's field names | ok | `ask` follows `YesRuling.ask` |
+| `close.reason: not_planned, duplicate` | GitHub's close reasons | `state_reason` ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | |
+| labels `sort:duplicate`, `sort:no`, `sort:plan`, `sort:ruling`, `sort:research` | the label each answer leaves | triage labels | differs | a fold leaves `sort:plan`, so a reader cannot tell a fold from a new plan by label. Follows the `triage` rename. 60% |
+| `issueUrl` / `writesFor` / `outcomeOf` | a ticket's url; an answer's writes; its outcome | none needed | ok | `outcomeOf` is also exported by `hosted/stage.ts` |
+| `SortHost` / `.ticket` / `.earlier` / `SortPlans` / `.open` / `ledgerPlans` / `githubSortHost` / `reasonIn` | reads from the code host and the ledger | none needed | ok | |
+| `Sorter` / `.run` / `liveSorter` / `sorterOptions` / `SorterConfig` / `.seen` / `.open` | the agent that sorts | agent ([Claude Agent SDK](https://docs.claude.com/en/docs/agent-sdk/overview)) | ok | follows `triage`: `Triager` |
+| `SortWrites` / `.write` (`intent`) | the stage's one write service | none needed | ok | |
+| `SortMsg` / `RunSub` (`sort_run`) / `runSub` | what the agent run says; the Sub that listens | Sub | ok | |
+| `SortReport` / `.answer`, `.wrote`, `.problems`, `.tries`, `.spend` | what the stage leaves | result | two-words | `spend` → `usage`, after the `Usage` pick |
+| `SortState` / `.phase: idle, reading, gathering, sorting, checking, writing, over` | where the stage is | state | ok | |
+| `SortState` keys `ask`, `settings`, `key`, `ticket`, `context`, `refining`, `answer`, `tries`, `spend`, `writes`, `wrote`, `asked`, `outcome`, `report` | what each phase holds | none needed | two-words | `key` → `session` and `spend` → `usage`, after the picks; `ask` → `input` |
+| `SortMachineMsg` / `.type: start, resume` | what the stage hears | Msg | differs | other stages tag their Msg with `type` too, outcomes with `kind`: see section 9 |
+| `sort` (machine) / `sortReadInterpret` / `sortWriteInterpret` / `sortSubscribe` | the machine and its handlers | interpreter | ok | |
+| `done:closed:no`, `done:closed:duplicate` (with `part`) | the ticket was closed | resolution | ok | |
+| `send:plan:yes`, `send:plan:fold`, `send:research:yes` | who is next | none needed | ok | `fold` follows its row |
+| `ask:owner:ruling` | the owner must choose | none needed | ok | |
+| `skip:closed` | the ticket is closed already | none needed | ok | |
+| `stuck:read_failed`, `draft_failed`, `over_budget`, `changed`, `write_failed` | how sort stops | none needed | ok | `changed` = the ticket's words moved; `ticket_changed` reads better. 55% |
+| `stuck:unchecked` | its last answer still has problems and the tries are spent | none | differs | `stuck:unfixed`, as plan's (picked 2026-10-24) |
+| `sortName` / `childSorter` / `sortTurn` / `sortWritesOf` / `hostedSort` / `SortJob` | the hosted triage | none needed | ok | `SortJob` → `TriageInput` (section 7) |
