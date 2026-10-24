@@ -26,17 +26,42 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   Merging them would be work on code that is being replaced. The new pipeline
   has one program per stage from the start, and no `hosted/` folder.
 - **The repo stays clean by checks, not by a written rule:** dead code found
-  and gated; the public names diffed against main, so a new export is seen;
-  and a limit on file size. Not built yet.
+  and gated, and the public names diffed against main, so a new export is
+  seen. Built 2026-10-24, in `pnpm lint`: dead code. Public names are not
+  built yet.
+- **No limit on file size** (dropped 2026-10-24). Its number, 400 lines, was
+  code-graph's default, picked by nobody here. Research finds no line count
+  where defects jump: bigger files carry somewhat more risk on average, with
+  no threshold
+  ([Waterloo, 2016](https://www.swag.uwaterloo.ca/www/publications/thresholds-for-size-and-complexity-metrics-a-case-study-from-the-perspective-of-defect-density.html)),
+  and in that study the largest files had the fewest defects per line. Dead
+  code has a yes-or-no answer; file size has none. How sure: 75%. What
+  would change it: our own records showing big files cost more review
+  rounds or more bugs.
 - **The checks come from `@demlik/code-graph`, not knip** (2026-10-22). It is
   already this repo's layer and boundary lint. Where it lacks a check, the
-  check is added there:
-  - public names: `--api`, `--api-base` and `--api-policy` cover it, from
-    0.9.0 on. The repo pins 0.6.0;
-  - dead code: `--unreachable` finds it but gates nothing
-    (https://github.com/kamp-us/demlik/issues/729);
-  - file size: the `big-file` smell gates, but cannot start at today's count
-    (https://github.com/kamp-us/demlik/issues/730).
+  check is added there. The repo pins 0.11.0 (2026-10-24):
+
+  ```sh
+  pnpm lint:dead   # code-graph . --unreachable --ci, against unreachable-ledger.json
+  ```
+
+  - dead code: gated since 0.11.0 (https://github.com/kamp-us/demlik/issues/729).
+    The ledger started with 12 entries. Only one is truly unused: `Canvas` in
+    the finished video. The other 11 are called in their own file. code-graph
+    misses calls to an arrow function, and calls from a function it
+    withholds (https://github.com/kamp-us/demlik/issues/733);
+  - file size: code-graph can gate it since 0.11.0
+    (https://github.com/kamp-us/demlik/issues/730), and it was built here,
+    then dropped before it merged (above). It would have started with a
+    ledger of 130 files over 400 lines;
+  - public names: not wired yet. `--api` lists the names and `--api-base`
+    diffs them against a commit, but only reports. The one gate,
+    `--api-policy`, passes a new name only when the same pull request adds a
+    changeset (`.changeset/*.md`). This repo has no changesets and no
+    release, so the builder would write its own pass. Wiring it also needs
+    two more things: CI must fetch `main` before `pnpm lint`, and a list of
+    subpaths that copies `package.json`'s `exports`. Left for the owner.
 
 ## Why
 

@@ -101,6 +101,11 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 
+`pnpm lint` also holds dead exports to a ledger, `unreachable-ledger.json`. It
+only shrinks: commit what the gate writes back. Adding an entry is the owner's
+call, in a change of its own
+([Nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+
 ```sh
 pnpm format     # biome: format, sort imports and apply its safe fixes, in place
 ```

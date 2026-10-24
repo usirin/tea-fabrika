@@ -33,6 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # `pnpm lint` prunes the code-graph ledger when dead code goes. A change it made here
+      # was not committed, and the ledger on main would stay looser than the code.
+      - run: git diff --exit-code -- unreachable-ledger.json
       - run: pnpm test
       # Experiment 117: each formal check is tied to the code it covers (promises/).
       # It fails when covered code changed and its record was not confirmed again, when
