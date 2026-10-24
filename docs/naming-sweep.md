@@ -17,30 +17,64 @@ type Row = {
 };
 ```
 
-## The worst clashes, first
+## The answer
 
-*Filled in as the sections land.*
+626 names and schema keys, in nine sections. 394 are fine as they are. 232
+are not:
 
-- **`Check`** is a move (code judges an output) and also plan's `{how, what}`
-  value on every criterion. `planProblems` is typed `Check<PlanDraft, Known>`
-  in the same folder that exports the value `Check`.
-- **`readFacts`** is exported twice: plan's Gather of what the code says, and
-  the ledger's read of its event log. `Facts` means "code facts" in plan,
-  "events" in the ledger, and "what the gate read" in `packages/promises`.
-- **`job`** is a task's first criterion in plan, and a scheduled row in the
-  host's `jobs` table (deadlines and lease expiry).
-- **`ask`** is an outcome verb, the ledger's question waiting on a person, a
-  plan question's text, and (until the pick) the machines' input type.
-- **`Verdict`** is exported four times: the criteria book's review row, the
-  promise check's printed result, review's verdict, and the ACP builder's
-  permission answer.
-- **`Built`** is exported twice in build, with two shapes; **`PlanState`** is
-  both plan's machine state and build's "is the plan approved".
-- **`Property`** (picked for `Promise`) now clashes with the promise's own
-  `tool: "property"`.
-- **`Revision` vs `Version`:** a revision is a plan's next words written by
-  code; a version is a criterion's wording number. Each version of a plan is
-  also called a version in the comments.
+| Mark | Rows |
+|---|---|
+| ok | 394 |
+| two-ideas | 115 |
+| differs | 61 |
+| two-words | 51 |
+| collides | 5 |
+
+The big problem is not words that differ from the industry's. It is one word
+used for two things inside this repo: 115 rows. Fixing those first gives the
+most clarity per rename.
+
+## The ten worst clashes
+
+1. **`Check`** is a move (code judges an output), plan's `{how, what}` on
+   every criterion, the asks core's `CheckAsk`, and a record's `check` command.
+   `planProblems` is typed `Check<PlanDraft, Known>` in the folder that exports
+   the value `Check`.
+2. **`ask`** is an outcome verb, the ledger record waiting on a person, a
+   question's text (`RulingAsk.ask`), the combo `createAsk`, and (until the
+   pick) every machine's input type.
+3. **`Facts` and `readFacts`.** `readFacts` is exported three times: plan's
+   code facts, the ledger's events, and ship's PR facts. `prFacts` and the
+   promise gate's facts make five meanings.
+4. **`job`** is a task's first criterion in plan, every hosted stage's input
+   (`PlanJob` is exported twice), and the host's `jobs` table of timers.
+5. **`fold`** is reading the ledger into state (`foldLedger`, `Folded`) and a
+   ticket joining a plan (`fold`, `foldsOf`), in the same file.
+6. **The tag key.** Nineteen different keys tell union cases apart: `kind`,
+   `type`, `phase`, `answer`, `go`, `flow`, `ev`, `how`, `reading`, `do`,
+   `on`, `op` and more.
+7. **Names exported more than once.** `Verdict` four times; `Built` three;
+   `Reviewed`, `PlanState`, `PlanJob`, `Outside`, `Landing`, `Hosting`,
+   `Shell`, `Entry`, `Fenced` twice each; `Row` in three places; `Settings` in
+   five stages.
+8. **`kind`** is every outcome's tag, fabrika's machine type, the ledger row's
+   event type, and the lane's `ChildKind`.
+9. **`Property`** (picked for `Promise`) clashes with the property's own
+   `tool: "property"`, and now means what `law` means.
+10. **Money and tries.** `usd`, `budget`, `cost`, `costUsd`, `spend` name a cap
+    or a cost; `tries`, `limit`, `MAX_RUNS`, `DEFAULT_TRIES` name one cap on
+    attempts.
+
+Close behind: `Revision` vs `Version`, `at` with five meanings, `kept` with
+four, and `stuck:review_failed` vs `send:builder:review_failed`.
+
+## What was picked
+
+The owner picked these on 2026-10-24, and each row says so: `planDraft` →
+`draftPlan`, `PlanAsk` → `PlanInput`, `Numbered` → `WithIds`, `Spent` and
+`Spend` → `Usage`, `stuck:unchecked` → `stuck:unfixed`, `key` → `session`, and
+`Promise` → `Property`. The sweep follows them: every `*Job` and `*Ask` input
+becomes `*Input`, and every `spend` key becomes `usage`.
 
 ## The marks
 
@@ -661,3 +695,142 @@ program on the host).
 | `stuck:read_failed`, `draft_failed`, `over_budget`, `changed`, `write_failed` | how sort stops | none needed | ok | `changed` = the ticket's words moved; `ticket_changed` reads better. 55% |
 | `stuck:unchecked` | its last answer still has problems and the tries are spent | none | differs | `stuck:unfixed`, as plan's (picked 2026-10-24) |
 | `sortName` / `childSorter` / `sortTurn` / `sortWritesOf` / `hostedSort` / `SortJob` | the hosted triage | none needed | ok | `SortJob` → `TriageInput` (section 7) |
+
+## 9. Shared
+
+`primitives.ts`, `combos.ts`, `stages/outcome.ts`, `services.ts`, `asks/`, and the `@kampus/fabrika`
+names the pipeline uses (program, host, ledger, agents).
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| moves / `primitives.ts` | the six moves every step is made of | none found for the set (searched Elm, Temporal, LangGraph); each move is a Cmd, a Sub or a pure function | two-words | AGENTS.md says "moves", the file says "primitives": rename the file `moves.ts`. 75% |
+| `gather` | code reads the world | query ([Fowler, CQS](https://martinfowler.com/bliki/CommandQuerySeparation.html)) | ok | |
+| `act` / `Intended` / `.intent` / `intentOf` | code writes the world, with its intent kept first | command; idempotency key | ok | |
+| `listen` | wait on an outside event | Sub ([Elm guide](https://guide.elm-lang.org/effects/time.html)) | ok | |
+| Draft / `createDraft` / `Draft` / `DraftMsg` / `DraftRun` | an agent produces within limits | an agent run | ok | |
+| `Check` (type) / `checkRun` | code judges an output | a validator; a guard | two-ideas | it is also plan's `{how, what}` on every criterion, `CheckAsk` and the record's `check` command. Keep the move; plan's value → `Verify` (section 1). 70% |
+| Judge / `createJudge` | a small classifier answers one narrow question | LLM-as-a-judge ([Zheng et al., 2023](https://arxiv.org/abs/2306.05685)); a classifier | ok | |
+| `Judged` / `.choice` / `.confidence` | the classifier's raw answer | prediction with a score | ok | |
+| `Ruled` / `.sure` / `.choice` / `.best` / `.confidence` | the answer after the floor | thresholded prediction | two-ideas | "ruled" is also the owner's ruling (`ruled`, `RulingAsk`): `Floored`, or `Sure`. 65% |
+| floor | the lowest confidence that counts | threshold | differs | `threshold`, the classifier word. 60% |
+| `Gate` / `.pass` / `.why` / `pass` / `park` / `gateCheck` / `gateJudge` | the work goes on, or it parks with why | a guard ([XState, guards](https://stately.ai/docs/guards)) | two-ideas | `gate` is also the idempotency write guard (section 7). `park` is a sixth outcome-like verb: keep, glossed "stop and wait". 55% |
+| `Remember` / `.step: writing, reading` / `.write` / `.read` / `remember` / `written` / `inFlight` | write, then read back, and count it done only when the read shows it | read-your-writes ([Jepsen, consistency models](https://jepsen.io/consistency/models/read-your-writes)) | differs | `writeThenRead`, or keep with the gloss. 50% |
+| `sessionOf` | a conversation id made from a name | session id | ok | |
+| `Tried` / `.go: done, again, out_of_tries` / `.tries` / `.note` / `.problems` / `nextTry` | the refine rule on its own | retry ([Temporal, retry policy](https://docs.temporal.io/encyclopedia/retry-policies)) | two-ideas | tag key `go` again; `out_of_tries` here, `unchecked` in outcomes (now `unfixed`): one word, `out_of_tries`. 60% |
+| refine / `createRefineLoop` / `Refining` | draft, check, send the problems back, up to a limit | evaluator-optimizer ([Anthropic, building effective agents](https://www.anthropic.com/engineering/building-effective-agents)) | ok | |
+| `Refining.phase: drafting, done, out_of_tries, failed` / `.brief`, `.run`, `.tries`, `.limit`, `.output`, `.session`, `.problems`, `.error` | where the loop is | none needed | two-words | `limit` here, `tries` in inputs, `MAX_RUNS` in build: one word |
+| `createRefineLoop` config `draft`, `check`, `prompt`, `agent`, `folder` | the loop's parts | none needed | ok | |
+| `key` (every child Cmd, Sub and Msg) | which child an answer is for | Elm's `Cmd.map` by data; correlation id ([EIP](https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html)) | two-ideas | the `key` → `session` pick was for a stage's own state; here it routes children: `child`. 60% |
+| `Reply` / `.id`, `.author`, `.body`, `.at` | one reply in a thread | comment ([GitHub REST, issue comments](https://docs.github.com/en/rest/issues/comments)) | ok | |
+| `Thread` / `.post` (`where`, `text`, `intent`) / `.replies` | where a question is posted and replies are read | thread | ok | |
+| `Question` / `.where`, `.text`, `.who`, `.floor` | a question to people, read by a Judge | none needed | ok | `floor` follows its row |
+| `Asking` / `.phase: posting, waiting, reading, answered, post_failed` / `.key`, `.question`, `.asked`, `.thread`, `.after`, `.reply`, `.choice`, `.by: code, jev` | an ask in flight | human-in-the-loop interrupt ([LangGraph, interrupts](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/)) | two-ideas | the combo's ask is a thread question; the asks core's `Ask` is a ledger record. `createQuestion`. 55% |
+| `createAsk` / `RepliesDeps` | the ask combo | none needed | two-ideas | follows `Asking` |
+| `Child` / `.slot` / `.state` / `Children` / `spawn` / `stepChild` / `allOver` / `slotSubs` | a child per item, each in a fixed Sub slot | spawn ([Erlang, processes](https://www.erlang.org/doc/system/ref_man_processes.html)); nested TEA | ok | |
+| `AnyOutcome` / `.kind: done, send, ask, skip, stuck` | the five verbs | exit reason; none found for the set (outcome-names.md) | ok | |
+| `AnyOutcome.part` | done in part | partial success | ok | |
+| `AnyOutcome.to`, `.who`, `.for`, `.why` | who is next, which person, for what, why | none needed | ok | the AGENTS.md examples |
+| `Words` / `.done`, `.send`, `.ask`, `.skip`, `.stuck` / `OutcomeOf` / `outcomesOf` | a stage's own words | none needed | ok | |
+| `Name` / `nameOf` / `Parts` / `partsOf` (`verb`, `who`, `why`) / `wentWrong` | the printed name `verb:who:why` and its parts | none needed | ok | |
+| `CodeHost` / `.prFacts` / `.change` / `.checksSettled` / `.leftQueue` | the code host, read side | forge API ([GitHub REST](https://docs.github.com/en/rest)) | two-ideas | `prFacts` is a fourth "facts": `pr`. 60% |
+| `leftQueue` answer `.reading: landed, ejected` / `.commit` | how the PR left the merge queue | merged; removed from the queue ([GitHub, merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)) | differs | tag key `reading` → `kind`; `ejected` → `removed`, GitHub's word. 60% |
+| `CodeHostWrites` / `.enqueue` / `.merge` / `.rerunChecks` | the code host, write side | enqueue; merge; re-run failed jobs ([GitHub REST, re-run failed jobs](https://docs.github.com/en/rest/actions/workflow-runs)) | ok | |
+| `Jev` / `.call` / `JevCallFailed` (`_tag`, `cause`) | one HTTP call to the classifier | product name | ok | |
+| `Ask` (asks core) | something waiting on the owner, under a stable id | a user task ([Camunda, user tasks](https://docs.camunda.io/docs/components/modeler/bpmn/user-tasks/)); an interrupt | two-ideas | `ask` has five meanings (section 1). Keep it here, the core's own word, and rename the others. 60% |
+| `Ask.at` | its place in the ledger | sequence number | two-ideas | `seq`: `at` has five meanings. 70% |
+| `Ask.for: plan, stuck, ruling, check` | which kind of ask | none needed | two-ideas | `for` is the outcome's "for what"; this is a tag: `kind`. 65% |
+| `PlanAsk` (asks) / `.plan`, `.tickets`, `.version`, `.data`, `.since`, `.problems` | the owner approves building a plan | approval | ok | the stage input `PlanAsk` is now `PlanInput` (picked 2026-10-24), so this one stands alone |
+| `Approved` / `.version` / `.data` | the last approved version, shown against a change | none needed | ok | |
+| `StuckAsk` / `.task`, `.title`, `.criteria`, `.open` / `.why: no_progress, ran_out` / `.time` | a task the stall rule ran out on | none needed | ok | `time` is a count: `times`. 70% |
+| `RulingAsk` / `.ticket`, `.ask`, `.options`, `.why` | a ticket triage sent to the owner | a decision request | two-ideas | `.ask` → `question`, as `CheckAsk` already says. 75% |
+| `CheckAsk` / `.task`, `.build`, `.by`, `.question`, `.attachments` / `Attachment` (`label`, `ref`) | a yes or no look at one build | a manual check; a review request | two-ideas | `check` again: `LookAsk`, or `ReviewAsk`. 55% |
+| `Answer` / `.answer` / `AnswerBody` / `KINDS` | the owner's answer under the ask's id | none needed | ok | `Answer.answer` reads twice: `body`. 60% |
+| `PlanAnswer.kind: approve, change, no` / `.line`, `.to`, `.why` | the answers to a plan | approve; request changes ([GitHub, PR reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | ok | |
+| `StuckAnswer.kind: remove, keep_going, reword` / `.rounds`, `.criterion`, `.when`, `.result` | the answers to a stuck task | none needed | ok | `when` and `result` are the Gherkin halves (section 1) |
+| `RulingAnswer.kind: rule` / `.answer`, `.rule: lasting, one_off`, `.build` | the answer to a ruling | ADR ([MADR](https://adr.github.io/madr/)) for a lasting one | ok | |
+| `CheckAnswer.kind: yes, no` / `.why` | the answer to a check | none needed | ok | |
+| `Next` (asks) / `.do: build, replan, close, remove_task, keep_going, reopen, ruled, ship, rebuild` | what the core does next with an answer | none needed | two-ideas | the lane exports a `Next` too, tagged by `go`; this one's tag is `do`. `AnswerNext`. 65% |
+| `Settled` / `.ask`, `.answer`, `.next` / `Refused` (`id`, `why`) / `Waiting` (`asks`) / `titleOf` | an answer taken, one refused, and every ask waiting | none needed | two-ideas | `Settled` is also the review's "settled" check state and `TaskState.settled` in the lane. 55% |
+| `Fact` / `.type` | one pipeline event on the ledger | event ([Fowler, event sourcing](https://martinfowler.com/eaaDev/EventSourcing.html)); fact is Datomic's word ([Datomic, datoms](https://docs.datomic.com/whatis/data-model.html)) | differs | `Event`, as the fabrika ledger itself says (`claimed` event). 65% |
+| `Fact.type: planned, judged, reviewed, folded, answered, built, cleared, check_raised, shipped, released` | the event names | past tense ([Microsoft, event sourcing](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing)) | ok | |
+| `Fact.type: ruling_needed`, `lane` | two event names not in the past tense | past tense | differs | `ruling_asked`, `lane_started`. 70% |
+| `Fact.type: judged` vs `reviewed` | a review round's rows; a review round's count | none | two-words | one round, two events: `round_judged`, `round_counted`. 50% |
+| fact keys `plan`, `tickets`, `data`, `problems`, `task`, `head`, `proof`, `rows`, `found`, `open`, `ticket`, `ask`, `options`, `why`, `changes`, `holds`, `build`, `by`, `question`, `attachments`, `lane` | each event's fields | none needed | ok | `ask` follows `RulingAsk.ask`; `holds` follows its row |
+| `Entry` (asks ledger) / `Entry` (fabrika `program/listed.ts`) | a fact with its place; a listed run | none | two-ideas | asks one → `Logged`. 55% |
+| `ROOT` / `ticketName` / `planName` / `homeOf` / `ensureName` | where a fact lives | stream name ([Kafka, topics](https://kafka.apache.org/documentation/)) | ok | `homeOf` is also a fabrika export of the same name |
+| `factsOf` (`<name>/facts`) / `readFacts` / `sendFact` / `appendFact` / `factOfRow` / `memoryLedger` / `steady` | the lease holder's stream, and the reads and writes | append; read all | two-ideas | `readFacts` is exported three times (sections 1 and 6). Follows `Event`: `readEvents`. 70% |
+| `Hold` (lease) / `BuildTrack.holds` / `HOLDS` (packs) | a lease on a name; how many listeners a build waits on | lease; a hold | two-ideas | `Hold` → `Lease`, the ledger's own word. 75% |
+| `WriteOptions` | how a fact is written | none needed | ok | |
+| stall rule / `Stall` / `.last`, `.lowest`, `.stalls`, `.sinceLowest` / `stallStep` / `asksOnStall` | stop when the open list stops shrinking | none found (searched Temporal, Erlang restart intensity, Agile) | ok | |
+| `Folded` / `.plans`, `.asks`, `.answered`, `.superseded`, `.builds` / `foldLedger` | everything the facts say, as one state | projection ([Marten, projections](https://martendb.io/events/projections/)); fold | ok | |
+| `foldsOf` / `PlanTrack.folds` | tickets triage folded into a plan | sub-issues | collides | `foldsOf` and `foldLedger` sit in one file and mean two things (section 8). 75% |
+| `BuildTrack` / `.plan`, `.task`, `.build`, `.changes`, `.holds`, `.heard` / `readyBuilds` | one build and what holds it | none needed | ok | |
+| `planAskId` / `stuckId` / `rulingId` / `checkId` / `criteriaOf` / `bookOf` / `latestOf` / `planFor` / `firstTaskOf` / `openAsks` / `problemWith` / `nextOf` | the fold's reads | none needed | ok | |
+| `asksProgram` / `Reviewed` / `Revised` / `Ruling` / `Build` / `Built` / `BuildRef` / `Cleared` / `Raise` | the asks program's inputs | none needed | two-ideas | `Built` is now exported three times and `Reviewed` twice (sections 3 and 5). 70% |
+| `Told` / `.on: fact, answer` | what the program heard | none needed | two-words | one more tag key, `on` |
+| `Lanes` / `claim` / `release` / `holding` / `holderOf` / `newLane` / `layerLanes` | who holds a ticket | lease ([Kubernetes, leases](https://kubernetes.io/docs/concepts/architecture/leases/)) | ok | |
+| pack / `Pack` / `loadPacks` / `startWithPacks` / `misfit` / `Loaded` / `PackRefused` / `Wired` / `StartedPack` / `readerOf` | an add-on program that hears the core | plugin; extension ([VS Code, extensions](https://code.visualstudio.com/api)) | differs | keep `pack`: the direction note picked it and "plugin" is taken by the Claude Code plugin. 60% |
+| `Places` / `Typed` (`id`, `text`) / `Shell` (packs) / `Hosting` (packs) | a pack's folders, a typed answer, its shell, its hosting | none | two-ideas | `Shell` is also fabrika's shell; `Hosting` is also `hosted/deliver.ts`'s. 70% |
+| laws / `lawHome` / `lawUnfenced` / `lawLost` / `lawOneWins` / `lawRelease` / `runPipelineLaws` | rules every run must keep | invariant ([TLA+](https://lamport.azurewebsites.net/tla/tla.html)); property ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)) | two-words | with `Promise` → `Property` picked, "law" and "property" now name one idea. Keep `law` (every-machine-has-laws.md); gloss it. 50% |
+| `RULINGS` / `Truth` / `changed` / `numberOf` / `plans86b` | the experiments' saved cases | fixtures | ok | |
+| program / `defineProgram` / `.flags`, `.inputs`, `.outputs` | a long-running service a host serves | a durable entity ([Akka, entity](https://doc.akka.io/libraries/akka-core/current/typed/cluster-sharding.html)) | ok | |
+| `kind` (fabrika) | a machine a program declares once | entity type (Akka `EntityTypeKey`, Effect `Entity.make`) | two-ideas | `kind` is also every outcome's tag and the ledger row's event type. The outcome tag is the most read: keep that, rename this one `type`. 50% |
+| `Self` / `.name`, `.fence`, `.incarnation`, `.holder`, `.inbox`, `.reads` | the program's own handle | `self()` ([Erlang, processes](https://www.erlang.org/doc/system/ref_man_processes.html)) | ok | |
+| `Ledger` / `Row` / `.pos`, `.stream`, `.rev`, `.writer`, `.kind`, `.at`, `.data`, `.id` | the one store under the host | an event store ([Marten, appending](https://martendb.io/events/appending.html)) | two-ideas | `Row` is also the criteria book's review row and ship's `Row`. Ledger one → `Record`. 60% |
+| `Fenced` (error) / `Fenced` (`"fenced" \| "unreachable"`) | the lease is gone | fencing token ([Kleppmann, 2016](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)) | two-ideas | two exports of one name: the type → `FenceWord`. 60% |
+| `Monitoring` / `Starting` / `Holding` / `Charging` / `.how` | the host call answers | monitor ([Erlang, monitors](https://www.erlang.org/doc/system/ref_man_processes.html)) | ok | `how` is one more tag key |
+| host `jobs` table / `.kind: deadline, lease_expiry` / `.due_at` | the host's scheduled wake-ups | timers ([Temporal, timers](https://docs.temporal.io/workflows)); alarms ([Durable Objects, alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)) | two-ideas | `job` is also plan's criterion and every hosted stage's input. `timers`. 75% |
+| `Limits` / `.usd`, `.tokens`, `.wallMs`, `.children` | a run's caps | quotas | two-words | `usd` here, `budget` in Settings, `maxBudgetUsd` in the Agent SDK. Settle one money word. 65% |
+| `Spend` / `.costUsd`, `.tokens`, `.context`, `.turns`, `.minutes` / `noSpend` | what a run cost | usage ([Anthropic API, usage](https://docs.anthropic.com/en/api/messages)) | two-words | `Usage`, `noUsage` (picked 2026-10-24) |
+| `DraftRun.key`, `.id`, `.prompt`, `.session` (`id`, `continues`), `.agent`, `.folder` | one agent run | session ([Claude Agent SDK, sessions](https://docs.claude.com/en/docs/agent-sdk/sessions)) | ok | `key` follows the combo's `key` row |
+| supervisor / `one_for_one` and the rest | OTP's supervisor as a program | supervisor ([Erlang, supervisor](https://www.erlang.org/doc/system/sup_princ.html)) | ok | |
+| dead letters / `deadLetters` / `redrive` / `.strikes` | messages set aside after crashing a program | dead-letter queue and redrive ([AWS, SQS dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)) | ok | |
+| journal | a program's saved state on the ledger | journal | ok | |
+| outbox | a pipe's never-lost send | transactional outbox ([microservices.io](https://microservices.io/patterns/data/transactional-outbox.html)) | ok | |
+| kept / `program/kept.ts` | a machine run whose state is saved | durable; persisted | two-ideas | "kept" is also a property's `is: "kept"`, `keeps` an id, and a review note's state. `durable.ts`. 65% |
+| tag keys: `kind`, `type`, `phase`, `answer`, `go`, `flow`, `ev`, `how`, `reading`, `step`, `do`, `on`, `op`, `at`, `for`, `is`, `sure`, `pass`, `_tag` | the key that tells a union's cases apart | discriminant ([TypeScript, discriminated unions](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions)); Effect's `_tag` | two-words | one key per role: `_tag` for errors (Effect), `type` for Msgs (Elm and Redux), `phase` for states, `kind` for every other data union. 60% |
+
+## What the sweep could not settle
+
+Each of these needs an owner's pick, or a fact the sweep did not have.
+
+- **The tag key.** Nineteen keys tell union cases apart. The proposal (one key per role) is
+  60%. What would settle it: count how often each is read in code and tests, and check
+  which key tea's own `Cmd`, `Sub` and Msg types use.
+- **`Check`, the move and the value.** NASA's "verification method" fits plan's value. But
+  the move's name is one of the six in AGENTS.md, so renaming the value is the cheap
+  side. 70%: a reader may still mix up `Verify` and `Check`.
+- **`ask`.** Five meanings. No tracker or workflow engine has one word for "a record waiting
+  on a person": Camunda says user task, LangGraph says interrupt, Temporal has none. The
+  sweep keeps `Ask` for the asks core and renames the others. 60%.
+- **`fold`.** GitHub and Linear say sub-issue and parent. A plan is not quite a parent
+  issue: it is a design that covers tickets. `attach` or `join` is 75%; which one is a
+  matter of taste.
+- **Money words.** `usd`, `budget`, `cost`, `costUsd`, `spend` and `maxBudgetUsd` name a cap
+  or what was paid. The `Usage` pick covers what was paid. The cap still needs one word:
+  `budget` (what it is) or `usd` (its unit).
+- **Tries.** `tries`, `limit`, `MAX_RUNS`, `DEFAULT_TRIES`. Temporal says `maximumAttempts`.
+  `attempts` would match it; `tries` is shorter and already the most used. 55%.
+- **`Fact` or `Event`.** Datomic says fact, event sourcing says event, and the fabrika
+  ledger says event. 65%: `Fact` is spread over many files and the direction notes.
+- **Lane or parent; sort or triage; ruling or decision; research or spike.** All four are
+  plain words already in the direction notes. The sweep leans `triage` (80%) and keeps
+  the other three, glossed. Each is the owner's word to keep or drop.
+- **`Property` and `tool: "property"`.** The pick of `Property` makes the tool word read
+  as the type. `"pbt"` is 70%; `"fast-check"` names a tool, not a method.
+- **`kind` in fabrika.** The program's machine kind follows Akka and Effect. The outcome's
+  `kind` is read far more. Renaming fabrika's (50%) touches every program.
+- **`job`.** Three meanings. Renaming the hosted inputs to `*Input` and the host table to
+  `timers` leaves plan's `job` alone. Whether plan's first criterion should be called a job
+  at all is a design question, not a naming one.
+
+What this sweep cannot tell us:
+
+- It renames nothing. No proposal is tested on a reader, so each confidence is one
+  person's judgment, not a measure.
+- It reads code, not the experiments' write-ups or the direction notes, except where a
+  name comes from one. A name used only in prose is not here.
+- It covers `packages/pipeline` and the `@kampus/fabrika` names the pipeline imports. It
+  does not cover `programs/*`, `packs/*`, `wip`, `legacy`, or fabrika's own internals.
+- A link was checked for an HTTP 200, and a few anchors that did not resolve were dropped.
+  A page that moves later is not caught.
