@@ -496,15 +496,19 @@ if (STEP === "sort") {
 		p !== null ? pPrompt(p.all, ticketOf(n)) : promptFor(dBrief(d as DCache, ticketOf(n)), null);
 	const todo = wanted.filter((n) => (only === undefined || only.includes(n)) && have(n) < RUNS);
 	const price = PRICE[c.model] ?? {in: 0, out: 0, read: 0};
+	// The pilot's first calls cost about twice the input price a token: the SDK writes the prompt to
+	// the cache, at the one-hour rate. A second run of the same prompt reads it back.
+	let input = 0;
 	const estimate = todo.reduce((s, n) => {
 		const tokens = promptOfN(n).length / 4;
 		const runs = RUNS - have(n);
-		const first = have(n) === 0 ? tokens * price.in * 1.25 : tokens * price.read;
-		return s + first + (runs - 1) * tokens * price.read + runs * 1500 * price.out;
+		input += tokens;
+		const first = have(n) === 0 ? tokens * price.in * 2 : tokens * price.read;
+		return s + first + (runs - 1) * tokens * price.read + runs * 1000 * price.out;
 	}, 0);
 	const calls = todo.reduce((s, n) => s + RUNS - have(n), 0);
 	console.log(
-		`${id}, group ${GROUP}, set ${set}: ${calls} sorts on ${todo.length} tickets, about $${estimate.toFixed(2)} at list price with the cache, 1,500 output tokens a call`,
+		`${id}, group ${GROUP}, set ${set}: ${calls} sorts on ${todo.length} tickets, ${Math.round(input)} prompt tokens, about $${estimate.toFixed(2)} at list price (cache writes at twice the input price, 1,000 output tokens a call)`,
 	);
 	if (process.env.PROMPT === "1" && todo[0] !== undefined) console.log(promptOfN(todo[0]));
 	if (process.env.DRY === "1") process.exit(0);
