@@ -96,3 +96,38 @@ plan's ids use.
 | `Claim` (local) / `claimFields` / `claimProblems` | one criterion's words | assertion; the ledger's `claims.ts` means a held ticket (a lease) | two-ideas | `Statement`. Local type, low cost. 50% |
 | `Known` | the user names known, or `null` | none needed | ok | |
 | `PlanCmd`, `RunSub` | the machine's Cmds and its Sub | Cmd and Sub ([Elm guide, subscriptions](https://guide.elm-lang.org/effects/time.html)) | ok | |
+
+## 2. The verify writer and promises
+
+Not built yet as a stage. The names come from
+[Promises in the pipeline](./direction/promises-in-the-pipeline.md) and from
+`packages/promises/`, the record and gate built in experiment 117, whose names
+a promise stage would inherit.
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| `Promise` (sketch type) | a criterion that lasts after the ticket closes: what the code always does | a property, safety or liveness ([learn TLA+, temporal properties](https://learntla.com/core/temporal-logic.html)); an invariant ([learn TLA+, invariants](https://learntla.com/core/invariants.html)); JS's own `Promise` ([MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)) | collides | `Guarantee`. `Invariant` misnames a liveness promise ("never waits forever"); `Property` clashes with the `property` tool. 55% |
+| promise vs law | a promise is a lasting rule on the code; a law is a rule a machine must always keep ([every machine has laws](./direction/every-machine-has-laws.md)), and the record's `check` runs a law | both are properties of the system | two-words | decide whether a promise is "a law the owner approved". If yes, one word. 50%: the two may differ in scope (a promise can span machines) |
+| `says` (sketch) / `promise` (record key) | the promise in one plain sentence | statement | two-words | `says` in both. 70% |
+| `harm` | what goes wrong for someone if it breaks | failure effect ([FMEA](https://en.wikipedia.org/wiki/Failure_mode_and_effects_analysis)) | ok | plain word for the effect column |
+| `is: "new" \| "kept"` | the ticket adds it, or today's code must already keep it | a new test written red first ([Fowler, TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html)) vs a regression test ([Wikipedia](https://en.wikipedia.org/wiki/Regression_testing)) or characterization test ([Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)) | two-ideas | `"new" \| "regression"`. `kept` already means "persisted" in fabrika (`program/kept.ts`) and "keeps an id" in plan. 65% |
+| `tool: "search" \| "tla" \| "property" \| "proof"` | which kind of check keeps it | model checking ([Wikipedia](https://en.wikipedia.org/wiki/Model_checking)), property-based testing ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)), proof | ok | the sketch drops `search` (2026-10-23); the record still has it |
+| `covers` / `Covers` / `Piece` | the code a promise is about, by file and top-level name | coverage; Stryker's `coveredBy` ([Stryker, mutant states](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)) | ok | |
+| `exam` | the check itself: law, plant, world and checker; a change to it asks the owner | test oracle ([Wikipedia](https://en.wikipedia.org/wiki/Test_oracle)) | differs | keep: "nobody writes their own exam" is a rule people already quote. 60% |
+| `Plant` / planted break / `PROMISE_PLANT` | a hand-written break that shows a check can fail | fault seeding, also bebugging ([Wikipedia](https://en.wikipedia.org/wiki/Bebugging)); a mutant when a tool makes it | two-words | `seeded fault` for the hand-made one, `mutant` for the tool's, and say which in each place. 60% |
+| `prints` / `printOf` | a hash of each piece's code at the last confirm | fingerprint ([Wikipedia](https://en.wikipedia.org/wiki/Fingerprint_(computing))) | ok | short for fingerprint |
+| `confirmed` / `confirm` | someone said the check still describes the code, at a commit | snapshot update ([Jest, snapshot testing](https://jestjs.io/docs/snapshot-testing)) | ok | |
+| `in step` / `checks_in_step` | every record's prints match the code | drift, as in "no drift"; none standard | ok | |
+| `Entry` (promises) | one promise record | record; also `Entry` in the criteria book and in the ledger | two-ideas | `PromiseRecord` (or `GuaranteeRecord`). 65% |
+| `Verdict` `{held, checked, plant, bound, path, why}` | what a check command prints last | result; `path` is a counterexample ([fast-check, properties](https://fast-check.dev/docs/core-blocks/properties/)) or error trace | two-ideas | `CheckResult`; `path` → `counterexample`. The criteria book and review also export a `Verdict`. 60% |
+| `Facts` (promises `judge.ts`) | what the gate read about one record | input | two-ideas | `Read` or `Gathered`; a third meaning of facts. 55% |
+| `judge` / `Judged` | the pure gate over one record's facts | gate; Judge is also a move (a small classifier) | two-ideas | `gate`, `Gated`. 70% |
+| `Problem.why`: `gone`, `stale`, `red`, `not_caught`, `no_verdict` | why a record fails the gate | Stryker's states: Killed, Survived, NoCoverage ([Stryker](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)) | ok | `not_caught` is Stryker's Survived for a plant; keep plain |
+| verify writer | the agent, not the builder, that writes each check before the build | test generator in Meta's ACH ([Meta, 2025](https://arxiv.org/abs/2501.12862)); evaluator in an evaluator-optimizer loop ([Anthropic, building effective agents](https://www.anthropic.com/engineering/building-effective-agents)) | differs | `tester`, outcome `send:tester:mutant_survived`. 55%: "tester" may read as a person |
+| `writeChecks` / `checks_write`, `checks_today`, `checks_hold`, `checks_kill_mutants` | the steps that write and run the promise checks | tests or specs; "check" is also the move and a GitHub check run | two-ideas | `tests_write`, `tests_today`, ... when the tool is a test; one word is open while TLA+ stays a tool. 50% |
+| red first | a new promise's check fails on today's code | red, green, refactor ([Fowler, TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html)) | ok | |
+| `mutant`, kill, survived, equivalent mutant | mutation testing's words | the same ([Stryker, introduction](https://stryker-mutator.io/docs/stryker-js/introduction/)) | ok | |
+| skip list | kinds of mutant left out, such as log text | Stryker ignorers ([Stryker, configuration](https://stryker-mutator.io/docs/stryker-js/configuration/)); Google's arid nodes | differs | `ignore list`, Stryker's own word. 75% |
+| disable comment | `// Stryker disable` on one line, with a reason | the same ([Stryker, disable mutants](https://stryker-mutator.io/docs/stryker-js/disable-mutants/)) | ok | |
+| `ask:owner:already_kept`, `ask:owner:not_kept`, `ask:owner:check_change` | the plan was wrong about today's code, or a diff touches a check | none found | differs | follow the `new`/`kept` pick: `already_holds`, `regression`. 50% |
+| `send:builder:promise_red` | ship found a promise red or out of step | failed required check | differs | follows the `Promise` pick |
