@@ -19,6 +19,7 @@ until the owner confirms it.
 | [The ledger sits behind a service, and code hosting behind another](./ledger-behind-a-service.md) | Two services: `Ledger` for the record, `CodeHost` for pull requests, checks and the queue. GitHub is the first implementation of each. | decided, names open |
 | [The backend is a library](./backend-as-a-library.md) | Typed services that code imports, not a command-line tool that agents call. | decided |
 | [Jev: the same answer, cheaper](./jev-same-answer-cheaper.md) | Jev is measured by agreement with the big model, never trusted to remove a person. | decided |
+| [Agents run on opus, for now](./agents-run-on-opus-for-now.md) | Triage, plan and review run on opus; triage is the entry point and gets no cheap model. Builder-type agents are the open seat. Cheaper comes from narrow questions asked of Jev, not a smaller LLM. Other setups are tried once the Codex backend runs. | decided 2026-10-24 |
 | [Elm first](./elm-first.md) | Name what Elm does before adding any new shape. Parents are written by hand. | decided |
 | [Read fresh, run alone](./read-fresh-run-alone.md) | A stage reads the facts again at the moment it acts, so every stage machine can also run by itself. | decided |
 | [Ask for decisions, not facts](./ask-for-decisions-not-facts.md) | A person is asked for a decision or an act. A fact is read from the ledger. | decided |
