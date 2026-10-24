@@ -5,7 +5,7 @@
 // Node at the edge, said out loud: `node:child_process` for `gh`, as the other
 // replay scripts do.
 import {execFile} from "node:child_process";
-import {query} from "@anthropic-ai/claude-agent-sdk";
+import {type Options, query} from "@anthropic-ai/claude-agent-sdk";
 import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
 import {agentEnv} from "@kampus/fabrika/agents/sandbox";
 import {Option, Schema} from "effect";
@@ -262,12 +262,16 @@ export function promptOf(
 export const SONNET_IN = 3 / 1e6;
 export const SONNET_OUT = 15 / 1e6;
 
-/** One sort call through the Agent SDK: no tools, no skills, no settings, the answer read back by its schema. */
+/**
+ * One sort call through the Agent SDK: no tools, no skills, no settings, the answer read back by its
+ * schema. With no `effort`, none is sent and the model runs at its own default.
+ */
 export async function sortOnce(
 	n: number,
 	prompt: string,
 	cwd: string,
 	model = "sonnet",
+	effort?: Options["effort"],
 ): Promise<Run & {model: string}> {
 	const started = Date.now();
 	let seen = "";
@@ -275,6 +279,7 @@ export async function sortOnce(
 		prompt,
 		options: {
 			model,
+			...(effort === undefined ? {} : {effort}),
 			systemPrompt: SYSTEM,
 			tools: [],
 			skills: [],
