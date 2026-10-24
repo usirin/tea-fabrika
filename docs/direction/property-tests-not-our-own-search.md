@@ -146,17 +146,25 @@ mutants.
   lanes world, `specs.ts` and the promise check. So ship's entry in
   `layer-rules.json` stays. Next: move `specs.ts` and the promise check to
   `laws/ship-pbt.ts`.
-- **Owner to check: workarounds in our code.** This note says a gap is not
-  worked around here. 121 worked around eight of them, about 200 lines in
-  `laws/ship-pbt.ts`, to measure the tool at all.
-  - The proposal: a workaround is allowed only next to its demlik issue, and
-    it leaves when that issue closes.
-  - Why: without them the tool could not reach ship's deep states, and the
-    new laws are worth too much to wait for.
-  - What it costs: about 200 lines of our own test code, the kind this note
-    warns against.
-  - How sure: 70%. The doubt is that the workarounds stay for good if
-    demlik never gets to the issues.
+- **Workarounds in our code.** 121 worked around eight gaps, about 200
+  lines in `laws/ship-pbt.ts`, to measure the tool at all. They stay as
+  merged, with no rule for more, because nothing more is ported (next item).
+
+## Stopped here (2026-10-24)
+
+- **No more proving fabrika's own machines for now.** Nothing more is
+  ported to tea's pbt, and the old pipeline gets no fixes: it is rebuilt
+  ([Sweep the core; rebuild the pipeline small](./sweep-the-core-rebuild-the-pipeline.md)).
+  The saved-state hole and the duplicate criterion id go on the new ship
+  stage's list.
+- **The next work is the pipeline's own checks:** the verify step of
+  [Promises in the pipeline](./promises-in-the-pipeline.md), with the same
+  tools. Fabrika is tested later the same way, as one more repo the
+  pipeline works on.
+- **Why:** checks in the pipeline are the product. The tool question is
+  answered well enough for that.
+- **What it costs:** fabrika's own machines stay less tested for a while.
+- **How sure: 80%.** Experiment 122 is the first test of the verify step.
 
 ## Not decided here
 
