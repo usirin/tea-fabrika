@@ -109,7 +109,15 @@ mutants.
 - **Run 2: plus the two new laws.**
   - It caught 118 of 150. The new laws alone caught 73, and 65 of those
     got past both of 119's tools.
-  - So the laws were what was thin, as 119 said. The tool matters less.
+  - 73 is an upper bound, not a settled count. 52 of the 73 came from
+    "which outcome a run gives" alone. That law works out the gate's answer
+    again, in about 155 lines. So it fails on any change to an outcome,
+    harmless or not, and every change to the gate means changing it too.
+  - Its lone catches were not checked for harmless changes, and both laws
+    were written after reading 119's misses.
+  - So "the laws were what was thin" is likely, not settled. A hand check of
+    the 52 is running (2026-10-24). Laws written blind for another stage,
+    before its mutants are seen, would settle it.
 - **A saved-state property found a real hole.** A saved state whose two
   proofs name different heads lands a head that was never sent. Not fixed
   yet.
