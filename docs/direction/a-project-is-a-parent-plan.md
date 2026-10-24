@@ -22,6 +22,9 @@ Decided 2026-10-18.
   ticket the plan covers. Plans are the only shape; there are no epics.
   - Each story says which ticket it came from, the same way each criterion
     says which story it serves.
+  - *On hold from 2026-10-24: triage does not fold
+    ([sort-answers-yes-or-no.md](./sort-answers-yes-or-no.md)), so for now
+    every plan covers one ticket. The shape stays able to hold more.*
 - **The plan is the one shape; everything under it is a sub-ticket.** The
   reports it covers and the tasks it splits into are the same kind of
   sub-ticket. A project is a plan whose sub-tickets include plans.
@@ -29,6 +32,7 @@ Decided 2026-10-18.
     report → sort → plan → build, and only the supervisor starts a builder.
   - A new report that fits an approved plan becomes one more sub-ticket. The
     plan changed, so it comes back to the owner for approval of what changed.
+    *On hold from 2026-10-24, with fold.*
 - **What a plan must hold** (decided 2026-10-18, kept as is for now):
   - user stories first, each with an id, for every kind of user;
   - every criterion serves a story, and every story is served by at least one

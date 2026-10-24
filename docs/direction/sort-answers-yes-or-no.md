@@ -5,7 +5,8 @@ Decided 2026-10-18.
 *Renamed 2026-10-24: in the new pipeline this step is called **triage**, the
 industry's word for it. It takes a ticket from the ledger and triages it to its
 next step. "Sort" had no written reason; it came from "triage only sorts" on
-2026-10-18. Which answers triage gives is being looked at again.*
+2026-10-18. Which answers triage gives is being looked at again. Fold was
+dropped on 2026-10-24 (below).*
 
 ## What was decided
 
@@ -19,6 +20,30 @@ next step. "Sort" had no written reason; it came from "triage only sorts" on
   everything fresh. There is no separate path.
 - **Sort's duplicate check reads closed tickets too.** A new report about the
   same thing finds the old "no" and its reason, so a reopen needs no clock.
+- **Triage does not fold, for now** (decided 2026-10-24, from experiment 133).
+  A fold was a yes that named an open plan the ticket joins (`partOf`). It
+  goes. Every yes that needs a plan starts a plan of its own.
+
+  ```ts
+  // demlik #389: filed 21 seconds after #388, by the same filer, built in #388's PR.
+  // Before: {answer: "yes", next: "plan", partOf: 388, why: "…"}
+  // Now:    {answer: "yes", next: "plan", why: "…"}   // a plan of its own, and a PR of its own
+  ```
+
+  - **Why:** triage folded right 2 of 26 times. 9 of the 13 real folds were
+    batch siblings whose target was not a plan yet when they came in. The
+    others turned on "can one PR carry both?", which needs the code. Making it
+    work needs a join rule, a rule for two planners running at once, and
+    planning a plan again. [The smallest ledger](./smallest-ledger-proof-to-grow.md)
+    says links wait for a run that needs them.
+  - **Cost:** a batch like demlik #388 to #392 becomes five plans for the
+    owner to approve and five PRs, each later one catching up with main.
+    Folds were at least 13 of about 400 closed demlik tickets.
+  - **The bar's `carried` rule goes with it.** Its reason said "folded into
+    another ticket". The same work is a duplicate.
+  - **What would bring it back:** batches that cost the owner real time, or
+    sibling PRs that keep fighting. Experiment 136 asks whether the planner,
+    which reads the code, could fold.
 
 ## Why
 
@@ -74,7 +99,8 @@ Decided 2026-10-18, from experiment 92. Sort says no when the ticket:
 
 - is already fixed on main;
 - is about something that was removed;
-- is already carried by another ticket;
+- ~~is already carried by another ticket;~~ dropped 2026-10-24 with fold (see
+  above); the same work is a duplicate;
 - was replaced by a later design;
 - asks again what a decision record or ruling already said no to;
 - is a bug in the pipeline tool itself, so it belongs in that tool's repo;
