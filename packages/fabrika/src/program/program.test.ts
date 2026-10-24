@@ -2,8 +2,8 @@ import {setFlagsFromString} from "node:v8";
 import {runInNewContext} from "node:vm";
 import {defineMachine} from "@demlik/tea";
 import {run as runMachine} from "@demlik/tea/effect";
+import {describe, expect, it} from "@effect/vitest";
 import {Cause, Context, Deferred, Effect, Fiber, Layer, Schema, Stream} from "effect";
-import {describe, expect, it} from "vitest";
 import {ear} from "./ear.ts";
 import {WINDOW} from "./outbox.ts";
 import {
@@ -587,127 +587,133 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 	// A receiver that holds its acks until it is let go: what a slow disk, or a slow stage, looks like
 	// from the sender. The sender waits once WINDOW values are sent and not acked, like a writer on a
 	// full Unix pipe, and nothing it sent is lost or held past that.
-	it("a slow receiver: the sender waits at WINDOW unacked values, every value arrives once and in order, and both end", async () => {
-		const SENT = 4 * WINDOW;
-		let sent = 0;
-		let acked = 0;
-		let most = 0;
-		const counts = defineProgram({
-			name: "counts",
-			description: "Sends 0, 1, 2, ... then ends.",
-			inputs: {},
-			outputs: {n: output(Schema.Int, "A number.")},
-			main: ({send}) =>
-				Effect.forEach(
-					Array.from({length: SENT}, (_, i) => i),
-					(i) =>
-						send("n", i).pipe(
-							Effect.andThen(
-								Effect.sync(() => {
-									sent++;
-									most = Math.max(most, sent - acked);
+	it.live(
+		"a slow receiver: the sender waits at WINDOW unacked values, every value arrives once and in order, and both end",
+		() =>
+			Effect.gen(function* () {
+				const SENT = 4 * WINDOW;
+				let sent = 0;
+				let acked = 0;
+				let most = 0;
+				const counts = defineProgram({
+					name: "counts",
+					description: "Sends 0, 1, 2, ... then ends.",
+					inputs: {},
+					outputs: {n: output(Schema.Int, "A number.")},
+					main: ({send}) =>
+						Effect.forEach(
+							Array.from({length: SENT}, (_, i) => i),
+							(i) =>
+								send("n", i).pipe(
+									Effect.andThen(
+										Effect.sync(() => {
+											sent++;
+											most = Math.max(most, sent - acked);
+										}),
+									),
+								),
+							{discard: true, concurrency: 1},
+						),
+				});
+				const got: number[] = [];
+				const held: Effect.Effect<void>[] = [];
+				const go = Effect.runSync(Deferred.make<void>());
+				const slow = defineProgram({
+					name: "slow",
+					description: "Takes numbers, and acks them only once it is let go.",
+					inputs: {n: input(Schema.Int, "A number.", {ack: "manual"})},
+					outputs: {},
+					main: ({inputs}) =>
+						inputs.n.pipe(
+							Stream.runForEach(({value, ack}) =>
+								Effect.gen(function* () {
+									got.push(value);
+									const counted = ack.pipe(Effect.andThen(Effect.sync(() => acked++)));
+									if (yield* Deferred.isDone(go)) yield* counted;
+									else held.push(counted);
 								}),
 							),
 						),
-					{discard: true, concurrency: 1},
-				),
-		});
-		const got: number[] = [];
-		const held: Effect.Effect<void>[] = [];
-		const go = Effect.runSync(Deferred.make<void>());
-		const slow = defineProgram({
-			name: "slow",
-			description: "Takes numbers, and acks them only once it is let go.",
-			inputs: {n: input(Schema.Int, "A number.", {ack: "manual"})},
-			outputs: {},
-			main: ({inputs}) =>
-				inputs.n.pipe(
-					Stream.runForEach(({value, ack}) =>
-						Effect.gen(function* () {
-							got.push(value);
-							const counted = ack.pipe(Effect.andThen(Effect.sync(() => acked++)));
-							if (yield* Deferred.isDone(go)) yield* counted;
-							else held.push(counted);
-						}),
-					),
-				),
-		});
-		const seen = await Effect.runPromise(
-			Effect.gen(function* () {
-				const target = yield* start(slow, {});
-				if (target.kind !== "running") return null;
-				const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
-				if (source.kind !== "running") return null;
-				// Held: WINDOW values reach the receiver, and the sender waits on the next.
-				while (got.length < WINDOW) yield* Effect.sleep("1 millis");
-				yield* Effect.sleep("30 millis");
-				const waiting = {sent, got: got.length};
-				// Let go: the held acks are kept, and from here each value is acked as it comes.
-				yield* Deferred.succeed(go, undefined);
-				for (const one of held.splice(0)) yield* one;
-				return {
-					waiting,
-					from: yield* source.run.ended,
-					to: yield* target.run.ended,
-				};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({
-			waiting: {sent: WINDOW, got: WINDOW},
-			from: {kind: "ended", unread: {}},
-			to: {kind: "ended", unread: {}},
-		});
-		expect(got).toEqual(Array.from({length: SENT}, (_, i) => i));
-		expect(most).toBeLessThanOrEqual(WINDOW);
-		expect(acked).toBe(SENT);
-	});
+				});
+				const seen = yield* Effect.gen(function* () {
+					const target = yield* start(slow, {});
+					if (target.kind !== "running") return null;
+					const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
+					if (source.kind !== "running") return null;
+					// Held: WINDOW values reach the receiver, and the sender waits on the next.
+					while (got.length < WINDOW) yield* Effect.sleep("1 millis");
+					yield* Effect.sleep("30 millis");
+					const waiting = {sent, got: got.length};
+					// Let go: the held acks are kept, and from here each value is acked as it comes.
+					yield* Deferred.succeed(go, undefined);
+					for (const one of held.splice(0)) yield* one;
+					return {
+						waiting,
+						from: yield* source.run.ended,
+						to: yield* target.run.ended,
+					};
+				}).pipe(Effect.scoped);
+				expect(seen).toEqual({
+					waiting: {sent: WINDOW, got: WINDOW},
+					from: {kind: "ended", unread: {}},
+					to: {kind: "ended", unread: {}},
+				});
+				expect(got).toEqual(Array.from({length: SENT}, (_, i) => i));
+				expect(most).toBeLessThanOrEqual(WINDOW);
+				expect(acked).toBe(SENT);
+			}),
+	);
 
-	it("into an input that does not ack, the sender never waits on the receiver: a pipe as before", async () => {
-		let sent = 0;
-		const counts = defineProgram({
-			name: "counts",
-			description: "Sends 0, 1, 2, ... then ends.",
-			inputs: {},
-			outputs: {n: output(Schema.Int, "A number.")},
-			main: ({send}) =>
-				Effect.forEach(
-					Array.from({length: 4 * WINDOW}, (_, i) => i),
-					(i) => send("n", i).pipe(Effect.andThen(Effect.sync(() => sent++))),
-					{discard: true, concurrency: 1},
-				),
-		});
-		const go = Effect.runSync(Deferred.make<void>());
-		const got: number[] = [];
-		const late = defineProgram({
-			name: "late",
-			description: "Reads numbers once it is let go.",
-			inputs: {n: input(Schema.Int, "A number.")},
-			outputs: {},
-			main: ({inputs}) =>
-				Deferred.await(go).pipe(
-					Effect.andThen(inputs.n.pipe(Stream.runForEach((n) => Effect.sync(() => got.push(n))))),
-				),
-		});
-		const seen = await Effect.runPromise(
+	it.live(
+		"into an input that does not ack, the sender never waits on the receiver: a pipe as before",
+		() =>
 			Effect.gen(function* () {
-				const target = yield* start(late, {});
-				if (target.kind !== "running") return null;
-				const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
-				if (source.kind !== "running") return null;
-				const from = yield* source.run.ended;
-				const before = got.length;
-				yield* Deferred.succeed(go, undefined);
-				return {from, sent, before, to: yield* target.run.ended};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({
-			from: {kind: "ended", unread: {}},
-			sent: 4 * WINDOW,
-			before: 0,
-			to: {kind: "ended", unread: {}},
-		});
-		expect(got).toHaveLength(4 * WINDOW);
-	});
+				let sent = 0;
+				const counts = defineProgram({
+					name: "counts",
+					description: "Sends 0, 1, 2, ... then ends.",
+					inputs: {},
+					outputs: {n: output(Schema.Int, "A number.")},
+					main: ({send}) =>
+						Effect.forEach(
+							Array.from({length: 4 * WINDOW}, (_, i) => i),
+							(i) => send("n", i).pipe(Effect.andThen(Effect.sync(() => sent++))),
+							{discard: true, concurrency: 1},
+						),
+				});
+				const go = Effect.runSync(Deferred.make<void>());
+				const got: number[] = [];
+				const late = defineProgram({
+					name: "late",
+					description: "Reads numbers once it is let go.",
+					inputs: {n: input(Schema.Int, "A number.")},
+					outputs: {},
+					main: ({inputs}) =>
+						Deferred.await(go).pipe(
+							Effect.andThen(
+								inputs.n.pipe(Stream.runForEach((n) => Effect.sync(() => got.push(n)))),
+							),
+						),
+				});
+				const seen = yield* Effect.gen(function* () {
+					const target = yield* start(late, {});
+					if (target.kind !== "running") return null;
+					const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
+					if (source.kind !== "running") return null;
+					const from = yield* source.run.ended;
+					const before = got.length;
+					yield* Deferred.succeed(go, undefined);
+					return {from, sent, before, to: yield* target.run.ended};
+				}).pipe(Effect.scoped);
+				expect(seen).toEqual({
+					from: {kind: "ended", unread: {}},
+					sent: 4 * WINDOW,
+					before: 0,
+					to: {kind: "ended", unread: {}},
+				});
+				expect(got).toHaveLength(4 * WINDOW);
+			}),
+	);
 });
 
 describe("how a run ends", () => {

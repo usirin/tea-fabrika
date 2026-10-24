@@ -2,10 +2,10 @@ import {existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {describe, expect, it} from "@effect/vitest";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, type FileSystem, type Path, type Scope} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {describe, expect, it} from "vitest";
 import {ear} from "../../program/ear.ts";
 import {type Given, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
@@ -73,15 +73,21 @@ const fake = (folder: string, more: Partial<Flags> = {}): Flags => ({
 	...more,
 });
 
-const until = (check: () => boolean) =>
+const until = (check: () => boolean, what: string) =>
 	Effect.gen(function* () {
 		while (!check()) yield* Effect.sleep(Duration.millis(10));
-	});
+	}).pipe(
+		// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for.
+		Effect.onInterrupt(() => Effect.logError(`waited for ${what}`)),
+	);
 
 type Node = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
+const onNode = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
+	effect.pipe(Effect.scoped, Effect.provide(nodeServices));
+
 const run = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
-	Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(nodeServices)));
+	Effect.runPromise(onNode(effect));
 
 describe("acp on the fake agent", () => {
 	it("three turns (read two files and answer, then two follow-ups): three answers, one transcript of three whole turns", async () => {
@@ -172,69 +178,75 @@ describe("acp on the fake agent", () => {
 		expect(readFileSync(join(folder, "written.txt"), "utf8")).toBe("written\n");
 	});
 
-	it("cancel: the turn running ends cancelled, and the next one runs", async () => {
-		const folder = scratch();
-		const {results, transcript} = await run(
-			Effect.gen(function* () {
-				runs += 1;
-				const {started, heard, transcript} = yield* life(
-					fake(folder),
-					memoryStorage(),
-					`acp:test-${runs}`,
-				);
-				yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
-				yield* tell(started.run, "prompt", "and now?");
-				started.close("prompt");
-				yield* until(() => promptsSent(folder).length === 1);
-				yield* tell(started.run, "cancel", "now");
-				yield* started.run.ended;
-				return {results: heard.result.values, transcript: transcript()};
-			}),
-		);
-		expect(results.map((r) => r.stop)).toEqual(["cancelled", "end_turn"]);
-		expect(transcript?.turns.map((t) => t.stop)).toEqual(["cancelled", "end_turn"]);
-	});
+	it.live("cancel: the turn running ends cancelled, and the next one runs", () =>
+		Effect.gen(function* () {
+			const folder = scratch();
+			const {results, transcript} = yield* onNode(
+				Effect.gen(function* () {
+					runs += 1;
+					const {started, heard, transcript} = yield* life(
+						fake(folder),
+						memoryStorage(),
+						`acp:test-${runs}`,
+					);
+					yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
+					yield* tell(started.run, "prompt", "and now?");
+					started.close("prompt");
+					yield* until(() => promptsSent(folder).length === 1, "the first prompt");
+					yield* tell(started.run, "cancel", "now");
+					yield* started.run.ended;
+					return {results: heard.result.values, transcript: transcript()};
+				}),
+			);
+			expect(results.map((r) => r.stop)).toEqual(["cancelled", "end_turn"]);
+			expect(transcript?.turns.map((t) => t.stop)).toEqual(["cancelled", "end_turn"]);
+		}),
+	);
 
 	for (const reopen of ["load", "resume"] as const)
-		it(`stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`, async () => {
-			const folder = scratch();
-			const storage = memoryStorage();
-			runs += 1;
-			const id = `acp:test-${runs}`;
-			const flags = fake(folder, {reopen});
-			await run(
+		it.live(
+			`stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`,
+			() =>
 				Effect.gen(function* () {
-					const {started, heard} = yield* life(flags, storage, id);
-					yield* tell(started.run, "prompt", "Read a.txt and say what it says.");
-					yield* tell(started.run, "prompt", "slowly read b.txt");
-					started.close("prompt");
-					yield* heard.result.upTo(1);
-					yield* until(() => promptsSent(folder).length === 2);
-					yield* started.stop;
+					const folder = scratch();
+					const storage = memoryStorage();
+					runs += 1;
+					const id = `acp:test-${runs}`;
+					const flags = fake(folder, {reopen});
+					yield* onNode(
+						Effect.gen(function* () {
+							const {started, heard} = yield* life(flags, storage, id);
+							yield* tell(started.run, "prompt", "Read a.txt and say what it says.");
+							yield* tell(started.run, "prompt", "slowly read b.txt");
+							started.close("prompt");
+							yield* heard.result.upTo(1);
+							yield* until(() => promptsSent(folder).length === 2, "the second prompt");
+							yield* started.stop;
+						}),
+					);
+					const again = yield* onNode(
+						Effect.gen(function* () {
+							const {started, heard, transcript} = yield* life(flags, storage, id);
+							yield* started.run.ended;
+							return {
+								opened: heard.opened.values,
+								results: heard.result.values,
+								transcript: transcript(),
+							};
+						}),
+					);
+					const sent = promptsSent(folder);
+					// The same session, both starts; the cut prompt sent twice, the answered one once.
+					expect(new Set(sent.map((l) => l.split(" ")[1])).size).toBe(1);
+					expect(sent.map((l) => l.split(" ")[3])).toEqual(["Read", "slowly", "slowly"]);
+					expect(again.opened).toMatchObject([{how: reopen, earlier: 1, resent: 1}]);
+					expect(again.results).toMatchObject([{turn: 2, stop: "end_turn"}]);
+					// Loaded, the transcript comes back from the replay; resumed, only what came after.
+					const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
+					if (reopen === "load") expect(replayed).toBeGreaterThan(0);
+					else expect(replayed).toBe(0);
 				}),
-			);
-			const again = await run(
-				Effect.gen(function* () {
-					const {started, heard, transcript} = yield* life(flags, storage, id);
-					yield* started.run.ended;
-					return {
-						opened: heard.opened.values,
-						results: heard.result.values,
-						transcript: transcript(),
-					};
-				}),
-			);
-			const sent = promptsSent(folder);
-			// The same session, both starts; the cut prompt sent twice, the answered one once.
-			expect(new Set(sent.map((l) => l.split(" ")[1])).size).toBe(1);
-			expect(sent.map((l) => l.split(" ")[3])).toEqual(["Read", "slowly", "slowly"]);
-			expect(again.opened).toMatchObject([{how: reopen, earlier: 1, resent: 1}]);
-			expect(again.results).toMatchObject([{turn: 2, stop: "end_turn"}]);
-			// Loaded, the transcript comes back from the replay; resumed, only what came after.
-			const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
-			if (reopen === "load") expect(replayed).toBeGreaterThan(0);
-			else expect(replayed).toBe(0);
-		});
+		);
 
 	it("a folder in a repository is refused before any harness starts", async () => {
 		const inRepo = await run(

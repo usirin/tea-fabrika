@@ -1,9 +1,9 @@
+import {describe, expect, it} from "@effect/vitest";
 import {defineProgram, ear, output, start, tell} from "@kampus/fabrika";
 import {misfit} from "@kampus/pipeline/asks/packs";
 import {asksProgram, Built, type Cleared, type Raise} from "@kampus/pipeline/asks/program";
 import {planOf, taskId, ticketId} from "@kampus/pipeline/ids";
 import {Effect, Layer} from "effect";
-import {describe, expect, it} from "vitest";
 import pack, {BY, fakeShots, Seen, uiProgram, visibleOf} from "./index.ts";
 
 // The ui pack on its own: which builds it lets go, which it asks about, and
@@ -23,11 +23,11 @@ describe("the ui-verification pack", () => {
 		).toEqual(["src/ui/inbox.ts", "web/page.tsx", "web/site.css"]);
 	});
 
-	it("clears a build no user sees, and asks about one they do, with before and after", async () => {
-		const cleared = ear<Cleared>();
-		const raised = ear<Raise>();
-		await Effect.runPromise(
-			Effect.gen(function* () {
+	it.live("clears a build no user sees, and asks about one they do, with before and after", () =>
+		Effect.gen(function* () {
+			const cleared = ear<Cleared>();
+			const raised = ear<Raise>();
+			yield* Effect.gen(function* () {
 				const started = yield* start(uiProgram, {}, {cleared: cleared.hear, raise: raised.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				yield* tell(started.run, "built", {
@@ -48,16 +48,16 @@ describe("the ui-verification pack", () => {
 			}).pipe(
 				Effect.scoped,
 				Effect.provide(Layer.mergeAll(fakeShots("shots"), Layer.succeed(Seen, {patterns: SEEN}))),
-			),
-		);
-		expect(cleared.values).toEqual([{plan: PLAN, task: T1, build: 1, by: BY}]);
-		expect(raised.values[0]?.attachments[0]?.ref).toBe("shots/367-t2-b1-before.png");
-		expect(raised.values[0]?.attachments.map((a) => a.label)).toEqual([
-			"before",
-			"after",
-			"the change, 10 seconds",
-		]);
-	});
+			);
+			expect(cleared.values).toEqual([{plan: PLAN, task: T1, build: 1, by: BY}]);
+			expect(raised.values[0]?.attachments[0]?.ref).toBe("shots/367-t2-b1-before.png");
+			expect(raised.values[0]?.attachments.map((a) => a.label)).toEqual([
+				"before",
+				"after",
+				"the change, 10 seconds",
+			]);
+		}),
+	);
 
 	it("fits the core it holds, and is refused by a core with no holds flag", () => {
 		expect(misfit(asksProgram, pack)).toBeNull();

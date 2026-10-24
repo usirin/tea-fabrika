@@ -1,5 +1,6 @@
+import {describe, expect, it} from "@effect/vitest";
 import {Cause, Deferred, Effect, Exit, Fiber, Schema, Stream} from "effect";
-import {describe, expect, expectTypeOf, it} from "vitest";
+import {expectTypeOf} from "vitest";
 import {
 	CAPACITY,
 	call,
@@ -64,52 +65,60 @@ const once = (
 	told: readonly string[],
 	expected = told.length,
 ) =>
-	Effect.runPromise(
-		Effect.gen(function* () {
-			const got: string[] = [];
-			const target = yield* start(holder(shape, got), {});
-			if (target.kind !== "running") return null;
-			const source = yield* pipe(
-				{program: relay, flags: {}, keeping: {id: "relay:1", storage: disk}},
-				"out",
-				target,
-				"line",
-			);
-			if (source.kind !== "running") return null;
-			for (const line of told) yield* tell(source.run, "line", line);
-			// Settled: holder has what it should, and a resend had its time; or relay ended first.
-			const settled = Effect.gen(function* () {
-				while (got.length < expected) yield* Effect.sleep("1 millis");
-				yield* Effect.sleep("50 millis");
-				return null;
-			});
-			const ended = yield* settled.pipe(Effect.raceFirst(source.run.ended));
-			return {got, ended};
-		}).pipe(Effect.scoped),
-	);
+	Effect.gen(function* () {
+		const got: string[] = [];
+		const target = yield* start(holder(shape, got), {});
+		if (target.kind !== "running") return null;
+		const source = yield* pipe(
+			{program: relay, flags: {}, keeping: {id: "relay:1", storage: disk}},
+			"out",
+			target,
+			"line",
+		);
+		if (source.kind !== "running") return null;
+		for (const line of told) yield* tell(source.run, "line", line);
+		// Settled: holder has what it should, and a resend had its time; or relay ended first.
+		const settled = Effect.gen(function* () {
+			while (got.length < expected) yield* Effect.sleep("1 millis");
+			yield* Effect.sleep("50 millis");
+			return null;
+		});
+		const ended = yield* settled.pipe(Effect.raceFirst(source.run.ended));
+		return {got, ended};
+	}).pipe(Effect.scoped);
 
 describe("a value kept in an outbox meets a stricter input at the next start (row 6)", () => {
-	it("moves to the run's dead letters with why; the rest are sent again, the sender runs on, and no later start sends it again", async () => {
-		const disk = memoryStorage();
-		const first = await once(disk, Schema.String, ["Abc", "abc"]);
-		expect(first).toEqual({got: ["Abc", "abc"], ended: null});
+	it.live(
+		"moves to the run's dead letters with why; the rest are sent again, the sender runs on, and no later start sends it again",
+		() =>
+			Effect.gen(function* () {
+				const disk = memoryStorage();
+				const first = yield* once(disk, Schema.String, ["Abc", "abc"]);
+				expect(first).toEqual({got: ["Abc", "abc"], ended: null});
 
-		// Before experiment 79 this start failed before main ("answered bad_shape"), and so did every start after.
-		const second = await once(disk, Lower, ["xyz"], 2);
-		expect(second).toEqual({got: ["abc", "xyz"], ended: null});
-		const third = await once(disk, Lower, [], 2);
-		expect(third?.got).toEqual(["abc", "xyz"]);
+				// Before experiment 79 this start failed before main ("answered bad_shape"), and so did every start after.
+				const second = yield* once(disk, Lower, ["xyz"], 2);
+				expect(second).toEqual({got: ["abc", "xyz"], ended: null});
+				const third = yield* once(disk, Lower, [], 2);
+				expect(third?.got).toEqual(["abc", "xyz"]);
 
-		const record = await Effect.runPromise(disk.record("relay:1"));
-		expect(record?.deadLetters).toEqual([
-			{output: "out", n: 0, value: "Abc", why: expect.stringMatching(/\[a-z\]/)},
-		]);
-	});
+				const record = yield* disk.record("relay:1");
+				expect(record?.deadLetters).toEqual([
+					{output: "out", n: 0, value: "Abc", why: expect.stringMatching(/\[a-z\]/)},
+				]);
+			}),
+	);
 
-	it("a value that does not fit when it is first sent still fails the sender: that is the sender's bug, not a change over time", async () => {
-		const sent = await once(memoryStorage(), Lower, ["Abc"], 0);
-		expect(why(sent?.ended ?? null)).toMatch(/relay sent out down a pipe that answered bad_shape/);
-	});
+	it.live(
+		"a value that does not fit when it is first sent still fails the sender: that is the sender's bug, not a change over time",
+		() =>
+			Effect.gen(function* () {
+				const sent = yield* once(memoryStorage(), Lower, ["Abc"], 0);
+				expect(why(sent?.ended ?? null)).toMatch(
+					/relay sent out down a pipe that answered bad_shape/,
+				);
+			}),
+	);
 });
 
 describe("a run's flags at its next start (row 6)", () => {
@@ -219,44 +228,46 @@ describe("a line nobody reads (row 11)", () => {
 		expect(words).toEqual({queued: 1000, Full: 100_000 - 1000});
 	});
 
-	it("offer waits for room: three lines' worth to a reader that starts late all arrive, once and in order", async () => {
-		const got: number[] = [];
-		const seen = await Effect.runPromise(
+	it.live(
+		"offer waits for room: three lines' worth to a reader that starts late all arrive, once and in order",
+		() =>
 			Effect.gen(function* () {
-				const go = yield* Deferred.make<void>();
-				const started = yield* start(late(go, got), {});
-				if (started.kind !== "running") return null;
-				const offering = yield* Effect.forkChild(
-					// One at a time: the order they arrive in is the point.
-					Effect.forEach(numbers(3 * CAPACITY), (n) => offer(started.run, "n", n), {
-						concurrency: 1,
-					}),
-				);
-				yield* Effect.sleep("20 millis");
-				const waiting = got.length;
-				yield* Deferred.succeed(go, undefined);
-				const words = new Set(yield* Fiber.join(offering));
-				started.close("n");
-				return {waiting, words: [...words], ended: yield* started.run.ended};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({waiting: 0, words: ["queued"], ended: {kind: "ended", unread: {}}});
-		expect(got).toEqual(numbers(3 * CAPACITY));
-	});
+				const got: number[] = [];
+				const seen = yield* Effect.gen(function* () {
+					const go = yield* Deferred.make<void>();
+					const started = yield* start(late(go, got), {});
+					if (started.kind !== "running") return null;
+					const offering = yield* Effect.forkChild(
+						// One at a time: the order they arrive in is the point.
+						Effect.forEach(numbers(3 * CAPACITY), (n) => offer(started.run, "n", n), {
+							concurrency: 1,
+						}),
+					);
+					yield* Effect.sleep("20 millis");
+					const waiting = got.length;
+					yield* Deferred.succeed(go, undefined);
+					const words = new Set(yield* Fiber.join(offering));
+					started.close("n");
+					return {waiting, words: [...words], ended: yield* started.run.ended};
+				}).pipe(Effect.scoped);
+				expect(seen).toEqual({waiting: 0, words: ["queued"], ended: {kind: "ended", unread: {}}});
+				expect(got).toEqual(numbers(3 * CAPACITY));
+			}),
+	);
 
-	it("a pipe into an input that does not ack waits on a full line instead of breaking", async () => {
-		const got: number[] = [];
-		const counts = defineProgram({
-			name: "counts",
-			description: "Sends 0, 1, 2, ... then ends.",
-			flags: {to: flag(Schema.Int, "How many.")},
-			inputs: {},
-			outputs: {n: output(Schema.Int, "A number.")},
-			main: ({flags, send}) =>
-				Effect.forEach(numbers(flags.to), (n) => send("n", n), {discard: true, concurrency: 1}),
-		});
-		const seen = await Effect.runPromise(
-			Effect.gen(function* () {
+	it.live("a pipe into an input that does not ack waits on a full line instead of breaking", () =>
+		Effect.gen(function* () {
+			const got: number[] = [];
+			const counts = defineProgram({
+				name: "counts",
+				description: "Sends 0, 1, 2, ... then ends.",
+				flags: {to: flag(Schema.Int, "How many.")},
+				inputs: {},
+				outputs: {n: output(Schema.Int, "A number.")},
+				main: ({flags, send}) =>
+					Effect.forEach(numbers(flags.to), (n) => send("n", n), {discard: true, concurrency: 1}),
+			});
+			const seen = yield* Effect.gen(function* () {
 				const go = yield* Deferred.make<void>();
 				const target = yield* start(late(go, got), {});
 				if (target.kind !== "running") return null;
@@ -265,11 +276,11 @@ describe("a line nobody reads (row 11)", () => {
 				yield* Effect.sleep("20 millis");
 				yield* Deferred.succeed(go, undefined);
 				return {from: yield* source.run.ended, to: yield* target.run.ended};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({from: {kind: "ended", unread: {}}, to: {kind: "ended", unread: {}}});
-		expect(got).toEqual(numbers(3 * CAPACITY));
-	});
+			}).pipe(Effect.scoped);
+			expect(seen).toEqual({from: {kind: "ended", unread: {}}, to: {kind: "ended", unread: {}}});
+			expect(got).toEqual(numbers(3 * CAPACITY));
+		}),
+	);
 
 	it("call tells more than a line holds, and every value is heard", async () => {
 		const echo = defineProgram({
@@ -285,70 +296,74 @@ describe("a line nobody reads (row 11)", () => {
 		);
 	});
 
-	it("an offer waiting when the run stops is let go with stopped; one waiting when the starter closes the input was in line before the close, and is read", async () => {
-		const got: number[] = [];
-		const words = await Effect.runPromise(
+	it.live(
+		"an offer waiting when the run stops is let go with stopped; one waiting when the starter closes the input was in line before the close, and is read",
+		() =>
 			Effect.gen(function* () {
-				const go = yield* Deferred.make<void>();
-				const a = yield* start(late(go, got), {});
-				const b = yield* start(stuck, {});
-				if (a.kind !== "running" || b.kind !== "running") return null;
-				for (const run of [a.run, b.run])
-					for (const n of numbers(CAPACITY)) yield* tell(run, "n", n);
-				const closing = yield* Effect.forkChild(offer(a.run, "n", -1));
-				const stopping = yield* Effect.forkChild(offer(b.run, "n", -1));
-				yield* Effect.sleep("10 millis");
-				yield* b.stop;
-				a.close("n");
-				yield* Deferred.succeed(go, undefined);
-				const told = [
-					yield* Fiber.join(closing),
-					yield* Fiber.join(stopping),
-					yield* tell(a.run, "n", 0),
-				];
-				// `main` reads one value per pull (experiment 80): wait for it to read the rest before the scope stops it.
-				yield* a.run.ended;
-				return told;
-			}).pipe(Effect.scoped),
-		);
-		expect(words).toEqual(["queued", "stopped", "closed"]);
-		expect(got).toEqual([...numbers(CAPACITY), -1]);
-	});
+				const got: number[] = [];
+				const words = yield* Effect.gen(function* () {
+					const go = yield* Deferred.make<void>();
+					const a = yield* start(late(go, got), {});
+					const b = yield* start(stuck, {});
+					if (a.kind !== "running" || b.kind !== "running") return null;
+					for (const run of [a.run, b.run])
+						for (const n of numbers(CAPACITY)) yield* tell(run, "n", n);
+					const closing = yield* Effect.forkChild(offer(a.run, "n", -1));
+					const stopping = yield* Effect.forkChild(offer(b.run, "n", -1));
+					yield* Effect.sleep("10 millis");
+					yield* b.stop;
+					a.close("n");
+					yield* Deferred.succeed(go, undefined);
+					const told = [
+						yield* Fiber.join(closing),
+						yield* Fiber.join(stopping),
+						yield* tell(a.run, "n", 0),
+					];
+					// `main` reads one value per pull (experiment 80): wait for it to read the rest before the scope stops it.
+					yield* a.run.ended;
+					return told;
+				}).pipe(Effect.scoped);
+				expect(words).toEqual(["queued", "stopped", "closed"]);
+				expect(got).toEqual([...numbers(CAPACITY), -1]);
+			}),
+	);
 
-	it("queues() names the writers waiting on a full line, and not a tell that failed Full; they go once room comes", async () => {
-		const got: number[] = [];
-		const seen = await Effect.runPromise(
+	it.live(
+		"queues() names the writers waiting on a full line, and not a tell that failed Full; they go once room comes",
+		() =>
 			Effect.gen(function* () {
-				const go = yield* Deferred.make<void>();
-				const started = yield* start(late(go, got), {});
-				if (started.kind !== "running") return null;
-				const empty = started.run.queues();
-				for (const n of numbers(CAPACITY)) yield* tell(started.run, "n", n);
-				const word = yield* tell(started.run, "n", -1).pipe(
-					Effect.catchTag("Full", (full) => Effect.succeed(full._tag)),
-				);
-				const told = started.run.queues();
-				const two = yield* Effect.forkChild(
-					Effect.forEach([-2, -3], (n) => offer(started.run, "n", n), {concurrency: 2}),
-				);
-				yield* Effect.sleep("10 millis");
-				const asleep = started.run.queues();
-				yield* Deferred.succeed(go, undefined);
-				yield* Fiber.join(two);
-				started.close("n");
-				yield* started.run.ended;
-				return {empty, word, told, asleep, after: started.run.queues()};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({
-			empty: {n: {length: 0, waiting: 0}},
-			word: "Full",
-			told: {n: {length: CAPACITY, waiting: 0}},
-			asleep: {n: {length: CAPACITY, waiting: 2}},
-			after: {n: {length: 0, waiting: 0}},
-		});
-		expect(got.length).toBe(CAPACITY + 2);
-	});
+				const got: number[] = [];
+				const seen = yield* Effect.gen(function* () {
+					const go = yield* Deferred.make<void>();
+					const started = yield* start(late(go, got), {});
+					if (started.kind !== "running") return null;
+					const empty = started.run.queues();
+					for (const n of numbers(CAPACITY)) yield* tell(started.run, "n", n);
+					const word = yield* tell(started.run, "n", -1).pipe(
+						Effect.catchTag("Full", (full) => Effect.succeed(full._tag)),
+					);
+					const told = started.run.queues();
+					const two = yield* Effect.forkChild(
+						Effect.forEach([-2, -3], (n) => offer(started.run, "n", n), {concurrency: 2}),
+					);
+					yield* Effect.sleep("10 millis");
+					const asleep = started.run.queues();
+					yield* Deferred.succeed(go, undefined);
+					yield* Fiber.join(two);
+					started.close("n");
+					yield* started.run.ended;
+					return {empty, word, told, asleep, after: started.run.queues()};
+				}).pipe(Effect.scoped);
+				expect(seen).toEqual({
+					empty: {n: {length: 0, waiting: 0}},
+					word: "Full",
+					told: {n: {length: CAPACITY, waiting: 0}},
+					asleep: {n: {length: CAPACITY, waiting: 2}},
+					after: {n: {length: 0, waiting: 0}},
+				});
+				expect(got.length).toBe(CAPACITY + 2);
+			}),
+	);
 });
 
 describe("an input's own capacity, declared where the program declares it", () => {
@@ -394,30 +409,32 @@ describe("an input's own capacity, declared where the program declares it", () =
 		});
 	});
 
-	it("offer still waits for room on a full line of 16, then is read once the reader starts", async () => {
-		const got: number[] = [];
-		const seen = await Effect.runPromise(
+	it.live(
+		"offer still waits for room on a full line of 16, then is read once the reader starts",
+		() =>
 			Effect.gen(function* () {
-				const go = yield* Deferred.make<void>();
-				const started = yield* start(late(go, got, 16), {});
-				if (started.kind !== "running") return null;
-				for (const n of numbers(16)) yield* tell(started.run, "n", n);
-				const offering = yield* Effect.forkChild(offer(started.run, "n", 16));
-				yield* Effect.sleep("10 millis");
-				const asleep = started.run.queues();
-				yield* Deferred.succeed(go, undefined);
-				const word: Word = yield* Fiber.join(offering);
-				started.close("n");
-				return {asleep, word, ended: yield* started.run.ended};
-			}).pipe(Effect.scoped),
-		);
-		expect(seen).toEqual({
-			asleep: {n: {length: 16, waiting: 1}},
-			word: "queued",
-			ended: {kind: "ended", unread: {}},
-		});
-		expect(got).toEqual(numbers(17));
-	});
+				const got: number[] = [];
+				const seen = yield* Effect.gen(function* () {
+					const go = yield* Deferred.make<void>();
+					const started = yield* start(late(go, got, 16), {});
+					if (started.kind !== "running") return null;
+					for (const n of numbers(16)) yield* tell(started.run, "n", n);
+					const offering = yield* Effect.forkChild(offer(started.run, "n", 16));
+					yield* Effect.sleep("10 millis");
+					const asleep = started.run.queues();
+					yield* Deferred.succeed(go, undefined);
+					const word: Word = yield* Fiber.join(offering);
+					started.close("n");
+					return {asleep, word, ended: yield* started.run.ended};
+				}).pipe(Effect.scoped);
+				expect(seen).toEqual({
+					asleep: {n: {length: 16, waiting: 1}},
+					word: "queued",
+					ended: {kind: "ended", unread: {}},
+				});
+				expect(got).toEqual(numbers(17));
+			}),
+	);
 
 	it.each([0, 2.5, -1, Number.NaN])(
 		"a capacity of %s is refused where the input is declared, and past the types where the program is",
