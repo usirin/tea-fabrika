@@ -94,7 +94,15 @@ test:
   every write. A ticket that steers the agent can then change only that
   ticket's answer, and an accept still waits for the owner's yes on the plan.
   Cost: about 0.3 s to start a box (128), on a turn of about 4 s.
-  Experiment 137 checks the model's way out with no login in the box.
+  [Experiment 137](../../experiments/137-key-outside-the-box.md) ran a triage
+  turn this way, in sandbox-runtime and in Docker, with no login in the box.
+- **Proposed: the model is reached through a relay on the host** (experiment
+  137, 80%; not yet the owner's call).
+  One relay for each box holds the login and adds it to each model call. The
+  box holds a placeholder login, and Claude Code needs no change. The relay
+  forwards only the model's one path, for allowed models, under a cap for
+  that box. Anything in the box can still spend through it, up to the cap, so
+  the cap is the guard against spend, not the box.
 
 ```ts
 // A sketch of the service. Not built.
@@ -155,16 +163,17 @@ The doubt is the edges nobody has run yet, listed below.
 - **The edges of the Cmd wall.** A box killed in the middle of a Cmd, a Cmd
   that takes seconds, and two Cmds at once are not tried. A Cmd cut off inside
   the box is not yet stopped outside.
-- **The proxy and a subscription login.** Claude Code may want a sign-in before
-  it uses a key ([Formal](https://www.joinformal.com/blog/using-proxies-claude-code)).
-  The proxy might need an API key. A small test settles it.
-- **The model's network path.** In 128 no box needed a network. An agent needs
-  to reach its model: through the proxy and nothing else, or as one more thing
-  passed out over the wall.
+- **The proxy and a subscription login.** Answered by experiment 137: a
+  subscription login works through the relay, with no API key.
+- **The model's network path.** Answered by experiment 137: the relay and
+  nothing else. In sandbox-runtime, one host port is the only entry in its
+  allow list. In Docker, the box has no network and the relay's socket is
+  mounted in. A long run with tools through the relay is not tried yet.
 - **ACP harnesses' tools.** An ACP harness takes its tools as a separate MCP
   program. Run inside the box, it should work. Not tried.
 - **sandbox-runtime and the Mac login.** In 127 Claude Code could not reach the
-  keychain inside it, so it needed a token. A proxy may remove the need.
+  keychain inside it, so it needed a token. In 137 the box held a placeholder
+  token and the relay the real one, so no keychain is needed.
 - **Which of the user's own setup goes into a box.** Never the user's own
   settings folder with write access.
 - **fabrika's part is bigger than first guessed.** 128's runner, host side and
