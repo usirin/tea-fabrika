@@ -28,6 +28,11 @@ judge("is_duplicate", {ticket, candidates}); // one Judge call instead of part o
   than it does. So a cost cut is a narrow question taken out of an agent's
   turn and asked of Jev, measured as [Jev: the same answer,
   cheaper](./jev-same-answer-cheaper.md) says.
+  - Jev stays out of triage's decline. In experiment 92 it agreed with the big
+    model on 89 to 95% of accepts and on none of 6 declines, and a wrong
+    decline closes a ticket with no person in the loop.
+  - The first Jev question to try in triage is a narrow one, such as "is this
+    a duplicate of one of these tickets?". It is not built or measured yet.
 - **Other setups are tried later, by experiment,** once the Codex backend
   runs: other models, other harnesses, the builder's seat first.
 
