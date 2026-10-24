@@ -20,7 +20,6 @@ import {
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {basename, dirname, join, relative} from "node:path";
-// biome-ignore lint/plugin: law 10 reads the Durable Object's own file; nothing here fakes D1.
 import {DatabaseSync} from "node:sqlite";
 import {fileURLToPath} from "node:url";
 import {Miniflare} from "miniflare";

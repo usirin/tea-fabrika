@@ -1,7 +1,6 @@
 // The same ledger SQL (`sql.ts`) on a node:sqlite file: the "SQLite on disk" backend in one
 // small driver. A pool of worker threads, each with its own connection to the one file,
 // makes "50 at once" real: the threads race for SQLite's write lock.
-// biome-ignore lint/plugin: this is the solo ledger's driver under test, not a fake of D1.
 import {DatabaseSync} from "node:sqlite";
 import {isMainThread, parentPort, Worker, workerData} from "node:worker_threads";
 import type {LedgerClient} from "./client.ts";

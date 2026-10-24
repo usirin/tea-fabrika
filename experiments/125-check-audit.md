@@ -233,6 +233,8 @@ Going forward: a check copied from elsewhere, or a number taken from a tool, sho
 the same bar before it blocks. Run it on main, read every fire, and count fires where the code
 stays. Above 0 for a gate, or 10% for advice, it does not block.
 
+**Applied:** 2 and 5 in PR 51 (the D1 rule is gone; the "warn" comment says it blocks), and in the same PR 3 and 4 in part: `no-effect-promise` and `no-raw-try-catch` only advise (`severity = "info"`), not yet narrowed.
+
 ## What it cannot tell us
 
 - **Fires fixed before a push leave no trace.** Every "fires right" count is a lower bound, and

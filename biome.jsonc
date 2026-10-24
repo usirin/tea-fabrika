@@ -33,11 +33,11 @@
 		"indentStyle": "tab"
 	},
 	// Custom rules, copied from the pipeline this repo rebuilds, and the one of this repo's own
-	// (no-bare-tell). See biome-plugins/README.md.
+	// (no-bare-tell). A rule's level is set in its own file: "warn" and "error" block, "info"
+	// only advises (no-effect-promise, no-raw-try-catch). See biome-plugins/README.md.
 	"plugins": [
 		"./biome-plugins/no-bare-tell.grit",
 		"./biome-plugins/no-type-assertions.grit",
-		"./biome-plugins/no-node-sqlite-test-backing.grit",
 		"./biome-plugins/no-effect-promise.grit",
 		"./biome-plugins/no-context-tag.grit",
 		"./biome-plugins/no-data-taggederror.grit",
@@ -57,7 +57,9 @@
 				"useImportExtensions": "error"
 			},
 			"style": {
-				// A nudge, not a gate: `x!` throws away the compiler's proof.
+				// A gate: `pnpm lint` runs biome with `--error-on-warnings`, so this "warn" fails it
+				// like an "error" does, and so does `noTsIgnore` below. `x!` throws away the
+				// compiler's proof.
 				"noNonNullAssertion": "warn"
 			},
 			"suspicious": {

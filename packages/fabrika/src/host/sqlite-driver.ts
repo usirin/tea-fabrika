@@ -4,7 +4,6 @@
 //
 // Lifted from experiment 96 (experiments/96-ledger-mailbox/node-ledger.ts), unchanged but for the
 // dispatch table, which now has `register` and the alarm's `runDue`.
-// biome-ignore lint/plugin: the ledger's own SQLite driver (the solo ledger), not a fake of D1.
 import {DatabaseSync} from "node:sqlite";
 import * as L from "./rules.ts";
 
