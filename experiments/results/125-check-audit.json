@@ -1,0 +1,624 @@
+{
+	"head": "4dbee87",
+	"ignores": {
+		"total": 48,
+		"byRule": {
+			"plugin/no-raw-try-catch": 21,
+			"plugin/no-type-assertions": 3,
+			"suspicious/noControlCharactersInRegex": 3,
+			"plugin/no-effect-promise": 8,
+			"plugin/no-node-sqlite-test-backing": 8,
+			"suspicious/noTemplateCurlyInString": 5
+		},
+		"byRuleAndArea": {
+			"plugin/no-raw-try-catch @ experiments": 18,
+			"plugin/no-type-assertions @ experiments": 2,
+			"suspicious/noControlCharactersInRegex @ experiments": 3,
+			"plugin/no-effect-promise @ experiments": 1,
+			"plugin/no-node-sqlite-test-backing @ experiments": 7,
+			"plugin/no-effect-promise @ legacy": 2,
+			"suspicious/noTemplateCurlyInString @ legacy": 4,
+			"plugin/no-raw-try-catch @ packages": 3,
+			"plugin/no-effect-promise @ packages": 5,
+			"plugin/no-node-sqlite-test-backing @ packages": 1,
+			"plugin/no-type-assertions @ packages": 1,
+			"suspicious/noTemplateCurlyInString @ packages": 1
+		},
+		"list": [
+			{
+				"file": "experiments/104-stages-on-tea-host.ts",
+				"line": 89,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: signalling a process group that may be gone already"
+			},
+			{
+				"file": "experiments/104-stages-on-tea-host.ts",
+				"line": 750,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: a pull request closed already answers with an error"
+			},
+			{
+				"file": "experiments/104-stages-on-tea-host.ts",
+				"line": 757,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: a branch that is gone already answers with an error"
+			},
+			{
+				"file": "experiments/105-the-plan-lane-dry-run.ts",
+				"line": 116,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: signalling a process group that may be gone already"
+			},
+			{
+				"file": "experiments/107-a-repo-that-is-not-demlik.ts",
+				"line": 269,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: a fixture that throws is a finding, counted, not a stop"
+			},
+			{
+				"file": "experiments/110-one-ledger-for-the-pipeline.ts",
+				"line": 67,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: signalling a process group that may be gone already"
+			},
+			{
+				"file": "experiments/111-sort-on-tea-host.ts",
+				"line": 83,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: signalling a process group that may be gone already"
+			},
+			{
+				"file": "experiments/111-sort-on-tea-host.ts",
+				"line": 818,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "node at the edge: an issue closed already answers with an error"
+			},
+			{
+				"file": "experiments/120-schema-property-tests.ts",
+				"line": 314,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a throw from the reducer under test is what this law measures, in a sync loop run millions of times, as walk.ts does"
+			},
+			{
+				"file": "experiments/120-schema-property-tests.ts",
+				"line": 328,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a law that throws on a mutant's state is a finding to report, not an error to model"
+			},
+			{
+				"file": "experiments/120-schema-property-tests.ts",
+				"line": 443,
+				"rule": "plugin/no-type-assertions",
+				"area": "experiments",
+				"reason": "the plant must return what the mutant returns, nothing, which the type rightly forbids"
+			},
+			{
+				"file": "experiments/120-schema-property-tests.ts",
+				"line": 482,
+				"rule": "plugin/no-type-assertions",
+				"area": "experiments",
+				"reason": "the mutant reads the commit of an ejected message, which has none"
+			},
+			{
+				"file": "experiments/122-verify-writer-replay.ts",
+				"line": 173,
+				"rule": "suspicious/noControlCharactersInRegex",
+				"area": "experiments",
+				"reason": "strips the colour codes of a terminal"
+			},
+			{
+				"file": "experiments/123-check-layer-timings.ts",
+				"line": 179,
+				"rule": "suspicious/noControlCharactersInRegex",
+				"area": "experiments",
+				"reason": "strips the colour codes of a terminal"
+			},
+			{
+				"file": "experiments/124-kill-every-survivor.ts",
+				"line": 170,
+				"rule": "suspicious/noControlCharactersInRegex",
+				"area": "experiments",
+				"reason": "strips the colour codes of a terminal"
+			},
+			{
+				"file": "experiments/43-sdk-stream-spike.ts",
+				"line": 233,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a plain loop over the SDK's stream, outside Effect on purpose: it keeps logging after the Sub closes, which is what this run measured"
+			},
+			{
+				"file": "experiments/43-sdk-stream-spike.ts",
+				"line": 254,
+				"rule": "plugin/no-effect-promise",
+				"area": "experiments",
+				"reason": "closing a scope has no way to fail with a typed error; the interrupt's failure is caught and both waits time out"
+			},
+			{
+				"file": "experiments/51-jev-vs-opus.ts",
+				"line": 243,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a plain function with no Effect in it; a reply that is not JSON reads as no answer"
+			},
+			{
+				"file": "experiments/77-fence.ts",
+				"line": 172,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a probe's check outside any Effect: git exits non-zero when the branch is not there"
+			},
+			{
+				"file": "experiments/77b-build.ts",
+				"line": 89,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "a probe's check outside any Effect: grep exits 1 when nothing matches"
+			},
+			{
+				"file": "experiments/93-ledger-miniflare.ts",
+				"line": 23,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "law 10 reads the Durable Object's own file; nothing here fakes D1."
+			},
+			{
+				"file": "experiments/93-ledger/node-ledger.ts",
+				"line": 4,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "this is the solo ledger's driver under test, not a fake of D1."
+			},
+			{
+				"file": "experiments/96-ledger-mailbox.ts",
+				"line": 38,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "law 10 reads the Durable Object's own file; nothing here fakes D1."
+			},
+			{
+				"file": "experiments/96-ledger-mailbox.ts",
+				"line": 153,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "Node at the edge (see the header); a group already gone throws."
+			},
+			{
+				"file": "experiments/96-ledger-mailbox.ts",
+				"line": 418,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "law 7 as in 93, on the Promise client; a kill ends a writer."
+			},
+			{
+				"file": "experiments/96-ledger-mailbox.ts",
+				"line": 623,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "the harness's own plain fetch, as in 94, retried while workerd restarts."
+			},
+			{
+				"file": "experiments/96-ledger-mailbox/node-ledger.ts",
+				"line": 9,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "this is the solo ledger's driver under test, not a fake of D1."
+			},
+			{
+				"file": "experiments/97-one-ledger.ts",
+				"line": 30,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "law 10 reads the Durable Object's own file; nothing here fakes D1."
+			},
+			{
+				"file": "experiments/97-one-ledger.ts",
+				"line": 340,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "experiments",
+				"reason": "law 7 as in 93, on the Promise client; a kill ends a writer."
+			},
+			{
+				"file": "experiments/97-one-ledger/node-ledger.ts",
+				"line": 12,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "this is the solo ledger's driver under test, not a fake of D1."
+			},
+			{
+				"file": "experiments/98-tea-host-package.ts",
+				"line": 27,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "experiments",
+				"reason": "law 10 reads the Durable Object's own file; nothing here fakes D1."
+			},
+			{
+				"file": "legacy/src/drive.ts",
+				"line": 558,
+				"rule": "plugin/no-effect-promise",
+				"area": "legacy",
+				"reason": "`held` is only ever resolved, never rejected, so there is no failure to give a type"
+			},
+			{
+				"file": "legacy/src/local.test.ts",
+				"line": 313,
+				"rule": "suspicious/noTemplateCurlyInString",
+				"area": "legacy",
+				"reason": "the text of a source file; `${name}` is that file's own template, written out as it is"
+			},
+			{
+				"file": "legacy/src/local.test.ts",
+				"line": 427,
+				"rule": "suspicious/noTemplateCurlyInString",
+				"area": "legacy",
+				"reason": "the text of a source file; `${name}` is that file's own template, written out as it is"
+			},
+			{
+				"file": "legacy/src/local.test.ts",
+				"line": 440,
+				"rule": "suspicious/noTemplateCurlyInString",
+				"area": "legacy",
+				"reason": "the text of a source file; `${String(name)}` is that file's own template, written out as it is"
+			},
+			{
+				"file": "legacy/src/local.test.ts",
+				"line": 462,
+				"rule": "suspicious/noTemplateCurlyInString",
+				"area": "legacy",
+				"reason": "the text of a source file; `${name}` is that file's own template, written out as it is"
+			},
+			{
+				"file": "legacy/src/scripted.ts",
+				"line": 86,
+				"rule": "plugin/no-effect-promise",
+				"area": "legacy",
+				"reason": "a stand-in that cannot write its scripted files is a broken script, so it stops the run; failing as an agent would send the lane back to it"
+			},
+			{
+				"file": "packages/fabrika/src/agents/claude/draft.ts",
+				"line": 290,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "packages",
+				"reason": "a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg"
+			},
+			{
+				"file": "packages/fabrika/src/agents/claude/draft.ts",
+				"line": 322,
+				"rule": "plugin/no-effect-promise",
+				"area": "packages",
+				"reason": "closing a scope has no way to fail with a typed error; the interrupt's failure is caught, both waits time out, and a throw from `close` is a bug"
+			},
+			{
+				"file": "packages/fabrika/src/host/sqlite-driver.ts",
+				"line": 7,
+				"rule": "plugin/no-node-sqlite-test-backing",
+				"area": "packages",
+				"reason": "the ledger's own SQLite driver (the solo ledger), not a fake of D1."
+			},
+			{
+				"file": "packages/pipeline/src/primitives.ts",
+				"line": 62,
+				"rule": "plugin/no-type-assertions",
+				"area": "packages",
+				"reason": "TypeScript cannot follow `fieldsAssign` through a struct whose fields it does not know yet, and refuses a single cast; the cast says what was built"
+			},
+			{
+				"file": "packages/pipeline/src/schema.test.ts",
+				"line": 456,
+				"rule": "plugin/no-effect-promise",
+				"area": "packages",
+				"reason": "the test needs an Effect that takes a Promise to answer, and this Promise cannot reject"
+			},
+			{
+				"file": "packages/pipeline/src/stages/build/builder-acp.test.ts",
+				"line": 44,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "packages",
+				"reason": "signal 0 throws for a process that is gone; that is the answer"
+			},
+			{
+				"file": "packages/pipeline/src/stages/build/guard.ts",
+				"line": 104,
+				"rule": "plugin/no-raw-try-catch",
+				"area": "packages",
+				"reason": "process.kill throws for a process that is gone; that is the answer, not a failure"
+			},
+			{
+				"file": "packages/pipeline/src/stages/plan/planner.ts",
+				"line": 234,
+				"rule": "plugin/no-effect-promise",
+				"area": "packages",
+				"reason": "closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug"
+			},
+			{
+				"file": "packages/pipeline/src/stages/review/reviewer.ts",
+				"line": 429,
+				"rule": "plugin/no-effect-promise",
+				"area": "packages",
+				"reason": "closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug"
+			},
+			{
+				"file": "packages/pipeline/src/stages/sort/sorter.ts",
+				"line": 54,
+				"rule": "plugin/no-effect-promise",
+				"area": "packages",
+				"reason": "closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug"
+			},
+			{
+				"file": "packages/promises/src/blocks.test.ts",
+				"line": 14,
+				"rule": "suspicious/noTemplateCurlyInString",
+				"area": "packages",
+				"reason": "the source under test holds a template placeholder on purpose."
+			}
+		]
+	},
+	"ignoreHistory": {
+		"added": 52,
+		"removed": 4,
+		"commitsAdding": 24
+	},
+	"quieted": {
+		"effectDiagnostics": 1,
+		"tsExpectError": 102,
+		"tsIgnore": 1,
+		"tsNocheck": 2
+	},
+	"layers": {
+		"layers": 11,
+		"allowed": 32,
+		"allowedTo": {
+			"packages/pipeline/src/laws/explore.ts": 26,
+			"packages/pipeline/src/laws/world/search.ts": 6
+		},
+		"commits": [
+			"21cd0b8 2026-10-23 experiments: 121, ship's laws on tea's own property tests, measured on 119's mutants (#43)",
+			"59b4961 2026-10-23 Property tests, not our own search engine; fence the engine",
+			"ab0ac96 2026-10-22 Experiment 114: the pipeline moves out into @kampus/pipeline (#33)",
+			"465538e 2026-10-21 experiment 103: one package, @kampus/fabrika, moved without loss",
+			"1e47236 2026-10-20 experiment 98: the tea-host package",
+			"b17c321 2026-10-18 exp 89: the owner's desk as a pack, wired from one config line (red)",
+			"f401acd 2026-10-18 build: a layer gate in pnpm lint, and the write-up of experiment 82"
+		]
+	},
+	"machines": {
+		"files": 35,
+		"calls": 40,
+		"covered": 16,
+		"notCovered": [
+			{
+				"file": "docs/tutorials/agents/programs.ts",
+				"count": 2,
+				"covered": false
+			},
+			{
+				"file": "docs/tutorials/two-hosts/programs.ts",
+				"count": 2,
+				"covered": false
+			},
+			{
+				"file": "experiments/100-supervision-tree/programs.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "experiments/102-limits/programs.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "experiments/125-check-audit.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "experiments/87-scenarios/631-effect-cmd/steps.ts",
+				"count": 2,
+				"covered": false
+			},
+			{
+				"file": "experiments/87-scenarios/692-terminal-save/steps.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "experiments/94-tea-host/counter.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "experiments/99-monitors-supervisor/programs.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/factory.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/lane.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/operator.ts",
+				"count": 3,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/review.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/ship.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/triage.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "legacy/src/watch.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "packages/fabrika/src/shell/jobs.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "packages/fabrika/src/shell/small.ts",
+				"count": 1,
+				"covered": false
+			},
+			{
+				"file": "packs/owner-desk/src/inbox.ts",
+				"count": 1,
+				"covered": false
+			}
+		]
+	},
+	"timeouts": {
+		"thirdArgument": 76,
+		"optionTimeout": 13,
+		"configTestTimeout": 0
+	},
+	"promises": {
+		"records": 2,
+		"commits": [
+			"4b40329 2026-10-22 Experiment 117: promises that stay in step with their code (#36)"
+		]
+	},
+	"deadLedgerOnPr44": {
+		"entries": 12,
+		"reasons": {
+			"called in its own file": 11,
+			"in the finished video": 1
+		}
+	},
+	"ci": {
+		"runs": 126,
+		"red": 12,
+		"mainPushRuns": 64,
+		"mainPushRed": 10,
+		"redRuns": [
+			{
+				"branch": "not main",
+				"event": "pull_request",
+				"sha": "10672a3",
+				"step": "Run pnpm lint"
+			},
+			{
+				"branch": "not main",
+				"event": "push",
+				"sha": "10672a3",
+				"step": "Run pnpm lint"
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "bcb3008",
+				"step": "Run pnpm test",
+				"cause": "same test, same limit (log read)",
+				"fixedBy": "1687d65",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "2b72f2d",
+				"step": "Run pnpm test",
+				"cause": "same test, same limit",
+				"fixedBy": "1687d65",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "21831fb",
+				"step": "Run pnpm test",
+				"cause": "same test, same limit (log read)",
+				"fixedBy": "1687d65",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "159a08d",
+				"step": "Run pnpm test",
+				"cause": "same test, same limit",
+				"fixedBy": "1687d65",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "21cd0b8",
+				"step": "Run pnpm test",
+				"cause": "ship-pbt planted-mistake test over vitest's 5 s default",
+				"fixedBy": "1687d65",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "a06a26a",
+				"step": "Run pnpm test",
+				"cause": "inferred, log gone: tea-host walks over vitest's 5 s default (d16846b says they took 7 to 12 s under load); green again at c43d876 before any fix",
+				"fixedBy": "d16846b",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "7b4e440",
+				"step": "Run pnpm test",
+				"cause": "unknown: the log is gone",
+				"fixedBy": "3d326c6, a feature commit",
+				"falseAlarm": false
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "075eb56",
+				"step": "Run pnpm test",
+				"cause": "runner had no expect or zsh, node:test output, whole-world search under 5 s",
+				"fixedBy": "7b4e440",
+				"falseAlarm": true
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "ed3e3d0",
+				"step": "Run pnpm/action-setup@v4",
+				"cause": "CI being set up: pnpm pin",
+				"fixedBy": "075eb56",
+				"falseAlarm": false
+			},
+			{
+				"branch": "main",
+				"event": "push",
+				"sha": "af1fdee",
+				"step": "Run pnpm install --frozen-lockfile",
+				"cause": "CI being set up: install",
+				"fixedBy": "ed3e3d0",
+				"falseAlarm": false
+			}
+		]
+	}
+}
