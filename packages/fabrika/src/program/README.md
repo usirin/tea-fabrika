@@ -43,6 +43,7 @@ Everything but Node's storage is on the top level, `@kampus/fabrika`. Each file,
 | `@kampus/fabrika` | `storage.ts` | `Storage`, where runs keep what must outlive the process: `memoryStorage`, `storageOf`, `folderStorage` |
 | `@kampus/fabrika/storage/node` | `storage-node.ts` | `fileStorage(dir)`: storage in a folder, over Node's file system |
 | `@kampus/fabrika` | `trace.ts` | Spans and events in Effect's own terms, `runTraced`, and the attribute names (`ATTR`). A trace's id comes from `trace-id.ts`: tea's `runTraceId`, copied so the top level loads no OpenTelemetry |
+| `@kampus/fabrika` | `view.ts` | A program's window, from its side: `readInput` (what a window sent, read by the program's inputs), `WindowProps`, `InputMsgOf`, `ViewDataOf`. The view itself is declared in `defineProgram` and read with `viewOf` (`program.ts`) |
 | `@kampus/fabrika` | `ear.ts` | `ear()`: a listener for tests that keeps what it hears |
 | `@kampus/fabrika` | `mortal.ts` | `mortalDisk()`: a disk for tests that kill a process mid-write |
 
@@ -71,6 +72,18 @@ const again = yield* tell(run, "n", 8).pipe(
 );
 ```
 - `pipe` is `from | to`: it starts `from` wired into `to`'s input, and that input closes when the last writer ends.
+- A program may have a window: a pure `view` of one of its machines, with an Effect Schema for what it picks. No React here; the window is a React component on `<package>/window`, and it sends the program its own inputs. A `view` that names no machine of the program is refused.
+
+```ts
+const counter = defineProgram({
+	// ...name, description, inputs: {press: input(Press, "...")}, machines: {count: kind({...})}
+	view: {machine: "count", data: Schema.Struct({n: Schema.Int}), of: (s) => ({n: s.n})},
+	main: ...,
+});
+viewOf(counter)?.of({n: 2});                                // {n: 2}
+readInput(counter, {type: "press", value: "plus"});         // {kind: "read", msg: {type: "press", value: "plus"}}
+const Window = ({view, send}: WindowProps<typeof counter>) => ...;   // view: {n: number}
+```
 
 ## Commands
 

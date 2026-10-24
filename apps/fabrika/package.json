@@ -1,0 +1,33 @@
+{
+	"name": "@kampus/fabrika-app",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The fabrika app: one Electron window running tsh, where a program with a window takes over until it ends. A walking skeleton.",
+	"main": "dist/main.mjs",
+	"scripts": {
+		"build": "node build.ts",
+		"start": "node build.ts && electron .",
+		"e2e": "node build.ts && node e2e.ts",
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@tea-fabrika/counter": "workspace:*",
+		"effect": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"electron": "catalog:",
+		"esbuild": "catalog:",
+		"playwright": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

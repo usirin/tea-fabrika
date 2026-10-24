@@ -1,6 +1,10 @@
 {
 	"layers": [
 		{
+			"name": "apps",
+			"paths": ["apps"]
+		},
+		{
 			"name": "own-search",
 			"paths": [
 				"packages/pipeline/src/laws/explore.ts",

@@ -1,0 +1,113 @@
+:root {
+	color-scheme: dark;
+	--ground: #16181d;
+	--ink: #d8dce4;
+	--faint: #8a93a3;
+	--line: #2a2f3a;
+	--key: #3b82f6;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 14px;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+	background: var(--ground);
+	color: var(--ink);
+}
+
+main {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	box-sizing: border-box;
+	padding: 16px;
+	gap: 8px;
+}
+
+.lines {
+	flex: 1;
+	margin: 0;
+	overflow: auto;
+	white-space: pre-wrap;
+	line-height: 1.5;
+}
+
+form label {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.prompt {
+	color: var(--faint);
+}
+
+input {
+	flex: 1;
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid var(--line);
+	padding: 4px 0;
+	outline: none;
+}
+
+input:focus {
+	border-bottom-color: var(--key);
+}
+
+.status,
+.starting,
+small {
+	margin: 0;
+	color: var(--faint);
+}
+
+.front header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	border-bottom: 1px solid var(--line);
+	padding-bottom: 8px;
+}
+
+.counter {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 24px;
+}
+
+.counter-n {
+	font-size: 64px;
+}
+
+.counter-keys {
+	display: flex;
+	gap: 12px;
+}
+
+button {
+	font: inherit;
+	color: var(--ink);
+	background: var(--line);
+	border: 1px solid transparent;
+	border-radius: 6px;
+	padding: 8px 20px;
+	cursor: pointer;
+}
+
+button:hover {
+	border-color: var(--key);
+}
+
+button:focus-visible {
+	outline: 2px solid var(--key);
+	outline-offset: 2px;
+}

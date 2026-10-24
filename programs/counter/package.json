@@ -1,0 +1,29 @@
+{
+	"name": "@tea-fabrika/counter",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program with a window: it counts presses of +1 until done, and says the count. The fabrika app's first window.",
+	"exports": {
+		".": "./src/index.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"react": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

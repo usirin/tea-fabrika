@@ -240,8 +240,9 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
   as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
   code changes and the record does not (experiment 117).
-- [`programs/`](./programs/README.md): one package per program that runs on its own. Empty for
-  now.
+- [`programs/`](./programs/README.md): one package per program that runs on its own.
+  - [`programs/counter`](./programs/counter/README.md), `@tea-fabrika/counter`: the smallest
+    program with a window. It counts presses of +1 until done.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.
@@ -251,6 +252,10 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   - [`packs/ask-log`](./packs/ask-log/README.md): one line per ask and answer, in a file.
   - [`packs/ui-verification`](./packs/ui-verification/README.md): holds a build that changes
     what a user sees, and asks the owner yes or no.
+- `apps/`: what a person opens, on top of everything else. Nothing imports an app.
+  - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app`: the fabrika app, a
+    walking skeleton. One Electron window running tsh; a program with a window takes it over
+    until it ends.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
 - `docs/`: drafts too: [`skill-map.md`](./docs/skill-map.md),
   [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)
@@ -280,6 +285,7 @@ Other commands:
 | Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
+| Open the fabrika app: tsh in a window, with the small programs and `counter` | `pnpm fabrika` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
 | List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
 | Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |
