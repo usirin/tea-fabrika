@@ -384,9 +384,7 @@ describe("a local workspace", () => {
 				}).pipe(Effect.provide(localWorkspace(dir, {test: NODE_TEST, tests: typed}))),
 			);
 
-		it("vets each snippet against how it says it stands today, and runs the existing test", {
-			timeout: 60_000,
-		}, async () => {
+		it("vets each snippet against how it says it stands today, and runs the existing test", async () => {
 			const dir = await typedRepo();
 
 			const vetted = await on(dir, (w) => w.vet(ticket));
@@ -407,9 +405,7 @@ describe("a local workspace", () => {
 			expect(git(dir, "status", "--porcelain")).toBe("");
 		});
 
-		it("writes the snippets beside the tests and locks them; the checks run them after a build, and send back a widening", {
-			timeout: 60_000,
-		}, async () => {
+		it("writes the snippets beside the tests and locks them; the checks run them after a build, and send back a widening", async () => {
 			const dir = await typedRepo();
 
 			const prepared = await on(dir, (w) => w.prepare(ticket));
@@ -452,9 +448,7 @@ describe("a local workspace", () => {
 			expect(await readFile(join(dir, "greet.test-d.ts"), "utf8")).toContain("greet(true);");
 		});
 
-		it("fails the checks when an existing test fails after the change", {
-			timeout: 60_000,
-		}, async () => {
+		it("fails the checks when an existing test fails after the change", async () => {
 			const dir = await typedRepo();
 			await on(dir, (w) => w.prepare(ticket));
 			await writeFile(

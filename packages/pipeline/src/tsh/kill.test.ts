@@ -104,5 +104,5 @@ describe("tsh killed mid build, attached again with its input closed", () => {
 		const after = life(home, folder, "jobs");
 		expect(await after.exited).toBe(0);
 		expect(after.out()).toMatch(/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+$/);
-	}, 60_000);
+	});
 });

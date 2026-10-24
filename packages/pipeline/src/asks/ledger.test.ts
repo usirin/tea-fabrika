@@ -214,7 +214,7 @@ describe("the pipeline's facts on the one ledger, in a node:sqlite file: the use
 		expect(foldLedger(again)).toEqual(foldLedger(memory.read()));
 		expect(await holderIn(onFile(file), C)).toBeNull();
 		expect(JSON.parse(await proc(["read", file]))).toEqual(summaryOf(memory.read()));
-	}, 30_000);
+	});
 });
 
 describe("the claim across processes: the ledger's lease", () => {
@@ -255,7 +255,7 @@ describe("the claim across processes: the ledger's lease", () => {
 		expect(refused.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
 		// Claims are the ledger's own events: no pipeline fact was written.
 		expect(await entriesOf(onFile(file))).toEqual([]);
-	}, 60_000);
+	});
 
 	it("planted: the same race with the lease read, then the ticket taken with no claim, tells two processes they both hold one ticket", async () => {
 		const {told} = await race("blind", ["L1", "L2", "L3", "L4"], 40);
@@ -263,7 +263,7 @@ describe("the claim across processes: the ledger's lease", () => {
 			(n) => n > 1,
 		);
 		expect(split.length).toBeGreaterThan(0);
-	}, 60_000);
+	});
 
 	it("three layers over one file in one process, claiming at once twenty times: one holds each ticket", async () => {
 		const file = scratch();
@@ -275,7 +275,7 @@ describe("the claim across processes: the ledger's lease", () => {
 			expect(new Set(told).size).toBe(1);
 			expect(await holderIn(onFile(file), ticket)).toBe(told[0]);
 		}
-	}, 60_000);
+	});
 });
 
 describe("what the ledger can hold under pipeline/", () => {

@@ -317,5 +317,5 @@ describe("monitor", () => {
 		]);
 		const real = out.inbox.filter((r) => r.kind === "DOWN" && !r.data.includes("noproc"));
 		expect(real.length).toBe(2);
-	}, 30_000);
+	});
 });

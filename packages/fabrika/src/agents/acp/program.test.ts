@@ -130,7 +130,7 @@ describe("acp on the fake agent", () => {
 			{turn: 3, prompts: 1, said: true, tools: [], stop: "end_turn", usage: true},
 		]);
 		expect(promptsSent(folder)).toHaveLength(3);
-	}, 30_000);
+	});
 
 	it("a permission ask is shown and refused by default: the file is not written", async () => {
 		const folder = scratch();
@@ -146,7 +146,7 @@ describe("acp on the fake agent", () => {
 		);
 		expect(asks).toMatchObject([{ask: "ask-1", tool: "Write", kind: "edit", answer: "refused"}]);
 		expect(existsSync(join(folder, "written.txt"))).toBe(false);
-	}, 30_000);
+	});
 
 	it("with --permissions ask it waits, and is allowed only when told: allow-once, never always", async () => {
 		const folder = scratch();
@@ -173,7 +173,7 @@ describe("acp on the fake agent", () => {
 		);
 		expect(asks).toEqual(["ask-1 waiting", "ask-1 allowed", "ask-2 waiting", "ask-2 refused"]);
 		expect(readFileSync(join(folder, "written.txt"), "utf8")).toBe("written\n");
-	}, 30_000);
+	});
 
 	it("cancel: the turn running ends cancelled, and the next one runs", async () => {
 		const folder = scratch();
@@ -196,7 +196,7 @@ describe("acp on the fake agent", () => {
 		);
 		expect(results.map((r) => r.stop)).toEqual(["cancelled", "end_turn"]);
 		expect(transcript?.turns.map((t) => t.stop)).toEqual(["cancelled", "end_turn"]);
-	}, 30_000);
+	});
 
 	for (const reopen of ["load", "resume"] as const)
 		it(`stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`, async () => {
@@ -237,7 +237,7 @@ describe("acp on the fake agent", () => {
 			const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
 			if (reopen === "load") expect(replayed).toBeGreaterThan(0);
 			else expect(replayed).toBe(0);
-		}, 30_000);
+		});
 
 	it("a folder in a repository is refused before any harness starts", async () => {
 		const inRepo = await run(
@@ -248,7 +248,7 @@ describe("acp on the fake agent", () => {
 			}),
 		);
 		expect(JSON.stringify(inRepo)).toContain("inside a git repository");
-	}, 30_000);
+	});
 
 	it("traced: the turn is an agent span with its tool calls under it, and no prompt, answer or file text is in any span", async () => {
 		const folder = scratch();
@@ -284,5 +284,5 @@ describe("acp on the fake agent", () => {
 		// Made: each tool call a span of its own. Shown: the agent run folded into its turn.
 		expect(names.filter((n) => n.includes("Read"))).toHaveLength(2);
 		expect(shown.map((s) => s.name)).toContain("acp turn · 1 turn");
-	}, 30_000);
+	});
 });

@@ -60,9 +60,7 @@ const git = (dir: string, ...args: string[]) =>
 	execFileSync("git", args, {cwd: dir, encoding: "utf8"});
 
 describe("vetting a draft on today's code, in a fresh copy", () => {
-	it("tells an example that fails from one that holds already and one that is broken", {
-		timeout: 30_000,
-	}, async () => {
+	it("tells an example that fails from one that holds already and one that is broken", async () => {
 		const toy = await checkoutToy("slugify");
 		const draft = issue([
 			example("lower", `slugify("Hello")`, `"hello"`),
@@ -86,9 +84,7 @@ describe("vetting a draft on today's code, in a fresh copy", () => {
 		expect(git(toy.dir, "worktree", "list").trim().split("\n")).toHaveLength(1);
 	});
 
-	it("calls every example broken when the file does not load, and names a file that is not at HEAD", {
-		timeout: 30_000,
-	}, async () => {
+	it("calls every example broken when the file does not load, and names a file that is not at HEAD", async () => {
 		const toy = await checkoutToy("slugify");
 		const gone = {
 			...example("gone", `gone("a")`, `"a"`, "gone.js"),
@@ -124,9 +120,7 @@ describe("vetting a draft on today's code, in a fresh copy", () => {
 		});
 	});
 
-	it("runs an existing test on today's code, and says whether it passes; a repo with no typecheck cannot check a snippet", {
-		timeout: 30_000,
-	}, async () => {
+	it("runs an existing test on today's code, and says whether it passes; a repo with no typecheck cannot check a snippet", async () => {
 		const toy = await checkoutToy("slugify");
 		await writeFile(
 			join(toy.dir, "shape.test.js"),

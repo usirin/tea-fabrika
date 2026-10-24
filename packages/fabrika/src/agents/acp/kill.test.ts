@@ -97,5 +97,5 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 				{turn: 2, stop: "end_turn"},
 				{turn: 3, stop: "end_turn"},
 			]);
-		}, 60_000);
+		});
 });

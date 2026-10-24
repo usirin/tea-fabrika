@@ -623,7 +623,7 @@ describe("a two-level tree on the in-memory ledger", () => {
 		expect(out.rest).toEqual(["exited r:2", "exited r:3", "restarted r:2", "restarted r:3"]);
 		expect(out.r1).toBe(1);
 		expect(out.top).toBe(0);
-	}, 30_000);
+	});
 
 	it("calls: which_children, terminate_child past a shutdown timeout, restart_child", async () => {
 		const out = await Effect.runPromise(
@@ -664,7 +664,7 @@ describe("a two-level tree on the in-memory ledger", () => {
 		expect(out.added).toEqual({ok: true, incarnation: 1});
 		// Five sends, four call ids, four replies: the resent t1 got its first reply again (a dup).
 		expect(out.replies).toBe(4);
-	}, 30_000);
+	});
 
 	it("a boot-crash loop backs off, its supervisor gives up, and the top restarts it once", async () => {
 		const out = await Effect.runPromise(
@@ -705,7 +705,7 @@ describe("a two-level tree on the in-memory ledger", () => {
 		expect(out.top?.restarted).toBe(1);
 		expect(out.top?.phase).toBe("running");
 		expect(out.supAll.length).toBe(0);
-	}, 30_000);
+	});
 });
 
 describe("dead letters", () => {
@@ -784,5 +784,5 @@ describe("dead letters", () => {
 		// Three crashes on the poison, none on its resent copy, which is counted once.
 		expect(out.exits).toBe(3);
 		expect(out.count).toBe(1);
-	}, 30_000);
+	});
 });

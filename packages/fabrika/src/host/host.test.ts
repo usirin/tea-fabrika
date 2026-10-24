@@ -92,7 +92,7 @@ describe("serve", () => {
 		expect(out.second.fence ?? 0).toBeGreaterThan(out.first.fence ?? 0);
 		expect(events.filter((e) => e.ev === "tea_error")).toEqual([]);
 		expect(events.filter((e) => e.ev === "program" && e.phase === "started").length).toBe(2);
-	}, 30_000);
+	});
 
 	it("waits on a name nobody registered, and writes nothing under it", async () => {
 		const events: HostEvent[] = [];

@@ -148,7 +148,7 @@ describe("the owner's desk in tsh", () => {
 		expect(pageOf(pages, plan490)).toContain("## Answer with one of");
 		// The core's refusal shows on the ask's own page.
 		expect(pageOf(pages, ruling163)).toContain("Your last answer was not taken");
-	}, 60_000);
+	});
 
 	it("a real desk with nothing waiting: its pages go where the pack's settings say, from fabrika.toml's folder", async () => {
 		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
@@ -159,7 +159,7 @@ describe("the owner's desk in tsh", () => {
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
 		expect(pageIds(join(at.folder, "pages"))).toEqual([]);
-	}, 60_000);
+	});
 
 	it("with no pack that reads replies, the demo still lists its asks and answer says why it cannot", async () => {
 		const at = project("");
@@ -168,7 +168,7 @@ describe("the owner's desk in tsh", () => {
 		expect(run.out).toContain("No pack in fabrika.toml shows pages.");
 		expect(run.err).toContain("no pack in fabrika.toml reads typed replies");
 		expect(run.status).toBe(1);
-	}, 60_000);
+	});
 
 	it("started deep in the repository, the desk takes its packs from the fabrika.toml at the root, and reads their paths from there", async () => {
 		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
@@ -179,7 +179,7 @@ describe("the owner's desk in tsh", () => {
 		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
-	}, 60_000);
+	});
 
 	it("tsh.toml names a target repository: its fabrika.toml is read as committed on its default branch, the start folder's is not, and the first line says which", async () => {
 		// The start folder's own file would stop tsh if it were read.
@@ -208,13 +208,13 @@ describe("the owner's desk in tsh", () => {
 		// The pack is found, and its paths read, from the folder tsh starts in: never from the clone.
 		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(existsSync(join(clone, "pages"))).toBe(false);
-	}, 60_000);
+	});
 
 	it("no target repository: the first line names the start folder's file", async () => {
 		const run = await tsh(project(""), ["programs"]);
 		expect(run.err.split("\n")[0]).toMatch(/^fabrika\.toml: \/.+\/fabrika\.toml$/);
 		expect(run.status).toBe(0);
-	}, 60_000);
+	});
 
 	it.each([
 		[
@@ -235,14 +235,10 @@ describe("the owner's desk in tsh", () => {
 			undefined,
 			"failure: no such key or table",
 		],
-	])(
-		"%s stops tsh before anything runs, and says why",
-		async (_, fabrika, tshToml, says) => {
-			const run = await tsh(project(fabrika, tshToml), ["programs"]);
-			expect(run.err).toContain(says);
-			expect(run.out).toBe("");
-			expect(run.status).toBe(2);
-		},
-		60_000,
-	);
+	])("%s stops tsh before anything runs, and says why", async (_, fabrika, tshToml, says) => {
+		const run = await tsh(project(fabrika, tshToml), ["programs"]);
+		expect(run.err).toContain(says);
+		expect(run.out).toBe("");
+		expect(run.status).toBe(2);
+	});
 });

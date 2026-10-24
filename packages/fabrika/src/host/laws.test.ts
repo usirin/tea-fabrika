@@ -39,19 +39,19 @@ describe("the ledger's laws", () => {
 		const rs = await lawsOn(layerHttp({url, ledger: "laws"}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
-	}, 60_000);
+	});
 
 	it("hold on node:sqlite, four connections to one file", async () => {
 		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
-	}, 60_000);
+	});
 
 	it("hold in memory", async () => {
 		const rs = await lawsOn(layerMemory());
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
-	}, 60_000);
+	});
 });
 
 describe("a ledger that runs each call late", () => {
@@ -69,7 +69,7 @@ describe("a ledger that runs each call late", () => {
 			}).pipe(Effect.provide(layerMemory()), Effect.scoped),
 		);
 		expect(broken([r])).toEqual([]);
-	}, 10_000);
+	});
 });
 
 describe("every planted mistake", () => {
@@ -94,5 +94,5 @@ describe("every planted mistake", () => {
 			caught.filter((c) => c.name.endsWith("(102)") && !c.by.some((b) => limits.includes(b ?? ""))),
 		).toEqual([]);
 		expect(caught.length).toBe(34);
-	}, 60_000);
+	});
 });
