@@ -436,6 +436,16 @@ async function listAll(repo: string): Promise<Listed[]> {
 	}));
 }
 
+/** An answer by its outcome's name, as the sort stage prints it. */
+const OUTCOME: Record<DSaid, string> = {
+	duplicate: "done:closed:duplicate",
+	no: "done:closed:no",
+	plan: "send:plan:yes",
+	fold: "send:plan:fold",
+	research: "send:research:yes",
+	ruling: "ask:owner:ruling",
+};
+
 if (STEP === "fetch") {
 	mkdirSync(CACHE, {recursive: true});
 	const tickets: Ticket[] = [];
@@ -696,16 +706,6 @@ function truthWord(n: number): string {
 	if (t?.next === "dup") return `duplicate of #${t.dupOf}`;
 	return t?.next ?? "unknown";
 }
-
-/** An answer by its outcome's name, as the sort stage prints it. */
-const OUTCOME: Record<DSaid, string> = {
-	duplicate: "done:closed:duplicate",
-	no: "done:closed:no",
-	plan: "send:plan:yes",
-	fold: "send:plan:fold",
-	research: "send:research:yes",
-	ruling: "ask:owner:ruling",
-};
 
 if (STEP !== "tables") {
 	console.error(`unknown STEP ${STEP}`);
