@@ -103,13 +103,16 @@ test:
   forwards only the model's one path, for allowed models, under a cap for
   that box. Anything in the box can still spend through it, up to the cap, so
   the cap is the guard against spend, not the box.
-  - The relay holds an API key, not a subscription login. Anthropic asks
-    anyone building on Claude Code or the Agent SDK to use an API key, and
-    bars others from holding or passing on a subscription's token
-    ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance)). A relay
-    that adds a subscription token to each call does exactly that.
-  - 137 used a subscription login, so it shows only that the wiring works. A
-    run with an API key is not done yet.
+  - **Each person runs their own agents on their own subscription**
+    (decided 2026-10-24). One person asks another's agents for work through
+    the ledger and never runs them. So a relay only ever carries its own
+    user's login, never someone else's.
+  - Anthropic asks products built on Claude Code or the Agent SDK to use an
+    API key, and bars them from holding or passing on other people's logins
+    ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance)). We read
+    a user's own login, on their own machine, as the ordinary use the terms
+    allow. Anthropic has not confirmed that.
+  - 137 used a subscription login through the relay, so the wiring works.
 
 ```ts
 // A sketch of the service. Not built.
@@ -170,10 +173,16 @@ The doubt is the edges nobody has run yet, listed below.
 - **The edges of the Cmd wall.** A box killed in the middle of a Cmd, a Cmd
   that takes seconds, and two Cmds at once are not tried. A Cmd cut off inside
   the box is not yet stopped outside.
-- **The proxy and a subscription login.** Experiment 137 showed it works
-  through the relay. Anthropic's terms do not allow it for a product
-  ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance)), so the
-  relay takes an API key. Not yet run with one.
+- **Where the user's login lives.** Two ways, not settled:
+  - The relay holds the user's token and adds it to each call. The box stays
+    empty, but fabrika's own code passes the login on.
+  - The box gets a token from `claude setup-token`, which can only make model
+    calls ([Anthropic](https://code.claude.com/docs/en/authentication)), and
+    the relay only passes calls through under the cap. Claude Code uses the
+    login as it is, but a program in the box can read it, against the rule
+    above.
+  - Lean: the second, 70%. A short question to Anthropic would settle which
+    one the terms allow.
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is
