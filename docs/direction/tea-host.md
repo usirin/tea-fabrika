@@ -20,6 +20,13 @@ opt-in restart backoff, and resending a dead letter.
   monitors and supervisors, which tea-host adds.
 - **A host is a running process that runs tea programs.** One machine can run
   several. A Cloudflare Durable Object can be one. It is OTP's node.
+- **One host per project, decided 2026-10-25.** OTP's practices, not only
+  its words: two separate systems on one machine are two nodes, each with its
+  own database folder and cookie, and never one node. A node shares one VM,
+  one database and one set of connections, and connections between nodes
+  spread ([Erlang](https://www.erlang.org/doc/system/distributed.html)). So
+  two projects open in the app are two hosts, each with its own tsh. See
+  [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md).
 - **Every host uses exactly one ledger, and config picks which:** a team's
   Durable Object, your own Cloudflare account's Durable Object (to share
   context between your own agents, wherever they run), or a local one. There

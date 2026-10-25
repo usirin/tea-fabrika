@@ -53,9 +53,21 @@ the app opens several projects the way Obsidian opens vaults.**
   ([Obsidian](https://obsidian.md/help/manage-vaults)). The same here: a solo
   project on the laptop's server and a shared one on Cloudflare, each in its
   own window, with its own desk.
-- This keeps [tea-host](./tea-host.md)'s rule, every host uses exactly one
-  ledger, if each open project gets its own host. Whether one host holds
-  several projects instead is open.
+- **One host per project, decided the same day.** Each open project gets its
+  own host, and so its own tsh: its own jobs, its own history, its own
+  programs, all on that project's server. This is how Erlang runs two
+  separate systems on one machine, as two nodes, each with its own database
+  folder and its own cookie. It keeps [tea-host](./tea-host.md)'s rule, every
+  host uses exactly one ledger, as written.
+
+```text
+A sketch. Two projects open on one laptop.
+
+window "solo"     host "solo"     the laptop's server     like solo@laptop
+window "shared"   host "shared"   the server on Cloudflare  like shared@laptop
+
+The shared host crashes: only its window says so. The solo window never notices.
+```
 
 *Changed the same day, twice.* First: a project is connected on its own, like
 `git remote add`, with the screen in a second, local ledger. Then: the whole
@@ -938,11 +950,10 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 
 - **[tea-host](./tea-host.md) says "every host uses exactly one ledger"**, and
   the GUI note says everything the app keeps is on the host's one ledger.
-  With one server per project, a host with one project open uses one server:
-  the project's object and the person's object sit on it. Each program is
-  handed one object. Still open: whether one host holds several open
-  projects, and so several servers, or each open project gets its own host,
-  and the rule holds as written.
+  It no longer disagrees. Each open project gets its own host (decided at
+  the top), and that host uses one server: the project's object and the
+  person's object sit on it. Each program is handed one object. The rule
+  holds as written.
   - *Overtaken the same day.* This bullet first gave each host two ledgers,
     the project's and the app's for the screen, and leaned to changing the
     rule to "a host holds the app's ledger and one per project" (80%). The
