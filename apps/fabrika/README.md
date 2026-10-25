@@ -78,6 +78,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | File | What it does |
 |---|---|
 | `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused. Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
+| `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
@@ -245,6 +246,9 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
   host's `host/sock`, `host/pid` and `host/log`. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
+- **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows
+  without taking focus and keeps drawing when covered, so an agent's test never takes the
+  person's keys. `FABRIKA_FOREGROUND=1` shows it as a normal window.
 - The ledger is `ledger.sqlite`, on one node:sqlite connection in the host
   (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
   a Miniflare child is more than one person's tickets need. Each call blocks the host while
