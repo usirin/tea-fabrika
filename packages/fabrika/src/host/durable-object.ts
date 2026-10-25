@@ -21,7 +21,7 @@ import {Layer, ManagedRuntime, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
 import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
 import {type Keys, layerNobody} from "./keys.ts";
-import {KEYS_CACHE_MS, layerGitHub} from "./keys-github.ts";
+import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
 import * as L from "./rules.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
@@ -45,8 +45,8 @@ type Env = {
 	MAX_DELIVERIES?: string;
 	/**
 	 * The door, by config (`configOf`): DOOR, LOCAL_PERSON, LOCAL_SECRET_HASH, FOUNDER, ORIGIN,
-	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS, and the
-	 * optional secret GITHUB_TOKEN.
+	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS,
+	 * KEYS_FAIL_MS, and the optional secret GITHUB_TOKEN.
 	 */
 	[door: string]: unknown;
 };
@@ -55,19 +55,25 @@ type Env = {
  * The `Keys` Layer the env names, or null when it names none this file knows, or says it wrong.
  *
  *   KEYS=github   GitHub's keys and ids (`keys-github.ts`), kept KEYS_CACHE_MS (default 5 min),
- *                 asked with the GITHUB_TOKEN secret when it is set (none: GitHub's shared limit)
+ *                 a failure kept KEYS_FAIL_MS (default 30 s), asked with the GITHUB_TOKEN secret
+ *                 when it is set (none: GitHub's shared limit)
  *
  * The one place a Layer is picked: a new answer to `Keys` is one more line here.
  */
 const keysOf = (env: Env): Layer.Layer<Keys> | null => {
-	const cache = typeof env.KEYS_CACHE_MS === "string" ? env.KEYS_CACHE_MS : "";
-	if (env.KEYS !== "github" || (cache !== "" && !/^[0-9]{1,12}$/.test(cache))) return null;
-	const cacheMs = cache === "" ? KEYS_CACHE_MS : Number(cache);
+	/** A length of time in ms from the env: the default when left out, null when it does not read. */
+	const ms = (k: string, fallback: number): number | null => {
+		const s = typeof env[k] === "string" ? env[k] : "";
+		return s === "" ? fallback : /^[0-9]{1,12}$/.test(s) ? Number(s) : null;
+	};
+	const cacheMs = ms("KEYS_CACHE_MS", KEYS_CACHE_MS);
+	const failMs = ms("KEYS_FAIL_MS", KEYS_FAIL_MS);
+	if (env.KEYS !== "github" || cacheMs === null || failMs === null) return null;
 	const token =
 		typeof env.GITHUB_TOKEN === "string" && env.GITHUB_TOKEN !== ""
 			? {token: Redacted.make(env.GITHUB_TOKEN)}
 			: {};
-	return layerGitHub({cacheMs, ...token}).pipe(Layer.provide(FetchHttpClient.layer));
+	return layerGitHub({cacheMs, failMs, ...token}).pipe(Layer.provide(FetchHttpClient.layer));
 };
 
 /** A shared door with no keys to ask is closed: nobody could prove who they are. */
@@ -298,8 +304,14 @@ export class Ledger extends DurableObject {
 	 * A credential is `Authorization: Bearer <token>`, or for a WebSocket, which cannot send that
 	 * header from a browser, the subprotocol `bearer.<token>` beside `fabrika` (Kubernetes carries
 	 * its bearer token the same way).
+	 *
+	 * Whatever the answer, the request's body is read to its end first (`drained`).
 	 */
 	async fetch(req: Request) {
+		return drained(req, await this.through(req));
+	}
+
+	private async through(req: Request) {
 		const url = new URL(req.url);
 		const [, ledger = "", method = "", step = ""] = url.pathname.split("/");
 		// The Worker picked this object by the name in the path (`objectOf`). When workerd says
@@ -428,6 +440,20 @@ const answer = (r: {ok: true; value: unknown} | {ok: false; status: number; why:
 	r.ok ? Response.json(r.value) : refused(r);
 
 /**
+ * `res`, once the rest of `req`'s body has been read and thrown away. workerd drops a kept-alive
+ * connection when an answer leaves the body unread, and the client's next call on it fails
+ * (experiment 145). An early refusal reads nothing, so this reads it, without keeping it: a body
+ * nobody is let in for is never held in memory.
+ */
+const drained = async (req: Request, res: Response): Promise<Response> => {
+	if (req.body !== null && !req.bodyUsed)
+		await req.body.pipeTo(new WritableStream()).catch(() => {
+			// The client went away mid-body: there is no connection left to keep.
+		});
+	return res;
+};
+
+/**
  * Which object a request is for: the name it is picked by, `idFromName`. One server holds many
  * objects (one per project, one per person); today the name is the path's first part. A router
  * goes here (experiment 145), and every object keeps its own door and its own members.
@@ -441,7 +467,7 @@ export const objectOf = (url: URL): string | null => url.pathname.split("/")[1] 
 export default {
 	async fetch(req: Request, env: Env): Promise<Response> {
 		const name = objectOf(new URL(req.url));
-		if (name === null) return new Response("not found", {status: 404});
+		if (name === null) return drained(req, new Response("not found", {status: 404}));
 		return env.LEDGER.get(env.LEDGER.idFromName(name)).fetch(req);
 	},
 };

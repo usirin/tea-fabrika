@@ -42,6 +42,8 @@ export type KeysOptions = {
 	readonly kind: "github";
 	/** How long GitHub's answers are kept, in ms. Default `KEYS_CACHE_MS`, 5 minutes. */
 	readonly cacheMs?: number;
+	/** How long a failed answer is kept, in ms. Default `KEYS_FAIL_MS`, 30 seconds; 0 keeps none. */
+	readonly failMs?: number;
 	/**
 	 * A GitHub token, for the ledger's own budget of calls (5,000 an hour, not the 60 its address
 	 * shares). The Worker gets it as the `GITHUB_TOKEN` binding, a secret on Cloudflare. Left out:
@@ -100,6 +102,7 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
 					...(d.sessionMs === undefined ? {} : {SESSION_MS: String(d.sessionMs)}),
 					KEYS: d.keys.kind,
 					...(d.keys.cacheMs === undefined ? {} : {KEYS_CACHE_MS: String(d.keys.cacheMs)}),
+					...(d.keys.failMs === undefined ? {} : {KEYS_FAIL_MS: String(d.keys.failMs)}),
 					...(d.keys.token === undefined ? {} : {GITHUB_TOKEN: Redacted.value(d.keys.token)}),
 				};
 

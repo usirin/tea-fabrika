@@ -8,7 +8,7 @@
 //
 //   layerGitHub()                              no token: 60 calls an hour from one address
 //   layerGitHub({token: Redacted.make(t)})     its own budget: 5,000 calls an hour
-//   layerGitHub({cacheMs: 0})                  asks GitHub every time
+//   layerGitHub({cacheMs: 0, failMs: 0})       asks GitHub every time
 //
 // Each question costs two calls. Without a token, GitHub's limit counts calls by address, and a
 // Worker's outgoing address is shared with other sites, so the budget may be spent before the
@@ -18,18 +18,52 @@
 // token slows sign-in down to the shared limit instead of stopping it.
 //
 // Answers are kept for `cacheMs` (`KEYS_CACHE_MS`, 5 minutes, by default). A key taken off on
-// GitHub still signs in until the copy here is that old. A failed call is never kept.
+// GitHub still signs in until the copy here is that old. A failed answer is kept for `failMs`
+// (`KEYS_FAIL_MS`, 30 seconds), so a login while GitHub fails does not ask it again at once.
+//
+// When GitHub says the calls are spent (a 403 or 429 with `retry-after`, or with
+// `x-ratelimit-remaining: 0` and `x-ratelimit-reset`), nothing is asked until the time it names,
+// at most an hour, and every question fails as unreachable till then. One wait for the whole Layer,
+// since the limit is one budget for every call.
 //
 // https://docs.github.com/en/rest/users/users#get-a-user-using-their-id
 // https://docs.github.com/en/rest/users/users#get-a-user
 // https://docs.github.com/en/rest/users/keys#list-public-keys-for-a-user
 // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-import {Cache, Duration, Effect, Exit, Layer, type Redacted, Schema} from "effect";
+import {Cache, Clock, Duration, Effect, Exit, Layer, type Redacted, Ref, Schema} from "effect";
 import {HttpClient, HttpClientRequest, HttpClientResponse} from "effect/http";
 import {Keys, KeysUnreachable, type Signers} from "./keys.ts";
 
 /** How long an answer from GitHub is kept, by default: 5 minutes. */
 export const KEYS_CACHE_MS = 5 * 60_000;
+/** How long a failed answer is kept, by default: 30 seconds. */
+export const KEYS_FAIL_MS = 30_000;
+/** The longest wait for a spent rate limit: GitHub's limit is counted by the hour. */
+export const LIMIT_WAIT_MS = 60 * 60_000;
+
+/**
+ * How long GitHub says to wait before the next call, from a refusal's headers, in ms from `now`;
+ * null when it says nothing of a spent limit. `retry-after` first (seconds, or an HTTP date), then
+ * `x-ratelimit-reset` (seconds since 1970) when `x-ratelimit-remaining` is 0. At most
+ * `LIMIT_WAIT_MS`.
+ */
+export const limitWait = (
+	status: number,
+	headers: Readonly<Record<string, string | undefined>>,
+	now: number,
+): number | null => {
+	if (status !== 403 && status !== 429) return null;
+	const after = headers["retry-after"]?.trim() ?? "";
+	const reset = headers["x-ratelimit-reset"]?.trim() ?? "";
+	const at = /^[0-9]{1,10}$/.test(after)
+		? now + Number(after) * 1000
+		: after !== "" && !Number.isNaN(Date.parse(after))
+			? Date.parse(after)
+			: headers["x-ratelimit-remaining"]?.trim() === "0" && /^[0-9]{1,12}$/.test(reset)
+				? Number(reset) * 1000
+				: null;
+	return at === null ? null : Math.min(Math.max(at - now, 0), LIMIT_WAIT_MS);
+};
 
 /** A GitHub login as GitHub allows it: letters, digits and single dashes, up to 39. */
 export const isLogin = (s: unknown): s is string =>
@@ -50,6 +84,8 @@ export const TOKEN_REFUSED = "the GitHub token was refused; asking without it";
 export interface GitHubOptions {
 	/** How long an answer is kept, in ms. Default `KEYS_CACHE_MS`; 0 asks every time. */
 	readonly cacheMs?: number;
+	/** How long a failed answer is kept, in ms. Default `KEYS_FAIL_MS`; 0 keeps none. */
+	readonly failMs?: number;
 	/**
 	 * A token for GitHub's API, for a budget of its own (5,000 calls an hour). It needs no
 	 * permission: a fine-grained token with public read only. Left out: no `authorization` header.
@@ -80,12 +116,19 @@ export const layerGitHub = (
 				const req = HttpClientRequest.get(`https://api.github.com${path}`);
 				return http.execute(token === undefined ? req : HttpClientRequest.bearerToken(req, token));
 			};
+			/** No call goes out before this time, in ms: GitHub said the limit is spent till then. */
+			const waitUntil = yield* Ref.make(0);
 			/** One GET, read with `schema`; null on a 404. */
 			const get = <A>(
 				path: string,
 				schema: Schema.Codec<A, unknown>,
 			): Effect.Effect<A | null, KeysUnreachable> =>
 				Effect.gen(function* () {
+					const until = yield* Ref.get(waitUntil);
+					if ((yield* Clock.currentTimeMillis) < until)
+						return yield* new KeysUnreachable({
+							why: `GitHub's rate limit is spent until ${new Date(until).toISOString()}; not asked for ${path}`,
+						});
 					let res = yield* send(path, o.token);
 					if (res.status === 401 && o.token !== undefined) {
 						yield* Effect.logWarning(TOKEN_REFUSED);
@@ -93,6 +136,9 @@ export const layerGitHub = (
 					}
 					if (res.status === 404) return null;
 					if (res.status < 200 || res.status >= 300) {
+						const now = yield* Clock.currentTimeMillis;
+						const wait = limitWait(res.status, res.headers, now);
+						if (wait !== null) yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));
 						// A limit hit reads as a limit, not as GitHub being down.
 						const left = res.headers["x-ratelimit-remaining"];
 						const limit =
@@ -146,12 +192,14 @@ export const layerGitHub = (
 				);
 			};
 
-			const ms = o.cacheMs ?? KEYS_CACHE_MS;
-			if (ms <= 0) return Keys.of({byId, of});
+			const ms = Math.max(o.cacheMs ?? KEYS_CACHE_MS, 0);
+			const failMs = Math.max(o.failMs ?? KEYS_FAIL_MS, 0);
+			if (ms === 0 && failMs === 0) return Keys.of({byId, of});
+			// A time to live by how the question ended: zero keeps nothing.
 			const keep = {
 				capacity: 256,
 				timeToLive: (exit: Exit.Exit<Signers | null, KeysUnreachable>) =>
-					Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero,
+					Duration.millis(Exit.isSuccess(exit) ? ms : failMs),
 			};
 			const ids = yield* Cache.makeWith(byId, keep);
 			const names = yield* Cache.makeWith(of, keep);

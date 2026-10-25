@@ -293,6 +293,12 @@ export type Known = {readonly id: string; readonly name: string};
  */
 export const NOT_PROVEN = "not signed by a key of anyone this ledger knows by that name";
 
+/**
+ * The one answer, a 502, when the keys service could not be asked or answered wrong: it names no
+ * id and no name. What went wrong is in the server's log only.
+ */
+export const UNAVAILABLE = "sign-in is unavailable right now; try again soon";
+
 // ---------------------------------------------------------------- texts that get signed
 
 /** The challenge a person or an agent signs to log in. */
@@ -515,24 +521,26 @@ export class Door {
 
 	/**
 	 * One question to the keys service, as a refusal or an answer. Its answer's id is checked here,
-	 * as config's is: it ends up in every writer and holder.
+	 * as config's is: it ends up in every writer and holder. A failure answers `UNAVAILABLE`, the
+	 * same for everyone; what went wrong goes to the server's log only.
 	 */
 	#ask(
 		about: string,
 		q: (k: Keys["Service"]) => Effect.Effect<Signers | null, KeysUnreachable>,
 		ok: (s: Signers) => boolean,
 	): Promise<Let<Signers | null>> {
+		const down = (why: string) =>
+			Effect.logWarning(`sign-in: the keys service failed for ${about}: ${why}`).pipe(
+				Effect.as(refuse(502, UNAVAILABLE)),
+			);
 		return this.#keys.runPromise(
 			Keys.use(q).pipe(
-				Effect.map(
-					(s): Let<Signers | null> =>
-						s === null || (isPersonId(s.id) && ok(s))
-							? letIn(s)
-							: refuse(502, "the keys service gave an id that is no person's, or another's"),
+				Effect.flatMap((s) =>
+					s === null || (isPersonId(s.id) && ok(s))
+						? Effect.succeed(letIn(s))
+						: down("it gave an id that is no person's, or another's"),
 				),
-				Effect.catchTag("KeysUnreachable", (e) =>
-					Effect.succeed(refuse(502, `could not ask for the keys of ${about}: ${e.why}`)),
-				),
+				Effect.catchTag("KeysUnreachable", (e) => down(e.why)),
 			),
 		);
 	}
@@ -541,6 +549,9 @@ export class Door {
 	 * Who this ledger knows by `name`, if `signature` over `text` is by a key the keys service lists
 	 * for them. Asks the keys service about those people only, by id: a name it does not know asks
 	 * nothing. Before the first login that is the founder, by the name the service gives them now.
+	 *
+	 * Every one of them is asked, and the signature picks: one whose question failed does not stop
+	 * the others. `UNAVAILABLE` only when none proved and a question failed; else `NOT_PROVEN`.
 	 */
 	async #proven(name: unknown, text: string, signature: unknown): Promise<Let<Known>> {
 		if (!isName(name)) return refuse(400, "not a name");
@@ -550,20 +561,24 @@ export class Door {
 		const known = knownBy(m, name);
 		const founder = c.kind === "shared" && !m.founded ? c.founder : null;
 		const ids = [...known.map((k) => k.id), ...(founder === null ? [] : [founder])];
+		let failed: Refused | null = null;
 		for (const id of new Set(ids)) {
 			const asked = await this.#ask(
 				id,
 				(k) => k.byId(id),
 				(s) => s.id === id,
 			);
-			if (!asked.ok) return asked;
+			if (!asked.ok) {
+				failed = asked;
+				continue;
+			}
 			const s = asked.value;
 			if (s === null) continue;
 			const as = known.find((k) => k.id === id)?.name ?? s.name;
 			if (as.toLowerCase() !== name.toLowerCase()) continue;
 			if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});
 		}
-		return refuse(401, NOT_PROVEN);
+		return failed ?? refuse(401, NOT_PROVEN);
 	}
 
 	/** A person's login: a challenge, signed with a key the keys service lists for them. */

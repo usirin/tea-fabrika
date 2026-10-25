@@ -1,3 +1,4 @@
+import {Agent, request} from "node:http";
 import {Effect, Exit, Redacted} from "effect";
 import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
@@ -56,7 +57,7 @@ beforeAll(async () => {
 			door: {
 				kind: "shared",
 				founder: "github:7",
-				keys: {kind: "github", cacheMs: 0, api: fakeGitHub},
+				keys: {kind: "github", cacheMs: 0, failMs: 0, api: fakeGitHub},
 			},
 		}),
 	);
@@ -301,6 +302,64 @@ describe("the door in workerd", () => {
 		);
 		if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
 		expect(exit.value?.holder).toBe("host-a@agent:triage for:github:7");
+	});
+});
+
+/**
+ * POSTs on one kept-alive connection, in turn: each call's status (0: the connection broke), and
+ * whether it went on the connection the one before it opened. Node's own `http`, held to one socket.
+ */
+const onOneConnection = async (calls: {path: string; body: string; token?: string}[]) => {
+	const agent = new Agent({keepAlive: true, maxSockets: 1});
+	try {
+		const answers: {status: number; reused: boolean}[] = [];
+		for (const c of calls)
+			answers.push(
+				await new Promise((resolve) => {
+					const req = request(
+						`${url}${c.path}`,
+						{
+							method: "POST",
+							agent,
+							headers: {
+								"content-type": "application/json",
+								...(c.token === undefined ? {} : {authorization: `Bearer ${c.token}`}),
+							},
+						},
+						(res) => {
+							res.resume();
+							res.on("end", () => resolve({status: res.statusCode ?? 0, reused: req.reusedSocket}));
+						},
+					);
+					req.on("error", () => resolve({status: 0, reused: req.reusedSocket}));
+					req.end(c.body);
+				}),
+			);
+		return answers;
+	} finally {
+		agent.destroy();
+	}
+};
+
+describe("a refusal on a kept-alive connection", () => {
+	it("leaves the connection good for the next call, at each early refusal", async () => {
+		// A body big enough that workerd has not read it all by the time it answers.
+		const big = JSON.stringify([0, 10, "x".repeat(256 * 1024)]);
+		const refusals = [
+			{path: "/", body: big},
+			{path: `/${LEDGER}/read`, body: big},
+			{path: `/${LEDGER}/read`, body: big, token: "fabrika_p_guess"},
+			{path: `/${LEDGER}/tail`, body: big, token: person},
+			{path: `/${LEDGER}/door/nothing`, body: big, token: person},
+		];
+		for (const refusal of refusals) {
+			const [first, next] = await onOneConnection([
+				refusal,
+				{path: `/${LEDGER}/read`, body: JSON.stringify([0, 1, null]), token: person},
+			]);
+			expect(first?.status, refusal.path).toBeGreaterThanOrEqual(400);
+			expect(next, refusal.path).toEqual({status: 200, reused: true});
+		}
 	});
 });
 

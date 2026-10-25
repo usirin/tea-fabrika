@@ -1,9 +1,18 @@
 import {describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Logger, Redacted} from "effect";
+import {Clock, Effect, Layer, Logger, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
 import {TestClock} from "effect/testing";
 import {Keys} from "./keys.ts";
-import {isLogin, KEYS_CACHE_MS, layerGitHub, numberOf, TOKEN_REFUSED} from "./keys-github.ts";
+import {
+	isLogin,
+	KEYS_CACHE_MS,
+	KEYS_FAIL_MS,
+	LIMIT_WAIT_MS,
+	layerGitHub,
+	limitWait,
+	numberOf,
+	TOKEN_REFUSED,
+} from "./keys-github.ts";
 
 // GitHub's answer to `Keys`, against a fake api.github.com: what it asks, what it gives back, how
 // long it keeps an answer, and the token it sends. Nothing leaves this process. The door itself is
@@ -18,8 +27,8 @@ const fakeGitHub = () => {
 		/** The `authorization` header of each call, in order: null for none. */
 		auth: [] as (string | null)[],
 		status: 200,
-		/** GitHub's `x-ratelimit-remaining` on a refusal; null sends none. */
-		left: null as string | null,
+		/** The headers GitHub sends with a refusal, such as `x-ratelimit-remaining`. */
+		headers: {} as Record<string, string>,
 		/** A token GitHub no longer takes: a call with it gets 401. */
 		dead: false,
 		logs: [] as string[],
@@ -33,10 +42,7 @@ const fakeGitHub = () => {
 		if (state.dead && auth !== null)
 			return Response.json({message: "Bad credentials"}, {status: 401});
 		if (state.status !== 200)
-			return new Response("no", {
-				status: state.status,
-				headers: state.left === null ? {} : {"x-ratelimit-remaining": state.left},
-			});
+			return new Response("no", {status: state.status, headers: state.headers});
 		if (url.host !== "api.github.com") return Response.json({message: "Not Found"}, {status: 404});
 		const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
 		if (byId !== null) {
@@ -53,10 +59,11 @@ const fakeGitHub = () => {
 			? Response.json({id: u.id, login})
 			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
 	};
-	const layer = (o: {cacheMs?: number; token?: string} = {}) =>
+	const layer = (o: {cacheMs?: number; failMs?: number; token?: string} = {}) =>
 		Layer.mergeAll(
 			layerGitHub({
 				...(o.cacheMs === undefined ? {} : {cacheMs: o.cacheMs}),
+				...(o.failMs === undefined ? {} : {failMs: o.failMs}),
 				...(o.token === undefined ? {} : {token: Redacted.make(o.token)}),
 			}).pipe(
 				Layer.provide(FetchHttpClient.layer),
@@ -134,7 +141,7 @@ describe("GitHub's keys", () => {
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0})));
 	});
 
-	it.effect("fails as unreachable on a GitHub error, and keeps no failure", () => {
+	it.effect("fails as unreachable on a GitHub error, and keeps the failure a short time", () => {
 		const gh = fakeGitHub();
 		gh.users.set("alice", {id: 7, keys: []});
 		gh.state.status = 503;
@@ -142,9 +149,36 @@ describe("GitHub's keys", () => {
 			const down = yield* Effect.flip(of("alice"));
 			expect(down._tag).toBe("KeysUnreachable");
 			expect(down.why).toContain("503");
+			expect(gh.state.asked).toHaveLength(2);
 			gh.state.status = 200;
+			// Kept: the same failure, and GitHub is not asked again.
+			yield* TestClock.adjust(KEYS_FAIL_MS - 1);
+			expect((yield* Effect.flip(of("alice"))).why).toBe(down.why);
+			expect(gh.state.asked).toHaveLength(2);
+			yield* TestClock.adjust(1);
 			expect(yield* of("alice")).toEqual({id: "github:7", name: "alice", keys: []});
+			expect(gh.state.asked).toHaveLength(4);
 		}).pipe(Effect.provide(gh.layer()));
+	});
+
+	it.effect("keeps a failure for failMs, and none at 0", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		gh.state.status = 503;
+		return Effect.gen(function* () {
+			for (const failMs of [1000, 0]) {
+				gh.state.asked.length = 0;
+				gh.state.status = 503;
+				const keys = yield* Layer.build(gh.layer({cacheMs: 0, failMs}));
+				const ask = byId("github:7").pipe(Effect.flip, Effect.provide(keys));
+				yield* ask;
+				yield* ask;
+				expect(gh.state.asked).toEqual(failMs === 0 ? ["/user/7", "/user/7"] : ["/user/7"]);
+				gh.state.status = 200;
+				yield* TestClock.adjust(failMs);
+				expect(yield* byId("github:7").pipe(Effect.provide(keys))).toMatchObject({id: "github:7"});
+			}
+		}).pipe(Effect.scoped);
 	});
 
 	it.effect("says a limit hit is a limit, with the calls GitHub says are left", () => {
@@ -153,14 +187,77 @@ describe("GitHub's keys", () => {
 		return Effect.gen(function* () {
 			for (const status of [403, 429]) {
 				gh.state.status = status;
-				gh.state.left = "0";
+				gh.state.headers = {"x-ratelimit-remaining": "0"};
 				expect((yield* Effect.flip(byId("github:7"))).why).toBe(
 					`GitHub answered ${status} for /user/7 (rate limit: 0 calls left)`,
 				);
 			}
-			gh.state.left = null;
+			gh.state.headers = {};
 			expect((yield* Effect.flip(byId("github:7"))).why).toBe("GitHub answered 429 for /user/7");
-		}).pipe(Effect.provide(gh.layer({cacheMs: 0})));
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
+	});
+
+	it.effect("asks nothing while GitHub's limit is spent, for any id, until its reset", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		gh.users.set("bob", {id: 8, keys: []});
+		return Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis;
+			gh.state.status = 403;
+			gh.state.headers = {
+				"x-ratelimit-remaining": "0",
+				"x-ratelimit-reset": String(Math.floor(now / 1000) + 60),
+			};
+			yield* Effect.flip(byId("github:7"));
+			expect(gh.state.asked).toEqual(["/user/7"]);
+			gh.state.status = 200;
+			// Spent for everyone: another id, and a name, are not asked about either.
+			const later = yield* Effect.flip(byId("github:8"));
+			expect(later._tag).toBe("KeysUnreachable");
+			expect(later.why).toContain("rate limit is spent until");
+			expect((yield* Effect.flip(of("alice")))._tag).toBe("KeysUnreachable");
+			yield* TestClock.adjust(59_999);
+			yield* Effect.flip(byId("github:7"));
+			expect(gh.state.asked).toEqual(["/user/7"]);
+			yield* TestClock.adjust(1);
+			expect(yield* byId("github:8")).toMatchObject({id: "github:8", name: "bob"});
+			expect(gh.state.asked).toEqual(["/user/7", "/user/8", "/users/bob/keys"]);
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
+	});
+
+	it.effect("waits as long as retry-after says", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		return Effect.gen(function* () {
+			gh.state.status = 429;
+			gh.state.headers = {"retry-after": "5"};
+			yield* Effect.flip(byId("github:7"));
+			gh.state.status = 200;
+			yield* TestClock.adjust(4_999);
+			yield* Effect.flip(byId("github:7"));
+			expect(gh.state.asked).toEqual(["/user/7"]);
+			yield* TestClock.adjust(1);
+			expect(yield* byId("github:7")).toMatchObject({id: "github:7"});
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
+	});
+
+	it.effect("waits for nothing on a refusal that names no spent limit", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		return Effect.gen(function* () {
+			for (const [status, headers] of [
+				[503, {"retry-after": "60"}],
+				[403, {}],
+				[403, {"x-ratelimit-remaining": "12", "x-ratelimit-reset": "9999999999"}],
+			] as const) {
+				gh.state.status = status;
+				gh.state.headers = headers;
+				yield* Effect.flip(byId("github:7"));
+			}
+			gh.state.status = 200;
+			expect(yield* byId("github:7")).toMatchObject({id: "github:7"});
+			expect(gh.state.asked).toHaveLength(5);
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
 	});
 
 	it.effect("fails as unreachable on an answer that does not read", () => {
@@ -257,6 +354,29 @@ describe("GitHub's keys with a token", () => {
 			expect(JSON.stringify(e)).not.toContain(TOKEN);
 			expect(String(e)).not.toContain(TOKEN);
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0, token: TOKEN})));
+	});
+});
+
+describe("how long GitHub says to wait", () => {
+	const now = 1_000_000_000_000;
+	it("reads retry-after in seconds, or as a date", () => {
+		expect(limitWait(429, {"retry-after": "5"}, now)).toBe(5000);
+		expect(limitWait(403, {"retry-after": new Date(now + 7000).toUTCString()}, now)).toBe(7000);
+	});
+	it("reads the reset when no calls are left", () => {
+		const reset = String(now / 1000 + 90);
+		expect(limitWait(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": reset}, now)).toBe(
+			90_000,
+		);
+		expect(limitWait(403, {"x-ratelimit-remaining": "3", "x-ratelimit-reset": reset}, now)).toBe(
+			null,
+		);
+	});
+	it("waits at most an hour, never less than nothing, and only on 403 or 429", () => {
+		expect(limitWait(429, {"retry-after": "999999"}, now)).toBe(LIMIT_WAIT_MS);
+		expect(limitWait(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1"}, now)).toBe(0);
+		expect(limitWait(503, {"retry-after": "5"}, now)).toBe(null);
+		expect(limitWait(403, {"retry-after": "soon"}, now)).toBe(null);
 	});
 });
 

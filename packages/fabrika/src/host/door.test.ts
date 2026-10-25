@@ -1,7 +1,7 @@
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Effect, Layer, ManagedRuntime} from "effect";
+import {Effect, Layer, Logger, ManagedRuntime} from "effect";
 import {afterAll, beforeEach, describe, expect, it} from "vitest";
 import {
 	CHALLENGE_MS,
@@ -20,6 +20,7 @@ import {
 	SESSION_MS,
 	type Stamp,
 	trustedArgs,
+	UNAVAILABLE,
 	type Writes,
 } from "./door.ts";
 import {Keys, KeysUnreachable, type Signers} from "./keys.ts";
@@ -47,35 +48,49 @@ const newKey = async (namespace = NAMESPACE): Promise<Key> => {
 
 /**
  * The keys service as far as the door asks: who goes by each name now, their id, and the keys
- * listed for them. `asked` is every question it was put, `down` makes it unreachable, and `other`
- * makes `byId` answer with another id than the one asked about.
+ * listed for them. `asked` is every question it was put, `down` makes it unreachable (`downFor`:
+ * only for those ids), and `other` makes `byId` answer with another id than the one asked about.
+ * `logs` is what the door's runtime logged.
  */
 const fakeKeys = () => {
 	const people = new Map<string, {id: string; keys: string[]}>();
-	const state = {down: false, asked: [] as string[], other: null as string | null};
-	const answer = (q: string, find: () => Signers | null) => {
+	const state = {
+		down: false,
+		downFor: new Set<string>(),
+		asked: [] as string[],
+		other: null as string | null,
+		logs: [] as string[],
+	};
+	const answer = (q: string, find: () => Signers | null, id?: string) => {
 		state.asked.push(q);
-		return state.down
-			? Effect.fail(new KeysUnreachable({why: "down for the test"}))
+		return state.down || (id !== undefined && state.downFor.has(id))
+			? Effect.fail(new KeysUnreachable({why: `down for the test, at ${q}`}))
 			: Effect.sync(find);
 	};
 	const keys = ManagedRuntime.make(
-		Layer.succeed(
-			Keys,
-			Keys.of({
-				byId: (id) =>
-					answer(`byId ${id}`, () => {
-						const found = [...people].find(([, p]) => p.id === id);
-						return found === undefined
-							? null
-							: {id: state.other ?? id, name: found[0], keys: found[1].keys};
-					}),
-				of: (name) =>
-					answer(`of ${name}`, () => {
-						const p = people.get(name);
-						return p === undefined ? null : {...p, name};
-					}),
-			}),
+		Layer.mergeAll(
+			Layer.succeed(
+				Keys,
+				Keys.of({
+					byId: (id) =>
+						answer(
+							`byId ${id}`,
+							() => {
+								const found = [...people].find(([, p]) => p.id === id);
+								return found === undefined
+									? null
+									: {id: state.other ?? id, name: found[0], keys: found[1].keys};
+							},
+							id,
+						),
+					of: (name) =>
+						answer(`of ${name}`, () => {
+							const p = people.get(name);
+							return p === undefined ? null : {...p, name};
+						}),
+				}),
+			),
+			Logger.layer([Logger.make((l) => state.logs.push(String(l.message)))]),
 		),
 	);
 	return {people, state, keys};
@@ -450,6 +465,83 @@ describe("a shared door", () => {
 		expect(await t.door.invite(a.value.who, "bob")).toMatchObject({ok: false, status: 502});
 		// A session it gave before still opens: the keys service is asked at login only.
 		expect(await t.door.who(a.value.token)).toMatchObject({ok: true});
+	});
+
+	it("answers one text for every failure of the keys service, and logs what went wrong", async () => {
+		const a = await loginWith(t.door, "alice", alice);
+		if (!a.ok) throw new Error(a.why);
+		t.state.down = true;
+		const down = {ok: false, status: 502, why: UNAVAILABLE};
+		expect(await loginWith(t.door, "alice", alice)).toEqual(down);
+		expect(await t.door.invite(a.value.who, "bob")).toEqual(down);
+		t.state.down = false;
+		t.state.other = "github:9";
+		expect(await loginWith(t.door, "alice", alice)).toEqual(down);
+		// The answer names nobody; the server's log says who and what.
+		expect(t.state.logs).toEqual([
+			"sign-in: the keys service failed for github:7: down for the test, at byId github:7",
+			"sign-in: the keys service failed for bob: down for the test, at of bob",
+			"sign-in: the keys service failed for github:7: it gave an id that is no person's, or another's",
+		]);
+	});
+
+	describe("several people it knows by one name", () => {
+		// bob joins, then goes by robert at the keys service; a new person takes the name bob and
+		// is invited. Both are known here as bob.
+		let newBob: Key;
+		beforeEach(async () => {
+			const a = await loginWith(t.door, "alice", alice);
+			if (!a.ok) throw new Error(a.why);
+			await t.door.invite(a.value.who, "bob");
+			await loginWith(t.door, "bob", bob);
+			newBob = await newKey();
+			t.people.delete("bob");
+			t.people.set("robert", {id: "github:8", keys: [bob.line]});
+			t.people.set("bob", {id: "github:10", keys: [newBob.line]});
+			await t.door.invite(a.value.who, "bob");
+			t.state.asked.length = 0;
+		});
+
+		it("asks about each, and lets in the one the signature proves", async () => {
+			expect(await loginWith(t.door, "bob", newBob)).toMatchObject({
+				ok: true,
+				value: {who: {kind: "user", id: "github:10"}},
+			});
+			expect(await loginWith(t.door, "bob", bob)).toMatchObject({
+				ok: true,
+				value: {who: {kind: "user", id: "github:8"}},
+			});
+		});
+
+		it("lets one in while the question about another fails", async () => {
+			t.state.downFor.add("github:8");
+			expect(await loginWith(t.door, "bob", newBob)).toMatchObject({
+				ok: true,
+				value: {who: {kind: "user", id: "github:10"}},
+			});
+			t.state.downFor = new Set(["github:10"]);
+			expect(await loginWith(t.door, "bob", bob)).toMatchObject({
+				ok: true,
+				value: {who: {kind: "user", id: "github:8"}},
+			});
+		});
+
+		it("answers unavailable when none proved and a question failed, else not proven", async () => {
+			const carol = await newKey();
+			t.state.downFor.add("github:8");
+			expect(await loginWith(t.door, "bob", carol)).toEqual({
+				ok: false,
+				status: 502,
+				why: UNAVAILABLE,
+			});
+			expect(t.state.asked).toEqual(["byId github:8", "byId github:10"]);
+			t.state.downFor.clear();
+			expect(await loginWith(t.door, "bob", carol)).toEqual({
+				ok: false,
+				status: 401,
+				why: NOT_PROVEN,
+			});
+		});
 	});
 
 	it("does not take the first person who comes as its founder", async () => {
