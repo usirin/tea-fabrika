@@ -85,9 +85,13 @@ Miniflare, are running to settle the details.
 same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
 Alchemy's latest version rather than phoenix's pinned one. Experiment 144
 deploys with it, and says how today's Durable Object ledger fits Alchemy's
-shape. The owner wants Alchemy as the one way to stand up any infrastructure,
-on the laptop too: local servers, Docker containers, and our own kinds through
-its custom resources. Experiment 146 tests that with small spikes.
+shape. The owner wants Alchemy to deploy a host and the storage layer from
+code, on the laptop too, with its custom resources for our own kinds.
+*Corrected the same day:* this line first said Alchemy would be the one way to
+stand up any infrastructure. That was a misreading. Experiment 146 tried that
+wider reading with small spikes, and found Alchemy fits long-lived things a
+person deploys, not per-run boxes or jobs. It timed only the command-line
+path; a deploy called from code is still to measure.
 
 **Everything else below is proposed.** The Door is built and in review.
 Nothing is deployed yet.
