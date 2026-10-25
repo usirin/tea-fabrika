@@ -2,7 +2,7 @@ import {Effect, Exit, Redacted} from "effect";
 import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {type DoorRefused, doorOf, layerHttp} from "./http.ts";
-import {Ledger} from "./ledger.ts";
+import {Ledger, streams} from "./ledger.ts";
 import {grant, layerSignerKey} from "./signer.ts";
 import {keyLineOf} from "./sshsig.ts";
 import {ledgerOptions} from "./worker-options.ts";
@@ -173,6 +173,37 @@ describe("the door in workerd", () => {
 		expect((await post("setLimits", ["t", {usd: 1}], agent)).status).toBe(403);
 		expect(await statusOf(door().invite(Redacted.make(agent), "bob"))).toBe(403);
 		expect(await statusOf(door().remove(Redacted.make(agent), "github:7"))).toBe(403);
+	});
+
+	it("refuses an agent's answer for its person, by append and by send, and takes a person's", async () => {
+		const data = {id: "plan:o/r#7@1", answer: {kind: "approve"}};
+		const raw = await post("append", ["t/inbox", "any", {kind: "answered", data}, null], agent);
+		expect(raw.status).toBe(403);
+		expect(await raw.json()).toEqual({
+			error: "only a person writes answered: an agent does not answer for its person",
+		});
+
+		/** `send`, as a host calls it: the `Ledger` service over HTTP, with `token`'s session. */
+		const send = (token: string, id: string, kind: string) =>
+			asLedger(
+				Redacted.make(token),
+				Effect.gen(function* () {
+					const ledger = yield* Ledger;
+					yield* ledger.send(streams("t").inbox, id, {kind, writer: "x", data});
+					return yield* ledger.readStream("t/inbox");
+				}),
+			);
+		const theirs = await send(agent, "answered:a1", "answered");
+		expect(Exit.isFailure(theirs) && String(theirs.cause)).toContain("answered 403");
+		const mine = await send(person, "answered:p1", "answered");
+		if (Exit.isFailure(mine)) throw new Error(String(mine.cause));
+		// The agent's own facts still land: here, the ask it puts to the owner.
+		const asked = await send(agent, "asked:a1", "ruling_needed");
+		if (Exit.isFailure(asked)) throw new Error(String(asked.cause));
+		expect(asked.value.slice(-2).map((r) => [r.kind, r.writer])).toEqual([
+			["answered", "user:github:7"],
+			["ruling_needed", "agent:triage for:github:7"],
+		]);
 	});
 
 	it("lets in a person a member invited, and nobody else", async () => {

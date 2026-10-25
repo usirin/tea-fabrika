@@ -1,4 +1,4 @@
-import {type Row, Writer, writerOf} from "@kampus/fabrika";
+import {type Row, Writer, type Writes, writerOf} from "@kampus/fabrika";
 import {Option, Schema} from "effect";
 
 // A ticket, as the tracker keeps it: one stream of facts on the ledger, and nothing else
@@ -40,6 +40,18 @@ export const Fact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("reopened")}),
 ]);
 export type Fact = typeof Fact.Type;
+
+/**
+ * Who may write each fact: a person or an agent, all of them. The type holds each row to the
+ * ledger door's kinds only a person writes (`PERSON_KINDS`), so a new fact gets a row here, and
+ * `person` does not compile until the door refuses that kind from an agent.
+ */
+export const WRITTEN_BY = {
+	filed: "anyone",
+	commented: "anyone",
+	closed: "anyone",
+	reopened: "anyone",
+} as const satisfies Writes<Fact["type"]>;
 
 /** One fact read back: on which ticket, who wrote it, when, and where the ledger put it. */
 export const Entry = Schema.Struct({

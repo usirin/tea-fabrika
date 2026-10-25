@@ -19,7 +19,8 @@
 export * as Call from "./host/call.ts";
 export * from "./host/dead-letters.ts";
 // The door: who a request is. It runs inside the ledger (`durable-object.ts`); these are the
-// names a host needs to build what gets signed, and to read what the door says.
+// names a host needs to build what gets signed, and to read what the door says. A program's facts
+// say who writes each (`Writes`), held to the kinds only a person writes (`PERSON_KINDS`).
 export {
 	challengeText,
 	DOOR,
@@ -30,10 +31,14 @@ export {
 	hostOf,
 	isAgentName,
 	isLogin,
+	isPersonKind,
 	MEMBERS,
 	NAMESPACE,
+	PERSON_KINDS,
+	type PersonKind,
 	type Stamp,
 	stampText,
+	type Writes,
 } from "./host/door.ts";
 export * from "./host/host.ts";
 export * from "./host/ledger.ts";

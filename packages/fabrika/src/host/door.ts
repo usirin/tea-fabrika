@@ -28,9 +28,13 @@
 //
 // With neither, every request is refused: a ledger with no door is closed, not open.
 //
+// A person's answer needs a person's session. A kind in `PERSON_KINDS` (the owner's answer to an
+// ask: an approval, a ruling) is refused from an agent's session on every write, so an agent
+// tricked into approving its own work is stopped here, whatever its host does.
+//
 // Erasable TypeScript: workerd loads this file with its types stripped, beside `rules.ts` and
 // `sshsig.ts` (worker-options.ts). Node runs the same file in the tests, on node:sqlite.
-import type {Db, SqlRow, Written} from "./rules.ts";
+import type {Db, Event, SqlRow, Written} from "./rules.ts";
 import {readStream, writeUnguarded} from "./rules.ts";
 import {keyOnly, verify} from "./sshsig.ts";
 
@@ -77,6 +81,33 @@ export const NAMESPACE = "fabrika-ledger";
 export const REDRIVE = "redrive:";
 
 export const isDoorStream = (s: string): boolean => s === DOOR || s.startsWith(`${DOOR}/`);
+
+/**
+ * The kinds only a person writes: a person's answer to what the machine asked them. The door
+ * refuses each from an agent's session, in any stream: no agent approves, rules or answers for
+ * its person.
+ *
+ *   answered   the owner's answer to an ask (packages/pipeline/src/asks/ledger.ts): a plan's
+ *              approval, a ruling, a stuck task's way on, a yes or a no on a build
+ *
+ * The one list. A program says who writes each of its facts in a `Writes` table, and the type holds
+ * that table to this list: a fact marked `person` does not compile until its kind is here.
+ */
+export const PERSON_KINDS = ["answered"] as const;
+export type PersonKind = (typeof PERSON_KINDS)[number];
+
+export const isPersonKind = (kind: string): kind is PersonKind =>
+	(PERSON_KINDS as readonly string[]).includes(kind);
+
+/**
+ * Who may write each of a program's facts, by kind: `person` for a kind in `PERSON_KINDS`, `anyone`
+ * for the rest. A program keeps one beside its facts, `satisfies Writes<Fact["type"]>`: a new fact
+ * has no row until someone says who writes it, and `person` there does not compile until the door
+ * refuses that kind from an agent.
+ */
+export type Writes<K extends string> = {
+	readonly [k in K]: k extends PersonKind ? "person" : "anyone";
+};
 
 // GitHub is the one place a person's keys live. Every key GitHub lists for a member's login may
 // sign in; nothing here pins one. A key taken off on GitHub stops letting anyone in once the
@@ -662,28 +693,35 @@ type Shape = {
 
 const withWriter = (args: unknown[], who: Stamp) => letIn([...args, stampText(who)]);
 
+/**
+ * An event as a request sends it, made the ledger's: its writer is the stamp. Every method that
+ * carries an event takes it through here (today `append`, which the `Ledger` service's `send` is
+ * too), so each refusal below holds on every write.
+ */
+const eventOf = (event: unknown, who: Stamp): Let<Event> => {
+	if (typeof event !== "object" || event === null || Array.isArray(event))
+		return refuse(400, "an event is an object");
+	const e = event as Record<string, unknown>;
+	if ("writer" in e) return refuse(400, "a request does not say its writer: the door does");
+	if (Object.keys(e).some((k) => k !== "kind" && k !== "data" && k !== "id"))
+		return refuse(400, "an event has kind, data and id only");
+	if (typeof e.kind !== "string") return refuse(400, "an event has a kind");
+	const id = e.id ?? null;
+	if (id !== null && typeof id !== "string") return refuse(400, "an event's id is text");
+	if (who.kind !== "user" && typeof id === "string" && id.startsWith(REDRIVE))
+		return refuse(403, "only a person sends a dead letter back");
+	if (who.kind !== "user" && isPersonKind(e.kind))
+		return refuse(403, `only a person writes ${e.kind}: an agent does not answer for its person`);
+	return letIn({kind: e.kind, data: e.data, id, writer: stampText(who)});
+};
+
 const SHAPES: Record<string, Shape> = {
 	register: {arity: 1, build: withWriter},
 	append: {
 		arity: 4,
 		build: ([stream, expected, event, fence], who) => {
-			if (typeof event !== "object" || event === null || Array.isArray(event))
-				return refuse(400, "an event is an object");
-			const e = event as Record<string, unknown>;
-			if ("writer" in e) return refuse(400, "a request does not say its writer: the door does");
-			if (Object.keys(e).some((k) => k !== "kind" && k !== "data" && k !== "id"))
-				return refuse(400, "an event has kind, data and id only");
-			if (typeof e.kind !== "string") return refuse(400, "an event has a kind");
-			const id = e.id ?? null;
-			if (id !== null && typeof id !== "string") return refuse(400, "an event's id is text");
-			if (who.kind !== "user" && typeof id === "string" && id.startsWith(REDRIVE))
-				return refuse(403, "only a person sends a dead letter back");
-			return letIn([
-				stream,
-				expected,
-				{kind: e.kind, data: e.data, id, writer: stampText(who)},
-				fence,
-			]);
+			const e = eventOf(event, who);
+			return e.ok ? letIn([stream, expected, e.value, fence]) : e;
 		},
 	},
 	claim: {
@@ -722,7 +760,8 @@ export const isWireMethod = (method: string): boolean => Object.hasOwn(SHAPES, m
 /**
  * A request's arguments, turned into the ledger method's own, with the writer or the holder from
  * the stamp. Refused: a method not on the wire, the wrong number of arguments (an old client that
- * still sends a writer), an agent on a person's call, or a write under the door's own name.
+ * still sends a writer), an agent on a person's call or with a person's kind (`PERSON_KINDS`), or a
+ * write under the door's own name.
  */
 export const trustedArgs = (method: string, args: unknown, who: Stamp): Let<unknown[]> => {
 	const shape = Object.hasOwn(SHAPES, method) ? SHAPES[method] : undefined;

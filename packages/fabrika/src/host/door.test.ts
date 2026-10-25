@@ -16,9 +16,11 @@ import {
 	KEYS_CACHE_MS,
 	MEMBERS,
 	NAMESPACE,
+	PERSON_KINDS,
 	SESSION_MS,
 	type Stamp,
 	trustedArgs,
+	type Writes,
 } from "./door.ts";
 import * as rules from "./rules.ts";
 import {readStream} from "./rules.ts";
@@ -128,6 +130,68 @@ describe("what a request may say", () => {
 		const event = {kind: "note", data: {}, id: "redrive:t/dead:3"};
 		expect(trustedArgs("append", ["t", "any", event, null], agent)).toMatchObject({status: 403});
 		expect(trustedArgs("append", ["t", "any", event, null], person)).toMatchObject({ok: true});
+	});
+
+	describe("a person's answer", () => {
+		// Where the pipeline keeps the owner's answers: a plan's inbox, under the answer's own id, and
+		// a lane's facts under its fence.
+		const places = [
+			{where: "a plan's inbox", stream: "pipeline/plan/o/r#7/inbox", id: "answered:x", fence: null},
+			{where: "a lane's own facts", stream: "pipeline/plan/o/r#7/facts", id: "a1", fence: 3},
+			{where: "any other stream", stream: "t/1", id: null, fence: null},
+		];
+		const answer = (kind: string, id: string | null) => ({
+			kind,
+			data: {type: kind, id: "plan:o/r#7@1", answer: {kind: "approve"}},
+			id,
+		});
+		/** The event the door hands the ledger, or its refusal. */
+		const eventIn = (r: ReturnType<typeof trustedArgs>) => (r.ok ? r.value[2] : r);
+
+		it.each(PERSON_KINDS.flatMap((kind) => places.map((p) => ({kind, ...p}))))(
+			"is refused when an agent writes $kind, in $where",
+			({kind, stream, id, fence}) => {
+				const r = trustedArgs("append", [stream, "any", answer(kind, id), fence], agent);
+				expect(r).toEqual({
+					ok: false,
+					status: 403,
+					why: `only a person writes ${kind}: an agent does not answer for its person`,
+				});
+			},
+		);
+
+		it.each(PERSON_KINDS)("is written by a person: %s, with the person as its writer", (kind) => {
+			const event = answer(kind, "answered:x");
+			const r = trustedArgs("append", ["pipeline/plan/o/r#7/inbox", "any", event, null], person);
+			expect(eventIn(r)).toEqual({...event, writer: "user:github:7"});
+		});
+
+		// An agent's own facts: the ask it puts to the owner, a plan, a listener's, its own answer to
+		// its stage, anything else.
+		it.each(["ruling_needed", "planned", "check_raised", "cleared", "answer", "note"])(
+			"leaves an agent's ordinary %s to land",
+			(kind) => {
+				const r = trustedArgs(
+					"append",
+					["pipeline/ticket/o/r#7/inbox", "any", {kind}, null],
+					agent,
+				);
+				expect(eventIn(r)).toMatchObject({kind, writer: "agent:triage for:github:7"});
+			},
+		);
+
+		it("holds a program's table of who writes what to the door's list, by its type", () => {
+			const table = {answered: "person", note: "anyone"} as const satisfies Writes<
+				"answered" | "note"
+			>;
+			// @ts-expect-error The door refuses an agent's `answered`: the row must say `person`.
+			const lax = {answered: "anyone"} as const satisfies Writes<"answered">;
+			// @ts-expect-error A kind an agent may write: `person` needs it in PERSON_KINDS first.
+			const unguarded = {approved: "person"} as const satisfies Writes<"approved">;
+			// @ts-expect-error Every fact has a row: one left out does not compile.
+			const short = {note: "anyone"} as const satisfies Writes<"answered" | "note">;
+			expect([table, lax, unguarded, short]).toHaveLength(4);
+		});
 	});
 
 	it("never writes under the door's own name, and still reads it", () => {
