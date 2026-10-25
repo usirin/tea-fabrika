@@ -14,8 +14,10 @@ const covers = (yes: Approved, now: Ticket) => yes.text === sha256(now.title, no
 
 ## What was decided
 
-- **The tracker is part of the first version.** It is the ledger, with
-  tickets as facts, plus a small form in the app to file one.
+- **The tracker is part of the first version.** It is a program: tickets are
+  facts on the ledger, and its window is the form to file one. As
+  [the GUI note](./the-gui-is-electron-first.md) says, every window in the app
+  is some program's view, so a form cannot exist outside a program.
   - It is not a whole Linear. No boards, no cycles, no priorities: those wait
     for a run that needs them, as
     [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.
@@ -53,7 +55,7 @@ const covers = (yes: Approved, now: Ticket) => yes.text === sha256(now.title, no
 - **It was the end state anyway.** The ledger note names fabrika's own tracker
   as where this goes. This moves it into the first version.
 
-**Cost:** a form in the app, three new facts and a hash. Tickets are no longer
+**Cost:** one program with a window, three new facts and a hash. Tickets are no longer
 public, so a demlik maintainer cannot see why a pull request exists unless it
 says so on GitHub (see below).
 
@@ -71,7 +73,8 @@ run. What would settle it: building the form and seeing how small it is.
     exists on GitHub. The doubt: comments on the copy reach nobody.
 - **Ticket ids.** `demlik-1`, in Linear's style of a team key and a number, is
   a guess.
-- **The form.** In the Electron app. A `tsh` command may come first.
+- **The form.** The tracker program's window. `tsh` can drive the same
+  program before the window exists.
 
 ## What would change it
 
