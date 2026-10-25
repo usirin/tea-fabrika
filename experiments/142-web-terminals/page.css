@@ -1,0 +1,25 @@
+/* The tiles, as the app draws them (apps/fabrika/src/window/window.css): a padded box per tile. */
+html,
+body {
+	margin: 0;
+	height: 100%;
+	background: #16181d;
+	overflow: hidden;
+}
+
+.tile {
+	position: absolute;
+	box-sizing: border-box;
+	border: 1px solid #2a2e37;
+}
+
+.term {
+	position: absolute;
+	inset: 0;
+	padding: 4px 6px;
+	box-sizing: border-box;
+}
+
+.screen {
+	height: 100%;
+}

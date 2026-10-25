@@ -1,5 +1,5 @@
-import {execFile} from "node:child_process";
-import {mkdir, mkdtemp, readdir, readFile} from "node:fs/promises";
+import {execFile, spawn} from "node:child_process";
+import {mkdir, mkdtemp, readdir, readFile, stat} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -25,8 +25,7 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; Ctrl-C over counter
 // is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
 // Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
-// the page cannot navigate away; a second copy quits and leaves the first; and what Electron's own
-// Node can do.
+// the page cannot navigate away; and a second copy quits and leaves the first.
 //
 // Then the window's own close button, as macOS has it:
 //
@@ -34,13 +33,22 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //                    brings a new window on the same desk, with counter and the tracker still up
 //
 // Then y on t2, covered by the tracker: the tracker gets the end of its inputs, ends, and t2 goes.
-// The app quits with counter up in a tile, and is started again on the same home:
+// The app quits with counter up in a tile. The host it started runs on, apart from the app, as
+// the tmux server outlives its client: its pid (in `<home>/host/pid`) is alive, and counter with
+// it. The app is started again on the same home, and attaches to that host:
 //
-//   10 restored      the tile comes back, and says 1 job from an earlier tsh
-//   11 again         `attach %n`: counter covers the tile again, at 1
+//   10 restored      the same desk, with counter still up in its tile, at 1: nothing restarted
 //
-// and closing the last tile closes the window, not the app; the dock icon then opens one fresh
-// tile. Then the app quits.
+// Ctrl-B | splits there, through the host. Done ends counter; closing the last tile closes the
+// window, not the app; the dock icon then opens one fresh tile. Then the app quits.
+//
+// Then a host of another version, on a home of its own: a small Node server on that home's
+// socket that says hello with version 0. The app does not attach, and says so:
+//
+//   11 mismatch      "Not attached to the host", with both versions; that host still runs
+//
+// Last, as no person ever does (there is no stop command), the run stops the host it started by
+// its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
 //
 // The terminals draw on canvases; the page keeps each screen as text too, for a screen reader,
 // and that is what this reads. Playwright's API is promises, and this script stays in it.
@@ -356,16 +364,6 @@ const flow = async (app: ElectronApplication) => {
 		},
 	);
 
-	const node = await app.evaluate(() => {
-		const sqlite = process.getBuiltinModule("node:sqlite");
-		const db = new sqlite.DatabaseSync(":memory:");
-		const row = db.prepare("select sqlite_version() as v").get();
-		db.close();
-		return {node: process.versions.node, electron: process.versions.electron, sqlite: row?.v};
-	});
-	console.log(`    ${JSON.stringify(node)}`);
-	check("node:sqlite runs in Electron's main process", typeof node.sqlite === "string", node);
-
 	// Last on this page: Playwright waits on the navigation main refused, so it is not driven after.
 	await page.evaluate(() => {
 		window.location.href = "https://example.com";
@@ -411,35 +409,39 @@ const reopen = async (app: ElectronApplication, left: string) => {
 	check("y on t2: the tracker gets the end of its inputs, ends, and t2 goes", true);
 };
 
-/** Started again on the same home: the tile comes back, and attach brings counter back where it was. */
+/** Started again on the same home: it attaches to the host that ran on, and the desk is as it was. */
 const again = async (app: ElectronApplication, left: string) => {
 	const page = await app.firstWindow();
 	await tilesAre(page, [left]);
-	const found = await shows(page, left, "the earlier job", (t) =>
-		t.includes("from an earlier tsh"),
+	await countIn(page, left).filter({hasText: /^1$/}).waitFor();
+	const before = await screen(page, left);
+	check(
+		"started again: the same desk, with counter still up at 1, and no earlier job to attach",
+		!before.includes("earlier tsh"),
+		before,
 	);
-	const n = /1 job from an earlier tsh, not running: %(\d+)\./.exec(
-		found.replaceAll("\n", ""),
-	)?.[1];
-	check("started again, the tile is back, and counter's job is there", n !== undefined, found);
-	await prompted(page, left);
 	await focusIs(page, left);
 	await shot(page, "10-restored");
 
-	await run(page, left, `attach %${n}`);
-	await countIn(page, left).waitFor();
-	check(
-		"attach: counter covers the tile again, at 1",
-		(await countIn(page, left).innerText()) === "1",
-	);
-	await shot(page, "11-again");
 	await tile(page, left).getByRole("button", {name: "done"}).click();
-	const back = await shows(page, left, "counter's count", (t) =>
-		t.includes(`tsh$ attach %${n}\n1\n`),
-	);
-	check("done: counter ends, tsh prints 1", true, back);
-
+	const back = await shows(page, left, "counter's count", (t) => t.includes("tsh$ counter\n1\n"));
+	check("done: counter ends, the tsh that ran it all along prints 1", true, back);
 	await prompted(page, left);
+
+	await prefixed(page, "|");
+	const split = await until(
+		"a new tile",
+		() => tiles(page),
+		(t) => t.length === 2,
+	);
+	await prompted(page, split[1] ?? "");
+	check("Ctrl-B | splits, through the host", split[0] === left, split);
+	await prefixed(page, "x");
+	await askedIs(page, `close ${split[1]}? (y/n)`);
+	await page.keyboard.press("y");
+	await tilesAre(page, [left]);
+	await focusIs(page, left);
+
 	const gone = page.waitForEvent("close");
 	await prefixed(page, "x");
 	await askedIs(page, `close ${left}? (y/n)`);
@@ -468,32 +470,164 @@ const again = async (app: ElectronApplication, left: string) => {
 if (process.platform !== "darwin")
 	throw new Error("this run checks macOS's window rules: run it on a Mac");
 
-const launch = () => _electron.launch({executablePath: electronPath, args: [here], env});
+const launch = (on: string) =>
+	_electron.launch({
+		executablePath: electronPath,
+		args: [here],
+		env: {...process.env, FABRIKA_HOME: on},
+	});
 
-const first = await launch();
+/** Is there a process with this pid? Signal 0 asks, and sends nothing. */
+const alive = (pid: number) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+};
+/** The pid the host wrote in its home, or none. */
+const hostPid = async (on: string) => {
+	const text = await readFile(join(on, "host", "pid"), "utf8").catch(() => "");
+	const pid = Number.parseInt(text, 10);
+	return Number.isInteger(pid) ? pid : null;
+};
+/** The pids whose command line names `what`, as pgrep finds them. */
+const pgrep = (what: string) =>
+	promisify(execFile)("pgrep", ["-f", what]).then(
+		(r) => r.stdout.split("\n").filter((l) => l !== ""),
+		(): string[] => [],
+	);
+/** Stop a process by its pid, as the test's own clean-up, and wait for it to be gone. */
+const stop = async (pid: number) => {
+	if (alive(pid)) process.kill(pid, "SIGTERM");
+	await until(
+		`pid ${pid} to stop`,
+		async () => alive(pid),
+		(up) => !up,
+	);
+};
+
+/**
+ * A host of another version: a Node server on the home's socket, in a 0700 folder as the host
+ * keeps it, that says hello with version 0 to whoever connects.
+ */
+const oldHost = async (on: string) => {
+	const dir = join(on, "host");
+	await mkdir(dir, {recursive: true, mode: 0o700});
+	const sock = join(dir, "sock");
+	const child = spawn(
+		process.execPath,
+		[
+			"-e",
+			`require("node:net").createServer((c) => c.write('{"type":"hello","version":0}\\n')).listen(process.argv[1])`,
+			sock,
+		],
+		{stdio: "ignore"},
+	);
+	await until(
+		"the old host's socket",
+		() =>
+			stat(sock).then(
+				(s) => s.isSocket(),
+				() => false,
+			),
+		(up) => up,
+	);
+	return child;
+};
+
+/** The app on a home whose host speaks version 0: it does not attach, says so, and stops nothing. */
+const mismatch = async () => {
+	const other = await mkdtemp(join(tmpdir(), "fabrika-old-"));
+	const old = await oldHost(other);
+	try {
+		const app = await launch(other);
+		try {
+			const page = await app.firstWindow();
+			const said = await until(
+				"the app to say it did not attach",
+				() =>
+					page
+						.getByRole("alert")
+						.textContent({timeout: 2000})
+						.then(
+							(t) => t ?? "",
+							() => "",
+						),
+				(t) => t.includes("Not attached"),
+			);
+			check(
+				"a host of another version: the app does not attach, and says both versions",
+				said.includes("version 0") && said.includes("speaks 1") && (await tiles(page)).length === 0,
+				said,
+			);
+			await shot(page, "11-mismatch");
+		} finally {
+			await app.close().catch(() => {});
+		}
+		check(
+			"the host of another version still runs: the app did not stop it",
+			old.pid !== undefined && alive(old.pid),
+		);
+	} finally {
+		if (old.pid !== undefined) await stop(old.pid);
+	}
+	check(
+		"the old host stopped by its pid: pgrep finds nothing on its home",
+		(await pgrep(other)).length === 0,
+	);
+};
+
+const first = await launch(home);
 let left = "";
 try {
-	left = await flow(first);
-	await reopen(first, left);
+	try {
+		left = await flow(first);
+		await reopen(first, left);
+	} finally {
+		// With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
+		await first.close();
+	}
+	const pid = await hostPid(home);
+	check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
+	const kept = await readdir(join(home, "storage", "tiles")).catch((): string[] => []);
+	check(
+		"the tile left with counter has its jobs in its own folder, and no closed tile has",
+		kept.includes(left) && !["t1", "t2", "t3"].some((t) => kept.includes(t)),
+		kept,
+	);
+	const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
+	check("the host kept the desk in the home", desk.includes(`"${left}"`), desk);
+	const history = await readFile(join(home, "history"), "utf8").catch(() => "");
+	check("the host kept the history in the home", history.endsWith("counter\n"), history);
+
+	const next = await launch(home);
+	try {
+		await again(next, left);
+	} finally {
+		await next.close().catch(() => {});
+	}
+	check(
+		"then the app quits, and the same host runs on",
+		(await hostPid(home)) === pid && pid !== null && alive(pid),
+	);
+
+	await mismatch();
 } finally {
-	// With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
-	await first.close();
+	// No person stops the host: there is no command for it. The run stops its own, by its pid.
+	const pid = await hostPid(home);
+	if (pid !== null) await stop(pid);
 }
-const kept = await readdir(join(home, "storage", "tiles")).catch((): string[] => []);
+const after = await pgrep(here);
 check(
-	"the tile left with counter kept its jobs in its own folder, and no closed tile did",
-	kept.includes(left) && !["t1", "t2", "t3"].some((t) => kept.includes(t)),
-	kept,
+	"the host stopped by its pid: pgrep finds nothing of this app left",
+	after.length === 0,
+	after,
 );
-const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
-check("the desk was kept in the home", desk.includes(`"${left}"`), desk);
-const history = await readFile(join(home, "history"), "utf8").catch(() => "");
-check("the history was kept in the home", history.endsWith("counter\n"), history);
-const next = await launch();
-try {
-	await again(next, left);
-} finally {
-	await next.close().catch(() => {});
-}
-check("then the app quits", true);
+const sock = await stat(join(home, "host", "sock")).then(
+	() => true,
+	() => false,
+);
+check("the host took its socket away as it stopped", !sock);
 console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);

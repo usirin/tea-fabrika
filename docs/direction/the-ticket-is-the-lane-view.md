@@ -71,6 +71,24 @@ const forAgent = brief(state, facts); // the same rows as text, typed facts as s
 brief fits every stage or each stage needs its own cut. The first lanes on the
 tracker would settle it.
 
+## Proposed 2026-10-25: what the view shows
+
+The whole study is in [what a ticket's view shows](./what-a-ticket-shows.md).
+In short:
+
+- **The top line** is a fold with seven branches: done, closed by you, waits
+  on you, running, stuck, idle, next. An open ask wins over all but done and
+  closed.
+- **A lane writes nine fact kinds:** `started`, `ended`, `planned`, `pushed`,
+  `reviewed`, `pr`, `asked`, `answered`, `rated`. Each is one short row.
+- **A running agent is one live row,** never its tool calls. "open log" opens
+  its whole log in a tile.
+- **Until the pipeline runs lanes,** Claude Code hooks write each run's start
+  and end, and the main session writes each stage's answer, as `agent:`
+  writers. The bridge never takes an answer.
+- **Done is a merged pull request,** read from GitHub, or a user's close on a
+  ticket with no code. No agent writes it.
+
 ## Still open
 
 - **Where the app keeps a user's key.** Somewhere no agent can read it, boxed

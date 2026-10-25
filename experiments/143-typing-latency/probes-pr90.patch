@@ -1,0 +1,375 @@
+diff -ruN a/apps/fabrika/src/host/main.ts b/apps/fabrika/src/host/main.ts
+--- a/apps/fabrika/src/host/main.ts
++++ b/apps/fabrika/src/host/main.ts
+@@ -2,6 +2,8 @@
+ import * as NodePath from "@effect/platform-node/NodePath";
+ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+ import {Effect, FileSystem, Layer, Logger} from "effect";
++import {probes} from "../probe.ts";
++import {dumpOn, timeSocket} from "../probe-net.ts";
+ import {runHost} from "./run.ts";
+ import {pathsOf} from "./socket.ts";
+ 
+@@ -29,6 +31,11 @@
+ // its mode is set.
+ 
+ const home = process.env.FABRIKA_HOME;
++
++// Experiment 143: time the tile named in X143_TILE, and dump its rows on SIGUSR2.
++probes.tile = process.env.X143_TILE ?? "t1";
++timeSocket("host");
++if (home !== undefined && home !== "") dumpOn(`${home}/host/x143.json`);
+ 
+ const main = Effect.gen(function* () {
+ 	if (home === undefined || home === "")
+diff -ruN a/apps/fabrika/src/host/serve.ts b/apps/fabrika/src/host/serve.ts
+--- a/apps/fabrika/src/host/serve.ts
++++ b/apps/fabrika/src/host/serve.ts
+@@ -15,6 +15,7 @@
+ import type {SharedHistory} from "../editor/history.ts";
+ import {type Down, PROTOCOL, type Up} from "../link.ts";
+ import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
++import {probe, timed} from "../probe.ts";
+ import {type Place, startTiles} from "../tiles.ts";
+ import type {Screen} from "../tsh.ts";
+ import {hostWire} from "../wire.ts";
+@@ -93,7 +94,12 @@
+ 			client.send({type: "port", port: name});
+ 			client.shown.set(
+ 				name,
+-				screen.show((m) => client.send({type: "to", port: name, m})),
++				screen.show((m) => {
++					if (!timed(name)) return client.send({type: "to", port: name, m});
++					probe("hout");
++					client.send({type: "to", port: name, m});
++					probe("hsent");
++				}),
+ 			);
+ 		};
+ 		const hide = (client: Client) => {
+@@ -233,8 +239,10 @@
+ 						else warn(`refused a message from a page: ${read.why}`);
+ 						return;
+ 					}
++					if (timed(m.port)) probe("hin");
+ 					const heard = screens.get(m.port)?.heard(m.m);
+ 					if (heard?.kind === "refused") warn(`refused a message on ${m.port}: ${heard.why}`);
++					if (timed(m.port)) probe("hheard");
+ 					return;
+ 				}
+ 			}
+diff -ruN a/apps/fabrika/src/main.ts b/apps/fabrika/src/main.ts
+--- a/apps/fabrika/src/main.ts
++++ b/apps/fabrika/src/main.ts
+@@ -10,6 +10,7 @@
+ 	ipcMain,
+ 	MessageChannelMain,
+ 	type MessagePortMain,
++	powerSaveBlocker,
+ 	protocol,
+ 	session,
+ } from "electron";
+@@ -18,8 +19,32 @@
+ import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+ import type {Down, Up} from "./link.ts";
+ import type {ToPage} from "./messages.ts";
++import {probe, probes, timed} from "./probe.ts";
++import {timeSocket} from "./probe-net.ts";
+ import {Unattached, type Wire} from "./wire.ts";
+ 
++probes.tile = process.env.X143_TILE ?? "t1";
++timeSocket("app");
++// Experiment 143: a run may switch Chromium features off. A second switch of the same name
++// replaces the first, so any list already there is kept and joined.
++if (process.env.X143_FEATURES_OFF) {
++	const had = app.commandLine.getSwitchValue("disable-features");
++	const off = [had, process.env.X143_FEATURES_OFF].filter(Boolean).join(",");
++	app.commandLine.appendSwitch("disable-features", off);
++}
++// Experiment 143: opened by the script, the copy never becomes the active app, so it never takes
++// focus from whoever is using the machine: no Dock icon, and its window is shown inactive. Its
++// keys come through Chromium (CDP), not the keyboard, and Playwright tells the page it has focus.
++const quiet = process.env.X143_QUIET === "1";
++const keepQuiet = () => {
++	if (quiet && process.platform === "darwin") app.setActivationPolicy("accessory");
++};
++keepQuiet();
++// Experiment 143: X143_AWAKE asks macOS not to nap the copy (App Nap), in this process only:
++// nothing is written to the system's settings.
++if (process.env.X143_AWAKE === "1")
++	void app.whenReady().then(() => powerSaveBlocker.start("prevent-app-suspension"));
++
+ // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
+ // program, the desk, the jobs and the ledger are in the host, a process of its own
+ // (host/main.ts), as tmux's server is. This process is a client of it, and a thin relay between
+@@ -99,19 +124,23 @@
+ 
+ /** The one window, with the same safe settings the app's windows always had. */
+ const deskWindow = (preload: string) => {
++	keepQuiet();
+ 	const window = new BrowserWindow({
+ 		width: 1200,
+ 		height: 760,
+ 		title: "fabrika",
+ 		backgroundColor: "#16181d",
++		...(quiet ? {show: false, paintWhenInitiallyHidden: true} : {}),
+ 		webPreferences: {
+ 			sandbox: true,
+ 			contextIsolation: true,
+ 			nodeIntegration: false,
+ 			webSecurity: true,
+ 			preload,
++			...(quiet ? {backgroundThrottling: false} : {}),
+ 		},
+ 	});
++	if (quiet) window.once("ready-to-show", () => window.showInactive());
+ 	window
+ 		.loadURL(DESK)
+ 		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
+@@ -223,8 +252,10 @@
+ 	/** A port whose messages go to the host, under its name. */
+ 	const relay = (name: string) =>
+ 		ports.push(name, (raw) => {
++			if (timed(name)) probe("in", (raw as {type?: unknown} | null)?.type);
+ 			if (plain(raw)) toHost({type: "on", port: name, m: raw});
+ 			else console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
++			if (timed(name)) probe("queued");
+ 		});
+ 	const toPage = (m: ToPage) => ports.post("desk", m);
+ 	const fromHost = (m: Down) => {
+@@ -236,7 +267,11 @@
+ 				if (m.port !== "desk") relay(m.port);
+ 				return;
+ 			case "to":
+-				return ports.post(m.port, m.m);
++				if (!timed(m.port)) return ports.post(m.port, m.m);
++				probe("back");
++				ports.post(m.port, m.m);
++				probe("posted");
++				return;
+ 			case "gone":
+ 				return ports.gone(m.port);
+ 			case "close":
+@@ -280,7 +315,7 @@
+ 	const showWindow = () => {
+ 		if (current !== null) {
+ 			if (current.isMinimized()) current.restore();
+-			current.focus();
++			if (!quiet) current.focus();
+ 			return;
+ 		}
+ 		const made = deskWindow(path.join(DIST, "preload.cjs"));
+diff -ruN a/apps/fabrika/src/probe-net.ts b/apps/fabrika/src/probe-net.ts
+--- a/apps/fabrika/src/probe-net.ts
++++ b/apps/fabrika/src/probe-net.ts
+@@ -0,0 +1,37 @@
++import {writeFileSync} from "node:fs";
++import {Socket} from "node:net";
++import {probe, probes} from "./probe.ts";
++
++// Experiment 143: the host's socket, timed where the bytes meet the kernel. Only chunks that
++// carry the timed tile's keys or its screen are timed: `up` names what this side writes, and
++// `down` what it reads, as {"type":"keys"} or {"type":"write"} on that tile's port.
++
++export const timeSocket = (side: "app" | "host") => {
++	const wrote = side === "app" ? '"keys"' : '"write"';
++	const read = side === "app" ? '"write"' : '"keys"';
++	// Searched as bytes, in place, not copied into text: a busy tile sends many chunks.
++	const has = (chunk: unknown, text: string) =>
++		typeof chunk === "string"
++			? chunk.includes(text)
++			: chunk instanceof Uint8Array &&
++				Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength).includes(text);
++	const ours = (chunk: unknown, what: string) =>
++		has(chunk, `"tile:${probes.tile}"`) && has(chunk, what);
++	const write = Socket.prototype.write;
++	Socket.prototype.write = function (this: Socket, ...args: unknown[]) {
++		if (ours(args[0], wrote)) probe("sock-write");
++		return (write as (...a: unknown[]) => boolean).apply(this, args);
++	} as typeof write;
++	const emit = Socket.prototype.emit;
++	Socket.prototype.emit = function (this: Socket, event: string | symbol, ...args: unknown[]) {
++		if (event === "data" && ours(args[0], read)) probe("sock-data");
++		return emit.call(this, event, ...args);
++	} as typeof emit;
++};
++
++/** The host's rows, written to a file on SIGUSR2: the script reads them there. */
++export const dumpOn = (file: string) =>
++	process.on("SIGUSR2", () => {
++		writeFileSync(file, JSON.stringify(probes.rows));
++		probes.rows.length = 0;
++	});
+diff -ruN a/apps/fabrika/src/probe.ts b/apps/fabrika/src/probe.ts
+--- a/apps/fabrika/src/probe.ts
++++ b/apps/fabrika/src/probe.ts
+@@ -0,0 +1,27 @@
++// Experiment 143's timing probes, in a copy of the app only: never in the app itself. Each
++// process keeps its own list, on its own clock (performance.now), and the script reads each list
++// and takes differences inside it. Nothing here crosses a process.
++//
++//   probe("in", "keys")       a row: its name, the time, and what it was about
++//   probes.tile = "t2"        the tile whose keys and screen are timed; the others are not
++//   probes.after = (name) =>  called after each row: the script waits on "frame" with it
++
++interface Probes {
++	readonly rows: unknown[][];
++	/** The tile timed. */
++	tile: string;
++	after?: (name: string) => void;
++}
++
++const held = globalThis as unknown as {__x143?: Probes};
++export const probes: Probes = held.__x143 ?? {rows: [], tile: "t1"};
++held.__x143 = probes;
++
++/** One row: what happened, when, and a small note. */
++export const probe = (name: string, note?: unknown) => {
++	probes.rows.push(note === undefined ? [name, performance.now()] : [name, performance.now(), note]);
++	probes.after?.(name);
++};
++
++/** Is this port the timed tile's? */
++export const timed = (port: string) => port === `tile:${probes.tile}`;
+diff -ruN a/apps/fabrika/src/tsh.ts b/apps/fabrika/src/tsh.ts
+--- a/apps/fabrika/src/tsh.ts
++++ b/apps/fabrika/src/tsh.ts
+@@ -20,6 +20,7 @@
+ import {type EditorMsg, editor} from "./editor/editor.ts";
+ import type {SharedHistory} from "./editor/history.ts";
+ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
++import {probe} from "./probe.ts";
+ 
+ // One tile's tsh: tsh, with its line editor, behind the tile's terminal, and a view for each run
+ // of a program that has one. It names no platform: it is handed the terminal's page and a way to
+@@ -211,7 +212,13 @@
+ 		// The terminal's screen: each write goes to every page, and is kept for a page loaded again.
+ 		let screen = "";
+ 		const pages = new Set<(m: ToTerminal) => void>();
++		/** The editor is stepping on keys: the write it makes is their echo, timed. */
++		let echoing = false;
+ 		const write = (data: string) => {
++			if (echoing) {
++				echoing = false;
++				probe("edit1", data.length);
++			}
+ 			screen = kept(screen + data);
+ 			for (const page of pages) page({type: "write", data});
+ 		};
+@@ -367,7 +374,18 @@
+ 		// What was heard, told in order by one fiber.
+ 		const tellOne = (told: Told) =>
+ 			told.to === "editor"
+-				? editing.dispatch(told.msg).pipe(Effect.orDie)
++				? Effect.suspend(() => {
++						echoing = told.msg.type === "keys";
++						if (echoing) probe("edit0");
++						return editing.dispatch(told.msg).pipe(
++							Effect.ensuring(
++								Effect.sync(() => {
++									if (echoing) probe("edit-none");
++									echoing = false;
++								}),
++							),
++						);
++					}).pipe(Effect.orDie)
+ 				: // Offered, not told: a press is never dropped on a full input. A run that ended
+ 					// meanwhile answers `stopped`, and the press goes nowhere, as it should.
+ 					told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
+diff -ruN a/apps/fabrika/src/window/desk.tsx b/apps/fabrika/src/window/desk.tsx
+--- a/apps/fabrika/src/window/desk.tsx
++++ b/apps/fabrika/src/window/desk.tsx
+@@ -30,6 +30,7 @@
+ 	type TileNode,
+ } from "../desk/layout/index.ts";
+ import {type FromPage, readToPage, readToWindow, type ToWindow} from "../messages.ts";
++import {probe} from "../probe.ts";
+ import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
+ import {WINDOWS} from "./windows.tsx";
+ 
+@@ -203,6 +204,8 @@
+ /** Every key, before anything else on the page sees it: the desk's, or the focused tile's. */
+ const onKey = (e: KeyboardEvent) => {
+ 	if (replaying) return;
++	probe("down", [e.timeStamp, e.key]);
++	performance.mark("x143:down");
+ 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
+ 	if (name === null) return;
+ 	const press = {
+@@ -213,7 +216,9 @@
+ 		meta: e.metaKey,
+ 		shift: e.shiftKey,
+ 	};
+-	if (holdStep({type: "key", key: {name, press}})) return;
++	const live = holdStep({type: "key", key: {name, press}});
++	probe("routed", !live);
++	if (live) return;
+ 	e.preventDefault();
+ 	e.stopImmediatePropagation();
+ };
+diff -ruN a/apps/fabrika/src/window/terminal.ts b/apps/fabrika/src/window/terminal.ts
+--- a/apps/fabrika/src/window/terminal.ts
++++ b/apps/fabrika/src/window/terminal.ts
+@@ -3,6 +3,7 @@
+ import wasm from "ghostty-web/ghostty-vt.wasm";
+ import type {TileId} from "../desk/layout/index.ts";
+ import {readToTerminal} from "../messages.ts";
++import {probe, timed} from "../probe.ts";
+ 
+ // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
+ // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
+@@ -98,6 +99,11 @@
+ 	 * buffer's length.
+ 	 */
+ 	const mirror = () => {
++		if (timed(port)) probe("mirror0");
++		mirrorRows();
++		if (timed(port)) probe("mirror1");
++	};
++	const mirrorRows = () => {
+ 		const buffer = term.buffer.active;
+ 		const end = Math.min(buffer.length, buffer.length - term.rows + buffer.cursorY + 1);
+ 		const rows: string[] = [];
+@@ -127,16 +133,41 @@
+ 			if (opened) return fit.fit();
+ 			opened = true;
+ 			term.open(screen);
++			// The draw that first shows what came: timed, with the frame after it.
++			const renderer = (term as unknown as {renderer: {render: (...a: unknown[]) => void}})
++				.renderer;
++			const render = renderer.render.bind(renderer);
++			let waiting = false;
++			renderer.render = (...a: unknown[]) => {
++				if (!timed(port)) return render(...a);
++				const echo = waiting;
++				waiting = false;
++				probe("draw0", echo);
++				render(...a);
++				probe("draw1", echo);
++				if (!echo) return;
++				performance.mark("x143:draw");
++				requestAnimationFrame(() => probe("frame"));
++			};
+ 			fit.fit();
+ 			fit.observeResize();
+-			term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
++			term.onData((data) => {
++				if (timed(port)) probe("data", data);
++				window.fabrika.send(port, {type: "keys", data});
++				if (timed(port)) probe("sent");
++			});
+ 			term.onResize(({cols, rows}) => size(cols, rows));
+ 			size(term.cols, term.rows);
+ 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
+ 			window.fabrika.onMessage(port, (raw) => {
++				if (timed(port)) probe("recv");
+ 				const read = readToTerminal(raw);
+ 				if (read.kind === "read") term.write(read.msg.data, mirrorSoon);
+ 				else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
++				if (timed(port)) {
++					waiting = true;
++					probe("parsed", read.kind === "read" ? read.msg.data.length : 0);
++				}
+ 			});
+ 		},
+ 		focus: () => term.focus(),

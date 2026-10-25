@@ -1,0 +1,88 @@
+--- a/dist/ghostty-web.js
++++ b/dist/ghostty-web.js
+@@ -1584,7 +1584,7 @@
+   // ==========================================================================
+   startCursorBlink() {
+     this.cursorBlinkInterval = window.setInterval(() => {
+-      this.cursorVisible = !this.cursorVisible;
++      this.cursorVisible = !this.cursorVisible, this.onChange?.();
+     }, 530);
+   }
+   stopCursorBlink() {
+@@ -1632,7 +1632,7 @@
+    * Update cursor style
+    */
+   setCursorStyle(A) {
+-    this.cursorStyle = A;
++    this.cursorStyle = A, this.onChange?.();
+   }
+   /**
+    * Enable/disable cursor blinking
+@@ -1687,14 +1687,14 @@
+    * Set the currently hovered hyperlink ID for rendering underlines
+    */
+   setHoveredHyperlinkId(A) {
+-    this.hoveredHyperlinkId = A;
++    this.hoveredHyperlinkId = A, this.onChange?.();
+   }
+   /**
+    * Set the currently hovered link range for rendering underlines (for regex-detected URLs)
+    * Pass null to clear the hover state
+    */
+   setHoveredLinkRange(A) {
+-    this.hoveredLinkRange = A;
++    this.hoveredLinkRange = A, this.onChange?.();
+   }
+   /**
+    * Get character cell width (for coordinate conversion)
+@@ -2090,6 +2090,7 @@
+    * Request a render update (triggers selection overlay redraw)
+    */
+   requestRender() {
++    this.terminal.requestRender();
+   }
+ };
+ L.AUTO_SCROLL_EDGE_SIZE = 30;
+@@ -2370,7 +2371,7 @@
+         E.preventDefault(), E.stopPropagation();
+         const C = (I = E.clipboardData) == null ? void 0 : I.getData("text");
+         C && this.paste(C);
+-      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.startRenderLoop(), this.focus();
++      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.renderer.onChange = () => this.requestRender(), this.onScroll(() => this.requestRender()), A.addEventListener("focusin", () => this.requestRender()), A.addEventListener("focusout", () => this.requestRender()), this.startRenderLoop(), this.focus();
+     } catch (B) {
+       throw this.isOpen = !1, this.cleanupComponents(), new Error(`Failed to open terminal: ${B}`);
+     }
+@@ -2387,7 +2388,7 @@
+    */
+   writeInternal(A, B) {
+     var g;
+-    this.wasmTerm.write(A), this.processTerminalResponses(), typeof A == "string" && A.includes("\x07") ? this.bellEmitter.fire() : A instanceof Uint8Array && A.includes(7) && this.bellEmitter.fire(), (g = this.linkDetector) == null || g.invalidateCache(), this.viewportY !== 0 && this.scrollToBottom(), typeof A == "string" && A.includes("\x1B]") && this.checkForTitleChange(A), B && requestAnimationFrame(B);
++    this.wasmTerm.write(A), this.processTerminalResponses(), typeof A == "string" && A.includes("\x07") ? this.bellEmitter.fire() : A instanceof Uint8Array && A.includes(7) && this.bellEmitter.fire(), (g = this.linkDetector) == null || g.invalidateCache(), this.viewportY !== 0 && this.scrollToBottom(), typeof A == "string" && A.includes("\x1B]") && this.checkForTitleChange(A), this.requestRender(), B && requestAnimationFrame(B);
+   }
+   /**
+    * Write data with newline
+@@ -2637,14 +2638,19 @@
+    * Start the render loop
+    */
+   startRenderLoop() {
+-    const A = () => {
+-      if (!this.isDisposed && this.isOpen) {
++    this.requestRender();
++  }
++  /**
++   * Draw once, on the next frame, when something changed. Many requests in one frame make one draw.
++   */
++  requestRender() {
++    this.animationFrameId === void 0 && !this.isDisposed && this.isOpen && (this.animationFrameId = requestAnimationFrame(() => {
++      if (this.animationFrameId = void 0, !this.isDisposed && this.isOpen) {
+         this.renderer.render(this.wasmTerm, !1, this.viewportY, this, this.scrollbarOpacity);
+         const B = this.wasmTerm.getCursor();
+-        B.y !== this.lastCursorY && (this.lastCursorY = B.y, this.cursorMoveEmitter.fire()), this.animationFrameId = requestAnimationFrame(A);
++        B.y !== this.lastCursorY && (this.lastCursorY = B.y, this.cursorMoveEmitter.fire());
+       }
+-    };
+-    A();
++    }));
+   }
+   /**
+    * Get a line from native WASM scrollback buffer

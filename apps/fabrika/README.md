@@ -20,17 +20,27 @@ Ctrl-B h                     focus moves left
 Ctrl-B x                     always asks: "close t2? (y/n)". y, and a busy tile shows "closing"
 Ctrl-B x                     on a closing tile: "stop t2 now? (y/n)"
 red button, then dock icon   the window closes, the app runs on; a new window on the same desk
-Cmd-Q, and open again        the same tiles; each tsh lists its earlier jobs for attach
+Cmd-Q, and open again        the app quits, the host runs on; the same tiles, the runs still up
 ```
 
+The app is a client. The host is its own process, as the tmux server is: it holds every tile's
+tsh, the programs, the history, the jobs, `ledger.sqlite` and the desk. Cmd-Q quits only the
+app. The next start attaches to the same host.
+
 ```ts
-// What goes between the page and the main process (src/messages.ts), each on its own port.
-// "desk": the desk machine in the page tells the main process what to do, and hears back.
-type FromDesk = {type: "open" | "close" | "stop"; tile: TileId}
-	| {type: "save"; desk: Saved} | {type: "empty"};
-type ToDesk = {type: "start"; saved: unknown} | {type: "covered"; tile: TileId; run: Run}
-	| {type: "over"; run: string} | {type: "jobs"; tile: TileId; running: number}
-	| {type: "closing" | "ended"; tile: TileId};
+// Between the app and the host (src/link.ts): NDJSON on a Unix socket, `<home>/host/sock`.
+type Up = {type: "hello"; version: number} | {type: "page"} | {type: "away"}
+	| {type: "on"; port: string; m: unknown};
+type Down = {type: "hello"; version: number} | {type: "port" | "gone"; port: string}
+	| {type: "to"; port: string; m: unknown} | {type: "close"};
+
+// Between the page and the host, each on its own port (src/messages.ts); main relays them.
+// "desk": the desk runs in the host. The page draws it, and sends the keys it takes and clicks.
+type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile: TileId}
+	| {type: "resize"; stack: string; sizes: Record<string, number>};
+type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
+	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
+	| {type: "answer"; id: number; took: boolean} | {type: "down"; why: string};
 // "tile:t1": t1's terminal, as a terminal is to a pty.
 type ToTerminal = {type: "write"; data: string};
 type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
@@ -43,30 +53,46 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 - The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika`,
   `programs/counter` and `programs/tracker`, and nothing imports it.
-- Electron and Node are named only in `src/main.ts` and `src/preload.ts`. Everything else is
-  plain Effect, tested with no Electron. The page is React, with each terminal made outside it.
-- tsh and the line editor run in the main process, one of each per tile. A tile's terminal only
-  draws bytes and sends keys, as a terminal does with a pty. There is no pty and no `node-pty`:
-  tsh is not a process, so there is nothing to give a pty to.
-- The desk (the layout, the focus, the prefix, the question) is a tea machine in the page. The
-  main process keeps no layout: it opens and closes tiles when the desk says so.
+- Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
+  `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
+  `src/host/main.ts`, `src/host/run.ts` and `src/host/socket.ts`. Everything else is plain
+  Effect, tested with no Electron. The page is React, with each terminal made outside it.
+- **The host is a process of its own.** It is the app's own binary run as Node
+  (`ELECTRON_RUN_AS_NODE=1`, on `dist/host.mjs`), started detached by the first app that finds
+  none, and let go. No second runtime ships, and Electron's Node is the one the app was built and
+  tested on. It holds the tiles (tsh and the line editor, one of each per tile), the ledger, the
+  history and the desk.
+- **The link is a Unix socket,** `<home>/host/sock`, mode 0600 in a 0700 folder. No TCP and no
+  secret: the file's mode is the lock, as tmux's is. One JSON line a message (NDJSON), each read
+  with an Effect Schema at both ends. A version handshake first (`link.ts`): an app of another
+  version is not attached, says so, and leaves that host running.
+- **Main is a thin relay.** It checks a page's hello, keeps a port per tile and run for the
+  window's own page, and passes lines on. It holds no desk and no tiles.
+- A tile's terminal only draws bytes and sends keys, as a terminal does with a pty. There is no
+  pty and no `node-pty`: tsh is not a process, so there is nothing to give a pty to.
+- **The desk (the layout, the focus, the prefix, the question) is a tea machine in the host.**
+  The page only draws it. A reload, a new window or a second client draws the same desk.
 
 ## What's in it
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page. Saves `desk.json` and each tile's jobs in the app home. |
+| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused. Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
+| `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. |
+| `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
+| `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder and socket, cleans a stale socket, writes the pid, and opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
-| `src/tiles.ts` | One host per tile, each in its own scope. It tells the desk when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
-| `src/host.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): Msgs in, Cmds for the main process out, and `route`, which says where a key goes. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
+| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
+| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The six message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
-| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit and open again, and the last tile closing the window. Not in `pnpm test`. macOS only. |
+| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, and a host of another version. It stops its own host by its pid and checks with `pgrep`. Not in `pnpm test`. macOS only. |
 
 ## Keys
 
@@ -82,8 +108,14 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
 
-- **The page reads the prefix first,** in the keydown capture phase, so neither ghostty-web nor
-  a program's view sees it. Any other key after the prefix does nothing, as in tmux.
+- **The host decides keys.** It sends the page the Ctrl-B table, and with every desk the keys
+  the desk takes now. The page reads keys first, in the keydown capture phase. A key the desk
+  takes goes to the host as a `press`, and neither ghostty-web nor a program's view sees it.
+  Keys after it are held, in order, until the host answers (`hold.ts`), with no timer. An answer
+  of `took: false` lets the key go on as it was. Any other key after the prefix does nothing, as
+  in tmux.
+- **Typing in a tile goes to the host,** on the tile's port, to its tsh. A text box in a program's
+  view stays in the page; the program gets only the inputs it declares.
 - **A click focuses a tile. Dragging a border resizes** the two tiles beside it.
 - **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
   same, and Ctrl-B twice sends it on.
@@ -109,13 +141,14 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   - Ctrl-D in a tile's tsh closes that tile.
 - **The window, macOS's way.** The red button closes the window only: the app stays in the dock
   and everything runs on. The dock icon, or a second start, makes a new window on the same desk,
-  with the live runs. Cmd-Q quits, and only then do the tiles end. On Windows and Linux, closing
-  the window quits, as Electron's own pattern does.
-- **The host lives in the main process for now.** So jobs live through a closed window, but not
-  through Cmd-Q.
-- **Quit and open again:** the layout comes back from `desk.json`, and each tile's tsh opens on
-  its own folder, so `attach %n` finds the earlier jobs. A tile that showed a run comes back as
-  tsh: the run ended with the app.
+  with the live runs. Cmd-Q quits the app, and only the app. On Windows and Linux, closing the
+  window quits the app, as Electron's own pattern does; the host runs on there too.
+- **The host outlives the app.** Quit and open again: the app attaches to the same host, and the
+  desk is as it was, with every run still up. A second start while the app runs brings the first
+  copy's window forward.
+- **No person stops the host;** there is no command for it yet. Tests stop their own by its pid,
+  in their own home. A host that stopped leaves `desk.json`: the next host starts the layout from
+  it, and each tile's tsh opens on its own folder, so `attach %n` finds the earlier jobs.
 - **Closing the last tile closes the window, not the app,** and removes `desk.json`, so the next
   window opens on one fresh tile.
 
@@ -124,13 +157,13 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 The page has one port per tile (`tile:t1`), one per run with a view (`run:counter:1a2b`) and
 one for the desk (`desk`). Not one port for everything.
 
-- Why: a message can only reach the tsh or the run whose port it came on. The main process
-  routes by port, never by a name inside the message, so a page bug cannot type into the wrong
-  tile or press a button in another run.
+- Why: a message can only reach the tsh or the run whose port it came on. Main relays by port,
+  and the host routes by port, never by a name inside the message, so a page bug cannot type
+  into the wrong tile or press a button in another run.
 - What it costs: the preload keeps a small table of ports, and a tile or run closing must
   `forget` its port. The preload takes only names of these three shapes.
 - How sure: 85%. A single port with a tile id in each message would be simpler, and safe as
-  long as the main process checks the id; the port does that check for free.
+  long as the host checks the id; the port does that check for free.
 
 ## The line editor
 
@@ -189,7 +222,8 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
 
 Pull request 61 is a draft with a terminal program of its own (`programs/terminal`) on
 ghostty-web 0.4.0. Taken from it: the terminal's options (font size 14, a monospace font, a
-blinking cursor, 1000 rows of scrollback), fit on open and then follow the window's size, the
+blinking cursor, 1000 rows of scrollback; the cursor no longer blinks since 2026-10-25), fit on
+open and then follow the window's size, the
 screen read back as text after each write, the size clamped before it is sent, a length limit on
 the keys message (64 KiB here, for a paste), and the test that tsh refuses a line before any window
 opens. Left: its pty (`node-pty` and a native shell, a different product), `Ghostty.load()` (it
@@ -207,12 +241,15 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite` and the one-copy lock.
-- The ledger is `ledger.sqlite`, on one node:sqlite connection in the main process
+  `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
+  host's `host/sock`, `host/pid` and `host/log`. A test on its own home can never reach another
+  home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
+  plain message.
+- The ledger is `ledger.sqlite`, on one node:sqlite connection in the host
   (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
-  a Miniflare child is more than one person's tickets need. Each call blocks the main process
-  while SQLite runs it. One copy per home means one tsh writes each tile's job table. The
-  end-to-end run uses a fresh home.
+  a Miniflare child is more than one person's tickets need. Each call blocks the host while
+  SQLite runs it. One host per home means one tsh writes each tile's job table. The end-to-end
+  run uses a fresh home.
 - `experiments/141-tiles-in-one-page.ts` measures 1, 4, 8 and 16 tiles on the built app.
 
 ## What it does not do yet
@@ -235,16 +272,23 @@ Left for later, from Tuval's keys and the build:
 
 - **The rest of Tuval's keys:** `w` (pick a tile from a list), `a` (focus the list), `:` (a
   command line), `r` (reload the config), `p` (the process board).
-- **The host in its own process,** so jobs live through Cmd-Q too. For now it lives in main.
-- **A closing tile that finishes while the window is closed** goes when the next window opens.
-  If it was the last tile, that window closes again at once.
+- **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
+  stops ends its runs; the next one finds their jobs for `attach`, not running.
+- **A way for a person to stop the host,** or to see that one runs.
+- **A link that drops while the app runs** is not tried again: the page says "Not attached to
+  the host" until the app starts again. tmux's client exits here; Tuval tried again.
+- **Two apps starting at the same moment** on a home with no host can both start one. One wins
+  the socket; tmux takes a lock file first, and so should this.
+- **A host of another version is left as it is.** Nothing offers to stop it or to move its jobs.
+- **The link's version counts the message shapes, not what they mean.** A change in behaviour
+  with the same shapes is not caught.
+- **Two windows on one host share each tile's size:** the last one to resize wins, as tmux's
+  `window-size latest`.
 - **An old `desk.json` with run tiles in it** is not read: the app starts on one fresh tile.
 - **A crash leaves tile folders** that no `desk.json` names. Nothing cleans them yet.
 - **The terminal build's single `storage/` folder is not moved over.** Its jobs are not found by
   any tile.
 - **History: the last write wins.** Two tiles saving at the same moment can drop one line.
-- **A page reloaded while runs go on** puts each run shown in a tile back in that tile.
-  Background runs stay in the background.
 - **An unfocused terminal still shows a solid cursor.** ghostty-web 0.4.0 has only filled
   cursors (block, underline, bar) and no focus-aware or hollow one, so the hollow cursor waits
   for a ghostty-web that has it.

@@ -7,7 +7,7 @@ import {readToTerminal} from "../messages.ts";
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
 // and draws the bytes it is sent, as a terminal emulator does with a pty. The line editor and tsh
-// are in the main process (host.ts, one per tile).
+// are in the host process (tsh.ts, one per tile).
 //
 //   const term = terminalFor(ghostty, "t1");
 //   term.attach(slot);      // drawn in the tile's slot; moved, not made again, as the layout changes
@@ -84,7 +84,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		ghostty,
 		fontSize: 13,
 		fontFamily: FONT,
-		cursorBlink: true,
+		// The cursor stays still, everywhere: no blink, and no redraw twice a second for it. Only an
+		// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
+		cursorBlink: false,
 		scrollback: 1000,
 		theme: THEME,
 	});

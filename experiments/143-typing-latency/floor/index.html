@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>floor</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #16181d; }
+	div, canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div data-tile="t1"><canvas></canvas></div>
+<script>
+	// Experiment 143's floor page. A key is "sent" and "heard back" at once, with no bridge, and
+	// drawn in the next frame, as the app's terminal draws an echo: one row cleared and its text
+	// drawn again. The rows are the app probes' rows, with the same names.
+	const probes = {rows: [], tile: "t1"};
+	window.__x143 = probes;
+	const probe = (name, note) => {
+		probes.rows.push(note === undefined ? [name, performance.now()] : [name, performance.now(), note]);
+		probes.after?.(name);
+	};
+	const canvas = document.querySelector("canvas");
+	const context = canvas.getContext("2d");
+	const fit = () => {
+		canvas.width = innerWidth * devicePixelRatio;
+		canvas.height = innerHeight * devicePixelRatio;
+	};
+	fit();
+	addEventListener("resize", fit);
+	let line = "tsh$ ";
+	let waiting = false;
+	let pending = false;
+	const draw = () => {
+		pending = false;
+		const echo = waiting;
+		waiting = false;
+		probe("draw0", echo);
+		const s = devicePixelRatio;
+		context.fillStyle = "#16181d";
+		context.fillRect(0, 0, canvas.width, 18 * s);
+		context.fillStyle = "#d8dee9";
+		context.font = `${14 * s}px monospace`;
+		context.textBaseline = "top";
+		context.fillText(line, 0, 2 * s);
+		probe("draw1", echo);
+		if (!echo) return;
+		performance.mark("x143:draw");
+		requestAnimationFrame(() => probe("frame"));
+	};
+	addEventListener(
+		"keydown",
+		(e) => {
+			probe("down", [e.timeStamp, e.key]);
+			performance.mark("x143:down");
+			if (e.key === "Control") return;
+			probe("routed");
+			probe("data", e.key);
+			line = e.ctrlKey && e.key === "u" ? "tsh$ " : line + e.key;
+			probe("sent");
+			probe("recv");
+			probe("parsed");
+			waiting = true;
+			if (pending) return;
+			pending = true;
+			requestAnimationFrame(draw);
+		},
+		true,
+	);
+	requestAnimationFrame(draw);
+</script>
+</body>
+</html>
