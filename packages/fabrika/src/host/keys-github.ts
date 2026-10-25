@@ -81,8 +81,8 @@ const utc = (year: number, month: string, day: number, h: number, m: number, s: 
 
 /**
  * An HTTP-date, read as RFC 9110 section 5.6.7 says: the IMF-fixdate form, or one of the two
- * obsolete ones. A two-digit year is the one with those digits nearest `now`, never more than 50
- * years ahead. Null for anything else.
+ * obsolete ones. A two-digit year is the latest one with those digits whose time is at most 50 years
+ * after `now`; one more second and it is the year a century back. Null for anything else.
  */
 export const httpDate = (s: string, now: number): number | null => {
 	const imf = IMF.exec(s);
@@ -93,10 +93,15 @@ export const httpDate = (s: string, now: number): number | null => {
 	const old = RFC850.exec(s);
 	if (old !== null) {
 		const [, d, mon = "", yy, h, m, sec] = old;
+		const at = (year: number) => utc(year, mon, Number(d), Number(h), Number(m), Number(sec));
 		const thisYear = new Date(now).getUTCFullYear();
-		const ahead = (((Number(yy) - thisYear) % 100) + 100) % 100;
-		const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);
-		return utc(year, mon, Number(d), Number(h), Number(m), Number(sec));
+		// The first year, from this one on, that ends in those two digits.
+		const next = thisYear + ((((Number(yy) - thisYear) % 100) + 100) % 100);
+		// The line is the time, not the year: past now plus 50 years, it is a century back.
+		const line = new Date(now);
+		line.setUTCFullYear(thisYear + 50);
+		const t = at(next);
+		return t !== null && t > line.getTime() ? at(next - 100) : t;
 	}
 	const asc = ASCTIME.exec(s);
 	if (asc !== null) {
