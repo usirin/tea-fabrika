@@ -1,0 +1,5 @@
+# Made by build.ts and by alchemy dev, never committed.
+dist/
+.alchemy/
+alchemy-home/
+dev.log
