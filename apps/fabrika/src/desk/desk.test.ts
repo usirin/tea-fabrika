@@ -1,38 +1,22 @@
-import {applyCell, type Machine} from "@demlik/tea";
-import {
-	arbMsg,
-	arbRecordMsg,
-	type MsgArbitraryTable,
-	propertyInvariant,
-	stubCtxThrowingProxy,
-} from "@demlik/tea/pbt";
-import fc from "fast-check";
+import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
 import {
 	activeOf,
 	claims,
-	close,
 	type Desk,
 	type DeskCmd,
 	type DeskMsg,
 	deskMachine,
-	empty,
-	fresh,
 	type Open,
-	open,
 	questionOf,
 	restore,
-	save,
 	savedOf,
-	send,
-	stop,
 	tilesOf,
-	whereIs,
 } from "./desk.ts";
 import {keyName} from "./keys.ts";
-import {checkTree, findTile} from "./layout/index.ts";
+import {findTile} from "./layout/index.ts";
 
-// The desk, folded by hand, and its laws as property tests on tea's pbt.
+// The desk, folded by hand. Its laws, as property tests on tea's pbt, are in desk.laws.test.ts.
 
 const [start, booted] = deskMachine.init(null, undefined);
 
@@ -298,150 +282,3 @@ describe("keyName", () => {
 		expect(keyName({...plain, key: "h", ctrl: true})).toBe("<c-h>");
 	});
 });
-
-// The laws, after every step of any list of Msgs, from the real init.
-
-const tile = fc.constantFrom("t1", "t2", "t3", "t4", "t5", "t6");
-const run = fc.constantFrom(
-	{id: "counter:1", program: "counter"},
-	{id: "tracker:1", program: "tracker"},
-);
-/** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
-const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
-const key = fc.oneof(
-	{arbitrary: fc.constant("<c-b>"), weight: 1},
-	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 1},
-);
-
-type MsgOf<T> = T extends Machine<infer _S, infer M, infer _C, infer _U, infer _X> ? M : never;
-
-/** A Cmd's failed answer. The desk's Cmds declare no errors, so a malformed answer is the one left. */
-const failed = <T extends string, C>(type: T, cmd: C) =>
-	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
-
-const [opening, closing, stopping, sending, saving, emptying] = [
-	open({tile: "t1"}),
-	close({tile: "t1"}),
-	stop({tile: "t1"}),
-	send({tile: "t1", data: "x"}),
-	save({desk: savedOf(fresh())}),
-	empty({}),
-] as const;
-
-/** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
-const table: MsgArbitraryTable<MsgOf<typeof deskMachine>> = {
-	key: arbRecordMsg("key", {key, at: fc.nat({max: 3000})}),
-	click: arbRecordMsg("click", {tile}),
-	resize: arbRecordMsg("resize", {
-		stack: fc.constantFrom("s1", "s2", "s3", "s4"),
-		sizes: fc.dictionary(tile, fc.double({min: 0, max: 200, noNaN: true})),
-	}),
-	covered: arbRecordMsg("covered", {tile, run}),
-	over: arbRecordMsg("over", {run: run.map((r) => r.id)}),
-	jobs: arbRecordMsg("jobs", {tile, running: fc.nat({max: 2})}),
-	closing: arbRecordMsg("closing", {tile}),
-	ended: arbRecordMsg("ended", {tile}),
-	open_ok: fc.constant(open.ok(opening, null, 0)),
-	open_err: failed(open.errType, opening),
-	close_ok: fc.constant(close.ok(closing, null, 0)),
-	close_err: failed(close.errType, closing),
-	stop_ok: fc.constant(stop.ok(stopping, null, 0)),
-	stop_err: failed(stop.errType, stopping),
-	send_ok: fc.constant(send.ok(sending, null, 0)),
-	send_err: failed(send.errType, sending),
-	save_ok: fc.constant(save.ok(saving, null, 0)),
-	save_err: failed(save.errType, saving),
-	empty_ok: fc.constant(empty.ok(emptying, null, 0)),
-	empty_err: failed(empty.errType, emptying),
-};
-/**
- * Lists of Msgs, mostly keys. Not tea's `arbMsgSequence`: at fast-check's default size its lists
- * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
- */
-const lists = fc.array(
-	arbMsg(table, {weights: {key: 24, click: 2, covered: 2, over: 2, jobs: 2, closing: 1}}),
-	{maxLength: 60, size: "max"},
-);
-
-/** Every law of an open desk, as one list of what is broken: empty when none is. */
-export const broken = (s: Desk): readonly string[] => {
-	if (s.at === "over") return [];
-	const out: string[] = [];
-	if (!s.workspaces.some((ws) => ws.id === s.active))
-		out.push(`active ${s.active} is no workspace`);
-	const seen = new Set<string>();
-	for (const ws of s.workspaces) {
-		for (const v of checkTree(ws.layout)) out.push(`${ws.id}: ${JSON.stringify(v)}`);
-		if (findTile(ws.layout, ws.focused) === null)
-			out.push(`${ws.id}: focus ${ws.focused} is no tile`);
-		if (ws.layout.zoomed !== null && ws.layout.zoomed !== ws.focused)
-			out.push(`${ws.id}: ${ws.layout.zoomed} is zoomed, ${ws.focused} has focus`);
-		for (const t of tilesOf(ws)) {
-			if (seen.has(t.id)) out.push(`${t.id} is in two places`);
-			seen.add(t.id);
-		}
-	}
-	if (s.ask !== null && findTile(activeOf(s).layout, s.ask) === null)
-		out.push(`asks in ${s.ask}, not a tile of the active workspace`);
-	for (const t of Object.keys(s.running))
-		if (whereIs(s, t) === undefined) out.push(`counts jobs of ${t}, which is gone`);
-	for (const t of s.closing) if (whereIs(s, t) === undefined) out.push(`${t} closing, and gone`);
-	if (new Set(s.closing).size !== s.closing.length) out.push("a tile closing twice");
-	return out;
-};
-
-describe("the desk's laws", () => {
-	it("keeps every layout whole, focus on a tile that exists, and the zoom on the focused tile", () => {
-		propertyInvariant(
-			deskMachine,
-			stubCtxThrowingProxy(),
-			lists,
-			(step) => {
-				// A law that breaks says which, as tea's pbt gives no reason of its own (demlik#746).
-				const why = broken(step.next);
-				if (why.length > 0) throw new Error(`after ${JSON.stringify(step.msg)}: ${why.join("; ")}`);
-				return true;
-			},
-			{numRuns: 400},
-		);
-	});
-
-	it("asks to open a tile's tsh for every tile it makes, and to stop it for every tile that goes", () => {
-		propertyInvariant(
-			deskMachine,
-			stubCtxThrowingProxy(),
-			lists,
-			(step) => {
-				const before = tileIds(step.prev);
-				const after = tileIds(step.next);
-				const opens = step.cmds.flatMap((c) => (c.type === "open" ? [c.tile] : []));
-				const stops = step.cmds.flatMap((c) => (c.type === "stop" ? [c.tile] : []));
-				const made = [...after].filter((t) => !before.has(t));
-				const gone = [...before].filter((t) => !after.has(t));
-				return same(opens, made) && same(stops, gone);
-			},
-			{numRuns: 400},
-		);
-	});
-
-	it("asks to close a tile only as it starts closing, and never one that is gone", () => {
-		propertyInvariant(
-			deskMachine,
-			stubCtxThrowingProxy(),
-			lists,
-			(step) => {
-				const was = step.prev.at === "open" ? step.prev.closing : [];
-				const now = step.next.at === "open" ? step.next.closing : [];
-				const closes = step.cmds.flatMap((c) => (c.type === "close" ? [c.tile] : []));
-				return closes.every((t) => now.includes(t) && !was.includes(t));
-			},
-			{numRuns: 400},
-		);
-	});
-});
-
-const tileIds = (s: Desk): ReadonlySet<string> =>
-	new Set(s.at === "over" ? [] : s.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id)));
-
-const same = (a: readonly string[], b: readonly string[]) =>
-	a.length === b.length && a.every((x) => b.includes(x));
