@@ -189,7 +189,8 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
 
 Pull request 61 is a draft with a terminal program of its own (`programs/terminal`) on
 ghostty-web 0.4.0. Taken from it: the terminal's options (font size 14, a monospace font, a
-blinking cursor, 1000 rows of scrollback), fit on open and then follow the window's size, the
+blinking cursor, 1000 rows of scrollback; the cursor no longer blinks since 2026-10-25), fit on
+open and then follow the window's size, the
 screen read back as text after each write, the size clamped before it is sent, a length limit on
 the keys message (64 KiB here, for a paste), and the test that tsh refuses a line before any window
 opens. Left: its pty (`node-pty` and a native shell, a different product), `Ghostty.load()` (it
