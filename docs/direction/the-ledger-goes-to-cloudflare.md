@@ -280,24 +280,20 @@ path. A law test that walks every way a write leaves the host would settle it.
 
 ## 3. What syncs and what stays on each laptop
 
-A project that is not connected keeps everything below on the laptop's ledger,
-as today. The table and the mounts apply only to a connected project: its
-shared work goes to the remote ledger, and the screen stays local.
+**Decided the same day: a project's ledger is shared whole, with no list per
+program.** Once a project is connected, every client reads and writes that one
+ledger. Nothing syncs between clients; the doorbell only tells each client that
+something new landed. Every stream in the project's ledger goes with it, so a
+new program needs no line here. Only the person's own screen lives apart, in
+the app's own ledger, which is always on the laptop.
 
 ```ts
-// A sketch, for a connected project. A project never connected mounts everything local.
-// One Ledger service for the host; names pick where a row lives, as mounts do on Unix.
-const ledger = mounts({
-	"tracker/": remote, // shared: tickets, comments, asks and answers, agents' talk on a ticket
-	"pipeline/": remote, // shared: lanes, claims, stage facts, inboxes
-	"agents/": remote, // shared: each agent's registered name and its inbox
-	"runs/": remote, // shared: each run's beats, in a side stream the ticket's fold never reads
-	"members/": remote, // shared: created, invited, joined, removed
-	"ci/": remote, // shared: jobs, results, machines (the services note)
-	"desk/": local, // this person's tiles, workspaces, focus
-	"tsh/": local, // each tile's job table, the line editor's history
-	"host/": local, // the host's own kept programs: the desk, tsh
-});
+// A sketch. Two ledgers per host, and no list of program prefixes.
+const project = connected ? layerHttp({url}) : layerSqliteSync({path: "<project>/ledger.sqlite"});
+const app = layerSqliteSync({path: "<home>/ledger.sqlite"}); // desk/, tsh/, host/: this person's screen
+
+// A program asks for the project's ledger and never learns where it is.
+// Only the desk, tsh and the host's kept programs are handed the app's.
 ```
 
 | Kind of fact | Where | Why |
@@ -317,14 +313,15 @@ const ledger = mounts({
 | A half-written comment | this laptop | Not a fact until it is sent. |
 | Who is online now | neither, for now | Live only, never a fact. Later, if needed. |
 
-- **Lean: shared work on the remote ledger, the screen on the local one.**
+- **The project's ledger is the whole project; the screen is the app's.**
   Why: the desk must come back offline (the restore lane), and the second
-  person has no use for the owner's tiles. Cost: one host now talks to two
-  ledgers. **How sure: 70%.** See "where it disagrees" below.
-- **A name lives wholly in one place.** So a claim, its fence and its appends
-  never cross. A `read` across both places has no single order: `pos` counts
-  per ledger. So a read names one place's prefix, and the mount refuses a read
-  that would span both.
+  person has no use for the owner's tiles. A program never has to say where
+  its rows go. Cost: one host talks to two ledgers, and the restore lane puts
+  the desk in the app's ledger, not the project's. **How sure: 80%.** The
+  doubt: a program that keeps one person's view inside a project, like a
+  filter, would need the app's ledger too. None does today.
+- **A stream lives wholly in one ledger.** So a claim, its fence and its
+  appends never cross, and a read never spans both: `pos` counts per ledger.
 
 ## 4. A ledger, and who belongs to it
 
@@ -429,7 +426,14 @@ needs one "away" banner. A lane can lose its ticket on a long drop. **How
 sure: 80%.** The doubt is a laptop that sleeps: how often its socket comes back
 broken. The experiment below measures it.
 
-## 6. Moving today's tickets
+## 6. Sharing a project: the whole ledger is copied
+
+**Decided the same day: sharing a project copies its whole ledger, every row of
+every table, with no code for any one program.** It is the first version's only
+sync: like `git push -u origin main` to an empty repository. Long work on the
+laptop that is pushed later, git-style two-way sync, waits until it is needed.
+Today the app's file holds 27 rows, all `tracker/`, so today's copy is the
+whole thing.
 
 ```ts
 // A sketch. One call, on an empty object, by the creator only. Rows keep their pos, rev, at and writer.
@@ -527,13 +531,13 @@ moves early. The real run comes first." no longer holds for it.
   - `Author` in the app comes from asking the door, not a constant.
   - Tests in Miniflare: a forged writer is stamped over, an agent's answer is
     refused, an unknown or removed login is refused. No deploy, no money.
-- **Lane 3, app state on the ledger and restore.** One ask of it: keep the
-  app's own state under `desk/`, `tsh/` and `host/`, and never read across
-  those and the shared prefixes in one call. Then the mount in section 3 is a
+- **Lane 3, app state on the ledger and restore.** One ask of it: put the
+  app's own state, `desk/`, `tsh/` and `host/`, in the app's ledger, and hand
+  programs the project's ledger. Then connecting a project in section 3 is a
   Layer change, not a rewrite.
 - **Then, in order:** the deploy experiment (needs the owner's yes), `connect`
   and the invite in the app, one agent message across two laptops (section
-  10), the tracker's poll moved to the tail, the mount Layer, and the import.
+  10), the tracker's poll moved to the tail, and the whole-ledger copy.
 - **Lane 4, the jump list,** does not wait on any of it.
 
 ## 9. One object for the whole ledger, or one per lane
@@ -869,14 +873,14 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 
 - **[tea-host](./tea-host.md) says "every host uses exactly one ledger"**, and
   the GUI note says everything the app keeps is on the host's one ledger.
-  Section 3 gives each host two places behind one `Ledger` service: a remote
-  one for shared work and a local one for the screen. Programs still see one
-  ledger. The host sees two. The owner picks:
+  Section 3 gives each host two: the project's, local or remote, and the
+  app's, always local, for the screen. Each program still sees one ledger.
+  The host sees two. The owner picks:
   - **keep the rule** and put the desk on the shared object under each
     person's prefix (then the desk needs the network to come back, and the
     door must keep each person's prefix to that person), or
-  - **change the rule** to "one ledger service a host, which may mount more
-    than one place" (the lean, 70%).
+  - **change the rule** to "a host holds the app's ledger and one per
+    project; each program is handed one" (the lean, 80%).
 - **[The services note](./services-and-our-own-ci.md#open-questions) asks
   where the ledger lives for one owner with two machines.** This note leans to
   Cloudflare. A second person on another network makes the always-on home
