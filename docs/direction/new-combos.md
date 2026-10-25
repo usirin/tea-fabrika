@@ -9,7 +9,7 @@ second use. That proposal stays below, marked as replaced.
 const mode = rate(rule, facts);                    // Rate: advise or block, from "fix" and "noise" counts
 const result = controls(onBad, onGood);            // Controls: red where it must fail, green where it must pass
 const brief = briefFor("reviewer", lane);          // Brief: one typed view per role
-const ci = poll("ci", {every: "1m", read: checksOf, key: (c) => c.state}); // Poll: a fact only on change
+const ci = poll("ci", {every: "1m", read: checksOf, by: (c) => c.state}); // Poll: a fact only on change
 const yes = ask(owner, plan);                      // ask, grown: the yes keeps a hash of what it saw
 const touched = guarded(diff, rows);               // guarded files, grown: a change to the exam asks the owner
 ```
@@ -123,7 +123,9 @@ const ReviewBrief = Schema.Struct({diff: Diff, criteria: Criteria, plan: Plan});
 
 ```ts
 // A sketch.
-const ci = poll("ci", {every: "1m", read: checksOf, key: (checks) => checks.state});
+// Built: packages/pipeline/src/poll.ts. `by` names the part of a read that counts;
+// `key` is already the child's id. The child hands back the change; the parent writes the fact.
+const ci = poll("ci", {every: "1m", read: checksOf, by: (checks) => checks.state});
 // tick 1: "pending", no fact yet  -> {fact: "pr", pr: 74, state: "pending"}
 // tick 2: "pending" again         -> nothing
 // tick 3: "green"                 -> {fact: "pr", pr: 74, state: "green"}
