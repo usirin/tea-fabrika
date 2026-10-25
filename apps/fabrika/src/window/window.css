@@ -98,3 +98,215 @@ button:focus-visible {
 	outline: 2px solid var(--key);
 	outline-offset: 2px;
 }
+
+/* The tracker's window (programs/tracker/src/window.tsx). */
+
+.tracker button:disabled {
+	opacity: 0.5;
+	cursor: default;
+	border-color: transparent;
+}
+
+.tracker,
+.tracker-page {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.tracker p,
+.tracker h2 {
+	margin: 0;
+}
+
+.tracker h2 {
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.tracker-composer {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.tracker input {
+	font: inherit;
+	font-size: 16px;
+	color: inherit;
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid var(--line);
+	padding: 4px 0;
+	outline: none;
+}
+
+.tracker input:focus {
+	border-bottom-color: var(--key);
+}
+
+.tracker small {
+	color: var(--faint);
+}
+
+.tracker textarea {
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 6px 8px;
+	resize: vertical;
+	outline: none;
+}
+
+.tracker textarea:focus {
+	border-color: var(--key);
+}
+
+.tracker-row,
+.tracker-head {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.tracker-row button,
+.tracker-head button {
+	padding: 4px 14px;
+}
+
+.tracker-list,
+.tracker-timeline {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+/* A ticket on the list, on two rows: its number, title and state, then when it last moved. */
+.tracker-list button {
+	display: grid;
+	grid-template-columns: 4ch 1fr auto;
+	gap: 2px 8px;
+	align-items: baseline;
+	width: 100%;
+	text-align: left;
+	background: transparent;
+	border-radius: 4px;
+	padding: 6px 8px;
+}
+
+.tracker-list button:hover,
+.tracker-list button[aria-current="true"] {
+	background: var(--line);
+	border-color: transparent;
+}
+
+.tracker-list button:focus-visible {
+	outline: 1px solid var(--key);
+	outline-offset: -1px;
+}
+
+.tracker-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tracker-number,
+.tracker-quiet,
+.tracker-meta {
+	color: var(--faint);
+}
+
+.tracker-sub {
+	grid-column: 2 / -1;
+	font-size: 12px;
+}
+
+.tracker-state {
+	font-size: 12px;
+	padding: 0 8px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+}
+
+.tracker-state-open {
+	color: #4ade80;
+}
+
+.tracker-state-closed {
+	color: #a78bfa;
+}
+
+.tracker-empty {
+	color: var(--faint);
+	text-align: center;
+	padding: 32px 0;
+}
+
+.tracker-alert {
+	margin: 0;
+	padding: 8px 12px;
+	color: #fca5a5;
+	border: 1px solid #f87171;
+	border-radius: 6px;
+}
+
+.tracker-alert pre {
+	margin: 4px 0 0;
+	white-space: pre-wrap;
+}
+
+.tracker-problems {
+	color: var(--faint);
+}
+
+.tracker-timeline {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.tracker-entry {
+	border-left: 2px solid var(--line);
+	padding: 2px 0 2px 12px;
+}
+
+.tracker-fact-closed,
+.tracker-fact-reopened {
+	border-left-color: var(--key);
+}
+
+.tracker-who {
+	color: var(--ink);
+	font-weight: 600;
+}
+
+.tracker-by-agent small {
+	margin-left: 4px;
+	padding: 0 4px;
+	border: 1px solid var(--faint);
+	border-radius: 4px;
+	font-weight: 400;
+}
+
+.tracker-body {
+	margin-top: 4px;
+	white-space: pre-wrap;
+	line-height: 1.5;
+}
+
+.tracker-pending {
+	opacity: 0.6;
+}
+
+.tracker-page > footer {
+	margin-top: auto;
+	font-size: 12px;
+}

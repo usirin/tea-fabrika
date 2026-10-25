@@ -28,3 +28,6 @@ export function writerOf(text: string): Writer | null {
 	if (at === -1) return null;
 	return Option.getOrNull(decode({kind: text.slice(0, at), id: text.slice(at + 1)}));
 }
+
+/** The text a row keeps for `writer`: `writerOf` reads it back. */
+export const writerText = (writer: Writer): string => `${writer.kind}:${writer.id}`;

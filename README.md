@@ -243,6 +243,8 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`programs/`](./programs/README.md): one package per program that runs on its own.
   - [`programs/counter`](./programs/counter/README.md), `@tea-fabrika/counter`: the smallest
     program with a window. It counts presses of +1 until done.
+  - [`programs/tracker`](./programs/tracker/README.md), `@tea-fabrika/tracker`: tickets on the
+    ledger, one stream of facts each, and a window to work them.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.
@@ -285,7 +287,7 @@ Other commands:
 | Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
-| Open the fabrika app: tsh in a window, with the small programs and `counter` | `pnpm fabrika` |
+| Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
 | List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
 | Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |

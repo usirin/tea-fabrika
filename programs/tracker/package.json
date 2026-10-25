@@ -1,0 +1,29 @@
+{
+	"name": "@tea-fabrika/tracker",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program with a window: the tracker. Tickets live on the ledger, one stream of facts each; its window lists them, files new ones, and shows one's timeline.",
+	"exports": {
+		".": "./src/index.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"react": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
