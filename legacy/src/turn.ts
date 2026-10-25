@@ -726,7 +726,7 @@ function asking(
 		...(act === null ? [] : [act]),
 		"The machine driving it cannot clear this itself, so it is waiting on you.",
 	].join("\n\n");
-	const question = {where: p.issue, text, who: p.knobs.who, floor: p.knobs.askFloor};
+	const question = {where: p.issue, text, about: text, who: p.knobs.who, floor: p.knobs.askFloor};
 	// The question is named by the park (the lane, and how long its ledger was), not by the run:
 	// a later run that meets the same park finds the question already asked, and reads the replies since.
 	const [ask, cmds] = parkAsk.start(t.task, question, intentOf(p.lane, t.task, "ask", t.seq));

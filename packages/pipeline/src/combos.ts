@@ -221,27 +221,50 @@ export class Thread extends Context.Service<
 	}
 >()("Thread") {}
 
-/** What a parent asks: where, the words, and whose replies count. */
+/** What a parent asks: where, the words, what they are about, and whose replies count. */
 export interface Question {
 	readonly where: string;
 	readonly text: string;
+	/**
+	 * The whole text the answer is about: the plan, the ticket, the park. The
+	 * words may say only "Approve plan v2?"; the answer covers this, not them.
+	 */
+	readonly about: string;
 	/** The people whose reply is read. Anyone else's is passed over. */
 	readonly who: readonly string[];
 	/** The Judge's floor for reading a reply in words. */
 	readonly floor: number;
 }
 
+/** A hash of some text, spelled as the ledger's facts spell it: `sha256:` and the hex. */
+export type Hash = `sha256:${string}`;
+
+export const hashOf = (text: string): Hash =>
+	`sha256:${createHash("sha256").update(text).digest("hex")}`;
+
+/**
+ * Whether an answer still covers what its question is about, as it reads now.
+ * The same text, yes. Any change, one character, and it does not: the ask goes
+ * out again. GitHub dismisses a stale pull request approval the same way when
+ * new commits are pushed.
+ */
+export const covers = (answer: {readonly saw: Hash}, about: string): boolean =>
+	answer.saw === hashOf(about);
+
+/** `saw`: the hash of what the question is about, so the answer names what it answered. */
 export type Asking<C extends string, P, J> =
 	| {
 			readonly phase: "posting";
 			readonly key: string;
 			readonly question: Question;
+			readonly saw: Hash;
 			readonly asked: P;
 	  }
 	| {
 			readonly phase: "waiting";
 			readonly key: string;
 			readonly question: Question;
+			readonly saw: Hash;
 			readonly thread: string;
 			/** Replies up to here have been read. */
 			readonly after: number;
@@ -250,6 +273,7 @@ export type Asking<C extends string, P, J> =
 			readonly phase: "reading";
 			readonly key: string;
 			readonly question: Question;
+			readonly saw: Hash;
 			readonly thread: string;
 			readonly after: number;
 			readonly reply: Reply;
@@ -262,11 +286,13 @@ export type Asking<C extends string, P, J> =
 			readonly choice: C;
 			readonly reply: Reply;
 			readonly by: "code" | "jev";
+			readonly saw: Hash;
 	  }
 	| {
 			readonly phase: "post_failed";
 			readonly key: string;
 			readonly question: Question;
+			readonly saw: Hash;
 			readonly asked: P;
 	  };
 
@@ -312,7 +338,7 @@ export function createAsk<const N extends string, const C extends string>(config
 		intent: string,
 	): readonly [State, readonly [Post]] => {
 		const asked = post({key, where: question.where, text: `${question.text}\n${footer()}`, intent});
-		return [{phase: "posting", key, question, asked}, [asked]];
+		return [{phase: "posting", key, question, saw: hashOf(question.about), asked}, [asked]];
 	};
 
 	/** Code reads a reply that names a choice: `/resume` and nothing else that counts. */
@@ -325,7 +351,7 @@ export function createAsk<const N extends string, const C extends string>(config
 
 	const posted = (s: State, thread: string, at: number): State =>
 		s.phase === "posting"
-			? {phase: "waiting", key: s.key, question: s.question, thread, after: at}
+			? {phase: "waiting", key: s.key, question: s.question, saw: s.saw, thread, after: at}
 			: s;
 
 	const failed = (s: State): State => (s.phase === "posting" ? {...s, phase: "post_failed"} : s);
@@ -337,23 +363,38 @@ export function createAsk<const N extends string, const C extends string>(config
 		const author = reply.author.toLowerCase();
 		if (!s.question.who.some((w) => w.toLowerCase() === author)) return [seen, []];
 		const choice = named(reply.body);
-		if (choice !== null) return [{phase: "answered", key: s.key, choice, reply, by: "code"}, []];
+		if (choice !== null)
+			return [{phase: "answered", key: s.key, choice, reply, by: "code", saw: s.saw}, []];
 		const asked = judge.ask({key: s.key, texts: {question: s.question.text, reply: reply.body}});
 		return [{...seen, phase: "reading", reply, asked}, [asked]];
 	}
 
+	/** Back to waiting, the reply set aside. */
+	const aside = (s: Extract<State, {phase: "reading"}>): State => ({
+		phase: "waiting",
+		key: s.key,
+		question: s.question,
+		saw: s.saw,
+		thread: s.thread,
+		after: s.after,
+	});
+
 	function read(s: State, ruled: Ruled<C>): State {
 		if (s.phase !== "reading") return s;
 		if (ruled.sure)
-			return {phase: "answered", key: s.key, choice: ruled.choice, reply: s.reply, by: "jev"};
-		return {phase: "waiting", key: s.key, question: s.question, thread: s.thread, after: s.after};
+			return {
+				phase: "answered",
+				key: s.key,
+				choice: ruled.choice,
+				reply: s.reply,
+				by: "jev",
+				saw: s.saw,
+			};
+		return aside(s);
 	}
 
 	/** Jev could not be asked: set the reply aside, as if unsure. */
-	const unread = (s: State): State =>
-		s.phase === "reading"
-			? {phase: "waiting", key: s.key, question: s.question, thread: s.thread, after: s.after}
-			: s;
+	const unread = (s: State): State => (s.phase === "reading" ? aside(s) : s);
 
 	const listening = (s: State): RepliesDeps | null =>
 		s.phase === "waiting" ? {key: s.key, thread: s.thread, after: s.after} : null;
