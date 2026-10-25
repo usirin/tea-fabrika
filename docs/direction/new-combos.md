@@ -1,10 +1,11 @@
-# New combos are named first, built on their second use
+# Four new combos and two that grow, built now
 
-**Proposed** 2026-10-24.
+Decided 2026-10-24: all six are built now, before any stage needs them. This
+replaces the first proposal of the same day, which said to build each on its
+second use. That proposal stays below, marked as replaced.
 
 ```ts
 // A sketch. Four new combos and two that grow, all made from the six moves.
-// None is built. Each is built when a second piece of code needs it.
 const mode = rate(rule, facts);                    // Rate: advise or block, from "fix" and "noise" counts
 const result = controls(onBad, onGood);            // Controls: red where it must fail, green where it must pass
 const brief = briefFor("reviewer", lane);          // Brief: one typed view per role
@@ -21,8 +22,9 @@ const touched = guarded(diff, rows);               // guarded files, grown: a ch
   `packages/pipeline/src/combos.ts`: gate, remember, refine, ask and spawn.
 - **Each gets its name now, in this note.** Design notes use these names from
   today.
-- **Each is built in `combos.ts` when a second piece of code needs it.** The
-  first use writes it inline, in its own stage.
+- **All six are built now,** each with its tests, next to the combos already
+  in `packages/pipeline/src/`. Then we see what the stages look like when they
+  are made from them.
 
 | Combo | Made of | Needed by |
 |---|---|---|
@@ -162,21 +164,32 @@ const touched = diff.files.filter((path) => ownersOf(rows, path).length > 0);
 if (touched.length > 0) return {kind: "ask", who: "owner", for: "check_change", files: touched};
 ```
 
-## Why name now and build later
+## Why build now
 
-- **Names give design talks shared words now.** Several notes from
-  2026-10-24 already use these shapes under other words.
-- **Building early risks the wrong shape.** The common rule is to wait for the
-  third copy before pulling code out
-  ([rule of three](https://en.wikipedia.org/wiki/Rule_of_three_(computer_programming))).
-  Here the second is enough: each combo's uses are already written in decided
-  notes, so the second use tests the shape instead of guessing it.
+- **They are common enough.** Each one already has two or three uses written
+  in decided notes, as the table shows.
+- **Building them shows what we can make from them.** A stage written from
+  six built combos shows its real size, and that is worth seeing before the
+  stages are designed further.
+- **Names give design talks shared words.** Several notes from 2026-10-24
+  already use these shapes under other words.
 
-**Cost:** this note and its row in the README. No code until a second use.
+**Cost:** six small pieces of code and their tests, built before any stage
+uses them.
 
-**How sure: 75%.** The doubt: some may never get a second use, or their two
-uses may want different shapes. Building the first stages will show it. If a
-second use has to bend the combo, it stays inline.
+**The risk:** the common rule is to wait for the third copy before pulling
+code out
+([rule of three](https://en.wikipedia.org/wiki/Rule_of_three_(computer_programming))),
+because the first shape is often wrong. Brief and Poll lean most on shapes
+not built yet, the ledger's facts and the role briefs. If the first stage
+built on one has to bend it, the combo changes there; each is small.
+
+### Replaced: build on the second use
+
+Proposed earlier on 2026-10-24 and replaced the same day: name all six now,
+and build each one only when a second piece of code needs it, so a use tests
+the shape instead of guessing it (75%). Replaced because the uses are already
+known and building them shows what the stages can be made of.
 
 ## Still open
 
@@ -189,7 +202,7 @@ second use has to bend the combo, it stays inline.
 
 ## What it cannot tell us
 
-- Nothing here is built or measured. The shapes come from one day of design
-  talk and experiments 122, 124, 139 and 140.
+- Nothing here is measured. The shapes come from one day of design talk and
+  experiments 122, 124, 139 and 140.
 - The table's uses are planned stages, not running code. A stage built
   another way changes the list.
