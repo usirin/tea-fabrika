@@ -1,0 +1,7324 @@
+{
+	"fields": {
+		"code_names": {
+			"type": "list",
+			"items": "text",
+			"instructions": "Every name of code the ticket mentions: functions, methods, types, classes, variables, constants, config keys, CLI flags and package names. Write each exactly as in the text, one per item. Not file paths and not plain English words."
+		},
+		"file_paths": {
+			"type": "list",
+			"items": "text",
+			"instructions": "Every file or folder path the ticket mentions, such as src/a/b.ts or packages/x/README.md, exactly as written. Not URLs and not code names."
+		},
+		"error_messages": {
+			"type": "list",
+			"items": "text",
+			"instructions": "Every error message, failing assertion or compiler or test output the ticket quotes, exactly as written."
+		}
+	},
+	"calls": {
+		"367": {
+			"1": {
+				"at": "2026-10-25T05:35:26.329Z",
+				"ms": 654,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"otel",
+							"full",
+							"tea package",
+							"OpenTelemetry suite",
+							"pnpm test`",
+							"main",
+							"open",
+							"builder",
+							"pnpm typecheck",
+							"pnpm typecheck:test",
+							"pnpm lint",
+							"pnpm test",
+							"packages",
+							"origin/main",
+							"feat",
+							"OpenTelemetry",
+							"span"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								38,
+								42
+							],
+							[
+								91,
+								102
+							],
+							[
+								105,
+								124
+							],
+							[
+								147,
+								157
+							],
+							[
+								238,
+								242
+							],
+							[
+								271,
+								275
+							],
+							[
+								372,
+								379
+							],
+							[
+								405,
+								419
+							],
+							[
+								423,
+								442
+							],
+							[
+								446,
+								455
+							],
+							[
+								459,
+								468
+							],
+							[
+								508,
+								516
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1076
+							],
+							[
+								1121,
+								1125
+							],
+							[
+								1156,
+								1169
+							],
+							[
+								1288,
+								1292
+							]
+						],
+						"confidence": 3.909427655842705e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"otel",
+							"tea",
+							"packages/tea/src/otel/otel.test.ts",
+							"origin/main"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								91,
+								94
+							],
+							[
+								508,
+								542
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1102
+							]
+						],
+						"confidence": 0.00036414297403821486
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"tea",
+							"OpenTelemetry suite",
+							"times each span by the transitions that opened and closed it"
+						],
+						"spans": [
+							[
+								91,
+								94
+							],
+							[
+								105,
+								124
+							],
+							[
+								547,
+								607
+							]
+						],
+						"confidence": 1.525866051560054e-14
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 361,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 721,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.0000721
+			},
+			"2": {
+				"at": "2026-10-25T05:36:47.864Z",
+				"ms": 293,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"otel",
+							"full",
+							"tea package",
+							"OpenTelemetry suite",
+							"pnpm test`",
+							"main",
+							"open",
+							"builder",
+							"pnpm typecheck",
+							"pnpm typecheck:test",
+							"pnpm lint",
+							"pnpm test",
+							"packages",
+							"origin/main",
+							"feat",
+							"OpenTelemetry",
+							"span"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								38,
+								42
+							],
+							[
+								91,
+								102
+							],
+							[
+								105,
+								124
+							],
+							[
+								147,
+								157
+							],
+							[
+								238,
+								242
+							],
+							[
+								271,
+								275
+							],
+							[
+								372,
+								379
+							],
+							[
+								405,
+								419
+							],
+							[
+								423,
+								442
+							],
+							[
+								446,
+								455
+							],
+							[
+								459,
+								468
+							],
+							[
+								508,
+								516
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1076
+							],
+							[
+								1121,
+								1125
+							],
+							[
+								1156,
+								1169
+							],
+							[
+								1288,
+								1292
+							]
+						],
+						"confidence": 3.909427655842705e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"otel",
+							"tea",
+							"packages/tea/src/otel/otel.test.ts",
+							"origin/main"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								91,
+								94
+							],
+							[
+								508,
+								542
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1102
+							]
+						],
+						"confidence": 0.00036414297403821486
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"tea",
+							"OpenTelemetry suite",
+							"times each span by the transitions that opened and closed it"
+						],
+						"spans": [
+							[
+								91,
+								94
+							],
+							[
+								105,
+								124
+							],
+							[
+								547,
+								607
+							]
+						],
+						"confidence": 1.525866051560054e-14
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 361,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 721,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.0000721
+			},
+			"3": {
+				"at": "2026-10-25T05:36:49.212Z",
+				"ms": 291,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"otel",
+							"full",
+							"tea package",
+							"OpenTelemetry suite",
+							"pnpm test`",
+							"main",
+							"open",
+							"builder",
+							"pnpm typecheck",
+							"pnpm typecheck:test",
+							"pnpm lint",
+							"pnpm test",
+							"packages",
+							"origin/main",
+							"feat",
+							"OpenTelemetry",
+							"span"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								38,
+								42
+							],
+							[
+								91,
+								102
+							],
+							[
+								105,
+								124
+							],
+							[
+								147,
+								157
+							],
+							[
+								238,
+								242
+							],
+							[
+								271,
+								275
+							],
+							[
+								372,
+								379
+							],
+							[
+								405,
+								419
+							],
+							[
+								423,
+								442
+							],
+							[
+								446,
+								455
+							],
+							[
+								459,
+								468
+							],
+							[
+								508,
+								516
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1076
+							],
+							[
+								1121,
+								1125
+							],
+							[
+								1156,
+								1169
+							],
+							[
+								1288,
+								1292
+							]
+						],
+						"confidence": 3.909427655842705e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"otel",
+							"tea",
+							"packages/tea/src/otel/otel.test.ts",
+							"origin/main"
+						],
+						"spans": [
+							[
+								0,
+								4
+							],
+							[
+								91,
+								94
+							],
+							[
+								508,
+								542
+							],
+							[
+								705,
+								716
+							],
+							[
+								1068,
+								1102
+							]
+						],
+						"confidence": 0.00036414297403821486
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"tea",
+							"OpenTelemetry suite",
+							"times each span by the transitions that opened and closed it"
+						],
+						"spans": [
+							[
+								91,
+								94
+							],
+							[
+								105,
+								124
+							],
+							[
+								547,
+								607
+							]
+						],
+						"confidence": 1.525866051560054e-14
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 361,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 721,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.0000721
+			}
+		},
+		"393": {
+			"1": {
+				"at": "2026-10-25T05:35:46.082Z",
+				"ms": 245,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"--",
+							"boundaries",
+							"@demlik/code-graph",
+							"--boundaries`",
+							"[a company]-rooted",
+							"monorepo-55",
+							"[a company]",
+							"#6194",
+							"access-gates",
+							"--boundaries",
+							"--ci",
+							"packages/code-graph/src/boundaries",
+							"--collapse",
+							"[a company] #619"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								13
+							],
+							[
+								13,
+								23
+							],
+							[
+								94,
+								112
+							],
+							[
+								117,
+								130
+							],
+							[
+								570,
+								587
+							],
+							[
+								597,
+								608
+							],
+							[
+								656,
+								669
+							],
+							[
+								673,
+								683
+							],
+							[
+								685,
+								690
+							],
+							[
+								715,
+								725
+							],
+							[
+								969,
+								981
+							],
+							[
+								1067,
+								1079
+							],
+							[
+								1080,
+								1084
+							],
+							[
+								1532,
+								1566
+							],
+							[
+								1623,
+								1633
+							],
+							[
+								1700,
+								1712
+							],
+							[
+								1716,
+								1731
+							]
+						],
+						"confidence": 2.2663348722770908e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"src/access-gates/rules/x.ts",
+							"access-gates",
+							"src/ratchet/scope-count.ts"
+						],
+						"spans": [
+							[
+								286,
+								313
+							],
+							[
+								969,
+								981
+							],
+							[
+								1023,
+								1050
+							],
+							[
+								1636,
+								1662
+							]
+						],
+						"confidence": 0.0000853052856982779
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"Bin"
+						],
+						"spans": [
+							[
+								570,
+								573
+							],
+							[
+								673,
+								676
+							],
+							[
+								1716,
+								1719
+							]
+						],
+						"confidence": 0.00011128644540389567
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 519,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 879,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008790000000000001
+			},
+			"2": {
+				"at": "2026-10-25T05:36:48.160Z",
+				"ms": 141,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"--",
+							"boundaries",
+							"@demlik/code-graph",
+							"--boundaries`",
+							"[a company]-rooted",
+							"monorepo-55",
+							"[a company]",
+							"#6194",
+							"access-gates",
+							"--boundaries",
+							"--ci",
+							"packages/code-graph/src/boundaries",
+							"--collapse",
+							"[a company] #619"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								13
+							],
+							[
+								13,
+								23
+							],
+							[
+								94,
+								112
+							],
+							[
+								117,
+								130
+							],
+							[
+								570,
+								587
+							],
+							[
+								597,
+								608
+							],
+							[
+								656,
+								669
+							],
+							[
+								673,
+								683
+							],
+							[
+								685,
+								690
+							],
+							[
+								715,
+								725
+							],
+							[
+								969,
+								981
+							],
+							[
+								1067,
+								1079
+							],
+							[
+								1080,
+								1084
+							],
+							[
+								1532,
+								1566
+							],
+							[
+								1623,
+								1633
+							],
+							[
+								1700,
+								1712
+							],
+							[
+								1716,
+								1731
+							]
+						],
+						"confidence": 2.2663348722770908e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"src/access-gates/rules/x.ts",
+							"access-gates",
+							"src/ratchet/scope-count.ts"
+						],
+						"spans": [
+							[
+								286,
+								313
+							],
+							[
+								969,
+								981
+							],
+							[
+								1023,
+								1050
+							],
+							[
+								1636,
+								1662
+							]
+						],
+						"confidence": 0.0000853052856982779
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"Bin"
+						],
+						"spans": [
+							[
+								570,
+								573
+							],
+							[
+								673,
+								676
+							],
+							[
+								1716,
+								1719
+							]
+						],
+						"confidence": 0.00011128644540389567
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 519,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 879,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008790000000000001
+			},
+			"3": {
+				"at": "2026-10-25T05:36:49.507Z",
+				"ms": 255,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"--",
+							"boundaries",
+							"@demlik/code-graph",
+							"--boundaries`",
+							"[a company]-rooted",
+							"monorepo-55",
+							"[a company]",
+							"#6194",
+							"access-gates",
+							"--boundaries",
+							"--ci",
+							"packages/code-graph/src/boundaries",
+							"--collapse",
+							"[a company] #619"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								13
+							],
+							[
+								13,
+								23
+							],
+							[
+								94,
+								112
+							],
+							[
+								117,
+								130
+							],
+							[
+								570,
+								587
+							],
+							[
+								597,
+								608
+							],
+							[
+								656,
+								669
+							],
+							[
+								673,
+								683
+							],
+							[
+								685,
+								690
+							],
+							[
+								715,
+								725
+							],
+							[
+								969,
+								981
+							],
+							[
+								1067,
+								1079
+							],
+							[
+								1080,
+								1084
+							],
+							[
+								1532,
+								1566
+							],
+							[
+								1623,
+								1633
+							],
+							[
+								1700,
+								1712
+							],
+							[
+								1716,
+								1731
+							]
+						],
+						"confidence": 2.2663348722770908e-13
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"src/access-gates/rules/x.ts",
+							"access-gates",
+							"src/ratchet/scope-count.ts"
+						],
+						"spans": [
+							[
+								286,
+								313
+							],
+							[
+								969,
+								981
+							],
+							[
+								1023,
+								1050
+							],
+							[
+								1636,
+								1662
+							]
+						],
+						"confidence": 0.0000853052856982779
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"Bin"
+						],
+						"spans": [
+							[
+								570,
+								573
+							],
+							[
+								673,
+								676
+							],
+							[
+								1716,
+								1719
+							]
+						],
+						"confidence": 0.00011128644540389567
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 519,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 879,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008790000000000001
+			}
+		},
+		"490": {
+			"1": {
+				"at": "2026-10-25T05:35:46.328Z",
+				"ms": 136,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"SplitCandidate",
+							"doc comment",
+							"refine cohesion",
+							"doc",
+							"SplitCandidate`",
+							"structure-sweep",
+							"propose refine`",
+							"README",
+							"README-only",
+							"packages",
+							"export interface",
+							"cohesion`",
+							"precision`",
+							"scoreCoChange`",
+							"predictedPairs",
+							"active",
+							"maxFiles`",
+							"scoreCoChange"
+						],
+						"spans": [
+							[
+								0,
+								14
+							],
+							[
+								15,
+								26
+							],
+							[
+								48,
+								63
+							],
+							[
+								91,
+								94
+							],
+							[
+								107,
+								122
+							],
+							[
+								126,
+								141
+							],
+							[
+								145,
+								160
+							],
+							[
+								252,
+								258
+							],
+							[
+								430,
+								441
+							],
+							[
+								454,
+								469
+							],
+							[
+								652,
+								660
+							],
+							[
+								705,
+								708
+							],
+							[
+								724,
+								740
+							],
+							[
+								741,
+								755
+							],
+							[
+								808,
+								817
+							],
+							[
+								918,
+								927
+							],
+							[
+								932,
+								942
+							],
+							[
+								949,
+								963
+							],
+							[
+								966,
+								974
+							],
+							[
+								1047,
+								1061
+							],
+							[
+								1093,
+								1099
+							],
+							[
+								1148,
+								1157
+							],
+							[
+								1450,
+								1458
+							],
+							[
+								1500,
+								1514
+							],
+							[
+								1567,
+								1580
+							],
+							[
+								1584,
+								1598
+							],
+							[
+								1642,
+								1657
+							]
+						],
+						"confidence": 7.60651929667813e-25
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/structure-sweep/src/",
+							"packages/structure-sweep/src/propose/refine.ts",
+							"scoreCo",
+							"packages/structure-sweep/src/score/score.ts",
+							"packages/structure-sweep/README.md"
+						],
+						"spans": [
+							[
+								566,
+								595
+							],
+							[
+								652,
+								698
+							],
+							[
+								949,
+								956
+							],
+							[
+								966,
+								1009
+							],
+							[
+								1450,
+								1496
+							],
+							[
+								1520,
+								1563
+							],
+							[
+								1604,
+								1638
+							]
+						],
+						"confidence": 0.000018514462933250198
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [],
+						"spans": [],
+						"confidence": 0.000023552544352760886
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 486,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 846,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008460000000000001
+			},
+			"2": {
+				"at": "2026-10-25T05:36:48.303Z",
+				"ms": 131,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"SplitCandidate",
+							"doc comment",
+							"refine cohesion",
+							"doc",
+							"SplitCandidate`",
+							"structure-sweep",
+							"propose refine`",
+							"README",
+							"README-only",
+							"packages",
+							"export interface",
+							"cohesion`",
+							"precision`",
+							"scoreCoChange`",
+							"predictedPairs",
+							"active",
+							"maxFiles`",
+							"scoreCoChange"
+						],
+						"spans": [
+							[
+								0,
+								14
+							],
+							[
+								15,
+								26
+							],
+							[
+								48,
+								63
+							],
+							[
+								91,
+								94
+							],
+							[
+								107,
+								122
+							],
+							[
+								126,
+								141
+							],
+							[
+								145,
+								160
+							],
+							[
+								252,
+								258
+							],
+							[
+								430,
+								441
+							],
+							[
+								454,
+								469
+							],
+							[
+								652,
+								660
+							],
+							[
+								705,
+								708
+							],
+							[
+								724,
+								740
+							],
+							[
+								741,
+								755
+							],
+							[
+								808,
+								817
+							],
+							[
+								918,
+								927
+							],
+							[
+								932,
+								942
+							],
+							[
+								949,
+								963
+							],
+							[
+								966,
+								974
+							],
+							[
+								1047,
+								1061
+							],
+							[
+								1093,
+								1099
+							],
+							[
+								1148,
+								1157
+							],
+							[
+								1450,
+								1458
+							],
+							[
+								1500,
+								1514
+							],
+							[
+								1567,
+								1580
+							],
+							[
+								1584,
+								1598
+							],
+							[
+								1642,
+								1657
+							]
+						],
+						"confidence": 7.60651929667813e-25
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/structure-sweep/src/",
+							"packages/structure-sweep/src/propose/refine.ts",
+							"scoreCo",
+							"packages/structure-sweep/src/score/score.ts",
+							"packages/structure-sweep/README.md"
+						],
+						"spans": [
+							[
+								566,
+								595
+							],
+							[
+								652,
+								698
+							],
+							[
+								949,
+								956
+							],
+							[
+								966,
+								1009
+							],
+							[
+								1450,
+								1496
+							],
+							[
+								1520,
+								1563
+							],
+							[
+								1604,
+								1638
+							]
+						],
+						"confidence": 0.000018514462933250198
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [],
+						"spans": [],
+						"confidence": 0.000023552544352760886
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 486,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 846,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008460000000000001
+			},
+			"3": {
+				"at": "2026-10-25T05:36:49.764Z",
+				"ms": 185,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"SplitCandidate",
+							"doc comment",
+							"refine cohesion",
+							"doc",
+							"SplitCandidate`",
+							"structure-sweep",
+							"propose refine`",
+							"README",
+							"README-only",
+							"packages",
+							"export interface",
+							"cohesion`",
+							"precision`",
+							"scoreCoChange`",
+							"predictedPairs",
+							"active",
+							"maxFiles`",
+							"scoreCoChange"
+						],
+						"spans": [
+							[
+								0,
+								14
+							],
+							[
+								15,
+								26
+							],
+							[
+								48,
+								63
+							],
+							[
+								91,
+								94
+							],
+							[
+								107,
+								122
+							],
+							[
+								126,
+								141
+							],
+							[
+								145,
+								160
+							],
+							[
+								252,
+								258
+							],
+							[
+								430,
+								441
+							],
+							[
+								454,
+								469
+							],
+							[
+								652,
+								660
+							],
+							[
+								705,
+								708
+							],
+							[
+								724,
+								740
+							],
+							[
+								741,
+								755
+							],
+							[
+								808,
+								817
+							],
+							[
+								918,
+								927
+							],
+							[
+								932,
+								942
+							],
+							[
+								949,
+								963
+							],
+							[
+								966,
+								974
+							],
+							[
+								1047,
+								1061
+							],
+							[
+								1093,
+								1099
+							],
+							[
+								1148,
+								1157
+							],
+							[
+								1450,
+								1458
+							],
+							[
+								1500,
+								1514
+							],
+							[
+								1567,
+								1580
+							],
+							[
+								1584,
+								1598
+							],
+							[
+								1642,
+								1657
+							]
+						],
+						"confidence": 7.60651929667813e-25
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/structure-sweep/src/",
+							"packages/structure-sweep/src/propose/refine.ts",
+							"scoreCo",
+							"packages/structure-sweep/src/score/score.ts",
+							"packages/structure-sweep/README.md"
+						],
+						"spans": [
+							[
+								566,
+								595
+							],
+							[
+								652,
+								698
+							],
+							[
+								949,
+								956
+							],
+							[
+								966,
+								1009
+							],
+							[
+								1450,
+								1496
+							],
+							[
+								1520,
+								1563
+							],
+							[
+								1604,
+								1638
+							]
+						],
+						"confidence": 0.000018514462933250198
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [],
+						"spans": [],
+						"confidence": 0.000023552544352760886
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 486,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 846,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008460000000000001
+			}
+		},
+		"504": {
+			"1": {
+				"at": "2026-10-25T05:35:46.465Z",
+				"ms": 165,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"Layer",
+							"--layers`",
+							"billing-business-rule",
+							"billing-plumbing",
+							"business rules",
+							"ast-grep rule",
+							"per",
+							"consumer",
+							"<domain>-api-surface",
+							"<domain>",
+							"layers",
+							"name",
+							"plumbing",
+							"api-surface",
+							"business-rule",
+							"code-graph .",
+							"--layers --layer-rules",
+							"layers/classify.ts",
+							"compile()",
+							"regex",
+							"Rails'",
+							"*_controller.rb",
+							"Angular's",
+							"NestJS's",
+							"packages/code-graph",
+							"compileMatchers()",
+							"README",
+							"Decl",
+							"--layer-rules",
+							"Patterns"
+						],
+						"spans": [
+							[
+								0,
+								5
+							],
+							[
+								90,
+								99
+							],
+							[
+								220,
+								241
+							],
+							[
+								248,
+								264
+							],
+							[
+								403,
+								417
+							],
+							[
+								468,
+								481
+							],
+							[
+								546,
+								549
+							],
+							[
+								586,
+								594
+							],
+							[
+								676,
+								696
+							],
+							[
+								700,
+								708
+							],
+							[
+								851,
+								857
+							],
+							[
+								867,
+								871
+							],
+							[
+								875,
+								883
+							],
+							[
+								924,
+								928
+							],
+							[
+								932,
+								943
+							],
+							[
+								995,
+								1008
+							],
+							[
+								1078,
+								1090
+							],
+							[
+								1091,
+								1113
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1216,
+								1225
+							],
+							[
+								1332,
+								1337
+							],
+							[
+								1534,
+								1540
+							],
+							[
+								1542,
+								1557
+							],
+							[
+								1560,
+								1569
+							],
+							[
+								1586,
+								1594
+							],
+							[
+								1854,
+								1873
+							],
+							[
+								1900,
+								1909
+							],
+							[
+								1941,
+								1958
+							],
+							[
+								2049,
+								2055
+							],
+							[
+								2057,
+								2061
+							],
+							[
+								2079,
+								2092
+							],
+							[
+								2192,
+								2200
+							],
+							[
+								2922,
+								2928
+							]
+						],
+						"confidence": 3.111085227473013e-30
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"billing-business-rule.ts",
+							"billing-plumbing.ts",
+							"<domain>-api-surface",
+							"`<",
+							"layers",
+							"layers/classify.ts",
+							"packages/code-graph/src/layers/classify.ts",
+							"packages/code-graph/src/layers/layers.test.ts",
+							"apps/web"
+						],
+						"spans": [
+							[
+								220,
+								244
+							],
+							[
+								248,
+								267
+							],
+							[
+								676,
+								696
+							],
+							[
+								699,
+								701
+							],
+							[
+								851,
+								857
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1854,
+								1896
+							],
+							[
+								2000,
+								2045
+							],
+							[
+								2475,
+								2483
+							]
+						],
+						"confidence": 2.745117448238662e-13
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"0 down,",
+							"compile",
+							"zero",
+							"[^/]*"
+						],
+						"spans": [
+							[
+								1126,
+								1133
+							],
+							[
+								1900,
+								1907
+							],
+							[
+								2221,
+								2225
+							],
+							[
+								2274,
+								2279
+							]
+						],
+						"confidence": 1.127343396451621e-18
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 766,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 1126,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00011260000000000001
+			},
+			"2": {
+				"at": "2026-10-25T05:36:48.436Z",
+				"ms": 176,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"Layer",
+							"--layers`",
+							"billing-business-rule",
+							"billing-plumbing",
+							"business rules",
+							"ast-grep rule",
+							"per",
+							"consumer",
+							"<domain>-api-surface",
+							"<domain>",
+							"layers",
+							"name",
+							"plumbing",
+							"api-surface",
+							"business-rule",
+							"code-graph .",
+							"--layers --layer-rules",
+							"layers/classify.ts",
+							"compile()",
+							"regex",
+							"Rails'",
+							"*_controller.rb",
+							"Angular's",
+							"NestJS's",
+							"packages/code-graph",
+							"compileMatchers()",
+							"README",
+							"Decl",
+							"--layer-rules",
+							"Patterns"
+						],
+						"spans": [
+							[
+								0,
+								5
+							],
+							[
+								90,
+								99
+							],
+							[
+								220,
+								241
+							],
+							[
+								248,
+								264
+							],
+							[
+								403,
+								417
+							],
+							[
+								468,
+								481
+							],
+							[
+								546,
+								549
+							],
+							[
+								586,
+								594
+							],
+							[
+								676,
+								696
+							],
+							[
+								700,
+								708
+							],
+							[
+								851,
+								857
+							],
+							[
+								867,
+								871
+							],
+							[
+								875,
+								883
+							],
+							[
+								924,
+								928
+							],
+							[
+								932,
+								943
+							],
+							[
+								995,
+								1008
+							],
+							[
+								1078,
+								1090
+							],
+							[
+								1091,
+								1113
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1216,
+								1225
+							],
+							[
+								1332,
+								1337
+							],
+							[
+								1534,
+								1540
+							],
+							[
+								1542,
+								1557
+							],
+							[
+								1560,
+								1569
+							],
+							[
+								1586,
+								1594
+							],
+							[
+								1854,
+								1873
+							],
+							[
+								1900,
+								1909
+							],
+							[
+								1941,
+								1958
+							],
+							[
+								2049,
+								2055
+							],
+							[
+								2057,
+								2061
+							],
+							[
+								2079,
+								2092
+							],
+							[
+								2192,
+								2200
+							],
+							[
+								2922,
+								2928
+							]
+						],
+						"confidence": 3.111085227473013e-30
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"billing-business-rule.ts",
+							"billing-plumbing.ts",
+							"<domain>-api-surface",
+							"`<",
+							"layers",
+							"layers/classify.ts",
+							"packages/code-graph/src/layers/classify.ts",
+							"packages/code-graph/src/layers/layers.test.ts",
+							"apps/web"
+						],
+						"spans": [
+							[
+								220,
+								244
+							],
+							[
+								248,
+								267
+							],
+							[
+								676,
+								696
+							],
+							[
+								699,
+								701
+							],
+							[
+								851,
+								857
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1854,
+								1896
+							],
+							[
+								2000,
+								2045
+							],
+							[
+								2475,
+								2483
+							]
+						],
+						"confidence": 2.745117448238662e-13
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"0 down,",
+							"compile",
+							"zero",
+							"[^/]*"
+						],
+						"spans": [
+							[
+								1126,
+								1133
+							],
+							[
+								1900,
+								1907
+							],
+							[
+								2221,
+								2225
+							],
+							[
+								2274,
+								2279
+							]
+						],
+						"confidence": 1.127343396451621e-18
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 766,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 1126,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00011260000000000001
+			},
+			"3": {
+				"at": "2026-10-25T05:36:49.952Z",
+				"ms": 142,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"Layer",
+							"--layers`",
+							"billing-business-rule",
+							"billing-plumbing",
+							"business rules",
+							"ast-grep rule",
+							"per",
+							"consumer",
+							"<domain>-api-surface",
+							"<domain>",
+							"layers",
+							"name",
+							"plumbing",
+							"api-surface",
+							"business-rule",
+							"code-graph .",
+							"--layers --layer-rules",
+							"layers/classify.ts",
+							"compile()",
+							"regex",
+							"Rails'",
+							"*_controller.rb",
+							"Angular's",
+							"NestJS's",
+							"packages/code-graph",
+							"compileMatchers()",
+							"README",
+							"Decl",
+							"--layer-rules",
+							"Patterns"
+						],
+						"spans": [
+							[
+								0,
+								5
+							],
+							[
+								90,
+								99
+							],
+							[
+								220,
+								241
+							],
+							[
+								248,
+								264
+							],
+							[
+								403,
+								417
+							],
+							[
+								468,
+								481
+							],
+							[
+								546,
+								549
+							],
+							[
+								586,
+								594
+							],
+							[
+								676,
+								696
+							],
+							[
+								700,
+								708
+							],
+							[
+								851,
+								857
+							],
+							[
+								867,
+								871
+							],
+							[
+								875,
+								883
+							],
+							[
+								924,
+								928
+							],
+							[
+								932,
+								943
+							],
+							[
+								995,
+								1008
+							],
+							[
+								1078,
+								1090
+							],
+							[
+								1091,
+								1113
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1216,
+								1225
+							],
+							[
+								1332,
+								1337
+							],
+							[
+								1534,
+								1540
+							],
+							[
+								1542,
+								1557
+							],
+							[
+								1560,
+								1569
+							],
+							[
+								1586,
+								1594
+							],
+							[
+								1854,
+								1873
+							],
+							[
+								1900,
+								1909
+							],
+							[
+								1941,
+								1958
+							],
+							[
+								2049,
+								2055
+							],
+							[
+								2057,
+								2061
+							],
+							[
+								2079,
+								2092
+							],
+							[
+								2192,
+								2200
+							],
+							[
+								2922,
+								2928
+							]
+						],
+						"confidence": 3.111085227473013e-30
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"billing-business-rule.ts",
+							"billing-plumbing.ts",
+							"<domain>-api-surface",
+							"`<",
+							"layers",
+							"layers/classify.ts",
+							"packages/code-graph/src/layers/classify.ts",
+							"packages/code-graph/src/layers/layers.test.ts",
+							"apps/web"
+						],
+						"spans": [
+							[
+								220,
+								244
+							],
+							[
+								248,
+								267
+							],
+							[
+								676,
+								696
+							],
+							[
+								699,
+								701
+							],
+							[
+								851,
+								857
+							],
+							[
+								1195,
+								1213
+							],
+							[
+								1854,
+								1896
+							],
+							[
+								2000,
+								2045
+							],
+							[
+								2475,
+								2483
+							]
+						],
+						"confidence": 2.745117448238662e-13
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"0 down,",
+							"compile",
+							"zero",
+							"[^/]*"
+						],
+						"spans": [
+							[
+								1126,
+								1133
+							],
+							[
+								1900,
+								1907
+							],
+							[
+								2221,
+								2225
+							],
+							[
+								2274,
+								2279
+							]
+						],
+						"confidence": 1.127343396451621e-18
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 766,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 1126,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00011260000000000001
+			}
+		},
+		"565": {
+			"1": {
+				"at": "2026-10-25T05:35:46.632Z",
+				"ms": 157,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"readAllowance",
+							"read",
+							"readAllowance`",
+							"B8",
+							"driving",
+							"decidedBy`",
+							"read exception",
+							"hexagonal",
+							"read-only",
+							"decidedBy:",
+							"contract\"]",
+							"adapters/driving",
+							"contract package",
+							"zod",
+							"RPC",
+							"index.ts",
+							"Cockburn's",
+							"CQRS's",
+							"packages/code-graph/README.md",
+							"Read allowance ",
+							"decidedBy",
+							"write",
+							"ORM"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								24
+							],
+							[
+								57,
+								61
+							],
+							[
+								91,
+								105
+							],
+							[
+								114,
+								116
+							],
+							[
+								131,
+								138
+							],
+							[
+								186,
+								196
+							],
+							[
+								210,
+								214
+							],
+							[
+								271,
+								275
+							],
+							[
+								349,
+								351
+							],
+							[
+								399,
+								413
+							],
+							[
+								484,
+								493
+							],
+							[
+								512,
+								526
+							],
+							[
+								546,
+								555
+							],
+							[
+								571,
+								581
+							],
+							[
+								584,
+								594
+							],
+							[
+								703,
+								719
+							],
+							[
+								786,
+								788
+							],
+							[
+								861,
+								863
+							],
+							[
+								895,
+								911
+							],
+							[
+								1017,
+								1019
+							],
+							[
+								1032,
+								1035
+							],
+							[
+								1040,
+								1043
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1182,
+								1192
+							],
+							[
+								1323,
+								1333
+							],
+							[
+								1413,
+								1423
+							],
+							[
+								1436,
+								1442
+							],
+							[
+								1748,
+								1758
+							],
+							[
+								1812,
+								1816
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								1949,
+								1964
+							],
+							[
+								1966,
+								1980
+							],
+							[
+								2011,
+								2015
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2127,
+								2129
+							],
+							[
+								2149,
+								2163
+							],
+							[
+								2220,
+								2230
+							],
+							[
+								2261,
+								2263
+							],
+							[
+								2395,
+								2400
+							],
+							[
+								2419,
+								2429
+							],
+							[
+								2547,
+								2550
+							]
+						],
+						"confidence": 1.878428804271379e-23
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"adapters/driving/",
+							"index.ts",
+							"packages/code-graph/README.md",
+							"packages/code-graph/src/boundaries/"
+						],
+						"spans": [
+							[
+								703,
+								720
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								2086,
+								2121
+							]
+						],
+						"confidence": 0.00001599403197904918
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"dec",
+							"exit ",
+							"decidedBy",
+							"read"
+						],
+						"spans": [
+							[
+								1323,
+								1326
+							],
+							[
+								1346,
+								1351
+							],
+							[
+								1748,
+								1751
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2149,
+								2153
+							]
+						],
+						"confidence": 1.2106710846828187e-20
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 630,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 990,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00009900000000000001
+			},
+			"2": {
+				"at": "2026-10-25T05:36:48.615Z",
+				"ms": 188,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"readAllowance",
+							"read",
+							"readAllowance`",
+							"B8",
+							"driving",
+							"decidedBy`",
+							"read exception",
+							"hexagonal",
+							"read-only",
+							"decidedBy:",
+							"contract\"]",
+							"adapters/driving",
+							"contract package",
+							"zod",
+							"RPC",
+							"index.ts",
+							"Cockburn's",
+							"CQRS's",
+							"packages/code-graph/README.md",
+							"Read allowance ",
+							"decidedBy",
+							"write",
+							"ORM"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								24
+							],
+							[
+								57,
+								61
+							],
+							[
+								91,
+								105
+							],
+							[
+								114,
+								116
+							],
+							[
+								131,
+								138
+							],
+							[
+								186,
+								196
+							],
+							[
+								210,
+								214
+							],
+							[
+								271,
+								275
+							],
+							[
+								349,
+								351
+							],
+							[
+								399,
+								413
+							],
+							[
+								484,
+								493
+							],
+							[
+								512,
+								526
+							],
+							[
+								546,
+								555
+							],
+							[
+								571,
+								581
+							],
+							[
+								584,
+								594
+							],
+							[
+								703,
+								719
+							],
+							[
+								786,
+								788
+							],
+							[
+								861,
+								863
+							],
+							[
+								895,
+								911
+							],
+							[
+								1017,
+								1019
+							],
+							[
+								1032,
+								1035
+							],
+							[
+								1040,
+								1043
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1182,
+								1192
+							],
+							[
+								1323,
+								1333
+							],
+							[
+								1413,
+								1423
+							],
+							[
+								1436,
+								1442
+							],
+							[
+								1748,
+								1758
+							],
+							[
+								1812,
+								1816
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								1949,
+								1964
+							],
+							[
+								1966,
+								1980
+							],
+							[
+								2011,
+								2015
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2127,
+								2129
+							],
+							[
+								2149,
+								2163
+							],
+							[
+								2220,
+								2230
+							],
+							[
+								2261,
+								2263
+							],
+							[
+								2395,
+								2400
+							],
+							[
+								2419,
+								2429
+							],
+							[
+								2547,
+								2550
+							]
+						],
+						"confidence": 1.878428804271379e-23
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"adapters/driving/",
+							"index.ts",
+							"packages/code-graph/README.md",
+							"packages/code-graph/src/boundaries/"
+						],
+						"spans": [
+							[
+								703,
+								720
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								2086,
+								2121
+							]
+						],
+						"confidence": 0.00001599403197904918
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"dec",
+							"exit ",
+							"decidedBy",
+							"read"
+						],
+						"spans": [
+							[
+								1323,
+								1326
+							],
+							[
+								1346,
+								1351
+							],
+							[
+								1748,
+								1751
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2149,
+								2153
+							]
+						],
+						"confidence": 1.2106710846828187e-20
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 630,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 990,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00009900000000000001
+			},
+			"3": {
+				"at": "2026-10-25T05:36:50.100Z",
+				"ms": 212,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"code-graph",
+							"readAllowance",
+							"read",
+							"readAllowance`",
+							"B8",
+							"driving",
+							"decidedBy`",
+							"read exception",
+							"hexagonal",
+							"read-only",
+							"decidedBy:",
+							"contract\"]",
+							"adapters/driving",
+							"contract package",
+							"zod",
+							"RPC",
+							"index.ts",
+							"Cockburn's",
+							"CQRS's",
+							"packages/code-graph/README.md",
+							"Read allowance ",
+							"decidedBy",
+							"write",
+							"ORM"
+						],
+						"spans": [
+							[
+								0,
+								10
+							],
+							[
+								11,
+								24
+							],
+							[
+								57,
+								61
+							],
+							[
+								91,
+								105
+							],
+							[
+								114,
+								116
+							],
+							[
+								131,
+								138
+							],
+							[
+								186,
+								196
+							],
+							[
+								210,
+								214
+							],
+							[
+								271,
+								275
+							],
+							[
+								349,
+								351
+							],
+							[
+								399,
+								413
+							],
+							[
+								484,
+								493
+							],
+							[
+								512,
+								526
+							],
+							[
+								546,
+								555
+							],
+							[
+								571,
+								581
+							],
+							[
+								584,
+								594
+							],
+							[
+								703,
+								719
+							],
+							[
+								786,
+								788
+							],
+							[
+								861,
+								863
+							],
+							[
+								895,
+								911
+							],
+							[
+								1017,
+								1019
+							],
+							[
+								1032,
+								1035
+							],
+							[
+								1040,
+								1043
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1182,
+								1192
+							],
+							[
+								1323,
+								1333
+							],
+							[
+								1413,
+								1423
+							],
+							[
+								1436,
+								1442
+							],
+							[
+								1748,
+								1758
+							],
+							[
+								1812,
+								1816
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								1949,
+								1964
+							],
+							[
+								1966,
+								1980
+							],
+							[
+								2011,
+								2015
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2127,
+								2129
+							],
+							[
+								2149,
+								2163
+							],
+							[
+								2220,
+								2230
+							],
+							[
+								2261,
+								2263
+							],
+							[
+								2395,
+								2400
+							],
+							[
+								2419,
+								2429
+							],
+							[
+								2547,
+								2550
+							]
+						],
+						"confidence": 1.878428804271379e-23
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"adapters/driving/",
+							"index.ts",
+							"packages/code-graph/README.md",
+							"packages/code-graph/src/boundaries/"
+						],
+						"spans": [
+							[
+								703,
+								720
+							],
+							[
+								1080,
+								1088
+							],
+							[
+								1909,
+								1938
+							],
+							[
+								2086,
+								2121
+							]
+						],
+						"confidence": 0.00001599403197904918
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"dec",
+							"exit ",
+							"decidedBy",
+							"read"
+						],
+						"spans": [
+							[
+								1323,
+								1326
+							],
+							[
+								1346,
+								1351
+							],
+							[
+								1748,
+								1751
+							],
+							[
+								2072,
+								2081
+							],
+							[
+								2149,
+								2153
+							]
+						],
+						"confidence": 1.2106710846828187e-20
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 630,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 990,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00009900000000000001
+			}
+		},
+		"579": {
+			"1": {
+				"at": "2026-10-25T05:35:46.790Z",
+				"ms": 129,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"run-many-machines",
+							"Scope",
+							"Exit",
+							"tea",
+							"how",
+							"Scope.make()",
+							"Scope.close",
+							"Exit.void",
+							"Effect",
+							"effect",
+							"Scope.make",
+							"stop"
+						],
+						"spans": [
+							[
+								0,
+								17
+							],
+							[
+								30,
+								35
+							],
+							[
+								40,
+								44
+							],
+							[
+								95,
+								98
+							],
+							[
+								101,
+								104
+							],
+							[
+								161,
+								173
+							],
+							[
+								177,
+								188
+							],
+							[
+								195,
+								204
+							],
+							[
+								257,
+								262
+							],
+							[
+								300,
+								304
+							],
+							[
+								646,
+								652
+							],
+							[
+								659,
+								664
+							],
+							[
+								673,
+								679
+							],
+							[
+								732,
+								742
+							],
+							[
+								776,
+								787
+							],
+							[
+								801,
+								810
+							],
+							[
+								866,
+								870
+							],
+							[
+								904,
+								908
+							],
+							[
+								915,
+								920
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 1.087711199901394e-8
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/tea/docs/how-to/run-many-machines.md",
+							"packages/tea/docs/how",
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						],
+						"spans": [
+							[
+								568,
+								613
+							],
+							[
+								1231,
+								1252
+							],
+							[
+								1297,
+								1347
+							]
+						],
+						"confidence": 0.012535765702056573
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"stop"
+						],
+						"spans": [
+							[
+								866,
+								870
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 4.859092751931366e-9
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 481,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 841,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008410000000000001
+			},
+			"2": {
+				"at": "2026-10-25T05:36:48.807Z",
+				"ms": 185,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"run-many-machines",
+							"Scope",
+							"Exit",
+							"tea",
+							"how",
+							"Scope.make()",
+							"Scope.close",
+							"Exit.void",
+							"Effect",
+							"effect",
+							"Scope.make",
+							"stop"
+						],
+						"spans": [
+							[
+								0,
+								17
+							],
+							[
+								30,
+								35
+							],
+							[
+								40,
+								44
+							],
+							[
+								95,
+								98
+							],
+							[
+								101,
+								104
+							],
+							[
+								161,
+								173
+							],
+							[
+								177,
+								188
+							],
+							[
+								195,
+								204
+							],
+							[
+								257,
+								262
+							],
+							[
+								300,
+								304
+							],
+							[
+								646,
+								652
+							],
+							[
+								659,
+								664
+							],
+							[
+								673,
+								679
+							],
+							[
+								732,
+								742
+							],
+							[
+								776,
+								787
+							],
+							[
+								801,
+								810
+							],
+							[
+								866,
+								870
+							],
+							[
+								904,
+								908
+							],
+							[
+								915,
+								920
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 1.087711199901394e-8
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/tea/docs/how-to/run-many-machines.md",
+							"packages/tea/docs/how",
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						],
+						"spans": [
+							[
+								568,
+								613
+							],
+							[
+								1231,
+								1252
+							],
+							[
+								1297,
+								1347
+							]
+						],
+						"confidence": 0.012535765702056573
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"stop"
+						],
+						"spans": [
+							[
+								866,
+								870
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 4.859092751931366e-9
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 481,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 841,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008410000000000001
+			},
+			"3": {
+				"at": "2026-10-25T05:36:50.314Z",
+				"ms": 135,
+				"ok": true,
+				"status": 200,
+				"answers": {
+					"code_names": {
+						"type": "list",
+						"value": [
+							"run-many-machines",
+							"Scope",
+							"Exit",
+							"tea",
+							"how",
+							"Scope.make()",
+							"Scope.close",
+							"Exit.void",
+							"Effect",
+							"effect",
+							"Scope.make",
+							"stop"
+						],
+						"spans": [
+							[
+								0,
+								17
+							],
+							[
+								30,
+								35
+							],
+							[
+								40,
+								44
+							],
+							[
+								95,
+								98
+							],
+							[
+								101,
+								104
+							],
+							[
+								161,
+								173
+							],
+							[
+								177,
+								188
+							],
+							[
+								195,
+								204
+							],
+							[
+								257,
+								262
+							],
+							[
+								300,
+								304
+							],
+							[
+								646,
+								652
+							],
+							[
+								659,
+								664
+							],
+							[
+								673,
+								679
+							],
+							[
+								732,
+								742
+							],
+							[
+								776,
+								787
+							],
+							[
+								801,
+								810
+							],
+							[
+								866,
+								870
+							],
+							[
+								904,
+								908
+							],
+							[
+								915,
+								920
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 1.087711199901394e-8
+					},
+					"file_paths": {
+						"type": "list",
+						"value": [
+							"packages/tea/docs/how-to/run-many-machines.md",
+							"packages/tea/docs/how",
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						],
+						"spans": [
+							[
+								568,
+								613
+							],
+							[
+								1231,
+								1252
+							],
+							[
+								1297,
+								1347
+							]
+						],
+						"confidence": 0.012535765702056573
+					},
+					"error_messages": {
+						"type": "list",
+						"value": [
+							"stop"
+						],
+						"spans": [
+							[
+								866,
+								870
+							],
+							[
+								958,
+								962
+							]
+						],
+						"confidence": 4.859092751931366e-9
+					}
+				},
+				"truncated": false,
+				"stateTextSame": true,
+				"usage": {
+					"state_tokens": 481,
+					"image_tokens": 0,
+					"schema_tokens": 360,
+					"input_tokens": 841,
+					"output_tokens": 0,
+					"passes": 1
+				},
+				"costUsd": 0.00008410000000000001
+			}
+		}
+	},
+	"scores": {
+		"perTicket": {
+			"367": {
+				"truth": {
+					"plan": [
+						"packages/tea/src/otel/otel.test.ts",
+						"packages/tea/src/otel/index.ts"
+					],
+					"planDropped": [
+						".changeset/"
+					],
+					"pr": [
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"prNew": [
+						".changeset/otel-epoch-span-time.md"
+					]
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 17,
+						"held": 17,
+						"spans": 18,
+						"spansExact": 18
+					},
+					"file_paths": {
+						"values": 4,
+						"held": 4,
+						"spans": 5,
+						"spansExact": 5
+					},
+					"error_messages": {
+						"values": 3,
+						"held": 3,
+						"spans": 3,
+						"spansExact": 3
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "packages/tea/src/otel/otel.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 1,
+					"real": 1,
+					"notInText": 0,
+					"briefChars": 87,
+					"files": [
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"planHit": [
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"prHit": [
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"reachedBy": {
+						"packages/tea/src/otel/otel.test.ts": [
+							"packages/tea/src/otel/otel.test.ts"
+						]
+					}
+				},
+				"B": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "otel",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "full",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "tea package",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "OpenTelemetry suite",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm test",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "main",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "open",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "builder",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "pnpm typecheck",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm typecheck:test",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm lint",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages",
+							"kind": "name",
+							"label": "cut",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "origin/main",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "feat",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "OpenTelemetry",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "span",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "tea",
+							"kind": "path",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/src/otel/otel.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 6,
+					"real": 8,
+					"notInText": 0,
+					"briefChars": 2158,
+					"files": [
+						"packages/tea/scripts/project-docs.mjs",
+						"packages/tea/src/pure/reducer-purity.ts",
+						"packages/tea/src/subs/from-reconnecting-web-socket.ts",
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"planHit": [
+						"packages/tea/src/otel/otel.test.ts",
+						"packages/tea/src/otel/index.ts"
+					],
+					"prHit": [
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"reachedBy": {
+						"packages/tea/src/otel/index.ts": [
+							"span"
+						],
+						"packages/tea/src/otel/otel.test.ts": [
+							"packages/tea/src/otel/otel.test.ts"
+						]
+					}
+				},
+				"C": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "packages/tea/src/otel/otel.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "otel",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "full",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "tea package",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "OpenTelemetry suite",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm test",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "main",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "open",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "builder",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "pnpm typecheck",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm typecheck:test",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "pnpm lint",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages",
+							"kind": "name",
+							"label": "cut",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "origin/main",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "feat",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "OpenTelemetry",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "span",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "tea",
+							"kind": "path",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						}
+					],
+					"code": 6,
+					"real": 8,
+					"notInText": 0,
+					"briefChars": 2199,
+					"files": [
+						"packages/tea/scripts/project-docs.mjs",
+						"packages/tea/src/pure/reducer-purity.ts",
+						"packages/tea/src/subs/from-reconnecting-web-socket.ts",
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"planHit": [
+						"packages/tea/src/otel/otel.test.ts",
+						"packages/tea/src/otel/index.ts"
+					],
+					"prHit": [
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/otel/otel.test.ts"
+					],
+					"reachedBy": {
+						"packages/tea/src/otel/otel.test.ts": [
+							"packages/tea/src/otel/otel.test.ts"
+						],
+						"packages/tea/src/otel/index.ts": [
+							"span"
+						]
+					}
+				}
+			},
+			"393": {
+				"truth": {
+					"plan": [
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/render.ts",
+						"packages/code-graph/src/boundaries/gate.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/ratchet/scope-count.ts",
+						"packages/code-graph/src/boundaries/rules.ts",
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/cli.ts"
+					],
+					"planDropped": [],
+					"pr": [
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/boundaries/render.ts"
+					],
+					"prNew": [
+						".changeset/code-graph-boundaries-b4.md"
+					]
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 15,
+						"held": 15,
+						"spans": 18,
+						"spansExact": 18
+					},
+					"file_paths": {
+						"values": 3,
+						"held": 3,
+						"spans": 4,
+						"spansExact": 4
+					},
+					"error_messages": {
+						"values": 1,
+						"held": 1,
+						"spans": 3,
+						"spansExact": 3
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "lib",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "src/access-gates/rules/x.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "src/ratchet/scope-count.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 3,
+					"real": 2,
+					"notInText": 0,
+					"briefChars": 396,
+					"files": [
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/src/ratchet/scope-count.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/ratchet/scope-count.ts",
+						"packages/code-graph/src/config.ts"
+					],
+					"prHit": [],
+					"reachedBy": {
+						"packages/code-graph/src/config.ts": [
+							"lib"
+						],
+						"packages/code-graph/src/ratchet/scope-count.ts": [
+							"src/ratchet/scope-count.ts"
+						]
+					}
+				},
+				"B": {
+					"folders": [
+						{
+							"dir": "packages/code-graph/src/boundaries",
+							"files": 5
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/render.ts",
+						"packages/code-graph/src/boundaries/gate.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/boundaries/rules.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/boundaries/render.ts"
+					],
+					"items": [
+						{
+							"text": "code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "--",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "boundaries",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "@demlik/code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "--boundaries",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "[a company]-rooted",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "monorepo-55",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "[a company]",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "#6194",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "access-gates",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--ci",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/boundaries",
+							"kind": "name",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "--collapse",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "[a company] #619",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "src/access-gates/rules/x.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "src/ratchet/scope-count.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 9,
+					"real": 8,
+					"notInText": 0,
+					"briefChars": 370,
+					"files": [
+						"packages/code-graph/src/ratchet/scope-count.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/ratchet/scope-count.ts"
+					],
+					"prHit": [],
+					"reachedBy": {
+						"packages/code-graph/src/ratchet/scope-count.ts": [
+							"src/ratchet/scope-count.ts"
+						]
+					}
+				},
+				"C": {
+					"folders": [
+						{
+							"dir": "packages/code-graph/src/boundaries",
+							"files": 5
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/render.ts",
+						"packages/code-graph/src/boundaries/gate.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/boundaries/rules.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/src/boundaries/analyze.ts",
+						"packages/code-graph/src/boundaries/boundaries.test.ts",
+						"packages/code-graph/src/boundaries/render.ts"
+					],
+					"items": [
+						{
+							"text": "lib",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "src/access-gates/rules/x.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "src/ratchet/scope-count.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "--",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "boundaries",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "@demlik/code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "--boundaries",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "[a company]-rooted",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "monorepo-55",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "[a company]",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "#6194",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "access-gates",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--ci",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/boundaries",
+							"kind": "name",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "--collapse",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "[a company] #619",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						}
+					],
+					"code": 10,
+					"real": 9,
+					"notInText": 0,
+					"briefChars": 622,
+					"files": [
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/src/ratchet/scope-count.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/ratchet/scope-count.ts",
+						"packages/code-graph/src/config.ts"
+					],
+					"prHit": [],
+					"reachedBy": {
+						"packages/code-graph/src/config.ts": [
+							"lib"
+						],
+						"packages/code-graph/src/ratchet/scope-count.ts": [
+							"src/ratchet/scope-count.ts"
+						]
+					}
+				}
+			},
+			"490": {
+				"truth": {
+					"plan": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"planDropped": [],
+					"pr": [
+						"packages/structure-sweep/src/propose/refine.ts"
+					],
+					"prNew": []
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 18,
+						"held": 18,
+						"spans": 27,
+						"spansExact": 27
+					},
+					"file_paths": {
+						"values": 5,
+						"held": 5,
+						"spans": 7,
+						"spansExact": 7
+					},
+					"error_messages": {
+						"values": 0,
+						"held": 0,
+						"spans": 0,
+						"spansExact": 0
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [
+						{
+							"dir": "packages/structure-sweep/src",
+							"files": 68
+						}
+					],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "SplitCandidate",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "cohesion",
+							"kind": "name",
+							"label": "code",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "precision",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "scoreCoChange",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "predictedPairs",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "active",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "maxFiles",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/",
+							"kind": "path",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/propose/refine.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/score/score.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/README.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 11,
+					"real": 10,
+					"notInText": 0,
+					"briefChars": 2204,
+					"files": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/test/groups.test.ts",
+						"packages/structure-sweep/test/non-ascii-paths.test.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"planHit": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"prHit": [
+						"packages/structure-sweep/src/propose/refine.ts"
+					],
+					"reachedBy": {
+						"packages/structure-sweep/src/propose/refine.ts": [
+							"SplitCandidate",
+							"packages/structure-sweep/src/propose/refine.ts"
+						],
+						"packages/structure-sweep/src/score/score.ts": [
+							"precision",
+							"scoreCoChange",
+							"predictedPairs",
+							"active",
+							"maxFiles",
+							"packages/structure-sweep/src/score/score.ts"
+						],
+						"packages/structure-sweep/README.md": [
+							"packages/structure-sweep/README.md"
+						],
+						"packages/structure-sweep/test/propose-refine.test.ts": [
+							"packages/structure-sweep/README.md"
+						]
+					}
+				},
+				"B": {
+					"folders": [
+						{
+							"dir": "packages/structure-sweep/src",
+							"files": 68
+						}
+					],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "SplitCandidate",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "doc comment",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "refine cohesion",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "doc",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "structure-sweep",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "propose refine",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "README",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "README-only",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages",
+							"kind": "name",
+							"label": "cut",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "export interface",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "cohesion",
+							"kind": "name",
+							"label": "code",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "precision",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "scoreCoChange",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "predictedPairs",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "active",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "maxFiles",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/",
+							"kind": "path",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/propose/refine.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "scoreCo",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/score/score.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/README.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 13,
+					"real": 12,
+					"notInText": 0,
+					"briefChars": 2479,
+					"files": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/test/groups.test.ts",
+						"packages/structure-sweep/test/non-ascii-paths.test.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"planHit": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"prHit": [
+						"packages/structure-sweep/src/propose/refine.ts"
+					],
+					"reachedBy": {
+						"packages/structure-sweep/src/propose/refine.ts": [
+							"SplitCandidate",
+							"packages/structure-sweep/src/propose/refine.ts"
+						],
+						"packages/structure-sweep/src/score/score.ts": [
+							"precision",
+							"scoreCoChange",
+							"predictedPairs",
+							"active",
+							"maxFiles",
+							"packages/structure-sweep/src/score/score.ts"
+						],
+						"packages/structure-sweep/README.md": [
+							"packages/structure-sweep/README.md"
+						],
+						"packages/structure-sweep/test/propose-refine.test.ts": [
+							"packages/structure-sweep/README.md"
+						]
+					}
+				},
+				"C": {
+					"folders": [
+						{
+							"dir": "packages/structure-sweep/src",
+							"files": 68
+						}
+					],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "SplitCandidate",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "cohesion",
+							"kind": "name",
+							"label": "code",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "precision",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "scoreCoChange",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "predictedPairs",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "active",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "maxFiles",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/",
+							"kind": "path",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/propose/refine.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/src/score/score.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/structure-sweep/README.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "doc comment",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "refine cohesion",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "doc",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "structure-sweep",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "propose refine",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "README",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "README-only",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages",
+							"kind": "name",
+							"label": "cut",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "export interface",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "scoreCo",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						}
+					],
+					"code": 13,
+					"real": 12,
+					"notInText": 0,
+					"briefChars": 2514,
+					"files": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/test/groups.test.ts",
+						"packages/structure-sweep/test/non-ascii-paths.test.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"planHit": [
+						"packages/structure-sweep/src/propose/refine.ts",
+						"packages/structure-sweep/README.md",
+						"packages/structure-sweep/src/score/score.ts",
+						"packages/structure-sweep/test/propose-refine.test.ts"
+					],
+					"prHit": [
+						"packages/structure-sweep/src/propose/refine.ts"
+					],
+					"reachedBy": {
+						"packages/structure-sweep/src/propose/refine.ts": [
+							"SplitCandidate",
+							"packages/structure-sweep/src/propose/refine.ts"
+						],
+						"packages/structure-sweep/src/score/score.ts": [
+							"precision",
+							"scoreCoChange",
+							"predictedPairs",
+							"active",
+							"maxFiles",
+							"packages/structure-sweep/src/score/score.ts"
+						],
+						"packages/structure-sweep/README.md": [
+							"packages/structure-sweep/README.md"
+						],
+						"packages/structure-sweep/test/propose-refine.test.ts": [
+							"packages/structure-sweep/README.md"
+						]
+					}
+				}
+			},
+			"504": {
+				"truth": {
+					"plan": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/src/layers/analyze.ts",
+						"packages/code-graph/src/layers/layers.test.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/test/parity/fixture/apps/core/src/cg/config.ts"
+					],
+					"planDropped": [],
+					"pr": [
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/code-graph/src/layers/gate.ts"
+					],
+					"prNew": [
+						".changeset/layer-filename-role-patterns.md",
+						"packages/code-graph/src/layers/patterns.test.ts"
+					]
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 30,
+						"held": 30,
+						"spans": 33,
+						"spansExact": 33
+					},
+					"file_paths": {
+						"values": 9,
+						"held": 9,
+						"spans": 9,
+						"spansExact": 9
+					},
+					"error_messages": {
+						"values": 4,
+						"held": 4,
+						"spans": 4,
+						"spansExact": 4
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "compile",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "compileMatchers",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "services",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "billing-business-rule.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "billing-plumbing.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "layers/classify.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/classify.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/layers.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "/",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						}
+					],
+					"code": 8,
+					"real": 6,
+					"notInText": 0,
+					"briefChars": 1361,
+					"files": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/tea/src/effect/run.ts",
+						"packages/tea/src/internal/engine/loop.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"prHit": [
+						"packages/code-graph/src/layers/classify.ts"
+					],
+					"reachedBy": {
+						"packages/code-graph/src/layers/classify.ts": [
+							"compile",
+							"compileMatchers",
+							"layers/classify.ts",
+							"packages/code-graph/src/layers/classify.ts"
+						],
+						"packages/code-graph/src/layers/layers.test.ts": [
+							"packages/code-graph/src/layers/layers.test.ts"
+						]
+					}
+				},
+				"B": {
+					"folders": [
+						{
+							"dir": "packages/code-graph",
+							"files": 311
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/src/layers/analyze.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/test/parity/fixture/apps/core/src/cg/config.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/layers/gate.ts"
+					],
+					"items": [
+						{
+							"text": "Layer",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "--layers",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "billing-business-rule",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "billing-plumbing",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "business rules",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "ast-grep rule",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "per",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "consumer",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "<domain>-api-surface",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "<domain>",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "layers",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "name",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "plumbing",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "api-surface",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "business-rule",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "code-graph .",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--layers --layer-rules",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "layers/classify.ts",
+							"kind": "name",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "compile()",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "regex",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Rails'",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "*_controller.rb",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Angular's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "NestJS's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "compileMatchers()",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "README",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "Decl",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--layer-rules",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Patterns",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "billing-business-rule.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "billing-plumbing.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "<",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/classify.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/layers.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "apps/web",
+							"kind": "path",
+							"label": "cut",
+							"real": "user name",
+							"inText": true
+						}
+					],
+					"code": 17,
+					"real": 16,
+					"notInText": 0,
+					"briefChars": 1925,
+					"files": [
+						"packages/code-graph/src/layers/rules.ts",
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/structure-sweep/src/inventory/glob.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"prHit": [
+						"packages/code-graph/src/layers/classify.ts"
+					],
+					"reachedBy": {
+						"packages/code-graph/src/layers/classify.ts": [
+							"layers/classify.ts",
+							"compile()",
+							"compileMatchers()",
+							"packages/code-graph/src/layers/classify.ts"
+						],
+						"packages/code-graph/src/layers/layers.test.ts": [
+							"packages/code-graph/src/layers/layers.test.ts"
+						]
+					}
+				},
+				"C": {
+					"folders": [
+						{
+							"dir": "packages/code-graph",
+							"files": 311
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/config.ts",
+						"packages/code-graph/src/layers/analyze.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/test/parity/fixture/apps/core/src/cg/config.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/layers/gate.ts"
+					],
+					"items": [
+						{
+							"text": "compile",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "compileMatchers",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "services",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "billing-business-rule.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "billing-plumbing.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "layers/classify.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/classify.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/layers/layers.test.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "/",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Layer",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "--layers",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "billing-business-rule",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "billing-plumbing",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "business rules",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "ast-grep rule",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "per",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "consumer",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "<domain>-api-surface",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "<domain>",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "layers",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "name",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "plumbing",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "api-surface",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "business-rule",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "code-graph .",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--layers --layer-rules",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "compile()",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "regex",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Rails'",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "*_controller.rb",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Angular's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "NestJS's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						},
+						{
+							"text": "compileMatchers()",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "README",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "Decl",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "--layer-rules",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Patterns",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "<",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "apps/web",
+							"kind": "path",
+							"label": "cut",
+							"real": "user name",
+							"inText": true
+						}
+					],
+					"code": 20,
+					"real": 19,
+					"notInText": 0,
+					"briefChars": 2505,
+					"files": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/tea/src/effect/run.ts",
+						"packages/tea/src/internal/engine/loop.ts",
+						"packages/code-graph/src/layers/rules.ts",
+						"packages/structure-sweep/src/inventory/glob.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"planHit": [
+						"packages/code-graph/src/layers/classify.ts",
+						"packages/code-graph/src/layers/layers.test.ts"
+					],
+					"prHit": [
+						"packages/code-graph/src/layers/classify.ts"
+					],
+					"reachedBy": {
+						"packages/code-graph/src/layers/classify.ts": [
+							"compile",
+							"compileMatchers",
+							"layers/classify.ts",
+							"packages/code-graph/src/layers/classify.ts",
+							"compile()",
+							"compileMatchers()"
+						],
+						"packages/code-graph/src/layers/layers.test.ts": [
+							"packages/code-graph/src/layers/layers.test.ts"
+						]
+					}
+				}
+			},
+			"565": {
+				"truth": {
+					"plan": [
+						"packages/code-graph/src/boundaries/zones/reads.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/gate.test.ts",
+						"packages/code-graph/src/test-helpers/shape-workspace.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/SPEC.md",
+						"packages/code-graph/src/cli.ts"
+					],
+					"planDropped": [],
+					"pr": [
+						"packages/code-graph/README.md",
+						"packages/code-graph/SPEC.md",
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/zones/reads.ts",
+						"packages/code-graph/src/cli.ts"
+					],
+					"prNew": [
+						".changeset/code-graph-read-allowance-optional-decided-by.md",
+						"packages/code-graph/src/boundaries/zones/read-handlers.test.ts"
+					]
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 24,
+						"held": 24,
+						"spans": 42,
+						"spansExact": 42
+					},
+					"file_paths": {
+						"values": 4,
+						"held": 4,
+						"spans": 4,
+						"spansExact": 4
+					},
+					"error_messages": {
+						"values": 4,
+						"held": 4,
+						"spans": 5,
+						"spansExact": 5
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "readAllowance",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "decidedBy",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "write",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "adapters/driving/",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "index.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/README.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 6,
+					"real": 5,
+					"notInText": 0,
+					"briefChars": 1174,
+					"files": [
+						"packages/structure-sweep/test/helpers.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/boundaries/ledger.ts",
+						"packages/backlog-sweep/src/index.ts",
+						"packages/code-graph/src/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/audit-runs/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/findings/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/index.ts",
+						"packages/structure-sweep/src/index.ts",
+						"packages/tea/src/agent/index.ts",
+						"packages/tea/src/compose/index.ts",
+						"packages/tea/src/devtools/index.ts",
+						"packages/tea/src/do/index.ts",
+						"packages/tea/src/effect/index.ts",
+						"packages/tea/src/extension/index.ts",
+						"packages/tea/src/extension/subs/index.ts",
+						"packages/tea/src/flow/index.ts",
+						"packages/tea/src/idempotency/index.ts",
+						"packages/tea/src/index.ts",
+						"packages/tea/src/internal/flow/await-terminal/index.ts",
+						"packages/tea/src/internal/flow/batch-window/index.ts",
+						"packages/tea/src/internal/flow/fan-out/index.ts",
+						"packages/tea/src/internal/flow/monitored-run/index.ts",
+						"packages/tea/src/internal/flow/poller/index.ts",
+						"packages/tea/src/internal/flow/reconciler/index.ts",
+						"packages/tea/src/internal/flow/saga/index.ts",
+						"packages/tea/src/internal/flow/workflow/index.ts",
+						"packages/tea/src/internal/idempotency/idempotency/index.ts",
+						"packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+						"packages/tea/src/internal/jev/ask/index.ts",
+						"packages/tea/src/internal/jev/classify-batch/index.ts",
+						"packages/tea/src/internal/jev/protocol/index.ts",
+						"packages/tea/src/internal/journal/index.ts",
+						"packages/tea/src/internal/llm-call/index.ts",
+						"packages/tea/src/internal/paginate/paginated-walk/index.ts",
+						"packages/tea/src/internal/paginate/paginator/index.ts",
+						"packages/tea/src/internal/persistence/recorder/index.ts",
+						"packages/tea/src/internal/persistence/snapshot/index.ts",
+						"packages/tea/src/internal/persistence/trace-replay/index.ts",
+						"packages/tea/src/internal/prediction/index.ts",
+						"packages/tea/src/internal/resilience/authed-call/index.ts",
+						"packages/tea/src/internal/resilience/cache/index.ts",
+						"packages/tea/src/internal/resilience/circuit-breaker/index.ts",
+						"packages/tea/src/internal/resilience/deadline/index.ts",
+						"packages/tea/src/internal/resilience/rate-limit/index.ts",
+						"packages/tea/src/internal/resilience/resilient-call/index.ts",
+						"packages/tea/src/internal/resilience/retry-to-success/index.ts",
+						"packages/tea/src/internal/resilience/token-refresh/index.ts",
+						"packages/tea/src/internal/timing/debounce/index.ts",
+						"packages/tea/src/internal/timing/throttle/index.ts",
+						"packages/tea/src/internal/timing/throttled-input/index.ts",
+						"packages/tea/src/internal/work-queue/index.ts",
+						"packages/tea/src/jev/index.ts",
+						"packages/tea/src/machine-viz/index.ts",
+						"packages/tea/src/mem/index.ts",
+						"packages/tea/src/node/index.ts",
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/paginate/index.ts",
+						"packages/tea/src/parity/index.ts",
+						"packages/tea/src/pbt/arbitraries/index.ts",
+						"packages/tea/src/pbt/index.ts",
+						"packages/tea/src/pbt/runners/index.ts",
+						"packages/tea/src/persistence/index.ts",
+						"packages/tea/src/promise/index.ts",
+						"packages/tea/src/pure/index.ts",
+						"packages/tea/src/react/index.ts",
+						"packages/tea/src/resilience/index.ts",
+						"packages/tea/src/retry-backoff/index.ts",
+						"packages/tea/src/subs/index.ts",
+						"packages/tea/src/testing/effect/index.ts",
+						"packages/tea/src/testing/index.ts",
+						"packages/tea/src/testing/promise/index.ts",
+						"packages/tea/src/timing/index.ts",
+						"packages/tea/src/work-queue/index.ts"
+					],
+					"planHit": [
+						"packages/code-graph/README.md"
+					],
+					"prHit": [
+						"packages/code-graph/README.md"
+					],
+					"reachedBy": {
+						"packages/code-graph/README.md": [
+							"packages/code-graph/README.md"
+						]
+					}
+				},
+				"B": {
+					"folders": [
+						{
+							"dir": "packages/code-graph/src/boundaries",
+							"files": 58
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/boundaries/zones/reads.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/gate.test.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/zones/reads.ts"
+					],
+					"items": [
+						{
+							"text": "code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "readAllowance",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "read",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "B8",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "driving",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "decidedBy",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "read exception",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "hexagonal",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "read-only",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "decidedBy:",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "contract\"]",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "adapters/driving",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "contract package",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "zod",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "RPC",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "index.ts",
+							"kind": "name",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "Cockburn's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "CQRS's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/README.md",
+							"kind": "name",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "Read allowance",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "write",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "ORM",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "adapters/driving/",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/boundaries/",
+							"kind": "path",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						}
+					],
+					"code": 11,
+					"real": 15,
+					"notInText": 0,
+					"briefChars": 1772,
+					"files": [
+						"packages/structure-sweep/test/helpers.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/boundaries/ledger.ts",
+						"packages/backlog-sweep/src/index.ts",
+						"packages/code-graph/src/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/audit-runs/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/findings/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/index.ts",
+						"packages/structure-sweep/src/index.ts",
+						"packages/tea/src/agent/index.ts",
+						"packages/tea/src/compose/index.ts",
+						"packages/tea/src/devtools/index.ts",
+						"packages/tea/src/do/index.ts",
+						"packages/tea/src/effect/index.ts",
+						"packages/tea/src/extension/index.ts",
+						"packages/tea/src/extension/subs/index.ts",
+						"packages/tea/src/flow/index.ts",
+						"packages/tea/src/idempotency/index.ts",
+						"packages/tea/src/index.ts",
+						"packages/tea/src/internal/flow/await-terminal/index.ts",
+						"packages/tea/src/internal/flow/batch-window/index.ts",
+						"packages/tea/src/internal/flow/fan-out/index.ts",
+						"packages/tea/src/internal/flow/monitored-run/index.ts",
+						"packages/tea/src/internal/flow/poller/index.ts",
+						"packages/tea/src/internal/flow/reconciler/index.ts",
+						"packages/tea/src/internal/flow/saga/index.ts",
+						"packages/tea/src/internal/flow/workflow/index.ts",
+						"packages/tea/src/internal/idempotency/idempotency/index.ts",
+						"packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+						"packages/tea/src/internal/jev/ask/index.ts",
+						"packages/tea/src/internal/jev/classify-batch/index.ts",
+						"packages/tea/src/internal/jev/protocol/index.ts",
+						"packages/tea/src/internal/journal/index.ts",
+						"packages/tea/src/internal/llm-call/index.ts",
+						"packages/tea/src/internal/paginate/paginated-walk/index.ts",
+						"packages/tea/src/internal/paginate/paginator/index.ts",
+						"packages/tea/src/internal/persistence/recorder/index.ts",
+						"packages/tea/src/internal/persistence/snapshot/index.ts",
+						"packages/tea/src/internal/persistence/trace-replay/index.ts",
+						"packages/tea/src/internal/prediction/index.ts",
+						"packages/tea/src/internal/resilience/authed-call/index.ts",
+						"packages/tea/src/internal/resilience/cache/index.ts",
+						"packages/tea/src/internal/resilience/circuit-breaker/index.ts",
+						"packages/tea/src/internal/resilience/deadline/index.ts",
+						"packages/tea/src/internal/resilience/rate-limit/index.ts",
+						"packages/tea/src/internal/resilience/resilient-call/index.ts",
+						"packages/tea/src/internal/resilience/retry-to-success/index.ts",
+						"packages/tea/src/internal/resilience/token-refresh/index.ts",
+						"packages/tea/src/internal/timing/debounce/index.ts",
+						"packages/tea/src/internal/timing/throttle/index.ts",
+						"packages/tea/src/internal/timing/throttled-input/index.ts",
+						"packages/tea/src/internal/work-queue/index.ts",
+						"packages/tea/src/jev/index.ts",
+						"packages/tea/src/machine-viz/index.ts",
+						"packages/tea/src/mem/index.ts",
+						"packages/tea/src/node/index.ts",
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/paginate/index.ts",
+						"packages/tea/src/parity/index.ts",
+						"packages/tea/src/pbt/arbitraries/index.ts",
+						"packages/tea/src/pbt/index.ts",
+						"packages/tea/src/pbt/runners/index.ts",
+						"packages/tea/src/persistence/index.ts",
+						"packages/tea/src/promise/index.ts",
+						"packages/tea/src/pure/index.ts",
+						"packages/tea/src/react/index.ts",
+						"packages/tea/src/resilience/index.ts",
+						"packages/tea/src/retry-backoff/index.ts",
+						"packages/tea/src/subs/index.ts",
+						"packages/tea/src/testing/effect/index.ts",
+						"packages/tea/src/testing/index.ts",
+						"packages/tea/src/testing/promise/index.ts",
+						"packages/tea/src/timing/index.ts",
+						"packages/tea/src/work-queue/index.ts"
+					],
+					"planHit": [
+						"packages/code-graph/README.md"
+					],
+					"prHit": [
+						"packages/code-graph/README.md"
+					],
+					"reachedBy": {
+						"packages/code-graph/README.md": [
+							"packages/code-graph/README.md"
+						]
+					}
+				},
+				"C": {
+					"folders": [
+						{
+							"dir": "packages/code-graph/src/boundaries",
+							"files": 58
+						}
+					],
+					"planUnderFolder": [
+						"packages/code-graph/src/boundaries/zones/reads.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/gate.test.ts"
+					],
+					"prUnderFolder": [
+						"packages/code-graph/src/boundaries/shape/declaration.test.ts",
+						"packages/code-graph/src/boundaries/shape/declaration.ts",
+						"packages/code-graph/src/boundaries/shape/schema.ts",
+						"packages/code-graph/src/boundaries/zones/reads.test.ts",
+						"packages/code-graph/src/boundaries/zones/reads.ts"
+					],
+					"items": [
+						{
+							"text": "readAllowance",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "decidedBy",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "write",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "adapters/driving/",
+							"kind": "path",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "index.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/README.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "code-graph",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "read",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "B8",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "driving",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "read exception",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "hexagonal",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "read-only",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "decidedBy:",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "contract\"]",
+							"kind": "name",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "adapters/driving",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "contract package",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "zod",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "RPC",
+							"kind": "name",
+							"label": "prose",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Cockburn's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "CQRS's",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Read allowance",
+							"kind": "name",
+							"label": "prose",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "ORM",
+							"kind": "name",
+							"label": "prose",
+							"real": "word only",
+							"inText": true
+						},
+						{
+							"text": "packages/code-graph/src/boundaries/",
+							"kind": "path",
+							"label": "code",
+							"real": "folder",
+							"inText": true
+						}
+					],
+					"code": 11,
+					"real": 15,
+					"notInText": 0,
+					"briefChars": 1807,
+					"files": [
+						"packages/structure-sweep/test/helpers.ts",
+						"packages/code-graph/README.md",
+						"packages/code-graph/src/boundaries/ledger.ts",
+						"packages/backlog-sweep/src/index.ts",
+						"packages/code-graph/src/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/audit-runs/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/findings/index.ts",
+						"packages/code-graph/test/parity/fixture/services/svc/src/index.ts",
+						"packages/structure-sweep/src/index.ts",
+						"packages/tea/src/agent/index.ts",
+						"packages/tea/src/compose/index.ts",
+						"packages/tea/src/devtools/index.ts",
+						"packages/tea/src/do/index.ts",
+						"packages/tea/src/effect/index.ts",
+						"packages/tea/src/extension/index.ts",
+						"packages/tea/src/extension/subs/index.ts",
+						"packages/tea/src/flow/index.ts",
+						"packages/tea/src/idempotency/index.ts",
+						"packages/tea/src/index.ts",
+						"packages/tea/src/internal/flow/await-terminal/index.ts",
+						"packages/tea/src/internal/flow/batch-window/index.ts",
+						"packages/tea/src/internal/flow/fan-out/index.ts",
+						"packages/tea/src/internal/flow/monitored-run/index.ts",
+						"packages/tea/src/internal/flow/poller/index.ts",
+						"packages/tea/src/internal/flow/reconciler/index.ts",
+						"packages/tea/src/internal/flow/saga/index.ts",
+						"packages/tea/src/internal/flow/workflow/index.ts",
+						"packages/tea/src/internal/idempotency/idempotency/index.ts",
+						"packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+						"packages/tea/src/internal/jev/ask/index.ts",
+						"packages/tea/src/internal/jev/classify-batch/index.ts",
+						"packages/tea/src/internal/jev/protocol/index.ts",
+						"packages/tea/src/internal/journal/index.ts",
+						"packages/tea/src/internal/llm-call/index.ts",
+						"packages/tea/src/internal/paginate/paginated-walk/index.ts",
+						"packages/tea/src/internal/paginate/paginator/index.ts",
+						"packages/tea/src/internal/persistence/recorder/index.ts",
+						"packages/tea/src/internal/persistence/snapshot/index.ts",
+						"packages/tea/src/internal/persistence/trace-replay/index.ts",
+						"packages/tea/src/internal/prediction/index.ts",
+						"packages/tea/src/internal/resilience/authed-call/index.ts",
+						"packages/tea/src/internal/resilience/cache/index.ts",
+						"packages/tea/src/internal/resilience/circuit-breaker/index.ts",
+						"packages/tea/src/internal/resilience/deadline/index.ts",
+						"packages/tea/src/internal/resilience/rate-limit/index.ts",
+						"packages/tea/src/internal/resilience/resilient-call/index.ts",
+						"packages/tea/src/internal/resilience/retry-to-success/index.ts",
+						"packages/tea/src/internal/resilience/token-refresh/index.ts",
+						"packages/tea/src/internal/timing/debounce/index.ts",
+						"packages/tea/src/internal/timing/throttle/index.ts",
+						"packages/tea/src/internal/timing/throttled-input/index.ts",
+						"packages/tea/src/internal/work-queue/index.ts",
+						"packages/tea/src/jev/index.ts",
+						"packages/tea/src/machine-viz/index.ts",
+						"packages/tea/src/mem/index.ts",
+						"packages/tea/src/node/index.ts",
+						"packages/tea/src/otel/index.ts",
+						"packages/tea/src/paginate/index.ts",
+						"packages/tea/src/parity/index.ts",
+						"packages/tea/src/pbt/arbitraries/index.ts",
+						"packages/tea/src/pbt/index.ts",
+						"packages/tea/src/pbt/runners/index.ts",
+						"packages/tea/src/persistence/index.ts",
+						"packages/tea/src/promise/index.ts",
+						"packages/tea/src/pure/index.ts",
+						"packages/tea/src/react/index.ts",
+						"packages/tea/src/resilience/index.ts",
+						"packages/tea/src/retry-backoff/index.ts",
+						"packages/tea/src/subs/index.ts",
+						"packages/tea/src/testing/effect/index.ts",
+						"packages/tea/src/testing/index.ts",
+						"packages/tea/src/testing/promise/index.ts",
+						"packages/tea/src/timing/index.ts",
+						"packages/tea/src/work-queue/index.ts"
+					],
+					"planHit": [
+						"packages/code-graph/README.md"
+					],
+					"prHit": [
+						"packages/code-graph/README.md"
+					],
+					"reachedBy": {
+						"packages/code-graph/README.md": [
+							"packages/code-graph/README.md"
+						]
+					}
+				}
+			},
+			"579": {
+				"truth": {
+					"plan": [
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts",
+						"packages/tea/src/docs/page-mirrors.ts",
+						"packages/tea/examples/process-tree-effect.ts"
+					],
+					"planDropped": [],
+					"pr": [
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/src/docs/pages-typecheck.test.ts"
+					],
+					"prNew": [
+						".changeset/tea-many-machines-step-3-imports.md"
+					]
+				},
+				"runs": 3,
+				"sameEveryRun": true,
+				"spans": {
+					"code_names": {
+						"values": 12,
+						"held": 12,
+						"spans": 20,
+						"spansExact": 20
+					},
+					"file_paths": {
+						"values": 3,
+						"held": 3,
+						"spans": 3,
+						"spansExact": 3
+					},
+					"error_messages": {
+						"values": 1,
+						"held": 1,
+						"spans": 2,
+						"spansExact": 2
+					}
+				},
+				"stateTextSame": true,
+				"A": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "Scope",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Exit",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "main",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "stop",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/docs/how-to/run-many-machines.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/examples/parent-and-workers-effect.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 6,
+					"real": 6,
+					"notInText": 0,
+					"briefChars": 4271,
+					"files": [
+						"packages/structure-sweep/src/lowering/names.ts",
+						"packages/tea/src/effect/children.ts",
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/src/runtime-types.ts",
+						"packages/tea/src/effect/handle.ts",
+						"packages/tea/src/effect/run.ts",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"planHit": [
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"prHit": [
+						"packages/tea/docs/how-to/run-many-machines.md"
+					],
+					"reachedBy": {
+						"packages/tea/docs/how-to/run-many-machines.md": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/src/effect/many-machines-how-to.test.ts": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/examples/parent-and-workers-effect.ts": [
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						]
+					}
+				},
+				"B": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "run-many-machines",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Scope",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Exit",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "tea",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "how",
+							"kind": "name",
+							"label": "cut",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Scope.make()",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Scope.close",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Exit.void",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Effect",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "effect",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Scope.make",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "stop",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/docs/how-to/run-many-machines.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/docs/how",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/examples/parent-and-workers-effect.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						}
+					],
+					"code": 12,
+					"real": 12,
+					"notInText": 0,
+					"briefChars": 4722,
+					"files": [
+						"packages/structure-sweep/src/lowering/names.ts",
+						"packages/code-graph/src/kinds/classify.ts",
+						"packages/tea/src/effect/children.ts",
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/src/runtime-types.ts",
+						"packages/tea/src/effect/handle.ts",
+						"packages/tea/src/effect/run.ts",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"planHit": [
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"prHit": [
+						"packages/tea/docs/how-to/run-many-machines.md"
+					],
+					"reachedBy": {
+						"packages/tea/docs/how-to/run-many-machines.md": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/src/effect/many-machines-how-to.test.ts": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/examples/parent-and-workers-effect.ts": [
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						]
+					}
+				},
+				"C": {
+					"folders": [],
+					"planUnderFolder": [],
+					"prUnderFolder": [],
+					"items": [
+						{
+							"text": "Scope",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Exit",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "main",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "stop",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/docs/how-to/run-many-machines.md",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/examples/parent-and-workers-effect.ts",
+							"kind": "path",
+							"label": "code",
+							"real": "path",
+							"inText": true
+						},
+						{
+							"text": "run-many-machines",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "tea",
+							"kind": "name",
+							"label": "prose",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "how",
+							"kind": "name",
+							"label": "cut",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Scope.make()",
+							"kind": "name",
+							"label": "code",
+							"real": "not at base",
+							"inText": true
+						},
+						{
+							"text": "Scope.close",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Exit.void",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "Effect",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "effect",
+							"kind": "name",
+							"label": "code",
+							"real": "declared",
+							"inText": true
+						},
+						{
+							"text": "Scope.make",
+							"kind": "name",
+							"label": "code",
+							"real": "user name",
+							"inText": true
+						},
+						{
+							"text": "packages/tea/docs/how",
+							"kind": "path",
+							"label": "cut",
+							"real": "not at base",
+							"inText": true
+						}
+					],
+					"code": 13,
+					"real": 13,
+					"notInText": 0,
+					"briefChars": 4830,
+					"files": [
+						"packages/structure-sweep/src/lowering/names.ts",
+						"packages/tea/src/effect/children.ts",
+						"packages/code-graph/src/kinds/classify.ts",
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/src/runtime-types.ts",
+						"packages/tea/src/effect/handle.ts",
+						"packages/tea/src/effect/run.ts",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"planHit": [
+						"packages/tea/docs/how-to/run-many-machines.md",
+						"packages/tea/examples/parent-and-workers-effect.ts",
+						"packages/tea/src/effect/many-machines-how-to.test.ts"
+					],
+					"prHit": [
+						"packages/tea/docs/how-to/run-many-machines.md"
+					],
+					"reachedBy": {
+						"packages/tea/docs/how-to/run-many-machines.md": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/src/effect/many-machines-how-to.test.ts": [
+							"packages/tea/docs/how-to/run-many-machines.md"
+						],
+						"packages/tea/examples/parent-and-workers-effect.ts": [
+							"packages/tea/examples/parent-and-workers-effect.ts"
+						]
+					}
+				}
+			}
+		},
+		"totals": {
+			"A": {
+				"plan": 13,
+				"pr": 5,
+				"code": 35,
+				"real": 30,
+				"items": 36,
+				"notIn": 0,
+				"files": 95,
+				"planFolder": 0,
+				"prFolder": 0
+			},
+			"B": {
+				"plan": 13,
+				"pr": 6,
+				"code": 68,
+				"real": 71,
+				"items": 130,
+				"notIn": 0,
+				"files": 99,
+				"planFolder": 15,
+				"prFolder": 10
+			},
+			"C": {
+				"plan": 14,
+				"pr": 6,
+				"code": 73,
+				"real": 76,
+				"items": 136,
+				"notIn": 0,
+				"files": 102,
+				"planFolder": 15,
+				"prFolder": 10
+			}
+		},
+		"planAll": 36,
+		"prAll": 20,
+		"lists": [
+			{
+				"n": 367,
+				"field": "code_names",
+				"confidence": 3.909427655842705e-13,
+				"items": 17,
+				"code": 6
+			},
+			{
+				"n": 367,
+				"field": "file_paths",
+				"confidence": 0.00036414297403821486,
+				"items": 4,
+				"code": 2
+			},
+			{
+				"n": 367,
+				"field": "error_messages",
+				"confidence": 1.525866051560054e-14,
+				"items": 3,
+				"code": null
+			},
+			{
+				"n": 393,
+				"field": "code_names",
+				"confidence": 2.2663348722770908e-13,
+				"items": 15,
+				"code": 8
+			},
+			{
+				"n": 393,
+				"field": "file_paths",
+				"confidence": 0.0000853052856982779,
+				"items": 3,
+				"code": 3
+			},
+			{
+				"n": 393,
+				"field": "error_messages",
+				"confidence": 0.00011128644540389567,
+				"items": 1,
+				"code": null
+			},
+			{
+				"n": 490,
+				"field": "code_names",
+				"confidence": 7.60651929667813e-25,
+				"items": 18,
+				"code": 11
+			},
+			{
+				"n": 490,
+				"field": "file_paths",
+				"confidence": 0.000018514462933250198,
+				"items": 5,
+				"code": 4
+			},
+			{
+				"n": 490,
+				"field": "error_messages",
+				"confidence": 0.000023552544352760886,
+				"items": 0,
+				"code": null
+			},
+			{
+				"n": 504,
+				"field": "code_names",
+				"confidence": 3.111085227473013e-30,
+				"items": 30,
+				"code": 13
+			},
+			{
+				"n": 504,
+				"field": "file_paths",
+				"confidence": 2.745117448238662e-13,
+				"items": 9,
+				"code": 7
+			},
+			{
+				"n": 504,
+				"field": "error_messages",
+				"confidence": 1.127343396451621e-18,
+				"items": 4,
+				"code": null
+			},
+			{
+				"n": 565,
+				"field": "code_names",
+				"confidence": 1.878428804271379e-23,
+				"items": 24,
+				"code": 11
+			},
+			{
+				"n": 565,
+				"field": "file_paths",
+				"confidence": 0.00001599403197904918,
+				"items": 4,
+				"code": 4
+			},
+			{
+				"n": 565,
+				"field": "error_messages",
+				"confidence": 1.2106710846828187e-20,
+				"items": 4,
+				"code": null
+			},
+			{
+				"n": 579,
+				"field": "code_names",
+				"confidence": 1.087711199901394e-8,
+				"items": 12,
+				"code": 10
+			},
+			{
+				"n": 579,
+				"field": "file_paths",
+				"confidence": 0.012535765702056573,
+				"items": 3,
+				"code": 2
+			},
+			{
+				"n": 579,
+				"field": "error_messages",
+				"confidence": 4.859092751931366e-9,
+				"items": 1,
+				"code": null
+			}
+		],
+		"confidenceRank": {
+			"lists": 12,
+			"withCodeShare": 0.4763579984700754,
+			"withLength": -0.9298302852148177
+		},
+		"errors": [
+			{
+				"n": 367,
+				"quoted": [
+					"times each span by the transitions that opened and closed it"
+				],
+				"got": [
+					"tea",
+					"OpenTelemetry suite",
+					"times each span by the transitions that opened and closed it"
+				]
+			},
+			{
+				"n": 393,
+				"quoted": [],
+				"got": [
+					"Bin"
+				]
+			},
+			{
+				"n": 490,
+				"quoted": [],
+				"got": []
+			},
+			{
+				"n": 504,
+				"quoted": [
+					"0 down, 0 sideways, 0 UP, 10373 unlayered"
+				],
+				"got": [
+					"0 down,",
+					"compile",
+					"zero",
+					"[^/]*"
+				]
+			},
+			{
+				"n": 565,
+				"quoted": [
+					"exit 2"
+				],
+				"got": [
+					"dec",
+					"exit",
+					"decidedBy",
+					"read"
+				]
+			},
+			{
+				"n": 579,
+				"quoted": [],
+				"got": [
+					"stop"
+				]
+			}
+		],
+		"spend": {
+			"calls": 18,
+			"costUsd": 0.0016208999999999996,
+			"inputTokens": 16209,
+			"medianMs": 185,
+			"slowestMs": 654
+		},
+		"mentionsOfMs": 0.026134090333333308
+	}
+}
