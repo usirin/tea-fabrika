@@ -30,6 +30,12 @@ const noise = (rule: Rule) => count(rule, "noise") / (count(rule, "fix") + count
   - no click, and the lane is still open: not counted yet.
 - **Code never writes a rating.** Only a user does. "Counts as noise" is
   worked out from the facts when the count is made; nothing is written for it.
+- **One exception: the test writer's own `noise` call** (added 2026-10-25).
+  There the finding is the writer saying a mutant may live, so silence would
+  count as the user agreeing. It stays open, shipped or not, until the user
+  rates it, as [the test writer](./the-test-writer.md) says. In code, each
+  rule states what silence means, `"noise"` or `"open"`, with no default
+  ([new combos](./new-combos.md), "Rate").
 
 ## Why
 
