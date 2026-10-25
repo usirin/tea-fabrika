@@ -70,11 +70,45 @@ tickets would show it.
   });
   ```
 
-  - The doubt (70%): review's findings carry proof and what would close them
-    (`packages/pipeline/src/stages/review/sheet.ts`); a live mutant carries the
-    changed code. Each program may need a field of its own, as SARIF's
-    `properties` bag allows. Fitting review's real findings and experiment
-    124's live mutants into the shape would settle it.
+  - **Fitted by hand (2026-10-24):** 7 real review findings (experiments 112
+    and 112b) and 6 live mutants (experiments 124 and 139). The six fields fit
+    both, but they are not enough to rate from the window:
+    - a review finding also needs its `proof` and `wants`
+      (`packages/pipeline/src/stages/review/sheet.ts`);
+    - a mutant needs the code before and after, whether a test ran it at
+      all (Stryker's `Survived` or `NoCoverage`), its column, and the promise
+      it was checked against.
+  - So each program brings its own detail, the way SARIF's `properties` bag
+    holds a tool's own fields. `relatedLocations` fits one fault in several
+    files.
+
+    ```ts
+    // A sketch. The core is shared; `detail` is each program's own.
+    const findingOf = <B extends string, D extends Schema.Top>(by: B, detail: D) =>
+    	Schema.Struct({
+    		id: Schema.String,
+    		by: Schema.Literal(by),
+    		rule: Schema.String, // from the program's closed list
+    		at: Schema.NullOr(Place),
+    		also: Schema.Array(Place), // SARIF's relatedLocations
+    		says: Schema.String,
+    		head: Schema.String,
+    		same: Schema.Record(Schema.String, Schema.String), // SARIF's partialFingerprints
+    		detail,
+    	});
+    ```
+  - **A rule must come from a closed list,** or the count says nothing. A
+    mutator name works: 11 names over 53 live mutants. Review's `check` names
+    work: 3 over 39. A criterion id such as `c9` belongs to one ticket, and
+    every deviation's text was unique, so those count as `criterion` and
+    `deviation`. A repo rule is the agent's own wording, so one rule splits
+    in two.
+  - **The same finding must be matched across rounds,** or one fault counts
+    twice. Review's `idOf` hashes the fault's words today, so a reworded
+    fault gets a new id. A mutant can be matched by file, mutator, and the code
+    before and after; Stryker's own number holds for one run only. A review
+    finding needs a looser key, such as rule and file, then a Judge for "the
+    same fault?". How sure: 55%; no Judge has been tried for it.
 - **While a rule advises, the click is the route.** A finding waits in the
   ticket's window, and only "fix" sends it back to its writer. A rule earns
   the right to block when its noise stays near 0; Google holds a check that
