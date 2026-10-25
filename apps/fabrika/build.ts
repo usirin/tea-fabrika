@@ -4,12 +4,17 @@ import {runMain} from "@effect/platform-node/NodeRuntime";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import {type BuildOptions, build} from "esbuild";
 
-// Build the app into dist/, with esbuild: three bundles and the window's two plain files.
+// Build the app into dist/, with esbuild: four bundles and the windows' plain files.
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
-//   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
-//   dist/window.js     the window: React and every program window it knows, for Chromium
-//   dist/index.html, dist/window.css
+//   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be. Both windows use it.
+//   dist/terminal.js   the terminal window: ghostty-web, with its WebAssembly in the bundle
+//   dist/program.js    a program's window: React and every program window it knows, for Chromium
+//   dist/terminal.html, dist/program.html, dist/window.css
+//
+// The WebAssembly is in terminal.js twice, about 560 KiB each: ghostty-web's own bundle holds it
+// as a data: url, which the page cannot fetch, and the bytes the page compiles are a second copy
+// (src/window/terminal.ts). It is read from disk, so the cost is size, not time on a network.
 //
 // `pnpm --filter @kampus/fabrika-app build`, or `start`, which builds and opens the app.
 
@@ -49,8 +54,17 @@ const program = Effect.gen(function* () {
 				external: ["electron"],
 			}),
 			bundle({
-				entryPoints: [at("src/window/window.tsx")],
-				outfile: at("dist/window.js"),
+				entryPoints: [at("src/window/terminal.ts")],
+				outfile: at("dist/terminal.js"),
+				platform: "browser",
+				format: "iife",
+				target: "chrome140",
+				minify: true,
+				loader: {".wasm": "binary"},
+			}),
+			bundle({
+				entryPoints: [at("src/window/program.tsx")],
+				outfile: at("dist/program.js"),
 				platform: "browser",
 				format: "iife",
 				target: "chrome140",
@@ -58,7 +72,8 @@ const program = Effect.gen(function* () {
 				minify: true,
 				define: {"process.env.NODE_ENV": '"production"'},
 			}),
-			fs.copyFile(at("src/window/index.html"), at("dist/index.html")),
+			fs.copyFile(at("src/window/terminal.html"), at("dist/terminal.html")),
+			fs.copyFile(at("src/window/program.html"), at("dist/program.html")),
 			fs.copyFile(at("src/window/window.css"), at("dist/window.css")),
 		],
 		{concurrency: "unbounded", discard: true},

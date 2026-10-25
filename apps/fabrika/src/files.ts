@@ -1,30 +1,20 @@
 import {Effect, FileSystem, Path} from "effect";
 
-// What the app's own protocol serves: its own three files, from its own folder, and nothing
-// else. Never `file://`, never a remote site (Electron's security checklist). A path is one of
-// the names below or it is not found, so no path can climb out of the folder.
+// What the app's own protocol serves: its own files, from its own folder, and nothing else.
+// Never `file://`, never a remote site (Electron's security checklist). A path is one of the
+// names below or it is not found, so no path can climb out of the folder.
 //
-//   fileOf("fabrika://app/")                    "/index.html"
-//   fileOf("fabrika://app/window.js?x=1")       "/window.js"
+//   fileOf("fabrika://app/")                    "/terminal.html"
+//   fileOf("fabrika://app/terminal.js?x=1")     "/terminal.js"
 //   fileOf("fabrika://app/../main.mjs")         null: the url reads as /main.mjs, not one of them
-//   fileOf("https://example.com/window.js")     null
+//   fileOf("https://example.com/terminal.js")   null
+//   pageOf("fabrika://app/program.html")        "program": a program's window
 //
 // It names no platform: Effect's `FileSystem` reads the file, and main.ts hands it Node's.
 
 export const SCHEME = "fabrika";
 /** The app's own host on its scheme. Everything it loads is under it. */
 const HOST = "app";
-/** Where the window starts. */
-export const START = `${SCHEME}://${HOST}/index.html`;
-
-const FILES = {
-	"/index.html": "text/html; charset=utf-8",
-	"/window.js": "text/javascript; charset=utf-8",
-	"/window.css": "text/css; charset=utf-8",
-} as const;
-
-/** A file the protocol serves, by its path. */
-export type Served = keyof typeof FILES;
 
 /**
  * The Content Security Policy every answer carries: scripts and styles from the app's own files,
@@ -32,6 +22,34 @@ export type Served = keyof typeof FILES;
  */
 export const CSP =
 	"default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/**
+ * The terminal's page's policy: the same, and WebAssembly may be compiled. Its screen is
+ * ghostty-web, whose terminal is Ghostty's own, built to WebAssembly; Chromium compiles none
+ * under `script-src 'self'` alone. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else: no
+ * `eval`, no `new Function`, no inline script. The bytes compiled are in the page's own script.
+ */
+export const TERMINAL_CSP =
+	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/** The two kinds of page: the terminal, and a program's window. */
+export type Page = "terminal" | "program";
+
+const FILES = {
+	"/terminal.html": {type: "text/html; charset=utf-8", csp: TERMINAL_CSP, page: "terminal"},
+	"/terminal.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: null},
+	"/program.html": {type: "text/html; charset=utf-8", csp: CSP, page: "program"},
+	"/program.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: null},
+	"/window.css": {type: "text/css; charset=utf-8", csp: CSP, page: null},
+} as const satisfies Record<string, {type: string; csp: string; page: Page | null}>;
+
+/** A file the protocol serves, by its path. */
+export type Served = keyof typeof FILES;
+
+/** Where the terminal window starts. */
+export const TERMINAL = `${SCHEME}://${HOST}/terminal.html`;
+/** Where a program's window starts. */
+export const PROGRAM = `${SCHEME}://${HOST}/program.html`;
 
 const isServed = (path: string): path is Served => Object.hasOwn(FILES, path);
 
@@ -45,14 +63,20 @@ export const isOurs = (url: string): boolean => {
 export const fileOf = (url: string): Served | null => {
 	const parsed = URL.parse(url);
 	if (parsed === null || !isOurs(url)) return null;
-	const path = parsed.pathname === "/" ? "/index.html" : parsed.pathname;
+	const path = parsed.pathname === "/" ? "/terminal.html" : parsed.pathname;
 	return isServed(path) ? path : null;
 };
 
-const headers = (type: string | null) => ({
-	"content-security-policy": CSP,
+/** The page a url shows, or `null`: not one of the app's two pages. */
+export const pageOf = (url: string): Page | null => {
+	const file = fileOf(url);
+	return file === null ? null : FILES[file].page;
+};
+
+const headers = (file: Served | null) => ({
+	"content-security-policy": file === null ? CSP : FILES[file].csp,
 	"x-content-type-options": "nosniff",
-	...(type === null ? {} : {"content-type": type}),
+	...(file === null ? {} : {"content-type": FILES[file].type}),
 });
 
 /** The answer to a request for `url`, from the files in `dir`: the file, 404 or 500. */
@@ -64,7 +88,7 @@ export const answer = (dir: string, url: string) =>
 		const path = yield* Path.Path;
 		// Every file it serves is text.
 		const text = yield* fs.readFileString(path.join(dir, file.slice(1)));
-		return new Response(text, {headers: headers(FILES[file])});
+		return new Response(text, {headers: headers(file)});
 	}).pipe(
 		Effect.catchTag("PlatformError", (e) =>
 			Effect.succeed(

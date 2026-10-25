@@ -3,7 +3,6 @@ import {
 	type AnyRun,
 	type AnyRunning,
 	type Entry,
-	type InputMsgOf,
 	listed,
 	memoryStorage,
 	offer,
@@ -15,57 +14,89 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
-import {Effect, Layer, Queue, Stream} from "effect";
-import {type PaneView, type Read, readFromPage, type ToPage} from "./messages.ts";
-import {type PaneMsg, paneMachine} from "./pane.ts";
+import {Deferred, Effect, Layer, Queue, Stream} from "effect";
+import {type EditorMsg, editor} from "./editor/editor.ts";
+import type {History} from "./editor/history.ts";
+import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 
-// The app's host: one pane, running tsh with the app's programs. A program tsh starts that has
-// a window takes over the pane until it ends. The host names no platform: it is handed a page to
-// show views on and told what the page sent, so a test drives it with no Electron
-// (host.test.ts). main.ts is the Electron edge that wires it to a window.
+// The app's host: tsh, with its line editor, behind a terminal, and a window for each run of a
+// program that has one. It names no platform: it is handed the terminal's page and a way to open
+// and close windows, so a test drives it with no Electron (host.test.ts). main.ts is the
+// Electron edge that wires it to real windows.
 //
-//   const host = yield* startHost(memoryStorage());
-//   host.show((m) => port.postMessage(m));        // the pane's view now, then on each change
-//   host.heard({type: "msg", pane: "p1", to: "tsh:p1", msg: {type: "line", value: "counter"}});
-//   // views: tsh busy, then front [{program: "counter", run: "counter:...", data: {n: 0}}]
-//   host.heard({type: "msg", pane: "p1", to: "counter:...", msg: {type: "press", value: "plus"}});
-//   // a view with data {n: 1}; "done" ends it: the front goes, tsh prints 1 and is ready
-//   host.heard({type: "msg", pane: "p1", to: "gone:1", msg: {type: "press", value: "plus"}});
-//   // {kind: "refused", why: "no run gone:1 is shown here"}: nothing is told
+//   const host = yield* startHost({jobs: memoryStorage(), history: memoryHistory(), windows});
+//   host.terminal.show((m) => port.postMessage(m));   // the screen so far, then each write
+//   host.terminal.heard({type: "keys", data: "cou\t"});
+//   // writes: "counter " goes on the line, as Tab put it in
+//   host.terminal.heard({type: "keys", data: "\r"});
+//   // windows.open("counter:1a2b", "counter", screen): the counter's window opens, and the prompt waits
+//   screen.heard({type: "msg", msg: {type: "press", value: "plus"}});    // the count is 1
+//   screen.closed();
+//   // the person closed it: its inputs close, as stdin's end. It ends, tsh prints 1, the prompt is back
+//
+// It is a terminal and a shell, as on Unix (README, "Job control"):
+//
+//   - The terminal is the line editor's (editor/editor.ts): keys in, bytes out. tsh is handed a
+//     whole line on Enter, as bash is by readline.
+//   - A program with a window run in the foreground opens its window, and the prompt waits for
+//     its end. Ctrl-C in the terminal stops it; its window closes.
+//   - `counter &` opens its window and gives the prompt back at once.
+//   - Closing a program's window closes its inputs: the program ends as it does on stdin's end.
 //
 // Which programs tsh comes with is fixed here for now: the small ones and the counter. A run
-// of one with a window is seen as it starts (`seenBy`): the host shows its view's data over tsh
-// and reads what its window sends by that program's inputs.
+// of one with a window is seen as it starts (`seenBy`): the host opens its window, shows it its
+// view's data on each change, and reads what its window sends by that program's inputs.
 //
 // Storage: the host is handed where tsh keeps its jobs, as the terminal tsh is
-// (packages/fabrika/src/shell/main.ts). main.ts hands it a folder in the app's home; a test hands
-// it memory, or one folder to two hosts in turn. What it keeps is tsh's job table and each job's
-// own record and machines. The next host on the same storage finds them as "from an earlier tsh,
-// not running", and `attach %n` starts one again where it left off:
-//
-//   const host = yield* startHost(fileStorage(dir));    // counter, +1, then the app quits
-//   const next = yield* startHost(fileStorage(dir));    // tsh: 1 job from an earlier tsh, not running: %1. ...
-//   next.heard({type: "msg", pane: "p1", to: "tsh:p1", msg: {type: "line", value: "attach %1"}});
-//   // a view with front [{program: "counter", ..., data: {n: 1}}]
+// (packages/fabrika/src/shell/main.ts), and where the line editor keeps its history. main.ts
+// hands it files in the app's home; a test hands it memory. The next host on the same storage
+// finds the jobs as "from an earlier tsh, not running", and `attach %n` starts one again where
+// it left off, with its window.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
 // table, not its run. No ledger is used, so no worker thread and no child process.
 
-/** Where views go: the page, or whatever stands in for it. */
-export type Page = (m: ToPage) => void;
-
-/** What became of a message from the page: read, and on its way to its run, or refused, and why. */
+/** What became of a message from a page: read, and on its way, or refused, and why. */
 export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
 
-export interface Host {
-	/** Show views on this page from now on, starting with the pane as it is now. A page reloaded is shown again. */
-	readonly show: (page: Page) => void;
-	/** A message from the page: read, then told to the run it names, in the order heard. One that does not read is refused. */
+/** A window's page, as the host sees it. */
+export interface Screen<To> {
+	/** Show on this page from now on, starting with what it shows now. A page loaded again is shown again. */
+	readonly show: (page: (m: To) => void) => void;
+	/** A message from the page: read, then acted on, in the order heard. One that does not read is refused. */
 	readonly heard: (raw: unknown) => Heard;
 }
 
-/** tsh's run in the one pane. */
+/** A program's window, as the host sees it. */
+export interface WindowScreen extends Screen<ToWindow> {
+	/**
+	 * The person closed the window. The run's inputs close, as a terminal closes a program's
+	 * stdin, and the program ends the way it ends on that. Said after the run ended, or while the
+	 * app quits, it changes nothing: quitting leaves jobs to be attached at the next start.
+	 */
+	readonly closed: () => void;
+}
+
+/** The windows of the runs with one, as the edge opens and closes them. */
+export interface Windows {
+	/** A run of `program` with a window started: open one, and show `screen` on it. */
+	readonly open: (run: string, program: string, screen: WindowScreen) => void;
+	/** That run ended: close its window, if it is still open. */
+	readonly close: (run: string) => void;
+}
+
+export interface Host {
+	/** The terminal's page: the bytes to draw, and the keys and size it sends. */
+	readonly terminal: Screen<ToTerminal>;
+	/** Done when tsh has ended: `exit`, or Ctrl-D on an empty line. */
+	readonly ended: Effect.Effect<void>;
+}
+
+/** tsh's run. */
 export const TSH = "tsh:p1";
+
+/** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
+export const SCREEN_KEPT = 256 * 1024;
 
 /** The programs tsh comes with in the app, fixed for now: the small ones, and one with a window. */
 const COUNTER = listed(counter, Layer.empty);
@@ -83,57 +114,93 @@ const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>
 			.pipe(Effect.tap((s) => (s.kind === "running" ? seen(s) : Effect.void))),
 });
 
-/** What the page sent, read already, for one run. */
+/** What was heard, read already, for the line editor or for one run with a window. */
 type Told =
-	| {readonly to: "tsh"; readonly msg: InputMsgOf<typeof Shell.tsh>}
+	| {readonly to: "editor"; readonly msg: EditorMsg}
 	| {
-			readonly to: "front";
+			readonly to: "window";
 			readonly run: AnyRun;
 			readonly msg: {readonly type: string; readonly value: unknown};
 	  };
 
-/** Start the host, with tsh keeping its job table and its jobs in `jobs`. */
-export const startHost = (jobs: Storage) =>
+/** The newest `SCREEN_KEPT` of a screen's bytes, cut at a row's start, so no escape sequence is cut in two. */
+const kept = (screen: string): string => {
+	if (screen.length <= SCREEN_KEPT) return screen;
+	const tail = screen.slice(-SCREEN_KEPT);
+	return tail.slice(tail.indexOf("\n") + 1);
+};
+
+/** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. */
+export const startHost = (options: {
+	readonly jobs: Storage;
+	readonly history: History;
+	readonly windows: Windows;
+}) =>
 	Effect.gen(function* () {
+		const {jobs, history, windows} = options;
 		const scope = yield* Effect.scope;
-		const pane = yield* (yield* run(paneMachine, {ctx: {run: TSH}})).ready;
-		let page: Page | null = null;
-		const view = (data: PaneView): ToPage => ({type: "view", pane: "p1", data});
-		const draw = () => page?.(view(pane.getState()));
-		/** Fold what was heard into the pane, in order, then draw it once. */
-		const fold = (msgs: readonly PaneMsg[]) =>
-			Effect.forEach(msgs, (m) => pane.dispatch(m), {concurrency: 1, discard: true}).pipe(
-				Effect.orDie,
-				Effect.andThen(Effect.sync(draw)),
-			);
+		/** The host's scope is closing: the app quits, and every run stops with it. */
+		let closing = false;
 
-		// What tsh and the fronts say, on one queue, folded by one fiber: a burst is drawn once.
-		const said = yield* Queue.unbounded<PaneMsg>();
+		// What the editor and the windows are told, on one queue, in the order it was heard.
+		const inbox = yield* Queue.unbounded<Told>();
+		const toEditor = (msg: EditorMsg) => Queue.offerUnsafe(inbox, {to: "editor", msg});
 
-		/** The runs with a window now, by run id: where a message from their window goes. */
-		const fronts = new Map<string, AnyRun>();
-		/** A run of a program with a window: shown over tsh, each time its view changes, until it ends. */
+		// The terminal's screen: each write goes to the page, and is kept for a page loaded again.
+		let screen = "";
+		let page: ((m: ToTerminal) => void) | null = null;
+		const write = (data: string) => {
+			screen = kept(screen + data);
+			page?.({type: "write", data});
+		};
+
+		/** A run of a program with a window: its window opens, is shown each change of its view, and closes at its end. */
 		const opened = (running: AnyRunning) =>
 			Effect.gen(function* () {
 				const {run: r} = running;
 				const declared = viewOf(r.program);
 				const machine = declared === undefined ? undefined : r.machines[declared.machine];
 				if (declared === undefined || machine === undefined) return;
-				fronts.set(r.id, r);
+				let newest: ToWindow | null = null;
+				let shownOn: ((m: ToWindow) => void) | null = null;
+				let over = false;
+				const window: WindowScreen = {
+					show: (next) => {
+						shownOn = next;
+						if (newest !== null) next(newest);
+					},
+					heard: (raw) => {
+						const envelope = readFromWindow(raw);
+						if (envelope.kind === "refused") return envelope;
+						const input = readInput(r.program, envelope.msg.msg);
+						if (input.kind === "refused") return input;
+						Queue.offerUnsafe(inbox, {to: "window", run: r, msg: input.msg});
+						return {kind: "read"};
+					},
+					closed: () => {
+						if (over || closing) return;
+						for (const name of Object.keys(r.program.inputs)) running.close(name);
+					},
+				};
+				windows.open(r.id, r.program.name, window);
 				yield* machine.changes.pipe(
 					Stream.filter((state) => state !== null),
 					Stream.runForEach((state) =>
-						Queue.offer(said, {
-							type: "drew",
-							program: r.program.name,
-							run: r.id,
-							data: declared.of(state),
+						Effect.sync(() => {
+							const view: ToWindow = {
+								type: "view",
+								program: r.program.name,
+								data: declared.of(state),
+							};
+							newest = view;
+							shownOn?.(view);
 						}),
 					),
 					Effect.ensuring(
-						Effect.sync(() => fronts.delete(r.id)).pipe(
-							Effect.andThen(Queue.offer(said, {type: "left", run: r.id})),
-						),
+						Effect.sync(() => {
+							over = true;
+							windows.close(r.id);
+						}),
 					),
 					Effect.forkIn(scope),
 				);
@@ -144,8 +211,8 @@ export const startHost = (jobs: Storage) =>
 			Shell.tsh,
 			{show: "short"},
 			{
-				printed: (p) => Queue.offerUnsafe(said, {type: "printed", to: p.to, text: p.text}),
-				ready: (r) => Queue.offerUnsafe(said, {type: "ready", status: r.status}),
+				printed: (p) => toEditor({type: "printed", text: p.text}),
+				ready: () => toEditor({type: "ready"}),
 			},
 			{id: TSH, storage: memoryStorage()},
 		).pipe(
@@ -155,59 +222,70 @@ export const startHost = (jobs: Storage) =>
 		// tsh's flags are this file's own: a refusal here is a mistake in it, not something to show.
 		if (started.kind !== "running")
 			return yield* Effect.die(`tsh refused its flags: ${started.why}`);
+		// Added after tsh started, so it runs before tsh stops: no window closed by the quit closes an input.
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				closing = true;
+			}),
+		);
+
+		const over = yield* Deferred.make<void>();
 		yield* started.run.ended.pipe(
-			Effect.flatMap((ended) => Queue.offer(said, {type: "ended", how: ended.kind})),
+			Effect.andThen(Effect.sync(() => toEditor({type: "ended"}))),
+			Effect.andThen(Deferred.succeed(over, undefined)),
 			Effect.forkScoped,
 		);
-		yield* Queue.takeAll(said).pipe(Effect.flatMap(fold), Effect.forever, Effect.forkScoped);
+		yield* started.run.machines.jobs.changes.pipe(
+			Stream.runForEach((jobs) =>
+				Effect.sync(() => {
+					if (jobs !== null) toEditor({type: "jobs", jobs});
+				}),
+			),
+			Effect.forkScoped,
+		);
 
-		// What the page sent, read already, told in order by one fiber.
-		const inbox = yield* Queue.unbounded<Told>();
-		const tellOne = (told: Told) => {
-			if (told.to === "front")
-				// Offered, not told: a press is never dropped on a full input. A run that ended
-				// meanwhile answers `stopped`, and the press goes nowhere, as it should.
-				return told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
-			const {msg} = told;
-			return msg.type === "line"
-				? // Shown first, so the line is on the pane above what it prints. Offered, not told: a
-					// line a person typed is never dropped, even on a full input.
-					fold([{type: "typed", text: msg.value}]).pipe(
-						Effect.andThen(offer(started.run, "line", msg.value)),
-					)
-				: // Ctrl-C. A full `signal` line already holds an interrupt tsh has not read: this one is let go.
-					tell(started.run, "signal", "interrupt").pipe(Effect.catchTag("Full", () => Effect.void));
-		};
+		const lines = yield* history.load;
+		const editing = yield* (yield* run(editor, {
+			ctx: {programs, history: lines},
+			interpret: {
+				write: (c) => Effect.sync(() => write(c.data)).pipe(Effect.as(null)),
+				// Offered, not told: a line a person typed is never dropped, even on a full input.
+				line: (c) => offer(started.run, "line", c.text).pipe(Effect.as(null)),
+				// A full `signal` line already holds an interrupt tsh has not read: this one is let go.
+				interrupt: () =>
+					tell(started.run, "signal", "interrupt").pipe(
+						Effect.catchTag("Full", () => Effect.void),
+						Effect.as(null),
+					),
+				close: () => Effect.sync(() => started.close("line")).pipe(Effect.as(null)),
+				keep: (c) => history.save(c.lines).pipe(Effect.as(null)),
+			},
+		})).ready;
+
+		// What was heard, told in order by one fiber.
+		const tellOne = (told: Told) =>
+			told.to === "editor"
+				? editing.dispatch(told.msg).pipe(Effect.orDie)
+				: // Offered, not told: a press is never dropped on a full input. A run that ended
+					// meanwhile answers `stopped`, and the press goes nowhere, as it should.
+					told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
 		yield* Queue.take(inbox).pipe(Effect.flatMap(tellOne), Effect.forever, Effect.forkScoped);
 
-		/** Read a message from the page all the way: the envelope, then the run it names, then its input. */
-		const read = (raw: unknown): Read<Told> => {
-			const envelope = readFromPage(raw);
-			if (envelope.kind === "refused") return envelope;
-			const {to, msg} = envelope.msg;
-			if (to === TSH) {
-				const input = readInput(Shell.tsh, msg);
-				return input.kind === "read" ? {kind: "read", msg: {to: "tsh", msg: input.msg}} : input;
-			}
-			const front = fronts.get(to);
-			if (front === undefined) return {kind: "refused", why: `no run ${to} is shown here`};
-			const input = readInput(front.program, msg);
-			return input.kind === "read"
-				? {kind: "read", msg: {to: "front", run: front, msg: input.msg}}
-				: input;
-		};
-
 		const host: Host = {
-			show: (next) => {
-				page = next;
-				draw();
+			terminal: {
+				show: (next) => {
+					page = next;
+					if (screen !== "") next({type: "write", data: screen});
+				},
+				heard: (raw) => {
+					const read = readFromTerminal(raw);
+					if (read.kind === "refused") return read;
+					const {msg} = read;
+					toEditor(msg.type === "keys" ? msg : {type: "size", cols: msg.cols});
+					return {kind: "read"};
+				},
 			},
-			heard: (raw) => {
-				const told = read(raw);
-				if (told.kind === "refused") return told;
-				Queue.offerUnsafe(inbox, told.msg);
-				return {kind: "read"};
-			},
+			ended: Deferred.await(over),
 		};
 		return host;
 	});
