@@ -1,5 +1,6 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {layer as nodePath} from "@effect/platform-node/NodePath";
+import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {Cause, Effect, type FileSystem, Layer, Path} from "effect";
 import {
@@ -40,6 +41,10 @@ import {type Screen, startHost, type Windows} from "./host.ts";
 // and the line editor its history in `history`, as the terminal tsh keeps them in its own home,
 // so they are there at the next start. The one-copy lock is in the same home: one app per home,
 // so one tsh writes its table.
+//
+// The ledger is `ledger.sqlite` in the same home, on one node:sqlite connection in this thread
+// (`layerSqliteSync`): the bundle has no worker file beside it. Its alarm looks for due jobs once
+// a second, not every 25 ms, as nothing here sets one yet. It closes with the host's scope.
 
 /** The bundle's folder: main.mjs, preload.cjs and the windows' own files, side by side. */
 const DIST = import.meta.dirname;
@@ -187,11 +192,12 @@ const main = Effect.gen(function* () {
 	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
 	const at = (name: string) => path.join(app.getPath("userData"), name);
 	const preload = path.join(DIST, "preload.cjs");
+	const ledger = yield* Layer.build(layerSqliteSync({path: at("ledger.sqlite"), tickMs: 1000}));
 	const host = yield* startHost({
 		jobs: fileStorage(at("storage")),
 		history: yield* fileHistory(at("history")),
 		windows: programWindows(preload),
-	});
+	}).pipe(Effect.provideContext(ledger));
 	const terminal = windowFor(preload, "terminal", host.terminal, {
 		width: 960,
 		height: 640,

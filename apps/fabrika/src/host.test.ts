@@ -1,7 +1,9 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {memoryStorage, type Storage} from "@kampus/fabrika";
+import {Ledger, memoryStorage, type Storage} from "@kampus/fabrika";
+import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Effect, FileSystem} from "effect";
+import {tracker} from "@tea-fabrika/tracker";
+import {Effect, FileSystem, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory} from "./editor/history.ts";
@@ -9,6 +11,7 @@ import {startHost, type WindowScreen, type Windows} from "./host.ts";
 
 // The host, with a fake terminal page and fake windows and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's window is shown.
+// The ledger is in memory.
 
 /** What the fake windows saw, in order. */
 type Seen =
@@ -16,7 +19,13 @@ type Seen =
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
 	| {readonly kind: "close"; readonly run: string};
 
-const session = (opts: {readonly jobs?: Storage; readonly history?: History} = {}) =>
+const session = (
+	opts: {
+		readonly jobs?: Storage;
+		readonly history?: History;
+		readonly ledger?: Ledger["Service"];
+	} = {},
+) =>
 	Effect.gen(function* () {
 		const seen: Seen[] = [];
 		const screens = new Map<string, WindowScreen>();
@@ -39,7 +48,7 @@ const session = (opts: {readonly jobs?: Storage; readonly history?: History} = {
 			jobs: opts.jobs ?? memoryStorage(),
 			history: opts.history ?? memoryHistory(),
 			windows,
-		});
+		}).pipe(Effect.provideService(Ledger, opts.ledger ?? memoryService()));
 		let bytes = "";
 		host.terminal.show((m) => {
 			bytes += m.data;
@@ -174,6 +183,56 @@ describe("a program's window", () => {
 		expect(seen.bad.kind === "refused" && seen.bad.why).toMatch(/^counter's press does not fit/);
 		expect(seen.named.kind).toBe("refused");
 		expect(seen.rows).toEqual(["tsh$ counter", "1", "tsh$"]);
+	});
+
+	it("opens for the tracker, files a ticket from it, and a new host on the same ledger lists it", async () => {
+		const isShown = Schema.is(tracker.view.data);
+		/** The titles the tracker's window was shown last, once it had read the ledger. */
+		const titles = (seen: readonly Seen[], run: string) => {
+			const last = seen.filter((s) => s.kind === "view" && s.run === run).at(-1);
+			const data = last?.kind === "view" ? last.data : undefined;
+			return isShown(data) && data.ready && data.page.kind === "list"
+				? data.page.tickets.map((t) => t.title)
+				: undefined;
+		};
+		const ledger = memoryService();
+		const seen = await go(
+			Effect.gen(function* () {
+				const first = yield* Effect.gen(function* () {
+					const s = yield* session({ledger});
+					s.type("tracker\r");
+					const open = yield* s.opened();
+					const empty = yield* s.until("the empty list", () => titles(s.seen, open.run));
+					const told = s.window(open.run).heard({
+						type: "msg",
+						msg: {type: "do", value: {kind: "file", title: "Login fails", body: ""}},
+					});
+					const filed = yield* s.until("the ticket on the list", () =>
+						titles(s.seen, open.run)?.length === 1 ? titles(s.seen, open.run) : undefined,
+					);
+					// Closing its window is the person's "done": the tracker ends once its writes are saved.
+					s.window(open.run).closed();
+					yield* s.closed(open.run);
+					return {program: open.program, empty, told, filed, rows: yield* s.prompts(2)};
+				}).pipe(Effect.scoped);
+
+				// A new host, with a new tsh, on the same ledger: the ticket is there.
+				const s = yield* session({ledger});
+				s.type("tracker\r");
+				const open = yield* s.opened();
+				return {first, again: yield* s.until("the list again", () => titles(s.seen, open.run))};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({
+			first: {
+				program: "tracker",
+				empty: [],
+				told: {kind: "read"},
+				filed: ["Login fails"],
+				rows: ["tsh$ tracker", "tsh$"],
+			},
+			again: ["Login fails"],
+		});
 	});
 
 	it("closes when counter is done, pressed in its window", async () => {

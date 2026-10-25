@@ -8,12 +8,12 @@ import {layerHttp} from "./http.ts";
 import {type LawResult, law30Wall, layerPlanted, PLANTED, type Planted, runLaws} from "./laws.ts";
 import {Ledger} from "./ledger.ts";
 import {layerMemory} from "./memory.ts";
-import {layerSqlite} from "./sqlite.ts";
+import {layerSqlite, layerSqliteSync} from "./sqlite.ts";
 import {ledgerOptions} from "./worker-options.ts";
 
 // One law suite, every implementation: the Durable Object (in Miniflare, over HTTP), node:sqlite
-// (four threads on one file) and plain memory. Then the SQL under each planted mistake, where the
-// same suite must fail.
+// (four threads on one file, then one connection in this thread) and plain memory. Then the SQL
+// under each planted mistake, where the same suite must fail.
 
 const dir = mkdtempSync(join(tmpdir(), "tea-host-laws-"));
 let mf: Miniflare;
@@ -43,6 +43,12 @@ describe("the ledger's laws", () => {
 
 	it("hold on node:sqlite, four connections to one file", async () => {
 		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
+		expect(broken(rs)).toEqual([]);
+		expect(rs.length).toBe(27);
+	});
+
+	it("hold on node:sqlite, one connection in this thread", async () => {
+		const rs = await lawsOn(layerSqliteSync({path: join(dir, "laws-sync.sqlite")}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});

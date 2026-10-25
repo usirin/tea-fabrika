@@ -7,6 +7,8 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
 (see experiments 82 and 103 in `experiments/README.md`).
 
 - [`counter`](./counter/README.md): the smallest program with a window, the fabrika app's first.
+- [`tracker`](./tracker/README.md): tickets on the ledger, one stream of facts each, with a
+  window to list, file, read, comment on, close and reopen them.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.

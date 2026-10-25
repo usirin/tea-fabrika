@@ -1,6 +1,8 @@
 import type {AnyProgram, View, WindowProps} from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
 import {CounterWindow} from "@tea-fabrika/counter/window";
+import {tracker} from "@tea-fabrika/tracker";
+import {TrackerWindow} from "@tea-fabrika/tracker/window";
 import type {ReactNode} from "react";
 import {reader} from "../messages.ts";
 
@@ -39,4 +41,7 @@ const known = <P extends Windowed>(
 	];
 };
 
-export const WINDOWS: ReadonlyMap<string, Known> = new Map([known(counter, CounterWindow)]);
+export const WINDOWS: ReadonlyMap<string, Known> = new Map([
+	known(counter, CounterWindow),
+	known(tracker, TrackerWindow),
+]);

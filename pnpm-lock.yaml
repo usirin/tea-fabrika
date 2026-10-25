@@ -204,6 +204,9 @@ importers:
       '@tea-fabrika/counter':
         specifier: workspace:*
         version: link:../../programs/counter
+      '@tea-fabrika/tracker':
+        specifier: workspace:*
+        version: link:../../programs/tracker
       effect:
         specifier: 'catalog:'
         version: 4.0.6
@@ -555,6 +558,34 @@ importers:
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2))
 
   programs/counter:
+    dependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.6)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)))(ws@8.22.0)
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2))
+
+  programs/tracker:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'

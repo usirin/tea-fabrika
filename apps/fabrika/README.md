@@ -1,7 +1,7 @@
 # fabrika app: `@kampus/fabrika-app`
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It opens as a terminal window
-running tsh, with the small programs and `counter` loaded. A program with a window opens a window
+running tsh, with the small programs, `counter` and `tracker` loaded. A program with a window opens a window
 of its own; the terminal stays a terminal. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md).
 
@@ -19,6 +19,7 @@ tsh$ <Up>                    the last line again: counter
 tsh$ counter                 +1: 1; then quit the app, and open it again
 tsh: 1 job from an earlier tsh, not running: %1. attach %n starts one again; jobs lists them.
 tsh$ attach %1               counter's window opens again, at 1
+tsh$ tracker                 the tracker's window: file a ticket, open it, comment, close it
 ```
 
 ```ts
@@ -35,8 +36,8 @@ screen.heard({type: "msg", msg: {type: "press", value: "minus"}});  // {kind: "r
 
 ## Where it sits
 
-- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika` and
-  `programs/counter`, and nothing imports it.
+- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika`,
+  `programs/counter` and `programs/tracker`, and nothing imports it.
 - Electron and Node are named only in `src/main.ts` and `src/preload.ts`. Everything else is
   plain Effect, tested with no Electron. The windows are a terminal (no React) and React.
 - tsh and the line editor run in the main process. The terminal window only draws bytes and
@@ -50,7 +51,7 @@ screen.heard({type: "msg", msg: {type: "press", value: "minus"}});  // {kind: "r
 | `src/main.ts` | The Electron edge. One copy at a time; every window made by one function, sandboxed, on the app's own scheme; every way out refused; one MessagePort per window, handed only to that window's own top frame on its own page. |
 | `src/preload.ts` | Gives a window `send` and `onMessage`, and nothing else. |
 | `src/bridge.ts` | Those two names, as a window sees them, and the IPC channel the port is asked on. |
-| `src/host.ts` | Starts tsh with the app's programs, runs the line editor between tsh and the terminal, and opens a window for each run of a program with a window. |
+| `src/host.ts` | Starts tsh with the app's programs, runs the line editor between tsh and the terminal, and opens a window for each run of a program with a window. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The four message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: two pages, their scripts and one stylesheet, each with a Content Security Policy. |
@@ -163,7 +164,11 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder: its
-  `storage/`, its `history` and its one-copy lock. One copy per home means one tsh writes that
+  `storage/`, its `history`, its `ledger.sqlite` and its one-copy lock.
+- The ledger is `ledger.sqlite`, on one node:sqlite connection in the main process
+  (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
+  a Miniflare child is more than one person's tickets need. Each call blocks the main process
+  while SQLite runs it. One copy per home means one tsh writes that
   home's job table. The end-to-end run uses a fresh one.
 
 ## What it does not do yet

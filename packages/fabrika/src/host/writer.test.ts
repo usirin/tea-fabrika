@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {writerOf} from "./writer.ts";
+import {writerOf, writerText} from "./writer.ts";
 
 describe("the writer of a row", () => {
 	it("reads a user and an agent from their text", () => {
@@ -7,6 +7,14 @@ describe("the writer of a row", () => {
 		expect(writerOf("agent:review")).toEqual({kind: "agent", id: "review"});
 		// Split at the first colon: the rest is the id.
 		expect(writerOf("agent:review:lane-12")).toEqual({kind: "agent", id: "review:lane-12"});
+	});
+
+	it("writes the text it reads back", () => {
+		expect(writerText({kind: "user", id: "owner"})).toBe("user:owner");
+		expect(writerOf(writerText({kind: "agent", id: "review:lane-12"}))).toEqual({
+			kind: "agent",
+			id: "review:lane-12",
+		});
 	});
 
 	it.each([

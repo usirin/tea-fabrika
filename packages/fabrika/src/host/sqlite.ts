@@ -6,12 +6,16 @@
 // they do on the Durable Object, and a doorbell: writes made through this layer ring at once;
 // writes from another process are seen by a poll every `pollMs`.
 //
+// `layerSqliteSync` is the same ledger on one connection in the caller's own thread, with no
+// worker: for a host bundled into one file, which has no `./sqlite-worker.ts` beside it (the
+// fabrika app). Each call blocks that thread while SQLite runs it.
+//
 // Node at the edge: worker threads (`./sqlite-worker.ts`) and their message ports.
 import {Worker} from "node:worker_threads";
 import {Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream} from "effect";
-import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
-import {MAX_DELIVERIES} from "./rules.ts";
-import {openDb} from "./sqlite-driver.ts";
+import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf, type WireCall} from "./ledger.ts";
+import {MAX_DELIVERIES, RULES} from "./rules.ts";
+import {dispatch, isMethod, openDb} from "./sqlite-driver.ts";
 
 /**
  * The file's own driver, past the ledger's rules: for a test that writes a row the way a bad
@@ -98,33 +102,70 @@ export const layerSqlite = (o: SqliteOptions) =>
 				});
 			}
 			let next = 0;
-			const bell = yield* PubSub.unbounded<string>();
-			const call = (method: string, args: readonly unknown[]) =>
+			return yield* served(o, (method, args) =>
 				Effect.gen(function* () {
 					if (dead !== null) return yield* new LedgerUnreachable({method: "sqlite", message: dead});
 					const id = next++;
 					const d = yield* Deferred.make<unknown, LedgerUnreachable>();
 					waiting.set(id, d);
 					workers[id % workers.length]?.postMessage({id, method, args});
-					const answer = yield* Deferred.await(d);
-					yield* PubSub.publishAll(bell, writes(method, args, answer));
-					return answer;
-				});
-			// The alarm: the due jobs, as the Durable Object's alarm runs them.
-			yield* call("runDue", []).pipe(
-				Effect.ignore,
-				Effect.repeat(Schedule.spaced(Duration.millis(o.tickMs ?? 25))),
-				Effect.forkScoped,
+					return yield* Deferred.await(d);
+				}),
 			);
-			const poll = Stream.tick(Duration.millis(o.pollMs ?? 250));
-			const watch: Raw["watch"] = (stream) =>
-				Stream.merge(
-					Stream.fromPubSub(bell).pipe(
-						Stream.filter((s) => s === stream),
-						Stream.map(() => undefined),
-					),
-					poll,
-				);
-			return fromRaw(rawOf(call, watch));
 		}),
 	);
+
+/** The same `Ledger` on one connection in this thread: no worker, and each call blocks the thread. */
+export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
+	Layer.effect(
+		Ledger,
+		Effect.gen(function* () {
+			const {db} = yield* Effect.acquireRelease(
+				Effect.sync(() => openDb(o.path)),
+				(opened) => Effect.sync(() => opened.close()),
+			);
+			const graceMs = o.graceMs ?? 1000;
+			const maxDeliveries = o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries;
+			return yield* served(o, (method, args) =>
+				isMethod(method)
+					? Effect.try({
+							try: () => dispatch(db, RULES, graceMs, method, args, maxDeliveries),
+							catch: (e) =>
+								new LedgerUnreachable({
+									method: "sqlite",
+									message: e instanceof Error ? e.message : String(e),
+								}),
+						})
+					: Effect.fail(new LedgerUnreachable({method: "sqlite", message: `no call ${method}`})),
+			);
+		}),
+	);
+
+/**
+ * The service over one way to make a call: the doorbell, which rings for each stream a call
+ * wrote, the alarm, and the poll that sees writes from another process.
+ */
+const served = (o: SqliteOptions, run: WireCall) =>
+	Effect.gen(function* () {
+		const bell = yield* PubSub.unbounded<string>();
+		const call: WireCall = (method, args) =>
+			run(method, args).pipe(
+				Effect.tap((answer) => PubSub.publishAll(bell, writes(method, args, answer))),
+			);
+		// The alarm: the due jobs, as the Durable Object's alarm runs them.
+		yield* call("runDue", []).pipe(
+			Effect.ignore,
+			Effect.repeat(Schedule.spaced(Duration.millis(o.tickMs ?? 25))),
+			Effect.forkScoped,
+		);
+		const poll = Stream.tick(Duration.millis(o.pollMs ?? 250));
+		const watch: Raw["watch"] = (stream) =>
+			Stream.merge(
+				Stream.fromPubSub(bell).pipe(
+					Stream.filter((s) => s === stream),
+					Stream.map(() => undefined),
+				),
+				poll,
+			);
+		return fromRaw(rawOf(call, watch));
+	});

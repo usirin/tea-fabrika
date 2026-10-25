@@ -16,6 +16,7 @@
 		"@effect/platform-node": "catalog:",
 		"@kampus/fabrika": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",
+		"@tea-fabrika/tracker": "workspace:*",
 		"effect": "catalog:",
 		"ghostty-web": "catalog:",
 		"react": "catalog:",

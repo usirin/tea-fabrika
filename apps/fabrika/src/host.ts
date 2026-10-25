@@ -3,6 +3,7 @@ import {
 	type AnyRun,
 	type AnyRunning,
 	type Entry,
+	Ledger,
 	listed,
 	memoryStorage,
 	offer,
@@ -14,6 +15,7 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
+import {Author, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {History} from "./editor/history.ts";
@@ -43,9 +45,10 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //   - `counter &` opens its window and gives the prompt back at once.
 //   - Closing a program's window closes its inputs: the program ends as it does on stdin's end.
 //
-// Which programs tsh comes with is fixed here for now: the small ones and the counter. A run
-// of one with a window is seen as it starts (`seenBy`): the host opens its window, shows it its
-// view's data on each change, and reads what its window sends by that program's inputs.
+// Which programs tsh comes with is fixed here for now: the small ones, the counter and the
+// tracker. A run of one with a window is seen as it starts (`seenBy`): the host opens its window,
+// shows it its view's data on each change, and reads what its window sends by that program's
+// inputs.
 //
 // Storage: the host is handed where tsh keeps its jobs, as the terminal tsh is
 // (packages/fabrika/src/shell/main.ts), and where the line editor keeps its history. main.ts
@@ -54,7 +57,11 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // it left off, with its window.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
-// table, not its run. No ledger is used, so no worker thread and no child process.
+// table, not its run.
+//
+// The ledger: the host is handed one, as the `Ledger` service, and gives it to the tracker. main.ts
+// hands it a node:sqlite file in the app's home; a test hands it memory. The tracker writes as the
+// owner, the one person at the app for now.
 
 /** What became of a message from a page: read, and on its way, or refused, and why. */
 export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
@@ -98,8 +105,16 @@ export const TSH = "tsh:p1";
 /** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
 export const SCREEN_KEPT = 256 * 1024;
 
-/** The programs tsh comes with in the app, fixed for now: the small ones, and one with a window. */
+/** The programs tsh comes with in the app, fixed for now: the small ones, and two with a window. */
 const COUNTER = listed(counter, Layer.empty);
+const trackerOn = (ledger: Ledger["Service"]) =>
+	listed(
+		tracker,
+		Layer.mergeAll(
+			Layer.succeed(Ledger, ledger),
+			Layer.succeed(Author, {kind: "user", id: "owner"}),
+		),
+	);
 
 /** An entry whose runs are handed to `seen` as they start, however tsh starts them. */
 const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>): Entry => ({
@@ -130,7 +145,7 @@ const kept = (screen: string): string => {
 	return tail.slice(tail.indexOf("\n") + 1);
 };
 
-/** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. */
+/** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
 export const startHost = (options: {
 	readonly jobs: Storage;
 	readonly history: History;
@@ -139,6 +154,7 @@ export const startHost = (options: {
 	Effect.gen(function* () {
 		const {jobs, history, windows} = options;
 		const scope = yield* Effect.scope;
+		const ledger = yield* Ledger;
 		/** The host's scope is closing: the app quits, and every run stops with it. */
 		let closing = false;
 
@@ -206,7 +222,11 @@ export const startHost = (options: {
 				);
 			});
 
-		const programs = Shell.programList([...Shell.SMALL, seenBy(COUNTER, opened)]);
+		const programs = Shell.programList([
+			...Shell.SMALL,
+			seenBy(COUNTER, opened),
+			seenBy(trackerOn(ledger), opened),
+		]);
 		const started = yield* start(
 			Shell.tsh,
 			{show: "short"},
