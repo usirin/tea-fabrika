@@ -11,7 +11,13 @@ A person first picks which ledger to connect to, by its address. Invited, they
 get in. Not invited, they are refused. Who belongs is facts on that ledger, and
 nothing outside it knows.
 
-**Everything below is proposed.** Nothing is built or deployed yet.
+**Decided 2026-10-25: a person signs in with their SSH key, and every key
+GitHub lists for their login works.** No key is pinned to a ledger. GitHub is
+the one place a person's keys live: they remove an old key there, and every
+ledger follows at the next login. So the ledger reads the keys again at each
+login, and its sessions are short. See section 1.
+
+**Everything else below is proposed.** Nothing is built or deployed yet.
 
 ```text
 The first version is three things, and nothing else:
@@ -26,7 +32,7 @@ The answer first:
 
 - **One ledger is one Durable Object behind one Worker.** The Worker is the
   door. It stamps who wrote each fact from the login, never from the request.
-- **A person proves who they are with their SSH key** (lean, 75%). The ledger
+- **A person proves who they are with their SSH key** (decided). The ledger
   checks it against the public keys GitHub lists for that login. No token
   leaves the laptop, and no OAuth app is needed.
 - **An agent holds a key its person signed,** so it writes as "agent for X",
@@ -147,14 +153,24 @@ const layers = {ssh: Proof.ssh, oauth: Proof.githubOAuth, fake: Proof.fake}; // 
 
 After the proof, the ledger gives its own session token. It names the GitHub
 user id, is signed with a secret only this ledger's Worker holds, and ends
-after a while (a day, a guess). Each call is still checked against the
-members facts, so a removed member's token stops working at once.
+after a few hours. Each call is still checked against the members facts, so a
+removed member's token stops working at once. An agent's grant ends no later
+than the session of the person who signed it.
 
-**Lean: (b), an SSH signature checked against GitHub's published keys.**
-Why: it needs nothing outside the ledger but a public list, and no token
-leaves the laptop. Cost: the Worker must read `SSHSIG` and check three kinds of
-key. The app must reach the person's SSH key. **How sure: 75%.** The doubts,
-and what would settle each:
+**Decided the same day: (b), an SSH signature checked against GitHub's
+published keys, with every key GitHub lists accepted.** Why: it needs nothing
+outside the ledger but a public list, and no token leaves the laptop. Cost: the
+Worker must read `SSHSIG` and check three kinds of key. The app must reach the
+person's SSH key.
+
+Key pinning, where the ledger remembers the key used at join and refuses any
+other, was proposed and not taken. A person keeps their GitHub key list clean
+themselves, the way `ssh-import-id` users already do. What pinning would have
+caught, an old forgotten key, is caught by removing it on GitHub. The ledger
+reads the keys again at each login, with at most a few minutes of cache, so a
+removed key stops working within one session's length.
+
+What is left to try, and what would settle each:
 
 - **Passphrase keys.** A key with a passphrase that is not in ssh-agent needs
   the passphrase typed. The app has no terminal, so it needs its own prompt or
@@ -175,8 +191,8 @@ and what would settle each:
   ledger keeps the keys it saw and reads again only at login. Whether that is
   enough is measured in the experiment.
 - **A login renamed and taken by someone else.** The invite also keeps the
-  GitHub user id (public, from `GET /users/{username}`), and the join keeps
-  the key prints it saw. A new owner of an old login has another id.
+  GitHub user id, public from `GET /users/{username}`, and each login checks
+  it. A new owner of an old login has another id.
 
 ## 2. Who wrote a fact, proven and not claimed
 
@@ -282,7 +298,7 @@ const ledger = mounts({
 | A run's beats (`runs/<run>/beats`) | shared | One small row per step: turns, last tool, waits on a person or not. Either person sees what an agent is doing, from any machine, later. The ticket's fold never reads them ([what a ticket shows](./what-a-ticket-shows.md)). |
 | A run's full log | shared, in `Blobs` (R2), by hash | "Open log" works from any machine. A log is MBs; a Durable Object row stops at 2 MB ([limits](https://developers.cloudflare.com/durable-objects/platform/limits/)). The ledger keeps only the hash. |
 | Spend and limits per ticket | shared | A cap must hold across both people's agents. |
-| Members and their key prints | shared | The door reads them. |
+| Members | shared | The door reads them on every call. |
 | CI jobs and results | shared | Any runner may claim a job. |
 | Desk layout, tiles, workspaces, focus | this laptop | It is one person's screen. It must come back with no network. |
 | Each tile's tsh jobs, history, scrollback | this laptop | Same. A tile's tsh runs on this host only. |
@@ -311,7 +327,7 @@ const Member = Schema.Union([
 	Schema.Struct({type: Schema.Literal("created"), login: Schema.String, id: Schema.Int}),
 	// By the creator, in the first version. The id is read from GitHub at invite time.
 	Schema.Struct({type: Schema.Literal("invited"), login: Schema.String, id: Schema.Int}),
-	// Written by the door at that person's first login: the key prints it checked.
+	// Written by the door at that person's first login. `keys` records which key signed; it never gates a later login.
 	Schema.Struct({type: Schema.Literal("joined"), id: Schema.Int, keys: Schema.Array(Schema.String)}),
 	// The one addition to the three: by the creator. A wrong invite must be undoable.
 	Schema.Struct({type: Schema.Literal("removed"), id: Schema.Int}),
@@ -327,7 +343,8 @@ const isMember = (facts: ReadonlyArray<typeof Member.Type>, id: number) => /* th
 - **The creator invites a GitHub login.** The door reads that login's user id
   from GitHub and keeps both.
 - **That person joins on their first login.** The door checks their proof
-  (section 1) and writes `joined`, with the key prints it saw.
+  (section 1) and writes `joined`. It notes which key signed, as a record
+  only: any key GitHub lists for that login works at the next login.
 - **Removing a member is one more fact, `removed`.** It is the one thing added
   beyond the three, because a wrong invite must be undoable. The door checks
   the fold on every call, so the removed person's session stops at once.
