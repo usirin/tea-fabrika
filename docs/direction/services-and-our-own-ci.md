@@ -1,7 +1,9 @@
 # The services fabrika needs, and CI on our own machines
 
-**Proposed 2026-10-25.** Nothing here is built. One part changes a decided
-note; the section near the end says which, and how.
+**Proposed 2026-10-25. Decided the same day: every edge is a service now,
+even one with a single Layer, and `Ci` leaves `CodeHost`** (the next section
+after the sketch). Our own machines as CI hosts are still proposed. Nothing
+here is built.
 
 ```ts
 // A sketch. Every edge fabrika crosses, as one Effect service. A repo picks a Layer for each.
@@ -24,6 +26,33 @@ const onGithub = Ci.githubActions; // the push starts GitHub's runs; we read its
 const here = Ci.local;             // today's [[checks.run]], in this process
 const hosts = Ci.ownHosts;         // a job is a lease on the ledger; our machines pull it
 ```
+
+## Decided 2026-10-25: every edge is a service, even with one Layer
+
+```ts
+// A sketch. Ci is a service now, with GitHub as its first Layer. A stage asks Ci, never GitHub.
+interface Ci {
+	readonly results: (at: Commit) => Stream<Result>; // how each check went at one commit
+}
+const demlik = Layer.mergeAll(Ci.githubActions, CodeHost.github, Ledger.local); // one Layer each, for now
+const inTests = Layer.mergeAll(Ci.fake, CodeHost.fake, Ledger.memory);         // the same stages, no network
+```
+
+- **Every edge fabrika crosses is a typed service, even where only one Layer
+  exists.** That covers all twelve in the table below. A stage talks to the
+  service, never to GitHub, a command-line tool or a file.
+- **`Ci` comes out of `CodeHost` now.** GitHub Actions and today's
+  `[[checks.run]]` are its first Layers. This settles the 70% doubt under
+  "How sure".
+- **Our own machines as CI hosts wait** until the new lane merges its first
+  ticket. Then they are one more `Ci` Layer, and no stage changes.
+- **Why:** a second backend then costs one Layer, not a change to every stage
+  that called the first. Tests get a fake Layer with no network. The shape
+  exists before the second backend does ([backend as a library](./backend-as-a-library.md)).
+- **Cost:** a service and a Layer for each edge, even where GitHub is the only
+  backend for now.
+- **How sure: 85%.** The doubt: a service designed around one backend tends
+  to take that backend's shape. The second Layer of each one will show it.
 
 ## The answer
 
@@ -423,7 +452,7 @@ the app people open, so it does not change.
 - **70% on taking `Ci` out of `CodeHost`.** The other way is a third wrapper
   like `local-checks.ts`, which is less code now and leaves `CodeHost` meaning
   "GitHub plus what we added". Building `Ci.ownHosts` both ways for one check
-  would settle it.
+  would settle it. *Decided 2026-10-25: `Ci` comes out now (above).*
 - **60% on the boxes.** gVisor's fit with this repo's own `pnpm test`, and
   Tart's time from clone to first output, are not measured.
 - **50% that it is worth building before the first release.** For demlik,

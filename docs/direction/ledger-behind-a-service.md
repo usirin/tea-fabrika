@@ -62,6 +62,11 @@ CodeHost.mergeable(pr)            // only the place holding the branches  → Co
 CodeHost.enqueue(pr, head)        // the queue lives with the code        → CodeHost
 ```
 
+*2026-10-25: checks move to their own `Ci` service. With our own runners, the
+place that ran them is not the code host. `CodeHost` keeps pull requests,
+can-it-merge and the queue. See
+[the services fabrika needs](./services-and-our-own-ci.md).*
+
 ## Why
 
 - A project tool should not need one hosting company to run.
