@@ -20,6 +20,7 @@ import {
 	deskMachine,
 	focusedOf,
 	type Open,
+	questionOf,
 	restore,
 	type Workspace,
 } from "../desk/desk.ts";
@@ -43,7 +44,7 @@ import {WINDOWS} from "./windows.tsx";
 //   Ctrl-B |      the desk splits the focused tile: t2 beside t1, and t2's tsh starts
 //   Ctrl-B l      focus moves right
 //   counter       counter covers its tile; Ctrl-C there goes to that tile's tsh, which stops it
-//   Ctrl-B x      the tile closes, after y or n if something runs in it
+//   Ctrl-B x      "close t1? (y/n)" on the tile; y closes it, at once or once what runs in it ends
 //
 // The desk's Cmds go to the main process on the desk's port (bridge.ts), but `send`, which goes
 // on the tile's own port as keys. What main tells the desk comes in on the desk's port.
@@ -94,12 +95,12 @@ const perform = (cmds: readonly DeskCmd[]) => {
 				window.fabrika.send("desk", {type: "open", tile: c.tile});
 				break;
 			case "close":
-				terminals.get(c.tile)?.dispose();
-				terminals.delete(c.tile);
 				window.fabrika.send("desk", {type: "close", tile: c.tile});
 				break;
 			case "stop":
-				window.fabrika.send("desk", {type: "stop", run: c.run});
+				terminals.get(c.tile)?.dispose();
+				terminals.delete(c.tile);
+				window.fabrika.send("desk", {type: "stop", tile: c.tile});
 				break;
 			case "send":
 				window.fabrika.send(`tile:${c.tile}`, {type: "keys", data: c.data});
@@ -107,8 +108,8 @@ const perform = (cmds: readonly DeskCmd[]) => {
 			case "save":
 				window.fabrika.send("desk", {type: "save", desk: c.desk});
 				break;
-			case "quit":
-				window.fabrika.send("desk", {type: "quit"});
+			case "empty":
+				window.fabrika.send("desk", {type: "empty"});
 				break;
 		}
 	}
@@ -135,7 +136,7 @@ const heard = (raw: unknown) => {
 		perform(cmds);
 		return changed();
 	}
-	if (m.type === "covered" || m.type === "beside") follow(m.run.id);
+	if (m.type === "covered") follow(m.run.id);
 	if (m.type === "over") {
 		store.views.delete(m.run);
 		window.fabrika.forget(`run:${m.run}`);
@@ -153,7 +154,7 @@ const onKey = (e: KeyboardEvent) => {
 	dispatch({type: "key", key, at: e.timeStamp});
 };
 
-/** The run a tile shows, if any: a run covering its tsh, or the run whose own tile it is. */
+/** The run a tile shows, if any: a run covering its tsh. */
 const runOf = (tile: TileNode) => tile.shows.run;
 
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
@@ -190,25 +191,30 @@ function Slot({tile}: {readonly tile: TileId}): ReactNode {
 function Tile(props: {
 	readonly tile: TileNode;
 	readonly focused: boolean;
-	readonly asking: boolean;
+	/** The tile's question, as tmux's confirm-before asks it, or none. */
+	readonly asking: string | null;
+	readonly closing: boolean;
 }): ReactNode {
-	const {tile, focused, asking} = props;
+	const {tile, focused, asking, closing} = props;
 	const run = runOf(tile);
 	return (
 		<section
-			className={`tile${focused ? " focused" : ""}`}
+			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
 			data-tile={tile.id}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}`}
+			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
 			aria-current={focused}
 			onPointerDownCapture={() => dispatch({type: "click", tile: tile.id})}
 		>
-			{tile.shows.kind === "tsh" && <Slot tile={tile.id} />}
+			<Slot tile={tile.id} />
 			{run !== null && <View tile={tile.id} run={run.id} />}
-			{asking && (
-				<div className="ask" role="alertdialog" aria-label="close the tile">
-					<p>
-						Close {tile.id} and stop what runs in it? <kbd>y</kbd> or <kbd>n</kbd>
-					</p>
+			{closing && (
+				<p className="closing-note" role="status">
+					closing
+				</p>
+			)}
+			{asking !== null && (
+				<div className="ask" role="alertdialog" aria-label={asking}>
+					<p>{asking}</p>
 				</div>
 			)}
 		</section>
@@ -231,9 +237,9 @@ const dragged = (stack: StackNode, at: number, fraction: number) => {
 function Stack(props: {
 	readonly stack: StackNode;
 	readonly ws: Workspace;
-	readonly ask: TileId | null;
+	readonly desk: Open;
 }): ReactNode {
-	const {stack, ws, ask} = props;
+	const {stack, ws, desk} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Readonly<Record<string, number>> | null>(null);
@@ -277,7 +283,7 @@ function Stack(props: {
 							/>,
 						]),
 				<div key={child.id} className="cell" style={{flexGrow: sizes[child.id] ?? 1}}>
-					<Node node={child} ws={ws} ask={ask} />
+					<Node node={child} ws={ws} desk={desk} />
 				</div>,
 			])}
 		</div>
@@ -287,11 +293,28 @@ function Stack(props: {
 function Node(props: {
 	readonly node: LayoutNode;
 	readonly ws: Workspace;
-	readonly ask: TileId | null;
+	readonly desk: Open;
 }): ReactNode {
-	const {node, ws, ask} = props;
-	if (node.tag === "stack") return <Stack stack={node} ws={ws} ask={ask} />;
-	return <Tile tile={node} focused={node.id === ws.focused} asking={ask === node.id} />;
+	const {node, ws, desk} = props;
+	if (node.tag === "stack") return <Stack stack={node} ws={ws} desk={desk} />;
+	return <DeskTile tile={node} ws={ws} desk={desk} />;
+}
+
+/** A tile as the desk has it now: focused or not, asking or not, closing or not. */
+function DeskTile(props: {
+	readonly tile: TileNode;
+	readonly ws: Workspace;
+	readonly desk: Open;
+}): ReactNode {
+	const {tile, ws, desk} = props;
+	return (
+		<Tile
+			tile={tile}
+			focused={tile.id === ws.focused}
+			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
+			closing={desk.closing.includes(tile.id)}
+		/>
+	);
 }
 
 function Status({desk}: {readonly desk: Open}): ReactNode {
@@ -340,9 +363,9 @@ function App(): ReactNode {
 		<div className="desk">
 			<div className="workspace" data-workspace={ws.id} data-zoomed={zoomed ?? undefined}>
 				{zoomed !== null ? (
-					<ZoomedTile ws={ws} id={zoomed} ask={desk.ask} />
+					<ZoomedTile ws={ws} id={zoomed} desk={desk} />
 				) : (
-					<Node node={ws.layout.root} ws={ws} ask={desk.ask} />
+					<Node node={ws.layout.root} ws={ws} desk={desk} />
 				)}
 			</div>
 			<Status desk={desk} />
@@ -353,12 +376,12 @@ function App(): ReactNode {
 function ZoomedTile(props: {
 	readonly ws: Workspace;
 	readonly id: TileId;
-	readonly ask: TileId | null;
+	readonly desk: Open;
 }): ReactNode {
-	const {ws, id, ask} = props;
+	const {ws, id, desk} = props;
 	const tile = findTile(ws.layout, id);
 	if (tile === null) return null;
-	return <Tile tile={tile} focused={ws.focused === id} asking={ask === id} />;
+	return <DeskTile tile={tile} ws={ws} desk={desk} />;
 }
 
 const boot = Effect.gen(function* () {

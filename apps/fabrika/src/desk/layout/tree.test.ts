@@ -103,12 +103,10 @@ describe("layout.split", () => {
 		expect(split(tree, "a", "vertical", ids("x", "s"))).toBe(tree);
 	});
 
-	it("puts what it is told to show in the new tile", () => {
-		const shows = {kind: "run", run: {id: "counter:1", program: "counter"}, of: "a"} as const;
+	it("puts a fresh tsh in the new tile", () => {
+		const next = split(threeTiles(), "a", "horizontal", ids("d", "s2"));
 
-		const next = split(threeTiles(), "a", "horizontal", ids("d", "s2"), shows);
-
-		expect(find(next, (tile) => tile.id === "d")?.shows).toEqual(shows);
+		expect(find(next, (tile) => tile.id === "d")?.shows).toEqual({kind: "tsh", run: null});
 	});
 });
 

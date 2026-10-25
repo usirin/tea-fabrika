@@ -42,14 +42,18 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //     whole line on Enter, as bash is by readline.
 //   - A program with a view run in the foreground covers the tile, and the prompt waits for its
 //     end. Ctrl-C in the terminal stops it, and its view goes.
-//   - `counter &` opens its view in a new tile beside this one and gives the prompt back at once.
+//   - `counter &` runs in the background, as in bash: nothing is shown, and the prompt is back at
+//     once. `attach %n` brings it to the foreground, as bash's `fg`: then it covers the tile.
 //   - Closing a program's view closes its inputs: the program ends as it does on stdin's end.
+//   - `close` gives tsh and every program it started the end of their inputs, as a terminal
+//     closing hangs up its shell, but softer: nothing is stopped. The programs end on their own,
+//     then tsh's line closes, and tsh ends. `ended` says when.
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter and the
-// tracker. A run of one with a view is seen as it starts (`seenBy`): the host tells its tile,
-// shows the view its data on each change, and reads what the view sends by that program's inputs.
-// Whether the run is in the foreground is read off tsh's job table, which tsh writes before the
-// run starts.
+// tracker. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
+// a view is drawn: the host tells its tile, shows the view its data on each change, and reads
+// what the view sends by that program's inputs. Whether the run is in the foreground is read off
+// tsh's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
 // Storage: the host is handed where tsh keeps its jobs, as the terminal tsh is
 // (packages/fabrika/src/shell/main.ts), and the history every tile shares. tiles.ts hands it a
@@ -85,25 +89,31 @@ export interface WindowScreen extends Screen<ToWindow> {
 	readonly closed: () => void;
 }
 
-/** In the foreground the run covers tsh's tile and tsh waits; in the background it opens beside it. */
+/** In the foreground the run covers tsh's tile and tsh waits; in the background nothing shows it. */
 export type Placed = "foreground" | "background";
 
 /** What the host tells its tile of tsh's runs, for the edge to draw. */
 export interface Runs {
-	/** A run of `program` with a view started: show `screen` for it, where `placed` says. */
+	/** A run of `program` with a view started: `screen` is its view, shown when it is in the foreground. */
 	readonly began: (run: string, program: string, placed: Placed, screen: WindowScreen) => void;
+	/** A run with a view that began in the background is in the foreground now: `attach`, as `fg`. */
+	readonly forward: (run: string) => void;
 	/** That run ended: its view goes, if it is still shown. */
 	readonly ended: (run: string) => void;
-	/** How many of tsh's jobs run now. Closing the tile stops them, so the desk asks first. */
+	/** How many of tsh's jobs run now. */
 	readonly running: (count: number) => void;
 }
 
 export interface Host {
 	/** The terminal's page: the bytes to draw, and the keys and size it sends. */
 	readonly terminal: Screen<ToTerminal>;
-	/** Stop one run of tsh's, as `stop` does: its tile was closed. A run not running changes nothing. */
-	readonly stop: (run: string) => Effect.Effect<void>;
-	/** Done when tsh has ended: `exit`, or Ctrl-D on an empty line. */
+	/**
+	 * Give tsh and every program it started the end of their inputs. When the last of its jobs has
+	 * ended, tsh's own line closes and tsh ends. Nothing is stopped: a program that does not end on
+	 * its inputs' end runs on, until the host's scope closes. Said again, it changes nothing.
+	 */
+	readonly close: Effect.Effect<void>;
+	/** Done when tsh has ended: `exit`, Ctrl-D on an empty line, or after `close`. */
 	readonly ended: Effect.Effect<void>;
 }
 
@@ -159,6 +169,10 @@ const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
 		? "background"
 		: "foreground";
 
+/** How many jobs of a table run now: started by this tsh, and not ended. */
+const runningIn = (table: Shell.Jobs | null): number =>
+	table?.jobs.filter((job) => job.state === "running").length ?? 0;
+
 /** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
 export const startHost = (options: {
 	readonly jobs: Storage;
@@ -173,8 +187,16 @@ export const startHost = (options: {
 		let closing = false;
 		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
 		let table: () => Shell.Jobs | null = () => null;
-		/** The runs with a view now, by id, for `stop`. */
-		const live = new Map<string, AnyRunning>();
+		/** Every run tsh started that has not ended, by id, so `close` reaches each. */
+		const all = new Map<string, AnyRunning>();
+		/** Where each run with a view is now, by id: one in the background is not drawn. */
+		const shown = new Map<string, {placed: Placed}>();
+		/** `close` was said: every input ends, and tsh's line too once no job runs. */
+		let hungUp = false;
+		/** Every input of a run ends, as stdin's end: what it does then is its own. */
+		const endInputs = (running: AnyRunning) => {
+			for (const name of Object.keys(running.run.program.inputs)) running.close(name);
+		};
 
 		// What the editor and the views are told, on one queue, in the order it was heard.
 		const inbox = yield* Queue.unbounded<Told>();
@@ -216,8 +238,9 @@ export const startHost = (options: {
 						for (const name of Object.keys(r.program.inputs)) running.close(name);
 					},
 				};
-				live.set(r.id, running);
-				runs.began(r.id, r.program.name, placedIn(table(), r.id), window);
+				const placed = placedIn(table(), r.id);
+				shown.set(r.id, {placed});
+				runs.began(r.id, r.program.name, placed, window);
 				yield* machine.changes.pipe(
 					Stream.filter((state) => state !== null),
 					Stream.runForEach((state) =>
@@ -234,7 +257,7 @@ export const startHost = (options: {
 					Effect.ensuring(
 						Effect.sync(() => {
 							over = true;
-							live.delete(r.id);
+							shown.delete(r.id);
 							runs.ended(r.id);
 						}),
 					),
@@ -242,11 +265,22 @@ export const startHost = (options: {
 				);
 			});
 
-		const programs = Shell.programList([
-			...Shell.SMALL,
-			seenBy(COUNTER, opened),
-			seenBy(trackerOn(ledger), opened),
-		]);
+		/** A run tsh started, by any path: kept for `close` until it ends, and drawn if it has a view. */
+		const seen = (running: AnyRunning) =>
+			Effect.gen(function* () {
+				all.set(running.run.id, running);
+				yield* running.run.ended.pipe(
+					Effect.ensuring(Effect.sync(() => all.delete(running.run.id))),
+					Effect.forkIn(scope),
+				);
+				// Started after `close`, as a line typed in a closing tile: its inputs end at once too.
+				if (hungUp) endInputs(running);
+				yield* opened(running);
+			});
+
+		const programs = Shell.programList(
+			[...Shell.SMALL, COUNTER, trackerOn(ledger)].map((entry) => seenBy(entry, seen)),
+		);
 		const started = yield* start(
 			Shell.tsh,
 			{show: "short"},
@@ -270,6 +304,12 @@ export const startHost = (options: {
 			}),
 		);
 
+		/** tsh's own inputs end: its line, as Ctrl-D, and Ctrl-C's. Every job of it has ended by now. */
+		const endTsh = () => {
+			started.close("line");
+			started.close("signal");
+		};
+
 		const over = yield* Deferred.make<void>();
 		yield* started.run.ended.pipe(
 			Effect.andThen(Effect.sync(() => toEditor({type: "ended"}))),
@@ -281,7 +321,15 @@ export const startHost = (options: {
 				Effect.sync(() => {
 					if (jobs === null) return;
 					toEditor({type: "jobs", jobs});
-					runs.running(jobs.jobs.filter((job) => job.state === "running").length);
+					// `attach %n` moved a job of the background to the foreground: its view covers the tile now.
+					for (const [run, where] of shown)
+						if (where.placed === "background" && placedIn(jobs, run) === "foreground") {
+							where.placed = "foreground";
+							runs.forward(run);
+						}
+					const count = runningIn(jobs);
+					runs.running(count);
+					if (hungUp && count === 0) endTsh();
 				}),
 			),
 			Effect.forkScoped,
@@ -331,7 +379,12 @@ export const startHost = (options: {
 					return {kind: "read"};
 				},
 			},
-			stop: (id) => Effect.suspend(() => live.get(id)?.stop ?? Effect.void).pipe(Effect.asVoid),
+			close: Effect.sync(() => {
+				if (hungUp) return;
+				hungUp = true;
+				for (const running of all.values()) endInputs(running);
+				if (runningIn(table()) === 0) endTsh();
+			}),
 			ended: Deferred.await(over),
 		};
 		return host;

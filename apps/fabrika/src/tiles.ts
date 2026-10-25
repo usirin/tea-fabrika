@@ -2,7 +2,7 @@ import {Ledger, type Storage} from "@kampus/fabrika";
 import {Effect, Exit, Scope} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import type {SharedHistory} from "./editor/history.ts";
-import {type Host, type Screen, startHost, type WindowScreen} from "./host.ts";
+import {type Host, type Placed, type Screen, startHost, type WindowScreen} from "./host.ts";
 import type {ToDesk, ToTerminal} from "./messages.ts";
 
 // The tiles in the main process: one host (host.ts), so one tsh with its own jobs, per tile the
@@ -12,16 +12,22 @@ import type {ToDesk, ToTerminal} from "./messages.ts";
 //
 //   const tiles = yield* startTiles({history, place, edge});
 //   yield* tiles.open("t1")       t1's tsh starts on its own folder: edge.terminal("t1", screen)
-//   // t1 runs `counter &`:       edge.view("counter:1a2b", screen), and the desk is told
-//   //                            {type: "beside", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
-//   yield* tiles.stop("counter:1a2b")
-//   // the run ends:              edge.gone("run:counter:1a2b"), the desk is told {type: "over", ...}
-//   yield* tiles.close("t1")      t1's tsh ends with its runs, and its folder goes
+//   // t1 runs `counter`:         edge.view("counter:1a2b", screen), and the desk is told
+//   //                            {type: "covered", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
+//   // t1 runs `tally &`:         nothing is shown: a job in the background, as in bash
+//   yield* tiles.close("t1")      t1's tsh and its programs get the end of their inputs; nothing stops
+//   // they end, then tsh does:   the desk is told {type: "ended", tile: "t1"}
+//   yield* tiles.stop("t1")       what still runs in t1 stops, its port goes, and its folder goes
+//
+// Closing is tmux's kill-pane, made soft: a tile owns its tsh as a pane owns its shell, and the
+// programs are given the end of their inputs before anything is stopped. The desk says when to
+// stop: after the tile's tsh ended, or when the person asks to stop now. Nothing here waits on a
+// clock.
 //
 // What a tile's tsh keeps is in its own folder, so the next start of the app finds the tile's jobs
-// "from an earlier tsh, not running", for `attach`. Closing a tile drops them, as tmux's
-// kill-pane ends what ran in the pane. Quitting the app keeps them: the scope every tile is in
-// closes, which stops each tsh the way the app's quit always has.
+// "from an earlier tsh, not running", for `attach`. Stopping a tile drops them. Quitting the app
+// keeps them: the scope every tile is in closes, which stops each tsh the way the app's quit
+// always has.
 
 /** Where one tile keeps its jobs, and how they go when the tile closes. */
 export interface Place {
@@ -44,10 +50,13 @@ export interface Edge {
 export interface Tiles {
 	/** Start the tile's tsh, or show the one that runs on a fresh port. */
 	readonly open: (tile: TileId) => Effect.Effect<void>;
-	/** End the tile's tsh and its runs, and drop its jobs. A tile not open changes nothing. */
+	/**
+	 * Give the tile's tsh and every program it started the end of their inputs, with `close`, not
+	 * `stop`. The desk is told `ended` once tsh has ended. A tile not open changes nothing.
+	 */
 	readonly close: (tile: TileId) => Effect.Effect<void>;
-	/** Stop one run, whichever tile's tsh started it. */
-	readonly stop: (run: string) => Effect.Effect<void>;
+	/** Stop what still runs in the tile, and drop its jobs: the tile is gone. A tile not open changes nothing. */
+	readonly stop: (tile: TileId) => Effect.Effect<void>;
 	/** Tell the desk again what runs now: its page was loaded again, and knows only what was kept. */
 	readonly replay: Effect.Effect<void>;
 }
@@ -56,23 +65,19 @@ export interface Tiles {
 interface Live {
 	readonly tile: TileId;
 	readonly program: string;
-	readonly placed: "foreground" | "background";
+	placed: Placed;
 	readonly screen: WindowScreen;
 }
 
-/** One tile's tsh: its host, the scope it runs in, and how many jobs run now. */
+/** One tile's tsh: its host, the scope it runs in, how many jobs run now, and how far it closed. */
 interface Running {
 	readonly host: Host;
 	readonly scope: Scope.Closeable;
 	readonly drop: Effect.Effect<void>;
 	running: number;
+	/** `open` until `close`; `closing` while its programs end; `ended` once its tsh has. */
+	state: "open" | "closing" | "ended";
 }
-
-const told = (tile: TileId, run: string, live: Live): ToDesk => ({
-	type: live.placed === "foreground" ? "covered" : "beside",
-	tile,
-	run: {id: run, program: live.program},
-});
 
 export const startTiles = (options: {
 	readonly history: SharedHistory;
@@ -86,9 +91,19 @@ export const startTiles = (options: {
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
 
+		/** A run in the foreground covers its tile: its view gets a port, and the desk is told. */
+		const cover = (run: string, one: Live) => {
+			edge.view(run, one.screen);
+			edge.tell({type: "covered", tile: one.tile, run: {id: run, program: one.program}});
+		};
+
 		/** A run is over: its port goes and the desk is told, once, whoever saw it end first. */
 		const over = (run: string) => {
-			if (!live.delete(run)) return;
+			const one = live.get(run);
+			if (one === undefined) return;
+			live.delete(run);
+			// A run of the background was never shown: there is no port and nothing covered.
+			if (one.placed === "background") return;
 			edge.gone(`run:${run}`);
 			edge.tell({type: "over", run});
 		};
@@ -104,8 +119,13 @@ export const startTiles = (options: {
 						began: (run, program, placed, screen) => {
 							const one: Live = {tile, program, placed, screen};
 							live.set(run, one);
-							edge.view(run, screen);
-							edge.tell(told(tile, run, one));
+							if (placed === "foreground") cover(run, one);
+						},
+						forward: (run) => {
+							const one = live.get(run);
+							if (one === undefined || one.placed === "foreground") return;
+							one.placed = "foreground";
+							cover(run, one);
 						},
 						ended: over,
 						running: (count) => {
@@ -115,10 +135,16 @@ export const startTiles = (options: {
 						},
 					},
 				}).pipe(Scope.provide(scope), Effect.provideService(Ledger, ledger));
-				open.set(tile, {host, scope, drop, running: 0});
-				// tsh ended on its own: `exit`, or Ctrl-D. The desk closes the tile, and asks to close it here.
+				open.set(tile, {host, scope, drop, running: 0, state: "open"});
+				// tsh ended: `exit`, Ctrl-D, or after `close`. The desk takes the tile away, and asks to stop it here.
 				yield* host.ended.pipe(
-					Effect.andThen(Effect.sync(() => edge.tell({type: "ended", tile}))),
+					Effect.andThen(
+						Effect.sync(() => {
+							const now = open.get(tile);
+							if (now !== undefined) now.state = "ended";
+							edge.tell({type: "ended", tile});
+						}),
+					),
 					Effect.forkIn(scope),
 				);
 				return host;
@@ -133,6 +159,13 @@ export const startTiles = (options: {
 					edge.terminal(tile, host.terminal);
 				}).pipe(Effect.catch((e) => Effect.logError(`fabrika: ${tile}'s tsh could not start`, e))),
 			close: (tile) =>
+				Effect.suspend(() => {
+					const one = open.get(tile);
+					if (one === undefined || one.state !== "open") return Effect.void;
+					one.state = "closing";
+					return one.host.close;
+				}),
+			stop: (tile) =>
 				Effect.gen(function* () {
 					const one = open.get(tile);
 					if (one === undefined) return;
@@ -144,18 +177,15 @@ export const startTiles = (options: {
 					edge.gone(`tile:${tile}`);
 					yield* one.drop;
 				}),
-			stop: (run) =>
-				Effect.suspend(() => {
-					const one = live.get(run);
-					const host = one === undefined ? undefined : open.get(one.tile)?.host;
-					return host === undefined ? Effect.void : host.stop(run);
-				}),
 			replay: Effect.sync(() => {
-				for (const [run, one] of live) {
-					edge.view(run, one.screen);
-					edge.tell(told(one.tile, run, one));
+				for (const [run, one] of live) if (one.placed === "foreground") cover(run, one);
+				for (const [tile, one] of open) {
+					edge.tell({type: "jobs", tile, running: one.running});
+					// What the page before knew of a closing tile, the new one is told: its question is stop.
+					if (one.state === "closing") edge.tell({type: "closing", tile});
+					// A tile whose tsh ended while no page was there to take it away.
+					if (one.state === "ended") edge.tell({type: "ended", tile});
 				}
-				for (const [tile, one] of open) edge.tell({type: "jobs", tile, running: one.running});
 			}),
 		};
 		return tiles;

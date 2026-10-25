@@ -498,6 +498,9 @@ export const waitForJob = (shell: Shell, job: Job) =>
 		const watcher = shell.watched.get(job.stages[0].run);
 		// Its watcher left already: the job ended between the line's read and now.
 		if (watcher === undefined) return 0;
+		// In the table before the wait, as bash's `fg` moves the job first: whoever reads the table
+		// (a terminal drawing a program's window) sees the job in the foreground while tsh waits.
+		yield* note(shell, {type: "foreground", n: job.n});
 		const ends = yield* waitFor(shell, runs, watcher);
 		sayEnd(
 			shell,

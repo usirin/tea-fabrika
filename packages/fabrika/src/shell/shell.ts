@@ -1,5 +1,5 @@
 import {run as runMachine} from "@demlik/tea/effect";
-import {type Cause, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
+import {type Cause, Deferred, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
 import type {AnyRunning} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
@@ -203,6 +203,19 @@ export const tsh = defineProgram({
 				),
 			);
 
+			// A job whose last program just ended may still be saying so: let it finish, so its end is
+			// printed before tsh stops speaking. Its watcher is done once it has said it.
+			const still = new Set(
+				table
+					.getState()
+					.jobs.filter((job) => job.state === "running")
+					.map((job) => job.stages[0].run),
+			);
+			yield* Effect.forEach(
+				[...shell.watched].filter(([run]) => !still.has(run)),
+				([, watcher]) => Deferred.await(watcher),
+				{concurrency: "unbounded"},
+			);
 			// tsh is leaving: its jobs stop with it, and stay in the table to be attached by the next one.
 			const left = table.getState().jobs.filter((job) => job.state === "running");
 			if (left.length > 0)

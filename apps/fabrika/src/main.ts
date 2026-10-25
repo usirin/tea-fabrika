@@ -2,7 +2,7 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {layer as nodePath} from "@effect/platform-node/NodePath";
 import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Cause, Deferred, Effect, FileSystem, Layer, Path, Queue} from "effect";
+import {Cause, Effect, FileSystem, Layer, Path, Queue} from "effect";
 import {
 	app,
 	BrowserWindow,
@@ -26,10 +26,11 @@ import {startTiles} from "./tiles.ts";
 // no Electron. What this file does, by Electron's security checklist
 // (https://www.electronjs.org/docs/latest/tutorial/security):
 //
-//   one copy        `requestSingleInstanceLock`; a second start brings the window forward and quits
+//   one copy        `requestSingleInstanceLock`; a second start brings the window forward, or makes
+//                   one if there is none, and quits
 //   one window      the desk: every tile and every program's view is drawn in it. Sandboxed,
 //                   context isolation, no Node, and a preload that gives only send, onMessage
-//                   and forget
+//                   and forget. At most one at a time; everything here follows the current one
 //   own files       over the app's own scheme (`protocol.handle`, files.ts): no `file://`, no remote site
 //   no way out      navigation, redirects, new windows, webviews and permission requests are refused,
 //                   for every web contents the app makes
@@ -37,9 +38,22 @@ import {startTiles} from "./tiles.ts";
 //                   hello is answered only from the window's own top frame, on the desk page of our
 //                   own files, and a port goes only to that page. A message on a tile's port is
 //                   for that tile's tsh alone; on a run's port, for that run alone.
-//   quit            the window closed, or the desk's last tile closed: every tsh and every program
-//                   stops with the tiles' scope, and the app quits. Jobs stay for `attach` next
-//                   time, but the last tile's: closing it dropped them.
+//
+// Closing and quitting follow the platform's own rules, never this app's:
+//
+//   close button    closes the window only. On macOS the app stays in the dock, and every tsh and
+//                   program runs on in this process. On Windows and Linux, closing every window
+//                   quits, as Electron's own pattern does (`window-all-closed`)
+//   dock icon       `activate`: a new window, on the same desk with the live runs. It loads as a
+//                   reloaded page does: hello, `start` with the desk kept, then `replay`
+//   last tile       closing it closes the window, as closing the last tab does in Terminal. It
+//                   does not quit. The next window opens on one fresh tile with a fresh tsh
+//   Cmd-Q           Electron's default app menu, kept for it, quits the app. Only then does the
+//                   tiles' scope close: every tsh and program stops, and their jobs stay for
+//                   `attach` at the next start
+//
+// Until the host moves out to a process of its own (the direction note's later decision), it
+// lives here, in the main process: jobs outlive a closed window, but not Cmd-Q.
 //
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
 // A test sets it, to run on a fresh one. In it:
@@ -113,12 +127,22 @@ const fromItsPage = (window: BrowserWindow, event: IpcMainEvent) => {
 	);
 };
 
-/** The ports handed to the page, by name: one per name, and a new one closes the old. */
-const portsFor = (window: BrowserWindow) => {
+/**
+ * The ports handed to the page of the window there is now, by name: one per name, and a new one
+ * closes the old. With no window, there is no port, and what would go on one is dropped: the next
+ * window's page is told again (`replay`).
+ */
+const portsFor = (current: () => BrowserWindow | null) => {
 	const ports = new Map<string, MessagePortMain>();
 	/** A fresh port named `name`: the page gets one end, and `heard` hears what comes on the other. */
 	const push = (name: string, heard: (raw: unknown) => void): MessagePortMain | null => {
-		if (!isPortName(name) || window.isDestroyed() || !isDesk(window.webContents.getURL()))
+		const window = current();
+		if (
+			!isPortName(name) ||
+			window === null ||
+			window.isDestroyed() ||
+			!isDesk(window.webContents.getURL())
+		)
 			return null;
 		ports.get(name)?.close();
 		const {port1, port2} = new MessageChannelMain();
@@ -135,13 +159,17 @@ const portsFor = (window: BrowserWindow) => {
 			if (heard.kind === "refused")
 				console.warn(`fabrika: refused a message on ${name}: ${heard.why}`);
 		});
-		if (port !== null) screen.show((m) => port.postMessage(m));
+		// Only while it is still the port of that name: a page closed or loaded again took it away.
+		if (port !== null)
+			screen.show((m) => {
+				if (ports.get(name) === port) port.postMessage(m);
+			});
 	};
 	const gone = (name: string) => {
 		ports.get(name)?.close();
 		ports.delete(name);
 	};
-	/** The page was loaded again: every port it had is dead. */
+	/** The page was loaded again, or its window closed: every port it had is dead. */
 	const reset = () => {
 		for (const port of ports.values()) port.close();
 		ports.clear();
@@ -164,8 +192,23 @@ const main = Effect.gen(function* () {
 	const at = (...names: string[]) => path.join(app.getPath("userData"), ...names);
 	const ledger = yield* Layer.build(layerSqliteSync({path: at("ledger.sqlite"), tickMs: 1000}));
 
-	const window = deskWindow(path.join(DIST, "preload.cjs"));
-	const ports = portsFor(window);
+	/** The desk's window now, or none: closed, and on macOS the app runs on in the dock. */
+	let current: BrowserWindow | null = null;
+	const ports = portsFor(() => current);
+	/** The window there is, brought forward, or a new one: its page asks for the desk as it loads. */
+	const showWindow = () => {
+		if (current !== null) {
+			if (current.isMinimized()) current.restore();
+			current.focus();
+			return;
+		}
+		const made = deskWindow(path.join(DIST, "preload.cjs"));
+		current = made;
+		made.once("closed", () => {
+			if (current === made) current = null;
+			ports.reset();
+		});
+	};
 	const tiles = yield* startTiles({
 		history: yield* sharedHistory(yield* fileHistory(at("history"))),
 		place: (tile) => ({
@@ -185,7 +228,6 @@ const main = Effect.gen(function* () {
 		Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
 		Effect.orElseSucceed((): unknown => null),
 	);
-	const over = yield* Deferred.make<void>();
 	// What the desk asks, in the order it asked: an open is done before the close after it.
 	const asks = yield* Queue.unbounded<FromDesk>();
 	const answerOne = (m: FromDesk) => {
@@ -195,25 +237,25 @@ const main = Effect.gen(function* () {
 			case "close":
 				return tiles.close(m.tile);
 			case "stop":
-				return tiles.stop(m.run);
+				return tiles.stop(m.tile);
 			case "save":
 				return fs
 					.writeFileString(at("desk.json"), JSON.stringify(m.desk))
 					.pipe(
 						Effect.catch((e) => Effect.logError(`fabrika: could not keep the desk: ${e.message}`)),
 					);
-			case "quit":
-				// The last tile closed: the next start begins on one fresh tile.
+			case "empty":
+				// The last tile closed: its window closes, and the next one begins on one fresh tile.
 				return fs
 					.remove(at("desk.json"))
-					.pipe(Effect.ignore, Effect.andThen(Deferred.succeed(over, undefined)));
+					.pipe(Effect.ignore, Effect.andThen(Effect.sync(() => current?.close())));
 		}
 	};
 	yield* Queue.take(asks).pipe(Effect.flatMap(answerOne), Effect.forever, Effect.forkScoped);
 
 	const services = yield* Effect.context<never>();
 	ipcMain.on(PORT_CHANNEL, (event) => {
-		if (!fromItsPage(window, event)) {
+		if (current === null || !fromItsPage(current, event)) {
 			console.warn(
 				`fabrika: refused a hello from ${event.senderFrame?.url ?? "a frame that is gone"}`,
 			);
@@ -234,16 +276,24 @@ const main = Effect.gen(function* () {
 			),
 		);
 	});
-	app.on("second-instance", () => {
-		if (window.isMinimized()) window.restore();
-		window.focus();
+	app.on("second-instance", showWindow);
+	// The dock icon, on macOS: the window there is, or a new one on the same desk.
+	app.on("activate", showWindow);
+	// Electron's own pattern: on macOS the app stays with no window; elsewhere it quits.
+	app.on("window-all-closed", () => {
+		if (process.platform !== "darwin") app.quit();
 	});
-	// Until the window closes, or the desk's last tile does: then every tile's tsh stops.
-	const closed = Effect.callback<void>((resume) => {
-		window.once("closed", () => resume(Effect.void));
+	showWindow();
+	// Until the app is asked to quit: Cmd-Q, or the last window closed off macOS. Then the scope
+	// closes, and every tile's tsh stops with it.
+	yield* Effect.callback<void>((resume) => {
+		const asked = (event: {preventDefault: () => void}) => {
+			event.preventDefault();
+			resume(Effect.void);
+		};
+		app.once("before-quit", asked);
+		return Effect.sync(() => app.off("before-quit", asked));
 	});
-	yield* Effect.raceFirst(closed, Deferred.await(over));
-	if (!window.isDestroyed()) window.close();
 }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(nodeFileSystem, nodePath)));
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -255,6 +305,7 @@ else
 					console.error(Cause.pretty(cause));
 					app.exit(1);
 				},
+				// Asked once already: this time nothing holds the quit back.
 				onSuccess: () => app.quit(),
 			}),
 		),

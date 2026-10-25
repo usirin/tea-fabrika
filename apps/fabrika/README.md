@@ -14,19 +14,23 @@ double 4
 double 6
 Ctrl-B |                     a second tile on the right, with a fresh tsh, focused
 tsh$ counter                 counter covers this tile: 0  [+1] [done]; Ctrl-C and tsh is back
-tsh$ tracker &               the tracker opens in a new tile beside; the prompt is back at once
+tsh$ tracker &               a job in the background; no tile opens, the prompt is back at once
+tsh$ attach %1               the tracker comes into this tile, as bash's fg
 Ctrl-B h                     focus moves left
-Ctrl-B x                     this tile has a run: "close it, and stop what runs in it?" y or n
-quit, and open again         the same tiles; each tsh lists its earlier jobs for attach
+Ctrl-B x                     always asks: "close t2? (y/n)". y, and a busy tile shows "closing"
+Ctrl-B x                     on a closing tile: "stop t2 now? (y/n)"
+red button, then dock icon   the window closes, the app runs on; a new window on the same desk
+Cmd-Q, and open again        the same tiles; each tsh lists its earlier jobs for attach
 ```
 
 ```ts
 // What goes between the page and the main process (src/messages.ts), each on its own port.
 // "desk": the desk machine in the page tells the main process what to do, and hears back.
-type FromDesk = {type: "open" | "close"; tile: TileId} | {type: "stop"; run: string}
-	| {type: "save"; desk: Saved} | {type: "quit"};
-type ToDesk = {type: "start"; saved: unknown} | {type: "covered" | "beside"; tile: TileId; run: Run}
-	| {type: "over"; run: string} | {type: "jobs"; tile: TileId; running: number} | {type: "ended"; tile: TileId};
+type FromDesk = {type: "open" | "close" | "stop"; tile: TileId}
+	| {type: "save"; desk: Saved} | {type: "empty"};
+type ToDesk = {type: "start"; saved: unknown} | {type: "covered"; tile: TileId; run: Run}
+	| {type: "over"; run: string} | {type: "jobs"; tile: TileId; running: number}
+	| {type: "closing" | "ended"; tile: TileId};
 // "tile:t1": t1's terminal, as a terminal is to a pty.
 type ToTerminal = {type: "write"; data: string};
 type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
@@ -51,10 +55,10 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge. One copy at a time; one window, sandboxed, on the app's own scheme; every way out refused. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page. Saves `desk.json` and each tile's jobs in the app home. |
+| `src/main.ts` | The Electron edge. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page. Saves `desk.json` and each tile's jobs in the app home. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
-| `src/tiles.ts` | One host per tile, each in its own scope. It tells the desk when a run covers a tile or opens beside it, and when it is over. Closing a tile ends its scope and drops its folder. |
+| `src/tiles.ts` | One host per tile, each in its own scope. It tells the desk when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
 | `src/host.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): Msgs in, Cmds for the main process out, and `route`, which says where a key goes. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
@@ -62,7 +66,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, `&`, zoom, the question, Ctrl-B twice, shared history, the safety checks, then quit and open again. Not in `pnpm test`. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit and open again, and the last tile closing the window. Not in `pnpm test`. macOS only. |
 
 ## Keys
 
@@ -73,7 +77,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `\|` or `-` | split the focused tile side by side, or top to bottom; the new tile runs a fresh tsh |
 | `h` `j` `k` `l`, or the arrows | focus left, down, up, right |
 | `z` | zoom the focused tile; again to undo |
-| `x` | close the focused tile; if something runs in it, ask y or n first |
+| `x` | ask `close t2? (y/n)`, then close the focused tile; on a closing tile, ask `stop t2 now? (y/n)` |
 | `N` | a new workspace, with one tile |
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
@@ -91,16 +95,29 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   is the next tile's Up.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
-- **A run with `&` opens in a new tile beside its tsh.** The focus stays on the tsh, and the
-  prompt is back at once.
-- **Closing a tile with something running asks y or n.** y ends the tile's tsh and every run it
-  started, and deletes its folder, as tmux's `kill-pane` hangs up the shell. A tile with nothing
-  running closes at once. Ctrl-D in a tile's tsh closes that tile.
+- **A run with `&` is a job in the background, and no tile opens.** The prompt is back at once.
+  `attach %n` brings it into the tile, as bash's `fg` does.
+- **Ctrl-B x always asks, as tmux's `kill-pane` does:** `close t2? (y/n)`. Only y says yes; any
+  other key says no.
+  - On a tile with nothing running, y closes it at once.
+  - On a busy tile, y gives tsh and every run it started `close`: the end of their inputs, as a
+    hung-up terminal gives a shell. It does not stop them. The tile shows "closing" until they
+    have all ended, then it goes. There is no timer.
+  - Ctrl-B x on a closing tile asks `stop t2 now? (y/n)`. y stops them, and the tile goes.
+  - Closing a tile ends only what that tile's tsh started. A run shown in another tile is left
+    alone. Its folder is deleted once it goes.
+  - Ctrl-D in a tile's tsh closes that tile.
+- **The window, macOS's way.** The red button closes the window only: the app stays in the dock
+  and everything runs on. The dock icon, or a second start, makes a new window on the same desk,
+  with the live runs. Cmd-Q quits, and only then do the tiles end. On Windows and Linux, closing
+  the window quits, as Electron's own pattern does.
+- **The host lives in the main process for now.** So jobs live through a closed window, but not
+  through Cmd-Q.
 - **Quit and open again:** the layout comes back from `desk.json`, and each tile's tsh opens on
   its own folder, so `attach %n` finds the earlier jobs. A tile that showed a run comes back as
   tsh: the run ended with the app.
-- **Closing the last tile quits the app** and removes `desk.json`, so the next start is one
-  fresh tile.
+- **Closing the last tile closes the window, not the app,** and removes `desk.json`, so the next
+  window opens on one fresh tile.
 
 ### A port per tile and per run
 
@@ -218,12 +235,17 @@ Left for later, from Tuval's keys and the build:
 
 - **The rest of Tuval's keys:** `w` (pick a tile from a list), `a` (focus the list), `:` (a
   command line), `r` (reload the config), `p` (the process board).
-- **x on a run tile stops the run hard,** as `stop` does. Closing its inputs first, as the old
-  window close did, would let a program say goodbye.
+- **The host in its own process,** so jobs live through Cmd-Q too. For now it lives in main.
+- **A closing tile that finishes while the window is closed** goes when the next window opens.
+  If it was the last tile, that window closes again at once.
+- **An old `desk.json` with run tiles in it** is not read: the app starts on one fresh tile.
 - **A crash leaves tile folders** that no `desk.json` names. Nothing cleans them yet.
 - **The terminal build's single `storage/` folder is not moved over.** Its jobs are not found by
   any tile.
 - **History: the last write wins.** Two tiles saving at the same moment can drop one line.
-- **A page reloaded while runs go on** puts each run back in a new tile beside its tsh.
-- **An unfocused terminal still shows a solid cursor.**
+- **A page reloaded while runs go on** puts each run shown in a tile back in that tile.
+  Background runs stay in the background.
+- **An unfocused terminal still shows a solid cursor.** ghostty-web 0.4.0 has only filled
+  cursors (block, underline, bar) and no focus-aware or hollow one, so the hollow cursor waits
+  for a ghostty-web that has it.
 - **No packaging, signing or updates.**

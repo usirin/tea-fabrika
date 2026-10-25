@@ -11,7 +11,8 @@ import {defineMachine} from "@demlik/tea";
 //   stage_ended one program of a job ended; when the last has, the job leaves the table
 //   detached    tsh left (or came back after a crash): no job of it runs now
 //   attached    a detached job was started again under its run ids
-//   dropped     a detached job was stopped for good: it leaves the table
+//   foreground  a job running in the background was brought to the foreground, as bash's `fg`
+//   dropped    a detached job was stopped for good: it leaves the table
 //
 // A job that ended is gone from the table, as a finished job is gone from a
 // shell's `jobs`. What it said was printed while it ran.
@@ -55,6 +56,8 @@ export type JobsMsg =
 	/** `n`: one job, whose start again did not go; `null`: every job. */
 	| {readonly type: "detached"; readonly n: number | null}
 	| {readonly type: "attached"; readonly n: number; readonly background: boolean}
+	/** A running job tsh now waits for, as bash's `fg`: the prompt waits for its end. */
+	| {readonly type: "foreground"; readonly n: number}
 	/** A detached job its owner stopped: it will not be started again. */
 	| {readonly type: "dropped"; readonly n: number};
 
@@ -128,6 +131,13 @@ export const jobsMachine = defineMachine({
 								stages: eachStage(job.stages, (st) => ({...st, ended: false})),
 							}
 						: job,
+				),
+			}),
+		foreground: (s, m) =>
+			step({
+				...s,
+				jobs: s.jobs.map((job) =>
+					job.n === m.n && job.state === "running" ? {...job, background: false} : job,
 				),
 			}),
 		dropped: (s, m) =>

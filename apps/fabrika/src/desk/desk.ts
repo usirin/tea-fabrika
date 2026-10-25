@@ -14,7 +14,6 @@ import {
 	remove,
 	resize,
 	type Shown,
-	type Shows,
 	setShows,
 	split,
 	type TileId,
@@ -33,20 +32,33 @@ import {
 //   [desk] = init(null)                                    one workspace, one tile t1: open {tile: "t1"}
 //   update(desk, {type: "key", key: "<c-b>", at: 0})       the prefix is armed
 //   update(desk, {type: "key", key: "|", at: 10})          t2 beside t1, focused: open {tile: "t2"}, save
-//   update(desk, {type: "key", key: "x", at: 20})          ... after the prefix: t2 closes: close {tile: "t2"}
+//   update(desk, {type: "key", key: "x", at: 20})          ... after the prefix: "close t2? (y/n)"
+//   update(desk, {type: "key", key: "y", at: 30})          nothing runs in t2: it goes, stop {tile: "t2"}
+//
+// Closing a tile is tmux's `confirm-before -p "kill-pane #P? (y/n)" kill-pane`, made soft:
+//
+//   Ctrl-B x                 always asks: "close t2? (y/n)". Only y says yes; any other key, no
+//   y, nothing runs in t2    t2 goes at once: stop {tile: "t2"}
+//   y, something runs        t2 is closing: close {tile: "t2"} gives its tsh and programs the end
+//                            of their inputs. When its tsh has ended (`ended`), t2 goes
+//   Ctrl-B x on a closing t2 asks "stop t2 now? (y/n)": y and t2 goes, stop {tile: "t2"}
+//
+// No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
 // What it is told, besides keys and clicks, comes from the main process, where each tile's tsh
-// runs (tiles.ts): a run with a view began in a tile's foreground (`covered`) or with `&`
-// (`beside`), a run ended (`over`), a tile's running jobs (`jobs`), a tile's tsh ended (`ended`).
+// runs (tiles.ts): a run with a view is in a tile's foreground (`covered`), a run ended (`over`),
+// a tile's running jobs (`jobs`), a tile was closing before this page loaded (`closing`), a tile's
+// tsh ended (`ended`). A run started with `&` is a job in the background, as in bash, and the desk
+// hears nothing of it until `attach` brings it to the foreground.
 //
 // What it asks for, each a Cmd (the page carries them to the main process, window/desk.tsx):
 //
 //   open {tile}          start the tile's tsh, or show the one that runs
-//   close {tile}         end the tile's tsh and its runs, as tmux's kill-pane
-//   stop {run}           stop one run: its own tile was closed
+//   close {tile}         give the tile's tsh and its programs the end of their inputs
+//   stop {tile}          the tile is gone: stop what still runs in it, as tmux's kill-pane
 //   send {tile, data}    bytes for the tile's tsh, as if typed: Ctrl-B twice, Ctrl-C over a program
 //   save {desk}          the desk changed: keep it for the next start
-//   quit {}              the last tile closed: the app quits, as tmux ends with its last pane
+//   empty {}             the last tile closed: the window closes, as the last tab's does in Terminal
 //
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
@@ -69,10 +81,15 @@ export interface Open {
 	readonly workspaces: readonly [Workspace, ...Workspace[]];
 	readonly active: string;
 	readonly prefix: Prefix;
-	/** The tile asking "close it, and stop what runs in it?", in the active workspace, or none. */
+	/**
+	 * The tile asking y or n, in the active workspace, or none. What it asks follows from the tile
+	 * (`questionOf`): "close t2?", or "stop t2 now?" once it is closing.
+	 */
 	readonly ask: TileId | null;
 	/** How many jobs run in each tile's tsh, as its tsh says. A tile not named runs none. */
 	readonly running: Readonly<Record<TileId, number>>;
+	/** The tiles closing: their programs have been given the end of their inputs, and the tile waits for their end. */
+	readonly closing: readonly TileId[];
 	/** The next number to mint: every id is `t<n>`, `s<n>` or `w<n>` for one `n`, spent once. */
 	readonly next: number;
 }
@@ -91,15 +108,15 @@ export type DeskMsg =
 			readonly stack: string;
 			readonly sizes: Readonly<Record<string, number>>;
 	  }
-	/** A run with a view began in a tile's foreground: it covers the tile's tsh. */
+	/** A run with a view is in a tile's foreground, started there or attached: it covers the tile's tsh. */
 	| {readonly type: "covered"; readonly tile: TileId; readonly run: Shown}
-	/** A run with a view began with `&`: it gets a tile of its own beside the tile's tsh. */
-	| {readonly type: "beside"; readonly tile: TileId; readonly run: Shown}
 	/** A run with a view ended. */
 	| {readonly type: "over"; readonly run: string}
 	/** How many jobs run in a tile's tsh now. */
 	| {readonly type: "jobs"; readonly tile: TileId; readonly running: number}
-	/** A tile's tsh ended: `exit`, or Ctrl-D on an empty line. */
+	/** A tile was closing before this page loaded: the main process still waits on its programs. */
+	| {readonly type: "closing"; readonly tile: TileId}
+	/** A tile's tsh ended: `exit`, Ctrl-D on an empty line, or its programs ended after a close. */
 	| {readonly type: "ended"; readonly tile: TileId};
 
 /** A tile's id: `t` and a number. The main process names a folder by it, so nothing else passes. */
@@ -124,18 +141,14 @@ export type Saved = typeof Saved.Type;
 
 export const open = Cmd.define("open", {input: Tile, ok: Done, err: []});
 export const close = Cmd.define("close", {input: Tile, ok: Done, err: []});
-export const stop = Cmd.define("stop", {
-	input: Schema.Struct({run: Schema.String}),
-	ok: Done,
-	err: [],
-});
+export const stop = Cmd.define("stop", {input: Tile, ok: Done, err: []});
 export const send = Cmd.define("send", {
 	input: Schema.Struct({tile: TileIdSchema, data: Schema.String}),
 	ok: Done,
 	err: [],
 });
 export const save = Cmd.define("save", {input: Schema.Struct({desk: Saved}), ok: Done, err: []});
-export const quit = Cmd.define("quit", {input: Schema.Struct({}), ok: Done, err: []});
+export const empty = Cmd.define("empty", {input: Schema.Struct({}), ok: Done, err: []});
 
 export type DeskCmd =
 	| ReturnType<typeof open>
@@ -143,7 +156,7 @@ export type DeskCmd =
 	| ReturnType<typeof stop>
 	| ReturnType<typeof send>
 	| ReturnType<typeof save>
-	| ReturnType<typeof quit>;
+	| ReturnType<typeof empty>;
 
 type Step = readonly [Desk, readonly DeskCmd[]];
 
@@ -157,6 +170,7 @@ export const fresh = (): Open => ({
 	prefix: DISARMED,
 	ask: null,
 	running: {},
+	closing: [],
 	next: 2,
 });
 
@@ -208,6 +222,7 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 	const running = Object.fromEntries(
 		Object.entries(s.running).filter(([tile]) => !doomed.includes(tile)),
 	);
+	const closing = s.closing.filter((tile) => !doomed.includes(tile));
 	const ask = s.ask !== null && doomed.includes(s.ask) ? null : s.ask;
 	if (left.length === 0) {
 		const at = s.workspaces.findIndex((w) => w.id === ws.id);
@@ -216,11 +231,11 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 		const workspaces: Open["workspaces"] = [first, ...rest];
 		const active =
 			s.active !== ws.id ? s.active : (workspaces[Math.min(at, workspaces.length - 1)] ?? first).id;
-		return {...s, workspaces, active, running, ask};
+		return {...s, workspaces, active, running, closing, ask};
 	}
 	const layout = doomed.reduce(remove, ws.layout);
 	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, left, ws.focused);
-	return {...withWorkspace(s, {...ws, layout, focused}), running, ask};
+	return {...withWorkspace(s, {...ws, layout, focused}), running, closing, ask};
 };
 
 /** Where focus goes when its tile is taken: the next tile left in reading order, else the one before. */
@@ -231,29 +246,35 @@ const heirOf = (all: readonly TileId[], left: readonly TileId[], from: TileId): 
 	return after ?? before ?? left[0] ?? from;
 };
 
-/** Close a tile: a tsh tile with the tiles of its runs, or a run's own tile with its run. */
-const closeTile = (s: Open, tile: TileId): Step => {
+/** The tile goes from the desk, and what still runs in it stops. The last tile empties the desk. */
+const goneTile = (s: Open, tile: TileId): Step => {
 	const ws = whereIs(s, tile);
-	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (ws === undefined || node === null) return [s, []];
-	const shows = node.shows;
-	const doomed =
-		shows.kind === "tsh"
-			? [
-					tile,
-					...tilesOf(ws)
-						.filter((t) => t.shows.kind === "run" && t.shows.of === tile)
-						.map((t) => t.id),
-				]
-			: [tile];
-	const own: DeskCmd = shows.kind === "tsh" ? close({tile}) : stop({run: shows.run.id});
-	const next = drop(s, ws, doomed);
-	return next.at === "over" ? [next, [own, quit({})]] : [next, [own, ...keep(next)]];
+	if (ws === undefined) return [s, []];
+	const next = drop(s, ws, [tile]);
+	const own = stop({tile});
+	return next.at === "over" ? [next, [own, empty({})]] : [next, [own, ...keep(next)]];
 };
 
-/** Does closing this tile stop something that runs? Then the desk asks first. */
-const stopsSomething = (s: Open, tile: TileNode): boolean =>
-	tile.shows.kind === "run" || (s.running[tile.id] ?? 0) > 0 || tile.shows.run !== null;
+/** Does something run in this tile: a job in its tsh, or a run covering it? */
+const busy = (s: Open, tile: TileNode): boolean =>
+	(s.running[tile.id] ?? 0) > 0 || tile.shows.run !== null;
+
+/** The question a tile asks, as tmux's confirm-before puts it: close it, or, once it is closing, stop it now. */
+export const questionOf = (s: Open, tile: TileId): string =>
+	s.closing.includes(tile) ? `stop ${tile} now? (y/n)` : `close ${tile}? (y/n)`;
+
+/**
+ * y to the tile's question. A closing tile goes now, stopped. One with nothing running goes at
+ * once. One with something running is closing: its programs get the end of their inputs, and it
+ * goes when its tsh says it ended.
+ */
+const yes = (s: Open, tile: TileId): Step => {
+	const ws = whereIs(s, tile);
+	const node = ws === undefined ? null : findTile(ws.layout, tile);
+	if (node === null) return [s, []];
+	if (s.closing.includes(tile) || !busy(s, node)) return goneTile(s, tile);
+	return [{...s, closing: [...s.closing, tile]}, [close({tile})]];
+};
 
 /** What a key after the prefix does. */
 const act = (s: Open, does: Does): Step => {
@@ -280,10 +301,9 @@ const act = (s: Open, does: Does): Step => {
 			return [next, keep(next)];
 		}
 		case "close": {
-			const tile = findTile(ws.layout, ws.focused);
-			if (tile === null) return [s, []];
-			if (stopsSomething(s, tile)) return [{...s, ask: tile.id}, []];
-			return closeTile(s, tile.id);
+			// Always asked, as tmux's default binding: confirm-before, then kill-pane.
+			if (findTile(ws.layout, ws.focused) === null) return [s, []];
+			return [{...s, ask: ws.focused}, []];
 		}
 		case "new": {
 			const made = blank(s.next);
@@ -322,7 +342,7 @@ const unarmed = (s: Open, key: string): Routed => {
 	if (key === PREFIX) return desk([{...s, prefix: {armed: true, until: null}}, []]);
 	const tile = focusedOf(s);
 	// The program covers the terminal, so its tsh would never see Ctrl-C: the desk hands it on.
-	if (key === "<c-c>" && tile !== null && tile.shows.kind === "tsh" && tile.shows.run !== null)
+	if (key === "<c-c>" && tile !== null && tile.shows.run !== null)
 		return desk([s, [send({tile: tile.id, data: CTRL_C})]]);
 	return {kind: "tile"};
 };
@@ -335,7 +355,7 @@ const unarmed = (s: Open, key: string): Routed => {
 export const route = (s: Open, key: string, at: number): Routed => {
 	if (s.ask !== null) {
 		// tmux's confirm-before: only y says yes; any other key says no.
-		if (key === "y") return desk(closeTile({...s, ask: null}, s.ask));
+		if (key === "y") return desk(yes({...s, ask: null}, s.ask));
 		return desk([{...s, ask: null}, []]);
 	}
 	const {prefix} = s;
@@ -355,7 +375,7 @@ export const route = (s: Open, key: string, at: number): Routed => {
 	if (key === PREFIX) {
 		// tmux's send-prefix: Ctrl-B twice sends one Ctrl-B on, to a tsh that is not covered.
 		const tile = focusedOf(s);
-		const to = tile !== null && tile.shows.kind === "tsh" && tile.shows.run === null;
+		const to = tile !== null && tile.shows.run === null;
 		return desk([disarmed, to ? [send({tile: tile.id, data: CTRL_B})] : []]);
 	}
 	// A key with no binding after the prefix is swallowed, as tmux does.
@@ -400,49 +420,35 @@ const clicked = (s: Open, tile: TileId): Step => {
 const covered = (s: Open, tile: TileId, run: Shown): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (ws === undefined || node === null || node.shows.kind !== "tsh") return [s, []];
+	if (ws === undefined || node === null) return [s, []];
 	return [withWorkspace(s, {...ws, layout: setShows(ws.layout, tile, {kind: "tsh", run})}), []];
 };
 
-const beside = (s: Open, tile: TileId, run: Shown): Step => {
-	const ws = whereIs(s, tile);
-	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (ws === undefined || node === null || node.shows.kind !== "tsh") return [s, []];
-	const ids = {tile: `t${s.next}`, stack: `s${s.next}`};
-	const shows: Shows = {kind: "run", run, of: tile};
-	const layout = split(unzoom(ws.layout), tile, "horizontal", ids, shows);
-	if (findTile(layout, ids.tile) === null) return [s, []];
-	// Focus stays on the tsh, as tmux's `split-window -d`: the prompt is back, and keys go to it.
-	const next = {...withWorkspace(s, {...ws, layout}), next: s.next + 1};
-	return [next, keep(next)];
+/** A run ended: each tile it covered shows its tsh again. */
+const over = (s: Open, run: string): Step => {
+	let next = s;
+	for (const {tile} of showing(s, run)) {
+		const ws = whereIs(next, tile.id);
+		if (ws !== undefined)
+			next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
+	}
+	return next === s ? [s, []] : [next, keep(next)];
 };
 
-const over = (s: Open, run: string): Step => {
-	let next: Desk = s;
-	for (const {tile} of showing(s, run)) {
-		if (next.at !== "open") break;
-		const ws = whereIs(next, tile.id);
-		if (ws === undefined) continue;
-		if (tile.shows.kind === "tsh")
-			next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
-		else next = drop(next, ws, [tile.id]);
-	}
-	if (next === s) return [s, []];
-	return next.at === "open" ? [next, keep(next)] : [next, [quit({})]];
-};
+/** A tile the main process says is closing: its question is "stop it now?" from here on. */
+const closingNow = (s: Open, tile: TileId): Step =>
+	whereIs(s, tile) === undefined || s.closing.includes(tile)
+		? [s, []]
+		: [{...s, closing: [...s.closing, tile]}, []];
 
 export const deskMachine = defineMachine({
 	types: {model: {} as Desk, msg: {} as DeskMsg},
-	cmds: [open, close, stop, send, save, quit],
+	cmds: [open, close, stop, send, save, empty],
 	init: (loaded) => {
 		if (loaded !== null && loaded.at === "open")
 			return [
 				loaded,
-				loaded.workspaces.flatMap((ws) =>
-					tilesOf(ws)
-						.filter((t) => t.shows.kind === "tsh")
-						.map((t) => open({tile: t.id})),
-				),
+				loaded.workspaces.flatMap((ws) => tilesOf(ws).map((t) => open({tile: t.id}))),
 			];
 		const s = fresh();
 		return [s, [open({tile: "t1"}), ...keep(s)]];
@@ -461,14 +467,14 @@ export const deskMachine = defineMachine({
 			return [next, keep(next)];
 		}),
 		covered: onOpen((s, m) => covered(s, m.tile, m.run)),
-		beside: onOpen((s, m) => beside(s, m.tile, m.run)),
 		over: onOpen((s, m) => over(s, m.run)),
 		jobs: onOpen((s, m) =>
 			whereIs(s, m.tile) === undefined
 				? [s, []]
 				: [{...s, running: {...s.running, [m.tile]: Math.max(0, m.running)}}, []],
 		),
-		ended: onOpen((s, m) => closeTile(s, m.tile)),
+		closing: onOpen((s, m) => closingNow(s, m.tile)),
+		ended: onOpen((s, m) => goneTile(s, m.tile)),
 		open_ok: noop,
 		open_err: noop,
 		close_ok: noop,
@@ -479,8 +485,8 @@ export const deskMachine = defineMachine({
 		send_err: noop,
 		save_ok: noop,
 		save_err: noop,
-		quit_ok: noop,
-		quit_err: noop,
+		empty_ok: noop,
+		empty_err: noop,
 	},
 });
 
@@ -489,8 +495,9 @@ const decodeSaved = Schema.decodeUnknownOption(Saved);
 
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the
- * desk. What ran in it is not running now: a tile of a run goes, a tile covered by a run shows its
- * tsh again, and `attach` brings the run back. The prefix is not armed and nothing is asked.
+ * desk. A tile covered by a run shows its tsh again: the main process says again what runs now
+ * (`covered`), and after a quit nothing does, and `attach` brings the run back. The prefix is not
+ * armed, nothing is asked, and nothing is closing until the main process says so.
  */
 export const restore = (raw: unknown): Open | null => {
 	const read = decodeSaved(raw);
@@ -501,12 +508,9 @@ export const restore = (raw: unknown): Open | null => {
 	const workspaces: Workspace[] = [];
 	for (const ws of saved.workspaces) {
 		let layout = ws.layout;
-		for (const t of [...tiles(layout.root)]) {
-			if (t.shows.kind === "run") layout = remove(layout, t.id);
-			else if (t.shows.run !== null) layout = setShows(layout, t.id, TSH);
-		}
+		for (const t of [...tiles(layout.root)])
+			if (t.shows.run !== null) layout = setShows(layout, t.id, TSH);
 		const left = [...tiles(layout.root)];
-		if (left.some((t) => t.shows.kind === "run")) continue;
 		if (checkTree(layout).length > 0) return null;
 		for (const t of left) {
 			const n = TILE_ID.exec(t.id);
@@ -530,6 +534,7 @@ export const restore = (raw: unknown): Open | null => {
 		prefix: DISARMED,
 		ask: null,
 		running: {},
+		closing: [],
 		next: Math.max(saved.next, top + 1),
 	};
 };
