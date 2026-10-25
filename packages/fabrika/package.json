@@ -151,6 +151,7 @@
 		"@types/node": "catalog:",
 		"effect": "catalog:",
 		"esbuild": "catalog:",
+		"fast-check": "catalog:",
 		"miniflare": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
