@@ -2414,10 +2414,10 @@ const twoDigitYear: Law = {
 };
 
 /**
- * 33. BUG, found by this law on 366c50b: in the year fifty years on, the line runs by the timestamp,
- *     not the year. `httpDate` reads the two digits by the year alone, so "Tuesday, 01-Feb-77
- *     00:00:00 GMT", more than 50 years after now (15 Jan 2027), reads as 2077 and waits an hour,
- *     where RFC 9110 reads 1977 and no wait. Run as a known bug below, not with the laws.
+ * 33. In the year fifty years on, the line runs by the timestamp, not the year. Found as a bug on
+ *     366c50b (`httpDate` read the two digits by the year alone, so "Tuesday, 01-Feb-77 00:00:00
+ *     GMT", more than 50 years after now (15 Jan 2027), read as 2077 and waited an hour, where
+ *     RFC 9110 reads 1977 and no wait); fixed in 687f35d.
  */
 const lineYear: Law = {
 	name: "in the year fifty years on, a two-digit year past the 50-year line reads as the past",
@@ -2463,13 +2463,14 @@ const LAWS: readonly Law[] = [
 	datesWait,
 	pastNoWait,
 	twoDigitYear,
+	lineYear,
 ];
 
 /**
  * Laws that found a bug in the real code. Each is kept as written and run as a known failure, so the
  * suite stays green and the day the bug is fixed this list turns red: then the law moves to `LAWS`.
  */
-const BUGS: readonly (readonly [Law, RegExp])[] = [[lineYear, /waits 3600000 ms, want 0 ms/]];
+const BUGS: readonly (readonly [Law, RegExp])[] = [];
 
 // ---------------------------------------------------------------- planted mistakes
 
@@ -2745,11 +2746,16 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	centuryYear: () =>
 		plant(
 			"keys-github",
-			"const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);",
-			"const year = 1900 + Number(yy);",
+			"const next = thisYear + ((((Number(yy) - thisYear) % 100) + 100) % 100);",
+			"const next = 1900 + Number(yy);",
 		),
 	// The line drawn at sixty years, not fifty.
-	sixtyYears: () => plant("keys-github", "ahead > 50 ? ahead - 100", "ahead > 60 ? ahead - 100"),
+	sixtyYears: () =>
+		plant(
+			"keys-github",
+			"line.setUTCFullYear(thisYear + 50);",
+			"line.setUTCFullYear(thisYear + 60);",
+		),
 	// asctime dates are not read.
 	noAsctime: () =>
 		plant("keys-github", "const asc = ASCTIME.exec(s);", 'const asc = ASCTIME.exec("");'),
@@ -2779,24 +2785,6 @@ describe("the door's laws", () => {
 			expect(String((e as Error).cause ?? e)).toMatch(how);
 		},
 	);
-
-	// The bug's law is right, not the bug: on a copy with one way of fixing it (the line drawn by
-	// the timestamp, fifty years on from now), it holds, and so does every other law.
-	it("a known bug's law holds on a copy with that bug fixed", async () => {
-		const fixed = await plant(
-			"keys-github",
-			"const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);\n\t\treturn utc(year, mon, Number(d), Number(h), Number(m), Number(sec));",
-			[
-				"const at = (year: number) => utc(year, mon, Number(d), Number(h), Number(m), Number(sec));",
-				"const line = new Date(now);",
-				"line.setUTCFullYear(thisYear + 50);",
-				"const t = at(thisYear + ahead);",
-				"return t !== null && t > line.getTime() ? at(thisYear + ahead - 100) : t;",
-			].join("\n"),
-		);
-		await lineYear.run(fixed);
-		expect(await broken(fixed)).toEqual([]);
-	}, 60_000);
 
 	it("each law is seen to fail on a planted mistake", async () => {
 		const caught: Record<string, readonly string[]> = {};
@@ -2848,7 +2836,13 @@ describe("the door's laws", () => {
 			firstIdOnly: [provenAsModel.name],
 			limitIgnored: [limitSilence.name, waitEndsForAll.name],
 			limitByIdOnly: [limitSilence.name, waitEndsForAll.name],
-			limitUncapped: [limitCapped.name, digitsWait.name, datesWait.name, twoDigitYear.name],
+			limitUncapped: [
+				limitCapped.name,
+				digitsWait.name,
+				datesWait.name,
+				twoDigitYear.name,
+				lineYear.name,
+			],
 			failKeptAsAnswer: [keptExactly.name],
 			keptOneMsLong: [githubCache.name, keptExactly.name],
 			failZeroKept: [limitSilence.name, keptExactly.name, junkIsNoHeader.name, pastNoWait.name],
@@ -2859,15 +2853,16 @@ describe("the door's laws", () => {
 				datesWait.name,
 				pastNoWait.name,
 				twoDigitYear.name,
+				lineYear.name,
 			],
 			looseReset: [junkIsNoHeader.name],
 			spacesDropped: [junkIsNoHeader.name, digitsWait.name],
 			tenDigitsOnly: [digitsWait.name],
 			secondsAsMs: [limitSilence.name, waitEndsForAll.name, digitsWait.name],
-			centuryYear: [datesWait.name, twoDigitYear.name],
-			sixtyYears: [pastNoWait.name, twoDigitYear.name],
+			centuryYear: [datesWait.name, twoDigitYear.name, lineYear.name],
+			sixtyYears: [twoDigitYear.name, lineYear.name],
 			noAsctime: [datesWait.name, pastNoWait.name],
-			pastWaits: [pastNoWait.name, twoDigitYear.name],
+			pastWaits: [pastNoWait.name, twoDigitYear.name, lineYear.name],
 		});
 		// Every law is caught by at least one plant.
 		const all = new Set(Object.values(caught).flat());
