@@ -156,7 +156,8 @@ type Task = {id: TaskId; title: string; ends: "pr" | "answer"; scenario: Scenari
 
 ```ts
 // A sketch. One tool run on one property, at one version and one commit.
-{type: "checked", plan: "demlik-1", property: "p1", version: 1, head: "a1b2c3d", tool: "test", result: "pass"}
+// The same shape as in the test writer's note.
+{fact: "checked", property: "p1", version: 1, head: "a1b2c3", tool: "test", result: "red"}
 ```
 
 - **Open:** whether a property's lasting id, after the ticket closes, is the
@@ -226,9 +227,8 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
   join lets "ab" + "c" and "a" + "bc" share a hash.
 
 ```ts
-// A sketch, in the shape of the tracker note's `approved` fact, with the version added.
-// That note names the plan "p-1". Here it is named by its first ticket, as ids.ts names
-// plans, so it is not read as a property's id.
+// A sketch: the tracker note's `approved` fact. A plan is named by its first ticket, as
+// ids.ts names plans, so it never reads like a property's id.
 {fact: "approved", ticket: "demlik-1", plan: "demlik-1", version: 2, text: "sha256:9c1f…"}
 const covers = (yes: Approved, now: Ticket) => yes.text === sha256(JSON.stringify([now.title, now.body]));
 ```
@@ -253,9 +253,9 @@ That note is still proposed. These parts of it no longer hold:
 
 These parts stand: red first for a new property, green on today's code for an
 existing one, the mutation step after the build, and the owner approving the
-properties with the plan. The verify writer's asks, `ask:owner:already_kept`
-and `ask:owner:not_kept`, keep their old words: their new names are not
-picked.
+properties with the plan. The verify writer is now the test writer, and its
+asks are `already_passes`, `fails_on_base` and `cannot_test`
+([The test writer](./the-test-writer.md)).
 
 [Five steps for every check](./five-steps-for-every-check.md) still names "a
 proof only past a bound". Under this note, that step has no tool word until
