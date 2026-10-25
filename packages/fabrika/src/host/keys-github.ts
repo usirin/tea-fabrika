@@ -100,8 +100,10 @@ export const httpDate = (s: string, now: number): number | null => {
 		// The line is the time, not the year: past now plus 50 years, it is a century back.
 		const line = new Date(now);
 		line.setUTCFullYear(thisYear + 50);
+		// A day that year does not have (29 Feb) is past the line when its whole year is.
 		const t = at(next);
-		return t !== null && t > line.getTime() ? at(next - 100) : t;
+		const past = t === null ? next - thisYear > 50 : t > line.getTime();
+		return past ? at(next - 100) : t;
 	}
 	const asc = ASCTIME.exec(s);
 	if (asc !== null) {
