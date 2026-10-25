@@ -4,7 +4,8 @@
 owner picks machine by machine, then one rename pass and a short glossary page
 follow, as [Use the industry's names](./direction/use-the-industrys-names.md)
 says. A row marked **picked 2026-10-24** is the owner's choice; the rename
-pass has not run yet.
+pass has not run yet. A row marked **held 2026-10-24** has a weak lean the
+owner kept for the glossary pass: not picked, not dropped.
 
 ```ts
 // The whole idea, on one name.
@@ -34,20 +35,28 @@ The big problem is not words that differ from the industry's. It is one word
 used for two things inside this repo: 115 rows. Fixing those first gives the
 most clarity per rename.
 
+These counts are the names in the code when the sweep ran. The four rows added
+on 2026-10-24 for the owner's plan picks (`Criterion.read`, `Property.id`,
+`Property.stories`, the `checked` fact) are not in them, and `Line.key`, marked
+two-ideas after the pick of `p1` for a property, is counted as ok.
+
 ## The ten worst clashes
 
 1. **`Check`** is a move (code judges an output), plan's `{how, what}` on
    every criterion, the asks core's `CheckAsk`, and a record's `check` command.
    `planProblems` is typed `Check<PlanDraft, Known>` in the folder that exports
-   the value `Check`.
+   the value `Check`. Picked 2026-10-24: plan's value goes, so in plan
+   `Check` is only the move.
 2. **`ask`** is an outcome verb, the ledger record waiting on a person, a
    question's text (`RulingAsk.ask`), the combo `createAsk`, and (until the
    pick) every machine's input type.
 3. **`Facts` and `readFacts`.** `readFacts` is exported three times: plan's
    code facts, the ledger's events, and ship's PR facts. `prFacts` and the
-   promise gate's facts make five meanings.
+   promise gate's facts make five meanings. Picked 2026-10-24: plan's are
+   `CodeContext` now.
 4. **`job`** is a task's first criterion in plan, every hosted stage's input
    (`PlanJob` is exported twice), and the host's `jobs` table of timers.
+   Picked 2026-10-24: plan's is `scenario` now.
 5. **`fold`** is reading the ledger into state (`foldLedger`, `Folded`) and a
    ticket joining a plan (`fold`, `foldsOf`), in the same file.
 6. **The tag key.** Nineteen different keys tell union cases apart: `kind`,
@@ -60,7 +69,8 @@ most clarity per rename.
 8. **`kind`** is every outcome's tag, fabrika's machine type, the ledger row's
    event type, and the lane's `ChildKind`.
 9. **`Property`** (picked for `Promise`) clashes with the property's own
-   `tool: "property"`, and now means what `law` means.
+   `tool: "property"`, and now means what `law` means. Picked 2026-10-24: the
+   tool word is `"test"`, so only the overlap with `law` is left.
 10. **Money and tries.** `usd`, `budget`, `cost`, `costUsd`, `spend` name a cap
     or a cost; `tries`, `limit`, `MAX_RUNS`, `DEFAULT_TRIES` name one cap on
     attempts.
@@ -75,6 +85,25 @@ The owner picked these on 2026-10-24, and each row says so: `planDraft` →
 `Spend` → `Usage`, `stuck:unchecked` → `stuck:unfixed`, `key` → `session`, and
 `Promise` → `Property`. The sweep follows them: every `*Job` and `*Ask` input
 becomes `*Input`, and every `spend` key becomes `usage`.
+
+Later the same day the owner settled the rest of plan's names, with the plan
+stage's shape ([The plan stage](./direction/the-plan-stage.md), once it
+lands):
+
+- Plan's `Check` value goes: `Check` is only the move. A check a tool runs is a
+  `Property`; one a reviewer reads is a `Criterion`, with `read` where the
+  check's `what` was.
+- A property says `when` and `result`, as a criterion does, in place of `says`;
+  `why` in place of `harm`; `behavior: "new" | "existing"` in place of
+  `is: "new" | "kept"`; `tool: "test" | "tla"`; `stories` in place of
+  `serves`; `code` in place of `covers`. Its id is `p1`, `p2`.
+- A criterion's `serves` is `stories` too.
+- A task's `job` is `scenario`, with a required `fixture`.
+- `Facts` → `CodeContext`, `readFacts` → `readCodeContext`, `plan_facts` →
+  `plan_code_context`.
+- `Revision` stays.
+- Held for the glossary pass: `pointers`, `goal`, `at`, `Claim`, and calling a
+  revision's number `version`.
 
 ## The marks
 
@@ -104,9 +133,9 @@ plan's ids use.
 | `Plan.questions` | product calls the ticket leaves open | open questions ([MADR](https://adr.github.io/madr/)) | ok | |
 | `PlanDraft` | the plan as the planner writes it, with no ids | draft | ok | |
 | `planDraft` | the Draft move that writes a `PlanDraft`: told apart from the schema only by case | a Cmd is a verb in Elm ([Elm guide, commands](https://guide.elm-lang.org/effects/)) | two-ideas | **picked 2026-10-24:** `draftPlan` |
-| `Revision` | a plan's next words, written by code that holds the last version | an update input ([Prisma, partial types](https://www.prisma.io/docs/orm/prisma-client/type-safety/operating-against-partial-structures-of-model-types)); elsewhere a revision is a saved version ([MediaWiki, revision](https://www.mediawiki.org/wiki/Manual:Revision_table)) | two-words | `PlanUpdate`, so "revision" and "version" stop meaning one thing. 55% |
+| `Revision` | a plan's next words, written by code that holds the last version | an update input ([Prisma, partial types](https://www.prisma.io/docs/orm/prisma-client/type-safety/operating-against-partial-structures-of-model-types)); elsewhere a revision is a saved version ([MediaWiki, revision](https://www.mediawiki.org/wiki/Manual:Revision_table)) | two-words | **picked 2026-10-24:** keep `Revision`: each `planned` fact stores one, and the fold gives it ids and makes the `Plan` (`asks/rules.ts`). The lean, `PlanUpdate`, was not taken |
 | `Revision.keeps` (task, criterion, question) | the id a next version keeps | supersedes; none standard (searched event sourcing, Prisma, JSON Patch) | ok | |
-| `Version` (criteria book) | which wording of a criterion: 1, then one more per reword | version, as an event stream's count ([Marten, appending events](https://martendb.io/events/appending.html)) | ok | keep; `Revision` is what moves |
+| `Version` (criteria book) | which wording of a criterion: 1, then one more per reword | version, as an event stream's count ([Marten, appending events](https://martendb.io/events/appending.html)) | ok | keep for a criterion's wording. **held 2026-10-24:** a revision's number is called `version` too (`PlanAsk.version`, `Approved.version`); the glossary pass decides |
 | `Story` | one kind of user the ticket touches | user story, "As a ‹role›, I want ‹goal›, so that ‹benefit›" ([Mountain Goat](https://www.mountaingoatsoftware.com/agile/user-stories)) | ok | |
 | `Story.id` | `s1`, `s2`: short, stable | story key; none standard | ok | |
 | `Story.who` | the role | role (same source) | ok | |
@@ -117,21 +146,22 @@ plan's ids use.
 | `Task.id` | `t1`, `t2`, given by the criteria book | issue key | ok | |
 | `Task.title` | the task in a line | title ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | |
 | `Task.ends` | what the task ends in: `"pr"` or `"answer"` | a story vs a spike ([Extreme Programming, spike](http://www.extremeprogramming.org/rules/spike.html)) | differs | keep `ends`; `"answer"` → `"spike"`, so a reader finds the prior art. 60% |
-| `Task.job` | the task's first criterion | see `Job` | two-ideas | see `Job` |
+| `Task.job` | the task's first criterion | see `Job` | two-ideas | **picked 2026-10-24:** `scenario`, see `Job` |
 | `Task.criteria` | the single claims after the job | acceptance criteria ([Atlassian](https://www.atlassian.com/work-management/project-management/acceptance-criteria)) | ok | |
-| `Criterion` | one observable claim, "When ‹when›, ‹result›" | acceptance criterion in Given/When/Then form ([Cucumber, Gherkin](https://cucumber.io/docs/gherkin/reference/)) | two-ideas | review's `pack.ts` exports another `Criterion` (section 5) |
+| `Criterion` | one observable claim, "When ‹when›, ‹result›" | acceptance criterion in Given/When/Then form ([Cucumber, Gherkin](https://cucumber.io/docs/gherkin/reference/)) | two-ideas | **picked 2026-10-24:** `Criterion` is a check a reviewer reads at review, and it ends with the ticket. A check a tool runs is a `Property` (section 2). Review's `pack.ts` still exports another `Criterion` (section 5) |
 | `Criterion.id` | `c1`, `c2`, kept for life by the criteria book | none standard | ok | |
 | `Criterion.version` | which wording it is at | see `Version` | ok | |
 | `Criterion.when` | the trigger, without "When" | When (Gherkin) | ok | |
-| `Criterion.result` | what someone can observe | Then (Gherkin) | differs | keep: a key `then` makes an object read as a Promise. 85% |
-| `Criterion.check` | how someone will see it hold | see `Check` | two-ideas | see `Check` |
-| `Criterion.serves` | the stories it serves, never empty | traceability, "satisfies" ([Wikipedia, requirements traceability](https://en.wikipedia.org/wiki/Requirements_traceability)) | differs | keep: plain, and reads as a sentence. 60% |
-| `Job` / `PlanJob` | a task's first criterion: the user's whole job on a realistic fixture | a scenario ([Cucumber, Scenario](https://cucumber.io/docs/gherkin/reference/#scenario)); the user's job is jobs-to-be-done ([HBR, 2016](https://hbr.org/2016/09/know-your-customers-jobs-to-be-done)) | two-ideas | `Scenario`, key `scenario`. The host's `jobs` table and every job queue ([BullMQ, jobs](https://docs.bullmq.io/guide/jobs)) mean a scheduled unit of work. 65% |
-| `Job.fixture` | the realistic case it runs on | test fixture; Gherkin's Given ([Wikipedia, test fixture](https://en.wikipedia.org/wiki/Test_fixture)) | ok | |
-| `Check` | how someone will see a criterion hold | verification method: test, analysis, inspection, demonstration ([NASA SE handbook, 5.3](https://www.nasa.gov/reference/5-3-product-verification/)) | two-ideas | `Verification`, key `verify`. Check stays the move. 55%: "verify" may be taken by the verify writer |
-| `Check.how` | `test`, `typecheck`, `run` or `read` | the four methods (same source) | differs | keep the four plain words |
-| `Check.what` | what the check does; for `run`, the command | procedure | ok | |
-| `Pointer` | a file, function or test a builder may start from; binds nobody | none found as a standard term (searched Agile, Linear, GitHub issue forms); "pointer" is a memory address in C | differs | `Hint`, key `hints`. 50%: no source for either |
+| `Criterion.result` | what someone can observe | Then (Gherkin) | differs | **picked 2026-10-24:** keep, and a `Property` says `when` and `result` too |
+| `Criterion.check` | how someone will see it hold | see `Check` | two-ideas | **picked 2026-10-24:** goes with `Check`; `read` takes its place |
+| `Criterion.read` | what the reviewer reads to see it hold: the old check's `what` | inspection, a verification method (NASA SE handbook, 5.3) | ok | **picked 2026-10-24:** new key |
+| `Criterion.serves` | the stories it serves, never empty | traceability, "satisfies" ([Wikipedia, requirements traceability](https://en.wikipedia.org/wiki/Requirements_traceability)) | differs | **picked 2026-10-24:** `stories`, as a `Property` says. The lean, keep `serves`, was not taken |
+| `Job` / `PlanJob` | a task's first criterion: the user's whole job on a realistic fixture | a scenario ([Cucumber, Scenario](https://cucumber.io/docs/gherkin/reference/#scenario)); the user's job is jobs-to-be-done ([HBR, 2016](https://hbr.org/2016/09/know-your-customers-jobs-to-be-done)) | two-ideas | **picked 2026-10-24:** key `scenario`, one main scenario per task. It is a `Property` when a tool can check it and a `Criterion` when only a reader can, with a `fixture`. So no `Job` type is left. The host's `jobs` table and every job queue ([BullMQ, jobs](https://docs.bullmq.io/guide/jobs)) mean a scheduled unit of work |
+| `Job.fixture` | the realistic case it runs on | test fixture; Gherkin's Given ([Wikipedia, test fixture](https://en.wikipedia.org/wiki/Test_fixture)) | ok | **picked 2026-10-24:** keep, required on every scenario |
+| `Check` | how someone will see a criterion hold | verification method: test, analysis, inspection, demonstration ([NASA SE handbook, 5.3](https://www.nasa.gov/reference/5-3-product-verification/)) | two-ideas | **picked 2026-10-24:** plan's `Check` goes; "Check" is only the move in `primitives.ts`. Who checks it says which type a check is: a tool, a `Property`; a reviewer, a `Criterion`. The lean, `Verification`, was not taken |
+| `Check.how` | `test`, `typecheck`, `run` or `read` | the four methods (same source) | differs | **picked 2026-10-24:** goes with `Check`. `test` is a `Property`'s `tool`, `read` is a `Criterion`. `typecheck` and `run` have no place yet (not picked) |
+| `Check.what` | what the check does; for `run`, the command | procedure | ok | **picked 2026-10-24:** a `Criterion`'s `read` |
+| `Pointer` | a file, function or test a builder may start from; binds nobody | none found as a standard term (searched Agile, Linear, GitHub issue forms); "pointer" is a memory address in C | differs | `Hint`, key `hints`. 50%: no source for either. **held 2026-10-24** for the glossary pass |
 | `Pointer.at` | the place | location | ok | |
 | `Pointer.why` | why it matters | reason | ok | |
 | `Question` | a product call the ticket leaves open, written with a lean | considered options and a recommendation ([MADR](https://adr.github.io/madr/)) | ok | |
@@ -140,12 +170,12 @@ plan's ids use.
 | `Question.options` | the choices | considered options (MADR) | ok | |
 | `Question.lean` | the choice the plan is written with | recommendation; MADR's "decision outcome" | differs | keep: plain, and says it is not decided. 65% |
 | `Question.why` | why that lean | rationale (MADR) | ok | |
-| `Goal` | the plan's own job and criteria; absent on a one-task plan | epic-level acceptance criteria (SAFe); "goal" is the story template's "I want ‹goal›" | differs | `whole`, or keep `goal`. 45%: no clean industry word |
-| `Goal.job` | the plan's whole job | scenario | two-ideas | follows `Job` |
+| `Goal` | the plan's own job and criteria; absent on a one-task plan | epic-level acceptance criteria (SAFe); "goal" is the story template's "I want ‹goal›" | differs | `whole`, or keep `goal`. 45%: no clean industry word. **held 2026-10-24** for the glossary pass |
+| `Goal.job` | the plan's whole job | scenario | two-ideas | **follows the pick:** `scenario`, as a task's. Not picked for the goal itself |
 | `Goal.criteria` | the plan's single claims | acceptance criteria | ok | |
 | `withIds` / `numbered` / `Numbered` | give every task, criterion and question its id | assign identity ([Fowler, Evans classification](https://martinfowler.com/bliki/EvansClassification.html)) | two-words | **picked 2026-10-24:** `Numbered` → `WithIds`; `withIds` stays, `numbered` folds into it |
 | `Numbered.plan` / `.book` / `.events` | the plan under ids, the book after it, the events between | aggregate and its events ([Fowler, event sourcing](https://martinfowler.com/eaaDev/EventSourcing.html)) | ok | |
-| `revisionOf` / `revisionOfDraft` / `keptFrom` | turn a plan or a draft into a next version | follows `Revision` | differs | follows the `Revision` pick |
+| `revisionOf` / `revisionOfDraft` / `keptFrom` | turn a plan or a draft into a next version | follows `Revision` | differs | **follows the pick:** keep, as `Revision` is kept |
 | `PlanAsk` | the plan machine's input | workflow input ([Temporal, workflow parameters](https://docs.temporal.io/workflows#parameters)); Elm's flags ([Elm guide, flags](https://guide.elm-lang.org/interop/flags.html)) | two-ideas | **picked 2026-10-24:** `PlanInput` |
 | `PlanAsk.ticket` | the ticket's url | issue url | ok | |
 | `PlanAsk.tries` | the most drafts the Check may send back for | attempts ([Temporal, retry policy](https://docs.temporal.io/encyclopedia/retry-policies)) | two-words | build says `MAX_RUNS`; pick one (section 3) |
@@ -159,35 +189,35 @@ plan's ids use.
 | `PlanReport.plan` | the plan that passed, or the last one | output | ok | |
 | `PlanReport.problems` | what the Check still found, in sentences | problems ([VS Code, Problems panel](https://code.visualstudio.com/docs/editor/editingevolved#_errors-warnings)) | ok | |
 | `PlanReport.tries` | drafts used | attempts | two-words | follows `tries` |
-| `PlanReport.facts` | facts were gathered and handed over | see `Facts` | two-ideas | follows `Facts` |
+| `PlanReport.facts` | facts were gathered and handed over | see `Facts` | two-ideas | follows the `CodeContext` pick; the key's word is not picked |
 | `PlanReport.spend` | what the runs cost | usage | two-words | follows the `Usage` pick: `usage`. 80% |
-| `PlanTicket` | a ticket as the planner reads it | issue ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | |
+| `PlanTicket` | a ticket as the planner reads it | issue ([GitHub REST, issues](https://docs.github.com/en/rest/issues/issues)) | ok | decided 2026-10-24: the ticket comes from our tracker, a ledger fact, not a GitHub issue; its fields follow the tracker's ticket |
 | `PlanTicket.url`, `.number`, `.state`, `.title`, `.body` | the issue's fields | the same names (same source) | ok | |
-| `PlanTicket.at` | the commit to read the code at; `null`, the clone's own | a ref ([git glossary, ref](https://git-scm.com/docs/gitglossary)) | differs | `ref`. 50% |
-| `Facts` / `PlanFacts` / `readFacts` | what the code says about the names and paths a ticket mentions | retrieved context ([Anthropic, contextual retrieval](https://www.anthropic.com/engineering/contextual-retrieval)); the ledger's facts are Datomic's word for stored events ([Datomic, data model](https://docs.datomic.com/whatis/data-model.html)) | two-ideas | `CodeFacts`, `readCodeFacts`; the ledger keeps `Fact`. Not `Context`: Effect has one. 60% |
+| `PlanTicket.at` | the commit to read the code at; `null`, the clone's own | a ref ([git glossary, ref](https://git-scm.com/docs/gitglossary)) | differs | `ref`. 50%. **held 2026-10-24** for the glossary pass |
+| `Facts` / `PlanFacts` / `readFacts` | what the code says about the names and paths a ticket mentions | retrieved context ([Anthropic, contextual retrieval](https://www.anthropic.com/engineering/contextual-retrieval)); the ledger's facts are Datomic's word for stored events ([Datomic, data model](https://docs.datomic.com/whatis/data-model.html)) | two-ideas | **picked 2026-10-24:** `Facts` → `CodeContext`, `readFacts` → `readCodeContext`, the Cmd `plan_facts` → `plan_code_context`; the ledger keeps `Fact`. The service `PlanFacts` follows; its new name is not picked. The lean, `CodeFacts`, was not taken |
 | `Facts.text` | what code found, as the planner reads it | none needed | ok | |
 | `Facts.names` | the names a user of the published packages meets | public API names ([API Extractor](https://api-extractor.com/pages/overview/intro/)) | differs | follows `userNames` |
 | `Settings` (plan; review has its own copy) | how the planner may run | run options | ok | one shared type would do |
 | `Settings.model` | the model id | model ([Anthropic API, messages](https://docs.anthropic.com/en/api/messages)) | ok | |
 | `Settings.effort` | `low`, `medium`, `high` | effort (Claude's effort setting) | ok | |
 | `Settings.budget` | the dollars one run may cost | budget (`maxBudgetUsd`, Agent SDK) | ok | |
-| `PlanHost` | reads the ticket (GitHub, or the replay set) | issue tracker; fabrika's `host` runs programs ([Erlang, applications](https://www.erlang.org/doc/system/applications.html)) | two-ideas | `PlanTickets` or `TicketSource`. 65% |
+| `PlanHost` | reads the ticket (GitHub, or the replay set) | issue tracker; fabrika's `host` runs programs ([Erlang, applications](https://www.erlang.org/doc/system/applications.html)) | two-ideas | `PlanTickets` or `TicketSource`. 65%. It reads from our tracker now (decided 2026-10-24) |
 | `Planner` / `livePlanner` | the one agent inside plan | planner, in plan-and-execute agents ([LangChain, planning agents](https://blog.langchain.dev/planning-agents/)) | ok | |
 | `Brief` | what the planner is handed | prompt context | ok | |
 | `Brief.ticket` | the ticket | issue | ok | |
-| `Brief.facts` | what code found, as text; `null`, nothing | retrieved context | two-ideas | follows `Facts` |
+| `Brief.facts` | what code found, as text; `null`, nothing | retrieved context | two-ideas | follows the `CodeContext` pick; the key's word is not picked |
 | `Brief.names` | the user names a criterion may use | public names | differs | follows `userNames` |
 | state `key` | the conversation's name, new each start | session id ([Claude Agent SDK, sessions](https://docs.anthropic.com/en/docs/claude-code/sdk/sdk-sessions)) | two-ideas | **picked 2026-10-24:** `session`, as build already says |
 | state `phase`: `idle`, `reading`, `gathering`, `drafting`, `over` | where the machine is | state; Elm's Model ([Elm guide](https://guide.elm-lang.org/architecture/)) | ok | |
 | state `ask`, `settings`, `ticket`, `asked`, `refining`, `facts`, `spend`, `restarts`, `outcome`, `report` | what each phase holds | none needed | ok | `ask` follows `PlanInput` (`input`); `spend` follows `Usage` |
 | `restarts` / `MAX_RESTARTS` | times a restart started the planner over | restart intensity ([Erlang, supervisor](https://www.erlang.org/doc/system/sup_princ.html#maximum-restart-intensity)) | ok | |
 | `stuck:unchecked` | the last plan still has problems and the tries are spent | none found; it was checked, and failed | differs | **picked 2026-10-24:** `stuck:unfixed` |
-| `ask:owner:questions`, `skip:closed`, `stuck:read_failed`, `draft_failed`, `over_budget`, `cut_off` | plan's other outcomes | the five verbs ([outcome names](./direction/outcome-names.md)) | ok | |
+| `ask:owner:questions`, `skip:closed`, `stuck:read_failed`, `draft_failed`, `over_budget`, `cut_off` | plan's other outcomes | the five verbs ([outcome names](./direction/outcome-names.md)) | ok | **picked 2026-10-24:** `ask:owner:questions` goes. Plan has no ask of its own: it answers `done`, with the questions inside the plan, and the parent asks the owner once per plan version. The rest stay |
 | `Planned` | how one plan ended | workflow result | ok | |
 | `Planned.ticket`, `.outcome`, `.name` | the ticket, the outcome, its printed name | none needed | ok | |
 | `planProgram`, `planToTheEnd` | the program, and a run to its end | workflow | ok | `planKind` is the `kind` question, section 9 |
 | `Line` | one thing an owner can approve, change or name | none needed | ok | |
-| `Line.key` | its id: `summary`, `s1`, `t1`, `c1`, `q1`, `p1` | key | ok | |
+| `Line.key` | its id: `summary`, `s1`, `t1`, `c1`, `q1`, `p1` | key | two-ideas | `p1` is a pointer's line today, and a property's id is `p1` now (picked 2026-10-24). One of them moves; not picked |
 | `Line.text` | its words | text | ok | |
 | `Line.criterion` | the criterion it is, or `null` | none needed | ok | |
 | `Changed` | what changed between two versions | a diff ([git diff](https://git-scm.com/docs/git-diff)) | ok | |
@@ -195,7 +225,7 @@ plan's ids use.
 | `Reworded.key` / `.was` / `.now` | one criterion's old and new words | before and after | ok | |
 | `userNames` / `Published` | every name a package shows its users | public API surface ([API Extractor](https://api-extractor.com/pages/overview/intro/)) | differs | `publicNames`. 60% |
 | `Published.manifest` / `.docs` | the parsed `package.json`, and each doc page | manifest ([npm, package.json](https://docs.npmjs.com/cli/v10/configuring-npm/package-json)) | ok | |
-| `Claim` (local) / `claimFields` / `claimProblems` | one criterion's words | assertion; the ledger's `claims.ts` means a held ticket (a lease) | two-ideas | `Statement`. Local type, low cost. 50% |
+| `Claim` (local) / `claimFields` / `claimProblems` | one criterion's words | assertion; the ledger's `claims.ts` means a held ticket (a lease) | two-ideas | `Statement`. Local type, low cost. 50%. **held 2026-10-24** for the glossary pass |
 | `Known` | the user names known, or `null` | none needed | ok | |
 | `PlanCmd`, `RunSub` | the machine's Cmds and its Sub | Cmd and Sub ([Elm guide, subscriptions](https://guide.elm-lang.org/effects/time.html)) | ok | |
 
@@ -208,18 +238,21 @@ a promise stage would inherit.
 
 | Name | Means here | Industry name | Mark | Proposal |
 |---|---|---|---|---|
-| `Promise` (sketch type) | a criterion that lasts after the ticket closes: what the code always does | a property, safety or liveness ([learn TLA+, temporal properties](https://learntla.com/core/temporal-logic.html)); JS's own `Promise` ([MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)) | collides | **picked 2026-10-24:** `Property`. It now clashes with `tool: "property"`, see that row |
+| `Promise` (sketch type) | a criterion that lasts after the ticket closes: what the code always does | a property, safety or liveness ([learn TLA+, temporal properties](https://learntla.com/core/temporal-logic.html)); JS's own `Promise` ([MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)) | collides | **picked 2026-10-24:** `Property`: a check a tool runs, which lasts as a test after the ticket closes. Its tool word is `"test"` now, so the clash with `tool: "property"` is gone (see that row) |
 | promise vs law | a promise is a lasting rule on the code; a law is a rule a machine must always keep ([every machine has laws](./direction/every-machine-has-laws.md)), and the record's `check` runs a law | both are properties of the system | two-words | decide whether a property is "a law the owner approved". If yes, one word. 50%: a property can span machines, a law sits on one |
-| `Promise.says` | the property in one plain sentence | statement | two-words | the record calls it `promise`; `says` in both. 70% |
-| `Promise.harm` | what goes wrong for someone if it breaks | failure effect ([FMEA](https://en.wikipedia.org/wiki/Failure_mode_and_effects_analysis)) | ok | plain word for the effect column |
-| `Promise.is` | `"new"` or `"kept"` | none for the key; a discriminant is `kind` in our outcomes | differs | `kind`, so it reads like every other tagged value. 55% |
-| `"new"` | the ticket adds it; its check must be red on today's code | a new test written red first ([Fowler, TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html)) | ok | |
-| `"kept"` | today's code must already keep it, and the ticket must not break it | a regression test ([Wikipedia](https://en.wikipedia.org/wiki/Regression_testing)); a characterization test ([Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)) | two-ideas | `"regression"`. `kept` already means "persisted" in fabrika (`program/kept.ts`) and "keeps an id" in plan. 65% |
-| `Promise.tool` | which kind of check keeps it: `property`, `tla`, `proof` (the record adds `search`) | model checking ([Wikipedia](https://en.wikipedia.org/wiki/Model_checking)), property-based testing ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)), proof | ok | |
-| `tool: "property"` | a property-based test | property-based test (same source) | two-ideas | with the type now `Property`, `tool: "property"` reads "a property kept by a property". `"pbt"`, as tea's own `@demlik/tea/pbt` says. 70% |
-| `Promise.covers` / `Covers` / `Piece` | the code a property is about, by file and top-level name | coverage; Stryker's `coveredBy` ([Stryker, mutant states](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)) | ok | |
-| record `promise` | the sentence (the sketch's `says`) | statement | two-words | `says`. 70% |
-| record `harm`, `tool`, `covers` | as in the sketch | as above | ok | |
+| `Promise.says` | the property in one plain sentence | statement | two-words | **picked 2026-10-24:** `when` and `result`, the words a `Criterion` uses, so the two differ only in who checks them. The lean, `says`, was not taken |
+| `Promise.harm` | what goes wrong for someone if it breaks | failure effect ([FMEA](https://en.wikipedia.org/wiki/Failure_mode_and_effects_analysis)) | ok | **picked 2026-10-24:** `why` |
+| `Promise.is` | `"new"` or `"kept"` | none for the key; a discriminant is `kind` in our outcomes | differs | **picked 2026-10-24:** `behavior: "new" \| "existing"`. The lean, `kind`, was not taken |
+| `"new"` | the ticket adds it; its check must be red on today's code | a new test written red first ([Fowler, TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html)) | ok | **picked 2026-10-24:** keep. Its test must fail on today's code first |
+| `"kept"` | today's code must already keep it, and the ticket must not break it | a regression test ([Wikipedia](https://en.wikipedia.org/wiki/Regression_testing)); a characterization test ([Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)) | two-ideas | **picked 2026-10-24:** `"existing"`. Its test must pass on today's code, and its lines are what the mutation step tests. The lean, `"regression"`, was not taken |
+| `Promise.tool` | which kind of check keeps it: `property`, `tla`, `proof` (the record adds `search`) | model checking ([Wikipedia](https://en.wikipedia.org/wiki/Model_checking)), property-based testing ([fast-check](https://fast-check.dev/docs/core-blocks/properties/)), proof | ok | **picked 2026-10-24:** `"test" \| "tla"`. No `"proof"` until something runs proofs. Who picks the tool is open (experiment 139) |
+| `tool: "property"` | a property-based test | property-based test (same source) | two-ideas | **picked 2026-10-24:** `"test"`. The lean, `"pbt"`, was not taken |
+| `Promise.covers` / `Covers` / `Piece` | the code a property is about, by file and top-level name | coverage; Stryker's `coveredBy` ([Stryker, mutant states](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)) | ok | **picked 2026-10-24:** key `code` |
+| `Property.id` | `p1`, `p2`: a property's id in the criteria book, kept across plan versions by `keeps`, as a criterion's is | none standard | ok | **picked 2026-10-24:** prefix `p`. It clashes with a pointer's line key `p1` (section 1, `Line.key`) |
+| `Property.stories` | the stories it serves | traceability (section 1, `Criterion.serves`) | ok | **picked 2026-10-24:** `stories`, as a `Criterion` says |
+| `checked` (fact) | a tool's result on one property: property, version, head, tool, result | a check run's conclusion ([GitHub REST, check runs](https://docs.github.com/en/rest/checks/runs)) | two-ideas | **picked 2026-10-24:** the fact, not a review row. Its `result` (how the check came out) and a property's `result` (what someone sees) are one word for two ideas; not picked |
+| record `promise` | the sentence (the sketch's `says`) | statement | two-words | not picked. The plan's `Property` says it as `when` and `result` now, so the lean `says` matches nothing |
+| record `harm`, `tool`, `covers` | as in the sketch | as above | ok | not picked. The plan's `Property` says `why`, `tool: "test" \| "tla"` and `code` now; the record's `tool` still has `search`, `property` and `proof` |
 | record `check` | the command that runs the check | test command | two-ideas | `command`: `check` is also the move and plan's `Check`. 70% |
 | record `plant` | the break planted to show the check can fail | see `Plant` | two-words | see `Plant` |
 | record `exam` | the check itself: law, plant, world, checker; a change asks the owner | test oracle ([Wikipedia](https://en.wikipedia.org/wiki/Test_oracle)) | differs | keep: "nobody writes their own exam" is a rule people already quote. 60% |
@@ -252,7 +285,7 @@ a promise stage would inherit.
 | `mutant`, kill, survived, equivalent mutant | mutation testing's words | the same ([Stryker, introduction](https://stryker-mutator.io/docs/stryker-js/introduction/)) | ok | |
 | skip list | kinds of mutant left out, such as log text | Stryker ignorers ([Stryker, configuration](https://stryker-mutator.io/docs/stryker-js/configuration/)); Google's arid nodes | differs | `ignore list`, Stryker's own word. 75% |
 | disable comment | `// Stryker disable` on one line, with a reason | the same ([Stryker, disable mutants](https://stryker-mutator.io/docs/stryker-js/disable-mutants/)) | ok | |
-| `ask:owner:already_kept`, `ask:owner:not_kept` | the plan was wrong about today's code | none found | differs | follow the `kept` pick: `already_holds`, `regression`. 50% |
+| `ask:owner:already_kept`, `ask:owner:not_kept` | the plan was wrong about today's code | none found | differs | `kept` became `"existing"` (picked 2026-10-24); these two names are not picked |
 | `ask:owner:check_change` | a diff touches a check | change to the test oracle | ok | |
 | `send:builder:promise_red` | ship found a property red or out of step | failed required check | differs | **follows the pick:** `property_red` |
 
@@ -708,7 +741,7 @@ names the pipeline uses (program, host, ledger, agents).
 | `act` / `Intended` / `.intent` / `intentOf` | code writes the world, with its intent kept first | command; idempotency key | ok | |
 | `listen` | wait on an outside event | Sub ([Elm guide](https://guide.elm-lang.org/effects/time.html)) | ok | |
 | Draft / `createDraft` / `Draft` / `DraftMsg` / `DraftRun` | an agent produces within limits | an agent run | ok | |
-| `Check` (type) / `checkRun` | code judges an output | a validator; a guard | two-ideas | it is also plan's `{how, what}` on every criterion, `CheckAsk` and the record's `check` command. Keep the move; plan's value → `Verify` (section 1). 70% |
+| `Check` (type) / `checkRun` | code judges an output | a validator; a guard | two-ideas | it is also plan's `{how, what}` on every criterion, `CheckAsk` and the record's `check` command. **picked 2026-10-24:** keep the move; plan's value goes (section 1). `CheckAsk` and the record's `check` are not picked. The lean, plan's value → `Verify`, was not taken |
 | Judge / `createJudge` | a small classifier answers one narrow question | LLM-as-a-judge ([Zheng et al., 2023](https://arxiv.org/abs/2306.05685)); a classifier | ok | |
 | `Judged` / `.choice` / `.confidence` | the classifier's raw answer | prediction with a score | ok | |
 | `Ruled` / `.sure` / `.choice` / `.best` / `.confidence` | the answer after the floor | thresholded prediction | two-ideas | "ruled" is also the owner's ruling (`ruled`, `RulingAsk`): `Floored`, or `Sure`. 65% |
@@ -745,7 +778,7 @@ names the pipeline uses (program, host, ledger, agents).
 | `RulingAsk` / `.ticket`, `.ask`, `.options`, `.why` | a ticket triage sent to the owner | a decision request | two-ideas | `.ask` → `question`, as `CheckAsk` already says. 75% |
 | `CheckAsk` / `.task`, `.build`, `.by`, `.question`, `.attachments` / `Attachment` (`label`, `ref`) | a yes or no look at one build | a manual check; a review request | two-ideas | `check` again: `LookAsk`, or `ReviewAsk`. 55% |
 | `Answer` / `.answer` / `AnswerBody` / `KINDS` | the owner's answer under the ask's id | none needed | ok | `Answer.answer` reads twice: `body`. 60% |
-| `PlanAnswer.kind: approve, change, no` / `.line`, `.to`, `.why` | the answers to a plan | approve; request changes ([GitHub, PR reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | ok | |
+| `PlanAnswer.kind: approve, change, no` / `.line`, `.to`, `.why` | the answers to a plan | approve; request changes ([GitHub, PR reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | ok | decided 2026-10-24: the plan ask also takes the owner's answers to the plan's questions, and a yes records the plan version and a hash of the ticket's title and body. The new answer's name is not picked |
 | `StuckAnswer.kind: remove, keep_going, reword` / `.rounds`, `.criterion`, `.when`, `.result` | the answers to a stuck task | none needed | ok | `when` and `result` are the Gherkin halves (section 1) |
 | `RulingAnswer.kind: rule` / `.answer`, `.rule: lasting, one_off`, `.build` | the answer to a ruling | ADR ([MADR](https://adr.github.io/madr/)) for a lasting one | ok | |
 | `CheckAnswer.kind: yes, no` / `.why` | the answer to a check | none needed | ok | |
@@ -799,7 +832,9 @@ Each of these needs an owner's pick, or a fact the sweep did not have.
   which key tea's own `Cmd`, `Sub` and Msg types use.
 - **`Check`, the move and the value.** NASA's "verification method" fits plan's value. But
   the move's name is one of the six in AGENTS.md, so renaming the value is the cheap
-  side. 70%: a reader may still mix up `Verify` and `Check`.
+  side. 70%: a reader may still mix up `Verify` and `Check`. **Settled 2026-10-24,** another
+  way: plan's value goes, and a check is a `Property` or a `Criterion` by who checks it. The
+  lean, `Verify`, was not taken.
 - **`ask`.** Five meanings. No tracker or workflow engine has one word for "a record waiting
   on a person": Camunda says user task, LangGraph says interrupt, Temporal has none. The
   sweep keeps `Ask` for the asks core and renames the others. 60%.
@@ -817,12 +852,14 @@ Each of these needs an owner's pick, or a fact the sweep did not have.
   plain words already in the direction notes. The sweep leans `triage` (80%) and keeps
   the other three, glossed. Each is the owner's word to keep or drop.
 - **`Property` and `tool: "property"`.** The pick of `Property` makes the tool word read
-  as the type. `"pbt"` is 70%; `"fast-check"` names a tool, not a method.
+  as the type. `"pbt"` is 70%; `"fast-check"` names a tool, not a method. **Settled
+  2026-10-24:** `tool: "test" | "tla"`. The lean, `"pbt"`, was not taken.
 - **`kind` in fabrika.** The program's machine kind follows Akka and Effect. The outcome's
   `kind` is read far more. Renaming fabrika's (50%) touches every program.
 - **`job`.** Three meanings. Renaming the hosted inputs to `*Input` and the host table to
   `timers` leaves plan's `job` alone. Whether plan's first criterion should be called a job
-  at all is a design question, not a naming one.
+  at all is a design question, not a naming one. **Settled 2026-10-24 for plan:** a task's
+  `job` is its `scenario`. The hosted inputs and the host table are not picked.
 
 What this sweep cannot tell us:
 
