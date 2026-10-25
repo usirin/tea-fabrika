@@ -1,0 +1,4110 @@
+{
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpus": "Apple M2 Max"
+  },
+  "electron": "45.0.0",
+  "tile": "300x190",
+  "window": "1200x760",
+  "idleSeconds": 20,
+  "csp": {
+    "app": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "measure": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  },
+  "results": [
+    {
+      "lib": "blank",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "none: the control draws nothing of its own",
+      "pageBytes": 5633,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/blank-4CCQZWAN.js",
+          427
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0,
+        "gpuCorePercent": 0,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 95.7
+      },
+      "pageHeapMB": 1.7,
+      "rendererWorkingSetAfterMB": 97.3,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null,
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "blank",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "none: the control draws nothing of its own",
+      "pageBytes": 5633,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/blank-4CCQZWAN.js",
+          427
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0,
+        "gpuCorePercent": 0,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 96.3
+      },
+      "pageHeapMB": 1.5,
+      "rendererWorkingSetAfterMB": 96.4,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null
+    },
+    {
+      "lib": "blank",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "none: the control draws nothing of its own",
+      "pageBytes": 5633,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/blank-4CCQZWAN.js",
+          427
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0,
+        "gpuCorePercent": 0,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 96.7
+      },
+      "pageHeapMB": 1.5,
+      "rendererWorkingSetAfterMB": 96.8,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null
+    },
+    {
+      "lib": "blank",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "none: the control draws nothing of its own",
+      "pageBytes": 5633,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/blank-4CCQZWAN.js",
+          427
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0,
+        "gpuCorePercent": 0,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 95.8
+      },
+      "pageHeapMB": 1.5,
+      "rendererWorkingSetAfterMB": 96.2,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null,
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 4.6,
+        "gpuCorePercent": 5.3,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.4,
+            "max": 0.4
+          },
+          "gpu": {
+            "mean": 0.4,
+            "max": 0.5
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 119.7
+      },
+      "pageHeapMB": 4.1,
+      "rendererWorkingSetAfterMB": 140.6,
+      "burst": {
+        "settledMs": 5.7,
+        "worstGapMs": 4.8,
+        "medianGapMs": 4.8,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "colorBurst": {
+        "settledMs": 14.7,
+        "worstGapMs": 12.7,
+        "medianGapMs": 12.7,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 27.6,
+          "p95": 32.4,
+          "max": 32.5
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 42.8,
+          "p95": 48.2,
+          "max": 48.2
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 5.7,
+        "gpuCorePercent": 8.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.5,
+            "max": 0.5
+          },
+          "gpu": {
+            "mean": 0.7,
+            "max": 0.8
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 128
+      },
+      "pageHeapMB": 4.6,
+      "rendererWorkingSetAfterMB": 149.4,
+      "burst": {
+        "settledMs": 6.3,
+        "worstGapMs": 3.7,
+        "medianGapMs": 3.7,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "colorBurst": {
+        "settledMs": 45.9,
+        "worstGapMs": 17.3,
+        "medianGapMs": 15.8,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 26.1,
+          "p95": 31.8,
+          "max": 32.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 41.8,
+          "p95": 48.2,
+          "max": 48.3
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 9.8,
+        "gpuCorePercent": 22.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.8,
+            "max": 0.9
+          },
+          "gpu": {
+            "mean": 1.9,
+            "max": 2.1
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 150
+      },
+      "pageHeapMB": 6.9,
+      "rendererWorkingSetAfterMB": 180.2,
+      "burst": {
+        "settledMs": 23.2,
+        "worstGapMs": 16.1,
+        "medianGapMs": 16.1,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 131.7,
+        "worstGapMs": 17.6,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 8
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 26.2,
+          "p95": 31.4,
+          "max": 32.6
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 41.7,
+          "p95": 47.4,
+          "max": 48.7
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 5.9,
+        "gpuCorePercent": 6,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.5,
+            "max": 0.5
+          },
+          "gpu": {
+            "mean": 0.5,
+            "max": 0.6
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 123.9
+      },
+      "pageHeapMB": 5.7,
+      "rendererWorkingSetAfterMB": 143.7,
+      "burst": {
+        "settledMs": 17.4,
+        "worstGapMs": 2.6,
+        "medianGapMs": 2.6,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "colorBurst": {
+        "settledMs": 32,
+        "worstGapMs": 14.3,
+        "medianGapMs": 14.3,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 36.8,
+          "p95": 37.2,
+          "max": 37.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 47.9,
+          "p95": 48.7,
+          "max": 48.7
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web-steady",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 4.2,
+        "gpuCorePercent": 5.2,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.4,
+            "max": 0.4
+          },
+          "gpu": {
+            "mean": 0.4,
+            "max": 0.5
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 120.1
+      },
+      "pageHeapMB": 4.2,
+      "rendererWorkingSetAfterMB": 138.9,
+      "burst": {
+        "settledMs": 6.3,
+        "worstGapMs": 5,
+        "medianGapMs": 5,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "colorBurst": {
+        "settledMs": 15.6,
+        "worstGapMs": 13.4,
+        "medianGapMs": 13.4,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 28.8,
+          "p95": 32.6,
+          "max": 32.7
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 44.2,
+          "p95": 48.7,
+          "max": 48.8
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web-steady",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 4.7,
+        "gpuCorePercent": 8.4,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.4,
+            "max": 0.4
+          },
+          "gpu": {
+            "mean": 0.7,
+            "max": 0.8
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 126.7
+      },
+      "pageHeapMB": 5,
+      "rendererWorkingSetAfterMB": 147.9,
+      "burst": {
+        "settledMs": 11.3,
+        "worstGapMs": 8,
+        "medianGapMs": 8,
+        "over50ms": 0,
+        "frames": 1
+      },
+      "colorBurst": {
+        "settledMs": 47,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.2,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 28.4,
+          "p95": 32.4,
+          "max": 32.7
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 43.8,
+          "p95": 47.9,
+          "max": 48.8
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web-steady",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1207355,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/ghostty-web-DWIPYFYD.js",
+          1202149
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 6.1,
+        "gpuCorePercent": 20,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.5,
+            "max": 0.6
+          },
+          "gpu": {
+            "mean": 1.7,
+            "max": 1.8
+          }
+        },
+        "drawsPerSecond": 60,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 141.8
+      },
+      "pageHeapMB": 6,
+      "rendererWorkingSetAfterMB": 170.5,
+      "burst": {
+        "settledMs": 25.1,
+        "worstGapMs": 16.6,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 135.2,
+        "worstGapMs": 17.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 8
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 29.2,
+          "p95": 32.2,
+          "max": 32.2
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 45.3,
+          "p95": 48.2,
+          "max": 48.2
+        }
+      }
+    },
+    {
+      "lib": "wterm",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "a change to its rows in the DOM (MutationObserver)",
+      "pageBytes": 733844,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/wterm.css",
+          9719
+        ],
+        [
+          "/wterm-DPYYSYFZ.js",
+          127052
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/ghostty-vt.wasm",
+          591867
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.3,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 116.2
+      },
+      "pageHeapMB": 1.9,
+      "rendererWorkingSetAfterMB": 135,
+      "burst": {
+        "settledMs": 10.1,
+        "worstGapMs": 17.1,
+        "medianGapMs": 17.1,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 17.7,
+        "worstGapMs": 16,
+        "medianGapMs": 16,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 26.8,
+          "p95": 33.4,
+          "max": 33.6
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 42.3,
+          "p95": 48,
+          "max": 48.2
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "wterm",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "a change to its rows in the DOM (MutationObserver)",
+      "pageBytes": 733844,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/wterm.css",
+          9719
+        ],
+        [
+          "/wterm-DPYYSYFZ.js",
+          127052
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/ghostty-vt.wasm",
+          591867
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.4,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 121.5
+      },
+      "pageHeapMB": 2.5,
+      "rendererWorkingSetAfterMB": 163.1,
+      "burst": {
+        "settledMs": 13.7,
+        "worstGapMs": 16.5,
+        "medianGapMs": 16.5,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 51.6,
+        "worstGapMs": 17.3,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 29.2,
+          "p95": 33.1,
+          "max": 34.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 44.6,
+          "p95": 48.5,
+          "max": 48.9
+        }
+      }
+    },
+    {
+      "lib": "wterm",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "a change to its rows in the DOM (MutationObserver)",
+      "pageBytes": 733844,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/wterm.css",
+          9719
+        ],
+        [
+          "/wterm-DPYYSYFZ.js",
+          127052
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/ghostty-vt.wasm",
+          591867
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.5,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 143.3
+      },
+      "pageHeapMB": 3.7,
+      "rendererWorkingSetAfterMB": 268.6,
+      "burst": {
+        "settledMs": 81.8,
+        "worstGapMs": 34.3,
+        "medianGapMs": 16.5,
+        "over50ms": 0,
+        "frames": 5
+      },
+      "colorBurst": {
+        "settledMs": 318.8,
+        "worstGapMs": 33.4,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 17
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 25.8,
+          "p95": 33.1,
+          "max": 33.5
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 41.6,
+          "p95": 48.4,
+          "max": 49
+        }
+      }
+    },
+    {
+      "lib": "wterm",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "a change to its rows in the DOM (MutationObserver)",
+      "pageBytes": 733844,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/wterm.css",
+          9719
+        ],
+        [
+          "/wterm-DPYYSYFZ.js",
+          127052
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/ghostty-vt.wasm",
+          591867
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.3,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 122.2
+      },
+      "pageHeapMB": 2.4,
+      "rendererWorkingSetAfterMB": 147.9,
+      "burst": {
+        "settledMs": 14,
+        "worstGapMs": 16.1,
+        "medianGapMs": 16.1,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 21.7,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 29.1,
+          "p95": 33.8,
+          "max": 34.1
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 43.7,
+          "p95": 48,
+          "max": 48.1
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2,
+        "gpuCorePercent": 0.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 113.2
+      },
+      "pageHeapMB": 3.3,
+      "rendererWorkingSetAfterMB": 133.5,
+      "burst": {
+        "settledMs": 20.1,
+        "worstGapMs": 17.4,
+        "medianGapMs": 15.8,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 16.5,
+        "worstGapMs": 16.4,
+        "medianGapMs": 16.4,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 29.2,
+          "p95": 32.5,
+          "max": 33.2
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 44.6,
+          "p95": 48.7,
+          "max": 48.8
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.1,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 117.9
+      },
+      "pageHeapMB": 4.5,
+      "rendererWorkingSetAfterMB": 144.7,
+      "burst": {
+        "settledMs": 30.7,
+        "worstGapMs": 17.5,
+        "medianGapMs": 15.8,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 18.2,
+        "worstGapMs": 16.1,
+        "medianGapMs": 16.1,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 27.9,
+          "p95": 33.6,
+          "max": 33.6
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 43.3,
+          "p95": 49.7,
+          "max": 49.7
+        }
+      }
+    },
+    {
+      "lib": "xterm",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.2,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 135.4
+      },
+      "pageHeapMB": 6.6,
+      "rendererWorkingSetAfterMB": 214.4,
+      "burst": {
+        "settledMs": 71.4,
+        "worstGapMs": 17,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 6
+      },
+      "colorBurst": {
+        "settledMs": 117.3,
+        "worstGapMs": 17.3,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 8
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 26.6,
+          "p95": 33.3,
+          "max": 34
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 42.3,
+          "p95": 48.5,
+          "max": 48.6
+        }
+      }
+    },
+    {
+      "lib": "xterm",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.1,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 114
+      },
+      "pageHeapMB": 3.2,
+      "rendererWorkingSetAfterMB": 131.2,
+      "burst": {
+        "settledMs": 17.6,
+        "worstGapMs": 15.7,
+        "medianGapMs": 15.7,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "colorBurst": {
+        "settledMs": 17.9,
+        "worstGapMs": 17.2,
+        "medianGapMs": 17.2,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 29.9,
+          "p95": 33.1,
+          "max": 33.2
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 46,
+          "p95": 48.7,
+          "max": 49
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 483248,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/addon-webgl-4LUCHJY3.js",
+          125363
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.3,
+        "gpuCorePercent": 0.6,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 126.4
+      },
+      "pageHeapMB": 5.9,
+      "rendererWorkingSetAfterMB": 136.9,
+      "burst": {
+        "settledMs": 23.6,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 17.9,
+        "worstGapMs": 15.9,
+        "medianGapMs": 15.9,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 12.1,
+          "p95": 25.6,
+          "max": 25.7
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 28.2,
+          "p95": 41.1,
+          "max": 41.2
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 483248,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/addon-webgl-4LUCHJY3.js",
+          125363
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.4,
+        "gpuCorePercent": 0.6,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0.1
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 132.2
+      },
+      "pageHeapMB": 7.1,
+      "rendererWorkingSetAfterMB": 148.2,
+      "burst": {
+        "settledMs": 27.2,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 18.2,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 12.8,
+          "p95": 29.1,
+          "max": 29.2
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 28.6,
+          "p95": 45.4,
+          "max": 45.8
+        }
+      }
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 483248,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/addon-webgl-4LUCHJY3.js",
+          125363
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.4,
+        "gpuCorePercent": 0.7,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 151.7
+      },
+      "pageHeapMB": 12.3,
+      "rendererWorkingSetAfterMB": 191.8,
+      "burst": {
+        "settledMs": 75.8,
+        "worstGapMs": 16.9,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 7
+      },
+      "colorBurst": {
+        "settledMs": 64.2,
+        "worstGapMs": 17.5,
+        "medianGapMs": 16.5,
+        "over50ms": 0,
+        "frames": 5
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 12.2,
+          "p95": 16.7,
+          "max": 21.7
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 28,
+          "p95": 32.9,
+          "max": 37.1
+        }
+      }
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "its onRender event",
+      "pageBytes": 483248,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/addon-webgl-4LUCHJY3.js",
+          125363
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.4,
+        "gpuCorePercent": 0.7,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0.1
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 128.1
+      },
+      "pageHeapMB": 7.5,
+      "rendererWorkingSetAfterMB": 138.5,
+      "burst": {
+        "settledMs": 26,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 17.8,
+        "worstGapMs": 16.9,
+        "medianGapMs": 16.9,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 10.7,
+          "p95": 16.2,
+          "max": 16.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 26.6,
+          "p95": 32.3,
+          "max": 33
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm-sr",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 1.9,
+        "gpuCorePercent": 0.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 113.4
+      },
+      "pageHeapMB": 3.3,
+      "rendererWorkingSetAfterMB": 130.2,
+      "burst": {
+        "settledMs": 27.9,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 15.7,
+        "worstGapMs": 16.8,
+        "medianGapMs": 16.8,
+        "over50ms": 0,
+        "frames": 2
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 27.7,
+          "p95": 31.6,
+          "max": 32.2
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 44.2,
+          "p95": 47.3,
+          "max": 48.4
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "xterm-sr",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.4,
+        "gpuCorePercent": 1,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 118.4
+      },
+      "pageHeapMB": 4.6,
+      "rendererWorkingSetAfterMB": 148.6,
+      "burst": {
+        "settledMs": 41.7,
+        "worstGapMs": 16.8,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 31.3,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 25.2,
+          "p95": 32.9,
+          "max": 33.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 41.4,
+          "p95": 48,
+          "max": 48.6
+        }
+      }
+    },
+    {
+      "lib": "xterm-sr",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its onRender event",
+      "pageBytes": 357885,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/xterm.css",
+          7112
+        ],
+        [
+          "/xterm-KZFL7VAR.js",
+          345567
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.7,
+        "gpuCorePercent": 1,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.3
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 156.1
+      },
+      "pageHeapMB": 6.9,
+      "rendererWorkingSetAfterMB": 232,
+      "burst": {
+        "settledMs": 93.6,
+        "worstGapMs": 17.6,
+        "medianGapMs": 16,
+        "over50ms": 0,
+        "frames": 7
+      },
+      "colorBurst": {
+        "settledMs": 190.6,
+        "worstGapMs": 17.1,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 12
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 23.6,
+          "p95": 32.1,
+          "max": 32.9
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 39.5,
+          "p95": 47.6,
+          "max": 49
+        }
+      }
+    },
+    {
+      "lib": "restty",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "none: restty has no hook",
+      "pageBytes": 3383514,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/restty-I3S4NKKT.js",
+          3378308
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 1.9,
+        "gpuCorePercent": 0.9,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 147.9
+      },
+      "pageHeapMB": 12.6,
+      "rendererWorkingSetAfterMB": 149.1,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null,
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "restty",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "none: restty has no hook",
+      "pageBytes": 3383514,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/restty-I3S4NKKT.js",
+          3378308
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 2.8,
+        "gpuCorePercent": 1.3,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.2,
+            "max": 0.4
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 162.5
+      },
+      "pageHeapMB": 14,
+      "rendererWorkingSetAfterMB": 162.8,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null
+    },
+    {
+      "lib": "restty",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "none: restty has no hook",
+      "pageBytes": 3383514,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4344
+        ],
+        [
+          "/restty-I3S4NKKT.js",
+          3378308
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 3.2,
+        "gpuCorePercent": 2,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.3,
+            "max": 0.4
+          },
+          "gpu": {
+            "mean": 0.2,
+            "max": 0.2
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 190.4
+      },
+      "pageHeapMB": 12.1,
+      "rendererWorkingSetAfterMB": 191,
+      "burst": null,
+      "colorBurst": null,
+      "typing": null
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "idle": {
+        "rendererCorePercent": 0.3,
+        "gpuCorePercent": 0.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 1.9,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 117.3
+      },
+      "pageHeapMB": 4.9,
+      "rendererWorkingSetAfterMB": 136,
+      "burst": {
+        "settledMs": 13.1,
+        "worstGapMs": 16.6,
+        "medianGapMs": 16.4,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 14.9,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 11.9,
+          "p95": 22.1,
+          "max": 25.1
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 27.7,
+          "p95": 38.1,
+          "max": 41.2
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "idle": {
+        "rendererCorePercent": 0.8,
+        "gpuCorePercent": 1.2,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.1,
+            "max": 0.1
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 1.9,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 124.5
+      },
+      "pageHeapMB": 4.9,
+      "rendererWorkingSetAfterMB": 143.6,
+      "burst": {
+        "settledMs": 6.6,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 49.9,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 5
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 11.6,
+          "p95": 23,
+          "max": 27.1
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 27.5,
+          "p95": 39.1,
+          "max": 42.6
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "idle": {
+        "rendererCorePercent": 1.5,
+        "gpuCorePercent": 2.3,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0.1,
+            "max": 0.1
+          },
+          "gpu": {
+            "mean": 0.2,
+            "max": 0.2
+          }
+        },
+        "drawsPerSecond": 1.9,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 143.9
+      },
+      "pageHeapMB": 8.1,
+      "rendererWorkingSetAfterMB": 176,
+      "burst": {
+        "settledMs": 26.4,
+        "worstGapMs": 17.2,
+        "medianGapMs": 16.1,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 148.3,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 10
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 12.5,
+          "p95": 24.3,
+          "max": 24.9
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 28.5,
+          "p95": 40.6,
+          "max": 42.1
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 1,
+      "tile": "1200x760",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "idle": {
+        "rendererCorePercent": 0.4,
+        "gpuCorePercent": 0.8,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0.1,
+            "max": 0.1
+          }
+        },
+        "drawsPerSecond": 1.9,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 122.8
+      },
+      "pageHeapMB": 5.9,
+      "rendererWorkingSetAfterMB": 142.9,
+      "burst": {
+        "settledMs": 46,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 311,
+        "worstGapMs": 17.6,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 20
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 18.8,
+          "p95": 21.5,
+          "max": 22
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 29.5,
+          "p95": 31.8,
+          "max": 32.4
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web-patched-steady",
+      "n": 1,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4756
+        ],
+        [
+          "/ghostty-web-patched-GT4OA3ZR.js",
+          638594
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/chunk-WOT6VMZA.js",
+          106
+        ],
+        [
+          "/chunk-LV3C2RCW.js",
+          564880
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.1,
+        "gpuCorePercent": 0.4,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 117.3
+      },
+      "pageHeapMB": 4.8,
+      "rendererWorkingSetAfterMB": 136.3,
+      "burst": {
+        "settledMs": 18.5,
+        "worstGapMs": 16.9,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 4
+      },
+      "colorBurst": {
+        "settledMs": 14,
+        "worstGapMs": 16.6,
+        "medianGapMs": 16.1,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 10.8,
+          "p95": 23.6,
+          "max": 25.3
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 26.6,
+          "p95": 39.6,
+          "max": 41.2
+        }
+      },
+      "keys": {
+        "caught": [
+          "b",
+          "|"
+        ],
+        "reachedTerminal": []
+      }
+    },
+    {
+      "lib": "ghostty-web-patched-steady",
+      "n": 4,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4756
+        ],
+        [
+          "/ghostty-web-patched-GT4OA3ZR.js",
+          638594
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/chunk-WOT6VMZA.js",
+          106
+        ],
+        [
+          "/chunk-LV3C2RCW.js",
+          564880
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.2,
+        "gpuCorePercent": 0.5,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 123.7
+      },
+      "pageHeapMB": 4.6,
+      "rendererWorkingSetAfterMB": 144.5,
+      "burst": {
+        "settledMs": 9,
+        "worstGapMs": 16.7,
+        "medianGapMs": 15.8,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 49.6,
+        "worstGapMs": 17,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 5
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 12.8,
+          "p95": 22.2,
+          "max": 23.5
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 28.3,
+          "p95": 38,
+          "max": 39.2
+        }
+      }
+    },
+    {
+      "lib": "ghostty-web-patched-steady",
+      "n": 16,
+      "tile": "300x190",
+      "drawn": "its renderer's render(), wrapped",
+      "pageBytes": 1209198,
+      "served": [
+        [
+          "/page.html",
+          224
+        ],
+        [
+          "/page.css",
+          383
+        ],
+        [
+          "/page.js",
+          4756
+        ],
+        [
+          "/ghostty-web-patched-GT4OA3ZR.js",
+          638594
+        ],
+        [
+          "/chunk-GJLR3RWS.js",
+          255
+        ],
+        [
+          "/chunk-WOT6VMZA.js",
+          106
+        ],
+        [
+          "/chunk-LV3C2RCW.js",
+          564880
+        ]
+      ],
+      "idle": {
+        "rendererCorePercent": 0.2,
+        "gpuCorePercent": 0.4,
+        "percentCPUUsage": {
+          "renderer": {
+            "mean": 0,
+            "max": 0
+          },
+          "gpu": {
+            "mean": 0,
+            "max": 0
+          }
+        },
+        "drawsPerSecond": 0,
+        "shown": {
+          "visibility": "visible",
+          "focus": true
+        },
+        "rendererWorkingSetMB": 144.2
+      },
+      "pageHeapMB": 6.6,
+      "rendererWorkingSetAfterMB": 171.2,
+      "burst": {
+        "settledMs": 19.6,
+        "worstGapMs": 16.7,
+        "medianGapMs": 16.6,
+        "over50ms": 0,
+        "frames": 3
+      },
+      "colorBurst": {
+        "settledMs": 137.2,
+        "worstGapMs": 17.5,
+        "medianGapMs": 16.7,
+        "over50ms": 0,
+        "frames": 10
+      },
+      "typing": {
+        "pressed": 25,
+        "drawn": 25,
+        "toDraw": {
+          "n": 25,
+          "median": 11.2,
+          "p95": 15.5,
+          "max": 15.8
+        },
+        "toNextFrame": {
+          "n": 25,
+          "median": 26.6,
+          "p95": 31.8,
+          "max": 32
+        }
+      }
+    }
+  ],
+  "fits": [
+    {
+      "lib": "ghostty-web",
+      "underAppCsp": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        }
+      },
+      "ax": {
+        "nodes": 14,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 7,
+          "textbox": 4,
+          "Canvas": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input",
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "ghostty-web-steady",
+      "underAppCsp": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        }
+      },
+      "ax": {
+        "nodes": 14,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 7,
+          "textbox": 4,
+          "Canvas": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input",
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "wterm",
+      "underAppCsp": {
+        "red": null,
+        "loads": false,
+        "errors": [
+          "TypeError: Failed to fetch\n    at Ss (bench://h/wterm-DPYYSYFZ.js:5:31665)\n    at Cs (bench://h/wterm-DPYYSYFZ.js:5:32182)\n    at xe (bench://h/wterm-DPYYSYFZ.js:5:32674)\n    at n.load (bench://h/wterm-DPYYSYFZ.js:5:36661)\n    at Dr (bench://h/wterm-DPYYSYFZ.js:5:52600)\n    at A (bench://h/page.js:1:2269)\n    at async <anonymous>:396:30"
+        ],
+        "refused": [
+          "connect-src bench"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": "rgb(216, 220, 228)",
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-attr inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": true,
+      "cursor": {
+        "focused": {
+          "pixels": 512,
+          "box": [
+            16,
+            32
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 176,
+          "box": [
+            16,
+            32
+          ],
+          "fill": 0.34
+        }
+      },
+      "ax": {
+        "nodes": 61,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 31,
+          "group": 2,
+          "textbox": 2,
+          "StaticText": 25
+        },
+        "textInTree": true,
+        "inputs": [
+          "Terminal",
+          "Terminal"
+        ]
+      }
+    },
+    {
+      "lib": "xterm",
+      "underAppCsp": {
+        "red": "rgb(0, 0, 0)",
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": "rgb(0, 0, 0)",
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": true,
+      "cursor": {
+        "focused": {
+          "pixels": 480,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 168,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 0.35
+        }
+      },
+      "ax": {
+        "nodes": 18,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 15,
+          "textbox": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "xterm-webgl",
+      "underAppCsp": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 480,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 168,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 0.35
+        }
+      },
+      "ax": {
+        "nodes": 22,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 15,
+          "Canvas": 4,
+          "textbox": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "xterm-sr",
+      "underAppCsp": {
+        "red": "rgb(0, 0, 0)",
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": "rgb(0, 0, 0)",
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": true,
+      "cursor": {
+        "focused": {
+          "pixels": 480,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 168,
+          "box": [
+            16,
+            30
+          ],
+          "fill": 0.35
+        }
+      },
+      "ax": {
+        "nodes": 73,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 19,
+          "list": 2,
+          "listitem": 24,
+          "StaticText": 25,
+          "textbox": 2
+        },
+        "textInTree": true,
+        "inputs": [
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "restty",
+      "underAppCsp": {
+        "red": null,
+        "loads": false,
+        "errors": [
+          "Uncaught RangeError: Start offset -2133852160 is outside the bounds of the buffer",
+          "Uncaught RuntimeError: unreachable",
+          "Uncaught RuntimeError: unreachable"
+        ],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [
+          "style-src-elem inline"
+        ],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": false,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 364,
+          "box": [
+            14,
+            26
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 364,
+          "box": [
+            14,
+            26
+          ],
+          "fill": 1
+        }
+      },
+      "ax": {
+        "nodes": 16,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 11,
+          "textbox": 2,
+          "Canvas": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "underAppCsp": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 168,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 0.33
+        }
+      },
+      "ax": {
+        "nodes": 14,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 7,
+          "textbox": 4,
+          "Canvas": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input",
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    },
+    {
+      "lib": "ghostty-web-patched-steady",
+      "underAppCsp": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "withFetch": {
+        "red": null,
+        "loads": true,
+        "errors": [],
+        "refused": [],
+        "node": {
+          "process": "undefined",
+          "require": "undefined"
+        }
+      },
+      "node": {
+        "process": "undefined",
+        "require": "undefined"
+      },
+      "textRead": true,
+      "browserFind": false,
+      "cursor": {
+        "focused": {
+          "pixels": 504,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 1
+        },
+        "unfocused": {
+          "pixels": 168,
+          "box": [
+            18,
+            28
+          ],
+          "fill": 0.33
+        }
+      },
+      "ax": {
+        "nodes": 14,
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 7,
+          "textbox": 4,
+          "Canvas": 2
+        },
+        "textInTree": false,
+        "inputs": [
+          "Terminal input",
+          "Terminal input",
+          "Terminal input",
+          "Terminal input"
+        ]
+      }
+    }
+  ],
+  "busy": [
+    {
+      "lib": "blank",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 38.9,
+      "gpuCorePercent": 4.1,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 3.2,
+          "max": 4.9
+        },
+        "gpu": {
+          "mean": 0.3,
+          "max": 0.3
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 184
+    },
+    {
+      "lib": "blank",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 100.4,
+      "gpuCorePercent": 5.8,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 8.4,
+          "max": 9.3
+        },
+        "gpu": {
+          "mean": 0.5,
+          "max": 0.6
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 332.8
+    },
+    {
+      "lib": "blank",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 111.1,
+      "gpuCorePercent": 6.9,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 9.3,
+          "max": 9.5
+        },
+        "gpu": {
+          "mean": 0.6,
+          "max": 0.8
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 530.9
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 6.2,
+      "gpuCorePercent": 6,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.5,
+          "max": 0.5
+        },
+        "gpu": {
+          "mean": 0.5,
+          "max": 0.5
+        }
+      },
+      "drawsPerSecond": 60,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 138.8
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 10,
+      "gpuCorePercent": 11.6,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.8,
+          "max": 0.9
+        },
+        "gpu": {
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "drawsPerSecond": 60.1,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 149.4
+    },
+    {
+      "lib": "ghostty-web",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 25.3,
+      "gpuCorePercent": 31,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 2.1,
+          "max": 2.3
+        },
+        "gpu": {
+          "mean": 2.6,
+          "max": 2.9
+        }
+      },
+      "drawsPerSecond": 60,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 189.8
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 3.9,
+      "gpuCorePercent": 3.4,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.3,
+          "max": 0.4
+        },
+        "gpu": {
+          "mean": 0.3,
+          "max": 0.3
+        }
+      },
+      "drawsPerSecond": 21.9,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 138.6
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 7.5,
+      "gpuCorePercent": 6.7,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.6,
+          "max": 0.6
+        },
+        "gpu": {
+          "mean": 0.6,
+          "max": 0.6
+        }
+      },
+      "drawsPerSecond": 21.2,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 147.7
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 21.5,
+      "gpuCorePercent": 19.9,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 1.8,
+          "max": 1.9
+        },
+        "gpu": {
+          "mean": 1.7,
+          "max": 1.7
+        }
+      },
+      "drawsPerSecond": 21.3,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 182.5
+    },
+    {
+      "lib": "wterm",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 12.9,
+      "gpuCorePercent": 5.3,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 1.1,
+          "max": 1.2
+        },
+        "gpu": {
+          "mean": 0.4,
+          "max": 0.5
+        }
+      },
+      "drawsPerSecond": 20,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 187.3
+    },
+    {
+      "lib": "wterm",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 26.3,
+      "gpuCorePercent": 10.6,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 2.2,
+          "max": 2.2
+        },
+        "gpu": {
+          "mean": 0.9,
+          "max": 0.9
+        }
+      },
+      "drawsPerSecond": 20,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 190.9
+    },
+    {
+      "lib": "wterm",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 80.7,
+      "gpuCorePercent": 30.1,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 6.7,
+          "max": 7
+        },
+        "gpu": {
+          "mean": 2.5,
+          "max": 2.6
+        }
+      },
+      "drawsPerSecond": 20,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 358.6
+    },
+    {
+      "lib": "xterm",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 8.4,
+      "gpuCorePercent": 2.5,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.7,
+          "max": 0.8
+        },
+        "gpu": {
+          "mean": 0.2,
+          "max": 0.2
+        }
+      },
+      "drawsPerSecond": 20.1,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 181.7
+    },
+    {
+      "lib": "xterm",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 14.8,
+      "gpuCorePercent": 2.5,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 1.2,
+          "max": 1.3
+        },
+        "gpu": {
+          "mean": 0.2,
+          "max": 0.2
+        }
+      },
+      "drawsPerSecond": 20.1,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 191.2
+    },
+    {
+      "lib": "xterm",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 45.9,
+      "gpuCorePercent": 4.7,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 3.8,
+          "max": 3.9
+        },
+        "gpu": {
+          "mean": 0.4,
+          "max": 0.4
+        }
+      },
+      "drawsPerSecond": 20.1,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 275.8
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 1,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 3.2,
+      "gpuCorePercent": 3,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.3,
+          "max": 0.3
+        },
+        "gpu": {
+          "mean": 0.3,
+          "max": 0.3
+        }
+      },
+      "drawsPerSecond": 20,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 133.5
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 4,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 3.5,
+      "gpuCorePercent": 4.7,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.3,
+          "max": 0.3
+        },
+        "gpu": {
+          "mean": 0.4,
+          "max": 0.4
+        }
+      },
+      "drawsPerSecond": 20.1,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 149.7
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 16,
+      "linesPerSecond": 200,
+      "rendererCorePercent": 6.3,
+      "gpuCorePercent": 11.5,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.5,
+          "max": 0.7
+        },
+        "gpu": {
+          "mean": 1,
+          "max": 1.1
+        }
+      },
+      "drawsPerSecond": 20,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 199.5
+    }
+  ],
+  "large": [
+    {
+      "lib": "ghostty-web",
+      "n": 16,
+      "tile": "600x340",
+      "window": "2400x1360",
+      "rendererCorePercent": 14.3,
+      "gpuCorePercent": 24.2,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 1.2,
+          "max": 1.3
+        },
+        "gpu": {
+          "mean": 2,
+          "max": 2.1
+        }
+      },
+      "drawsPerSecond": 60,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 151.3
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 16,
+      "tile": "600x340",
+      "window": "2400x1360",
+      "rendererCorePercent": 1.9,
+      "gpuCorePercent": 2.6,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.2,
+          "max": 0.2
+        },
+        "gpu": {
+          "mean": 0.2,
+          "max": 0.2
+        }
+      },
+      "drawsPerSecond": 1.9,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 148.9
+    },
+    {
+      "lib": "wterm",
+      "n": 16,
+      "tile": "600x340",
+      "window": "2400x1360",
+      "rendererCorePercent": 2.7,
+      "gpuCorePercent": 1,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.2,
+          "max": 0.2
+        },
+        "gpu": {
+          "mean": 0.1,
+          "max": 0.1
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 152.1
+    },
+    {
+      "lib": "xterm",
+      "n": 16,
+      "tile": "600x340",
+      "window": "2400x1360",
+      "rendererCorePercent": 2.5,
+      "gpuCorePercent": 1,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0.2,
+          "max": 0.2
+        },
+        "gpu": {
+          "mean": 0.1,
+          "max": 0.1
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 135.9
+    },
+    {
+      "lib": "xterm-webgl",
+      "n": 16,
+      "tile": "600x340",
+      "window": "2400x1360",
+      "rendererCorePercent": 0.4,
+      "gpuCorePercent": 0.7,
+      "percentCPUUsage": {
+        "renderer": {
+          "mean": 0,
+          "max": 0
+        },
+        "gpu": {
+          "mean": 0.1,
+          "max": 0.1
+        }
+      },
+      "drawsPerSecond": 0,
+      "shown": {
+        "visibility": "visible",
+        "focus": true
+      },
+      "rendererWorkingSetMB": 156.4
+    }
+  ],
+  "growth": [
+    {
+      "lib": "ghostty-web",
+      "n": 2,
+      "readings": [
+        {
+          "label": "fresh",
+          "rendererCorePercent": 4.5,
+          "gpuCorePercent": 6.2,
+          "drawsPerSecond": 60,
+          "msPerRender": 0.056,
+          "rendererWorkingSetMB": 122.5
+        },
+        {
+          "label": "1,000 lines",
+          "rendererCorePercent": 4.4,
+          "gpuCorePercent": 6,
+          "drawsPerSecond": 60,
+          "msPerRender": 0.054,
+          "rendererWorkingSetMB": 141.5
+        },
+        {
+          "label": "21,000 lines",
+          "rendererCorePercent": 4.7,
+          "gpuCorePercent": 6.4,
+          "drawsPerSecond": 60,
+          "msPerRender": 0.059,
+          "rendererWorkingSetMB": 145.9
+        },
+        {
+          "label": "3 minutes later",
+          "rendererCorePercent": 6.6,
+          "gpuCorePercent": 10,
+          "drawsPerSecond": 59.9,
+          "msPerRender": 0.105,
+          "rendererWorkingSetMB": 153.5
+        }
+      ]
+    },
+    {
+      "lib": "ghostty-web-patched",
+      "n": 2,
+      "readings": [
+        {
+          "label": "fresh",
+          "rendererCorePercent": 0.6,
+          "gpuCorePercent": 1,
+          "drawsPerSecond": 1.9,
+          "msPerRender": 0.118,
+          "rendererWorkingSetMB": 121.5
+        },
+        {
+          "label": "1,000 lines",
+          "rendererCorePercent": 0.6,
+          "gpuCorePercent": 1,
+          "drawsPerSecond": 1.9,
+          "msPerRender": 0.108,
+          "rendererWorkingSetMB": 139.3
+        },
+        {
+          "label": "21,000 lines",
+          "rendererCorePercent": 0.9,
+          "gpuCorePercent": 1.3,
+          "drawsPerSecond": 1.9,
+          "msPerRender": 0.166,
+          "rendererWorkingSetMB": 141.8
+        },
+        {
+          "label": "3 minutes later",
+          "rendererCorePercent": 0.7,
+          "gpuCorePercent": 1.3,
+          "drawsPerSecond": 1.9,
+          "msPerRender": 0.139,
+          "rendererWorkingSetMB": 143.9
+        }
+      ]
+    }
+  ],
+  "app": [
+    {
+      "count": 1,
+      "tiles": 1,
+      "rendererCorePercent": 6.7,
+      "gpuCorePercent": 6.1,
+      "mainCorePercent": 0.1
+    },
+    {
+      "count": 4,
+      "tiles": 4,
+      "rendererCorePercent": 8.4,
+      "gpuCorePercent": 10.5,
+      "mainCorePercent": 0.6
+    },
+    {
+      "count": 16,
+      "tiles": 16,
+      "rendererCorePercent": 11.8,
+      "gpuCorePercent": 24.3,
+      "mainCorePercent": 0.1
+    }
+  ]
+}

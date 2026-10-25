@@ -60,6 +60,21 @@ catalogs:
     '@types/react-dom':
       specifier: 19.3.0
       version: 19.3.0
+    '@wterm/dom':
+      specifier: 0.5.5
+      version: 0.5.5
+    '@wterm/ghostty':
+      specifier: 0.5.5
+      version: 0.5.5
+    '@xterm/addon-fit':
+      specifier: 0.11.0
+      version: 0.11.0
+    '@xterm/addon-webgl':
+      specifier: 0.19.0
+      version: 0.19.0
+    '@xterm/xterm':
+      specifier: 6.0.0
+      version: 6.0.0
     effect:
       specifier: 4.0.6
       version: 4.0.6
@@ -87,6 +102,9 @@ catalogs:
     react-dom:
       specifier: 19.3.1
       version: 19.3.1
+    restty:
+      specifier: 0.3.0
+      version: 0.3.0
     smol-toml:
       specifier: ^1.9.0
       version: 1.9.0
@@ -299,6 +317,40 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  experiments/142-web-terminals:
+    dependencies:
+      '@wterm/dom':
+        specifier: 'catalog:'
+        version: 0.5.5
+      '@wterm/ghostty':
+        specifier: 'catalog:'
+        version: 0.5.5
+      '@xterm/addon-fit':
+        specifier: 'catalog:'
+        version: 0.11.0
+      '@xterm/addon-webgl':
+        specifier: 'catalog:'
+        version: 0.19.0
+      '@xterm/xterm':
+        specifier: 'catalog:'
+        version: 6.0.0
+      ghostty-web:
+        specifier: 'catalog:'
+        version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
+      restty:
+        specifier: 'catalog:'
+        version: 0.3.0
+    devDependencies:
+      electron:
+        specifier: 'catalog:'
+        version: 45.0.0
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      playwright:
+        specifier: 'catalog:'
+        version: 1.64.1
 
   legacy:
     dependencies:
@@ -2113,6 +2165,24 @@ packages:
   '@vitest/spy@5.0.3':
     resolution: {integrity: sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg==}
 
+  '@wterm/core@0.5.5':
+    resolution: {integrity: sha512-0dvlZuXMDFvaGr1B0wPqXx8qw5UVfE3gc/BkhpLd0t9zsYdmiIRJPEFmEJkFxzIQlffPbnEP5sQ6iT+XyjT1pg==}
+
+  '@wterm/dom@0.5.5':
+    resolution: {integrity: sha512-eUSgc4a0/8WxYLpjp/4UgLUI9K/Ret5O8LKljx4swT0B1bcQpZtyxgt/LZ/Sp7DFxEB2eesgy4OSB0TQsmSS1A==}
+
+  '@wterm/ghostty@0.5.5':
+    resolution: {integrity: sha512-7OhGUBNdVxVstKFTgPBiUF7e/TQoaWRN1KCvPRLob9MCTHKg5QdJhWEjwLaYUQkbdg9Kd91IqCSMDOYXl22oCg==}
+
+  '@xterm/addon-fit@0.11.0':
+    resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
+
+  '@xterm/addon-webgl@0.19.0':
+    resolution: {integrity: sha512-b3fMOsyLVuCeNJWxolACEUED0vm7qC0cy4wRvf3oURSzDTYVQiGPhTnhWZwIHdvC48Y+oLhvYXnY4XDXPoJo6A==}
+
+  '@xterm/xterm@6.0.0':
+    resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
+
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
@@ -2637,6 +2707,10 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  restty@0.3.0:
+    resolution: {integrity: sha512-ppNLeZRnJHmGMCJKHYkYzphi1DUSLWqiZbPHOOv0KT1j5wp2yfLDMXjQQmNgqb4evYhItab0D72HpYhdbNY6Fw==}
+    engines: {bun: '>=1.2.0'}
+
   rolldown@1.2.12:
     resolution: {integrity: sha512-8wafseiaG80xmXSfqidUNqZcylTlhmPZZt+za2m+js2sFZ8dTNlhIOV2WcbIPx2hgwPBJpEUGFAMZ9bgBBLTSQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2734,6 +2808,9 @@ packages:
   supports-color@10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
     engines: {node: '>=18'}
+
+  text-shaper@0.1.28:
+    resolution: {integrity: sha512-uwm6+tkgYJ4hsTV0wZVHkZeoXR1/mthLxDiJvfU9o/FiibNinpFRC8PAMTNx8SaOjaK/5ZjDG1XAkPbKlIe2Jg==}
 
   tinybench@6.2.0:
     resolution: {integrity: sha512-78U2TlB2CnVenajOFzf3BKSm0J6oz5L0NV7g32LCPccvYc0lbWvys4d3uUUCS2B1N8PAf2+aekR8i1KbC3HO7Q==}
@@ -3997,6 +4074,22 @@ snapshots:
 
   '@vitest/spy@5.0.3': {}
 
+  '@wterm/core@0.5.5': {}
+
+  '@wterm/dom@0.5.5':
+    dependencies:
+      '@wterm/core': 0.5.5
+
+  '@wterm/ghostty@0.5.5':
+    dependencies:
+      '@wterm/core': 0.5.5
+
+  '@xterm/addon-fit@0.11.0': {}
+
+  '@xterm/addon-webgl@0.19.0': {}
+
+  '@xterm/xterm@6.0.0': {}
+
   accepts@2.0.0:
     dependencies:
       mime-types: 3.0.2
@@ -4529,6 +4622,10 @@ snapshots:
 
   require-from-string@2.0.2: {}
 
+  restty@0.3.0:
+    dependencies:
+      text-shaper: 0.1.28
+
   rolldown@1.2.12:
     dependencies:
       '@oxc-project/types': 0.152.0
@@ -4686,6 +4783,8 @@ snapshots:
       - supports-color
 
   supports-color@10.2.2: {}
+
+  text-shaper@0.1.28: {}
 
   tinybench@6.2.0: {}
 
