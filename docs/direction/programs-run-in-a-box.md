@@ -21,7 +21,7 @@ test:
 | A bad ticket can... | A: key inside | B: key outside |
 |---|---|---|
 | steal the keys | yes | no, nothing real is there |
-| push code | anywhere, as the owner | only to its own branch, and review sees it |
+| push code | anywhere, as the owner | only to its own branch, and only after review passes ([push after review](./push-after-review.md)) |
 | spend on the model account | from anywhere, later | only inside this job, under the box's limit |
 
 ## What was decided
