@@ -491,7 +491,13 @@ Where they clash, the owner picks.
 - **Memory while the window is closed:** the host, under 200 MB today.
 - **A trip to the host** for Ctrl-B and the key after it.
 - **How sure: 80%.** The doubt: an agent halfway through a call when the host
-  stops needs its own way back. The first real lane run would show it.
+  stops needs its own way back. Coming back running would send the call
+  again: a second paid model call, or a second comment on a real ticket. It is
+  decided before the lane that builds the restore, not found on a real
+  ticket. The shape to start from is already in kept programs
+  (`packages/fabrika/src/program/kept.test.ts`): the program gets `resume` and
+  its own `update` says what each half-done step does, with a write carrying
+  its `intent`.
 
 ### Later
 
