@@ -1,0 +1,13 @@
+{
+	"name": "exp-146-alchemy-everywhere",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 146: can Alchemy v2 be the one way fabrika spins up infrastructure? Kept outside the workspace on purpose.",
+	"dependencies": {
+		"@alchemy.run/cloudflare": "2.0.0-beta.84",
+		"@alchemy.run/docker": "2.0.0-beta.84",
+		"@effect/platform-node": "4.0.6",
+		"alchemy": "2.0.0-beta.84",
+		"effect": "4.0.6"
+	}
+}

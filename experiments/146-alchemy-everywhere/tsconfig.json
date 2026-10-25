@@ -1,0 +1,7 @@
+{
+	// Experiment 146's own type check, outside `pnpm typecheck` like every experiment. Spike 4 runs
+	// it: do the spike files, which mix this folder's Effect copy with the workspace's, typecheck?
+	//   node_modules/.bin/tsc -p experiments/146-alchemy-everywhere
+	"extends": "../../tsconfig.base.json",
+	"include": ["*.ts"]
+}
