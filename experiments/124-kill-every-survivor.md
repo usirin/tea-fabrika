@@ -240,6 +240,37 @@ the agent's check killed it. "3 of 40" is 3 of #483's 40 such kills.
 - **The estimate was $4.** It came in at a fifth of that. The whole run,
   harness and write-up, took about an hour.
 
+### Each new test, rated later (2026-10-24)
+
+Asked by [Every finding is rated](../docs/direction/every-finding-is-rated.md):
+when an agent kills a mutant that is noise, does it leave a test that locks a
+detail? The tests' code was not saved, only their names, so each is rated from
+its name, the mutants it killed, and the hand read above. One rater.
+
+The 28 kills came from 13 new tests: 1 on #355, 3 on #367, 9 on #483, each
+of #483's run on both clients. The rewrite case added a status to an
+existing test.
+
+- **10 of 13 guard real behaviour:**
+  - #355's saved state with no `lifecycle` field;
+  - #367's carry into the seconds, its `CLIENT` span and its child span ended
+    at `RunDone`, two of them off the promise but real;
+  - #483's arrays and keys in a redacted body, the empty key, the body that
+    is not JSON, empty parts, no detail, and the 400 and 399 edges.
+- **3 of 13 carry junk:**
+  - **A detail pinned:** the redaction test expects `"[redacted]"` word for
+    word. The mutant it kills turns the marker into `""`, which still hides
+    the key. The rest of that test is sound.
+  - **A choice nobody made, locked in:** "a success body is passed through as
+    is" sends the key in a 200 body and expects it back. If every body should
+    one day be redacted, this test stands in the way.
+  - **A test of the tool:** "a key that happens to be `"Stryker was here!"` is
+    still redacted" kills nothing the empty-key test does not.
+- **So about 1 test in 4 carries some junk,** and on #483 the junk is
+  doubled by the two copied clients.
+- **The writer never said "not worth a test".** Its only other answer was
+  "cannot be told apart". It killed every mutant it could, noise included.
+
 ## Recommendation
 
 1. **Keep the loop as the proposal has it: every live mutant goes to the
