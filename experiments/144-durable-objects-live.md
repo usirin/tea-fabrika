@@ -16,7 +16,8 @@ GitHub's keys list.**
 - **Writes:** an append is 56 ms at p50 and 74 ms at p95, but 426 ms at p99. About 1 write in
   100 waits 0.4 to 0.8 s inside Cloudflare. That is far over
   [tea-host](../docs/direction/tea-host.md)'s 50 ms bar. Reads have no such tail, so a read
-  cache, the note's answer to a slow ledger, would not fix it.
+  cache, the note's answer to a slow ledger, would not fix it. *That bar was dropped the same
+  day: these times are good enough for two people (part 1).*
 - **Two writers for 10 minutes, a redeploy in the middle:** run twice, 5,670 and 5,342 facts,
   0 lost, 0 doubled. A redeploy reached the Worker within 1 s. A busy object kept its old code
   until it went quiet: 5 minutes in one run. So a new Worker calls an old object for a while,
@@ -137,6 +138,10 @@ between them. All 900 answered 200.
     pending write and handle a refused one. **How sure: 65%.** The doubt: one afternoon. A
     second run on another day, and one from a far network, would show whether the tail is
     steady.
+  - **Decided the same day** ([tea-host](../docs/direction/tea-host.md)): these write times
+    are good enough for two people. The 50 ms line was an agent's lean, never agreed, so no
+    direct host-to-host path comes next. Showing a change before its write settles is later,
+    and only if it feels slow in use.
 - A brand-new object's first call was 444 ms.
 
 ## 2. A cold object
