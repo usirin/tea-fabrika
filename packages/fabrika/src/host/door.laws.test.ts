@@ -2024,6 +2024,25 @@ const arbForm = fc.constantFrom<DateForm>("imf", "rfc850", "asctime");
 /** Forty years in seconds: inside it a two-digit year is never in doubt. */
 const FORTY_YEARS = 40 * 365 * 24 * 3600;
 
+/**
+ * The machine's time zone, as an input of the laws that read a date: Cloudflare runs in UTC, a
+ * laptop's Miniflare in the laptop's zone. A date read as local time is right only in UTC. Twelve
+ * hours behind it, a date just past reads as still ahead; fourteen hours ahead, a date just ahead
+ * reads as already past. Each run sets its zone, so a law gives the same answer on any machine.
+ * These are IANA's fixed offsets, whose sign is the other way round: `Etc/GMT+12` is UTC-12.
+ */
+const arbZone = fc.constantFrom("UTC", "Etc/GMT+12", "Etc/GMT-14");
+/** Runs a law whose runs set the zone, then puts back the zone the machine had. */
+const keepingZone = async (law: () => Promise<void>): Promise<void> => {
+	const was = process.env.TZ;
+	try {
+		await law();
+	} finally {
+		if (was === undefined) Reflect.deleteProperty(process.env, "TZ");
+		else process.env.TZ = was;
+	}
+};
+
 /** A spent-limit refusal's other headers: a reset now or later, or none, any remaining. */
 const arbOthers = fc
 	.record(
@@ -2270,89 +2289,103 @@ const digitsWait: Law = {
 /**
  * 30. A `retry-after` that is an HTTP-date, in each of RFC 9110's three forms, waits until that time,
  *     capped at one hour, whatever else the refusal says. Dates from a second to forty years ahead
- *     (and to 9999 for the forms with four-digit years).
+ *     (and to 9999 for the forms with four-digit years), in any of `arbZone`'s zones.
  */
 const datesWait: Law = {
 	name: "an HTTP-date in each of its three forms waits until that time, capped at one hour",
 	run: async (mod) => {
 		const LAST = Math.floor((Date.UTC(9999, 11, 31, 23, 59, 59) - T0) / 1000);
-		await fc.assert(
-			fc.property(
-				fc.constantFrom(403, 429),
-				arbForm,
-				fc.oneof(
-					fc.integer({min: 1, max: 7200}),
-					fc.integer({min: 1, max: FORTY_YEARS}),
-					fc.integer({min: 1, max: LAST}),
+		await keepingZone(async () => {
+			await fc.assert(
+				fc.property(
+					fc.constantFrom(403, 429),
+					arbForm,
+					fc.oneof(
+						fc.integer({min: 1, max: 7200}),
+						fc.integer({min: 1, max: FORTY_YEARS}),
+						fc.integer({min: 1, max: LAST}),
+					),
+					arbOthers,
+					arbZone,
+					(status, form, ahead, others, zone) => {
+						process.env.TZ = zone;
+						// A two-digit year is in doubt past fifty years; law 32 reads those.
+						const secs = form === "rfc850" ? ((ahead - 1) % FORTY_YEARS) + 1 : ahead;
+						const at = T0 + secs * 1000;
+						const text = httpDateText(at, form);
+						const w = mod.limitWait(status, {...others, "retry-after": text}, T0);
+						ensure(
+							w === waitUntil(at),
+							`in ${zone}, retry-after "${text}" waits ${shownWait(w)}, want ${waitUntil(at)} ms`,
+						);
+					},
 				),
-				arbOthers,
-				(status, form, ahead, others) => {
-					// A two-digit year is in doubt past fifty years; law 32 reads those.
-					const secs = form === "rfc850" ? ((ahead - 1) % FORTY_YEARS) + 1 : ahead;
-					const at = T0 + secs * 1000;
-					const text = httpDateText(at, form);
-					const w = mod.limitWait(status, {...others, "retry-after": text}, T0);
-					ensure(
-						w === waitUntil(at),
-						`retry-after "${text}" waits ${shownWait(w)}, want ${waitUntil(at)} ms`,
-					);
-				},
-			),
-			{numRuns: 300, seed: 7},
-		);
+				{numRuns: 300, seed: 7},
+			);
+		});
 	},
 };
 
 /**
  * 31. A date in the past, or now, means no wait: an HTTP-date in each form and an
  *     `x-ratelimit-reset` at or before now give 0, and through the Layer the next question goes out
- *     at that same ms.
+ *     at that same ms. In any of `arbZone`'s zones.
  */
 const pastNoWait: Law = {
 	name: "a date in the past means no wait",
 	run: async (mod) => {
 		const FIRST = Math.floor((T0 - Date.UTC(1000, 0, 1)) / 1000);
-		await fc.assert(
-			fc.asyncProperty(
-				fc.constantFrom(403, 429),
-				fc.constantFrom("imf" as const, "rfc850" as const, "asctime" as const, "reset" as const),
-				fc.oneof(
-					fc.constant(0),
-					fc.integer({min: 1, max: 7200}),
-					fc.integer({min: 1, max: FORTY_YEARS}),
-					fc.integer({min: 1, max: FIRST}),
+		await keepingZone(async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					fc.constantFrom(403, 429),
+					fc.constantFrom("imf" as const, "rfc850" as const, "asctime" as const, "reset" as const),
+					fc.oneof(
+						fc.constant(0),
+						fc.integer({min: 1, max: 7200}),
+						fc.integer({min: 1, max: FORTY_YEARS}),
+						fc.integer({min: 1, max: FIRST}),
+					),
+					arbQ,
+					arbQ,
+					arbZone,
+					async (status, form, back, first, next, zone) => {
+						process.env.TZ = zone;
+						const at = T0 - (form === "rfc850" ? back % FORTY_YEARS : back) * 1000;
+						const headers =
+							form === "reset"
+								? {
+										"x-ratelimit-remaining": "0",
+										"x-ratelimit-reset": String(Math.max(at / 1000, 0)),
+									}
+								: {"retry-after": httpDateText(at, form)};
+						const w = mod.limitWait(status, headers, T0);
+						ensure(
+							w === 0,
+							`in ${zone}, ${JSON.stringify(headers)} waits ${shownWait(w)}, want 0 ms`,
+						);
+						const gh = ghPeople();
+						await onTestClock(
+							mod,
+							gh,
+							{cacheMs: 0, failMs: 0},
+							Effect.gen(function* () {
+								gh.state.refusal = {status, headers};
+								yield* answerOf(mod, first);
+								gh.state.refusal = null;
+								const sent = gh.asked.length;
+								const got = yield* answerOf(mod, next);
+								ensure(
+									got.startsWith("keys") && gh.asked.length > sent,
+									`in ${zone}, right after ${status} ${JSON.stringify(headers)}, ${next.q} ${next.arg} answered ${got}`,
+								);
+							}),
+						);
+					},
 				),
-				arbQ,
-				arbQ,
-				async (status, form, back, first, next) => {
-					const at = T0 - (form === "rfc850" ? back % FORTY_YEARS : back) * 1000;
-					const headers =
-						form === "reset"
-							? {"x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.max(at / 1000, 0))}
-							: {"retry-after": httpDateText(at, form)};
-					const w = mod.limitWait(status, headers, T0);
-					ensure(w === 0, `${JSON.stringify(headers)} waits ${shownWait(w)}, want 0 ms`);
-					const gh = ghPeople();
-					await onTestClock(
-						mod,
-						gh,
-						{cacheMs: 0, failMs: 0},
-						Effect.gen(function* () {
-							gh.state.refusal = {status, headers};
-							yield* answerOf(mod, first);
-							gh.state.refusal = null;
-							const sent = gh.asked.length;
-							const got = yield* answerOf(mod, next);
-							ensure(
-								got.startsWith("keys") && gh.asked.length > sent,
-								`right after ${status} ${JSON.stringify(headers)}, ${next.q} ${next.arg} answered ${got}`,
-							);
-						}),
-					);
-				},
-			),
-			{numRuns: 120, seed: 7},
-		);
+				{numRuns: 120, seed: 7},
+			);
+		});
 	},
 };
 
@@ -2756,6 +2789,13 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			"line.setUTCFullYear(thisYear + 50);",
 			"line.setUTCFullYear(thisYear + 60);",
 		),
+	// An asctime date, which names no zone, is read in the machine's zone, as `Date.parse` reads it.
+	asctimeLocal: () =>
+		plant(
+			"keys-github",
+			"return utc(Number(y), mon, Number(d.trim()), Number(h), Number(m), Number(sec));",
+			'return new Date(mon + " " + d.trim() + ", " + y + " " + h + ":" + m + ":" + sec).getTime();',
+		),
 	// asctime dates are not read.
 	noAsctime: () =>
 		plant("keys-github", "const asc = ASCTIME.exec(s);", 'const asc = ASCTIME.exec("");'),
@@ -2861,6 +2901,7 @@ describe("the door's laws", () => {
 			secondsAsMs: [limitSilence.name, waitEndsForAll.name, digitsWait.name],
 			centuryYear: [datesWait.name, twoDigitYear.name, lineYear.name],
 			sixtyYears: [twoDigitYear.name, lineYear.name],
+			asctimeLocal: [datesWait.name, pastNoWait.name],
 			noAsctime: [datesWait.name, pastNoWait.name],
 			pastWaits: [pastNoWait.name, twoDigitYear.name, lineYear.name],
 		});
