@@ -47,6 +47,7 @@ Layer on its own subpath.
 | Import | File | What it gives |
 |---|---|---|
 | `@kampus/fabrika` | `ledger.ts` | `Ledger` (the service), its tagged errors, `Row`, `Lease`, `streams(name)`, `inboxOf` |
+| `@kampus/fabrika` | `writer.ts` | `Writer`: who wrote a row, a user or an agent. `writerOf` reads it from a row's `writer` text (`user:<id>`, `agent:<id>`); any other text names neither |
 | `@kampus/fabrika/local` | `local.ts`, `worker-options.ts` | `layerLocal`: the ledger in a Miniflare child. Own process group, a fixed direct socket, restarted past 500 MB. `LocalLedger` is the handle on the child. `ledgerOptions`: Miniflare options for the Durable Object, for a caller that runs it itself |
 | `@kampus/fabrika/http` | `http.ts` | `layerHttp`: a `Ledger` over HTTP to any running ledger, with a small pool of connections |
 | `@kampus/fabrika/memory` | `memory.ts` | `layerMemory`: the rules written a second time over Maps, for tests |

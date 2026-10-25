@@ -28,6 +28,7 @@ export * from "./host/observer.ts";
 export * from "./host/rules.ts";
 export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
+export * from "./host/writer.ts";
 // program: a tea machine as a program.
 export * from "./program/ear.ts";
 // The kept run's types appear in what `defineProgram` hands back, so an app's

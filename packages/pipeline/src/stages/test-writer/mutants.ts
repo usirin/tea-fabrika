@@ -1,6 +1,6 @@
 import {Schema} from "effect";
 import {type Controlling, createControls, Result} from "../../controls.ts";
-import {countedAs, type Facts, Finding} from "../../rate.ts";
+import {countedAs, type Facts, Finding, type Silence} from "../../rate.ts";
 import {outcomesOf} from "../outcome.ts";
 
 // The test writer's second job (docs/direction/the-test-writer.md): after
@@ -34,16 +34,24 @@ type Of<A extends MutantAnswer["answer"]> = Extract<MutantAnswer, {readonly answ
 /** The rule a `noise` answer is rated under: the owner's "fix" says the writer was wrong to let it live. */
 export const NOISE_RULE = "test_writer/noise";
 
+/**
+ * What silence means under `NOISE_RULE`: a `noise` answer is the writer's own
+ * call, and only the owner's "noise" lets the mutant live. An unrated one
+ * stays open, shipped or not.
+ */
+export const NOISE_SILENCE: Silence = "open";
+
 /** A `noise` answer, as the Finding the owner rates. */
 export const findingOf = (a: Of<"noise">): Finding => ({id: a.mutant, rule: NOISE_RULE});
 
 /**
  * What the owner's rating does to a noise answer, by Rate's own count:
  * "fix" sends it back for a test, "noise" lets it live, and not yet rated
- * waits. A finding never rated counts as noise once its change ships.
+ * waits, even once its change ships. Only a rating in a row a user wrote
+ * counts: an agent's is as if never made.
  */
 export const ratedAs = (a: Of<"noise">, facts: Facts) => {
-	const says = countedAs(findingOf(a), facts);
+	const says = countedAs(findingOf(a), facts, NOISE_SILENCE);
 	return says === null ? "open" : says === "fix" ? "write_test" : "lives";
 };
 
