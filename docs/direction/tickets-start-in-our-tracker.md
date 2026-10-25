@@ -88,12 +88,20 @@ run. What would settle it: building the form and seeing how small it is.
 ## Still open
 
 - **demlik asks each pull request to close a GitHub issue.** Its `CLAUDE.md`
-  says to write `Closes #N`. Two ways:
-  - Post the approved ticket to GitHub once, at approval, as a copy. No stage
-    ever reads it.
-  - Ask demlik to accept a link to our ticket instead.
-  - Lean: the copy, 70%. demlik's maintainers then see why each pull request
-    exists on GitHub. The doubt: comments on the copy reach nobody.
+  says to write `Closes #N`. Decided 2026-10-24: **no copy of a ticket goes to
+  GitHub.** demlik's rule changes instead, since demlik is the test bed.
+  - Stages read the ticket from the lane's own fact, never from a pull
+    request's body. Today `ticketIn` and review's `no_ticket` check read
+    `Closes #N` from the body, so they change.
+  - [Experiment 138](../../experiments/138-tracker-on-demlik.md) found no
+    outsider ever wrote a demlik issue or comment, and demlik's CI reads none
+    of the link.
+  - The earlier lean, a one-time copy on GitHub (70%), was wrong: comments on
+    a copy reach nobody.
+- **How a pull request's status reaches the ticket.** Today `CodeHost` asks
+  GitHub again every few seconds (`packages/pipeline/src/code-host-github.ts`).
+  GitHub webhooks are wanted instead, behind the same `CodeHost` streams. Where
+  the webhook lands is open: a laptop has no public address.
 - **Ticket ids.** `demlik-1`, in Linear's style of a team key and a number, is
   a guess.
 - **The form.** The tracker program's window. `tsh` can drive the same
@@ -106,5 +114,6 @@ run. What would settle it: building the form and seeing how small it is.
 
 ## What it cannot tell us
 
-Nothing has run. No ticket has been filed this way, and no stage reads a
+Nothing has run on a real tracker. Experiment 138 read demlik's history only.
+No ticket has been filed this way, and no stage reads a
 ticket from the ledger yet.
