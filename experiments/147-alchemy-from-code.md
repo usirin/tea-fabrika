@@ -139,8 +139,9 @@ The live run's watcher, for contrast, saw `api.cloudflare.com` and nothing else 
 Worker's own address.
 
 Phoenix's dev needs credentials only because it marks its D1 database `Alchemy.remote()`
-(`docs/direction/local-is-the-cloud.md`). With nothing marked remote, the Durable Object needs no
-account.
+(`docs/direction/local-is-the-cloud.md`). That was not phoenix's free choice: when it was set
+up, Alchemy needed it to keep its state. Here state is `Alchemy.localState()`, a local folder.
+With nothing marked remote, the Durable Object needs no account.
 
 ## The one switch, and what has no local twin
 
