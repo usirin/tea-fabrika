@@ -27,6 +27,26 @@ opt-in restart backoff, and resending a dead letter.
   spread ([Erlang](https://www.erlang.org/doc/system/distributed.html)). So
   two projects open in the app are two hosts, each with its own tsh. See
   [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md).
+- **A project's host can run on Cloudflare, in the first version, decided
+  2026-10-25.** What runs there is fabrika programs, not agents. They are the
+  same programs, started the same way from tsh, as jobs on the project's
+  host. A program that drafts with an agent does it inside its box, as it
+  would on a laptop. Each job runs on the Claude Code key of the person who
+  started it, and that key never enters the box: the model's calls get it
+  added outside, by a relay
+  ([programs run in a box](./programs-run-in-a-box.md), choice B;
+  [experiment 137](../../experiments/137-key-outside-the-box.md)). Why: both
+  people want jobs to keep running with their laptops closed. How it is
+  built is open. Experiment 148 starts from the Durable Object and container
+  in [PR 61](https://github.com/usirin/tea-fabrika/pull/61).
+
+  ```ts
+  // A sketch. The same job on two hosts. Only where the host runs changes.
+  // tsh on a laptop, attached to the project's host:
+  //   ship 42 &      a job, started by user:github:7
+  // laptop host:      the program in a box on the laptop; the relay on the laptop adds the key
+  // Cloudflare host:  the program in a container; a Worker adds github:7's key on the way out
+  ```
 - **Every host uses exactly one ledger, and config picks which:** a team's
   Durable Object, your own Cloudflare account's Durable Object (to share
   context between your own agents, wherever they run), or a local one. There
