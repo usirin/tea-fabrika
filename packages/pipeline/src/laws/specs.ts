@@ -33,9 +33,12 @@ import * as taskLaws from "./task.ts";
 import * as testWriterLaws from "./test-writer.ts";
 import * as transcriptLaws from "./transcript.ts";
 
-// Every tea machine's laws, in one list. The standard test (standard.test.ts)
-// finds each machine in the source by how it is made, and fails when one has
-// no entry here. Each entry is checked in the normal test suite: no law
+// The laws of the machines on our own search engine, in one list. The
+// standard test (standard.test.ts) finds each machine in the workspace by how
+// it is made, and fails when one has no entry here and no laws file beside
+// it. New laws go beside their machine, on tea's pbt; this list only shrinks
+// (property-tests-not-our-own-search.md). Each entry is checked in the normal
+// test suite: no law
 // broken, and every Msg type the machine takes sent at least once, so no law
 // holds only because the Msg that would break it never came.
 //
@@ -58,7 +61,7 @@ export interface Checked {
 
 export interface Spec {
 	readonly name: string;
-	/** The file the machine is made in: `pipeline/<path under this package's src>`, or `agents/<path under fabrika's src/agents>`. */
+	/** The file the machine is made in, from the top of the repo: `packages/pipeline/src/stages/ship/machine.ts`. */
 	readonly file: string;
 	readonly check: () => Checked;
 }
@@ -116,7 +119,7 @@ export function spec<S, M extends {readonly type: string}, C>(parts: {
 export const SPECS: readonly Spec[] = [
 	spec({
 		name: "ship",
-		file: "pipeline/stages/ship/machine.ts",
+		file: "packages/pipeline/src/stages/ship/machine.ts",
 		machine: ship,
 		init: shipLaws.shipInit,
 		update: shipLaws.shipStep,
@@ -126,7 +129,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "review",
-		file: "pipeline/stages/review/machine.ts",
+		file: "packages/pipeline/src/stages/review/machine.ts",
 		machine: review,
 		init: reviewLaws.reviewInit,
 		update: reviewLaws.reviewStep,
@@ -136,7 +139,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "build",
-		file: "pipeline/stages/build/machine.ts",
+		file: "packages/pipeline/src/stages/build/machine.ts",
 		machine: build,
 		init: buildLaws.buildInit,
 		update: buildLaws.buildStep,
@@ -146,7 +149,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "operate loop",
-		file: "pipeline/stages/operate/machine.ts",
+		file: "packages/pipeline/src/stages/operate/machine.ts",
 		machine: loop,
 		init: loopLaws.loopInit,
 		update: loopLaws.loopStep,
@@ -163,7 +166,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "queue",
-		file: "pipeline/stages/queue.ts",
+		file: "packages/pipeline/src/stages/queue.ts",
 		machine: queue,
 		init: queueLaws.queueInit,
 		update: queueLaws.queueStep,
@@ -173,7 +176,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "hosted agent child",
-		file: "pipeline/hosted/agent.ts",
+		file: "packages/pipeline/src/hosted/agent.ts",
 		machine: quiet,
 		init: agentLaws.agentInit,
 		update: agentLaws.agentStep,
@@ -183,7 +186,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "acp session",
-		file: "agents/acp/session.ts",
+		file: "packages/fabrika/src/agents/acp/session.ts",
 		machine: session,
 		init: sessionLaws.sessionInit,
 		update: sessionLaws.sessionStep,
@@ -193,7 +196,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "acp transcript",
-		file: "agents/acp/transcript.ts",
+		file: "packages/fabrika/src/agents/acp/transcript.ts",
 		machine: transcript,
 		init: transcriptLaws.transcriptInit,
 		update: transcriptLaws.transcriptStep,
@@ -203,7 +206,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "refine",
-		file: "pipeline/refine.ts",
+		file: "packages/pipeline/src/refine.ts",
 		machine: refineLaws.drafts.machine,
 		init: refineLaws.refineInit,
 		update: refineLaws.refineStep,
@@ -216,7 +219,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "criteria book",
-		file: "pipeline/criteria/book.ts",
+		file: "packages/pipeline/src/criteria/book.ts",
 		machine: criteria,
 		init: criteriaLaws.criteriaInit,
 		update: criteriaLaws.criteriaStep,
@@ -226,7 +229,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "local check runs",
-		file: "pipeline/check-runs.ts",
+		file: "packages/pipeline/src/check-runs.ts",
 		machine: checkRuns,
 		init: runsLaws.runsInit,
 		update: runsLaws.runsStep,
@@ -236,7 +239,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "plan",
-		file: "pipeline/stages/plan/machine.ts",
+		file: "packages/pipeline/src/stages/plan/machine.ts",
 		machine: plan,
 		init: planLaws.planInit,
 		update: planLaws.planStep,
@@ -246,7 +249,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "sort",
-		file: "pipeline/stages/sort/machine.ts",
+		file: "packages/pipeline/src/stages/sort/machine.ts",
 		machine: sort,
 		init: sortLaws.sortInit,
 		update: sortLaws.sortStep,
@@ -256,7 +259,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "plan task",
-		file: "pipeline/stages/task/machine.ts",
+		file: "packages/pipeline/src/stages/task/machine.ts",
 		machine: task,
 		init: taskLaws.taskInit,
 		update: taskLaws.taskStep,
@@ -266,7 +269,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "plan catch-up",
-		file: "pipeline/stages/catchup/machine.ts",
+		file: "packages/pipeline/src/stages/catchup/machine.ts",
 		machine: catchup,
 		init: catchupLaws.catchupInit,
 		update: catchupLaws.catchupStep,
@@ -276,7 +279,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "plan lane",
-		file: "pipeline/stages/lane/machine.ts",
+		file: "packages/pipeline/src/stages/lane/machine.ts",
 		machine: lane,
 		init: laneLaws.laneInit,
 		update: laneLaws.laneStep,
@@ -290,7 +293,7 @@ export const SPECS: readonly Spec[] = [
 	}),
 	spec({
 		name: "test writer",
-		file: "pipeline/stages/test-writer/machine.ts",
+		file: "packages/pipeline/src/stages/test-writer/machine.ts",
 		machine: testWriter,
 		init: testWriterLaws.testWriterInit,
 		update: testWriterLaws.testWriterStep,
