@@ -241,6 +241,55 @@ describe("GitHub's keys", () => {
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
 	});
 
+	it.effect("asks again at the wait's end, even about a question asked just before it", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		return Effect.gen(function* () {
+			gh.state.status = 403;
+			gh.state.headers = {"retry-after": "1"};
+			yield* Effect.flip(byId("github:7"));
+			gh.state.status = 200;
+			yield* TestClock.adjust(999);
+			expect((yield* Effect.flip(of("alice"))).why).toContain("rate limit is spent until");
+			expect(gh.state.asked).toEqual(["/user/7"]);
+			yield* TestClock.adjust(1);
+			expect(yield* of("alice")).toEqual({id: "github:7", name: "alice", keys: []});
+			expect(gh.state.asked).toHaveLength(3);
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 2})));
+	});
+
+	it.effect("still keeps GitHub's own limit refusal for failMs, past the wait's end", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		return Effect.gen(function* () {
+			gh.state.status = 403;
+			gh.state.headers = {"retry-after": "1"};
+			const refused = yield* Effect.flip(byId("github:7"));
+			expect(refused.why).toBe("GitHub answered 403 for /user/7");
+			gh.state.status = 200;
+			yield* TestClock.adjust(4_999);
+			expect((yield* Effect.flip(byId("github:7"))).why).toBe(refused.why);
+			expect(gh.state.asked).toEqual(["/user/7"]);
+			yield* TestClock.adjust(1);
+			expect(yield* byId("github:7")).toMatchObject({id: "github:7"});
+		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 5_000})));
+	});
+
+	it.effect("ends the wait on time under the default failMs, at the one-hour cap", () => {
+		const gh = fakeGitHub();
+		gh.users.set("alice", {id: 7, keys: []});
+		return Effect.gen(function* () {
+			gh.state.status = 429;
+			gh.state.headers = {"retry-after": String(LIMIT_WAIT_MS)};
+			yield* Effect.flip(byId("github:7"));
+			gh.state.status = 200;
+			yield* TestClock.adjust(LIMIT_WAIT_MS - 1);
+			yield* Effect.flip(of("alice"));
+			yield* TestClock.adjust(1);
+			expect(yield* of("alice")).toMatchObject({id: "github:7"});
+		}).pipe(Effect.provide(gh.layer()));
+	});
+
 	it.effect("waits for nothing on a refusal that names no spent limit", () => {
 		const gh = fakeGitHub();
 		gh.users.set("alice", {id: 7, keys: []});
@@ -377,6 +426,67 @@ describe("how long GitHub says to wait", () => {
 		expect(limitWait(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1"}, now)).toBe(0);
 		expect(limitWait(503, {"retry-after": "5"}, now)).toBe(null);
 		expect(limitWait(403, {"retry-after": "soon"}, now)).toBe(null);
+	});
+	it("reads digits as seconds, never as a year", () => {
+		expect(limitWait(429, {"retry-after": "2027"}, now)).toBe(2_027_000);
+	});
+	it.each([
+		"1.5",
+		"-5",
+		"+5",
+		"2027-01-01",
+		"June 2027",
+		"5s",
+		"0x10",
+		"1e3",
+		"Sun, 06 Nov 1994",
+		"tomorrow",
+	])("reads retry-after %s as no header", (after) => {
+		expect(limitWait(429, {"retry-after": after}, now)).toBe(null);
+		// And falls through to the reset, as with no retry-after at all.
+		const reset = String(now / 1000 + 90);
+		const headers = {
+			"retry-after": after,
+			"x-ratelimit-remaining": "0",
+			"x-ratelimit-reset": reset,
+		};
+		expect(limitWait(403, headers, now)).toBe(90_000);
+	});
+	it.each(["12.5", "-1", "1e12", "+99", "0x1"])(
+		"reads x-ratelimit-reset %s as no header",
+		(reset) => {
+			expect(limitWait(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": reset}, now)).toBe(
+				null,
+			);
+		},
+	);
+	it("reads all three HTTP-date forms, and no others", () => {
+		// 2001-09-09T01:46:47Z is now + 7 s.
+		for (const date of [
+			"Sun, 09 Sep 2001 01:46:47 GMT",
+			"Sunday, 09-Sep-01 01:46:47 GMT",
+			"Sun Sep  9 01:46:47 2001",
+		])
+			expect(limitWait(429, {"retry-after": date}, now)).toBe(7000);
+		for (const date of [
+			"Sun, 9 Sep 2001 01:46:47 GMT",
+			"Sun, 09 Sep 2001 01:46:47 UTC",
+			"sun, 09 sep 2001 01:46:47 gmt",
+			"Sun, 31 Feb 2001 01:46:47 GMT",
+			"Sun, 09 Sep 2001 24:00:00 GMT",
+			"2001-09-09T01:46:47Z",
+			"Sun Sep 09 01:46:47 2001 GMT",
+		])
+			expect(limitWait(429, {"retry-after": date}, now)).toBe(null);
+	});
+	it("takes a two-digit year as the nearest, never more than 50 years ahead", () => {
+		const at = Date.UTC(2026, 0, 1);
+		const wait = (yy: string) =>
+			limitWait(429, {"retry-after": `Thursday, 01-Jan-${yy} 00:00:05 GMT`}, at);
+		expect(wait("26")).toBe(5000);
+		// 2076 is 50 years ahead, 2077 more: that is 1977, gone, so no wait.
+		expect(wait("76")).toBe(LIMIT_WAIT_MS);
+		expect(wait("77")).toBe(0);
 	});
 });
 
