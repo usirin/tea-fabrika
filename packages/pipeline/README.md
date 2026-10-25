@@ -75,6 +75,7 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `stages/review/` | The review machine and the `review` program |
 | `stages/build/` | The build machine and the `build` program |
 | `stages/plan/` | The plan machine and the `plan` program |
+| `stages/test-writer/` | The test writer machine, built from the combos: one test per Property, run on the plan's base. No program yet |
 | `stages/operate/` | The operate loop and the `operate` program |
 | `stages/queue.ts`, `status.ts`, `traced.ts`, `rules.ts` | Shared by the stages: the kept work queue, status lines, trace drawings, the repo's agent rules |
 | `asks/` | The `asks` core program: what waits on the owner, kept in a ledger. `packs.ts` wires add-on packs to it. `demo.ts` is the demo ledger |
