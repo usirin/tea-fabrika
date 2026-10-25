@@ -1,0 +1,905 @@
+{
+	"host": {
+		"steps": [
+			{
+				"name": "create",
+				"ms": 568,
+				"planMs": 39,
+				"applyMs": 67,
+				"plan": "1 to create",
+				"ok": true,
+				"tail": "[13:26:09.940] INFO (#1): Deploy · s146\n[13:26:09.940] INFO (#1): Importing stack module\n[13:26:09.969] INFO (#22): Resolving stack services\n[13:26:09.973] INFO (#1): Loading stack state\n[13:26:09.974] INFO (#1): Computing plan\n[13:26:09.979] INFO (#1): Plan ready (39ms)\n[13:26:09.980] INFO (#1): Plan: 1 to create\n[13:26:09.980] INFO (#1): [laptop] create\n[13:26:09.980] INFO (#1): \n[13:26:09.983] INFO (#36): [laptop] creating\n[13:26:10.045] INFO (#36): [laptop] created (62ms)\n[13:26:10.047] INFO (#42): [laptop] created (63ms)\n[13:26:10.047] INFO (#1): \n[13:26:10.048] INFO (#1): Done: 1 succeeded (67ms)\n{\n  pid: 44424,\n  socket: '<tmp>/host/host.sock',\n  reloads: 0\n}"
+			},
+			{
+				"name": "same inputs",
+				"ms": 311,
+				"planMs": 36,
+				"applyMs": 3,
+				"plan": "no changes",
+				"ok": true,
+				"tail": "[13:26:10.323] INFO (#1): Deploy · s146\n[13:26:10.323] INFO (#1): Importing stack module\n[13:26:10.348] INFO (#17): Resolving stack services\n[13:26:10.352] INFO (#1): Loading stack state\n[13:26:10.356] INFO (#1): Computing plan\n[13:26:10.360] INFO (#1): Plan ready (36ms)\n[13:26:10.360] INFO (#1): Plan: no changes\n[13:26:10.360] INFO (#1): [laptop] noop\n[13:26:10.360] INFO (#1): \n[13:26:10.363] INFO (#1): \n[13:26:10.363] INFO (#1): Done: 0 succeeded (3ms)\n{\n  pid: 44424,\n  socket: '<tmp>/host/host.sock',\n  reloads: 0\n}"
+			},
+			{
+				"name": "update programs (in place)",
+				"ms": 309,
+				"planMs": 38,
+				"applyMs": 8,
+				"plan": "1 to update",
+				"ok": true,
+				"tail": "[13:26:10.624] INFO (#1): Deploy · s146\n[13:26:10.624] INFO (#1): Importing stack module\n[13:26:10.652] INFO (#17): Resolving stack services\n[13:26:10.657] INFO (#1): Loading stack state\n[13:26:10.659] INFO (#1): Computing plan\n[13:26:10.662] INFO (#1): Plan ready (38ms)\n[13:26:10.663] INFO (#1): Plan: 1 to update\n[13:26:10.663] INFO (#1): [laptop] update\n[13:26:10.663] INFO (#1): \n[13:26:10.665] INFO (#34): [laptop] updating\n[13:26:10.669] INFO (#34): [laptop] updated (4ms)\n[13:26:10.671] INFO (#38): [laptop] updated (6ms)\n[13:26:10.671] INFO (#1): \n[13:26:10.671] INFO (#1): Done: 1 succeeded (8ms)\n{\n  pid: 44424,\n  socket: '<tmp>/host/host.sock',\n  reloads: 1\n}"
+			},
+			{
+				"name": "change ledger (replace)",
+				"ms": 407,
+				"planMs": 36,
+				"applyMs": 121,
+				"plan": "1 to replace",
+				"ok": true,
+				"tail": "[13:26:10.923] INFO (#1): Deploy · s146\n[13:26:10.923] INFO (#1): Importing stack module\n[13:26:10.949] INFO (#17): Resolving stack services\n[13:26:10.955] INFO (#1): Loading stack state\n[13:26:10.956] INFO (#1): Computing plan\n[13:26:10.959] INFO (#1): Plan ready (36ms)\n[13:26:10.959] INFO (#1): Plan: 1 to replace\n[13:26:10.959] INFO (#1): [laptop] replace\n[13:26:10.959] INFO (#1): \n[13:26:10.963] INFO (#34): [laptop] Deleting previous resource before creating its replacement (deleteFirst)...\n[13:26:10.991] INFO (#34): [laptop] creating replacement\n[13:26:11.077] INFO (#34): [laptop] created (86ms)\n[13:26:11.079] INFO (#43): [laptop] created (88ms)\n[13:26:11.080] INFO (#1): \n[13:26:11.080] INFO (#1): Done: 1 succeeded (121ms)\n{\n  pid: 44535,\n  socket: '<tmp>/host/host.sock',\n  reloads: 0\n}"
+			},
+			{
+				"name": "deploy after a kill",
+				"ms": 299,
+				"planMs": 37,
+				"applyMs": 3,
+				"plan": "no changes",
+				"ok": true,
+				"tail": "[13:26:11.337] INFO (#1): Deploy · s146\n[13:26:11.338] INFO (#1): Importing stack module\n[13:26:11.363] INFO (#17): Resolving stack services\n[13:26:11.369] INFO (#1): Loading stack state\n[13:26:11.370] INFO (#1): Computing plan\n[13:26:11.374] INFO (#1): Plan ready (37ms)\n[13:26:11.374] INFO (#1): Plan: no changes\n[13:26:11.375] INFO (#1): [laptop] noop\n[13:26:11.375] INFO (#1): \n[13:26:11.378] INFO (#1): \n[13:26:11.378] INFO (#1): Done: 0 succeeded (3ms)\n{\n  pid: 44535,\n  socket: '<tmp>/host/host.sock',\n  reloads: 0\n}"
+			},
+			{
+				"name": "drift after a kill",
+				"ms": 373,
+				"planMs": 33,
+				"applyMs": 85,
+				"plan": "1 to create",
+				"ok": true,
+				"tail": "[13:26:11.642] INFO (#1): Drift · s146\n[13:26:11.643] INFO (#1): Importing stack module\n[13:26:11.667] INFO (#17): Resolving stack services\n[13:26:11.671] INFO (#1): Loading stack state\n[13:26:11.672] INFO (#1): Checking drift\n[13:26:11.675] INFO (#1): Drift check complete (33ms)\n[13:26:11.676] INFO (#1): Plan: 1 to create\n[13:26:11.676] INFO (#1): [laptop] create\n[13:26:11.676] INFO (#1): \n[13:26:11.677] INFO (#27): [laptop] creating\n[13:26:11.761] INFO (#27): [laptop] created (84ms)\n[13:26:11.761] INFO (#1): \n[13:26:11.761] INFO (#1): Done: 1 succeeded (85ms)"
+			},
+			{
+				"name": "destroy",
+				"ms": 323,
+				"planMs": 32,
+				"applyMs": 34,
+				"plan": "1 to delete",
+				"ok": true,
+				"tail": "[13:26:12.019] INFO (#1): Destroy · s146\n[13:26:12.020] INFO (#1): Importing stack module\n[13:26:12.043] INFO (#17): Resolving stack services\n[13:26:12.048] INFO (#1): Loading stack state\n[13:26:12.049] INFO (#1): Computing plan\n[13:26:12.051] INFO (#1): Plan ready (32ms)\n[13:26:12.051] INFO (#1): Plan: 1 to delete\n[13:26:12.051] INFO (#1): [laptop] delete\n[13:26:12.051] INFO (#1): \n[13:26:12.053] INFO (#27): [laptop] deleting\n[13:26:12.083] INFO (#27): [laptop] deleted (30ms)\n[13:26:12.085] INFO (#1): \n[13:26:12.085] INFO (#1): Done: 1 succeeded (34ms)"
+			}
+		],
+		"seen": {
+			"afterCreate": {
+				"pid": 44424,
+				"alive": true,
+				"files": [
+					"config.json",
+					"host.log",
+					"host.pid",
+					"host.sock"
+				],
+				"state": {
+					"__stack_output__.json": {
+						"pid": 44424,
+						"socket": "<tmp>/host/host.sock",
+						"reloads": 0
+					},
+					"laptop.json": {
+						"status": "created",
+						"fqn": "laptop",
+						"logicalId": "laptop",
+						"instanceId": "1bb468cf71ba7fc60a76793e29082481",
+						"resourceType": "Fabrika.Host",
+						"props": {
+							"home": "<tmp>/host",
+							"programs": [
+								"counter"
+							],
+							"ledger": "memory"
+						},
+						"attr": {
+							"pid": 44424,
+							"socket": "<tmp>/host/host.sock",
+							"home": "<tmp>/host",
+							"startedAt": 1792959970038,
+							"programs": [
+								"counter"
+							],
+							"reloads": 0
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterUpdate": {
+				"pid": 44424,
+				"alive": true,
+				"files": [
+					"config.json",
+					"host.log",
+					"host.pid",
+					"host.sock"
+				],
+				"state": {
+					"__stack_output__.json": {
+						"pid": 44424,
+						"socket": "<tmp>/host/host.sock",
+						"reloads": 1
+					},
+					"laptop.json": {
+						"status": "updated",
+						"fqn": "laptop",
+						"logicalId": "laptop",
+						"instanceId": "1bb468cf71ba7fc60a76793e29082481",
+						"resourceType": "Fabrika.Host",
+						"props": {
+							"home": "<tmp>/host",
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"ledger": "memory"
+						},
+						"attr": {
+							"pid": 44424,
+							"socket": "<tmp>/host/host.sock",
+							"home": "<tmp>/host",
+							"startedAt": 1792959970038,
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"reloads": 1
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterReplace": {
+				"pid": 44535,
+				"alive": true,
+				"files": [
+					"config.json",
+					"host.log",
+					"host.pid",
+					"host.sock"
+				],
+				"state": {
+					"__stack_output__.json": {
+						"pid": 44535,
+						"socket": "<tmp>/host/host.sock",
+						"reloads": 0
+					},
+					"laptop.json": {
+						"status": "created",
+						"fqn": "laptop",
+						"logicalId": "laptop",
+						"instanceId": "f46f6b76babe54796a4c27cd69dc8f03",
+						"resourceType": "Fabrika.Host",
+						"props": {
+							"home": "<tmp>/host",
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"ledger": "local"
+						},
+						"attr": {
+							"pid": 44535,
+							"socket": "<tmp>/host/host.sock",
+							"home": "<tmp>/host",
+							"startedAt": 1792959971047,
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"reloads": 0
+						},
+						"providerVersion": 0,
+						"bindings": [],
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterKillDeploy": {
+				"killed": 44535,
+				"pid": 44535,
+				"alive": false,
+				"files": [
+					"config.json",
+					"host.log",
+					"host.pid",
+					"host.sock"
+				]
+			},
+			"afterDrift": {
+				"pid": 44582,
+				"alive": true,
+				"files": [
+					"config.json",
+					"host.log",
+					"host.pid",
+					"host.sock"
+				],
+				"state": {
+					"__stack_output__.json": {
+						"pid": 44535,
+						"socket": "<tmp>/host/host.sock",
+						"reloads": 0
+					},
+					"laptop.json": {
+						"status": "created",
+						"fqn": "laptop",
+						"logicalId": "laptop",
+						"instanceId": "f46f6b76babe54796a4c27cd69dc8f03",
+						"resourceType": "Fabrika.Host",
+						"props": {
+							"home": "<tmp>/host",
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"ledger": "local"
+						},
+						"attr": {
+							"pid": 44582,
+							"socket": "<tmp>/host/host.sock",
+							"home": "<tmp>/host",
+							"startedAt": 1792959971731,
+							"programs": [
+								"counter",
+								"tracker"
+							],
+							"reloads": 0
+						},
+						"providerVersion": 0,
+						"bindings": [],
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterDestroy": {
+				"pidBefore": 44582,
+				"stillAlive": false,
+				"ps": "",
+				"homeFiles": [
+					"config.json",
+					"host.log"
+				],
+				"state": {},
+				"alchemyHome": [
+					"logs/2026-10-25T20-26-09-pid44390.log",
+					"logs/2026-10-25T20-26-10-pid44443.log",
+					"logs/2026-10-25T20-26-10-pid44470.log",
+					"logs/2026-10-25T20-26-10-pid44516.log",
+					"logs/2026-10-25T20-26-11-pid44552.log",
+					"logs/2026-10-25T20-26-11-pid44574.log",
+					"logs/2026-10-25T20-26-12-pid44599.log"
+				],
+				"dotAlchemy": [
+					"log/out",
+					"version-check.json"
+				]
+			}
+		}
+	},
+	"dockerSleepPid1": {
+		"steps": [
+			{
+				"name": "create",
+				"ms": 1405,
+				"planMs": 95,
+				"applyMs": 859,
+				"plan": "2 to create",
+				"ok": true,
+				"tail": "[13:09:56.936] INFO (#1): Deploy · s146\n[13:09:56.936] INFO (#1): Importing stack module\n[13:09:56.991] INFO (#22): Resolving stack services\n[13:09:56.999] INFO (#1): Loading stack state\n[13:09:57.000] INFO (#1): Computing plan\n[13:09:57.031] INFO (#1): Plan ready (95ms)\n[13:09:57.032] INFO (#1): Plan: 2 to create\n[13:09:57.032] INFO (#1): [box] create\n[13:09:57.032] INFO (#1): [box-image] create\n[13:09:57.032] INFO (#1): \n[13:09:57.035] INFO (#70): [box-image] creating\n[13:09:57.685] INFO (#71): [box] creating\n[13:09:57.685] INFO (#70): [box-image] created (650ms)\n[13:09:57.889] INFO (#71): [box] created (204ms)\n[13:09:57.891] INFO (#100): [box-image] created (856ms)\n[13:09:57.891] INFO (#101): [box] created (206ms)\n[13:09:57.891] INFO (#1): \n[13:09:57.891] INFO (#1): Done: 2 succeeded (859ms)\n{\n  id: 'c21c8bf1e1811bf92078ad764bdcfc82914de809c3813b8b9234a3c245d72439',\n  name: 'exp146-box-box-s146-3f43ttnwivxcxhqp',\n  status: 'running',\n  image: 'exp146-box-dl6nw7:v1'\n}"
+			},
+			{
+				"name": "same inputs",
+				"ms": 531,
+				"planMs": 270,
+				"applyMs": 3,
+				"plan": "no changes",
+				"ok": true,
+				"tail": "[13:09:58.264] INFO (#1): Deploy · s146\n[13:09:58.265] INFO (#1): Importing stack module\n[13:09:58.302] INFO (#17): Resolving stack services\n[13:09:58.309] INFO (#1): Loading stack state\n[13:09:58.310] INFO (#1): Computing plan\n[13:09:58.534] INFO (#1): Plan ready (270ms)\n[13:09:58.535] INFO (#1): Plan: no changes\n[13:09:58.535] INFO (#1): [box] noop\n[13:09:58.535] INFO (#1): [box-image] noop\n[13:09:58.535] INFO (#1): \n[13:09:58.538] INFO (#1): \n[13:09:58.538] INFO (#1): Done: 0 succeeded (3ms)\n{\n  id: 'c21c8bf1e1811bf92078ad764bdcfc82914de809c3813b8b9234a3c245d72439',\n  name: 'exp146-box-box-s146-3f43ttnwivxcxhqp',\n  status: 'running',\n  image: 'exp146-box-dl6nw7:v1'\n}"
+			},
+			{
+				"name": "new task (replace)",
+				"ms": 10895,
+				"planMs": 271,
+				"applyMs": null,
+				"plan": "1 to replace",
+				"ok": true,
+				"tail": "[13:09:58.796] INFO (#1): Deploy · s146\n[13:09:58.797] INFO (#1): Importing stack module\n[13:09:58.837] INFO (#17): Resolving stack services\n[13:09:58.844] INFO (#1): Loading stack state\n[13:09:58.845] INFO (#1): Computing plan\n[13:09:59.067] INFO (#1): Plan ready (271ms)\n[13:09:59.068] INFO (#1): Plan: 1 to replace\n[13:09:59.068] INFO (#1): [box] replace\n[13:09:59.068] INFO (#1): [box-image] noop\n[13:09:59.068] INFO (#1): \n[13:09:59.072] INFO (#84): [box] Deleting previous resource before creating its replacement (deleteFirst)...\n[13:10:09.235] INFO (#84): [box] creating replacement\n[13:10:09.430] INFO (#84): [box] created (195ms)\n[13:10:09.432] INFO (#107): [box] created (197ms)\n[13:10:09.433] INFO (#1): \n[13:10:09.433] INFO (#1): Done: 1 succeeded (10.4s)\n{\n  id: 'f77acfc50760bc0169d666a7492e732e9f6b9dc902e80df68268f3a0c8050221',\n  name: 'exp146-box-box-s146-2umwlxkhkcidgusj',\n  status: 'running',\n  image: 'exp146-box-dl6nw7:v1'\n}"
+			},
+			{
+				"name": "destroy",
+				"ms": 10496,
+				"planMs": 47,
+				"applyMs": null,
+				"plan": "2 to delete",
+				"ok": true,
+				"tail": "[13:10:09.807] INFO (#1): Destroy · s146\n[13:10:09.807] INFO (#1): Importing stack module\n[13:10:09.844] INFO (#17): Resolving stack services\n[13:10:09.851] INFO (#1): Loading stack state\n[13:10:09.852] INFO (#1): Computing plan\n[13:10:09.854] INFO (#1): Plan ready (47ms)\n[13:10:09.855] INFO (#1): Plan: 2 to delete\n[13:10:09.855] INFO (#1): [box] delete\n[13:10:09.855] INFO (#1): [box-image] delete\n[13:10:09.855] INFO (#1): \n[13:10:09.857] INFO (#48): [box] deleting\n[13:10:20.019] INFO (#48): [box] deleted (10.2s)\n[13:10:20.020] INFO (#46): [box-image] deleting\n[13:10:20.044] INFO (#46): [box-image] deleted (24ms)\n[13:10:20.046] INFO (#1): \n[13:10:20.046] INFO (#1): Done: 2 succeeded (10.2s)"
+			}
+		],
+		"seen": {
+			"run": "dl6nw7",
+			"afterCreate": {
+				"containers": [
+					"c21c8bf1e181 exp146-box-dl6nw7:v1 Up Less than a second exp146-box-box-s146-3f43ttnwivxcxhqp"
+				],
+				"images": [
+					"exp146-box-dl6nw7:v1 71ff3c4d70d3 8.66MB"
+				],
+				"inBox": "triage-1\nagent",
+				"state": {
+					"__stack_output__.json": {
+						"id": "c21c8bf1e1811bf92078ad764bdcfc82914de809c3813b8b9234a3c245d72439",
+						"name": "exp146-box-box-s146-3f43ttnwivxcxhqp",
+						"status": "running",
+						"image": "exp146-box-dl6nw7:v1"
+					},
+					"box-image.json": {
+						"status": "created",
+						"fqn": "box-image",
+						"logicalId": "box-image",
+						"instanceId": "0f5ed30f2a4710c40542ac76421730bc",
+						"resourceType": "Docker.Image",
+						"props": {
+							"name": "exp146-box-dl6nw7",
+							"tag": "v1",
+							"build": {
+								"context": "<exp>/box",
+								"args": {
+									"RUN": "dl6nw7"
+								}
+							}
+						},
+						"attr": {
+							"name": "exp146-box-dl6nw7",
+							"imageRef": "exp146-box-dl6nw7:v1",
+							"imageId": "sha256:71ff3c4d70d39ce6aca61aa07717b4a1a84c22482907515d2198a1a78ab44565",
+							"tag": "v1",
+							"builtAt": 1792958997595
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [
+							"box"
+						],
+						"removalPolicy": "destroy"
+					},
+					"box.json": {
+						"status": "created",
+						"fqn": "box",
+						"logicalId": "box",
+						"instanceId": "d979b9cdb6456e2b9e0fa0d37500ebcb",
+						"resourceType": "Docker.Container",
+						"props": {
+							"image": {
+								"name": "exp146-box-dl6nw7",
+								"imageRef": "exp146-box-dl6nw7:v1",
+								"imageId": "sha256:71ff3c4d70d39ce6aca61aa07717b4a1a84c22482907515d2198a1a78ab44565",
+								"tag": "v1",
+								"builtAt": 1792958997595
+							},
+							"labels": {
+								"exp146": "dl6nw7"
+							},
+							"environment": {
+								"TASK": "triage-1"
+							},
+							"start": true
+						},
+						"attr": {
+							"id": "c21c8bf1e1811bf92078ad764bdcfc82914de809c3813b8b9234a3c245d72439",
+							"name": "exp146-box-box-s146-3f43ttnwivxcxhqp",
+							"status": "running",
+							"createdAt": 1792958997748,
+							"imageRef": "exp146-box-dl6nw7:v1",
+							"ports": {},
+							"networkMode": "bridge",
+							"devices": []
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterChange": {
+				"containers": [
+					"f77acfc50760 exp146-box-dl6nw7:v1 Up Less than a second exp146-box-box-s146-2umwlxkhkcidgusj"
+				],
+				"images": [
+					"exp146-box-dl6nw7:v1 71ff3c4d70d3 8.66MB"
+				],
+				"inBox": "build-2\nagent",
+				"state": {
+					"__stack_output__.json": {
+						"id": "f77acfc50760bc0169d666a7492e732e9f6b9dc902e80df68268f3a0c8050221",
+						"name": "exp146-box-box-s146-2umwlxkhkcidgusj",
+						"status": "running",
+						"image": "exp146-box-dl6nw7:v1"
+					},
+					"box-image.json": {
+						"status": "created",
+						"fqn": "box-image",
+						"logicalId": "box-image",
+						"instanceId": "0f5ed30f2a4710c40542ac76421730bc",
+						"resourceType": "Docker.Image",
+						"props": {
+							"name": "exp146-box-dl6nw7",
+							"tag": "v1",
+							"build": {
+								"context": "<exp>/box",
+								"args": {
+									"RUN": "dl6nw7"
+								}
+							}
+						},
+						"attr": {
+							"name": "exp146-box-dl6nw7",
+							"imageRef": "exp146-box-dl6nw7:v1",
+							"imageId": "sha256:71ff3c4d70d39ce6aca61aa07717b4a1a84c22482907515d2198a1a78ab44565",
+							"tag": "v1",
+							"builtAt": 1792958997595
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [
+							"box"
+						],
+						"removalPolicy": "destroy"
+					},
+					"box.json": {
+						"status": "created",
+						"fqn": "box",
+						"logicalId": "box",
+						"instanceId": "d51965dd475090335249be944e3523bf",
+						"resourceType": "Docker.Container",
+						"props": {
+							"image": {
+								"name": "exp146-box-dl6nw7",
+								"imageRef": "exp146-box-dl6nw7:v1",
+								"imageId": "sha256:71ff3c4d70d39ce6aca61aa07717b4a1a84c22482907515d2198a1a78ab44565",
+								"tag": "v1",
+								"builtAt": 1792958997595
+							},
+							"labels": {
+								"exp146": "dl6nw7"
+							},
+							"environment": {
+								"TASK": "build-2"
+							},
+							"start": true
+						},
+						"attr": {
+							"id": "f77acfc50760bc0169d666a7492e732e9f6b9dc902e80df68268f3a0c8050221",
+							"name": "exp146-box-box-s146-2umwlxkhkcidgusj",
+							"status": "running",
+							"createdAt": 1792959009284,
+							"imageRef": "exp146-box-dl6nw7:v1",
+							"ports": {},
+							"networkMode": "bridge",
+							"devices": []
+						},
+						"providerVersion": 0,
+						"bindings": [],
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterDestroy": {
+				"containers": [],
+				"images": [],
+				"state": {}
+			},
+			"leftAfterCleanup": {
+				"containers": [],
+				"images": []
+			}
+		}
+	},
+	"docker": {
+		"steps": [
+			{
+				"name": "create",
+				"ms": 1718,
+				"planMs": 87,
+				"applyMs": 580,
+				"plan": "2 to create",
+				"ok": true,
+				"tail": "[13:22:54.020] INFO (#1): Deploy · s146\n[13:22:54.020] INFO (#1): Importing stack module\n[13:22:54.065] INFO (#22): Resolving stack services\n[13:22:54.073] INFO (#1): Loading stack state\n[13:22:54.074] INFO (#1): Computing plan\n[13:22:54.107] INFO (#1): Plan ready (87ms)\n[13:22:54.108] INFO (#1): Plan: 2 to create\n[13:22:54.108] INFO (#1): [box] create\n[13:22:54.108] INFO (#1): [box-image] create\n[13:22:54.108] INFO (#1): \n[13:22:54.111] INFO (#71): [box-image] creating\n[13:22:54.487] INFO (#72): [box] creating\n[13:22:54.488] INFO (#71): [box-image] created (377ms)\n[13:22:54.686] INFO (#72): [box] created (199ms)\n[13:22:54.687] INFO (#101): [box-image] created (576ms)\n[13:22:54.687] INFO (#102): [box] created (200ms)\n[13:22:54.688] INFO (#1): \n[13:22:54.688] INFO (#1): Done: 2 succeeded (580ms)\n{\n  id: '130054adae59fe33364f1ce9dace84e324aab7281dc045d6170f7361f7da46b6',\n  name: 'exp146-box-box-s146-ip6dq7vfk36bowt3',\n  status: 'running',\n  image: 'exp146-box-7ok72n:v1'\n}"
+			},
+			{
+				"name": "same inputs",
+				"ms": 539,
+				"planMs": 275,
+				"applyMs": 5,
+				"plan": "no changes",
+				"ok": true,
+				"tail": "[13:22:55.053] INFO (#1): Deploy · s146\n[13:22:55.054] INFO (#1): Importing stack module\n[13:22:55.095] INFO (#17): Resolving stack services\n[13:22:55.103] INFO (#1): Loading stack state\n[13:22:55.105] INFO (#1): Computing plan\n[13:22:55.328] INFO (#1): Plan ready (275ms)\n[13:22:55.329] INFO (#1): Plan: no changes\n[13:22:55.329] INFO (#1): [box] noop\n[13:22:55.329] INFO (#1): [box-image] noop\n[13:22:55.329] INFO (#1): \n[13:22:55.335] INFO (#1): \n[13:22:55.335] INFO (#1): Done: 0 succeeded (5ms)\n{\n  id: '130054adae59fe33364f1ce9dace84e324aab7281dc045d6170f7361f7da46b6',\n  name: 'exp146-box-box-s146-ip6dq7vfk36bowt3',\n  status: 'running',\n  image: 'exp146-box-7ok72n:v1'\n}"
+			},
+			{
+				"name": "new task (replace)",
+				"ms": 869,
+				"planMs": 268,
+				"applyMs": 330,
+				"plan": "1 to replace",
+				"ok": true,
+				"tail": "[13:22:55.606] INFO (#1): Deploy · s146\n[13:22:55.607] INFO (#1): Importing stack module\n[13:22:55.653] INFO (#17): Resolving stack services\n[13:22:55.661] INFO (#1): Loading stack state\n[13:22:55.663] INFO (#1): Computing plan\n[13:22:55.874] INFO (#1): Plan ready (268ms)\n[13:22:55.874] INFO (#1): Plan: 1 to replace\n[13:22:55.874] INFO (#1): [box] replace\n[13:22:55.874] INFO (#1): [box-image] noop\n[13:22:55.874] INFO (#1): \n[13:22:55.878] INFO (#85): [box] Deleting previous resource before creating its replacement (deleteFirst)...\n[13:22:55.995] INFO (#85): [box] creating replacement\n[13:22:56.201] INFO (#85): [box] created (206ms)\n[13:22:56.203] INFO (#108): [box] created (208ms)\n[13:22:56.204] INFO (#1): \n[13:22:56.204] INFO (#1): Done: 1 succeeded (330ms)\n{\n  id: '516d8a0e2bcf778fee91f5282394d946b80311dd0e379fac05f1ecea732002c3',\n  name: 'exp146-box-box-s146-vqvgw3vkqke3uqy6',\n  status: 'running',\n  image: 'exp146-box-7ok72n:v1'\n}"
+			},
+			{
+				"name": "destroy",
+				"ms": 452,
+				"planMs": 48,
+				"applyMs": 154,
+				"plan": "2 to delete",
+				"ok": true,
+				"tail": "[13:22:56.569] INFO (#1): Destroy · s146\n[13:22:56.570] INFO (#1): Importing stack module\n[13:22:56.606] INFO (#17): Resolving stack services\n[13:22:56.614] INFO (#1): Loading stack state\n[13:22:56.615] INFO (#1): Computing plan\n[13:22:56.617] INFO (#1): Plan ready (48ms)\n[13:22:56.618] INFO (#1): Plan: 2 to delete\n[13:22:56.618] INFO (#1): [box] delete\n[13:22:56.618] INFO (#1): [box-image] delete\n[13:22:56.618] INFO (#1): \n[13:22:56.620] INFO (#48): [box] deleting\n[13:22:56.746] INFO (#48): [box] deleted (126ms)\n[13:22:56.746] INFO (#46): [box-image] deleting\n[13:22:56.771] INFO (#46): [box-image] deleted (25ms)\n[13:22:56.772] INFO (#1): \n[13:22:56.772] INFO (#1): Done: 2 succeeded (154ms)"
+			}
+		],
+		"seen": {
+			"run": "7ok72n",
+			"afterCreate": {
+				"containers": [
+					"130054adae59 exp146-box-7ok72n:v1 Up Less than a second exp146-box-box-s146-ip6dq7vfk36bowt3"
+				],
+				"images": [
+					"exp146-box-7ok72n:v1 3feeeccf094f 8.66MB"
+				],
+				"inBox": "triage-1\nagent",
+				"fakeKeyInClearIn": [
+					"box.json"
+				],
+				"state": {
+					"__stack_output__.json": {
+						"id": "130054adae59fe33364f1ce9dace84e324aab7281dc045d6170f7361f7da46b6",
+						"name": "exp146-box-box-s146-ip6dq7vfk36bowt3",
+						"status": "running",
+						"image": "exp146-box-7ok72n:v1"
+					},
+					"box-image.json": {
+						"status": "created",
+						"fqn": "box-image",
+						"logicalId": "box-image",
+						"instanceId": "e70807695cfdf972ce3d432b51170ba5",
+						"resourceType": "Docker.Image",
+						"props": {
+							"name": "exp146-box-7ok72n",
+							"tag": "v1",
+							"build": {
+								"context": "<exp>/box",
+								"args": {
+									"RUN": "7ok72n"
+								}
+							}
+						},
+						"attr": {
+							"name": "exp146-box-7ok72n",
+							"imageRef": "exp146-box-7ok72n:v1",
+							"imageId": "sha256:3feeeccf094f73299256f2e7b80e996656fd1d76cc065ab44b64da90534b7eee",
+							"tag": "v1",
+							"builtAt": 1792959774420
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [
+							"box"
+						],
+						"removalPolicy": "destroy"
+					},
+					"box.json": {
+						"status": "created",
+						"fqn": "box",
+						"logicalId": "box",
+						"instanceId": "43fc387ea556fc175a7b600b572f0c18",
+						"resourceType": "Docker.Container",
+						"props": {
+							"image": {
+								"name": "exp146-box-7ok72n",
+								"imageRef": "exp146-box-7ok72n:v1",
+								"imageId": "sha256:3feeeccf094f73299256f2e7b80e996656fd1d76cc065ab44b64da90534b7eee",
+								"tag": "v1",
+								"builtAt": 1792959774420
+							},
+							"labels": {
+								"exp146": "7ok72n"
+							},
+							"environment": {
+								"TASK": "triage-1",
+								"FAKE_KEY": {
+									"__redacted__": "<fake key>"
+								}
+							},
+							"start": true
+						},
+						"attr": {
+							"id": "130054adae59fe33364f1ce9dace84e324aab7281dc045d6170f7361f7da46b6",
+							"name": "exp146-box-box-s146-ip6dq7vfk36bowt3",
+							"status": "running",
+							"createdAt": 1792959774548,
+							"imageRef": "exp146-box-7ok72n:v1",
+							"ports": {},
+							"networkMode": "bridge",
+							"devices": []
+						},
+						"bindings": [],
+						"providerVersion": 0,
+						"downstream": [],
+						"removalPolicy": "destroy"
+					}
+				}
+			},
+			"afterChange": {
+				"containers": [
+					"516d8a0e2bcf exp146-box-7ok72n:v1 Up Less than a second exp146-box-box-s146-vqvgw3vkqke3uqy6"
+				],
+				"images": [
+					"exp146-box-7ok72n:v1 3feeeccf094f 8.66MB"
+				],
+				"inBox": "build-2\nagent"
+			},
+			"afterDestroy": {
+				"containers": [],
+				"images": [],
+				"state": {}
+			},
+			"leftAfterCleanup": {
+				"containers": [],
+				"images": []
+			}
+		}
+	},
+	"local": {
+		"steps": [
+			{
+				"name": "destroy after dev",
+				"ms": 1031,
+				"planMs": 630,
+				"applyMs": 119,
+				"plan": "3 to delete",
+				"ok": true,
+				"tail": "[13:23:06.187] INFO (#1): Destroy · s146\n[13:23:06.188] INFO (#1): Importing stack module\n[13:23:06.769] INFO (#17): Resolving stack services\n[13:23:06.782] INFO (#1): Loading stack state\n[13:23:06.787] INFO (#1): Computing plan\n[13:23:06.817] INFO (#1): Plan ready (630ms)\n[13:23:06.818] INFO (#1): Plan: 3 to delete\n[13:23:06.818] INFO (#1): [box] delete\n[13:23:06.818] INFO (#1): [hello] delete (local)\n[13:23:06.818] INFO (#1): [laptop] delete\n[13:23:06.818] INFO (#1): \n[13:23:06.823] INFO (#357): [box] deleting\n[13:23:06.823] INFO (#359): [hello] deleting (local)\n[13:23:06.823] INFO (#361): [laptop] deleting\n[13:23:06.830] INFO (#359): [hello] deleted (local) (6ms)\n[13:23:06.855] INFO (#361): [laptop] deleted (31ms)\n[13:23:06.935] INFO (#357): [box] deleted (112ms)\n[13:23:06.937] INFO (#1): \n[13:23:06.937] INFO (#1): Done: 3 succeeded (119ms)"
+			}
+		],
+		"seen": {
+			"run": "vjrd8d",
+			"dev": {
+				"up": true,
+				"upMs": 2018,
+				"url": "http://localhost:1337/",
+				"firstGet": {
+					"status": 200,
+					"body": "hello from workerd Cloudflare-Workers",
+					"ms": 7
+				},
+				"secondGet": {
+					"status": 200,
+					"body": "hello from workerd Cloudflare-Workers",
+					"ms": 1
+				},
+				"hostPid": 37494,
+				"hostAlive": true,
+				"box": {
+					"containers": [
+						"693a665d3074 alpine:latest Up Less than a second exp146-local-box-s146-3kgvkqknss5i53h6"
+					],
+					"images": []
+				},
+				"processes": [
+					{
+						"pid": 37418,
+						"command": "<node> --import file://<exp>/node_modules/.pnpm/alchemy@2.0.0-beta.84_@effect+platform-node@4.0.6_effect@4.0.6__effect@4.0.6_ws@8.22.0/node_modules/alchemy/bin/"
+					},
+					{
+						"pid": 37494,
+						"command": "<node> <exp>/host-process.ts <tmp>/host"
+					},
+					{
+						"pid": 37424,
+						"command": "<node> --import file://<exp>/node_modules/.pnpm/alchemy@2.0.0-beta.84_@effect+platform-node@4.0.6_effect@4.0.6__effect@4.0.6_ws@8.22.0/node_modules/alchemy/bin/"
+					},
+					{
+						"pid": 37497,
+						"command": "<exp>/node_modules/.pnpm/@cloudflare+workerd-darwin-arm64@1.20261012.1/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental -"
+					}
+				],
+				"output": "[13:23:03.829] INFO (#20): Dev · s146\n[13:23:03.829] INFO (#20): Importing stack module\n[13:23:04.416] INFO (#20): Resolving stack services\n[13:23:04.438] INFO (#20): Loading stack state\n[13:23:04.889] INFO (#20): Computing plan\n[13:23:04.917] INFO (#20): Plan ready (1.1s)\n[13:23:04.918] INFO (#20): Plan: 3 to create\n[13:23:04.918] INFO (#20): [box] create\n[13:23:04.918] INFO (#20): [hello] create (local)\n[13:23:04.918] INFO (#20): [laptop] create\n[13:23:04.918] INFO (#20): \n[13:23:04.922] INFO (#357): [box] creating\n[13:23:04.924] INFO (#356): [hello] creating (local)\n[13:23:04.924] INFO (#358): [laptop] creating\n[13:23:04.996] INFO (#53): [hello] Started in 67ms → http://localhost:1337/ (logs: <tmp>/.alchemy/log/s146/hello)\n[13:23:04.999] INFO (#356): [hello] ready at http://localhost:1337\n[13:23:04.999] INFO (#356): [hello] created (local) (75ms)\n[13:23:05.010] INFO (#358): [laptop] created (86ms)\n[13:23:05.117] INFO (#357): [box] created (195ms)\n[13:23:05.119] INFO (#381): [hello] created (local) (195ms)\n[13:23:05.119] INFO (#382): [laptop] created (195ms)\n[13:23:05.119] INFO (#383): [box] created (197ms)\n[13:23:05.120] INFO (#20): {\n  url: 'http://localhost:1337',\n  box: '693a665d30740242be83852803ea89693e12dbd8ea152d45cfddeea7256a279b',\n  pid: 37494\n}\n[13:23:05.120] INFO (#20): \n[13:23:05.120] INFO (#20): Done: 3 succeeded (202ms)\n",
+				"workerRow": {
+					"status": "created",
+					"fqn": "hello",
+					"logicalId": "hello",
+					"instanceId": "422024ba8a2f9393678fa5d7aefa2c6f",
+					"resourceType": "Cloudflare.Worker",
+					"props": {
+						"script": "export default { fetch: () => new Response(\"hello from workerd \" + navigator.userAgent) };",
+						"isExternal": true
+					},
+					"attr": {
+						"workerId": "dev:exp146-local-hello-s146-iiqcjoukf6jzgz4p",
+						"workerName": "exp146-local-hello-s146-iiqcjoukf6jzgz4p",
+						"url": "http://localhost:1337",
+						"urls": [
+							"http://localhost:1337"
+						],
+						"tags": [],
+						"durableObjectNamespaces": {},
+						"routes": [],
+						"crons": [],
+						"accountId": "00000000000000000000000000000000"
+					},
+					"bindings": [],
+					"providerVersion": 0,
+					"downstream": [],
+					"removalPolicy": "destroy",
+					"providerMode": "local"
+				},
+				"stateFiles": [
+					"local/cache/exp146-local-hello-s146-iiqcjoukf6jzgz4p/cloudflare-runtime-CacheObject/metadata.sqlite",
+					"local/cache/exp146-local-hello-s146-iiqcjoukf6jzgz4p/cloudflare-runtime-CacheObject/metadata.sqlite-shm",
+					"local/cache/exp146-local-hello-s146-iiqcjoukf6jzgz4p/cloudflare-runtime-CacheObject/metadata.sqlite-wal",
+					"log/out",
+					"log/s146/2026-10-25T20-23-03.808Z.log",
+					"log/s146/hello/2026-10-25T20-23-04.935Z.log",
+					"state/exp146-local/s146/__stack_output__.json",
+					"state/exp146-local/s146/box.json",
+					"state/exp146-local/s146/hello.json",
+					"state/exp146-local/s146/laptop.json",
+					"version-check.json"
+				]
+			},
+			"afterCtrlC": {
+				"stopped": true,
+				"stopMs": 601,
+				"devTreeStillAlive": [
+					"<node> <exp>/host-process.ts <tmp>/host"
+				],
+				"hostAlive": true,
+				"box": {
+					"containers": [
+						"693a665d3074 alpine:latest Up Less than a second exp146-local-box-s146-3kgvkqknss5i53h6"
+					],
+					"images": []
+				},
+				"state": [
+					"__stack_output__.json",
+					"box.json",
+					"hello.json",
+					"laptop.json"
+				]
+			},
+			"afterDestroy": {
+				"hostAlive": false,
+				"box": {
+					"containers": [],
+					"images": []
+				},
+				"devTreeStillAlive": [],
+				"state": {}
+			},
+			"leftAfterCleanup": {
+				"containers": [],
+				"images": [],
+				"devTree": 0
+			}
+		}
+	},
+	"effect": {
+		"steps": [
+			{
+				"name": "create",
+				"ms": 545,
+				"planMs": 122,
+				"applyMs": 7,
+				"plan": "1 to create",
+				"ok": true,
+				"tail": "[13:22:30.167] INFO (#1): Deploy · s146\n[13:22:30.167] INFO (#1): Importing stack module\n[13:22:30.272] INFO (#22): Resolving stack services\n[13:22:30.282] INFO (#1): Loading stack state\n[13:22:30.286] INFO (#1): Computing plan\n[13:22:30.289] INFO (#1): Plan ready (122ms)\n[13:22:30.290] INFO (#1): Plan: 1 to create\n[13:22:30.290] INFO (#1): [triage] create\n[13:22:30.290] INFO (#1): \n[13:22:30.293] INFO (#33): [triage] creating\n[13:22:30.295] INFO (#33): [triage] created (2ms)\n[13:22:30.296] INFO (#36): [triage] created (3ms)\n[13:22:30.297] INFO (#1): \n[13:22:30.297] INFO (#1): Done: 1 succeeded (7ms)\n{ created: true, rev: 1, events: 1 }"
+			},
+			{
+				"name": "same inputs",
+				"ms": 368,
+				"planMs": 111,
+				"applyMs": 3,
+				"plan": "no changes",
+				"ok": true,
+				"tail": "[13:22:30.550] INFO (#1): Deploy · s146\n[13:22:30.551] INFO (#1): Importing stack module\n[13:22:30.645] INFO (#17): Resolving stack services\n[13:22:30.654] INFO (#1): Loading stack state\n[13:22:30.656] INFO (#1): Computing plan\n[13:22:30.662] INFO (#1): Plan ready (111ms)\n[13:22:30.662] INFO (#1): Plan: no changes\n[13:22:30.662] INFO (#1): [triage] noop\n[13:22:30.662] INFO (#1): \n[13:22:30.665] INFO (#1): \n[13:22:30.665] INFO (#1): Done: 0 succeeded (3ms)\n{ created: true, rev: 1, events: 1 }"
+			},
+			{
+				"name": "new writer (update)",
+				"ms": 379,
+				"planMs": 113,
+				"applyMs": 6,
+				"plan": "1 to update",
+				"ok": true,
+				"tail": "[13:22:30.926] INFO (#1): Deploy · s146\n[13:22:30.926] INFO (#1): Importing stack module\n[13:22:31.025] INFO (#17): Resolving stack services\n[13:22:31.032] INFO (#1): Loading stack state\n[13:22:31.037] INFO (#1): Computing plan\n[13:22:31.039] INFO (#1): Plan ready (113ms)\n[13:22:31.040] INFO (#1): Plan: 1 to update\n[13:22:31.040] INFO (#1): [triage] update\n[13:22:31.040] INFO (#1): \n[13:22:31.042] INFO (#29): [triage] updating\n[13:22:31.045] INFO (#29): [triage] updated (3ms)\n[13:22:31.046] INFO (#32): [triage] updated (4ms)\n[13:22:31.046] INFO (#1): \n[13:22:31.046] INFO (#1): Done: 1 succeeded (6ms)\n{ created: false, rev: 1, events: 1 }"
+			},
+			{
+				"name": "destroy",
+				"ms": 363,
+				"planMs": 109,
+				"applyMs": 6,
+				"plan": "1 to delete",
+				"ok": true,
+				"tail": "[13:22:31.302] INFO (#1): Destroy · s146\n[13:22:31.302] INFO (#1): Importing stack module\n[13:22:31.399] INFO (#17): Resolving stack services\n[13:22:31.405] INFO (#1): Loading stack state\n[13:22:31.409] INFO (#1): Computing plan\n[13:22:31.411] INFO (#1): Plan ready (109ms)\n[13:22:31.411] INFO (#1): Plan: 1 to delete\n[13:22:31.411] INFO (#1): [triage] delete\n[13:22:31.411] INFO (#1): \n[13:22:31.413] INFO (#27): [triage] deleting\n[13:22:31.416] INFO (#27): [triage] deleted (3ms)\n[13:22:31.417] INFO (#1): \n[13:22:31.417] INFO (#1): Done: 1 succeeded (6ms)"
+			},
+			{
+				"name": "create again, same ledger file",
+				"ms": 387,
+				"planMs": 116,
+				"applyMs": 5,
+				"plan": "1 to adopted",
+				"ok": true,
+				"tail": "[13:22:31.671] INFO (#1): Deploy · s146\n[13:22:31.671] INFO (#1): Importing stack module\n[13:22:31.770] INFO (#17): Resolving stack services\n[13:22:31.778] INFO (#1): Loading stack state\n[13:22:31.780] INFO (#1): Computing plan\n[13:22:31.787] INFO (#1): Plan ready (116ms)\n[13:22:31.788] INFO (#1): Plan: 1 to adopted\n[13:22:31.788] INFO (#1): [triage] adopted\n[13:22:31.788] INFO (#1): \n[13:22:31.790] INFO (#28): [triage] adopting\n[13:22:31.791] INFO (#28): [triage] adopted (1ms)\n[13:22:31.792] INFO (#31): [triage] adopted (2ms)\n[13:22:31.793] INFO (#1): \n[13:22:31.793] INFO (#1): Done: 1 succeeded (5ms)\n{ created: false, rev: 1, events: 1 }"
+			},
+			{
+				"name": "a name the ledger denies",
+				"ms": 374,
+				"planMs": 112,
+				"applyMs": 6,
+				"plan": "1 to update",
+				"ok": false,
+				"tail": "[13:22:32.051] INFO (#1): Deploy · s146\n[13:22:32.051] INFO (#1): Importing stack module\n[13:22:32.148] INFO (#17): Resolving stack services\n[13:22:32.155] INFO (#1): Loading stack state\n[13:22:32.160] INFO (#1): Computing plan\n[13:22:32.163] INFO (#1): Plan ready (112ms)\n[13:22:32.163] INFO (#1): Plan: 1 to update\n[13:22:32.163] INFO (#1): [triage] update\n[13:22:32.163] INFO (#1): \n[13:22:32.166] INFO (#29): [triage] updating\n[13:22:32.169] INFO (#29): [triage] fail - denied on inbox (3ms)\n[13:22:32.169] INFO (#1): \n[13:22:32.169] INFO (#1): Failed: 0 succeeded, 1 failed (6ms)\n[13:22:32.176] ERROR (#1): Error: denied on inbox"
+			},
+			{
+				"name": "destroy again",
+				"ms": 363,
+				"planMs": 114,
+				"applyMs": 5,
+				"plan": "1 to delete",
+				"ok": true,
+				"tail": "[13:22:32.421] INFO (#1): Destroy · s146\n[13:22:32.422] INFO (#1): Importing stack module\n[13:22:32.521] INFO (#17): Resolving stack services\n[13:22:32.528] INFO (#1): Loading stack state\n[13:22:32.533] INFO (#1): Computing plan\n[13:22:32.535] INFO (#1): Plan ready (114ms)\n[13:22:32.536] INFO (#1): Plan: 1 to delete\n[13:22:32.536] INFO (#1): [triage] delete\n[13:22:32.536] INFO (#1): \n[13:22:32.538] INFO (#27): [triage] deleting\n[13:22:32.540] INFO (#27): [triage] deleted (2ms)\n[13:22:32.541] INFO (#1): \n[13:22:32.541] INFO (#1): Done: 1 succeeded (5ms)"
+			}
+		],
+		"seen": {
+			"copies": {
+				"alchemy": {
+					"path": "experiments/146-alchemy-everywhere/node_modules/.pnpm/effect@4.0.6/node_modules/effect",
+					"version": "4.0.6"
+				},
+				"fabrika": {
+					"path": "node_modules/.pnpm/effect@4.0.6/node_modules/effect",
+					"version": "4.0.6"
+				},
+				"sameFile": false
+			},
+			"create": {
+				"created": true,
+				"rev": 1,
+				"events": 1
+			},
+			"same": {
+				"created": true,
+				"rev": 1,
+				"events": 1
+			},
+			"newWriter": {
+				"created": false,
+				"rev": 1,
+				"events": 1
+			},
+			"afterDestroy": {
+				"state": {},
+				"ledgerFileKept": true
+			},
+			"again": {
+				"created": false,
+				"rev": 1,
+				"events": 1
+			},
+			"denied": {
+				"caughtByTag": true,
+				"row": "updating"
+			},
+			"row": {}
+		}
+	}
+}
