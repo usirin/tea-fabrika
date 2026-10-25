@@ -84,7 +84,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		ghostty,
 		fontSize: 13,
 		fontFamily: FONT,
-		cursorBlink: true,
+		// The cursor stays still, everywhere: no blink, and no redraw twice a second for it. Only an
+		// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
+		cursorBlink: false,
 		scrollback: 1000,
 		theme: THEME,
 	});
