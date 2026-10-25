@@ -125,10 +125,12 @@ const ReviewBrief = Schema.Struct({diff: Diff, criteria: Criteria, plan: Plan});
 // A sketch.
 // Built: packages/pipeline/src/poll.ts. `by` names the part of a read that counts;
 // `key` is already the child's id. The child hands back the change; the parent writes the fact.
-const ci = poll("ci", {every: "1m", read: checksOf, by: (checks) => checks.state});
+// `limit` bounds each read: a read that never answers counts as failed, so polling never stops.
+const ci = poll("ci", {every: "1m", limit: "20s", read: checksOf, by: (checks) => checks.state});
 // tick 1: "pending", no fact yet  -> {fact: "pr", pr: 74, state: "pending"}
 // tick 2: "pending" again         -> nothing
-// tick 3: "green"                 -> {fact: "pr", pr: 74, state: "green"}
+// tick 3: no answer in 20s        -> nothing, and tick 4 reads again
+// tick 4: "green"                 -> {fact: "pr", pr: 74, state: "green"}
 ```
 
 ### ask, grown: a yes covers what it saw
