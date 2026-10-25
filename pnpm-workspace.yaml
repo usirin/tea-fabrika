@@ -1,8 +1,3 @@
-# packages: what other code may build on. programs: one runnable tea program each.
-# wip: everything not yet pulled out. legacy: the first-generation factory.
-# packs: add-on packs, wired to the core by one config line; the core names none.
-# docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
-# apps: what a person opens, on top of everything else. Nothing imports an app.
 packages:
   - apps/*
   - packages/*
@@ -35,7 +30,6 @@ catalog:
   electron: 45.0.0
   esbuild: 0.28.2
   fast-check: 4.10.2
-  # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
   ghostty-web: 0.4.0
   miniflare: 4.20260730.0
   playwright: 1.64.1
@@ -46,6 +40,8 @@ catalog:
   vitest: ^5.0.3
   zod: ^4.6.5
 
-# The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
   '@effect/platform-node-shared': 4.0.6
+
+patchedDependencies:
+  ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch

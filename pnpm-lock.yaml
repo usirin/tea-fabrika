@@ -103,6 +103,11 @@ catalogs:
 overrides:
   '@effect/platform-node-shared': 4.0.6
 
+patchedDependencies:
+  ghostty-web@0.4.0:
+    hash: 28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54
+    path: patches/ghostty-web@0.4.0.patch
+
 importers:
 
   .:
@@ -212,7 +217,7 @@ importers:
         version: 4.0.6
       ghostty-web:
         specifier: 'catalog:'
-        version: 0.4.0
+        version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -4255,7 +4260,7 @@ snapshots:
       dunder-proto: 1.0.1
       es-object-atoms: 1.1.2
 
-  ghostty-web@0.4.0: {}
+  ghostty-web@0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54): {}
 
   gopd@1.2.0: {}
 
