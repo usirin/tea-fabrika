@@ -56,7 +56,8 @@ shape. The owner wants Alchemy as the one way to stand up any infrastructure,
 on the laptop too: local servers, Docker containers, and our own kinds through
 its custom resources. Experiment 146 tests that with small spikes.
 
-**Everything else below is proposed.** Nothing is built or deployed yet.
+**Everything else below is proposed.** The Door is built and in review.
+Nothing is deployed yet.
 
 ```text
 The first version is three things, and nothing else:
@@ -69,18 +70,21 @@ The first version is three things, and nothing else:
 
 The answer first:
 
-- **One ledger is one Durable Object behind one Worker.** The Worker is the
-  door. It stamps who wrote each fact from the login, never from the request.
+- **A ledger server is one Worker in front of many Durable Objects.** One
+  object per project holds the shared work. One per person holds that
+  person's desk and settings. The Worker is the door. It stamps who wrote each
+  fact from the login, never from the request.
 - **A person proves who they are with their SSH key** (decided). The ledger
   checks it against the public keys GitHub lists for that login. No token
   leaves the laptop, and no OAuth app is needed.
 - **An agent holds a key its person signed,** so it writes as "agent for X",
   and only agent facts.
 - **Members are facts on the ledger:** created, invited, joined, removed.
-- **Each person's desk stays on their own laptop.**
-- **The first build step is the Door,** and a build lane is building it now:
-  stamping writers and checking members, against a fake GitHub, with the proof
-  as a swappable service.
+- **Each person's desk lives in their own object,** which only that person
+  can open.
+- **The first build step is the Door.** It is built and in review: it stamps
+  writers and checks members, against a fake GitHub, with the proof as a
+  swappable service.
 
 ```ts
 // A sketch. At the door, before any ledger call.
@@ -319,7 +323,7 @@ landed. Every stream in a project goes with it, so a new program needs no line
 here. A person's own screen lives in that person's object on the same server.
 
 ```ts
-// A sketch. One server per host, local or remote; many objects inside it.
+// A sketch. One server per project, local or remote; many objects inside it.
 const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 
 //   project/<id>      shared work: tickets, lanes, asks, agents' talk, members
@@ -360,8 +364,8 @@ const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 
 ## 4. A ledger, and who belongs to it
 
-A ledger is one Durable Object, shared by everyone on it. In the first version
-it holds one repository's work. Who belongs is four kinds of fact on it, and
+A project's ledger is one Durable Object, `project/<id>` (section 3), shared
+by everyone on it. In the first version it holds one repository's work. Who belongs is four kinds of fact on it, and
 nothing else knows.
 
 ```ts
@@ -404,7 +408,7 @@ Other shapes, weighed:
 - **One Durable Object per ticket or lane** → section 9.
 - **A central list of users across ledgers** → no, by the decision above.
 
-**Lean: a ledger is one Durable Object; created, invited, joined and removed
+**Lean: a project is one Durable Object; created, invited, joined and removed
 are facts on it.** Why: it matches what tsh and `fabrika.toml` do (one ledger
 per repository), the referee needs no election, and no outside service holds
 anyone's name. Cost: no per-ticket privacy, and roles wait. **How sure: 80%.**
@@ -449,7 +453,9 @@ type Link =
     plan, start nothing. A running lane whose lease runs out is fenced, as it
     is today. A lane loses its ticket after about 30 s away (the claim's ttl).
     That is honest, and costs a restart of that lane.
-  - **The desk still works.** It is on the local ledger.
+  - **The desk stays on screen.** On the laptop's own server it never goes
+    away. On a remote one, its changes wait like any other write. Starting
+    the app while away is the open question in section 3.
 - **When it is slow:** each call already times out at 3 s and fails as
   `LedgerUnreachable`. The window says "slow" past a p99 we pick after
   measuring, not before.
@@ -552,10 +558,10 @@ experiment counts it:
 The decision at the top moves this work earlier. The sync note's "Nothing else
 moves early. The real run comes first." no longer holds for it.
 
-- **Lane 2, the host running apart,** is being built now. This note does not
+- **Lane 2, the host running apart,** is built and in review. This note does not
   touch it. It needs one thing from it: the host is the only process that
   talks to the ledger, so sessions live in one place.
-- **The Door lane has started.** It builds the Door, which stamps writers and
+- **The Door is built and in review.** It is the Door, which stamps writers and
   checks members, against a fake GitHub. The proof is a swappable `Proof`
   service (section 1), with the SSH signature as the first real Layer and
   OAuth kept as a second.
@@ -567,15 +573,19 @@ moves early. The real run comes first." no longer holds for it.
   - Tests in Miniflare: a forged writer is stamped over, an agent's answer is
     refused, an unknown or removed login is refused. No deploy, no money.
 - **Lane 3, app state on the ledger and restore.** One ask of it: put the
-  app's own state, `desk/`, `tsh/` and `host/`, in the app's ledger, and hand
-  programs the project's ledger. Then connecting a project in section 3 is a
+  app's own state, `desk/`, `tsh/` and `host/`, in the person's object, and
+  hand programs the project's object. Then connecting a project in section 3 is a
   Layer change, not a rewrite.
-- **Then, in order:** the deploy experiment (needs the owner's yes), `connect`
+- **Then, in order:** the deploy experiment (144, the owner said yes), `connect`
   and the invite in the app, one agent message across two laptops (section
   10), the tracker's poll moved to the tail, and the whole-ledger copy.
 - **Lane 4, the jump list,** does not wait on any of it.
 
 ## 9. One object for the whole ledger, or one per lane
+
+*Replaced the same day:* the owner chose many objects from the start (the
+decision at the top). This section is kept as it was argued, with its lean of
+one object first. What it found a split costs still holds.
 
 Section 4 makes a ledger one object. This section asks whether each lane, or
 each ticket, should get its own object with its own ledger, for real data
@@ -896,9 +906,8 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 - **Cost: under $1** on top of the plan already paid. A 2 h soak at 50 calls
   a second is 360,000 requests. The laws, latency and login runs add less. No
   model calls.
-- **Needs the owner's yes before any deploy.** It also needs a Cloudflare
-  account. None of that is in this repo, and none of it was read by this
-  study.
+- **The owner said yes the same day,** under $1, with everything deleted
+  after. It is experiment 144. The account and its keys are not in this repo.
 - **It settles:** the 50 ms p99 bar in [tea-host](./tea-host.md) ("If a
   deployed ledger's p99 append is over about 50 ms, a direct host-to-host path
   comes next"); poll or tail; whether a deploy mid-run loses anything; and
@@ -908,14 +917,15 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 
 - **[tea-host](./tea-host.md) says "every host uses exactly one ledger"**, and
   the GUI note says everything the app keeps is on the host's one ledger.
-  Section 3 gives each host two: the project's, local or remote, and the
-  app's, always local, for the screen. Each program still sees one ledger.
-  The host sees two. The owner picks:
-  - **keep the rule** and put the desk on the shared object under each
-    person's prefix (then the desk needs the network to come back, and the
-    door must keep each person's prefix to that person), or
-  - **change the rule** to "a host holds the app's ledger and one per
-    project; each program is handed one" (the lean, 80%).
+  With one server per project, a host with one project open uses one server:
+  the project's object and the person's object sit on it. Each program is
+  handed one object. Still open: whether one host holds several open
+  projects, and so several servers, or each open project gets its own host,
+  and the rule holds as written.
+  - *Overtaken the same day.* This bullet first gave each host two ledgers,
+    the project's and the app's for the screen, and leaned to changing the
+    rule to "a host holds the app's ledger and one per project" (80%). The
+    one-server decision at the top replaced both.
 - **[The services note](./services-and-our-own-ci.md#open-questions) asks
   where the ledger lives for one owner with two machines.** This note leans to
   Cloudflare. A second person on another network makes the always-on home
@@ -958,15 +968,17 @@ None of these is in the first version.
 
 ## What it cannot tell us
 
-- Nothing here has run. No Worker, no Door, no deploy, no SSH login, no agent
-  talk across two laptops. Every Cloudflare and GitHub number is from their
-  docs, read 2026-10-25, not measured.
+- Nothing here has run on Cloudflare. The Door runs in Miniflare tests only.
+  No deploy, no SSH login against the real GitHub, no agent talk across two
+  laptops. Every Cloudflare and GitHub number is from their docs, read
+  2026-10-25, not measured.
 - The load in section 7 is guessed: lanes at once, calls per run, beats per
   run, rows per write and MB per log. The bill is small enough that a guess
   twice too low still costs little.
 - Reaching ssh-agent from a GUI app, and the 1Password case, are guesses.
-- Whether GitHub's `/keys` lists hardware keys, and Ed25519 in a Worker's
-  WebCrypto, are still to check.
+- Whether GitHub's `/keys` lists hardware keys is still to check. An Ed25519
+  SSH signature checks in workerd, in the Door's tests, but not yet on
+  Cloudflare itself.
 - It says nothing about more than two people, people in far-apart regions, or
   a team that wants no Cloudflare. That team runs the same bundle on workerd,
   as the sync note says, and needs its own door.
