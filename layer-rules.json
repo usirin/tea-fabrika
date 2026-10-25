@@ -192,6 +192,18 @@
 			"reason": "The host's laws, on our own search engine. They move to tea's pbt in the core sweep (property-tests-not-our-own-search.md)."
 		},
 		{
+			"from": "packages/pipeline/src/laws/test-writer.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The test writer's laws, on our own search engine because the standard laws check (standard.test.ts) still walks every machine on it. They move to tea's pbt with the rest (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/test-writer.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The test writer's laws, on our own search engine because the standard laws check (standard.test.ts) still walks every machine on it. They move to tea's pbt with the rest (property-tests-not-our-own-search.md)."
+		},
+		{
 			"from": "packages/pipeline/src/laws/transcript.ts",
 			"to": "packages/pipeline/src/laws/explore.ts",
 			"sites": 1,

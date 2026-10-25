@@ -13,6 +13,7 @@ import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import {sort} from "../stages/sort/machine.ts";
 import {task} from "../stages/task/machine.ts";
+import {testWriter} from "../stages/test-writer/machine.ts";
 import * as agentLaws from "./agent.ts";
 import * as buildLaws from "./build.ts";
 import * as catchupLaws from "./catchup.ts";
@@ -29,6 +30,7 @@ import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
 import * as sortLaws from "./sort.ts";
 import * as taskLaws from "./task.ts";
+import * as testWriterLaws from "./test-writer.ts";
 import * as transcriptLaws from "./transcript.ts";
 
 // Every tea machine's laws, in one list. The standard test (standard.test.ts)
@@ -285,5 +287,15 @@ export const SPECS: readonly Spec[] = [
 			{world: laneLaws.laneWorld(), depth: 8},
 			{world: laneLaws.laneWorld({views: ["a task not done"]}), depth: 12},
 		],
+	}),
+	spec({
+		name: "test writer",
+		file: "pipeline/stages/test-writer/machine.ts",
+		machine: testWriter,
+		init: testWriterLaws.testWriterInit,
+		update: testWriterLaws.testWriterStep,
+		laws: testWriterLaws.testWriterLaws,
+		show: testWriterLaws.showTestWriterMsg,
+		walks: [{world: testWriterLaws.testWriterWorld(), depth: 9}],
 	}),
 ];
