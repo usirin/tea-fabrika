@@ -34,7 +34,9 @@ for (const count of [1, 4, 8, 16]) {
 
 ## Setup
 
-- One Apple laptop, macOS, Electron 45 (Chromium 140), the window at 1200 by 760.
+- One Apple laptop, macOS, Electron 45 (Chromium 140), the window at 1200 by 760. (Wrong:
+  Electron 45 is Chromium 156; 140 is only the build target. See
+  [143](./143-typing-latency.md).)
 - A fresh home for each count. Tiles are made with the desk's own keys. The biggest tile is
   split each time, along its long side, so 16 tiles are a 4 by 4 grid of about 300 by 190
   pixels. Splitting the newest tile each time made the 8th tile too small to hold the prompt
@@ -107,7 +109,9 @@ term.write(read.msg.data, mirrorSoon);
 - Anything the page does per write is paid by every tile. A new per-write step needs this
   check again.
 - Typing delay is flat from 1 to 16 tiles. The number itself, 30 to 50 ms, is mostly the round
-  trip to the main process and its line editor, which this did not split up.
+  trip to the main process and its line editor, which this did not split up. (Wrong: the round
+  trip is 0.4 ms. The time is the terminal's draw and the display. See
+  [143](./143-typing-latency.md).)
 
 ## What this cannot tell us
 

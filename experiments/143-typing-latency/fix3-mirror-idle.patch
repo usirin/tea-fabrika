@@ -1,0 +1,26 @@
+diff -ruN a/apps/fabrika/src/window/terminal.ts b/apps/fabrika/src/window/terminal.ts
+--- a/apps/fabrika/src/window/terminal.ts
++++ b/apps/fabrika/src/window/terminal.ts
+@@ -116,13 +116,18 @@
+ 	 * read 200 rows back 2,000 times, and held the whole page for seconds (experiment 141).
+ 	 */
+ 	let mirroring = false;
++	// Experiment 143: read back when the page is idle, after the frame that draws the write, not
++	// in it; at most a quarter second late on a page that is never idle.
+ 	const mirrorSoon = () => {
+ 		if (mirroring) return;
+ 		mirroring = true;
+-		requestAnimationFrame(() => {
+-			mirroring = false;
+-			mirror();
+-		});
++		requestIdleCallback(
++			() => {
++				mirroring = false;
++				mirror();
++			},
++			{timeout: 250},
++		);
+ 	};
+ 	const size = (cols: number, rows: number) =>
+ 		window.fabrika.send(port, {type: "size", cols: cells(cols), rows: cells(rows)});
