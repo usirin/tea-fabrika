@@ -7,9 +7,9 @@ import {Effect, FileSystem, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
-import {type Placed, type Runs, startHost, type WindowScreen} from "./host.ts";
+import {type Placed, type Runs, startTsh, type WindowScreen} from "./tsh.ts";
 
-// The host, with a fake terminal page and a fake tile and no Electron: what a person would see
+// One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
 // The ledger is in memory.
 
@@ -51,7 +51,7 @@ const session = (
 			},
 			running: (count) => seen.push({kind: "running", count}),
 		};
-		const host = yield* startHost({
+		const host = yield* startTsh({
 			jobs: opts.jobs ?? memoryStorage(),
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
@@ -94,7 +94,7 @@ const session = (
 		/** The run's window, or one that refuses all it hears: a test pressing on no window fails on what it is told. */
 		const window = (run: string): WindowScreen =>
 			screens.get(run) ?? {
-				show: () => {},
+				show: () => () => {},
 				heard: () => ({kind: "refused", why: `no window for ${run}`}),
 				closed: () => {},
 			};

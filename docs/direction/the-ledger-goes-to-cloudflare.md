@@ -525,6 +525,45 @@ needs one "away" banner. A lane can lose its ticket on a long drop. **How
 sure: 80%.** The doubt is a laptop that sleeps: how often its socket comes back
 broken. The experiment below measures it.
 
+**Decided the same day: the first version rides out a wifi blip. A laptop that
+stays offline for long waits.**
+
+```ts
+// A sketch, to be measured in experiment 149. A lane's own view of its lease.
+type Lease =
+	| {state: "held"; until: number} // renewed on time
+	| {state: "jeopardy"; since: number} // a renew failed: keep working, hold outside writes
+	| {state: "lost"}; // the grace ran out, or the ledger says another host has it
+```
+
+- **Why blips come first.** Every laptop's wifi drops for seconds or minutes.
+  Today that costs a lane its ticket after about 30 s and a restart. Long
+  offline work matters less: an agent needs Anthropic's servers, so a laptop
+  with no internet cannot run agent steps anyway.
+- **What "rides out" means.** The lane keeps its ticket and does not restart.
+  Its writes land once and in order. Nothing outside happens twice. The window
+  says plainly what happened.
+- **How it is found.** Experiment 149 measures today's behaviour on drops from
+  2 s to 5 min, for both a clean refusal and a silent hang. It tries ttl and
+  renew pairs and a grace period, the shape Chubby calls "jeopardy" (a lease
+  in doubt, held while the client waits)
+  ([Burrows, OSDI 2006](https://research.google/pubs/the-chubby-lock-service-for-loosely-coupled-distributed-systems/)).
+  It also counts how often this laptop's link really drops.
+- **Hosts can be anywhere either way.** Every host uses the project's one
+  ledger, so a lane on the laptop, one on Cloudflare and one on another
+  person's laptop are already one record. Offline work is the only thing a
+  branch-and-merge ledger would add.
+- **Kept for later: a checked-out lane.** The lane takes its claim online with
+  a long ttl. Offline, it writes only its own one-writer streams to an outbox.
+  It uploads them in order under the same fence: a fast-forward, or nothing.
+  A person can free the ticket, and that fences the upload. It is LiveStore's
+  shape (the server sets the order, and the client replays on top before it
+  pushes) ([LiveStore](https://docs.livestore.dev/reference/syncing/)) with a
+  git-lfs-style lock for the claim
+  ([git-lfs](https://github.com/git-lfs/git-lfs/wiki/File-Locking)). It would
+  need program cursors keyed by message id instead of inbox rev, and it would
+  block asks, outside writes and new tickets while offline.
+
 ## 6. Sharing a project: the whole ledger is copied
 
 **Decided the same day: sharing a project copies its whole ledger, every row of
