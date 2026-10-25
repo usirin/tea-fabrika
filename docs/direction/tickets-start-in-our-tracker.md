@@ -7,7 +7,7 @@ Decided 2026-10-24, for the pipeline's first version.
 {fact: "filed", ticket: "demlik-1", by: "owner", title: "…", body: "…"}
 {fact: "edited", ticket: "demlik-1", by: "owner", body: "…"}
 {fact: "commented", ticket: "demlik-1", by: "agent", body: "Plan ready. One open point: …"}
-{fact: "approved", ticket: "demlik-1", plan: "p-1", text: "sha256:9c1f…"}
+{fact: "approved", ticket: "demlik-1", plan: "demlik-1", version: 2, text: "sha256:9c1f…"}
 
 // The yes names the text it saw. An edit after it is not covered.
 // A JSON pair, so "ab" + "c" and "a" + "bc" do not share a hash (experiment 138).

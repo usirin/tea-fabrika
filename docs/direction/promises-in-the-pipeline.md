@@ -1,5 +1,7 @@
 # Promises in the pipeline
 
+**Changed 2026-10-24:** a promise is now a Property; [The plan stage](./the-plan-stage.md) says what changed.
+
 Proposed 2026-10-22.
 
 ```ts
