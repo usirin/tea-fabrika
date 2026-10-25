@@ -86,6 +86,13 @@ export const startTiles = (options: {
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
 
+		/** A run is over: its port goes and the desk is told, once, whoever saw it end first. */
+		const over = (run: string) => {
+			if (!live.delete(run)) return;
+			edge.gone(`run:${run}`);
+			edge.tell({type: "over", run});
+		};
+
 		const startOne = (tile: TileId) =>
 			Effect.gen(function* () {
 				const scope = yield* Scope.fork(parent);
@@ -100,11 +107,7 @@ export const startTiles = (options: {
 							edge.view(run, screen);
 							edge.tell(told(tile, run, one));
 						},
-						ended: (run) => {
-							if (!live.delete(run)) return;
-							edge.gone(`run:${run}`);
-							edge.tell({type: "over", run});
-						},
+						ended: over,
 						running: (count) => {
 							const now = open.get(tile);
 							if (now !== undefined) now.running = count;
@@ -135,6 +138,9 @@ export const startTiles = (options: {
 					if (one === undefined) return;
 					open.delete(tile);
 					yield* Scope.close(one.scope, Exit.void);
+					// The scope closing interrupts the runs, and a run interrupted may end before its host
+					// says so. Every run of the tile is over now, said or not.
+					for (const [run, it] of [...live]) if (it.tile === tile) over(run);
 					edge.gone(`tile:${tile}`);
 					yield* one.drop;
 				}),
