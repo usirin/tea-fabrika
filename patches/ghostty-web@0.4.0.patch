@@ -1,0 +1,108 @@
+diff --git a/dist/ghostty-web.js b/dist/ghostty-web.js
+index a4ca427b95288e70c782ce303013cd644893dcec..da8720a96da0451315772553f6a4e6bcdc8f25a8 100644
+--- a/dist/ghostty-web.js
++++ b/dist/ghostty-web.js
+@@ -1560,7 +1560,10 @@ class $ {
+    */
+   renderCursor(A, B) {
+     const g = A * this.metrics.width, E = B * this.metrics.height;
+-    switch (this.ctx.fillStyle = this.theme.cursor, this.cursorStyle) {
++    switch (this.ctx.fillStyle = this.theme.cursor, this.ctx.strokeStyle = this.theme.cursor, this.blurred ? "hollow" : this.cursorStyle) {
++      case "hollow":
++        this.ctx.lineWidth = 1, this.ctx.strokeRect(g + 0.5, E + 0.5, this.metrics.width - 1, this.metrics.height - 1);
++        break;
+       case "block":
+         this.ctx.fillRect(g, E, this.metrics.width, this.metrics.height);
+         break;
+@@ -1584,7 +1587,7 @@ class $ {
+   // ==========================================================================
+   startCursorBlink() {
+     this.cursorBlinkInterval = window.setInterval(() => {
+-      this.cursorVisible = !this.cursorVisible;
++      this.cursorVisible = !this.cursorVisible, this.onChange?.();
+     }, 530);
+   }
+   stopCursorBlink() {
+@@ -1632,7 +1635,7 @@ class $ {
+    * Update cursor style
+    */
+   setCursorStyle(A) {
+-    this.cursorStyle = A;
++    this.cursorStyle = A, this.onChange?.();
+   }
+   /**
+    * Enable/disable cursor blinking
+@@ -1687,14 +1690,14 @@ class $ {
+    * Set the currently hovered hyperlink ID for rendering underlines
+    */
+   setHoveredHyperlinkId(A) {
+-    this.hoveredHyperlinkId = A;
++    this.hoveredHyperlinkId = A, this.onChange?.();
+   }
+   /**
+    * Set the currently hovered link range for rendering underlines (for regex-detected URLs)
+    * Pass null to clear the hover state
+    */
+   setHoveredLinkRange(A) {
+-    this.hoveredLinkRange = A;
++    this.hoveredLinkRange = A, this.onChange?.();
+   }
+   /**
+    * Get character cell width (for coordinate conversion)
+@@ -2090,6 +2093,7 @@ const L = class Y {
+    * Request a render update (triggers selection overlay redraw)
+    */
+   requestRender() {
++    this.terminal.requestRender();
+   }
+ };
+ L.AUTO_SCROLL_EDGE_SIZE = 30;
+@@ -2370,7 +2374,7 @@ class IA {
+         E.preventDefault(), E.stopPropagation();
+         const C = (I = E.clipboardData) == null ? void 0 : I.getData("text");
+         C && this.paste(C);
+-      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.startRenderLoop(), this.focus();
++      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.renderer.onChange = () => this.requestRender(), this.onScroll(() => this.requestRender()), A.addEventListener("focusin", () => this.redrawFocus(!1)), A.addEventListener("focusout", () => this.redrawFocus(!0)), this.startRenderLoop(), this.focus();
+     } catch (B) {
+       throw this.isOpen = !1, this.cleanupComponents(), new Error(`Failed to open terminal: ${B}`);
+     }
+@@ -2387,7 +2391,7 @@ class IA {
+    */
+   writeInternal(A, B) {
+     var g;
+-    this.wasmTerm.write(A), this.processTerminalResponses(), typeof A == "string" && A.includes("\x07") ? this.bellEmitter.fire() : A instanceof Uint8Array && A.includes(7) && this.bellEmitter.fire(), (g = this.linkDetector) == null || g.invalidateCache(), this.viewportY !== 0 && this.scrollToBottom(), typeof A == "string" && A.includes("\x1B]") && this.checkForTitleChange(A), B && requestAnimationFrame(B);
++    this.wasmTerm.write(A), this.processTerminalResponses(), typeof A == "string" && A.includes("\x07") ? this.bellEmitter.fire() : A instanceof Uint8Array && A.includes(7) && this.bellEmitter.fire(), (g = this.linkDetector) == null || g.invalidateCache(), this.viewportY !== 0 && this.scrollToBottom(), typeof A == "string" && A.includes("\x1B]") && this.checkForTitleChange(A), this.requestRender(), B && requestAnimationFrame(B);
+   }
+   /**
+    * Write data with newline
+@@ -2637,14 +2641,25 @@ class IA {
+    * Start the render loop
+    */
+   startRenderLoop() {
+-    const A = () => {
+-      if (!this.isDisposed && this.isOpen) {
++    this.requestRender();
++  }
++  /**
++   * Focus came or went: the cursor turns solid or hollow, so the whole screen is drawn once.
++   */
++  redrawFocus(A) {
++    this.renderer && this.wasmTerm && (this.renderer.blurred = A, this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity));
++  }
++  /**
++   * Draw once, on the next frame, when something changed. Many requests in one frame make one draw.
++   */
++  requestRender() {
++    this.animationFrameId === void 0 && !this.isDisposed && this.isOpen && (this.animationFrameId = requestAnimationFrame(() => {
++      if (this.animationFrameId = void 0, !this.isDisposed && this.isOpen) {
+         this.renderer.render(this.wasmTerm, !1, this.viewportY, this, this.scrollbarOpacity);
+         const B = this.wasmTerm.getCursor();
+-        B.y !== this.lastCursorY && (this.lastCursorY = B.y, this.cursorMoveEmitter.fire()), this.animationFrameId = requestAnimationFrame(A);
++        B.y !== this.lastCursorY && (this.lastCursorY = B.y, this.cursorMoveEmitter.fire());
+       }
+-    };
+-    A();
++    }));
+   }
+   /**
+    * Get a line from native WASM scrollback buffer
