@@ -45,6 +45,34 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
   - A pick that changes the plan counts as the owner's yes for the new
     version, so nobody approves twice.
   - The agent never decides anything about the plan.
+- **After the mutation step, it answers each mutant that lived in one of
+  three ways** (the third decided 2026-10-24):
+
+  ```ts
+  {mutant: "jev.ts:82:32", answer: "test", test: "redaction keeps the rest of the body"}
+  {mutant: "machine.ts:620:9", answer: "cannot", why: "an empty outbox loops zero times"} // changes nothing
+  {mutant: "jev.ts:105:13", answer: "noise", why: "a 200 body redacted too breaks no promise"}
+  ```
+
+  - `test`: it writes a test that kills the mutant.
+  - `cannot`: the mutant changes nothing a test can see. A disable comment
+    asks the owner, as [promises in the pipeline](./promises-in-the-pipeline.md)
+    says.
+  - `noise`: a test could tell the mutant apart, but the test would only
+    lock a detail. It becomes a finding the owner rates
+    ([every finding is rated](./every-finding-is-rated.md)):
+    "fix" sends it back for a test, "noise" lets it live.
+  - Why: in [experiment 124](../../experiments/124-kill-every-survivor.md)
+    the writer had only `test` and `cannot`, so it killed every mutant it
+    could. 3 of its 13 new tests carry junk: an exact marker text, a choice
+    nobody made, and a test of Stryker's own string.
+  - The doubt: a writer could call a real gap noise to save work. The owner's
+    ratings show it: a writer whose `noise` the owner often marks "fix" is
+    wrong too often.
+  - Still open: how a mutant the owner let live stays closed on the next run.
+    A disable comment in the code, or a fact on the ledger matched by file,
+    mutator and the code before and after. SARIF names the two `inSource`
+    and `external`.
 - **It runs in a box.** It runs tests, and code that comes out of a box runs
   only in a box ([programs run in a box](./programs-run-in-a-box.md)). The box
   holds a copy of the code at the plan's base, no login, and no network but
