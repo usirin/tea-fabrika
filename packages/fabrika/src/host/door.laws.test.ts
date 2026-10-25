@@ -42,10 +42,20 @@ type Mod = Pick<
 	| "MEMBERS"
 	| "SESSION_MS"
 	| "CHALLENGE_MS"
+	| "UNAVAILABLE"
+	| "NOT_PROVEN"
 > &
 	Pick<typeof realWriter, "writerOf" | "writerText"> &
 	Pick<typeof realKeys, "Keys" | "KeysUnreachable" | "layerNobody"> &
-	Pick<typeof realGitHub, "layerGitHub" | "KEYS_CACHE_MS" | "TOKEN_REFUSED">;
+	Pick<
+		typeof realGitHub,
+		| "layerGitHub"
+		| "KEYS_CACHE_MS"
+		| "KEYS_FAIL_MS"
+		| "LIMIT_WAIT_MS"
+		| "limitWait"
+		| "TOKEN_REFUSED"
+	>;
 
 const real: Mod = {...realDoor, ...realWriter, ...realKeys, ...realGitHub};
 
@@ -132,6 +142,8 @@ type Ask = {
 type KeysState = {
 	/** The keys service is unreachable. */
 	down: boolean;
+	/** The keys service is unreachable for these ids only (`byId`). */
+	downFor: Set<string>;
 	/** Each answer gives this id instead of the person's own; null: the true one. */
 	lie: ((id: string) => string) | null;
 	/** The law is inside `Door.invite` (see `invite` below). */
@@ -146,6 +158,8 @@ type World = {
 	readonly state: KeysState;
 	/** Every question the keys service was put, in order. */
 	readonly asks: Ask[];
+	/** What the door's runtime logged: the server's log. */
+	readonly logs: string[];
 	readonly clock: {t: number};
 	readonly founder: string;
 	readonly mod: Mod;
@@ -165,7 +179,7 @@ const runtimeOf = (layer: Layer.Layer<Keys>): ManagedRuntime.ManagedRuntime<Keys
  */
 const fakeKeys = (
 	mod: Mod,
-	w: Pick<World, "people" | "state" | "asks">,
+	w: Pick<World, "people" | "state" | "asks" | "logs">,
 	knownNow: (id: string) => boolean,
 ) => {
 	const answer = (name: string, p: {id: string; keys: string[]}): Signers => ({
@@ -179,7 +193,8 @@ const fakeKeys = (
 		find: () => readonly [string, {id: string; keys: string[]}] | undefined,
 	): Effect.Effect<Signers | null, KeysUnreachable> =>
 		Effect.suspend(() => {
-			const found = w.state.down ? undefined : find();
+			const down = w.state.down || (q === "byId" && w.state.downFor.has(arg));
+			const found = down ? undefined : find();
 			const got = found === undefined ? null : answer(...found);
 			w.asks.push({
 				q,
@@ -188,21 +203,25 @@ const fakeKeys = (
 				known: q === "byId" && knownNow(arg),
 				lied: got !== null && found !== undefined && got.id !== found[1].id,
 			});
-			return w.state.down
-				? Effect.fail(new mod.KeysUnreachable({why: "down for the law"}))
+			return down
+				? Effect.fail(new mod.KeysUnreachable({why: `down for the law, at ${q} ${arg}`}))
 				: Effect.succeed(got);
 		});
 	return runtimeOf(
-		Layer.succeed(
-			mod.Keys,
-			mod.Keys.of({
-				byId: (id) => ask("byId", id, () => [...w.people].find(([, p]) => p.id === id)),
-				of: (name) =>
-					ask("of", name, () => {
-						const p = w.people.get(name);
-						return p === undefined ? undefined : [name, p];
-					}),
-			}),
+		Layer.mergeAll(
+			Layer.succeed(
+				mod.Keys,
+				mod.Keys.of({
+					byId: (id) => ask("byId", id, () => [...w.people].find(([, p]) => p.id === id)),
+					of: (name) =>
+						ask("of", name, () => {
+							const p = w.people.get(name);
+							return p === undefined ? undefined : [name, p];
+						}),
+				}),
+			),
+			// The server's log, kept for the laws, and kept off the test's own output.
+			Logger.layer([Logger.make((l) => w.logs.push(String(l.message)))]),
 		),
 	);
 };
@@ -214,8 +233,9 @@ const sharedWorld = (mod: Mod, o: {founder?: string; sessionMs?: number} = {}): 
 	const founder = o.founder ?? "github:7";
 	const w = {
 		people: new Map<string, {id: string; keys: string[]}>(),
-		state: {down: false, lie: null, inInvite: false} as KeysState,
+		state: {down: false, downFor: new Set(), lie: null, inInvite: false} as KeysState,
 		asks: [] as Ask[],
+		logs: [] as string[],
 	};
 	const config: DoorConfig = {
 		kind: "shared",
@@ -292,6 +312,11 @@ const ensure = (cond: boolean, msg: string): void => {
 	if (!cond) throw new Error(msg);
 };
 const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+type Answer = {ok: true} | {ok: false; status: number; why: string};
+/** The one answer for a keys service that failed: exactly `{status: 502, why: UNAVAILABLE}`. */
+const unavailable = (mod: Mod, r: Answer): boolean =>
+	!r.ok && eq({status: r.status, why: r.why}, {status: 502, why: mod.UNAVAILABLE});
 
 // ---------------------------------------------------------------- random requests (tea's pbt)
 
@@ -713,16 +738,23 @@ const listedKeys: Law = {
 /**
  * A fake api.github.com for `layerGitHub`: logins, their numeric ids and keys, and every request it
  * got, with its `authorization` header. `refuse` answers 401: to a request with a token, or to all.
+ * `state.refusal`, while set, is the answer to every request: a status and its headers.
  */
 const fakeGitHub = (o: {refuse?: "token" | "all"} = {}) => {
 	const users = new Map<string, {id: number; keys: string[]}>();
 	const asked: {path: string; auth: string | null}[] = [];
+	const state = {refusal: null as {status: number; headers: Record<string, string>} | null};
 	const notFound = () => Response.json({message: "Not Found"}, {status: 404});
 	const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
 		const req = input instanceof Request ? input : new Request(input, init);
 		const url = new URL(req.url);
 		const auth = req.headers.get("authorization");
 		asked.push({path: url.pathname, auth});
+		if (state.refusal !== null)
+			return new Response("refused", {
+				status: state.refusal.status,
+				headers: state.refusal.headers,
+			});
 		if (o.refuse === "all" || (o.refuse === "token" && auth !== null))
 			return Response.json({message: "Bad credentials"}, {status: 401});
 		if (url.host !== "api.github.com") return notFound();
@@ -739,7 +771,7 @@ const fakeGitHub = (o: {refuse?: "token" | "all"} = {}) => {
 			? Response.json({id: u.id, login})
 			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
 	};
-	return {users, asked, fetch};
+	return {users, asked, state, fetch};
 };
 
 /** `layerGitHub` over a fake GitHub's fetch. */
@@ -947,7 +979,10 @@ const personKinds: Law = {
 	},
 };
 
-/** 13. The keys service's id ends up in every writer, so an id with an "@" in it is a 502. */
+/**
+ * 13. The keys service's id ends up in every writer, so an id with an "@" in it is the one 502,
+ *     `UNAVAILABLE`.
+ */
 const idChecked: Law = {
 	name: "an id from the keys service with an @ in it is a 502, and lets nobody in",
 	run: async (mod) => {
@@ -959,7 +994,7 @@ const idChecked: Law = {
 				const alice = mustOk(await loginWith(W, "alice", key(0)));
 				W.people.set("eve", {id: `${a}@${b}`, keys: [key(1).line]});
 				const inv = await W.door.invite(alice.who, "eve");
-				ensure(!inv.ok && inv.status === 502, `an invite took the id ${a}@${b}`);
+				ensure(unavailable(mod, inv), `an invite took the id ${a}@${b}: ${JSON.stringify(inv)}`);
 				const before = sessionCount(W);
 				// The invite was refused, so the ledger does not know eve: a 401, and nobody is asked.
 				const eve = await loginWith(W, "eve", key(1));
@@ -971,7 +1006,10 @@ const idChecked: Law = {
 	},
 };
 
-/** 14. When the keys service cannot be asked: a 502, and no session opened, no invite kept. */
+/**
+ * 14. When the keys service cannot be asked: the one 502, `UNAVAILABLE`, and no session opened, no
+ *     invite kept.
+ */
 const keysUnreachable: Law = {
 	name: "an unreachable keys service is a 502, with no session opened",
 	run: async (mod) => {
@@ -983,7 +1021,7 @@ const keysUnreachable: Law = {
 		const facts = rules.readStream(W.db, mod.MEMBERS).length;
 		W.state.down = true;
 		const login = await loginWith(W, "alice", key(0));
-		ensure(!login.ok && login.status === 502, "a login with the keys service down was not 502");
+		ensure(unavailable(mod, login), "a login with the keys service down was not UNAVAILABLE");
 		const grant = mod.grantText({
 			address: addressOf(W, "demo"),
 			agent: "triage",
@@ -992,9 +1030,9 @@ const keysUnreachable: Law = {
 			expires: W.clock.t + 60_000,
 		});
 		const agent = await agentLogin(W, {grant, by: key(0), signer: key(2)});
-		ensure(!agent.ok && agent.status === 502, "an agent login with the keys down was not 502");
+		ensure(unavailable(mod, agent), "an agent login with the keys down was not UNAVAILABLE");
 		const inv = await W.door.invite(alice.who, "bob");
-		ensure(!inv.ok && inv.status === 502, "an invite with the keys service down was not 502");
+		ensure(unavailable(mod, inv), "an invite with the keys service down was not UNAVAILABLE");
 		ensure(sessionCount(W) === before, "a session was opened with the keys service down");
 		ensure(
 			rules.readStream(W.db, mod.MEMBERS).length === facts,
@@ -1294,8 +1332,8 @@ const renameKeepsResult: Law = {
 };
 
 /**
- * 20. When the keys service answers a login with another id than the one asked about, the login is a
- *     502, every time, and opens no session and writes no member fact.
+ * 20. When the keys service answers a login with another id than the one asked about, the login is
+ *     the one 502, `UNAVAILABLE`, every time, and opens no session and writes no member fact.
  */
 const otherIdIs502: Law = {
 	name: "an answer with another id than the one asked is always a 502, never a session",
@@ -1321,7 +1359,10 @@ const otherIdIs502: Law = {
 					const facts = rules.readStream(W.db, mod.MEMBERS).length;
 					const r = asAgent ? await agentOp(W, n, k) : await loginOp(W, n, k);
 					if (!W.asks.slice(asked).some((a) => a.lied)) continue;
-					ensure(!r.ok && r.status === 502, `${n} was let in on another id's answer`);
+					ensure(
+						unavailable(mod, r),
+						`${n} on another id's answer was not UNAVAILABLE: ${JSON.stringify(r)}`,
+					);
 					ensure(sessionCount(W) === sessions, `${n} opened a session on another id's answer`);
 					ensure(
 						rules.readStream(W.db, mod.MEMBERS).length === facts,
@@ -1402,6 +1443,518 @@ const tokenRetry: Law = {
 	},
 };
 
+// ---------------------------------------------------------------- round 3: one 502, several ids
+
+/**
+ * Generated people for law 22: names `m<n>-z` and ids `<service>:<n>q`, so no name or id is a
+ * part of another. Person 0 founds the ledger.
+ */
+const arbFolk = fc
+	.uniqueArray(fc.nat({max: 9999}), {minLength: 2, maxLength: 5})
+	.chain((ns) =>
+		fc.tuple(
+			fc.constant(ns),
+			fc.array(fc.constantFrom("github", "gl", "kc"), {minLength: ns.length, maxLength: ns.length}),
+		),
+	)
+	.map(([ns, services]) =>
+		ns.map((n, i) => ({name: `m${n}-z`, id: `${services[i]}:${n * 7 + 13}q`, key: i})),
+	);
+
+/** One step of law 22's runs. `as` picks a typed name: a person's, in some case, or a stranger's. */
+type Step =
+	| {readonly type: "login"; readonly as: number; readonly upper: boolean; readonly key: number}
+	| {readonly type: "agent"; readonly as: number; readonly upper: boolean; readonly key: number}
+	| {readonly type: "invite"; readonly by: number; readonly as: number}
+	| {readonly type: "remove"; readonly by: number; readonly who: number}
+	| {readonly type: "rename"; readonly who: number; readonly to: number}
+	| {readonly type: "down"; readonly ids: readonly boolean[]; readonly all: boolean}
+	| {readonly type: "lie"; readonly on: boolean};
+
+const arbStep: fc.Arbitrary<Step> = fc.oneof(
+	fc.record({
+		type: fc.constant("login" as const),
+		as: fc.nat({max: 7}),
+		upper: fc.boolean(),
+		key: fc.nat({max: 6}),
+	}),
+	fc.record({
+		type: fc.constant("agent" as const),
+		as: fc.nat({max: 7}),
+		upper: fc.boolean(),
+		key: fc.nat({max: 6}),
+	}),
+	fc.record({type: fc.constant("invite" as const), by: fc.nat({max: 4}), as: fc.nat({max: 7})}),
+	fc.record({type: fc.constant("remove" as const), by: fc.nat({max: 4}), who: fc.nat({max: 9})}),
+	fc.record({type: fc.constant("rename" as const), who: fc.nat({max: 4}), to: fc.nat({max: 99})}),
+	fc.record({
+		type: fc.constant("down" as const),
+		ids: fc.array(fc.boolean(), {minLength: 5, maxLength: 5}),
+		all: fc.boolean(),
+	}),
+	fc.record({type: fc.constant("lie" as const), on: fc.boolean()}),
+);
+
+/**
+ * 22. No refusal names anyone. Every 502 is exactly `UNAVAILABLE`, and what went wrong is in the
+ *     server's log. No refusal holds a person's id, a name anyone goes or went by (but the name the
+ *     request itself typed), or a keys service's path. Over random runs on generated people, with
+ *     the keys service down for some ids or for all, or answering with another id.
+ */
+const refusalsNameNobody: Law = {
+	name: "no refusal names anyone: a 502 is exactly UNAVAILABLE, and no refusal holds an id, another's name or a path",
+	run: async (mod) => {
+		const stranger = fc.integer({min: 10_000, max: 19_999}).map((n) => `m${n}-z`);
+		await fc.assert(
+			fc.asyncProperty(
+				arbFolk,
+				fc.array(stranger, {minLength: 3, maxLength: 3}),
+				fc.array(arbStep, {maxLength: 10}),
+				async (folk, strangers, steps) => {
+					const founder = folk[0];
+					if (founder === undefined) return;
+					const W = sharedWorld(mod, {founder: founder.id});
+					for (const p of folk) W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+					const ids = new Set(folk.flatMap((p) => [p.id, `${p.id}9`]));
+					const names = new Set([...folk.map((p) => p.name), ...strangers]);
+					const typed = (as: number, upper: boolean) => {
+						const n = at([...folk.map((p) => p.name), ...strangers], as);
+						return upper ? n.toUpperCase() : n;
+					};
+					const seen: {typed: string; status: number; why: string; logged: boolean}[] = [];
+					const keep = (t: string, r: Answer, logsBefore: number) => {
+						if (!r.ok) seen.push({...r, typed: t, logged: W.logs.length > logsBefore});
+					};
+					await loginOp(W, founder.name, founder.key);
+					for (const s of steps) {
+						const m = W.door.members();
+						const members = [...m.members.keys()];
+						const logs = W.logs.length;
+						if (s.type === "login" || s.type === "agent") {
+							const t = typed(s.as, s.upper);
+							const k = s.key === 6 ? NOBODY_KEY : s.key;
+							keep(t, s.type === "login" ? await loginOp(W, t, k) : await agentOp(W, t, k), logs);
+						} else if (s.type === "invite") {
+							if (members.length === 0) continue;
+							const t = typed(s.as, false);
+							keep(t, await invite(W, {kind: "user", id: at(members, s.by)}, t), logs);
+						} else if (s.type === "remove") {
+							const off = [...members, ...m.invited.keys()];
+							if (members.length > 0)
+								keep(
+									"",
+									W.door.remove({kind: "user", id: at(members, s.by)}, at(off, s.who)),
+									logs,
+								);
+						} else if (s.type === "rename") {
+							const p = at(folk, s.who);
+							const now = [...W.people].find(([, q]) => q.id === p.id);
+							const to = `r${s.to}-y`;
+							if (now === undefined || W.people.has(to)) continue;
+							W.people.delete(now[0]);
+							W.people.set(to, now[1]);
+							names.add(to);
+						} else if (s.type === "down") {
+							W.state.down = s.all;
+							W.state.downFor = new Set(folk.filter((_, i) => s.ids[i]).map((p) => p.id));
+						} else {
+							W.state.lie = s.on ? (id) => `${id}9` : null;
+						}
+					}
+					for (const r of seen) {
+						const shown = `${JSON.stringify(r)} (ids ${[...ids]}, names ${[...names]})`;
+						if (r.status === 502)
+							ensure(
+								r.why === mod.UNAVAILABLE && r.logged,
+								`a 502 was not UNAVAILABLE, logged: ${shown}`,
+							);
+						const text =
+							r.typed === ""
+								? r.why.toLowerCase()
+								: r.why.toLowerCase().split(r.typed.toLowerCase()).join("");
+						ensure(
+							![...ids].some((id) => text.includes(id.toLowerCase())),
+							`a refusal names an id: ${shown}`,
+						);
+						ensure(
+							![...names].some((n) => text.includes(n.toLowerCase())),
+							`a refusal names someone the request did not type: ${shown}`,
+						);
+						ensure(!/\/users?\b|api\.github/.test(text), `a refusal names a path: ${shown}`);
+					}
+				},
+			),
+			{numRuns: 25, seed: 7},
+		);
+	},
+};
+
+/** What the keys service says about one of several people this ledger knows by one name. */
+type Says = "proves" | "other-key" | "nobody" | "down" | "lies";
+const SAYS: readonly Says[] = ["proves", "other-key", "nobody", "down", "lies"];
+
+/**
+ * The model of a login by a name several people here go by: in when any of them is proven by the
+ * signature, whatever the others say; else `UNAVAILABLE` when a question about one failed (down, or
+ * an answer with another id); else `NOT_PROVEN`.
+ */
+const provenModel = (says: readonly Says[]): "in" | "unavailable" | "not-proven" =>
+	says.includes("proves")
+		? "in"
+		: says.some((s) => s === "down" || s === "lies")
+			? "unavailable"
+			: "not-proven";
+
+/**
+ * 23. A login by a name several people here go by (members and open invites, in any case) answers as
+ *     the model says, for every mix of what the keys service says of each: proven wins over any
+ *     failure, a failure with no proof is `UNAVAILABLE`, and neither is `NOT_PROVEN`.
+ */
+const provenAsModel: Law = {
+	name: "a login by a name several people go by answers as the model: proven wins, else a failure is UNAVAILABLE, else NOT_PROVEN",
+	run: async (mod) => {
+		const SIGNER = 1;
+		const OTHER = 2;
+		const arbCase = fc.array(
+			fc.record({
+				says: fc.constantFrom(...SAYS),
+				member: fc.boolean(),
+				as: fc.constantFrom("bob", "Bob", "BOB"),
+			}),
+			{minLength: 1, maxLength: 5},
+		);
+		await fc.assert(
+			fc.asyncProperty(arbCase, fc.constantFrom("bob", "Bob", "bOB"), async (cands, typedName) => {
+				const W = sharedWorld(mod, {founder: "github:1"});
+				W.people.set("alice", {id: "github:1", keys: [key(0).line]});
+				mustOk(await loginOp(W, "alice", 0));
+				const liars = new Set<string>();
+				for (const [i, c] of cands.entries()) {
+					const id = `github:${100 + i}`;
+					const fact = (kind: string) =>
+						rules.writeUnguarded(W.db, W.clock.t, mod.MEMBERS, "any", {
+							kind,
+							writer: "user:github:1",
+							data: {id, name: c.as},
+						});
+					fact("invited");
+					if (c.member) fact("joined");
+					if (c.says === "down") W.state.downFor.add(id);
+					if (c.says === "lies") liars.add(id);
+					if (c.says !== "nobody")
+						W.people.set(`p${i}`, {
+							id,
+							keys: [key(c.says === "other-key" ? OTHER : SIGNER).line],
+						});
+				}
+				W.state.lie = (id) => (liars.has(id) ? `${id}9` : id);
+				const sessions = sessionCount(W);
+				const r = await loginOp(W, typedName, SIGNER);
+				const want = provenModel(cands.map((c) => c.says));
+				const provers = cands.flatMap((c, i) => (c.says === "proves" ? [`github:${100 + i}`] : []));
+				const shown = `${JSON.stringify(cands)} answered ${JSON.stringify(r)}, the model says ${want}`;
+				if (want === "in")
+					ensure(
+						r.ok && provers.includes(r.value.who.kind === "user" ? r.value.who.id : ""),
+						shown,
+					);
+				else {
+					ensure(
+						want === "unavailable"
+							? unavailable(mod, r)
+							: !r.ok && eq({status: r.status, why: r.why}, {status: 401, why: mod.NOT_PROVEN}),
+						shown,
+					);
+					ensure(sessionCount(W) === sessions, `a session was opened: ${shown}`);
+				}
+			}),
+			{numRuns: 60, seed: 7},
+		);
+	},
+};
+
+// ---------------------------------------------------------------- round 3: GitHub's limit and memory
+
+/** One question to `Keys`: by id, or by name. */
+type Q = {readonly q: "byId" | "of"; readonly arg: string};
+const GH_PEOPLE = [
+	["alice", 7],
+	["bob", 8],
+	["carol", 9],
+] as const;
+const arbQ: fc.Arbitrary<Q> = fc.constantFrom(
+	...GH_PEOPLE.map(([, n]): Q => ({q: "byId", arg: `github:${n}`})),
+	...GH_PEOPLE.map(([login]): Q => ({q: "of", arg: login})),
+);
+/** A fake GitHub with alice, bob and carol, one key each. */
+const ghPeople = () => {
+	const gh = fakeGitHub();
+	for (const [login, n] of GH_PEOPLE) gh.users.set(login, {id: n, keys: [`ssh-ed25519 AAAA${n}`]});
+	return gh;
+};
+/** Where Effect's TestClock starts in these laws: a whole second, in 2027. */
+const T0 = 1_800_000_000_000;
+/** A question's answer as text: its keys, or the tag it failed with. */
+const answerOf = (mod: Mod, x: Q) =>
+	mod.Keys.use((k) => (x.q === "byId" ? k.byId(x.arg) : k.of(x.arg))).pipe(
+		Effect.match({
+			onFailure: (e): string => e._tag,
+			onSuccess: (s): string => `keys ${JSON.stringify(s?.keys ?? null)}`,
+		}),
+	);
+/** `body` on a fresh `layerGitHub` over `gh`, with Effect's TestClock at `T0`. */
+const onTestClock = (
+	mod: Mod,
+	gh: ReturnType<typeof fakeGitHub>,
+	o: Parameters<Mod["layerGitHub"]>[0],
+	body: Effect.Effect<void, never, Keys>,
+) =>
+	Effect.runPromise(
+		Effect.gen(function* () {
+			yield* TestClock.setTime(T0);
+			yield* body;
+		}).pipe(Effect.provide(githubLayer(mod, gh, o)), Effect.provide(TestClock.layer())),
+	);
+
+/** A refusal that says the limit is spent for `secs`, in one of the three ways GitHub says it. */
+const arbLimit = fc.record({
+	status: fc.constantFrom(403, 429),
+	how: fc.constantFrom("after" as const, "date" as const, "reset" as const),
+	secs: fc.integer({min: 1, max: 3600}),
+});
+type Limit = typeof arbLimit extends fc.Arbitrary<infer T> ? T : never;
+const limitHeaders = (l: Limit): Record<string, string> =>
+	l.how === "after"
+		? {"retry-after": String(l.secs)}
+		: l.how === "date"
+			? {"retry-after": new Date(T0 + l.secs * 1000).toUTCString()}
+			: {"x-ratelimit-remaining": "0", "x-ratelimit-reset": String(T0 / 1000 + l.secs)};
+
+/**
+ * 24. After GitHub says the limit is spent, no call goes out until the time it names, for any id or
+ *     any name, and every question in between fails as unreachable. At that time calls go out again.
+ */
+const limitSilence: Law = {
+	name: "while GitHub's limit is spent no call goes out, for any id or name, and at its end calls go out again",
+	run: async (mod) => {
+		const later = fc.array(fc.tuple(fc.nat({max: 999_999_999}), arbQ), {maxLength: 6});
+		await fc.assert(
+			fc.asyncProperty(arbLimit, arbQ, later, arbQ, async (lim, first, asks, last) => {
+				const gh = ghPeople();
+				const wait = lim.secs * 1000;
+				const times = asks.map(([x, q]) => [x % wait, q] as const).sort((a, b) => a[0] - b[0]);
+				await onTestClock(
+					mod,
+					gh,
+					{cacheMs: 0, failMs: 0},
+					Effect.gen(function* () {
+						gh.state.refusal = {status: lim.status, headers: limitHeaders(lim)};
+						ensure(
+							(yield* answerOf(mod, first)) === "KeysUnreachable",
+							"the refusal was not a failure",
+						);
+						gh.state.refusal = null;
+						const sent = gh.asked.length;
+						for (const [t, q] of times) {
+							yield* TestClock.setTime(T0 + t);
+							const a = yield* answerOf(mod, q);
+							ensure(
+								a === "KeysUnreachable" && gh.asked.length === sent,
+								`${q.q} ${q.arg} at ${t} ms of a ${wait} ms wait answered ${a}, with ${gh.asked.length - sent} calls out`,
+							);
+						}
+						yield* TestClock.setTime(T0 + wait);
+						const a = yield* answerOf(mod, last);
+						ensure(
+							a.startsWith("keys") && gh.asked.length > sent,
+							`at the end of a ${wait} ms wait ${last.q} ${last.arg} answered ${a}`,
+						);
+					}),
+				);
+			}),
+			{numRuns: 60, seed: 7},
+		);
+	},
+};
+
+/** A header value as anyone may send it: odd numbers, far dates, nothing, or any text. */
+const arbHeader = fc.oneof(
+	fc.integer({min: -1e12, max: 1e13}).map(String),
+	fc.constantFrom(
+		"9999999999",
+		"99999999999",
+		"4102444800",
+		"-1",
+		"-5",
+		"1.5",
+		"1e9",
+		"0x10",
+		"2099",
+		"Fri, 31 Dec 9999 23:59:59 GMT",
+		"+275760-09-13T00:00:00Z",
+		" 60 ",
+		"",
+		"soon",
+	),
+	fc.integer({min: 1, max: 10 * 365 * 24 * 3600}).map((s) => new Date(T0 + s * 1000).toUTCString()),
+	fc.stringMatching(/^[ -~]{0,16}$/),
+);
+const arbForged = fc
+	.record(
+		{
+			"retry-after": arbHeader,
+			"x-ratelimit-remaining": fc.constantFrom("0", " 0", "00", "-0", "1", ""),
+			"x-ratelimit-reset": arbHeader,
+		},
+		{requiredKeys: []},
+	)
+	.map(
+		(h) =>
+			Object.fromEntries(Object.entries(h).filter(([, v]) => v !== undefined)) as Record<
+				string,
+				string
+			>,
+	);
+
+/**
+ * 25. GitHub's wait is never over an hour, whatever the headers say: forged far resets, far dates,
+ *     negative numbers, text. `limitWait` gives null or 0 to `LIMIT_WAIT_MS`, and an hour after any
+ *     refusal a question goes out again.
+ */
+const limitCapped: Law = {
+	name: "GitHub's wait is never over an hour, whatever the headers say",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom(403, 429),
+				arbForged,
+				arbQ,
+				arbQ,
+				async (status, headers, first, last) => {
+					const w = mod.limitWait(status, headers, T0);
+					ensure(
+						w === null || (w >= 0 && w <= mod.LIMIT_WAIT_MS),
+						`limitWait gave ${w} for ${JSON.stringify(headers)}`,
+					);
+					const gh = ghPeople();
+					await onTestClock(
+						mod,
+						gh,
+						{cacheMs: 0, failMs: 0},
+						Effect.gen(function* () {
+							gh.state.refusal = {status, headers};
+							yield* answerOf(mod, first);
+							gh.state.refusal = null;
+							const sent = gh.asked.length;
+							yield* TestClock.setTime(T0 + mod.LIMIT_WAIT_MS);
+							const a = yield* answerOf(mod, last);
+							ensure(
+								a.startsWith("keys") && gh.asked.length > sent,
+								`an hour after ${status} ${JSON.stringify(headers)}, ${last.q} ${last.arg} answered ${a}`,
+							);
+						}),
+					);
+				},
+			),
+			{numRuns: 80, seed: 7},
+		);
+	},
+};
+
+/**
+ * 26. An answer is served from memory for exactly `cacheMs` and a failure for exactly `failMs`: the
+ *     last ms before, nothing goes out and the old answer comes back; at that ms, GitHub is asked.
+ *     0 keeps nothing. Over generated times, both questions, and both outcomes.
+ */
+const keptExactly: Law = {
+	name: "an answer is kept exactly cacheMs and a failure exactly failMs, and 0 keeps nothing",
+	run: async (mod) => {
+		const ms = fc.oneof(fc.constant(0), fc.integer({min: 1, max: 10 * 60_000}));
+		await fc.assert(
+			fc.asyncProperty(ms, ms, arbQ, fc.boolean(), async (cacheMs, failMs, q, fails) => {
+				const gh = ghPeople();
+				const ttl = fails ? failMs : cacheMs;
+				await onTestClock(
+					mod,
+					gh,
+					{cacheMs, failMs},
+					Effect.gen(function* () {
+						if (fails) gh.state.refusal = {status: 503, headers: {}};
+						const was = yield* answerOf(mod, q);
+						ensure(
+							fails ? was === "KeysUnreachable" : was.startsWith("keys"),
+							`the first answer was ${was}`,
+						);
+						// GitHub changes its answer: it is up again, and every key is new.
+						gh.state.refusal = null;
+						for (const [login, n] of GH_PEOPLE)
+							gh.users.set(login, {id: n, keys: [`ssh-ed25519 BBBB${n}`]});
+						const sent = gh.asked.length;
+						const shown = `${q.q} ${q.arg}, cacheMs ${cacheMs}, failMs ${failMs}, ${fails ? "a failure" : "an answer"}`;
+						if (ttl > 0) {
+							yield* TestClock.setTime(T0 + ttl - 1);
+							const kept = yield* answerOf(mod, q);
+							ensure(kept === was && gh.asked.length === sent, `not kept to its last ms: ${shown}`);
+						}
+						yield* TestClock.setTime(T0 + ttl);
+						const fresh = yield* answerOf(mod, q);
+						ensure(
+							fresh.includes("BBBB") && gh.asked.length > sent,
+							`kept past its time: ${shown}, answered ${fresh}`,
+						);
+					}),
+				);
+			}),
+			{numRuns: 60, seed: 7},
+		);
+	},
+};
+
+/**
+ * 27. BUG, found by this law on 00e02fa: a question asked during GitHub's wait is kept failing for
+ *     `failMs` after it, so for that question the wait runs past its end, and past an hour. The law:
+ *     at the wait's end, every question goes out again, even one asked during it. It fails on the
+ *     real code, and is run as a known bug below, not with the laws.
+ */
+const waitEndsForAll: Law = {
+	name: "at the end of GitHub's wait every question goes out again, even one asked during it",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(
+				arbLimit,
+				fc.integer({min: 1, max: 60_000}),
+				arbQ,
+				arbQ,
+				async (lim, failMs, first, during) => {
+					if (eq(first, during)) return;
+					const gh = ghPeople();
+					const wait = lim.secs * 1000;
+					await onTestClock(
+						mod,
+						gh,
+						{cacheMs: 0, failMs},
+						Effect.gen(function* () {
+							gh.state.refusal = {status: lim.status, headers: limitHeaders(lim)};
+							yield* answerOf(mod, first);
+							gh.state.refusal = null;
+							yield* TestClock.setTime(T0 + wait - 1);
+							yield* answerOf(mod, during);
+							yield* TestClock.setTime(T0 + wait);
+							const sent = gh.asked.length;
+							const a = yield* answerOf(mod, during);
+							ensure(
+								a.startsWith("keys") && gh.asked.length > sent,
+								`${during.q} ${during.arg}, asked 1 ms before the end of a ${wait} ms wait, answered ${a} at its end (failMs ${failMs})`,
+							);
+						}),
+					);
+				},
+			),
+			{numRuns: 30, seed: 7},
+		);
+	},
+};
+
 const LAWS: readonly Law[] = [
 	writerIsStamp,
 	agentNeverUser,
@@ -1425,6 +1978,19 @@ const LAWS: readonly Law[] = [
 	renameKeepsResult,
 	otherIdIs502,
 	tokenRetry,
+	refusalsNameNobody,
+	provenAsModel,
+	limitSilence,
+	limitCapped,
+	keptExactly,
+];
+
+/**
+ * Laws that found a bug in the real code. Each is kept as written and run as a known failure, so the
+ * suite stays green and the day the bug is fixed this list turns red: then the law moves to `LAWS`.
+ */
+const BUGS: readonly (readonly [Law, RegExp])[] = [
+	[waitEndsForAll, /answered KeysUnreachable at its end/],
 ];
 
 // ---------------------------------------------------------------- planted mistakes
@@ -1516,8 +2082,8 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	cacheNeverExpires: () =>
 		plant(
 			"keys-github",
-			"Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero,",
-			"Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,",
+			"Duration.millis(Exit.isSuccess(exit) ? ms : failMs),",
+			"Exit.isSuccess(exit) ? Duration.infinity : Duration.millis(failMs),",
 		),
 	// A grant is accepted for any object.
 	grantAnyObject: () =>
@@ -1550,8 +2116,8 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	unreachableIsNobody: () =>
 		plant(
 			"door",
-			"Effect.succeed(refuse(502, `could not ask for the keys of",
-			"Effect.succeed(letIn(null) || refuse(502, `could not ask for the keys of",
+			'Effect.catchTag("KeysUnreachable", (e) => down(e.why)),',
+			'Effect.catchTag("KeysUnreachable", () => Effect.succeed(letIn(null))),',
 		),
 	// Every member and open invite is asked about at each login, whatever name was typed.
 	asksEveryone: () =>
@@ -1564,8 +2130,8 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	saysNobody: () =>
 		plant(
 			"door",
-			"\t\t}\n\t\treturn refuse(401, NOT_PROVEN);",
-			'\t\t}\n\t\treturn refuse(401, known.length === 0 ? "nobody here goes by that name" : NOT_PROVEN);',
+			"return failed ?? refuse(401, NOT_PROVEN);",
+			'return failed ?? refuse(401, known.length === 0 ? "nobody here goes by that name" : NOT_PROVEN);',
 		),
 	// A login that is proven asks once more, by name, for the name the person goes by now.
 	refreshesByName: () =>
@@ -1600,12 +2166,103 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			"if (res.status === 401 && o.token !== undefined) {",
 			"if (res.status === 401) {",
 		),
+
+	// Round 3.
+	// The 502 says who it could not ask about.
+	unavailableSaysWho: () =>
+		plant(
+			"door",
+			"Effect.as(refuse(502, UNAVAILABLE)),",
+			'Effect.as(refuse(502, UNAVAILABLE + " (" + about + ")")),',
+		),
+	// The 401 says which ids it asked about.
+	notProvenSaysIds: () =>
+		plant(
+			"door",
+			"return failed ?? refuse(401, NOT_PROVEN);",
+			'return failed ?? refuse(401, NOT_PROVEN + ": asked " + ids.join(", "));',
+		),
+	// The first question that fails ends the login: the others are not asked.
+	failStopsOthers: () => plant("door", "failed = asked;\n\t\t\t\tcontinue;", "return asked;"),
+	// A failed question with no proof reads as not proven.
+	failIsNotProven: () =>
+		plant("door", "return failed ?? refuse(401, NOT_PROVEN);", "return refuse(401, NOT_PROVEN);"),
+	// Only the first person known by the name is asked about.
+	firstIdOnly: () =>
+		plant(
+			"door",
+			"for (const id of new Set(ids)) {",
+			"for (const id of new Set(ids.slice(0, 1))) {",
+		),
+	// A spent limit starts no wait.
+	limitIgnored: () =>
+		plant(
+			"keys-github",
+			"if (wait !== null) yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));",
+			"",
+		),
+	// The wait holds back questions by id only: a question by name still goes out.
+	limitByIdOnly: () =>
+		plant(
+			"keys-github",
+			"if ((yield* Clock.currentTimeMillis) < until)",
+			'if (path.startsWith("/user/") && (yield* Clock.currentTimeMillis) < until)',
+		),
+	// The wait is as long as the headers say, with no cap.
+	limitUncapped: () =>
+		plant("keys-github", "Math.min(Math.max(at - now, 0), LIMIT_WAIT_MS)", "Math.max(at - now, 0)"),
+	// A failure is kept as long as an answer.
+	failKeptAsAnswer: () =>
+		plant(
+			"keys-github",
+			"Duration.millis(Exit.isSuccess(exit) ? ms : failMs),",
+			"Duration.millis(ms),",
+		),
+	// Everything is kept one ms too long.
+	keptOneMsLong: () =>
+		plant(
+			"keys-github",
+			"Duration.millis(Exit.isSuccess(exit) ? ms : failMs),",
+			"Duration.millis((Exit.isSuccess(exit) ? ms : failMs) + 1),",
+		),
+	// `failMs: 0` reads as the default: a failure is kept 30 seconds.
+	failZeroKept: () =>
+		plant(
+			"keys-github",
+			"Math.max(o.failMs ?? KEYS_FAIL_MS, 0)",
+			"Math.max(o.failMs || KEYS_FAIL_MS, 0)",
+		),
 };
 
 describe("the door's laws", () => {
 	it.each(LAWS.map((law) => [law.name, law] as const))("%s", async (_, law) => {
 		await law.run(real);
 	});
+
+	it.each(BUGS.map(([law, how]) => [law.name, law, how] as const))(
+		"known bug: %s",
+		async (_, law, how) => {
+			// fast-check keeps the law's own error as the cause of its own.
+			const e = await law.run(real).then(
+				() => null,
+				(x: unknown) => x,
+			);
+			expect(e).toBeInstanceOf(Error);
+			expect(String((e as Error).cause ?? e)).toMatch(how);
+		},
+	);
+
+	// The bug's law is right, not the bug: on a copy with one way of fixing it (the wait's own
+	// refusal is kept no time), it holds, and so does every other law.
+	it("a known bug's law holds on a copy with that bug fixed", async () => {
+		const fixed = await plant(
+			"keys-github",
+			"Duration.millis(Exit.isSuccess(exit) ? ms : failMs),",
+			'JSON.stringify(exit).includes("rate limit is spent") ? Duration.zero : Duration.millis(Exit.isSuccess(exit) ? ms : failMs),',
+		);
+		await waitEndsForAll.run(fixed);
+		expect(await broken(fixed)).toEqual([]);
+	}, 60_000);
 
 	it("each law is seen to fail on a planted mistake", async () => {
 		const caught: Record<string, readonly string[]> = {};
@@ -1619,29 +2276,51 @@ describe("the door's laws", () => {
 			agentInvites: [personOnly.name],
 			longAgent: [agentSessionBound.name],
 			challengeReused: [challengeOnce.name],
-			bindsToLogin: [bindToId.name, onlyInviteAsksByName.name, otherIdIs502.name],
+			bindsToLogin: [
+				bindToId.name,
+				onlyInviteAsksByName.name,
+				otherIdIs502.name,
+				provenAsModel.name,
+			],
 			removesLast: [removeEndsSessions.name],
 			closedIs401: [noCredential.name],
 			noCredIs403: [noCredential.name],
 			pinsFirstKey: [listedKeys.name],
-			cacheNeverExpires: [githubCache.name],
+			cacheNeverExpires: [githubCache.name, keptExactly.name],
 			grantAnyObject: [grantOneObject.name],
 			noOldAgent: [writerReads.name],
 			emptyPersonReads: [writerReads.name],
 			agentAnswers: [personKinds.name],
 			anyIdTaken: [idChecked.name],
-			unreachableIsNobody: [keysUnreachable.name],
+			unreachableIsNobody: [keysUnreachable.name, provenAsModel.name],
 			asksEveryone: [strangersAskNothing.name],
 			saysNobody: [oneRefusal.name],
 			refreshesByName: [onlyInviteAsksByName.name],
 			asksFounderAlways: [byIdOnlyKnown.name],
-			goesByNewName: [renameKeepsResult.name],
-			takesOtherId: [otherIdIs502.name],
+			goesByNewName: [renameKeepsResult.name, provenAsModel.name],
+			takesOtherId: [otherIdIs502.name, provenAsModel.name],
 			noRetry: [tokenRetry.name],
 			retriesWithoutToken: [tokenRetry.name],
+			unavailableSaysWho: [
+				idChecked.name,
+				keysUnreachable.name,
+				otherIdIs502.name,
+				refusalsNameNobody.name,
+				provenAsModel.name,
+			],
+			notProvenSaysIds: [oneRefusal.name, refusalsNameNobody.name, provenAsModel.name],
+			failStopsOthers: [provenAsModel.name],
+			failIsNotProven: [keysUnreachable.name, otherIdIs502.name, provenAsModel.name],
+			firstIdOnly: [provenAsModel.name],
+			limitIgnored: [limitSilence.name],
+			limitByIdOnly: [limitSilence.name],
+			limitUncapped: [limitCapped.name],
+			failKeptAsAnswer: [keptExactly.name],
+			keptOneMsLong: [githubCache.name, keptExactly.name],
+			failZeroKept: [limitSilence.name, keptExactly.name],
 		});
 		// Every law is caught by at least one plant.
 		const all = new Set(Object.values(caught).flat());
 		expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);
-	}, 120_000);
+	}, 240_000);
 });
