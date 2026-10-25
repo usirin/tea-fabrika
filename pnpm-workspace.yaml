@@ -1,3 +1,9 @@
+# packages: what other code may build on. programs: one runnable tea program each.
+# wip: everything not yet pulled out. legacy: the first-generation factory.
+# packs: add-on packs, wired to the core by one config line; the core names none.
+# docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
+# apps: what a person opens, on top of everything else. Nothing imports an app.
+# experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
 packages:
   - apps/*
   - packages/*
@@ -6,6 +12,7 @@ packages:
   - docs/tutorials/*
   - wip
   - legacy
+  - experiments/142-web-terminals
 
 catalog:
   '@agentclientprotocol/sdk': 1.6.1
@@ -26,22 +33,35 @@ catalog:
   '@types/node': ^22.20.5
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
+  # Experiment 142's other terminals (experiments/142-web-terminals), held exact like ghostty-web.
+  # wterm, Apache-2.0, a Vercel Labs experiment: rows in the DOM, libghostty's core opt-in.
+  '@wterm/dom': 0.5.5
+  '@wterm/ghostty': 0.5.5
+  # xterm.js, MIT, VS Code's terminal, with its fit and WebGL addons.
+  '@xterm/addon-fit': 0.11.0
+  '@xterm/addon-webgl': 0.19.0
+  '@xterm/xterm': 6.0.0
   effect: 4.0.6
   electron: 45.0.0
   esbuild: 0.28.2
   fast-check: 4.10.2
+  # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
   ghostty-web: 0.4.0
   miniflare: 4.20260730.0
   playwright: 1.64.1
   react: 19.3.1
   react-dom: 19.3.1
+  # Experiment 142: libghostty-vt on WebGPU. MIT.
+  restty: 0.3.0
   smol-toml: ^1.9.0
   typescript: ^7.0.2
   vitest: ^5.0.3
   zod: ^4.6.5
 
+# The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
   '@effect/platform-node-shared': 4.0.6
 
+# Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
 patchedDependencies:
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch

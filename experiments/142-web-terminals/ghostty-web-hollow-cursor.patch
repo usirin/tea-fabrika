@@ -1,0 +1,36 @@
+--- a/dist/ghostty-web.js
++++ b/dist/ghostty-web.js
+@@ -1560,7 +1560,10 @@
+    */
+   renderCursor(A, B) {
+     const g = A * this.metrics.width, E = B * this.metrics.height;
+-    switch (this.ctx.fillStyle = this.theme.cursor, this.cursorStyle) {
++    switch (this.ctx.fillStyle = this.theme.cursor, this.ctx.strokeStyle = this.theme.cursor, this.blurred ? "hollow" : this.cursorStyle) {
++      case "hollow":
++        this.ctx.lineWidth = 1, this.ctx.strokeRect(g + 0.5, E + 0.5, this.metrics.width - 1, this.metrics.height - 1);
++        break;
+       case "block":
+         this.ctx.fillRect(g, E, this.metrics.width, this.metrics.height);
+         break;
+@@ -2371,7 +2374,7 @@
+         E.preventDefault(), E.stopPropagation();
+         const C = (I = E.clipboardData) == null ? void 0 : I.getData("text");
+         C && this.paste(C);
+-      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.renderer.onChange = () => this.requestRender(), this.onScroll(() => this.requestRender()), A.addEventListener("focusin", () => this.requestRender()), A.addEventListener("focusout", () => this.requestRender()), this.startRenderLoop(), this.focus();
++      }), this.linkDetector = new v(this), this.linkDetector.registerProvider(new X(this)), this.linkDetector.registerProvider(new _(this)), A.addEventListener("mousedown", this.handleMouseDown, { capture: !0 }), A.addEventListener("mousemove", this.handleMouseMove), A.addEventListener("mouseleave", this.handleMouseLeave), A.addEventListener("click", this.handleClick), document.addEventListener("mouseup", this.handleMouseUp), A.addEventListener("wheel", this.handleWheel, { passive: !1, capture: !0 }), this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity), this.renderer.onChange = () => this.requestRender(), this.onScroll(() => this.requestRender()), A.addEventListener("focusin", () => this.redrawFocus(!1)), A.addEventListener("focusout", () => this.redrawFocus(!0)), this.startRenderLoop(), this.focus();
+     } catch (B) {
+       throw this.isOpen = !1, this.cleanupComponents(), new Error(`Failed to open terminal: ${B}`);
+     }
+@@ -2641,6 +2644,12 @@
+     this.requestRender();
+   }
+   /**
++   * Focus came or went: the cursor turns solid or hollow, so the whole screen is drawn once.
++   */
++  redrawFocus(A) {
++    this.renderer && this.wasmTerm && (this.renderer.blurred = A, this.renderer.render(this.wasmTerm, !0, this.viewportY, this, this.scrollbarOpacity));
++  }
++  /**
+    * Draw once, on the next frame, when something changed. Many requests in one frame make one draw.
+    */
+   requestRender() {

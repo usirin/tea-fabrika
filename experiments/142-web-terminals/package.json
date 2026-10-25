@@ -1,0 +1,21 @@
+{
+	"name": "@tea-fabrika/exp-142-terminals",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 142's harness: one Electron page that mounts N terminals of one web terminal library, to compare them. Only the experiment uses it.",
+	"dependencies": {
+		"@wterm/dom": "catalog:",
+		"@wterm/ghostty": "catalog:",
+		"@xterm/addon-fit": "catalog:",
+		"@xterm/addon-webgl": "catalog:",
+		"@xterm/xterm": "catalog:",
+		"ghostty-web": "catalog:",
+		"restty": "catalog:"
+	},
+	"devDependencies": {
+		"electron": "catalog:",
+		"esbuild": "catalog:",
+		"playwright": "catalog:"
+	}
+}
