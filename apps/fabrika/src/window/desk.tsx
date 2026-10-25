@@ -4,27 +4,24 @@ import type {Ghostty} from "ghostty-web";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
-	useEffect,
 	useLayoutEffect,
 	useRef,
 	useState,
 	useSyncExternalStore,
 } from "react";
+import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
 import {
 	activeOf,
-	claims,
 	type Desk,
-	type DeskCmd,
-	type DeskMsg,
-	deskMachine,
 	focusedOf,
 	type Open,
 	questionOf,
-	restore,
+	tilesOf,
 	type Workspace,
 } from "../desk/desk.ts";
-import {keyName, PREFIX} from "../desk/keys.ts";
+import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
+import {keyName} from "../desk/keys.ts";
 import {
 	findTile,
 	type LayoutNode,
@@ -32,34 +29,43 @@ import {
 	type TileId,
 	type TileNode,
 } from "../desk/layout/index.ts";
-import {readToDesk, readToWindow, type ToWindow} from "../messages.ts";
+import {type FromPage, readToPage, readToWindow, type ToWindow} from "../messages.ts";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
-// The desk's page: the app's one window, tiled like tmux. The desk machine (desk/desk.ts) runs
-// here, stepped by hand with tea's `applyCell`, because a key must be judged the instant it is
-// pressed: the page reads every key in the capture phase, before ghostty-web or a program's view
-// sees it, and asks the desk whether it takes it (`claims`). A key the desk takes goes no further.
+// The desk's page: the app's one window, tiled like tmux. It draws the desk the host sends
+// (desk/desk.ts runs in the host, host/serve.ts), and sends it the keys the desk takes, and its
+// clicks. A reload, a new window or a second app draws the same desk, as every tmux client does.
 //
-//   Ctrl-B |      the desk splits the focused tile: t2 beside t1, and t2's tsh starts
-//   Ctrl-B l      focus moves right
-//   counter       counter covers its tile; Ctrl-C there goes to that tile's tsh, which stops it
+//   Ctrl-B |      sent to the host: it splits the focused tile, t2's tsh starts there, and the
+//                 page draws the desk it is sent back
+//   Ctrl-B l      the same: focus moves right
+//   counter       typed into t1's terminal, which sends it to t1's tsh in the host
 //   Ctrl-B x      "close t1? (y/n)" on the tile; y closes it, at once or once what runs in it ends
 //
-// The desk's Cmds go to the main process on the desk's port (bridge.ts), but `send`, which goes
-// on the tile's own port as keys. What main tells the desk comes in on the desk's port.
+// Every key is read in the capture phase, before ghostty-web or a program's view sees it. The
+// host says, with each desk, which keys the desk takes now (`takes`): those go to the host and no
+// further. While one is out, later keys are held, and go on in order once the host answered
+// (desk/hold.ts). No timer: a held key waits for the answer, or for the link to drop. Every other
+// key stays in the page: typing in tsh goes to the terminal, and the terminal sends it on its
+// tile's port; typing in a view's text box stays in the view, which sends only its program's
+// declared inputs.
 //
 // Each tile's terminal is made once and moved into its slot as the layout changes (terminal.ts).
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 
 /** The desk, the newest view of each run, and who to tell of a change. */
 const store: {
-	/** `null` until main hands the desk kept from before. */
+	/** `null` until the host sends the desk. */
 	desk: Desk | null;
+	/** The desk's Ctrl-B key, as the host's table says. */
+	prefix: string;
+	/** Why the app is not attached to the host, said plainly, or `null`. */
+	down: string | null;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
 	version: number;
-} = {desk: null, views: new Map(), listeners: new Set(), version: 0};
+} = {desk: null, prefix: "", down: null, views: new Map(), listeners: new Set(), version: 0};
 
 const changed = () => {
 	store.version += 1;
@@ -74,7 +80,11 @@ const subscribe = (listener: () => void) => {
 };
 
 const terminals = new Map<TileId, TileTerminal>();
+/** The runs whose view this page hears, on each run's port. */
+const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
+
+const toHost = (m: FromPage) => window.fabrika.send("desk", m);
 
 /** Hear a run's view on its port, from now on. */
 const follow = (run: string) =>
@@ -85,73 +95,127 @@ const follow = (run: string) =>
 		changed();
 	});
 
-/** Carry out what the desk asked for. */
-const perform = (cmds: readonly DeskCmd[]) => {
-	for (const c of cmds) {
-		switch (c.type) {
-			case "open":
-				if (!terminals.has(c.tile) && ghostty !== null)
-					terminals.set(c.tile, terminalFor(ghostty, c.tile));
-				window.fabrika.send("desk", {type: "open", tile: c.tile});
-				break;
-			case "close":
-				window.fabrika.send("desk", {type: "close", tile: c.tile});
-				break;
-			case "stop":
-				terminals.get(c.tile)?.dispose();
-				terminals.delete(c.tile);
-				window.fabrika.send("desk", {type: "stop", tile: c.tile});
-				break;
-			case "send":
-				window.fabrika.send(`tile:${c.tile}`, {type: "keys", data: c.data});
-				break;
-			case "save":
-				window.fabrika.send("desk", {type: "save", desk: c.desk});
-				break;
-			case "empty":
-				window.fabrika.send("desk", {type: "empty"});
-				break;
-		}
+/**
+ * Make what the desk shows, and let go of what it no longer does: a terminal for each tile, in
+ * any workspace, and the view of each run covering one.
+ */
+const follows = (desk: Desk) => {
+	const all = desk.at === "open" ? desk.workspaces.flatMap((ws) => tilesOf(ws)) : [];
+	const tiles = new Set(all.map((t) => t.id));
+	const runs = new Set(all.flatMap((t) => (t.shows.run === null ? [] : [t.shows.run.id])));
+	for (const tile of tiles)
+		if (!terminals.has(tile) && ghostty !== null) terminals.set(tile, terminalFor(ghostty, tile));
+	for (const [tile, term] of terminals) {
+		if (tiles.has(tile)) continue;
+		term.dispose();
+		terminals.delete(tile);
+	}
+	for (const run of runs) {
+		if (followed.has(run)) continue;
+		followed.add(run);
+		follow(run);
+	}
+	for (const run of followed) {
+		if (runs.has(run)) continue;
+		followed.delete(run);
+		store.views.delete(run);
+		window.fabrika.forget(`run:${run}`);
 	}
 };
 
-/** Step the desk by one Msg, at once, and carry out what it asks. */
-const dispatch = (msg: DeskMsg) => {
-	const now = store.desk;
-	if (now === null) return;
-	const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, now, msg);
-	store.desk = next;
-	perform(cmds);
-	changed();
+/** The keys while the host decides. */
+let hold: Hold = holdMachine.init(null, undefined)[0];
+/** A key held back is being pressed again: the page's own listener lets it go by. */
+let replaying = false;
+
+/** Is this element one a key types into: a text box, or an editable region of a view? */
+const editable = (el: Element | null): el is HTMLElement =>
+	el instanceof HTMLInputElement ||
+	el instanceof HTMLTextAreaElement ||
+	(el instanceof HTMLElement && el.isContentEditable && el.closest("[data-view]") !== null);
+
+/**
+ * Press a held key again, where focus is now: a character into a view's text box, as typing
+ * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
+ */
+const pressAgain = (key: Key) => {
+	const p = key.press;
+	const target = document.activeElement ?? document.body;
+	replaying = true;
+	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta)
+		document.execCommand("insertText", false, p.key);
+	else
+		target.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: p.key,
+				code: p.code,
+				ctrlKey: p.ctrl,
+				altKey: p.alt,
+				metaKey: p.meta,
+				shiftKey: p.shift,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	replaying = false;
 };
 
-/** What main tells the desk. */
+/** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
+const holdStep = (msg: HoldMsg): boolean => {
+	const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
+	hold = next;
+	let live = false;
+	for (const c of cmds) {
+		if (c.type === "press") toHost({type: "press", id: c.id, key: c.key});
+		else if (!c.held) live = true;
+		else pressAgain(c.key);
+	}
+	return live;
+};
+
+/** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
-	const read = readToDesk(raw);
+	const read = readToPage(raw);
 	if (read.kind === "refused") return console.warn(`fabrika: refused a message: ${read.why}`);
 	const m = read.msg;
-	if (m.type === "start") {
-		const [desk, cmds] = deskMachine.init(restore(m.saved), undefined);
-		store.desk = desk;
-		perform(cmds);
-		return changed();
+	switch (m.type) {
+		case "keys":
+			store.prefix = m.prefix;
+			return changed();
+		case "desk":
+			store.desk = m.desk;
+			store.down = null;
+			follows(m.desk);
+			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
+			flushSync(changed);
+			holdStep({type: "takes", takes: m.takes});
+			return;
+		case "answer":
+			holdStep({type: "answer", id: m.id, took: m.took});
+			return;
+		case "down":
+			store.down = m.why;
+			holdStep({type: "down"});
+			return changed();
 	}
-	if (m.type === "covered") follow(m.run.id);
-	if (m.type === "over") {
-		store.views.delete(m.run);
-		window.fabrika.forget(`run:${m.run}`);
-	}
-	dispatch(m);
 };
 
 /** Every key, before anything else on the page sees it: the desk's, or the focused tile's. */
 const onKey = (e: KeyboardEvent) => {
-	const desk = store.desk;
-	const key = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
-	if (desk === null || key === null || !claims(desk, key, e.timeStamp)) return;
+	if (replaying) return;
+	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
+	if (name === null) return;
+	const press = {
+		key: e.key,
+		code: e.code,
+		ctrl: e.ctrlKey,
+		alt: e.altKey,
+		meta: e.metaKey,
+		shift: e.shiftKey,
+	};
+	if (holdStep({type: "key", key: {name, press}})) return;
 	e.preventDefault();
 	e.stopImmediatePropagation();
-	dispatch({type: "key", key, at: e.timeStamp});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
@@ -203,7 +267,7 @@ function Tile(props: {
 			data-tile={tile.id}
 			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
 			aria-current={focused}
-			onPointerDownCapture={() => dispatch({type: "click", tile: tile.id})}
+			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
 		>
 			<Slot tile={tile.id} />
 			{run !== null && <View tile={tile.id} run={run.id} />}
@@ -264,7 +328,7 @@ function Stack(props: {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", up);
 			setDrag(null);
-			dispatch({type: "resize", stack: stack.id, sizes: last});
+			toHost({type: "resize", stack: stack.id, sizes: last});
 		};
 		target.addEventListener("pointermove", move);
 		target.addEventListener("pointerup", up);
@@ -334,7 +398,7 @@ function Status({desk}: {readonly desk: Open}): ReactNode {
 				{running > 0 ? ` · ${running} running` : ""}
 			</span>
 			<span className={`prefix${desk.prefix.armed ? " armed" : ""}`}>
-				{desk.prefix.armed ? PREFIX : ""}
+				{desk.prefix.armed ? store.prefix : ""}
 			</span>
 		</footer>
 	);
@@ -347,8 +411,9 @@ function App(): ReactNode {
 	const focused = desk?.at === "open" ? focusedOf(desk) : null;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
-	// when that changes, so a view's own input keeps focus while its view is drawn again.
-	useEffect(() => {
+	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
+	// effect, so focus has moved before a key held for the host's answer is pressed again.
+	useLayoutEffect(() => {
 		if (focused === null) return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
@@ -356,6 +421,13 @@ function App(): ReactNode {
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
 	}, [shown]);
+	if (store.down !== null)
+		return (
+			<div className="down" role="alert">
+				<h1>Not attached to the host</h1>
+				<p>{store.down}</p>
+			</div>
+		);
 	if (desk === null) return <p className="starting">starting</p>;
 	if (desk.at === "over" || ws === null) return <p className="starting">closing</p>;
 	const zoomed = ws.layout.zoomed;

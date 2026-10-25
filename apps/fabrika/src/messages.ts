@@ -1,14 +1,15 @@
 import {Cause, Exit, Schema} from "effect";
-import {Saved, TileIdSchema} from "./desk/desk.ts";
+import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 
-// What the app's one window and the main process say to each other. The window holds the desk
-// (desk/desk.ts), a terminal per tile, and a view per run of a program with one; each has its own
-// two message types, on a port of its own. They are the protocol; the MessagePort that carries
-// them today is one way to carry them. No platform here: the window imports this file too.
+// What the app's one window and the host say to each other. The window draws the desk
+// (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
+// each has its own two message types, on a port of its own. They are the protocol: the page's
+// MessagePort and the host's socket (link.ts) are only what carries them, and the app's main
+// process relays them unread. No platform here: the window imports this file too.
 //
 // A tile's terminal is a terminal and nothing more, as a terminal emulator is to a pty: it
 // sends the keys pressed and its size, and draws the bytes it is sent. The line editor and tsh
-// are in the main process (host.ts).
+// are in the host (tsh.ts).
 //
 //   to the terminal      {type: "write", data: "tsh$ "}
 //   from the terminal    {type: "keys", data: "cou\t"}
@@ -60,54 +61,60 @@ export const FromWindow = Schema.Struct({
 });
 export type FromWindow = typeof FromWindow.Type;
 
-/** A run with a view, as the desk names it: its id, and its program, which picks its view. */
-const Run = Schema.Struct({id: Schema.String, program: Schema.String});
+/** A key's name, as `keyName` spells it (desk/keys.ts): short, always. */
+const KeyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
+
+/** A number the page gives each key it sends the host, so the answer names the key it is for. */
+const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /**
- * What the main process tells the desk (desk/desk.ts), on the desk's own port. `start` hands it
- * the desk kept from before, not read yet: the page reads it with `restore`. The rest are the
- * desk's own Msgs, as each tile's tsh sees its runs (tiles.ts).
+ * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
+ * the page draws what it is sent and nothing else. `keys` is the desk's Ctrl-B table, sent once
+ * as the page loads. `desk` is the whole desk, after every change, with the keys the desk takes
+ * now (`takes`): the page sends those keys to the host and no further. `answer` says whether the
+ * host took the key sent with that id; a key it did not take goes on to the tile, in order.
+ * `down` is the app's own, not the host's: the link to the host is down, or was refused.
  *
- *   {type: "start", saved: null}
- *   {type: "covered", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
- *   {type: "over", run: "counter:1a2b"}
- *   {type: "jobs", tile: "t1", running: 1}
- *   {type: "closing", tile: "t2"}    t2 was closing before this page loaded
- *   {type: "ended", tile: "t2"}
+ *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false}, ...]}
+ *   {type: "desk", desk: {at: "open", ...}, takes: {all: false, keys: ["<c-b>"]}}
+ *   {type: "answer", id: 3, took: true}
+ *   {type: "down", why: "the host speaks version 0, this app 1"}
  */
-export const ToDesk = Schema.Union([
-	Schema.Struct({type: Schema.Literal("start"), saved: Schema.Unknown}),
-	Schema.Struct({type: Schema.Literal("covered"), tile: TileIdSchema, run: Run}),
-	Schema.Struct({type: Schema.Literal("over"), run: Schema.String}),
+export const ToPage = Schema.Union([
 	Schema.Struct({
-		type: Schema.Literal("jobs"),
-		tile: TileIdSchema,
-		running: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+		type: Schema.Literal("keys"),
+		prefix: KeyName,
+		table: Schema.Array(Schema.Struct({key: KeyName, repeats: Schema.Boolean})),
 	}),
-	Schema.Struct({type: Schema.Literal("closing"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("ended"), tile: TileIdSchema}),
+	Schema.Struct({
+		type: Schema.Literal("desk"),
+		desk: DeskSchema,
+		takes: Schema.Struct({all: Schema.Boolean, keys: Schema.Array(KeyName)}),
+	}),
+	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
+	Schema.Struct({type: Schema.Literal("down"), why: Schema.String}),
 ]);
-export type ToDesk = typeof ToDesk.Type;
+export type ToPage = typeof ToPage.Type;
 
 /**
- * What the desk asks of the main process: its Cmds, but `send`, which goes on the tile's own
- * port as keys. A tile's id names a folder in the app's home, so it is read by its pattern
- * (`t` and a number) and nothing else passes.
+ * What the page tells the host, on the desk's port: a key the desk takes, a click on a tile, a
+ * border let go. A tile's id names a folder in the app's home, so it is read by its pattern (`t`
+ * and a number) and nothing else passes. The host stamps each key with its own clock.
  *
- *   {type: "open", tile: "t2"}       start t2's tsh, or show the one that runs
- *   {type: "close", tile: "t2"}      give t2's tsh and its programs the end of their inputs
- *   {type: "stop", tile: "t2"}       stop what still runs in t2, and drop its jobs: t2 is gone
- *   {type: "save", desk: {...}}      keep the desk for the next start
- *   {type: "empty"}                  the last tile closed: the window closes, the app stays
+ *   {type: "press", id: 3, key: "<c-b>"}
+ *   {type: "click", tile: "t2"}
+ *   {type: "resize", stack: "s2", sizes: {t1: 30, t2: 70}}
  */
-export const FromDesk = Schema.Union([
-	Schema.Struct({type: Schema.Literal("open"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("close"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("stop"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("save"), desk: Saved}),
-	Schema.Struct({type: Schema.Literal("empty")}),
+export const FromPage = Schema.Union([
+	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
+	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
+	Schema.Struct({
+		type: Schema.Literal("resize"),
+		stack: Schema.String,
+		sizes: Schema.Record(Schema.String, Schema.Number),
+	}),
 ]);
-export type FromDesk = typeof FromDesk.Type;
+export type FromPage = typeof FromPage.Type;
 
 /** A message read: what it says, or why it was refused, in the schema's words. */
 export type Read<T> =
@@ -133,7 +140,7 @@ export const readToTerminal = reader(ToTerminal);
 export const readFromWindow = reader(FromWindow);
 /** What a program's window reads from the host. */
 export const readToWindow = reader(ToWindow);
-/** What the main process reads from the desk. */
-export const readFromDesk = reader(FromDesk);
-/** What the desk reads from the main process. */
-export const readToDesk = reader(ToDesk);
+/** What the host reads from the page, on the desk's port. */
+export const readFromPage = reader(FromPage);
+/** What the page reads from the host, on the desk's port. */
+export const readToPage = reader(ToPage);
