@@ -64,6 +64,12 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
   3. the rest of the old pipeline's laws, when the old pipeline is deleted
      ([Sweep the core; rebuild the pipeline small](./sweep-the-core-rebuild-the-pipeline.md)
      says no cleanup goes into it);
+     - The lane's laws (`laws/lane.ts`) move to tea's pbt first, as laws of
+       the rebuilt lane (added 2026-10-24). In
+       [experiment 139](../../experiments/139-tla-trace-validation.md) they
+       were the only check that caught 5 of 46 mutants (432, 464, 465, 472,
+       553): the stall rule's count and the `unseen` rule. The move is done
+       when 139's fixed sample, seed 139, is caught by the new laws as well.
   4. then the engine moves to `experiments/` as a record.
 
 ## Why
