@@ -2,24 +2,31 @@ import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
 import {arbMsg, arbRecordMsg, type MsgArbitraryTable} from "@demlik/tea/pbt";
+import {Effect, Layer, ManagedRuntime} from "effect";
+import {FetchHttpClient} from "effect/http";
+import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import type {DoorConfig, GitHub, Stamp} from "./door.ts";
+import type {DoorConfig, Stamp} from "./door.ts";
 import * as realDoor from "./door.ts";
+import type {Keys, KeysUnreachable, Signers} from "./keys.ts";
+import * as realKeys from "./keys.ts";
+import * as realGitHub from "./keys-github.ts";
 import * as rules from "./rules.ts";
-import {openDb} from "./sqlite-driver.ts";
+import {dispatch, openDb} from "./sqlite-driver.ts";
 import {keyLineOf, sign} from "./sshsig.ts";
 import * as realWriter from "./writer.ts";
 
 // The door's laws, on fast-check (and tea's pbt for the request stream): properties over random
 // runs of logins, invites, joins, removes, appends, grants, challenges and clock moves, against the
-// real Door on node:sqlite, the same file workerd runs. A fake GitHub and a clock the test turns.
-// Real GitHub, the network and Cloudflare are never touched.
+// real Door on node:sqlite, the same file workerd runs. A fake keys service and a clock the test
+// turns. GitHub's own answer (`layerGitHub`) runs over a fake fetch and Effect's TestClock. Real
+// GitHub, the network and Cloudflare are never touched.
 //
 // Nobody writes their own exam: this file writes the laws and never the door's code. Each planted
-// mistake is a text edit on a COPY of door.ts or writer.ts, imported from a temp folder, so the
-// real code is untouched. The exact list of laws each plant breaks is checked below, as the app's
-// laws files do (apps/fabrika/src/desk/desk.laws.test.ts).
+// mistake is a text edit on a COPY of door.ts, writer.ts, keys.ts or keys-github.ts, imported from
+// a temp folder, so the real code is untouched. The exact list of laws each plant breaks is checked
+// below, as the app's laws files do (apps/fabrika/src/desk/desk.laws.test.ts).
 
 // ---------------------------------------------------------------- the module under test
 
@@ -34,22 +41,28 @@ type Mod = Pick<
 	| "MEMBERS"
 	| "SESSION_MS"
 	| "CHALLENGE_MS"
-	| "KEYS_CACHE_MS"
 > &
-	Pick<typeof realWriter, "writerOf" | "writerText">;
+	Pick<typeof realWriter, "writerOf" | "writerText"> &
+	Pick<typeof realKeys, "Keys" | "KeysUnreachable" | "layerNobody"> &
+	Pick<typeof realGitHub, "layerGitHub" | "KEYS_CACHE_MS">;
 
-const real: Mod = {...realDoor, ...realWriter};
+const real: Mod = {...realDoor, ...realWriter, ...realKeys, ...realGitHub};
 
 const madeDirs: string[] = [];
-afterAll(() => {
+const runtimes: ManagedRuntime.ManagedRuntime<Keys, never>[] = [];
+afterAll(async () => {
+	for (const rt of runtimes) await rt.dispose();
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
 
+type File = "door" | "writer" | "keys" | "keys-github";
+const FILES: readonly string[] = ["door", "rules", "sshsig", "writer", "keys", "keys-github"];
+
 /** A copy of the door's files with one edit, imported from its own folder. The real code stays as it is. */
-async function plant(file: "door" | "writer", from: string, to: string): Promise<Mod> {
+async function plant(file: File, from: string, to: string): Promise<Mod> {
 	const dir = mkdtempSync(join(import.meta.dirname, ".door-laws-plant-"));
 	madeDirs.push(dir);
-	for (const f of ["door", "rules", "sshsig", "writer"]) {
+	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
 		if (f === file) {
 			const count = text.split(from).length - 1;
@@ -62,7 +75,9 @@ async function plant(file: "door" | "writer", from: string, to: string): Promise
 	const url = (f: string) => pathToFileURL(join(dir, `${f}.ts`)).href;
 	const d = (await import(/* @vite-ignore */ url("door"))) as typeof realDoor;
 	const w = (await import(/* @vite-ignore */ url("writer"))) as typeof realWriter;
-	return {...d, ...w};
+	const k = (await import(/* @vite-ignore */ url("keys"))) as typeof realKeys;
+	const g = (await import(/* @vite-ignore */ url("keys-github"))) as typeof realGitHub;
+	return {...d, ...w, ...k, ...g};
 }
 
 // ---------------------------------------------------------------- the harness
@@ -94,46 +109,63 @@ const key = (i: number): Key => {
 
 type World = {
 	readonly door: InstanceType<Mod["Door"]>;
-	readonly users: Map<string, {id: number; keys: string[]}>;
+	readonly db: ReturnType<typeof openDb>["db"];
+	/** Who goes by each name, as the fake keys service answers. */
+	readonly people: Map<string, Signers>;
+	/** `down`: the keys service is unreachable. */
+	readonly state: {down: boolean};
 	readonly clock: {t: number};
 	readonly mod: Mod;
 };
 
-const githubFake = (users: Map<string, {id: number; keys: string[]}>): GitHub => ({
-	user: async (login) => (users.has(login) ? {id: users.get(login)!.id, login} : null),
-	keys: async (login) => users.get(login)?.keys ?? [],
-});
+/** A runtime over `layer`, disposed after the laws. */
+const runtimeOf = (layer: Layer.Layer<Keys>): ManagedRuntime.ManagedRuntime<Keys, never> => {
+	const rt = ManagedRuntime.make(layer);
+	runtimes.push(rt);
+	return rt;
+};
 
-const githubWorld = (
-	mod: Mod,
-	o: {founder?: number; keysCacheMs?: number; sessionMs?: number} = {},
-): World => {
+/** The keys service as far as the door asks: `people`, read at each question, or unreachable. */
+const fakeKeys = (mod: Mod, people: Map<string, Signers>, state: {down: boolean}) =>
+	runtimeOf(
+		Layer.succeed(
+			mod.Keys,
+			mod.Keys.of({
+				of: (name): Effect.Effect<Signers | null, KeysUnreachable> =>
+					state.down
+						? Effect.fail(new mod.KeysUnreachable({why: "down for the law"}))
+						: Effect.sync(() => people.get(name) ?? null),
+			}),
+		),
+	);
+
+const sharedWorld = (mod: Mod, o: {founder?: string; sessionMs?: number} = {}): World => {
 	const {db} = openDb(":memory:");
 	rules.migrate(db);
 	const clock = {t: 1_000_000};
-	const users = new Map<string, {id: number; keys: string[]}>();
+	const people = new Map<string, Signers>();
+	const state = {down: false};
 	const config: DoorConfig = {
-		kind: "github",
-		founder: o.founder ?? 7,
+		kind: "shared",
+		founder: o.founder ?? "github:7",
 		origin: null,
 		sessionMs: o.sessionMs ?? mod.SESSION_MS,
-		keysCacheMs: o.keysCacheMs ?? 0,
 	};
-	const door = new mod.Door(db, config, githubFake(users), {now: () => clock.t});
-	return {door, users, clock, mod};
+	const door = new mod.Door(db, config, fakeKeys(mod, people, state), {now: () => clock.t});
+	return {door, db, people, state, clock, mod};
 };
 
 const localDoor = (mod: Mod, person: string, secretHash: string): InstanceType<Mod["Door"]> => {
 	const {db} = openDb(":memory:");
 	rules.migrate(db);
 	const config: DoorConfig = {kind: "local", person, secretHash};
-	return new mod.Door(db, config, githubFake(new Map()), {now: () => 1_000_000});
+	return new mod.Door(db, config, runtimeOf(mod.layerNobody), {now: () => 1_000_000});
 };
 
 const closedDoor = (mod: Mod): InstanceType<Mod["Door"]> => {
 	const {db} = openDb(":memory:");
 	rules.migrate(db);
-	return new mod.Door(db, {kind: "closed"}, githubFake(new Map()), {now: () => 1_000_000});
+	return new mod.Door(db, {kind: "closed"}, runtimeOf(mod.layerNobody), {now: () => 1_000_000});
 };
 
 const addressOf = (W: World, object: string) => W.door.address(ORIGIN, object);
@@ -143,11 +175,11 @@ const mustOk = <T>(r: {ok: true; value: T} | {ok: false; status: number; why: st
 	return r.value;
 };
 
-const loginWith = (W: World, login: string, key: Key, object = "demo") => {
+const loginWith = (W: World, name: string, key: Key, object = "demo") => {
 	const c = W.door.challenge(addressOf(W, object));
 	return key
 		.sign(mustOk(c).text)
-		.then((signature) => W.door.login({login, challenge: mustOk(c).text, signature}));
+		.then((signature) => W.door.login({name, challenge: mustOk(c).text, signature}));
 };
 
 const agentLogin = async (W: World, o: {object?: string; grant: string; by: Key; signer: Key}) => {
@@ -161,6 +193,10 @@ const agentLogin = async (W: World, o: {object?: string; grant: string; by: Key;
 		signature: await o.signer.sign(text),
 	});
 };
+
+/** How many sessions the door has stored, live or not. */
+const sessionCount = (W: World): number =>
+	Number(W.db.all("SELECT COUNT(*) AS n FROM door_sessions")[0]?.n);
 
 const ensure = (cond: boolean, msg: string): void => {
 	if (!cond) throw new Error(msg);
@@ -339,7 +375,7 @@ const personOnly: Law = {
 			"an agent could not read door/",
 		);
 		// Invite and remove are refused from an agent's session.
-		const W = githubWorld(mod);
+		const W = sharedWorld(mod);
 		const inv = await W.door.invite(agent, "bob");
 		ensure(!inv.ok && inv.status === 403, "an agent's invite was not refused");
 		const rem = W.door.remove(agent, "github:8");
@@ -356,8 +392,8 @@ const agentSessionBound: Law = {
 	run: async (mod) => {
 		// No live person session: the agent is refused.
 		{
-			const W = githubWorld(mod);
-			W.users.set("alice", {id: 7, keys: [key(0).line]});
+			const W = sharedWorld(mod);
+			W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 			mustOk(await loginWith(W, "alice", key(0)));
 			const personUntil = W.clock.t + mod.SESSION_MS;
 			W.clock.t = personUntil; // alice's only session has just ended
@@ -373,8 +409,8 @@ const agentSessionBound: Law = {
 		}
 		await fc.assert(
 			fc.asyncProperty(fc.integer({min: 1000, max: mod.SESSION_MS * 2}), async (offset) => {
-				const W = githubWorld(mod);
-				W.users.set("alice", {id: 7, keys: [key(0).line]});
+				const W = sharedWorld(mod);
+				W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 				const start = W.clock.t;
 				mustOk(await loginWith(W, "alice", key(0)));
 				const personUntil = start + mod.SESSION_MS;
@@ -405,25 +441,24 @@ const challengeOnce: Law = {
 	run: async (mod) => {
 		await fc.assert(
 			fc.asyncProperty(fc.integer({min: 0, max: mod.CHALLENGE_MS - 1}), async (within) => {
-				const W = githubWorld(mod);
-				W.users.set("alice", {id: 7, keys: [key(0).line]});
+				const W = sharedWorld(mod);
+				W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 				// Used once: the same challenge a second time is refused.
 				const c = W.door.challenge(addressOf(W, "demo"));
 				const text = mustOk(c).text;
 				const sig = await key(0).sign(text);
 				ensure(
-					(await W.door.login({login: "alice", challenge: text, signature: sig})).ok,
+					(await W.door.login({name: "alice", challenge: text, signature: sig})).ok,
 					"a fresh challenge was refused",
 				);
-				const twice = await W.door.login({login: "alice", challenge: text, signature: sig});
+				const twice = await W.door.login({name: "alice", challenge: text, signature: sig});
 				ensure(!twice.ok && twice.status === 401, "a challenge was accepted twice");
 				// Still good within five minutes.
 				const c2 = W.door.challenge(addressOf(W, "demo"));
 				const t2 = mustOk(c2).text;
 				W.clock.t += within;
 				ensure(
-					(await W.door.login({login: "alice", challenge: t2, signature: await key(0).sign(t2)}))
-						.ok,
+					(await W.door.login({name: "alice", challenge: t2, signature: await key(0).sign(t2)})).ok,
 					"a challenge in time was refused",
 				);
 				// Ended after five minutes.
@@ -431,7 +466,7 @@ const challengeOnce: Law = {
 				const t3 = mustOk(c3).text;
 				W.clock.t += mod.CHALLENGE_MS;
 				const ended = await W.door.login({
-					login: "alice",
+					name: "alice",
 					challenge: t3,
 					signature: await key(0).sign(t3),
 				});
@@ -442,27 +477,34 @@ const challengeOnce: Law = {
 	},
 };
 
-/** 6. An invite and a join bind to GitHub's numeric id, so a login that changes hands lets nobody new in. */
+/**
+ * 6. An invite and a join bind to the keys service's id, so a name that changes hands lets nobody
+ *    new in, and the invited person joins under a new name.
+ */
 const bindToId: Law = {
-	name: "an invite and a join bind to GitHub's numeric id, so a renamed login lets nobody new in",
+	name: "an invite and a join bind to the keys service's id, so a renamed name lets nobody new in",
 	run: async (mod) => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.integer({min: 100, max: 500}),
 				fc.integer({min: 600, max: 999}),
 				async (bobId, takerId) => {
-					const W = githubWorld(mod);
-					W.users.set("alice", {id: 7, keys: [key(0).line]});
+					const W = sharedWorld(mod);
+					W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 					const alice = mustOk(await loginWith(W, "alice", key(0)));
-					W.users.set("bob", {id: bobId, keys: [key(1).line]});
-					ensure((await W.door.invite(alice.who, "bob")).ok, "the invite was refused");
-					// The login "bob" is taken over by someone with a new id; the old id gets a new login.
-					W.users.set("bob", {id: takerId, keys: [key(2).line]});
-					W.users.set("robert", {id: bobId, keys: [key(1).line]});
+					W.people.set("bob", {id: `github:${bobId}`, keys: [key(1).line]});
+					const inv = await W.door.invite(alice.who, "bob");
+					ensure(
+						inv.ok && eq(inv.value, {id: `github:${bobId}`, name: "bob"}),
+						"the invite was refused, or did not answer the service's id and the name",
+					);
+					// The name "bob" is taken over by someone with a new id; the old id gets a new name.
+					W.people.set("bob", {id: `github:${takerId}`, keys: [key(2).line]});
+					W.people.set("robert", {id: `github:${bobId}`, keys: [key(1).line]});
 					const taker = await loginWith(W, "bob", key(2));
-					ensure(!taker.ok && taker.status === 403, "a login that changed hands let a new id in");
+					ensure(!taker.ok && taker.status === 403, "a name that changed hands let a new id in");
 					const robert = await loginWith(W, "robert", key(1));
-					ensure(robert.ok, "the invited id could not join under a new login");
+					ensure(robert.ok, "the invited id could not join under a new name");
 				},
 			),
 			OPTS_SIGN,
@@ -474,10 +516,10 @@ const bindToId: Law = {
 const removeEndsSessions: Law = {
 	name: "removing a member ends their and their agents' sessions, and the last member stays",
 	run: async (mod) => {
-		const W = githubWorld(mod);
-		W.users.set("alice", {id: 7, keys: [key(0).line]});
+		const W = sharedWorld(mod);
+		W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 		const alice = mustOk(await loginWith(W, "alice", key(0)));
-		W.users.set("bob", {id: 8, keys: [key(1).line]});
+		W.people.set("bob", {id: "github:8", keys: [key(1).line]});
 		mustOk(await W.door.invite(alice.who, "bob"));
 		const bob = mustOk(await loginWith(W, "bob", key(1)));
 		const grant = mod.grantText({
@@ -507,13 +549,13 @@ const noCredential: Law = {
 	run: async (mod) => {
 		await fc.assert(
 			fc.asyncProperty(fc.string(), async (garbage) => {
-				const W = githubWorld(mod);
+				const W = sharedWorld(mod);
 				const g1 = await W.door.who(null);
 				const g2 = await W.door.who("");
-				ensure(!g1.ok && g1.status === 401, "a github door did not answer 401 to no credential");
+				ensure(!g1.ok && g1.status === 401, "a shared door did not answer 401 to no credential");
 				ensure(
 					!g2.ok && g2.status === 401,
-					"a github door did not answer 401 to an empty credential",
+					"a shared door did not answer 401 to an empty credential",
 				);
 				const local = localDoor(mod, "owner", await realDoor.hashOf("secret"));
 				const l1 = await local.who(null);
@@ -530,38 +572,104 @@ const noCredential: Law = {
 };
 
 /**
- * 9. Any key GitHub lists for a member may sign in. A key removed on GitHub stops working within the
- *    cache time, plus what is left of a session it already opened.
+ * 9a. The door half of a person's keys: any key the keys service lists for a member signs in, and a
+ *     key it no longer lists fails at the next login. A session the key already opened lives on
+ *     until its own end.
  */
-const githubKeys: Law = {
-	name: "any listed key signs in; a removed key stops within the cache, and an open session outlives it",
+const listedKeys: Law = {
+	name: "any listed key signs in, and a key no longer listed fails at the next login",
 	run: async (mod) => {
 		await fc.assert(
-			fc.asyncProperty(fc.integer({min: 0, max: mod.KEYS_CACHE_MS - 1}), async (within) => {
-				const W = githubWorld(mod, {keysCacheMs: mod.KEYS_CACHE_MS, sessionMs: mod.SESSION_MS});
-				W.users.set("alice", {id: 7, keys: [key(0).line, key(1).line]});
-				// Any key GitHub lists may sign in.
-				ensure((await loginWith(W, "alice", key(1))).ok, "a listed key was refused");
-				const opened = mustOk(await loginWith(W, "alice", key(0)));
-				// The key is removed on GitHub; within the cache a new login still works.
-				W.users.set("alice", {id: 7, keys: [key(1).line]});
-				W.clock.t += within;
-				ensure(
-					(await loginWith(W, "alice", key(0))).ok,
-					"a removed key stopped working before the cache ran out",
-				);
-				ensure((await W.door.who(opened.token)).ok, "the open session ended early");
-				// Past the cache, the removed key is read again and refused.
-				W.clock.t += mod.KEYS_CACHE_MS;
-				const after = await loginWith(W, "alice", key(0));
-				ensure(!after.ok && after.status === 401, "a removed key still signed in after the cache");
-				// The session it already opened outlives the removal, until its own end.
-				ensure(
-					(await W.door.who(opened.token)).ok,
-					"an open session did not outlive the key's removal",
-				);
-			}),
+			fc.asyncProperty(
+				fc.integer({min: 2, max: 4}).chain((n) => fc.tuple(fc.constant(n), fc.nat({max: n - 1}))),
+				async ([n, gone]) => {
+					const W = sharedWorld(mod);
+					const keys = Array.from({length: n}, (_, i) => key(i));
+					W.people.set("alice", {id: "github:7", keys: keys.map((k) => k.line)});
+					// Any key listed signs in.
+					for (const [i, k] of keys.entries())
+						ensure((await loginWith(W, "alice", k)).ok, `listed key ${i} of ${n} was refused`);
+					const opened = mustOk(await loginWith(W, "alice", key(gone)));
+					// One key is taken off the list: the next login with it fails, the rest still work.
+					W.people.set("alice", {
+						id: "github:7",
+						keys: keys.filter((_, i) => i !== gone).map((k) => k.line),
+					});
+					const after = await loginWith(W, "alice", key(gone));
+					ensure(!after.ok && after.status === 401, "a key no longer listed still signed in");
+					for (const [i, k] of keys.entries())
+						if (i !== gone)
+							ensure((await loginWith(W, "alice", k)).ok, `a still listed key ${i} was refused`);
+					// The session it already opened lives on, until its own end.
+					W.clock.t = opened.expires - 1;
+					ensure((await W.door.who(opened.token)).ok, "an open session ended with its key");
+					W.clock.t = opened.expires;
+					ensure(!(await W.door.who(opened.token)).ok, "an open session outlived its end");
+				},
+			),
 			{numRuns: 8, seed: 7},
+		);
+	},
+};
+
+/** A fake api.github.com for `layerGitHub`: logins, their numeric ids and keys, and what was asked. */
+const fakeGitHub = () => {
+	const users = new Map<string, {id: number; keys: string[]}>();
+	const fetch = async (input: string | URL | Request): Promise<Response> => {
+		const url = new URL(input instanceof Request ? input.url : input);
+		const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
+		const login = m?.[1] === undefined ? "" : decodeURIComponent(m[1]);
+		const u = users.get(login);
+		if (url.host !== "api.github.com" || u === undefined)
+			return Response.json({message: "Not Found"}, {status: 404});
+		return m?.[2] === undefined
+			? Response.json({id: u.id, login})
+			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
+	};
+	return {users, fetch};
+};
+
+/**
+ * 9b. The GitHub half: `layerGitHub` keeps an answer at most its cache time. Past it, a key taken
+ *     off on GitHub is gone from the answer. Time moves by Effect's TestClock.
+ */
+const githubCache: Law = {
+	name: "GitHub's answer is kept at most the cache time",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.option(fc.integer({min: 1, max: 10 * 60_000}), {nil: undefined}),
+				fc.integer({min: 0, max: 3 * 60_000}),
+				async (cacheMs, extra) => {
+					const gh = fakeGitHub();
+					gh.users.set("alice", {id: 7, keys: ["ssh-ed25519 AAAA1", "ssh-ed25519 AAAA2"]});
+					const ttl = cacheMs ?? mod.KEYS_CACHE_MS;
+					const layer = mod
+						.layerGitHub(cacheMs === undefined ? {} : {cacheMs})
+						.pipe(
+							Layer.provide(FetchHttpClient.layer),
+							Layer.provide(Layer.succeed(FetchHttpClient.Fetch, gh.fetch as typeof fetch)),
+						);
+					const of = (name: string) => mod.Keys.use((k) => k.of(name));
+					const got = await Effect.runPromise(
+						Effect.gen(function* () {
+							const first = yield* of("alice");
+							gh.users.set("alice", {id: 7, keys: ["ssh-ed25519 AAAA2"]});
+							yield* TestClock.adjust(ttl + extra);
+							return {first, later: yield* of("alice")};
+						}).pipe(Effect.provide(layer), Effect.provide(TestClock.layer())),
+					);
+					ensure(
+						eq(got.first, {id: "github:7", keys: ["ssh-ed25519 AAAA1", "ssh-ed25519 AAAA2"]}),
+						`GitHub's first answer was ${JSON.stringify(got.first)}`,
+					);
+					ensure(
+						eq(got.later, {id: "github:7", keys: ["ssh-ed25519 AAAA2"]}),
+						`a key taken off on GitHub was still listed ${ttl + extra} ms later, past the cache of ${ttl}`,
+					);
+				},
+			),
+			{numRuns: 20, seed: 7},
 		);
 	},
 };
@@ -572,8 +680,8 @@ const grantOneObject: Law = {
 	run: async (mod) => {
 		await fc.assert(
 			fc.asyncProperty(fc.constantFrom("other", "acme", "person:1"), async (otherObject) => {
-				const W = githubWorld(mod);
-				W.users.set("alice", {id: 7, keys: [key(0).line]});
+				const W = sharedWorld(mod);
+				W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 				mustOk(await loginWith(W, "alice", key(0)));
 				const forOther = mod.grantText({
 					address: addressOf(W, otherObject),
@@ -647,6 +755,131 @@ const writerReads: Law = {
 	},
 };
 
+/**
+ * 12. An agent's session never stores a person-only fact (`answered`), in any stream, by `append`
+ *     (what `send` is on the wire). A person's identical append lands, stamped as that person.
+ */
+const personKinds: Law = {
+	name: "an agent's session never stores a person's answer, and a person's identical one lands as them",
+	run: async (mod) => {
+		// The input the first door (5c2a411) let through.
+		const first = mod.trustedArgs(
+			"append",
+			["pipeline/ticket/x/facts", "any", {kind: "answered", data: {}}, null],
+			{kind: "agent", id: "triage", for: "github:7"},
+		);
+		ensure(!first.ok && first.status === 403, "an agent's answered in a lane's facts was let in");
+		const owner = fc.constantFrom("pipeline/ticket/x", "pipeline/plan/o/r#7", "t", "a:1/b");
+		const id = fc.constantFrom(null, "answered:x", "a1", "plan:o/r#7@1");
+		const data = fc.oneof(
+			fc.constant({}),
+			fc.record({type: fc.constant("answered"), answer: fc.constantFrom("approve", "no")}),
+			fc.dictionary(fc.string({maxLength: 6}), fc.integer()),
+		);
+		const where = fc.constantFrom("facts", "inbox", "dead", "x/y");
+		const fence = fc.option(fc.nat({max: 1000}), {nil: null});
+		await fc.assert(
+			fc.property(owner, where, fence, id, data, agentStamp, (name, tail, f, i, d, agent) => {
+				const event = i === null ? {kind: "answered", data: d} : {kind: "answered", data: d, id: i};
+				// In any stream, under any fence: refused.
+				const anywhere = mod.trustedArgs("append", [`${name}/${tail}`, "any", event, f], agent);
+				ensure(
+					!anywhere.ok && anywhere.status === 403,
+					`an agent's answered was let in at ${name}/${tail}`,
+				);
+				// In the one stream that takes an unfenced append, the ledger keeps nothing of the
+				// agent's, and the person's identical append lands as them.
+				const {db} = openDb(":memory:");
+				rules.migrate(db);
+				const person: Stamp = {kind: "user", id: agent.for};
+				dispatch(
+					db,
+					rules.RULES,
+					0,
+					"register",
+					mustOk(mod.trustedArgs("register", [name], person)),
+				);
+				const inbox = `${name}/inbox`;
+				const a = mod.trustedArgs("append", [inbox, "any", event, null], agent);
+				if (a.ok) dispatch(db, rules.RULES, 0, "append", a.value);
+				ensure(
+					rules.readStream(db, inbox).length === 0,
+					`an agent's answered was stored in ${inbox}`,
+				);
+				const p = mustOk(mod.trustedArgs("append", [inbox, "any", event, null], person));
+				const res = dispatch(db, rules.RULES, 0, "append", p) as {ok: boolean};
+				ensure(res.ok, `a person's answered did not land in ${inbox}`);
+				const rows = rules.readStream(db, inbox);
+				ensure(
+					rows.length === 1 &&
+						rows[0]?.kind === "answered" &&
+						rows[0]?.writer === `user:${agent.for}`,
+					`a person's answered was not stored as them: ${JSON.stringify(rows)}`,
+				);
+			}),
+			OPTS_PURE,
+		);
+	},
+};
+
+/** 13. The keys service's id ends up in every writer, so an id with an "@" in it is a 502. */
+const idChecked: Law = {
+	name: "an id from the keys service with an @ in it is a 502, and lets nobody in",
+	run: async (mod) => {
+		const part = fc.stringMatching(/^[a-z0-9:]{1,8}$/);
+		await fc.assert(
+			fc.asyncProperty(part, part, async (a, b) => {
+				const W = sharedWorld(mod);
+				W.people.set("alice", {id: "github:7", keys: [key(0).line]});
+				const alice = mustOk(await loginWith(W, "alice", key(0)));
+				W.people.set("eve", {id: `${a}@${b}`, keys: [key(1).line]});
+				const inv = await W.door.invite(alice.who, "eve");
+				ensure(!inv.ok && inv.status === 502, `an invite took the id ${a}@${b}`);
+				const before = sessionCount(W);
+				const eve = await loginWith(W, "eve", key(1));
+				ensure(!eve.ok && eve.status === 502, `a login took the id ${a}@${b}`);
+				ensure(sessionCount(W) === before, "a login with an @ id opened a session");
+			}),
+			OPTS_SIGN,
+		);
+	},
+};
+
+/** 14. When the keys service cannot be asked: a 502, and no session opened, no invite kept. */
+const keysUnreachable: Law = {
+	name: "an unreachable keys service is a 502, with no session opened",
+	run: async (mod) => {
+		const W = sharedWorld(mod);
+		W.people.set("alice", {id: "github:7", keys: [key(0).line]});
+		W.people.set("bob", {id: "github:8", keys: [key(1).line]});
+		const alice = mustOk(await loginWith(W, "alice", key(0)));
+		const before = sessionCount(W);
+		const facts = rules.readStream(W.db, mod.MEMBERS).length;
+		W.state.down = true;
+		const login = await loginWith(W, "alice", key(0));
+		ensure(!login.ok && login.status === 502, "a login with the keys service down was not 502");
+		const grant = mod.grantText({
+			address: addressOf(W, "demo"),
+			agent: "triage",
+			key: key(2).line,
+			for: "alice",
+			expires: W.clock.t + 60_000,
+		});
+		const agent = await agentLogin(W, {grant, by: key(0), signer: key(2)});
+		ensure(!agent.ok && agent.status === 502, "an agent login with the keys down was not 502");
+		const inv = await W.door.invite(alice.who, "bob");
+		ensure(!inv.ok && inv.status === 502, "an invite with the keys service down was not 502");
+		ensure(sessionCount(W) === before, "a session was opened with the keys service down");
+		ensure(
+			rules.readStream(W.db, mod.MEMBERS).length === facts,
+			"a member fact was written with the keys service down",
+		);
+		// Back up: the same login works.
+		W.state.down = false;
+		ensure((await loginWith(W, "alice", key(0))).ok, "a login failed once the keys were back");
+	},
+};
+
 const LAWS: readonly Law[] = [
 	writerIsStamp,
 	agentNeverUser,
@@ -656,9 +889,13 @@ const LAWS: readonly Law[] = [
 	bindToId,
 	removeEndsSessions,
 	noCredential,
-	githubKeys,
+	listedKeys,
+	githubCache,
 	grantOneObject,
 	writerReads,
+	personKinds,
+	idChecked,
+	keysUnreachable,
 ];
 
 // ---------------------------------------------------------------- planted mistakes
@@ -703,12 +940,12 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// A spent challenge is not deleted, so it works again.
 	challengeReused: () =>
 		plant("door", 'this.#db.all("DELETE FROM door_challenges WHERE nonce = ?", nonce);', ""),
-	// A join binds to the login, not the id.
+	// A join binds to the name, not the id.
 	bindsToLogin: () =>
 		plant(
 			"door",
-			'else if (m.invited.has(id)) this.#fact(me, "joined", {id, login});',
-			'else if (m.invited.has(id) || [...m.invited.values()].includes(login)) this.#fact(me, "joined", {id, login});',
+			'else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});',
+			'else if (m.invited.has(id) || [...m.invited.values()].includes(name)) this.#fact(me, "joined", {id, name});',
 		),
 	// The last member can be removed.
 	removesLast: () =>
@@ -731,12 +968,19 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			'if (token === null || token === "") return refuse(401, "no credential");',
 			'if (token === null || token === "") return refuse(403, "no credential");',
 		),
-	// The door's key cache never expires, so a removed key keeps working.
-	cacheNeverExpires: () =>
+	// The door checks a login against the first listed key only.
+	pinsFirstKey: () =>
 		plant(
 			"door",
-			'const ttl = this.#config.kind === "github" ? this.#config.keysCacheMs : 0;',
-			"const ttl = Number.POSITIVE_INFINITY;",
+			"(await verify(signature, text, NAMESPACE, asked.value.keys)) === null",
+			"(await verify(signature, text, NAMESPACE, asked.value.keys.slice(0, 1))) === null",
+		),
+	// GitHub's answer is kept forever, so a key taken off on GitHub keeps working.
+	cacheNeverExpires: () =>
+		plant(
+			"keys-github",
+			"timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero),",
+			"timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),",
 		),
 	// A grant is accepted for any object.
 	grantAnyObject: () =>
@@ -758,6 +1002,18 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			"writer",
 			'return Option.getOrNull(decodeAgent({kind, id, for: rest.slice("for:".length)}));',
 			'return Option.getOrNull(decode({kind, id, for: rest.slice("for:".length)}));',
+		),
+	// The person-only kinds guard is gone: an agent's `answered` lands.
+	agentAnswers: () =>
+		plant("door", 'if (who.kind !== "user" && isPersonKind(e.kind))', "if (false)"),
+	// The keys service's id is taken as it comes, "@" and all.
+	anyIdTaken: () => plant("door", "s === null || isPersonId(s.id)", "true"),
+	// An unreachable keys service reads as nobody by that name.
+	unreachableIsNobody: () =>
+		plant(
+			"door",
+			"Effect.succeed(refuse(502, `could not ask for the keys of",
+			"Effect.succeed(letIn(null) || refuse(502, `could not ask for the keys of",
 		),
 };
 
@@ -782,13 +1038,17 @@ describe("the door's laws", () => {
 			removesLast: [removeEndsSessions.name],
 			closedIs401: [noCredential.name],
 			noCredIs403: [noCredential.name],
-			cacheNeverExpires: [githubKeys.name],
+			pinsFirstKey: [listedKeys.name],
+			cacheNeverExpires: [githubCache.name],
 			grantAnyObject: [grantOneObject.name],
 			noOldAgent: [writerReads.name],
 			emptyPersonReads: [writerReads.name],
+			agentAnswers: [personKinds.name],
+			anyIdTaken: [idChecked.name],
+			unreachableIsNobody: [keysUnreachable.name],
 		});
 		// Every law is caught by at least one plant.
 		const all = new Set(Object.values(caught).flat());
 		expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);
-	});
+	}, 120_000);
 });
