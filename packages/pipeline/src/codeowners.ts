@@ -7,6 +7,8 @@
 // its owners, a row with no owner takes them away, and any listed owner's
 // approval is enough.
 
+import {outcomesOf} from "./stages/outcome.ts";
+
 export interface OwnerRow {
 	readonly pattern: string;
 	/** `@login` or `@org/team`, as written. */
@@ -54,6 +56,37 @@ export function ownersOf(rows: readonly OwnerRow[], path: string): readonly stri
 	let owners: readonly string[] = [];
 	for (const row of rows) if (matcherFor(row.pattern).test(path)) owners = row.owners;
 	return owners;
+}
+
+// ---------------------------------------------------------------- guarded files
+//
+// The same rows say which files are the exam (docs/direction/nobody-writes-their-own-exam.md):
+// a change that touches one is the owner's to decide, never a builder's. The
+// rows may come from `.github/CODEOWNERS` or from any other list of the same shape.
+
+/** The changed paths a row covers with at least one owner: each needs an owner's yes. */
+export const guarded = (rows: readonly OwnerRow[], paths: readonly string[]): readonly string[] =>
+	paths.filter((path) => ownersOf(rows, path).length > 0);
+
+const exam = outcomesOf({
+	done: {},
+	send: {},
+	ask: {owner: ["check_change"]},
+	skip: [],
+	stuck: [],
+});
+
+/** A stage that touched the exam ends here: the owner is asked, with the files. Never none. */
+export type CheckChange = Extract<typeof exam.schema.Type, {readonly kind: "ask"}> & {
+	readonly files: readonly [string, ...string[]];
+};
+
+/** The guarded paths as the ask a stage ends on. `null`: none are guarded, so nothing to ask. */
+export function checkChange(files: readonly string[]): CheckChange | null {
+	const [first, ...rest] = files;
+	return first === undefined
+		? null
+		: {kind: "ask", who: "owner", for: "check_change", files: [first, ...rest]};
 }
 
 /** Every owner the file names, each once: the people any one of whom may approve. */

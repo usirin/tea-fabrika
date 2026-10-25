@@ -1,5 +1,14 @@
 import {describe, expect, it} from "vitest";
-import {everyOwner, matcherFor, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
+import {
+	checkChange,
+	everyOwner,
+	guarded,
+	matcherFor,
+	ownersOf,
+	parseCodeowners,
+	teamOf,
+} from "./codeowners.ts";
+import {nameOf} from "./stages/outcome.ts";
 
 // A CODEOWNERS file as the list of protected files and their owners.
 
@@ -68,5 +77,26 @@ describe("who owns a path", () => {
 		expect(covers("/a/**/c.ts", "a/c.ts")).toBe(true);
 		expect(covers("/a/**/c.ts", "a/b/b/c.ts")).toBe(true);
 		expect(covers("/a.b/", "aXb/c")).toBe(false);
+	});
+});
+
+describe("guarded files: a change to the exam asks the owner", () => {
+	const changed = ["src/a.ts", ".github/workflows/build.yaml", ".github/README.md", "lefthook.yml"];
+
+	it("keeps the changed paths a row covers with an owner, in the diff's order", () => {
+		expect(guarded(rows, changed)).toEqual([".github/workflows/build.yaml", "lefthook.yml"]);
+		expect(guarded([], changed)).toEqual([]);
+	});
+
+	it("ends as ask:owner:check_change with the files, and asks nothing when none are guarded", () => {
+		const asked = checkChange(guarded(rows, changed));
+		expect(asked).toEqual({
+			kind: "ask",
+			who: "owner",
+			for: "check_change",
+			files: [".github/workflows/build.yaml", "lefthook.yml"],
+		});
+		expect(asked === null ? null : nameOf(asked)).toBe("ask:owner:check_change");
+		expect(checkChange(guarded(rows, ["src/a.ts"]))).toBeNull();
 	});
 });

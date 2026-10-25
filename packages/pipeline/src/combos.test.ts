@@ -3,10 +3,12 @@ import {describe, expect, it} from "vitest";
 import {z} from "zod";
 import {
 	type Children,
+	covers,
 	createAsk,
 	createRefineLoop,
 	gateCheck,
 	gateJudge,
+	hashOf,
 	inFlight,
 	nextTry,
 	remember,
@@ -236,7 +238,13 @@ describe("ask: a question, the replies, a typed answer", () => {
 			choices: {yes: "Go ahead", no: "Stop"},
 		}),
 	});
-	const question = {where: "issue-1", text: "Go on?", who: ["owner"], floor: 0.8};
+	const question = {
+		where: "issue-1",
+		text: "Go on?",
+		about: "The plan, version 2.",
+		who: ["owner"],
+		floor: 0.8,
+	};
 	const reply = (author: string, body: string, at: number) => ({id: `${at}`, author, body, at});
 	const waiting = () => ask.posted(ask.start("k", question, "run/ask")[0], "thread-1", 100);
 
@@ -291,6 +299,42 @@ describe("ask: a question, the replies, a typed answer", () => {
 			after: 200,
 		});
 		expect(ask.unread(reading)).toMatchObject({phase: "waiting", after: 200});
+	});
+
+	describe("a yes covers what it was about", () => {
+		const yes = (q = question) => {
+			const asked = ask.posted(ask.start("k", q, "run/ask")[0], "thread-1", 100);
+			const [answered] = ask.replied(asked, reply("owner", "/yes", 200));
+			if (answered.phase !== "answered") throw new Error("not answered");
+			return answered;
+		};
+
+		it("keeps the hash of the subject, by code or by Jev", () => {
+			expect(yes().saw).toMatch(/^sha256:[0-9a-f]{64}$/);
+			expect(covers(yes(), "The plan, version 2.")).toBe(true);
+
+			const [reading] = ask.replied(waiting(), reply("owner", "sure", 200));
+			const read = ask.read(reading, {sure: true, choice: "yes", confidence: 0.9});
+			expect(read).toMatchObject({phase: "answered", saw: yes().saw});
+		});
+
+		it("does not cover the subject once one character changes: the ask goes out again", () => {
+			expect(covers(yes(), "The plan, version 2!")).toBe(false);
+		});
+
+		it("covers the subject, not the question's words", () => {
+			expect(covers(yes(), question.text)).toBe(false);
+			expect(yes({...question, text: "Approve plan v2? See the link."}).saw).toBe(yes().saw);
+		});
+
+		it("names the same hash on a replay", () => {
+			const again = ask.start("k", question, "run/ask")[0];
+			expect(again.saw).toBe(yes().saw);
+			expect(again.saw).toBe(hashOf("The plan, version 2."));
+			expect(hashOf("abc")).toBe(
+				"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+			);
+		});
 	});
 });
 
