@@ -341,6 +341,69 @@ update(desk, {type: "close"}); // the focused tile goes, and its tsh ends
 - **Closing the last tile quits the app,** as tmux ends with its last pane.
   70%. A fresh tsh in a fresh tile may be kinder; a week of use would show.
 
+### What the build found (2026-10-25)
+
+Each lean was built as written. The answer first: one page holds 16 tiles well
+(experiment 141), after one fix to our own code.
+
+```ts
+// The desk is a pure tea machine in the page, stepped with applyCell.
+// The main process is told what to do; it never keeps a layout of its own.
+type FromDesk =
+	| {type: "open"; tile: TileId}   // start this tile's tsh
+	| {type: "close"; tile: TileId}  // end its tsh and runs, delete its folder
+	| {type: "stop"; run: string}    // a covered run's Ctrl-C, or x on a run tile
+	| {type: "save"; desk: Saved}    // desk.json in the app home
+	| {type: "quit"};                // the last tile closed
+
+type ToDesk =
+	| {type: "start"; saved: unknown}                            // the page loaded: here is what was kept
+	| {type: "covered" | "beside"; tile: TileId; run: {id: string; program: string}}
+	| {type: "over"; run: string}
+	| {type: "jobs"; tile: TileId; running: number}              // so x knows to ask
+	| {type: "ended"; tile: TileId};                             // Ctrl-D in a tile's tsh
+```
+
+- **`&` opens a tile beside its tsh.** The tile is split and the run goes in the
+  new half. The focus stays on the tsh, so the prompt is where the keys go.
+- **x asks y or n** when the tile's tsh has a running job, or the tile shows a
+  run. y ends the tsh and its runs and deletes the tile's own folder under
+  `storage/tiles/`. A tile with nothing running closes at once, as tmux does.
+- **Quit and open again** brings back the layout from `desk.json`, and each
+  tile's tsh opens on its own folder, so `attach` finds the earlier jobs.
+  Tiles that showed a run come back as plain tsh tiles: the run did not
+  survive the quit.
+- **The last tile closing quits the app** and removes `desk.json`, so the next
+  start is one fresh tile.
+- **The desk machine has a law test.** After every step of a random walk,
+  the tree passes Tuval's own checks, and the focus names a tile that exists.
+- **A port per tile and per run, plus one for the desk.** A message cannot
+  reach the wrong tsh, and the main process routes by the port it came on,
+  never by a name inside the message.
+- **History is shared, jobs are not.** A line typed in one tile is the next
+  tile's Up. Two tiles saving at once: the last write wins.
+
+What was guessed wrong:
+
+- **The guess was that many canvases would be the cost. Wrong.** The cost was
+  our own text copy of the screen, read after every write. One tile printing
+  2,000 lines froze the whole page for up to 7.8 s. Reading it once a frame
+  fixed it.
+
+| Tiles | Renderer MB | Busy frame max ms | Keydown to text median ms |
+|---|---|---|---|
+| 1 | 150.9 | 18.6 | 52.9 |
+| 4 | 162.9 | 18.7 | 48.9 |
+| 8 | 176.9 | 33.3 | 47.8 |
+| 16 | 193.5 | 33.4 | 47.6 |
+
+- **The 85% doubt of "What it costs" is settled** for this machine: about
+  2.8 MB a terminal, and idle frames stay at 16.7 ms at every count.
+- **Still open:** x on a run tile stops the run hard, not by closing its
+  inputs. A crash leaves tile folders no `desk.json` names; nothing cleans
+  them yet. The old single `storage/` folder of the terminal build is not
+  moved over. Typing is 30 to 50 ms, mostly the trip to the main process.
+
 ## What would change it
 
 - A need to run fabrika on a machine with no screen, such as a remote server.

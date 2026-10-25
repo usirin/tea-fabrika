@@ -256,8 +256,8 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     what a user sees, and asks the owner yes or no.
 - `apps/`: what a person opens, on top of everything else. Nothing imports an app.
   - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app`: the fabrika app, a
-    walking skeleton. A terminal window running tsh, with a line editor; a program with a window
-    opens a window of its own.
+    walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
+    editor, and a program with a view runs inside a tile.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
 - `docs/`: drafts too: [`skill-map.md`](./docs/skill-map.md),
   [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)

@@ -105,6 +105,19 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 			rows.push(buffer.getLine(y)?.translateToString(true) ?? "");
 		text.textContent = rows.join("\n");
 	};
+	/**
+	 * Read the screen back once a frame at most, not after each write: a tile printing 2,000 lines
+	 * read 200 rows back 2,000 times, and held the whole page for seconds (experiment 141).
+	 */
+	let mirroring = false;
+	const mirrorSoon = () => {
+		if (mirroring) return;
+		mirroring = true;
+		requestAnimationFrame(() => {
+			mirroring = false;
+			mirror();
+		});
+	};
 	const size = (cols: number, rows: number) =>
 		window.fabrika.send(port, {type: "size", cols: cells(cols), rows: cells(rows)});
 
@@ -122,7 +135,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
 			window.fabrika.onMessage(port, (raw) => {
 				const read = readToTerminal(raw);
-				if (read.kind === "read") term.write(read.msg.data, mirror);
+				if (read.kind === "read") term.write(read.msg.data, mirrorSoon);
 				else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
 			});
 		},

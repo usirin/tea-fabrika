@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The fabrika app: a terminal window running tsh, and a window of its own for each run of a program that has one. A walking skeleton.",
+	"description": "The fabrika app: one window, tiled like tmux, where every tile runs its own tsh and a program with a view runs inside a tile. A walking skeleton.",
 	"main": "dist/main.mjs",
 	"scripts": {
 		"build": "node build.ts",

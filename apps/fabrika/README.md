@@ -1,37 +1,38 @@
 # fabrika app: `@kampus/fabrika-app`
 
-The fabrika app, as a walking skeleton: the whole flow, thin. It opens as a terminal window
-running tsh, with the small programs, `counter` and `tracker` loaded. A program with a window opens a window
-of its own; the terminal stays a terminal. The design is
-[The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md).
+The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
+tmux. Every tile runs its own tsh, with the small programs `counter` and `tracker` loaded. A
+program with a view runs inside a tile. The design is
+[The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
+"Decided 2026-10-25: tiles, like tmux".
 
 ```text
-pnpm fabrika
+pnpm fabrika                 one tile, running tsh
 tsh$ seq --to 3 | double
 double 2
 double 4
 double 6
-tsh$ cou<Tab>                Tab puts in the one program that starts with "cou"
-tsh$ counter                 counter's own window opens: 0  [+1] [done]; the prompt waits
-                             +1: 1; close the window (or press done): its count, and the prompt
-1
-tsh$ <Up>                    the last line again: counter
-tsh$ counter                 +1: 1; then quit the app, and open it again
-tsh: 1 job from an earlier tsh, not running: %1. attach %n starts one again; jobs lists them.
-tsh$ attach %1               counter's window opens again, at 1
-tsh$ tracker                 the tracker's window: file a ticket, open it, comment, close it
+Ctrl-B |                     a second tile on the right, with a fresh tsh, focused
+tsh$ counter                 counter covers this tile: 0  [+1] [done]; Ctrl-C and tsh is back
+tsh$ tracker &               the tracker opens in a new tile beside; the prompt is back at once
+Ctrl-B h                     focus moves left
+Ctrl-B x                     this tile has a run: "close it, and stop what runs in it?" y or n
+quit, and open again         the same tiles; each tsh lists its earlier jobs for attach
 ```
 
 ```ts
-// What goes between the windows and the main process (src/messages.ts). Each kind of window has its own two types.
-type ToTerminal = {type: "write"; data: string};                       // bytes to draw, as from a pty
+// What goes between the page and the main process (src/messages.ts), each on its own port.
+// "desk": the desk machine in the page tells the main process what to do, and hears back.
+type FromDesk = {type: "open" | "close"; tile: TileId} | {type: "stop"; run: string}
+	| {type: "save"; desk: Saved} | {type: "quit"};
+type ToDesk = {type: "start"; saved: unknown} | {type: "covered" | "beside"; tile: TileId; run: Run}
+	| {type: "over"; run: string} | {type: "jobs"; tile: TileId; running: number} | {type: "ended"; tile: TileId};
+// "tile:t1": t1's terminal, as a terminal is to a pty.
+type ToTerminal = {type: "write"; data: string};
 type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
+// "run:counter:1a2b": one run's view. The host reads `msg` with that run's program (`readInput`).
 type ToWindow = {type: "view"; program: string; data: unknown /* its view schema reads it */};
 type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
-
-// A program window's port is its run's: the host reads `msg` with that run's program (`readInput`).
-screen.heard({type: "msg", msg: {type: "press", value: "plus"}});   // {kind: "read"}; the window is shown {n: 1}
-screen.heard({type: "msg", msg: {type: "press", value: "minus"}});  // {kind: "refused", why: "counter's press does not fit: ..."}
 ```
 
 ## Where it sits
@@ -39,25 +40,80 @@ screen.heard({type: "msg", msg: {type: "press", value: "minus"}});  // {kind: "r
 - The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika`,
   `programs/counter` and `programs/tracker`, and nothing imports it.
 - Electron and Node are named only in `src/main.ts` and `src/preload.ts`. Everything else is
-  plain Effect, tested with no Electron. The windows are a terminal (no React) and React.
-- tsh and the line editor run in the main process. The terminal window only draws bytes and
-  sends keys, as a terminal does with a pty. There is no pty and no `node-pty`: tsh is not a
-  process, so there is nothing to give a pty to.
+  plain Effect, tested with no Electron. The page is React, with each terminal made outside it.
+- tsh and the line editor run in the main process, one of each per tile. A tile's terminal only
+  draws bytes and sends keys, as a terminal does with a pty. There is no pty and no `node-pty`:
+  tsh is not a process, so there is nothing to give a pty to.
+- The desk (the layout, the focus, the prefix, the question) is a tea machine in the page. The
+  main process keeps no layout: it opens and closes tiles when the desk says so.
 
 ## What's in it
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge. One copy at a time; every window made by one function, sandboxed, on the app's own scheme; every way out refused; one MessagePort per window, handed only to that window's own top frame on its own page. |
-| `src/preload.ts` | Gives a window `send` and `onMessage`, and nothing else. |
-| `src/bridge.ts` | Those two names, as a window sees them, and the IPC channel the port is asked on. |
-| `src/host.ts` | Starts tsh with the app's programs, runs the line editor between tsh and the terminal, and opens a window for each run of a program with a window. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
-| `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, `grid.ts` reads bytes back as rows for the tests. |
-| `src/messages.ts` | The four message types as Effect Schemas, and their strict readers. |
-| `src/files.ts` | What the app's own scheme serves: two pages, their scripts and one stylesheet, each with a Content Security Policy. |
-| `src/window/` | `terminal.ts`, the terminal page: ghostty-web, no React. `program.tsx`, a program's window: React, with `windows.tsx` listing each window the app knows. |
-| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `preload.cjs`, `terminal.js`, `program.js`, and the pages' plain files. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step, then quits it with a job and opens it again. Not in `pnpm test`. |
+| `src/main.ts` | The Electron edge. One copy at a time; one window, sandboxed, on the app's own scheme; every way out refused. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page. Saves `desk.json` and each tile's jobs in the app home. |
+| `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
+| `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
+| `src/tiles.ts` | One host per tile, each in its own scope. It tells the desk when a run covers a tile or opens beside it, and when it is over. Closing a tile ends its scope and drops its folder. |
+| `src/host.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): Msgs in, Cmds for the main process out, and `route`, which says where a key goes. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
+| `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
+| `src/messages.ts` | The six message types as Effect Schemas, and their strict readers. |
+| `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
+| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, `&`, zoom, the question, Ctrl-B twice, shared history, the safety checks, then quit and open again. Not in `pnpm test`. |
+
+## Keys
+
+Ctrl-B, then one key, as in tmux. Tuval had the same table.
+
+| After Ctrl-B | What it does |
+|---|---|
+| `\|` or `-` | split the focused tile side by side, or top to bottom; the new tile runs a fresh tsh |
+| `h` `j` `k` `l`, or the arrows | focus left, down, up, right |
+| `z` | zoom the focused tile; again to undo |
+| `x` | close the focused tile; if something runs in it, ask y or n first |
+| `N` | a new workspace, with one tile |
+| `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
+| `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
+
+- **The page reads the prefix first,** in the keydown capture phase, so neither ghostty-web nor
+  a program's view sees it. Any other key after the prefix does nothing, as in tmux.
+- **A click focuses a tile. Dragging a border resizes** the two tiles beside it.
+- **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
+  same, and Ctrl-B twice sends it on.
+
+## Tiles
+
+- **Every new tile runs a tsh of its own,** with its own job table, in
+  `storage/tiles/<tile>/` in the app home. History is one file, shared: a line typed in one tile
+  is the next tile's Up.
+- **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
+  back. The other tiles stay as they were.
+- **A run with `&` opens in a new tile beside its tsh.** The focus stays on the tsh, and the
+  prompt is back at once.
+- **Closing a tile with something running asks y or n.** y ends the tile's tsh and every run it
+  started, and deletes its folder, as tmux's `kill-pane` hangs up the shell. A tile with nothing
+  running closes at once. Ctrl-D in a tile's tsh closes that tile.
+- **Quit and open again:** the layout comes back from `desk.json`, and each tile's tsh opens on
+  its own folder, so `attach %n` finds the earlier jobs. A tile that showed a run comes back as
+  tsh: the run ended with the app.
+- **Closing the last tile quits the app** and removes `desk.json`, so the next start is one
+  fresh tile.
+
+### A port per tile and per run
+
+The page has one port per tile (`tile:t1`), one per run with a view (`run:counter:1a2b`) and
+one for the desk (`desk`). Not one port for everything.
+
+- Why: a message can only reach the tsh or the run whose port it came on. The main process
+  routes by port, never by a name inside the message, so a page bug cannot type into the wrong
+  tile or press a button in another run.
+- What it costs: the preload keeps a small table of ports, and a tile or run closing must
+  `forget` its port. The preload takes only names of these three shapes.
+- How sure: 85%. A single port with a tile id in each message would be simpler, and safe as
+  long as the main process checks the id; the port does that check for free.
 
 ## The line editor
 
@@ -73,7 +129,7 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
   the line. A key it does not know does nothing, as in fish; readline would insert some of them.
 - **Ctrl-C** at the prompt prints `^C` and a fresh prompt, as bash does. While a line runs, it
   stops the program in the foreground, and drops what was typed ahead, as a terminal does.
-- **Ctrl-D** on an empty line ends tsh, and the app quits, as `exit` would. On a line with text,
+- **Ctrl-D** on an empty line ends tsh, and its tile closes, as `exit` would. On a line with text,
   it deletes the character under the cursor.
 - **History.** Up and Down, or Ctrl-P and Ctrl-N. Ctrl-R searches back, as bash's
   `reverse-search-history`. A line run again moves to the end and is not kept twice (bash's
@@ -87,60 +143,30 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
 - **Text from tsh while the prompt is up** (a background job ending) goes above the prompt, and
   the prompt is drawn again under it, with what was typed.
 
-## One window per program
-
-A run of a program with a window opens a window of its own, titled with the program's name. The
-terminal stays a terminal. It follows Unix job control: a window is to a run what a terminal is to
-a foreground process.
-
-```text
-tsh$ counter                 its window opens; the prompt waits until the run ends
-1
-tsh$ counter &               its window opens; the prompt is back at once
-[1] counter:7f3a
-tsh$ say --text meanwhile
-meanwhile
-tsh$                         done in its window: its count and its end print above the prompt
-```
-
-- **Foreground.** `counter` opens its window, and the prompt waits for it to end, as a shell waits
-  for a foreground process. Keys typed in the terminal meanwhile wait for the next prompt.
-- **Background.** `counter &` opens its window and gives the prompt back at once. Its end is
-  printed above the prompt, as bash prints `[1]+ Done` before its next prompt.
-- **Ctrl-C in the terminal** stops the foreground run only, as `SIGINT` reaches only the
-  foreground process group. Its window closes. A background run is not touched.
-- **Closing a run's window closes its inputs,** as the end of stdin does: the program sees no more
-  presses. Counter ends on that and says its count. A program that ends only on `done` would keep
-  running with no window; Ctrl-C (in the foreground) or `stop %n` stops it.
-- **Quitting the app** keeps every job, window or not, as a `nohup` job outlives its terminal. The
-  next start lists them, and `attach %n` opens the window again where it was.
-
-Why this pick, and not a window that takes over the terminal (the first build): the terminal is
-always there, so tsh is never hidden behind a program, and a background job's window no longer
-covers tsh with no way back. It costs one more window per run, and the person moves between
-windows with the operating system's own keys.
-
-How sure: 75%. The doubt is what closing a window should mean: the end of its inputs (this), or
-stop (as a terminal's close sends `SIGHUP`). Watching people close windows with a job half done
-would settle it.
-
 ## The terminal
 
 - **ghostty-web 0.4.0** (MIT, by Coder): Ghostty's terminal built to WebAssembly, drawn on a
   canvas, with an xterm.js-like API. Held at an exact version in the catalog. It has no
   dependencies.
-- **The terminal page's policy allows WebAssembly.** `TERMINAL_CSP` in `files.ts` is the app's
-  policy plus `'wasm-unsafe-eval'` in `script-src`, and only the terminal's page gets it. Chromium
-  compiles no WebAssembly under `script-src 'self'` alone. `'wasm-unsafe-eval'` lets in
-  WebAssembly and nothing else: no `eval`, no `new Function`, no inline script. The program
-  windows keep the policy with no WebAssembly.
-- **The WebAssembly is compiled from bytes in the page's own script.** `Ghostty.load()` fetches a
-  `data:` url, which the policy refuses (`connect-src` is `'none'`), so `build.ts` bundles the
-  `.wasm` file as bytes and `terminal.ts` compiles them. The cost: ghostty-web's own bundle holds
-  the same bytes as base64, so `terminal.js` carries them twice, about 1.1 MB of its 1.5 MB.
-- **The screen is kept as text too,** in a visually hidden region labelled "tsh screen": the last
-  200 rows, up to the cursor's. The canvas is blank to a screen reader and to a test. Ghostty 0.4
-  declares `onRender` and never fires it, so the text is read after each write.
+- **The page's policy allows WebAssembly.** `DESK_CSP` in `files.ts` is the app's policy plus
+  `'wasm-unsafe-eval'` in `script-src`, and nothing else. Chromium compiles no WebAssembly under
+  `script-src 'self'` alone. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else: no
+  `eval`, no `new Function`, no inline script. Program views now share that page, so they share
+  its policy.
+- **The WebAssembly is compiled from bytes in the page's own script,** once, and every tile's
+  terminal shares it. `Ghostty.load()` fetches a `data:` url, which the policy refuses
+  (`connect-src` is `'none'`), so `build.ts` bundles the `.wasm` file as bytes and `terminal.ts`
+  compiles them. The cost: ghostty-web's own bundle holds the same bytes as base64, so they are
+  in `desk.js` twice, about 1.1 MB of its 2 MB.
+- **Each terminal is made once, outside React,** and moved into its tile's slot. A split puts a
+  tile in a new stack, and React would make it again, with a fresh, empty terminal.
+- **The screen is kept as text too,** in a visually hidden region labelled with the tile ("t1
+  screen"): the last 200 rows, up to the cursor's. The canvas is blank to a screen reader and to
+  a test. Ghostty 0.4 declares `onRender` and never fires it, so the text is read back once a
+  frame after a write. After every write, one busy tile froze the whole page for seconds
+  (experiment 141).
+- **16 tiles hold up** on one laptop: about 2.8 MB of renderer memory a terminal, idle frames at
+  16.7 ms, and at most 34 ms with every tile printing at once (experiment 141).
 
 ### Taken from pull request 61
 
@@ -163,13 +189,14 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
-- `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder: its
-  `storage/`, its `history`, its `ledger.sqlite` and its one-copy lock.
+- `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
+  `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite` and the one-copy lock.
 - The ledger is `ledger.sqlite`, on one node:sqlite connection in the main process
   (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
   a Miniflare child is more than one person's tickets need. Each call blocks the main process
-  while SQLite runs it. One copy per home means one tsh writes that
-  home's job table. The end-to-end run uses a fresh one.
+  while SQLite runs it. One copy per home means one tsh writes each tile's job table. The
+  end-to-end run uses a fresh home.
+- `experiments/141-tiles-in-one-page.ts` measures 1, 4, 8 and 16 tiles on the built app.
 
 ## What it does not do yet
 
@@ -181,10 +208,22 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - **A resize does not redraw the line** already on the screen; the next one is drawn at the new
   width.
 - **No Ctrl-Z and no `bg`:** a run in the foreground cannot be sent to the background.
-- **A window closed while its run keeps going** (a program that ignores the end of its inputs)
-  cannot be opened again until the app restarts and `attach` reopens it.
 - **The screen's text is not a live region**: a screen reader is not told of new text.
-- **A program window is built into the app's bundle;** one from outside the app's build cannot be
+- **A program view is built into the app's bundle;** one from outside the app's build cannot be
   loaded.
-- **Nothing clears the folder.** Every run tsh starts keeps its record there, ended or not.
+- **Nothing clears a tile's folder** while the tile lives. Every run its tsh starts keeps its
+  record there, ended or not.
+
+Left for later, from Tuval's keys and the build:
+
+- **The rest of Tuval's keys:** `w` (pick a tile from a list), `a` (focus the list), `:` (a
+  command line), `r` (reload the config), `p` (the process board).
+- **x on a run tile stops the run hard,** as `stop` does. Closing its inputs first, as the old
+  window close did, would let a program say goodbye.
+- **A crash leaves tile folders** that no `desk.json` names. Nothing cleans them yet.
+- **The terminal build's single `storage/` folder is not moved over.** Its jobs are not found by
+  any tile.
+- **History: the last write wins.** Two tiles saving at the same moment can drop one line.
+- **A page reloaded while runs go on** puts each run back in a new tile beside its tsh.
+- **An unfocused terminal still shows a solid cursor.**
 - **No packaging, signing or updates.**

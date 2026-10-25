@@ -270,7 +270,7 @@ export function resize(
 	id: StackId,
 	sizes: Readonly<Record<NodeId, number>>,
 ): LayoutTree {
-	const root = mapStack(tree.root, id, (stack) => ({
+	const root = withStack(tree.root, id, (stack) => ({
 		...stack,
 		sizes: resolveSizes(stack.children, sizes),
 	}));
@@ -311,7 +311,7 @@ function nodeShape(node: LayoutNode): unknown {
 	];
 }
 
-function mapStack(
+function withStack(
 	stack: StackNode,
 	id: StackId,
 	f: (stack: StackNode) => StackNode,
@@ -319,7 +319,7 @@ function mapStack(
 	if (stack.id === id) return f(stack);
 	for (const child of stack.children) {
 		if (child.tag !== "stack") continue;
-		const next = mapStack(child, id, f);
+		const next = withStack(child, id, f);
 		if (next) return replaceChild(stack, child.id, next);
 	}
 	return null;
