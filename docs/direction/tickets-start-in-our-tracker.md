@@ -87,6 +87,15 @@ run. What would settle it: building the form and seeing how small it is.
 
 ## Still open
 
+- **A change of mind written as a comment.** A comment after the yes leaves
+  the yes in place, so build goes on, even when the comment says "skip part
+  2". Lean, 75%: the comment form has two buttons, as GitHub's review box has
+  "Comment" and "Request changes". A user's "request changes" after a yes
+  stops build and asks for a new plan or a new yes; an agent's never does.
+  The person says which it is, so nothing guesses. The doubt: a person who
+  picks "Comment" by habit. How often a user's comment after a yes changes
+  the ask would settle it; experiment 138 counted edits after the yes, not
+  comments.
 - **demlik asks each pull request to close a GitHub issue.** Its `CLAUDE.md`
   says to write `Closes #N`. Decided 2026-10-24: **no copy of a ticket goes to
   GitHub.** demlik's rule changes instead, since demlik is the test bed.
