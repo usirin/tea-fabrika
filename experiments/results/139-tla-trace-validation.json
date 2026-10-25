@@ -1,0 +1,1717 @@
+{
+	"trace": {
+		"count": 300,
+		"seed": 139,
+		"wallMs": {
+			"today": 7925,
+			"fixed": 4778
+		},
+		"medianRunMs": {
+			"today": 19,
+			"fixed": 14
+		},
+		"mostChildren": {
+			"today": 7,
+			"fixed": 7
+		},
+		"endedRuns": {
+			"today": 177,
+			"fixed": 300
+		},
+		"childExitsAfterLane": {
+			"today": 75,
+			"fixed": 83
+		},
+		"nextStartsBeforeLastExits": {
+			"today": 100,
+			"fixed": 100
+		},
+		"checks": [
+			{
+				"spec": {
+					"against": "v2",
+					"n": 8,
+					"fixed": true
+				},
+				"variant": "fixed",
+				"runs": 300,
+				"distinct": 65,
+				"accepted": 300,
+				"rejected": 0,
+				"why": {},
+				"tlcMs": 1441
+			},
+			{
+				"spec": {
+					"against": "v2",
+					"n": 8,
+					"fixed": false
+				},
+				"variant": "today",
+				"runs": 300,
+				"distinct": 64,
+				"accepted": 300,
+				"rejected": 0,
+				"why": {},
+				"tlcMs": 1210
+			},
+			{
+				"spec": {
+					"against": "v2",
+					"n": 8,
+					"fixed": true
+				},
+				"variant": "today",
+				"runs": 300,
+				"distinct": 64,
+				"accepted": 177,
+				"rejected": 123,
+				"why": {
+					"rest: the lane still waits on a child that ended with no row (SeeExit owed)": {
+						"count": 123,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 50,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 0
+							},
+							{
+								"ending": "no_row",
+								"before": 150,
+								"after": 300
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 600
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 300
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unnnnnnn row=nnnnnnnn exit=00000000 seen=00000000",
+							"WriteRow(1) lane=running cur=1 proc=unnnnnnn row=dnnnnnnn exit=00000000 seen=00000000",
+							"SeeRow(1) lane=ready cur=2 proc=unnnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"Start(2) lane=running cur=2 proc=uunnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"End(1) lane=running cur=2 proc=dunnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"Deliver(1) lane=running cur=2 proc=dunnnnnn row=dnnnnnnn exit=10000000 seen=10000000",
+							"WriteRow(2) lane=running cur=2 proc=dunnnnnn row=ddnnnnnn exit=10000000 seen=10000000",
+							"SeeRow(2) lane=ready cur=3 proc=dunnnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"Start(3) lane=running cur=3 proc=duunnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"End(2) lane=running cur=3 proc=ddunnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"Deliver(2) lane=running cur=3 proc=ddunnnnn row=ddnnnnnn exit=11000000 seen=11000000",
+							"End(3) lane=running cur=3 proc=dddnnnnn row=ddnnnnnn exit=11000000 seen=11000000",
+							"Deliver(3) lane=running cur=3 proc=dddnnnnn row=ddnnnnnn exit=11100000 seen=11000000"
+						]
+					}
+				},
+				"tlcMs": 1183
+			},
+			{
+				"spec": {
+					"against": "v2",
+					"n": 8,
+					"fixed": false
+				},
+				"variant": "fixed",
+				"runs": 300,
+				"distinct": 65,
+				"accepted": 177,
+				"rejected": 123,
+				"why": {
+					"SeeExit: today's spec has no wait on the EXIT": {
+						"count": 123,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 50,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 0
+							},
+							{
+								"ending": "no_row",
+								"before": 150,
+								"after": 300
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 600
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 300
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unnnnnnn row=nnnnnnnn exit=00000000 seen=00000000",
+							"WriteRow(1) lane=running cur=1 proc=unnnnnnn row=dnnnnnnn exit=00000000 seen=00000000",
+							"SeeRow(1) lane=ready cur=2 proc=unnnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"Start(2) lane=running cur=2 proc=uunnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"End(1) lane=running cur=2 proc=dunnnnnn row=dnnnnnnn exit=00000000 seen=10000000",
+							"Deliver(1) lane=running cur=2 proc=dunnnnnn row=dnnnnnnn exit=10000000 seen=10000000",
+							"WriteRow(2) lane=running cur=2 proc=dunnnnnn row=ddnnnnnn exit=10000000 seen=10000000",
+							"SeeRow(2) lane=ready cur=3 proc=dunnnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"Start(3) lane=running cur=3 proc=duunnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"End(2) lane=running cur=3 proc=ddunnnnn row=ddnnnnnn exit=10000000 seen=11000000",
+							"Deliver(2) lane=running cur=3 proc=ddunnnnn row=ddnnnnnn exit=11000000 seen=11000000",
+							"End(3) lane=running cur=3 proc=dddnnnnn row=ddnnnnnn exit=11000000 seen=11000000",
+							"Deliver(3) lane=running cur=3 proc=dddnnnnn row=ddnnnnnn exit=11100000 seen=11000000",
+							"SeeExit(3) lane=over cur=3 proc=dddnnnnn row=ddnnnnnn exit=11100000 seen=11100000"
+						]
+					}
+				},
+				"tlcMs": 1221
+			},
+			{
+				"spec": {
+					"against": "v1",
+					"n": 3,
+					"fixed": true
+				},
+				"variant": "fixed",
+				"runs": 300,
+				"distinct": 60,
+				"accepted": 0,
+				"rejected": 300,
+				"why": {
+					"SeeRow on a stuck row: the lane stops; 116 goes on": {
+						"count": 146,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 0,
+								"after": 600
+							},
+							{
+								"ending": "row_stuck",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 0,
+								"after": 50
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 0
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=unn row=dnn exit=000 seen=100",
+							"Start(2) lane=running cur=2 proc=uun row=dnn exit=000 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=uun row=dsn exit=000 seen=100",
+							"End(2) lane=running cur=2 proc=udn row=dsn exit=000 seen=100",
+							"Deliver(2) lane=running cur=2 proc=udn row=dsn exit=010 seen=100",
+							"SeeRow(2) lane=over cur=2 proc=udn row=dsn exit=010 seen=110"
+						]
+					},
+					"Exit: 116 has no lane exit": {
+						"count": 120,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 50,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 0
+							},
+							{
+								"ending": "no_row",
+								"before": 150,
+								"after": 300
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 600
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 300
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=unn row=dnn exit=000 seen=100",
+							"Start(2) lane=running cur=2 proc=uun row=dnn exit=000 seen=100",
+							"End(1) lane=running cur=2 proc=dun row=dnn exit=000 seen=100",
+							"Deliver(1) lane=running cur=2 proc=dun row=dnn exit=100 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=dun row=ddn exit=100 seen=100",
+							"SeeRow(2) lane=ready cur=3 proc=dun row=ddn exit=100 seen=110",
+							"Start(3) lane=running cur=3 proc=duu row=ddn exit=100 seen=110",
+							"End(2) lane=running cur=3 proc=ddu row=ddn exit=100 seen=110",
+							"Deliver(2) lane=running cur=3 proc=ddu row=ddn exit=110 seen=110",
+							"End(3) lane=running cur=3 proc=ddd row=ddn exit=110 seen=110",
+							"Deliver(3) lane=running cur=3 proc=ddd row=ddn exit=111 seen=110",
+							"SeeExit(3) lane=over cur=3 proc=ddd row=ddn exit=111 seen=111",
+							"Exit(3) lane=gone cur=3 proc=ddd row=ddn exit=111 seen=111"
+						]
+					},
+					"SeeRow(3): the lane goes on past N = 3; 116 stops": {
+						"count": 34,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 150,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 150,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 0,
+								"after": 50
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"End(1) lane=running cur=1 proc=dnn row=dnn exit=000 seen=000",
+							"Deliver(1) lane=running cur=1 proc=dnn row=dnn exit=100 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=dnn row=dnn exit=100 seen=100",
+							"Start(2) lane=running cur=2 proc=dun row=dnn exit=100 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=dun row=ddn exit=100 seen=100",
+							"End(2) lane=running cur=2 proc=ddn row=ddn exit=100 seen=100",
+							"Deliver(2) lane=running cur=2 proc=ddn row=ddn exit=110 seen=100",
+							"SeeRow(2) lane=ready cur=3 proc=ddn row=ddn exit=110 seen=110",
+							"Start(3) lane=running cur=3 proc=ddu row=ddn exit=110 seen=110",
+							"WriteRow(3) lane=running cur=3 proc=ddu row=ddd exit=110 seen=110",
+							"SeeRow(3) lane=ready cur=4 proc=ddu row=ddd exit=110 seen=111"
+						]
+					}
+				},
+				"tlcMs": 1030
+			},
+			{
+				"spec": {
+					"against": "v1",
+					"n": 3,
+					"fixed": false
+				},
+				"variant": "today",
+				"runs": 300,
+				"distinct": 62,
+				"accepted": 107,
+				"rejected": 193,
+				"why": {
+					"SeeRow on a stuck row: the lane stops; 116 goes on": {
+						"count": 146,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 0,
+								"after": 600
+							},
+							{
+								"ending": "row_stuck",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 300,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 0,
+								"after": 50
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 0
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=unn row=dnn exit=000 seen=100",
+							"Start(2) lane=running cur=2 proc=uun row=dnn exit=000 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=uun row=dsn exit=000 seen=100",
+							"End(2) lane=running cur=2 proc=udn row=dsn exit=000 seen=100",
+							"Deliver(2) lane=running cur=2 proc=udn row=dsn exit=010 seen=100",
+							"SeeRow(2) lane=over cur=2 proc=udn row=dsn exit=010 seen=110"
+						]
+					},
+					"SeeRow(3): the lane goes on past N = 3; 116 stops": {
+						"count": 34,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 150,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "row_done",
+								"before": 150,
+								"after": 150
+							},
+							{
+								"ending": "row_done",
+								"before": 50,
+								"after": 50
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 0,
+								"after": 50
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"End(1) lane=running cur=1 proc=dnn row=dnn exit=000 seen=000",
+							"Deliver(1) lane=running cur=1 proc=dnn row=dnn exit=100 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=dnn row=dnn exit=100 seen=100",
+							"Start(2) lane=running cur=2 proc=dun row=dnn exit=100 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=dun row=ddn exit=100 seen=100",
+							"End(2) lane=running cur=2 proc=ddn row=ddn exit=100 seen=100",
+							"Deliver(2) lane=running cur=2 proc=ddn row=ddn exit=110 seen=100",
+							"SeeRow(2) lane=ready cur=3 proc=ddn row=ddn exit=110 seen=110",
+							"Start(3) lane=running cur=3 proc=ddu row=ddn exit=110 seen=110",
+							"WriteRow(3) lane=running cur=3 proc=ddu row=ddd exit=110 seen=110",
+							"SeeRow(3) lane=ready cur=4 proc=ddu row=ddd exit=110 seen=111"
+						]
+					},
+					"Exit: 116 has no lane exit": {
+						"count": 13,
+						"input": [
+							{
+								"ending": "row_done",
+								"before": 600,
+								"after": 600
+							},
+							{
+								"ending": "row_done",
+								"before": 0,
+								"after": 600
+							},
+							{
+								"ending": "row_stuck",
+								"before": 150,
+								"after": 300
+							},
+							{
+								"ending": "row_done",
+								"before": 600,
+								"after": 50
+							},
+							{
+								"ending": "no_row",
+								"before": 0,
+								"after": 600
+							},
+							{
+								"ending": "no_row",
+								"before": 300,
+								"after": 50
+							}
+						],
+						"events": [
+							"Start(1) lane=running cur=1 proc=unn row=nnn exit=000 seen=000",
+							"WriteRow(1) lane=running cur=1 proc=unn row=dnn exit=000 seen=000",
+							"SeeRow(1) lane=ready cur=2 proc=unn row=dnn exit=000 seen=100",
+							"Start(2) lane=running cur=2 proc=uun row=dnn exit=000 seen=100",
+							"WriteRow(2) lane=running cur=2 proc=uun row=ddn exit=000 seen=100",
+							"SeeRow(2) lane=ready cur=3 proc=uun row=ddn exit=000 seen=110",
+							"Start(3) lane=running cur=3 proc=uuu row=ddn exit=000 seen=110",
+							"WriteRow(3) lane=running cur=3 proc=uuu row=dds exit=000 seen=110",
+							"SeeRow(3) lane=over cur=3 proc=uuu row=dds exit=000 seen=111",
+							"Exit(3) lane=gone cur=3 proc=uuu row=dds exit=000 seen=111"
+						]
+					}
+				},
+				"tlcMs": 1030
+			}
+		]
+	},
+	"paths": {
+		"n": 3,
+		"laws": [
+			{
+				"cfg": "v2-fixed",
+				"passed": true,
+				"broke": null,
+				"distinct": 207,
+				"ms": 855
+			},
+			{
+				"cfg": "v2-today",
+				"passed": false,
+				"broke": "Temporal properties were violated.",
+				"distinct": 181,
+				"ms": 851
+			},
+			{
+				"cfg": "v2-reach",
+				"passed": false,
+				"broke": "Invariant NeverTheLast is violated.",
+				"distinct": 87,
+				"ms": 676
+			}
+		],
+		"specs": {
+			"fixed": {
+				"states": 207,
+				"paths": 17353,
+				"scripts": 322,
+				"tlcMs": 940
+			},
+			"today": {
+				"states": 181,
+				"paths": 16075,
+				"scripts": 292,
+				"tlcMs": 918
+			}
+		},
+		"runs": {
+			"fixed spec, fixed lane": {
+				"scripts": 322,
+				"passed": 322,
+				"stalled": 0,
+				"otherLane": 0,
+				"rejected": 0,
+				"samePath": 125,
+				"wallMs": 18393,
+				"failed": []
+			},
+			"fixed spec, today lane": {
+				"scripts": 322,
+				"passed": 255,
+				"stalled": 67,
+				"otherLane": 67,
+				"rejected": 67,
+				"samePath": 92,
+				"wallMs": 20715,
+				"failed": [
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								}
+							],
+							"laneSteps": 7
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 5
+								}
+							],
+							"laneSteps": 7
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 7
+								}
+							],
+							"laneSteps": 7
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 6
+								}
+							],
+							"laneSteps": 7
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 4
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								}
+							],
+							"laneSteps": 7
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						]
+					}
+				]
+			},
+			"today spec, fixed lane": {
+				"scripts": 292,
+				"passed": 255,
+				"stalled": 0,
+				"otherLane": 37,
+				"rejected": 37,
+				"samePath": 92,
+				"wallMs": 16877,
+				"failed": [
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								}
+							],
+							"laneSteps": 5
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 5
+								}
+							],
+							"laneSteps": 5
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 4
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								}
+							],
+							"laneSteps": 5
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "WriteRow",
+									"k": 2,
+									"kind": "done",
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 3,
+									"after": 5
+								}
+							],
+							"laneSteps": 5
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeRow(2)",
+							"Start(3)",
+							"SeeExit(3)",
+							"Exit(3)"
+						]
+					},
+					{
+						"script": {
+							"pushes": [
+								{
+									"act": "WriteRow",
+									"k": 1,
+									"kind": "done",
+									"after": 1
+								},
+								{
+									"act": "End",
+									"k": 1,
+									"after": 3
+								},
+								{
+									"act": "End",
+									"k": 2,
+									"after": 3
+								}
+							],
+							"laneSteps": 3
+						},
+						"lane": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)"
+						],
+						"got": [
+							"Start(1)",
+							"SeeRow(1)",
+							"Start(2)",
+							"SeeExit(2)",
+							"Exit(2)"
+						]
+					}
+				]
+			},
+			"today spec, today lane": {
+				"scripts": 292,
+				"passed": 292,
+				"stalled": 0,
+				"otherLane": 0,
+				"rejected": 0,
+				"samePath": 114,
+				"wallMs": 16018,
+				"failed": []
+			}
+		}
+	},
+	"mutants": {
+		"seed": 139,
+		"sample": 150,
+		"sampleByFile": {
+			"packages/pipeline/src/hosted/lane.ts": 53,
+			"packages/pipeline/src/stages/lane/machine.ts": 97
+		},
+		"refusedByTsc": 104,
+		"ran": 46,
+		"ranByFile": {
+			"packages/pipeline/src/hosted/lane.ts": 15,
+			"packages/pipeline/src/stages/lane/machine.ts": 31
+		},
+		"killed": {
+			"tests": 22,
+			"property": 8,
+			"trace": 8,
+			"paths": 7
+		},
+		"killedByAny": 22,
+		"killedBySpec": 8,
+		"pairs": {
+			"traceNotProperty": 1,
+			"pathsNotProperty": 1,
+			"propertyNotTrace": 1,
+			"propertyNotPaths": 2,
+			"specNotTests": 0,
+			"testsNotSpec": 14
+		},
+		"medianArmMs": {
+			"tests": 5460,
+			"property": 2675,
+			"trace": 21533,
+			"paths": 48644
+		},
+		"byTestFile": {
+			"packages/pipeline/src/hosted/lane-ends.test.ts": 7,
+			"packages/pipeline/src/hosted/lane-trace.test.ts": 6,
+			"packages/pipeline/src/laws/plan-lane.test.ts": 14,
+			"packages/pipeline/src/laws/standard.test.ts": 13,
+			"packages/pipeline/src/stages/lane/lane.test.ts": 12,
+			"packages/pipeline/src/laws/sample.test.ts": 2,
+			"packages/pipeline/src/laws/world/hosted.test.ts": 2,
+			"packages/pipeline/src/laws/world/hosted.test.ts (timeout)": 1,
+			"packages/pipeline/src/hosted/lane-ends.test.ts (timeout)": 1
+		},
+		"onlyLaneTrace": [],
+		"byOlderTests": 22,
+		"specNotOlderTests": 0,
+		"mutants": [
+			{
+				"id": "432",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@317:22-317:28 StringLiteral \"\"",
+				"original": "\"done\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "464",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@347:2-349:18 LogicalOperator (f.flow === \"round\" || f.flow === \"final\") && f.step === \"review\" || kind === \"stuck\"",
+				"original": "(f.flow === \"round\" || f.flow === \"final\") &&\n\t\tf.step === \"review\" &&\n\t\tkind === \"stuck\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "185",
+				"key": "packages/pipeline/src/hosted/lane.ts@247:6-247:41 EqualityOperator now.length === sub.deps.asks.length",
+				"original": "now.length !== sub.deps.asks.length",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "227",
+				"key": "packages/pipeline/src/hosted/lane.ts@307:14-307:32 ConditionalExpression true",
+				"original": "s.phase === \"over\"",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts"
+				],
+				"trace": "fixed: Exit",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "19",
+				"key": "packages/pipeline/src/hosted/lane.ts@99:5-99:89 ConditionalExpression false",
+				"original": "(yield* git.git([\"-C\", tree, \"merge-base\", \"--is-ancestor\", main, head])).code !== 0",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "530",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@375:10-375:25 ConditionalExpression true",
+				"original": "kind === \"done\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "232",
+				"key": "packages/pipeline/src/hosted/lane.ts@308:14-308:32 ConditionalExpression true",
+				"original": "s.phase === \"idle\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "465",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@347:2-348:21 ConditionalExpression true",
+				"original": "(f.flow === \"round\" || f.flow === \"final\") &&\n\t\tf.step === \"review\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "490",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@351:25-351:32 BooleanLiteral unseen",
+				"original": "!unseen",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts",
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": "timeout",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "352",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@177:19-177:44 ObjectLiteral {}",
+				"original": "{started: Schema.Boolean}",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "76",
+				"key": "packages/pipeline/src/hosted/lane.ts@136:7-136:26 EqualityOperator sent.how === \"sent\"",
+				"original": "sent.how !== \"sent\"",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts"
+				],
+				"trace": "fixed: the lane is over without taking a child's end",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "431",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@317:1-317:28 EqualityOperator end.outcome.kind !== \"done\"",
+				"original": "end.outcome.kind === \"done\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "389",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@279:7-279:27 EqualityOperator flow.flow !== \"ship\"",
+				"original": "flow.flow === \"ship\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "18",
+				"key": "packages/pipeline/src/hosted/lane.ts@99:5-99:89 ConditionalExpression true",
+				"original": "(yield* git.git([\"-C\", tree, \"merge-base\", \"--is-ancestor\", main, head])).code !== 0",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "327",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@147:7-147:25 EqualityOperator f.step !== \"build\"",
+				"original": "f.step === \"build\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "281",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@105:10-105:42 StringLiteral ``",
+				"original": "`${lane}:${f.task}:drop:catchup`",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "297",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@122:40-125:2 BlockStatement {}",
+				"original": "{\n\t\th ^= child.charCodeAt(k);\n\t\th = Math.imul(h, 0x01000193) >>> 0;\n\t}",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "573",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@392:3-392:21 ConditionalExpression false",
+				"original": "s.phase === \"idle\"",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts",
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/sample.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/laws/world/hosted.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": "timeout",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "298",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@126:8-126:19 ArithmeticOperator h * 100_000",
+				"original": "h % 100_000",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "278",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@103:10-103:47 StringLiteral ``",
+				"original": "`${lane}:final:r${f.round}:${f.step}`",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "183",
+				"key": "packages/pipeline/src/hosted/lane.ts@247:6-247:90 LogicalOperator now.length !== sub.deps.asks.length && now.some(id => !sub.deps.asks.includes(id))",
+				"original": "now.length !== sub.deps.asks.length || now.some((id) => !sub.deps.asks.includes(id))",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "553",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@380:7-380:22 ConditionalExpression false",
+				"original": "kind === \"skip\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/standard.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "400",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@290:2-291:24 ConditionalExpression case \"ship\":",
+				"original": "case \"ship\":\n\t\t\treturn \"ship_failed\";",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "596",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@397:3-397:25 ConditionalExpression false",
+				"original": "s.phase === \"planning\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "100",
+				"key": "packages/pipeline/src/hosted/lane.ts@167:14-167:27 ConditionalExpression true",
+				"original": "last === null",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "216",
+				"key": "packages/pipeline/src/hosted/lane.ts@286:24-286:28 BooleanLiteral false",
+				"original": "true",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts"
+				],
+				"trace": "fixed: Exit",
+				"paths": "fixed: script 3 stalled other lane moves rejected"
+			},
+			{
+				"id": "141",
+				"key": "packages/pipeline/src/hosted/lane.ts@203:13-203:33 StringLiteral ``",
+				"original": "`${url}@${cmd.head}`",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "546",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@379:11-379:26 ConditionalExpression true",
+				"original": "kind === \"done\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "305",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@137:36-137:81 ObjectLiteral {}",
+				"original": "{settings: agentFor(job, step), usd: job.usd}",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "472",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@347:25-347:43 ConditionalExpression false",
+				"original": "f.flow === \"final\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "377",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@261:48-261:55 ArrayDeclaration []",
+				"original": "[asked]",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts",
+					"packages/pipeline/src/hosted/lane-trace.test.ts",
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/sample.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts",
+					"packages/pipeline/src/laws/world/hosted.test.ts"
+				],
+				"trace": "timeout",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "724",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@475:67-475:90 StringLiteral \"\"",
+				"original": "\"the plan was not kept\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "462",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@347:2-350:18 LogicalOperator (f.flow === \"round\" || f.flow === \"final\") && f.step === \"review\" && kind === \"stuck\" || why === \"unseen\"",
+				"original": "(f.flow === \"round\" || f.flow === \"final\") &&\n\t\tf.step === \"review\" &&\n\t\tkind === \"stuck\" &&\n\t\twhy === \"unseen\"",
+				"killedBy": [
+					"tests",
+					"trace",
+					"paths"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/laws/world/hosted.test.ts (timeout)",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": "fixed: SeeRow(3) lands on lane=ready cur=4 proc=dddnnnn row=ddnnnnn exit=1110000 seen=1110000; SeeRow(6) lands on lane=ready cur=7 proc=ddddddn row=dddddsn exit=1111110 seen=1111110; SeeRow(3) lands on lane=ready cur=4 proc=uuunnnn row=ddsnnnn exit=0000000 seen=1110000; SeeRow(3) lands on lane=ready cur=4 proc=uddnnnn row=ddsnnnn exit=0110000 seen=1110000; SeeRow(3) lands on lane=ready cur=4 proc=dudnnnn row=ddnnnnn exit=1010000 seen=1110000; SeeRow(6) lands on lane=ready cur=7 proc=ddddddn row=dddddnn exit=1111110 seen=1111110; SeeRow(3) lands on lane=ready cur=4 proc=dddnnnn row=ddsnnnn exit=1110000 seen=1110000; SeeRow(3) lands on lane=ready cur=4 proc=dudnnnn row=ddsnnnn exit=1010000 seen=1110000; SeeRow(3) lands on lane=ready cur=4 proc=ddunnnn row=ddsnnnn exit=1100000 seen=1110000; SeeRow(6) lands on lane=ready cur=7 proc=ddddudn row=dddddnn exit=1111010 seen=1111110; SeeRow(6) lands on lane=ready cur=7 proc=ddddudn row=dddddsn exit=1111010 seen=1111110",
+				"paths": "fixed: script 0 stalled other lane moves rejected"
+			},
+			{
+				"id": "60",
+				"key": "packages/pipeline/src/hosted/lane.ts@125:12-125:19 StringLiteral \"\"",
+				"original": "\"child\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "188",
+				"key": "packages/pipeline/src/hosted/lane.ts@247:62-247:89 BooleanLiteral sub.deps.asks.includes(id)",
+				"original": "!sub.deps.asks.includes(id)",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "187",
+				"key": "packages/pipeline/src/hosted/lane.ts@247:54-247:89 ArrowFunction () => undefined",
+				"original": "(id) => !sub.deps.asks.includes(id)",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "640",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@421:14-421:49 ObjectLiteral {}",
+				"original": "{...s.at.rounds, [n.task]: n.round}",
+				"killedBy": [
+					"tests",
+					"property",
+					"trace"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts (timeout)",
+					"packages/pipeline/src/laws/plan-lane.test.ts"
+				],
+				"trace": "timeout",
+				"paths": null
+			},
+			{
+				"id": "461",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@347:2-350:18 ConditionalExpression false",
+				"original": "(f.flow === \"round\" || f.flow === \"final\") &&\n\t\tf.step === \"review\" &&\n\t\tkind === \"stuck\" &&\n\t\twhy === \"unseen\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "593",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@396:3-396:23 ConditionalExpression false",
+				"original": "s.phase === \"noting\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "662",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@445:28-445:30 StringLiteral \"Stryker was here!\"",
+				"original": "\"\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "413",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@297:6-297:24 ConditionalExpression false",
+				"original": "f.step === \"build\"",
+				"killedBy": [
+					"tests",
+					"property"
+				],
+				"testFiles": [
+					"packages/pipeline/src/hosted/lane-ends.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "175",
+				"key": "packages/pipeline/src/hosted/lane.ts@239:34-239:49 ConditionalExpression true",
+				"original": "a.plan === plan",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "91",
+				"key": "packages/pipeline/src/hosted/lane.ts@157:71-157:81 ArrowFunction () => undefined",
+				"original": "() => null",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "478",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@349:2-349:18 ConditionalExpression true",
+				"original": "kind === \"stuck\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "476",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@348:2-348:21 EqualityOperator f.step !== \"review\"",
+				"original": "f.step === \"review\"",
+				"killedBy": [
+					"tests"
+				],
+				"testFiles": [
+					"packages/pipeline/src/laws/plan-lane.test.ts",
+					"packages/pipeline/src/laws/standard.test.ts",
+					"packages/pipeline/src/stages/lane/lane.test.ts"
+				],
+				"trace": null,
+				"paths": null
+			},
+			{
+				"id": "336",
+				"key": "packages/pipeline/src/stages/lane/machine.ts@151:7-151:27 ConditionalExpression false",
+				"original": "f.step === \"catchup\"",
+				"killedBy": [],
+				"testFiles": null,
+				"trace": null,
+				"paths": null
+			}
+		]
+	}
+}
