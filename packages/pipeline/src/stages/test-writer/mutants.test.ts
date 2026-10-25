@@ -1,9 +1,12 @@
 import {describe, expect, it} from "vitest";
+import {tallyOf} from "../../rate.ts";
 import {
+	findingOf,
 	killRan,
 	kills,
 	type MutantAnswer,
 	NOISE_RULE,
+	NOISE_SILENCE,
 	outcomeOf,
 	ratedAs,
 	startKills,
@@ -90,10 +93,28 @@ describe("answering the mutants that lived", () => {
 	it("reads the owner's rating of a noise answer by Rate's count", () => {
 		if (noise.answer !== "noise") throw new Error("noise");
 		const none = {ratings: [], shipped: []};
+		const by = (writer: string, says: "fix" | "noise") => ({
+			writer,
+			rating: {finding: noise.mutant, says},
+		});
 		expect(ratedAs(noise, none)).toBe("open");
-		expect(ratedAs(noise, {...none, shipped: [noise.mutant]})).toBe("lives");
+		expect(ratedAs(noise, {...none, ratings: [by("user:owner", "fix")]})).toBe("write_test");
+		expect(ratedAs(noise, {...none, ratings: [by("user:owner", "noise")]})).toBe("lives");
+	});
+
+	it("keeps an unrated noise answer open once its change ships: silence is not the owner's yes", () => {
+		if (noise.answer !== "noise") throw new Error("noise");
+		expect(ratedAs(noise, {ratings: [], shipped: [noise.mutant]})).toBe("open");
 		expect(
-			ratedAs(noise, {ratings: [{finding: noise.mutant, by: "owner", says: "fix"}], shipped: []}),
-		).toBe("write_test");
+			tallyOf([findingOf(noise)], {ratings: [], shipped: [noise.mutant]}, () => NOISE_SILENCE),
+		).toEqual({[NOISE_RULE]: {fix: 0, noise: 0, open: 1}});
+	});
+
+	it("does not let an agent's rating send a noise answer back or let it live", () => {
+		if (noise.answer !== "noise") throw new Error("noise");
+		for (const says of ["fix", "noise"] as const) {
+			const ratings = [{writer: "agent:review", rating: {finding: noise.mutant, says}}];
+			expect(ratedAs(noise, {ratings, shipped: [noise.mutant]})).toBe("open");
+		}
 	});
 });

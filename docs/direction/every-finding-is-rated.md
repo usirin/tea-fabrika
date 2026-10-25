@@ -5,7 +5,8 @@ change ships.** The rest of this note is **proposed**.
 
 ```ts
 // A sketch. A user rates a finding with one of two buttons, as a fact of its own.
-{fact: "rated", finding: "f-12", by: "owner", says: "fix"} // or "noise"
+// Who rated is the writer of its ledger row, not a field (new-combos.md, "Rate").
+{fact: "rated", finding: "f-12", says: "fix"} // or "noise"
 
 // How one finding counts toward its rule's noise.
 const counted = (finding: Finding, facts: Facts): "fix" | "noise" | null => {

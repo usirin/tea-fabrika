@@ -45,12 +45,29 @@ const touched = guarded(diff, rows);               // guarded files, grown: a ch
 - Google's Tricorder turns an analyzer off when its findings are marked "not
   useful" too often
   ([Sadowski et al., CACM 2018](https://research.google/pubs/lessons-from-building-static-analysis-tools-at-google/)).
+- **A rating counts only when its ledger row was written by a user.** The
+  rating does not say who made it; the row's writer does, read as a user or
+  an agent (`Writer` in `@kampus/fabrika`). A row an agent wrote, or one whose
+  writer names neither, counts as never rated. Today the caller names its
+  writer; the ledger stamping it from a signing key comes later
+  ([a local-first sync engine](./a-local-first-sync-engine.md)).
+- **Each rule says what silence means, with no default.** A check's finding
+  never rated counts as noise once its change ships: the owner saw it and did
+  not act. The test writer's `noise` answer stays open, shipped or not: it is
+  the writer's own call, and only the owner's "noise" lets the mutant live
+  ([the test writer](./the-test-writer.md)).
 
 ```ts
 // A sketch. `enough` is the open question.
+type Writer = {kind: "user"; id: string} | {kind: "agent"; id: string}; // a row keeps it as "user:<id>"
+type Rating = {finding: string; says: "fix" | "noise"}; // no `by`: who rated is the row's writer
+type RatingRow = {writer: string; rating: Rating};
+type Silence = "noise" | "open"; // what a finding never rated counts as once shipped
+
+const tally = tallyOf(findings, facts, (rule) => silence(rule)); // users' ratings only
 type Mode = "advise" | "block";
-const modeOf = (rule: Rule, facts: Facts): Mode =>
-	rated(rule, facts) >= enough && noise(rule, facts) === 0 ? "block" : "advise";
+const modeOf = (t: Tally, enough: Enough): Mode =>
+	t.fix + t.noise >= enough && t.noise === 0 ? "block" : "advise";
 ```
 
 ### Controls
