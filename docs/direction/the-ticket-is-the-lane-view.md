@@ -73,6 +73,8 @@ tracker would settle it.
 
 ## Still open
 
+- **Where the app keeps a user's key.** Somewhere no agent can read it, boxed
+  or not: some agent sessions run on the same machine outside any box.
 - What each stage's brief keeps: the whole timeline, or a cut per stage.
 - How a long timeline is cut for an agent.
 - How the window groups rows, by stage or by task, once a lane has many.
