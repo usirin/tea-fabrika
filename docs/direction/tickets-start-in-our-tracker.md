@@ -6,10 +6,16 @@ Decided 2026-10-24, for the pipeline's first version.
 // A sketch. A ticket is facts on the ledger. No stage reads a GitHub issue.
 {fact: "filed", ticket: "demlik-1", by: "owner", title: "…", body: "…"}
 {fact: "edited", ticket: "demlik-1", by: "owner", body: "…"}
+{fact: "commented", ticket: "demlik-1", by: "agent", body: "Plan ready. One open point: …"}
 {fact: "approved", ticket: "demlik-1", plan: "p-1", text: "sha256:9c1f…"}
 
 // The yes names the text it saw. An edit after it is not covered.
-const covers = (yes: Approved, now: Ticket) => yes.text === sha256(now.title, now.body);
+// A JSON pair, so "ab" + "c" and "a" + "bc" do not share a hash (experiment 138).
+const covers = (yes: Approved, now: Ticket) =>
+	yes.text === sha256(JSON.stringify([now.title, now.body]));
+
+// The window: every fact, oldest first, then a box for each ask still open.
+const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map(box)];
 ```
 
 ## What was decided
@@ -21,6 +27,23 @@ const covers = (yes: Approved, now: Ticket) => yes.text === sha256(now.title, no
   - It is not a whole Linear. No boards, no cycles, no priorities: those wait
     for a run that needs them, as
     [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.
+- **A ticket's window is its timeline** (decided 2026-10-24). Every fact about
+  the ticket shows in one list, oldest first: filed, edited, comments, each
+  stage's answer. It is the one place to see what is being done.
+  - When something waits on the owner, the open ask
+    (`packages/pipeline/src/asks/ask.ts`: plan, stuck, ruling, check) shows as
+    a decision box after the last entry. The owner answers there, not in a
+    chat. The answer is a fact, and the agent reads it when it next runs. The
+    work between the owner and the agents is async.
+  - Comments are part of it (decided 2026-10-24). A comment is talk. A yes or a
+    ruling is an answer in a box, a fact of its own, so a comment never
+    changes what a yes covers.
+  - Only a person in the window can answer a box. No agent writes an answer,
+    as [AGENTS.md](../../AGENTS.md) already says.
+  - GitHub shows a pull request the same way: comments, pushes and reviews in
+    one list. Its required reviewers for a deployment answer in a box inside
+    the run's own page
+    ([GitHub](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments)).
 - **The first demlik ticket is filed there,** not as a GitHub issue. Triage,
   plan and every later stage read it from the ledger.
 - **Only people on the ledger can file or edit a ticket.** A stranger has no
