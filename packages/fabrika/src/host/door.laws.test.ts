@@ -1911,10 +1911,10 @@ const keptExactly: Law = {
 };
 
 /**
- * 27. BUG, found by this law on 00e02fa: a question asked during GitHub's wait is kept failing for
- *     `failMs` after it, so for that question the wait runs past its end, and past an hour. The law:
- *     at the wait's end, every question goes out again, even one asked during it. It fails on the
- *     real code, and is run as a known bug below, not with the laws.
+ * 27. At the wait's end every question goes out again, even one asked during it: the wait's own
+ *     refusal is kept no time, whatever `failMs` is. Found as a bug on 00e02fa (the refusal was kept
+ *     `failMs`, so that question stayed failed past the wait, and past an hour); fixed in 366c50b.
+ *     A question asked at any ms of the wait answers at the wait's last ms + 1, never later.
  */
 const waitEndsForAll: Law = {
 	name: "at the end of GitHub's wait every question goes out again, even one asked during it",
@@ -1923,12 +1923,16 @@ const waitEndsForAll: Law = {
 			fc.asyncProperty(
 				arbLimit,
 				fc.integer({min: 1, max: 60_000}),
+				fc.oneof(fc.constant(1), fc.integer({min: 1, max: 999_999_999})),
 				arbQ,
 				arbQ,
-				async (lim, failMs, first, during) => {
+				async (lim, failMs, back, first, during) => {
+					// The first question's refusal is GitHub's own, kept `failMs`: that one may stay failed.
 					if (eq(first, during)) return;
 					const gh = ghPeople();
 					const wait = lim.secs * 1000;
+					// Asked `back` ms before the end, at the latest 1 ms before it.
+					const at = wait - 1 - ((back - 1) % wait);
 					await onTestClock(
 						mod,
 						gh,
@@ -1937,20 +1941,490 @@ const waitEndsForAll: Law = {
 							gh.state.refusal = {status: lim.status, headers: limitHeaders(lim)};
 							yield* answerOf(mod, first);
 							gh.state.refusal = null;
-							yield* TestClock.setTime(T0 + wait - 1);
-							yield* answerOf(mod, during);
+							yield* TestClock.setTime(T0 + at);
+							const was = yield* answerOf(mod, during);
+							ensure(was === "KeysUnreachable", `asked during the wait, answered ${was}`);
 							yield* TestClock.setTime(T0 + wait);
 							const sent = gh.asked.length;
 							const a = yield* answerOf(mod, during);
 							ensure(
 								a.startsWith("keys") && gh.asked.length > sent,
-								`${during.q} ${during.arg}, asked 1 ms before the end of a ${wait} ms wait, answered ${a} at its end (failMs ${failMs})`,
+								`${during.q} ${during.arg}, asked at ${at} ms of a ${wait} ms wait, answered ${a} at its end (failMs ${failMs})`,
 							);
 						}),
 					);
 				},
 			),
-			{numRuns: 30, seed: 7},
+			{numRuns: 40, seed: 7},
+		);
+	},
+};
+
+// ---------------------------------------------------------------- round 4: GitHub's headers, read strictly
+
+/** One hour in ms: the longest wait, written here and not read from the code under test. */
+const HOUR = 60 * 60_000;
+/** How long a wait until `at` is, from `T0`: never below 0, never over an hour. */
+const waitUntil = (at: number) => Math.min(Math.max(at - T0, 0), HOUR);
+/** Seconds as text, to the wait they name, in BigInt so a number of any length is exact. */
+const waitOfSecs = (s: string) => {
+	const ms = BigInt(s) * 1000n;
+	return ms >= BigInt(HOUR) ? HOUR : Number(ms);
+};
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAYS_LONG = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday",
+] as const;
+const MONTHS = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+] as const;
+const two = (n: number) => String(n).padStart(2, "0");
+
+/** The three forms of an HTTP-date, RFC 9110 section 5.6.7. */
+type DateForm = "imf" | "rfc850" | "asctime";
+/**
+ * `t` (ms since 1970, a whole second, a year of four digits) as an HTTP-date in `form`, written here
+ * by hand and not by `Date`'s own printer:
+ * `Sun, 06 Nov 1994 08:49:37 GMT`, `Sunday, 06-Nov-94 08:49:37 GMT`, `Sun Nov  6 08:49:37 1994`.
+ */
+const httpDateText = (t: number, form: DateForm): string => {
+	const d = new Date(t);
+	const day = d.getUTCDate();
+	const mon = MONTHS[d.getUTCMonth()];
+	const year = d.getUTCFullYear();
+	const time = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(d.getUTCSeconds())}`;
+	switch (form) {
+		case "imf":
+			return `${WEEKDAYS[d.getUTCDay()]}, ${two(day)} ${mon} ${year} ${time} GMT`;
+		case "rfc850":
+			return `${WEEKDAYS_LONG[d.getUTCDay()]}, ${two(day)}-${mon}-${two(year % 100)} ${time} GMT`;
+		case "asctime":
+			return `${WEEKDAYS[d.getUTCDay()]} ${mon} ${String(day).padStart(2, " ")} ${time} ${year}`;
+	}
+};
+const arbForm = fc.constantFrom<DateForm>("imf", "rfc850", "asctime");
+/** Forty years in seconds: inside it a two-digit year is never in doubt. */
+const FORTY_YEARS = 40 * 365 * 24 * 3600;
+
+/** A spent-limit refusal's other headers: a reset now or later, or none, any remaining. */
+const arbOthers = fc
+	.record(
+		{
+			"x-ratelimit-remaining": fc.constantFrom("0", "1"),
+			"x-ratelimit-reset": fc.integer({min: 0, max: 7200}).map((s) => String(T0 / 1000 + s)),
+		},
+		{requiredKeys: []},
+	)
+	.map((h) => h as Record<string, string>);
+
+/** A date's parts, any of which a bent date below may break. */
+const arbParts = fc.record({
+	wd: fc.nat({max: 6}),
+	day: fc.integer({min: 1, max: 28}),
+	mon: fc.nat({max: 11}),
+	year: fc.integer({min: 1970, max: 2100}),
+	h: fc.nat({max: 23}),
+	m: fc.nat({max: 59}),
+	s: fc.nat({max: 59}),
+});
+type Parts = typeof arbParts extends fc.Arbitrary<infer T> ? T : never;
+/** Ways to bend a date so it is no HTTP-date: a piece dropped, moved, spelled wrong or out of range. */
+const BENDS: readonly ((p: Parts) => string)[] = [
+	// IMF-fixdate with its weekday, its zone, its time, its seconds or its comma dropped.
+	(p) => `${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)}`,
+	(p) => `${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} GMT`,
+	(p) => `${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year}`,
+	(p) => `${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]} ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	// Another zone, a lower-case zone or month, a one-digit day, a two-digit year, a long weekday.
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} UTC`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} +0000`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} gmt`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]?.toLowerCase()} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${p.day % 9 || 1} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${two(p.year % 100)} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS_LONG[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	// rfc850-date with a four-digit year or a short weekday; asctime with one space before a
+	// one-digit day, or with a zone.
+	(p) =>
+		`${WEEKDAYS_LONG[p.wd]}, ${two(p.day)}-${MONTHS[p.mon]}-${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)}-${MONTHS[p.mon]}-${two(p.year % 100)} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]} ${MONTHS[p.mon]} ${p.day % 9 || 1} ${two(p.h)}:${two(p.m)}:${two(p.s)} ${p.year}`,
+	(p) =>
+		`${WEEKDAYS[p.wd]} ${MONTHS[p.mon]} ${String(p.day).padStart(2, " ")} ${two(p.h)}:${two(p.m)}:${two(p.s)} ${p.year} GMT`,
+	// Out of range: day 32, 30 February, hour 24, minute 60, second 61.
+	(p) => `${WEEKDAYS[p.wd]}, 32 ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) => `${WEEKDAYS[p.wd]}, 30 Feb ${p.year} ${two(p.h)}:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} 24:${two(p.m)}:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:60:${two(p.s)} GMT`,
+	(p) =>
+		`${WEEKDAYS[p.wd]}, ${two(p.day)} ${MONTHS[p.mon]} ${p.year} ${two(p.h)}:${two(p.m)}:61 GMT`,
+];
+
+const digits = fc.stringMatching(/^[0-9]{1,6}$/);
+/**
+ * A header value that is neither digits only nor an HTTP-date: decimals, negatives, signs, spaces
+ * inside, other spellings of numbers, huge numbers that are not digits only, words, ISO dates, and
+ * HTTP-dates bent out of shape. Spaces at either end are not here: a header's value comes trimmed.
+ */
+const arbJunk: fc.Arbitrary<string> = fc.oneof(
+	// Decimals.
+	fc.tuple(digits, digits).map(([a, b]) => `${a}.${b}`),
+	digits.map((a) => `${a}.`),
+	digits.map((a) => `.${a}`),
+	// Negatives and signs.
+	fc.tuple(fc.constantFrom("-", "+", "--", "+-"), digits).map(([s, a]) => s + a),
+	// Spaces and tabs inside.
+	fc.tuple(digits, fc.constantFrom(" ", "\t", "  ", " \t "), digits).map(([a, s, b]) => a + s + b),
+	// Other spellings of a number, and digits that are not ASCII.
+	fc.constantFrom(
+		"1e9",
+		"1E3",
+		"0x10",
+		"0b1",
+		"0o7",
+		"1_000",
+		"1,000",
+		"Infinity",
+		"-Infinity",
+		"NaN",
+		"٣٠",
+		"１２",
+		"60s",
+		"60 seconds",
+		"2027-",
+	),
+	// Huge numbers, not digits only.
+	fc.integer({min: 11, max: 400}).map((n) => `1e${n}`),
+	fc.integer({min: 11, max: 400}).map((n) => `${"9".repeat(n)}.5`),
+	fc.integer({min: 11, max: 400}).map((n) => `-${"9".repeat(n)}`),
+	// Words.
+	fc.constantFrom("soon", "never", "now", "later", "tomorrow", "GMT", "Sun", "Nov", "null"),
+	fc.stringMatching(/^[A-Za-z][A-Za-z ,:-]{0,15}[A-Za-z]$/),
+	// ISO dates, whole and partial.
+	fc
+		.integer({min: -FORTY_YEARS, max: FORTY_YEARS})
+		.chain((s) =>
+			fc.constantFrom(
+				new Date(T0 + s * 1000).toISOString(),
+				new Date(T0 + s * 1000).toISOString().slice(0, 10),
+				new Date(T0 + s * 1000).toISOString().slice(0, 19),
+				new Date(T0 + s * 1000).toISOString().replace("T", " "),
+			),
+		),
+	// HTTP-dates bent out of shape.
+	fc
+		.tuple(arbParts, fc.nat({max: BENDS.length - 1}))
+		.map(([p, i]) => (BENDS[i] ?? BENDS[0])?.(p) ?? ""),
+);
+
+/** A wait as text, for a message. */
+const shownWait = (w: number | null) => (w === null ? "none" : `${w} ms`);
+
+/**
+ * 28. A `retry-after` or `x-ratelimit-reset` that is neither digits only nor an HTTP-date acts
+ *     exactly like no header at all: `limitWait` gives what it gives without it, whatever else the
+ *     refusal says, and through the Layer, after a refusal with only that header, the next question
+ *     goes out at once.
+ */
+const junkIsNoHeader: Law = {
+	name: "a retry-after or x-ratelimit-reset in any other shape acts exactly like no header",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom(403, 429),
+				fc.constantFrom("retry-after" as const, "x-ratelimit-reset" as const),
+				arbJunk,
+				arbOthers,
+				fc.option(arbJunk, {nil: undefined}),
+				arbQ,
+				arbQ,
+				async (status, slot, junk, others, junkAfter, first, next) => {
+					// The refusal without the header, and with it.
+					const without: Record<string, string> =
+						slot === "retry-after"
+							? others
+							: {
+									...(junkAfter === undefined ? {} : {"retry-after": junkAfter}),
+									"x-ratelimit-remaining": "0",
+								};
+					const withIt = {...without, [slot]: junk};
+					const a = mod.limitWait(status, withIt, T0);
+					const b = mod.limitWait(status, without, T0);
+					ensure(
+						a === b,
+						`${JSON.stringify(withIt)} waits ${shownWait(a)}, and without ${slot} ${shownWait(b)}`,
+					);
+					// Through the Layer, with only the bad header: no wait.
+					const alone =
+						slot === "retry-after"
+							? {"retry-after": junk}
+							: {"x-ratelimit-remaining": "0", "x-ratelimit-reset": junk};
+					const gh = ghPeople();
+					await onTestClock(
+						mod,
+						gh,
+						{cacheMs: 0, failMs: 0},
+						Effect.gen(function* () {
+							gh.state.refusal = {status, headers: alone};
+							yield* answerOf(mod, first);
+							gh.state.refusal = null;
+							yield* TestClock.setTime(T0 + 1);
+							const sent = gh.asked.length;
+							const got = yield* answerOf(mod, next);
+							ensure(
+								got.startsWith("keys") && gh.asked.length > sent,
+								`1 ms after ${status} ${JSON.stringify(alone)}, ${next.q} ${next.arg} answered ${got}`,
+							);
+						}),
+					);
+				},
+			),
+			{numRuns: 200, seed: 7},
+		);
+	},
+};
+
+/** Seconds as digits only: small, large, with leading zeros, longer than any number, "2027". */
+const arbSecsText = fc.oneof(
+	fc.nat({max: 7200}).map(String),
+	fc.nat().map(String),
+	fc.tuple(fc.integer({min: 1, max: 4}), fc.nat({max: 7200})).map(([z, n]) => "0".repeat(z) + n),
+	fc.integer({min: 11, max: 400}).map((n) => "9".repeat(n)),
+	fc.constantFrom("0", "1", "2027", "3599", "3600", "3601", "9999999999", "99999999999"),
+);
+
+/**
+ * 29. Digits only wait exactly that many seconds, capped at one hour: a `retry-after` of digits from
+ *     now, whatever else the refusal says, and an `x-ratelimit-reset` of digits until that second
+ *     since 1970 when `x-ratelimit-remaining` is 0 and no `retry-after` reads. "2027" is 2027 s.
+ */
+const digitsWait: Law = {
+	name: "digits only wait exactly that many seconds, capped at one hour",
+	run: async (mod) => {
+		await fc.assert(
+			fc.property(
+				fc.constantFrom(403, 429),
+				arbSecsText,
+				arbOthers,
+				arbSecsText,
+				fc.option(arbJunk, {nil: undefined}),
+				(status, secs, others, reset, junkAfter) => {
+					const after = {...others, "retry-after": secs};
+					const a = mod.limitWait(status, after, T0);
+					ensure(
+						a === waitOfSecs(secs),
+						`retry-after ${secs} waits ${shownWait(a)}, want ${waitOfSecs(secs)} ms (${JSON.stringify(after)})`,
+					);
+					// A reset of `reset` seconds after T0, as seconds since 1970.
+					const at = (BigInt(T0 / 1000) + BigInt(reset)).toString();
+					const r = {
+						...(junkAfter === undefined ? {} : {"retry-after": junkAfter}),
+						"x-ratelimit-remaining": "0",
+						"x-ratelimit-reset": at,
+					};
+					const b = mod.limitWait(status, r, T0);
+					ensure(
+						b === waitOfSecs(reset),
+						`${JSON.stringify(r)} waits ${shownWait(b)}, want ${waitOfSecs(reset)} ms`,
+					);
+				},
+			),
+			{numRuns: 300, seed: 7},
+		);
+	},
+};
+
+/**
+ * 30. A `retry-after` that is an HTTP-date, in each of RFC 9110's three forms, waits until that time,
+ *     capped at one hour, whatever else the refusal says. Dates from a second to forty years ahead
+ *     (and to 9999 for the forms with four-digit years).
+ */
+const datesWait: Law = {
+	name: "an HTTP-date in each of its three forms waits until that time, capped at one hour",
+	run: async (mod) => {
+		const LAST = Math.floor((Date.UTC(9999, 11, 31, 23, 59, 59) - T0) / 1000);
+		await fc.assert(
+			fc.property(
+				fc.constantFrom(403, 429),
+				arbForm,
+				fc.oneof(
+					fc.integer({min: 1, max: 7200}),
+					fc.integer({min: 1, max: FORTY_YEARS}),
+					fc.integer({min: 1, max: LAST}),
+				),
+				arbOthers,
+				(status, form, ahead, others) => {
+					// A two-digit year is in doubt past fifty years; law 32 reads those.
+					const secs = form === "rfc850" ? ((ahead - 1) % FORTY_YEARS) + 1 : ahead;
+					const at = T0 + secs * 1000;
+					const text = httpDateText(at, form);
+					const w = mod.limitWait(status, {...others, "retry-after": text}, T0);
+					ensure(
+						w === waitUntil(at),
+						`retry-after "${text}" waits ${shownWait(w)}, want ${waitUntil(at)} ms`,
+					);
+				},
+			),
+			{numRuns: 300, seed: 7},
+		);
+	},
+};
+
+/**
+ * 31. A date in the past, or now, means no wait: an HTTP-date in each form and an
+ *     `x-ratelimit-reset` at or before now give 0, and through the Layer the next question goes out
+ *     at that same ms.
+ */
+const pastNoWait: Law = {
+	name: "a date in the past means no wait",
+	run: async (mod) => {
+		const FIRST = Math.floor((T0 - Date.UTC(1000, 0, 1)) / 1000);
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom(403, 429),
+				fc.constantFrom("imf" as const, "rfc850" as const, "asctime" as const, "reset" as const),
+				fc.oneof(
+					fc.constant(0),
+					fc.integer({min: 1, max: 7200}),
+					fc.integer({min: 1, max: FORTY_YEARS}),
+					fc.integer({min: 1, max: FIRST}),
+				),
+				arbQ,
+				arbQ,
+				async (status, form, back, first, next) => {
+					const at = T0 - (form === "rfc850" ? back % FORTY_YEARS : back) * 1000;
+					const headers =
+						form === "reset"
+							? {"x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.max(at / 1000, 0))}
+							: {"retry-after": httpDateText(at, form)};
+					const w = mod.limitWait(status, headers, T0);
+					ensure(w === 0, `${JSON.stringify(headers)} waits ${shownWait(w)}, want 0 ms`);
+					const gh = ghPeople();
+					await onTestClock(
+						mod,
+						gh,
+						{cacheMs: 0, failMs: 0},
+						Effect.gen(function* () {
+							gh.state.refusal = {status, headers};
+							yield* answerOf(mod, first);
+							gh.state.refusal = null;
+							const sent = gh.asked.length;
+							const got = yield* answerOf(mod, next);
+							ensure(
+								got.startsWith("keys") && gh.asked.length > sent,
+								`right after ${status} ${JSON.stringify(headers)}, ${next.q} ${next.arg} answered ${got}`,
+							);
+						}),
+					);
+				},
+			),
+			{numRuns: 120, seed: 7},
+		);
+	},
+};
+
+/**
+ * An rfc850-date's two-digit year as RFC 9110 section 5.6.7 reads it: "a timestamp that appears to
+ * be more than 50 years in the future" is "the most recent year in the past that had the same last
+ * two digits". So the year is the latest one with those digits whose time is at most 50 years after
+ * `T0`. Its time as an rfc850-date's text, and its year.
+ */
+const NOW = new Date(T0);
+const THIS_YEAR = NOW.getUTCFullYear();
+/** `T0` fifty years on: the line a two-digit year's time may not pass. */
+const FIFTY_ON = Date.UTC(
+	THIS_YEAR + 50,
+	NOW.getUTCMonth(),
+	NOW.getUTCDate(),
+	NOW.getUTCHours(),
+	NOW.getUTCMinutes(),
+	NOW.getUTCSeconds(),
+);
+/** The two digits of the year fifty years on: the one year the line runs through. */
+const LINE_YY = (THIS_YEAR + 50) % 100;
+const rfc850Of = (yy: number, p: Parts) => {
+	let year = THIS_YEAR + 60 - ((THIS_YEAR + 60 - yy) % 100);
+	while (Date.UTC(year, p.mon, p.day, p.h, p.m, p.s) > FIFTY_ON) year -= 100;
+	const at = Date.UTC(year, p.mon, p.day, p.h, p.m, p.s);
+	return {at, year, text: httpDateText(at, "rfc850")};
+};
+const checkRfc850 = (mod: Mod, yy: number, p: Parts) => {
+	const {at, year, text} = rfc850Of(yy, p);
+	const w = mod.limitWait(403, {"retry-after": text}, T0);
+	ensure(
+		w === waitUntil(at),
+		`retry-after "${text}" waits ${shownWait(w)}, want ${waitUntil(at)} ms (read as ${year})`,
+	);
+};
+
+/**
+ * 32. An rfc850-date's two-digit year reads by RFC 9110's 50-year rule, for every two digits but
+ *     the year the line runs through (law 33): the years next to it and this year drawn more often.
+ */
+const twoDigitYear: Law = {
+	name: "an rfc850-date's two-digit year reads by RFC 9110's 50-year rule",
+	run: async (mod) => {
+		await fc.assert(
+			fc.property(
+				fc
+					.oneof(
+						fc.nat({max: 99}),
+						fc.constantFrom(LINE_YY - 1, LINE_YY + 1, THIS_YEAR % 100, (THIS_YEAR - 1) % 100),
+					)
+					.filter((yy) => yy !== LINE_YY),
+				arbParts,
+				(yy, p) => checkRfc850(mod, yy, p),
+			),
+			{numRuns: 300, seed: 7},
+		);
+	},
+};
+
+/**
+ * 33. BUG, found by this law on 366c50b: in the year fifty years on, the line runs by the timestamp,
+ *     not the year. `httpDate` reads the two digits by the year alone, so "Tuesday, 01-Feb-77
+ *     00:00:00 GMT", more than 50 years after now (15 Jan 2027), reads as 2077 and waits an hour,
+ *     where RFC 9110 reads 1977 and no wait. Run as a known bug below, not with the laws.
+ */
+const lineYear: Law = {
+	name: "in the year fifty years on, a two-digit year past the 50-year line reads as the past",
+	run: async (mod) => {
+		await fc.assert(
+			fc.property(arbParts, (p) => checkRfc850(mod, LINE_YY, p)),
+			{numRuns: 300, seed: 7},
 		);
 	},
 };
@@ -1983,15 +2457,19 @@ const LAWS: readonly Law[] = [
 	limitSilence,
 	limitCapped,
 	keptExactly,
+	waitEndsForAll,
+	junkIsNoHeader,
+	digitsWait,
+	datesWait,
+	pastNoWait,
+	twoDigitYear,
 ];
 
 /**
  * Laws that found a bug in the real code. Each is kept as written and run as a known failure, so the
  * suite stays green and the day the bug is fixed this list turns red: then the law moves to `LAWS`.
  */
-const BUGS: readonly (readonly [Law, RegExp])[] = [
-	[waitEndsForAll, /answered KeysUnreachable at its end/],
-];
+const BUGS: readonly (readonly [Law, RegExp])[] = [[lineYear, /waits 3600000 ms, want 0 ms/]];
 
 // ---------------------------------------------------------------- planted mistakes
 
@@ -2232,6 +2710,56 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			"Math.max(o.failMs ?? KEYS_FAIL_MS, 0)",
 			"Math.max(o.failMs || KEYS_FAIL_MS, 0)",
 		),
+
+	// Round 4.
+	// The wait's own refusal is kept `failMs`, like GitHub's: the bug 366c50b fixed.
+	waitKeptFailMs: () =>
+		plant(
+			"keys-github",
+			'Option.exists(Exit.findErrorOption(exit), (e) => e._tag === "Spent")',
+			"false",
+		),
+	// `retry-after` is read by `Date.parse`, as before 366c50b: "1.5" or "-5" reads as a date.
+	looseDate: () =>
+		plant(
+			"keys-github",
+			"(httpDate(after, now) ??",
+			'((after !== "" && !Number.isNaN(Date.parse(after)) ? Date.parse(after) : null) ??',
+		),
+	// `x-ratelimit-reset` is read as any number: "1.5", "-5" or "1e9".
+	looseReset: () =>
+		plant("keys-github", "/^[0-9]+$/.test(reset)", 'reset !== "" && !Number.isNaN(Number(reset))'),
+	// Spaces inside `retry-after` are dropped: "1 0" reads as 10 seconds.
+	spacesDropped: () =>
+		plant(
+			"keys-github",
+			'const after = headers["retry-after"]?.trim() ?? "";',
+			'const after = (headers["retry-after"]?.trim() ?? "").replace(/^([0-9]+)\\s+([0-9]+)$/, "$1$2");',
+		),
+	// Delay-seconds of more than ten digits are no number, as before 366c50b.
+	tenDigitsOnly: () =>
+		plant("keys-github", "/^[0-9]+$/.test(after)", "/^[0-9]{1,10}$/.test(after)"),
+	// Delay-seconds read as ms.
+	secondsAsMs: () => plant("keys-github", "now + Number(after) * 1000", "now + Number(after)"),
+	// A two-digit year is 19xx.
+	centuryYear: () =>
+		plant(
+			"keys-github",
+			"const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);",
+			"const year = 1900 + Number(yy);",
+		),
+	// The line drawn at sixty years, not fifty.
+	sixtyYears: () => plant("keys-github", "ahead > 50 ? ahead - 100", "ahead > 60 ? ahead - 100"),
+	// asctime dates are not read.
+	noAsctime: () =>
+		plant("keys-github", "const asc = ASCTIME.exec(s);", 'const asc = ASCTIME.exec("");'),
+	// A date in the past waits as long as it is ago.
+	pastWaits: () =>
+		plant(
+			"keys-github",
+			"Math.min(Math.max(at - now, 0), LIMIT_WAIT_MS)",
+			"Math.min(Math.abs(at - now), LIMIT_WAIT_MS)",
+		),
 };
 
 describe("the door's laws", () => {
@@ -2252,15 +2780,21 @@ describe("the door's laws", () => {
 		},
 	);
 
-	// The bug's law is right, not the bug: on a copy with one way of fixing it (the wait's own
-	// refusal is kept no time), it holds, and so does every other law.
+	// The bug's law is right, not the bug: on a copy with one way of fixing it (the line drawn by
+	// the timestamp, fifty years on from now), it holds, and so does every other law.
 	it("a known bug's law holds on a copy with that bug fixed", async () => {
 		const fixed = await plant(
 			"keys-github",
-			"Duration.millis(Exit.isSuccess(exit) ? ms : failMs),",
-			'JSON.stringify(exit).includes("rate limit is spent") ? Duration.zero : Duration.millis(Exit.isSuccess(exit) ? ms : failMs),',
+			"const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);\n\t\treturn utc(year, mon, Number(d), Number(h), Number(m), Number(sec));",
+			[
+				"const at = (year: number) => utc(year, mon, Number(d), Number(h), Number(m), Number(sec));",
+				"const line = new Date(now);",
+				"line.setUTCFullYear(thisYear + 50);",
+				"const t = at(thisYear + ahead);",
+				"return t !== null && t > line.getTime() ? at(thisYear + ahead - 100) : t;",
+			].join("\n"),
 		);
-		await waitEndsForAll.run(fixed);
+		await lineYear.run(fixed);
 		expect(await broken(fixed)).toEqual([]);
 	}, 60_000);
 
@@ -2312,12 +2846,28 @@ describe("the door's laws", () => {
 			failStopsOthers: [provenAsModel.name],
 			failIsNotProven: [keysUnreachable.name, otherIdIs502.name, provenAsModel.name],
 			firstIdOnly: [provenAsModel.name],
-			limitIgnored: [limitSilence.name],
-			limitByIdOnly: [limitSilence.name],
-			limitUncapped: [limitCapped.name],
+			limitIgnored: [limitSilence.name, waitEndsForAll.name],
+			limitByIdOnly: [limitSilence.name, waitEndsForAll.name],
+			limitUncapped: [limitCapped.name, digitsWait.name, datesWait.name, twoDigitYear.name],
 			failKeptAsAnswer: [keptExactly.name],
 			keptOneMsLong: [githubCache.name, keptExactly.name],
-			failZeroKept: [limitSilence.name, keptExactly.name],
+			failZeroKept: [limitSilence.name, keptExactly.name, junkIsNoHeader.name, pastNoWait.name],
+			waitKeptFailMs: [waitEndsForAll.name],
+			looseDate: [
+				junkIsNoHeader.name,
+				digitsWait.name,
+				datesWait.name,
+				pastNoWait.name,
+				twoDigitYear.name,
+			],
+			looseReset: [junkIsNoHeader.name],
+			spacesDropped: [junkIsNoHeader.name, digitsWait.name],
+			tenDigitsOnly: [digitsWait.name],
+			secondsAsMs: [limitSilence.name, waitEndsForAll.name, digitsWait.name],
+			centuryYear: [datesWait.name, twoDigitYear.name],
+			sixtyYears: [pastNoWait.name, twoDigitYear.name],
+			noAsctime: [datesWait.name, pastNoWait.name],
+			pastWaits: [pastNoWait.name, twoDigitYear.name],
 		});
 		// Every law is caught by at least one plant.
 		const all = new Set(Object.values(caught).flat());
