@@ -24,13 +24,26 @@
 // When GitHub says the calls are spent (a 403 or 429 with `retry-after`, or with
 // `x-ratelimit-remaining: 0` and `x-ratelimit-reset`), nothing is asked until the time it names,
 // at most an hour, and every question fails as unreachable till then. One wait for the whole Layer,
-// since the limit is one budget for every call.
+// since the limit is one budget for every call. That failure is not kept: at the wait's end every
+// question goes out again, even one asked a moment before it. The headers are read strictly (RFC
+// 9110): a `retry-after` such as "1.5" or "2027" is read as no header, not as a date.
 //
 // https://docs.github.com/en/rest/users/users#get-a-user-using-their-id
 // https://docs.github.com/en/rest/users/users#get-a-user
 // https://docs.github.com/en/rest/users/keys#list-public-keys-for-a-user
 // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-import {Cache, Clock, Duration, Effect, Exit, Layer, type Redacted, Ref, Schema} from "effect";
+import {
+	Cache,
+	Clock,
+	Duration,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	type Redacted,
+	Ref,
+	Schema,
+} from "effect";
 import {HttpClient, HttpClientRequest, HttpClientResponse} from "effect/http";
 import {Keys, KeysUnreachable, type Signers} from "./keys.ts";
 
@@ -41,11 +54,64 @@ export const KEYS_FAIL_MS = 30_000;
 /** The longest wait for a spent rate limit: GitHub's limit is counted by the hour. */
 export const LIMIT_WAIT_MS = 60 * 60_000;
 
+const MONTH = "(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)";
+const TIME = "([0-9]{2}):([0-9]{2}):([0-9]{2})";
+/** `Sun, 06 Nov 1994 08:49:37 GMT`: the form to send. Day, month, year, then the time. */
+const IMF = new RegExp(
+	`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), ([0-9]{2}) ${MONTH} ([0-9]{4}) ${TIME} GMT$`,
+);
+/** `Sunday, 06-Nov-94 08:49:37 GMT`: obsolete, with a two-digit year. */
+const RFC850 = new RegExp(
+	`^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), ([0-9]{2})-${MONTH}-([0-9]{2}) ${TIME} GMT$`,
+);
+/** `Sun Nov  6 08:49:37 1994`: obsolete, C's asctime. */
+const ASCTIME = new RegExp(
+	`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${MONTH} ( [1-9]|[0-9]{2}) ${TIME} ([0-9]{4})$`,
+);
+
+/** The time a real date and time names, in ms since 1970; null when there is no such time. */
+const utc = (year: number, month: string, day: number, h: number, m: number, s: number) => {
+	const mon = MONTH.slice(1, -1).split("|").indexOf(month);
+	const date = new Date(Date.UTC(year, mon, day));
+	// 31 Feb is no day; a second of 60 is a leap second.
+	if (date.getUTCFullYear() !== year || date.getUTCDate() !== day || h > 23 || m > 59 || s > 60)
+		return null;
+	return date.getTime() + ((h * 60 + m) * 60 + s) * 1000;
+};
+
+/**
+ * An HTTP-date, read as RFC 9110 section 5.6.7 says: the IMF-fixdate form, or one of the two
+ * obsolete ones. A two-digit year is the one with those digits nearest `now`, never more than 50
+ * years ahead. Null for anything else.
+ */
+export const httpDate = (s: string, now: number): number | null => {
+	const imf = IMF.exec(s);
+	if (imf !== null) {
+		const [, d, mon = "", y, h, m, sec] = imf;
+		return utc(Number(y), mon, Number(d), Number(h), Number(m), Number(sec));
+	}
+	const old = RFC850.exec(s);
+	if (old !== null) {
+		const [, d, mon = "", yy, h, m, sec] = old;
+		const thisYear = new Date(now).getUTCFullYear();
+		const ahead = (((Number(yy) - thisYear) % 100) + 100) % 100;
+		const year = thisYear + (ahead > 50 ? ahead - 100 : ahead);
+		return utc(year, mon, Number(d), Number(h), Number(m), Number(sec));
+	}
+	const asc = ASCTIME.exec(s);
+	if (asc !== null) {
+		const [, mon = "", d = "", h, m, sec, y] = asc;
+		return utc(Number(y), mon, Number(d.trim()), Number(h), Number(m), Number(sec));
+	}
+	return null;
+};
+
 /**
  * How long GitHub says to wait before the next call, from a refusal's headers, in ms from `now`;
- * null when it says nothing of a spent limit. `retry-after` first (seconds, or an HTTP date), then
- * `x-ratelimit-reset` (seconds since 1970) when `x-ratelimit-remaining` is 0. At most
- * `LIMIT_WAIT_MS`.
+ * null when it says nothing of a spent limit. `retry-after` first, as RFC 9110 section 10.2.3
+ * gives it: a number of seconds (digits only) or an HTTP-date. Then `x-ratelimit-reset` (seconds
+ * since 1970, digits only) when `x-ratelimit-remaining` is 0. A header in any other shape is read as
+ * no header. At most `LIMIT_WAIT_MS`.
  */
 export const limitWait = (
 	status: number,
@@ -55,13 +121,12 @@ export const limitWait = (
 	if (status !== 403 && status !== 429) return null;
 	const after = headers["retry-after"]?.trim() ?? "";
 	const reset = headers["x-ratelimit-reset"]?.trim() ?? "";
-	const at = /^[0-9]{1,10}$/.test(after)
+	const at = /^[0-9]+$/.test(after)
 		? now + Number(after) * 1000
-		: after !== "" && !Number.isNaN(Date.parse(after))
-			? Date.parse(after)
-			: headers["x-ratelimit-remaining"]?.trim() === "0" && /^[0-9]{1,12}$/.test(reset)
+		: (httpDate(after, now) ??
+			(headers["x-ratelimit-remaining"]?.trim() === "0" && /^[0-9]+$/.test(reset)
 				? Number(reset) * 1000
-				: null;
+				: null));
 	return at === null ? null : Math.min(Math.max(at - now, 0), LIMIT_WAIT_MS);
 };
 
@@ -93,6 +158,27 @@ export interface GitHubOptions {
 	readonly token?: Redacted.Redacted<string>;
 }
 
+/**
+ * GitHub was not asked about `path`: its limit is spent until `until`. Only inside this Layer, so
+ * the cache can tell it from GitHub's own refusal; a question that leaves gets `KeysUnreachable`.
+ */
+class Spent extends Schema.TaggedError<Spent>()("Spent", {
+	until: Schema.Number,
+	path: Schema.String,
+}) {}
+
+/** A question's answer as `Keys` gives it: the wait's refusal reads as unreachable. */
+const outward = <A>(
+	ask: Effect.Effect<A, KeysUnreachable | Spent>,
+): Effect.Effect<A, KeysUnreachable> =>
+	Effect.catchTag(ask, "Spent", ({until, path}) =>
+		Effect.fail(
+			new KeysUnreachable({
+				why: `GitHub's rate limit is spent until ${new Date(until).toISOString()}; not asked for ${path}`,
+			}),
+		),
+	);
+
 const User = Schema.Struct({id: Schema.Int, login: Schema.String});
 const KeyList = Schema.Array(Schema.Struct({key: Schema.String}));
 
@@ -122,13 +208,10 @@ export const layerGitHub = (
 			const get = <A>(
 				path: string,
 				schema: Schema.Codec<A, unknown>,
-			): Effect.Effect<A | null, KeysUnreachable> =>
+			): Effect.Effect<A | null, KeysUnreachable | Spent> =>
 				Effect.gen(function* () {
 					const until = yield* Ref.get(waitUntil);
-					if ((yield* Clock.currentTimeMillis) < until)
-						return yield* new KeysUnreachable({
-							why: `GitHub's rate limit is spent until ${new Date(until).toISOString()}; not asked for ${path}`,
-						});
+					if ((yield* Clock.currentTimeMillis) < until) return yield* new Spent({until, path});
 					let res = yield* send(path, o.token);
 					if (res.status === 401 && o.token !== undefined) {
 						yield* Effect.logWarning(TOKEN_REFUSED);
@@ -152,14 +235,14 @@ export const layerGitHub = (
 					return yield* HttpClientResponse.schemaBodyJson(schema)(res);
 				}).pipe(
 					Effect.mapError((e) =>
-						e instanceof KeysUnreachable
+						e instanceof KeysUnreachable || e instanceof Spent
 							? e
 							: new KeysUnreachable({why: `GitHub, for ${path}: ${e.message}`}),
 					),
 				);
 			const keysOf = (login: string) => get(`/users/${encodeURIComponent(login)}/keys`, KeyList);
 
-			const of = (login: string): Effect.Effect<Signers | null, KeysUnreachable> => {
+			const of = (login: string): Effect.Effect<Signers | null, KeysUnreachable | Spent> => {
 				// Not a login: nobody, and GitHub is not asked.
 				if (!isLogin(login)) return Effect.succeed(null);
 				return Effect.all([get(`/users/${encodeURIComponent(login)}`, User), keysOf(login)], {
@@ -173,7 +256,7 @@ export const layerGitHub = (
 				);
 			};
 
-			const byId = (id: string): Effect.Effect<Signers | null, KeysUnreachable> => {
+			const byId = (id: string): Effect.Effect<Signers | null, KeysUnreachable | Spent> => {
 				// Not GitHub's id: nobody, and GitHub is not asked.
 				const n = numberOf(id);
 				if (n === null) return Effect.succeed(null);
@@ -194,18 +277,23 @@ export const layerGitHub = (
 
 			const ms = Math.max(o.cacheMs ?? KEYS_CACHE_MS, 0);
 			const failMs = Math.max(o.failMs ?? KEYS_FAIL_MS, 0);
-			if (ms === 0 && failMs === 0) return Keys.of({byId, of});
-			// A time to live by how the question ended: zero keeps nothing.
+			if (ms === 0 && failMs === 0)
+				return Keys.of({byId: (id) => outward(byId(id)), of: (name) => outward(of(name))});
+			// A time to live by how the question ended: zero keeps nothing. GitHub's own refusal is kept
+			// `failMs`. The wait's is kept no time: asking again during the wait costs no call, and at
+			// its end the question goes out.
 			const keep = {
 				capacity: 256,
-				timeToLive: (exit: Exit.Exit<Signers | null, KeysUnreachable>) =>
-					Duration.millis(Exit.isSuccess(exit) ? ms : failMs),
+				timeToLive: (exit: Exit.Exit<Signers | null, KeysUnreachable | Spent>) =>
+					Option.exists(Exit.findErrorOption(exit), (e) => e._tag === "Spent")
+						? Duration.zero
+						: Duration.millis(Exit.isSuccess(exit) ? ms : failMs),
 			};
 			const ids = yield* Cache.makeWith(byId, keep);
 			const names = yield* Cache.makeWith(of, keep);
 			return Keys.of({
-				byId: (id) => Cache.get(ids, id),
-				of: (name) => Cache.get(names, name),
+				byId: (id) => outward(Cache.get(ids, id)),
+				of: (name) => outward(Cache.get(names, name)),
 			});
 		}),
 	);
