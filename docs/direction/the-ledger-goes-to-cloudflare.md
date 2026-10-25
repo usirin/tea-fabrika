@@ -17,6 +17,13 @@ the one place a person's keys live: they remove an old key there, and every
 ledger follows at the next login. So the ledger reads the keys again at each
 login, and its sessions are short. See section 1.
 
+**Decided 2026-10-25: the laptop's own ledger stays the default.** A project
+keeps its work on the laptop until its person connects it to a shared ledger,
+the way a git repository has no remote until `git remote add`. Connecting is
+per project: one project can be shared while another stays on the laptop for
+solo hacking, and nothing needs a network or a login until a project is
+connected. See section 3.
+
 **Everything else below is proposed.** Nothing is built or deployed yet.
 
 ```text
@@ -273,8 +280,13 @@ path. A law test that walks every way a write leaves the host would settle it.
 
 ## 3. What syncs and what stays on each laptop
 
+A project that is not connected keeps everything below on the laptop's ledger,
+as today. The table and the mounts apply only to a connected project: its
+shared work goes to the remote ledger, and the screen stays local.
+
 ```ts
-// A sketch. One Ledger service for the host; names pick where a row lives, as mounts do on Unix.
+// A sketch, for a connected project. A project never connected mounts everything local.
+// One Ledger service for the host; names pick where a row lives, as mounts do on Unix.
 const ledger = mounts({
 	"tracker/": remote, // shared: tickets, comments, asks and answers, agents' talk on a ticket
 	"pipeline/": remote, // shared: lanes, claims, stage facts, inboxes
