@@ -124,8 +124,14 @@ us.
 
 ## Still open
 
-- **TLA+.** How it writes a check when a Property's `tool` is `"tla"`, and who
-  picks the tool. Waits on experiment 139.
+- **TLA+, for a design with no code yet.** How it writes a spec when a
+  Property's `tool` is `"tla"`, and how that spec shows it can fail (a
+  planted break, step 3 of [five steps](./five-steps-for-every-check.md)).
+  Decided 2026-10-25 from
+  [experiment 139](../../experiments/139-tla-trace-validation.md): the
+  planner picks the tool; no TLA+ for code that exists; a Property about
+  machines working together is a property test on the running host, as in
+  experiment 116.
 - **Where red and green live:** in the criteria book, or only in the lane.
   The mutation step's walk reads them and settles it.
 - **A fixture outside `includes`.** Whether some tests need one the default

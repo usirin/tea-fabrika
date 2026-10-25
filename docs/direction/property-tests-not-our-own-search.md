@@ -172,9 +172,10 @@ mutants.
 - **What it costs:** fabrika's own machines stay less tested for a while.
 - **How sure: 80%.** Experiment 122 is the first test of the verify step.
 
-## Proposed: a TLA+ spec that outlives its design is checked against real runs (2026-10-24)
+## Decided: a TLA+ spec that outlives its design is checked against real runs (2026-10-25)
 
-**Proposed**, from [experiment 139](../../experiments/139-tla-trace-validation.md).
+**Decided** 2026-10-25, from [experiment 139](../../experiments/139-tla-trace-validation.md).
+Proposed 2026-10-24.
 
 ```ts
 // A sketch. A spec kept after its code exists is checked against real runs of that code.
@@ -196,6 +197,9 @@ const c = yield* checkTraces(jar, {against: "v2", n: 8, fixed: true}, [steps]);
 - **Not adopted: tests made from a spec's paths, or a trace check as a
   ticket's gate.** On the hosted lane they caught nothing the repo's own
   tests missed (below).
+- **The mutation step's grader stays StrykerJS with the repo's own tests,**
+  with no spec arm. The spec arms took 4 and 9 times the tests' time a
+  mutant.
 
 **Why:**
 

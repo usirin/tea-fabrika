@@ -1,7 +1,8 @@
 # The plan stage
 
-Decided 2026-10-24. Who picks a property's tool is still open: it waits on
-experiment 139. Nothing here is built yet.
+Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from
+experiment 139: the planner, with `"tla"` only for a design with no code yet.
+Nothing here is built yet.
 
 ```ts
 // A sketch: one plan in the names picked 2026-10-24, with the ids the fold gives.
@@ -123,8 +124,26 @@ criterion for `serves`:
   steps and 118 states, in about 1 second. That write-up still said "do not
   adopt TLA+ now": its spec was a hand copy, and it is worth it only with trace
   validation.
-- **Who picks `tool` is open.** Experiment 139, still running, tries TLA+ trace
-  validation and tests made from a spec. Its answer may move the pick.
+- **The planner picks `tool`** (decided 2026-10-25, from
+  [experiment 139](../../experiments/139-tla-trace-validation.md)).
+  `"tla"` is only for a design with no code yet, about the order things
+  happen in between actors or about "it ends". Everything else is `"test"`.
+  A Property that names code that exists and says `"tla"` is sent back to the
+  planner by a Check.
+
+  ```ts
+  type Tool = "test" | "tla";
+  const toolFor = (p: {code: "exists" | "none"; about: "order" | "end" | "value"}): Tool =>
+  	p.code === "none" && p.about !== "value" ? "tla" : "test";
+  ```
+
+  - Why: TLC found the lane's hang from 116's design alone. On code that
+    exists, 139's two spec checks caught none of 46 planted bugs that the
+    repo's tests missed, at 4 and 9 times the time.
+  - Once the design's code lands, the Property is checked by `"test"`. A spec
+    is kept after that only with the drift job
+    ([scheduled jobs](./scheduled-jobs-on-the-host.md)); otherwise it is a
+    record.
 
 ### 3. A Criterion's `serves` becomes `stories` too
 
@@ -243,8 +262,9 @@ const covers = (yes: Approved, now: Ticket) => yes.text === sha256(JSON.stringif
 That note is still proposed. These parts of it no longer hold:
 
 - **"A promise" is now a Property,** with the keys in decision 2.
-- **`tool` is not "picked by code from the promise's kind".** Who picks it is
-  open (experiment 139).
+- **`tool` is not "picked by code from the promise's kind".** The planner
+  picks it, and a Check sends back `"tla"` on code that exists (experiment
+  139).
 - **`"proof"` and `"property"` are gone as tool words.** The words are
   `"test"` and `"tla"`.
 - **"New or kept" is now `new` or `existing`.**
@@ -307,9 +327,8 @@ something runs proofs.
 
 About 80% that the split and the shapes hold once built. The doubts:
 
-- **The tool pick.** Until experiment 139 reports, a plan can say `"tla"` with
-  no rule for when. What would settle it: 139's results on whether a spec can
-  be tied to the code.
+- **The tool pick.** 139 tried one small machine. A machine with more state,
+  where a spec catches what its tests miss, would move the rule.
 - **The chore fixture.** One ticket in six (#490) did not fit a fixture well.
   What would settle it: a run of the plan stage on a handful of chores.
 - **`typecheck` and `run` have no place.** 86b had one `run` check (#367, "pnpm
@@ -318,7 +337,6 @@ About 80% that the split and the shapes hold once built. The doubts:
 
 ## Still open
 
-- Who picks a property's `tool` (experiment 139).
 - Whether a property's lasting id after close is its record's name in
   `promises/`.
 - Where a task lists its other properties and criteria (the sketch's
@@ -364,7 +382,7 @@ Nothing here is built. These parts of the code contradict a decision:
 - **Nothing is built.** The shapes are sketches. A field may move when the
   code is written.
 - **The evidence is small.** Experiment 86b is 6 tickets on one repository.
-- **Experiment 139 has not reported.** Its result may change who picks the
-  tool, or whether `"tla"` is worth keeping.
+- **Experiment 139 is one machine.** Its rule for `"tla"` rests on the hosted
+  lane and 46 planted bugs.
 - **Whether properties written by a planner are good tests.** No run has yet
   had a planner write properties and a tool check them on real code.

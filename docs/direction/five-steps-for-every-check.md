@@ -32,7 +32,9 @@ Every formal check in this repo follows five steps.
    - Parts working together, such as a stage and the host: a property test on
      the real code, with Effect's `Arbitrary`, as in experiment 116.
    - A design with no code yet: TLA+. Once the code exists, the check moves to
-     the code.
+     the code. A spec kept after that is checked against real runs in the
+     drift job, and only advises (decided 2026-10-25,
+     [experiment 139](../../experiments/139-tla-trace-validation.md)).
    - A promise that must hold at any size, where a bound is not enough: a
      proof.
 3. **Show the check can fail.** Each check has a planted break it must catch,
@@ -71,4 +73,6 @@ Every formal check in this repo follows five steps.
 ## What would change it
 
 - A bug that property tests on the real code keep missing and TLA+ catches.
+  *2026-10-25: experiment 139 looked for one on the hosted lane and found
+  none in 46 planted bugs.*
 - Records that cost more to keep up than the stale checks they catch.

@@ -51,7 +51,7 @@ Jobs this could run, each a guess until it is tried:
 | job | reads | files a ticket when |
 |---|---|---|
 | PR watcher | GitHub, each open pull request | never: it writes `pr` facts ([tracker](./tickets-start-in-our-tracker.md)) |
-| TLA+ drift | each spec and recorded runs of its code | real runs no longer fit the spec (experiment 139) |
+| TLA+ drift | each spec and recorded runs of its code | real runs no longer fit the spec. Decided 2026-10-25: a kept spec is checked here, advise only (experiment 139: 0 false alarms in 600 right runs) |
 | docs drift | doc lines tickets added | a line no longer holds on main (experiment 134) |
 | mutation sweep | a sample of code no ticket touched lately | a mutant survives every test |
 | stale lane | the ledger | a lane has waited on an ask too long |
@@ -73,8 +73,9 @@ Jobs this could run, each a guess until it is tried:
 - Each job needs its false alarms measured before it files anything.
 
 **How sure: 70%.** The doubts: whether a laptop's host is up often enough for
-a daily job, and how noisy each job is. The PR watcher running for a week,
-and experiment 139 for TLA+ drift, would settle the first two.
+a daily job, and how noisy each job is. The PR watcher running for a week
+would settle the first. For TLA+ drift, experiment 139 raised no false alarm
+on 600 runs, but of stand-in children; a week on real lanes would settle it.
 
 ## Still open
 
