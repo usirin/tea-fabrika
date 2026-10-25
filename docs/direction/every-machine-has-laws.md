@@ -25,6 +25,21 @@ that tries every order is an experiment, fenced so nothing new imports it. See
 tea's strict table, one generator per Msg type, makes a type that is never
 generated a compile error.*
 
+*2026-10-25: the rule held only where the suite looked. Its scan,
+`packages/pipeline/src/laws/standard.test.ts`, reads `packages/pipeline` and
+the agents, so six machines in the app, the programs and tsh slipped past:
+the desk, the editor, the tracker, the counter, tsh's jobs and its small
+machine. Only the desk has property tests, and they are not registered.
+Lane 1 of the app changed tsh's jobs machine and added no law. The fix is a
+wider scan, not a reminder. A first try at it was wrong: Lane 2 was told to
+write the laws for the machines it changes, which breaks
+[Nobody writes their own exam](./nobody-writes-their-own-exam.md). It was
+stopped before it wrote any. The laws for every app machine come in a pull
+request of their own, from an agent that did not write the code, and the
+owner reads them. Also decided: this repo's main branch stays
+without protection for now. It is the lab, and which checks block a merge in
+kamp-us/fabrika, and which only advise, is tried here first.*
+
 ## What was decided
 
 - **Every machine has laws:** short rules that must always hold ("a merge is
