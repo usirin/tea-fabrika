@@ -1,18 +1,30 @@
 // `Keys` from GitHub: a name is a GitHub login, its keys are the ones GitHub lists for it
-// (`GET /users/{login}/keys`), and its id is GitHub's numeric user id (`GET /users/{login}`), as
-// `github:<n>`. The numeric id is kept, not the login: a login can be renamed, and then given to
-// someone else, and the ledger must not take the new owner for the old.
+// (`GET /users/{login}/keys`), and its id is GitHub's numeric user id, as `github:<n>`. The numeric
+// id is kept, not the login: a login can be renamed, and then given to someone else, and the
+// ledger must not take the new owner for the old.
 //
-//   layerGitHub()                    {id: "github:7", keys: [...]} for "alice"; null for no such login
-//   layerGitHub({cacheMs: 0})        asks GitHub every time
+//   byId("github:7")   GET /user/7 (the login it has now), then GET /users/{that login}/keys
+//   of("alice")        GET /users/alice and GET /users/alice/keys, together
 //
-// No token: both calls are public. GitHub allows 60 of them an hour from one address without one,
-// so answers are kept for `cacheMs` (`KEYS_CACHE_MS`, 5 minutes, by default). A key taken off on
+//   layerGitHub()                              no token: 60 calls an hour from one address
+//   layerGitHub({token: Redacted.make(t)})     its own budget: 5,000 calls an hour
+//   layerGitHub({cacheMs: 0})                  asks GitHub every time
+//
+// Each question costs two calls. Without a token, GitHub's limit counts calls by address, and a
+// Worker's outgoing address is shared with other sites, so the budget may be spent before the
+// ledger asks. With a token the ledger has its own. The token is only ever sent as
+// `authorization: Bearer ...`, and never logged or put in an error. A call GitHub refuses the token
+// on (401: it expired, or was taken back) is asked once more without it, with a warning in the log, so a dead
+// token slows sign-in down to the shared limit instead of stopping it.
+//
+// Answers are kept for `cacheMs` (`KEYS_CACHE_MS`, 5 minutes, by default). A key taken off on
 // GitHub still signs in until the copy here is that old. A failed call is never kept.
 //
+// https://docs.github.com/en/rest/users/users#get-a-user-using-their-id
 // https://docs.github.com/en/rest/users/users#get-a-user
 // https://docs.github.com/en/rest/users/keys#list-public-keys-for-a-user
-import {Cache, Duration, Effect, Exit, Layer, Schema} from "effect";
+// https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+import {Cache, Duration, Effect, Exit, Layer, type Redacted, Schema} from "effect";
 import {HttpClient, HttpClientRequest, HttpClientResponse} from "effect/http";
 import {Keys, KeysUnreachable, type Signers} from "./keys.ts";
 
@@ -26,9 +38,23 @@ export const isLogin = (s: unknown): s is string =>
 /** A person's id from GitHub: their numeric user id, which a rename does not change. */
 export const githubId = (n: number): string => `github:${n}`;
 
+/** The number in a GitHub id (`github:7` is 7); null for any other id. */
+export const numberOf = (id: string): number | null => {
+	const n = /^github:([1-9][0-9]{0,15})$/.exec(id)?.[1];
+	return n === undefined || !Number.isSafeInteger(Number(n)) ? null : Number(n);
+};
+
+/** What the log says when GitHub refuses the token. It never holds the token. */
+export const TOKEN_REFUSED = "the GitHub token was refused; asking without it";
+
 export interface GitHubOptions {
 	/** How long an answer is kept, in ms. Default `KEYS_CACHE_MS`; 0 asks every time. */
 	readonly cacheMs?: number;
+	/**
+	 * A token for GitHub's API, for a budget of its own (5,000 calls an hour). It needs no
+	 * permission: a fine-grained token with public read only. Left out: no `authorization` header.
+	 */
+	readonly token?: Redacted.Redacted<string>;
 }
 
 const User = Schema.Struct({id: Schema.Int, login: Schema.String});
@@ -49,16 +75,34 @@ export const layerGitHub = (
 					}),
 				),
 			);
+			/** One GET, with the token when there is one. */
+			const send = (path: string, token: Redacted.Redacted<string> | undefined) => {
+				const req = HttpClientRequest.get(`https://api.github.com${path}`);
+				return http.execute(token === undefined ? req : HttpClientRequest.bearerToken(req, token));
+			};
 			/** One GET, read with `schema`; null on a 404. */
 			const get = <A>(
 				path: string,
 				schema: Schema.Codec<A, unknown>,
 			): Effect.Effect<A | null, KeysUnreachable> =>
 				Effect.gen(function* () {
-					const res = yield* http.get(`https://api.github.com${path}`);
+					let res = yield* send(path, o.token);
+					if (res.status === 401 && o.token !== undefined) {
+						yield* Effect.logWarning(TOKEN_REFUSED);
+						res = yield* send(path, undefined);
+					}
 					if (res.status === 404) return null;
-					if (res.status < 200 || res.status >= 300)
-						return yield* new KeysUnreachable({why: `GitHub answered ${res.status} for ${path}`});
+					if (res.status < 200 || res.status >= 300) {
+						// A limit hit reads as a limit, not as GitHub being down.
+						const left = res.headers["x-ratelimit-remaining"];
+						const limit =
+							(res.status === 403 || res.status === 429) && left !== undefined
+								? ` (rate limit: ${left} calls left)`
+								: "";
+						return yield* new KeysUnreachable({
+							why: `GitHub answered ${res.status} for ${path}${limit}`,
+						});
+					}
 					return yield* HttpClientResponse.schemaBodyJson(schema)(res);
 				}).pipe(
 					Effect.mapError((e) =>
@@ -67,22 +111,53 @@ export const layerGitHub = (
 							: new KeysUnreachable({why: `GitHub, for ${path}: ${e.message}`}),
 					),
 				);
-			const ask = (login: string): Effect.Effect<Signers | null, KeysUnreachable> => {
+			const keysOf = (login: string) => get(`/users/${encodeURIComponent(login)}/keys`, KeyList);
+
+			const of = (login: string): Effect.Effect<Signers | null, KeysUnreachable> => {
 				// Not a login: nobody, and GitHub is not asked.
 				if (!isLogin(login)) return Effect.succeed(null);
-				const at = `/users/${encodeURIComponent(login)}`;
-				return Effect.all([get(at, User), get(`${at}/keys`, KeyList)], {concurrency: 2}).pipe(
+				return Effect.all([get(`/users/${encodeURIComponent(login)}`, User), keysOf(login)], {
+					concurrency: 2,
+				}).pipe(
 					Effect.map(([user, keys]) =>
-						user === null ? null : {id: githubId(user.id), keys: (keys ?? []).map((k) => k.key)},
+						user === null
+							? null
+							: {id: githubId(user.id), name: user.login, keys: (keys ?? []).map((k) => k.key)},
 					),
 				);
 			};
+
+			const byId = (id: string): Effect.Effect<Signers | null, KeysUnreachable> => {
+				// Not GitHub's id: nobody, and GitHub is not asked.
+				const n = numberOf(id);
+				if (n === null) return Effect.succeed(null);
+				return get(`/user/${n}`, User).pipe(
+					Effect.flatMap((user) => {
+						if (user === null) return Effect.succeed(null);
+						if (user.id !== n || !isLogin(user.login))
+							return Effect.fail(new KeysUnreachable({why: `GitHub gave another user for ${id}`}));
+						// Renamed between the two calls: nobody by that login now. The next ask finds them.
+						return keysOf(user.login).pipe(
+							Effect.map((keys) =>
+								keys === null ? null : {id, name: user.login, keys: keys.map((k) => k.key)},
+							),
+						);
+					}),
+				);
+			};
+
 			const ms = o.cacheMs ?? KEYS_CACHE_MS;
-			if (ms <= 0) return Keys.of({of: ask});
-			const cache = yield* Cache.makeWith(ask, {
+			if (ms <= 0) return Keys.of({byId, of});
+			const keep = {
 				capacity: 256,
-				timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero),
+				timeToLive: (exit: Exit.Exit<Signers | null, KeysUnreachable>) =>
+					Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero,
+			};
+			const ids = yield* Cache.makeWith(byId, keep);
+			const names = yield* Cache.makeWith(of, keep);
+			return Keys.of({
+				byId: (id) => Cache.get(ids, id),
+				of: (name) => Cache.get(names, name),
 			});
-			return Keys.of({of: (name) => Cache.get(cache, name)});
 		}),
 	);

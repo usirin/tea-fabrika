@@ -1,10 +1,18 @@
-// Where a person's keys come from: the one question the door asks about a person. The door never
+// Where a person's keys come from: the two questions the door asks about a person. The door never
 // calls GitHub, or anything else, itself. It asks `Keys`, and a Layer answers.
 //
-//   const who = yield* (yield* Keys).of("alice")
-//   // {id: "github:7", keys: ["ssh-ed25519 AAAA..."]}   who goes by "alice", and what may sign for them
-//   // null                                              nobody goes by "alice"
-//   // KeysUnreachable                                   the answer could not be had: try again later
+//   const k = yield* Keys
+//   yield* k.byId("github:7")
+//   // {id: "github:7", name: "alice", keys: ["ssh-ed25519 AAAA..."]}   who has that id, by the
+//   //                                                                   name they go by now
+//   // null                                                             nobody has it
+//   // KeysUnreachable                                                  could not be had: try later
+//   yield* k.of("alice")   // the same answer, for whoever goes by "alice" now
+//
+// The door signs a person in with `byId`: it finds the typed name among the people this ledger
+// already knows, and asks only about their ids. A name this ledger does not know is never asked
+// about. `of` is for an invite, the one step that brings a new person in: it binds a name to an
+// id once, and from then on the ledger goes by the id.
 //
 // Two answers to it, the first built:
 //
@@ -18,10 +26,12 @@
 // starts its ids with its own name (`github:<n>`).
 import {Context, Effect, Layer, Schema} from "effect";
 
-/** Who goes by a name, as a keys service knows them: their id, and the keys that may sign for them. */
+/** A person as a keys service knows them: their id, the name they go by now, and their keys. */
 export const Signers = Schema.Struct({
 	/** Never changes while the person is the same, and names its service first: `github:7`. */
 	id: Schema.String,
+	/** The name they go by at the service now (on GitHub, their login). It may change. */
+	name: Schema.String,
 	/** Public keys as key lines (`ssh-ed25519 AAAA...`). Any one of them may sign for the person. */
 	keys: Schema.Array(Schema.String),
 });
@@ -35,13 +45,15 @@ export class KeysUnreachable extends Schema.TaggedError<KeysUnreachable>()("Keys
 export class Keys extends Context.Service<
 	Keys,
 	{
-		/** Who goes by `name`, and the keys that may sign for them; null: nobody does. */
+		/** Who has the id `id`, and the keys that may sign for them; null: nobody does. */
+		readonly byId: (id: string) => Effect.Effect<Signers | null, KeysUnreachable>;
+		/** Who goes by `name` now, and the keys that may sign for them; null: nobody does. */
 		readonly of: (name: string) => Effect.Effect<Signers | null, KeysUnreachable>;
 	}
 >()("@kampus/fabrika/Keys") {}
 
-/** Nobody goes by any name: for a door that asks nobody's keys (a local one, or a closed one). */
+/** Nobody has any id or name: for a door that asks nobody's keys (a local one, or a closed one). */
 export const layerNobody: Layer.Layer<Keys> = Layer.succeed(
 	Keys,
-	Keys.of({of: () => Effect.succeed(null)}),
+	Keys.of({byId: () => Effect.succeed(null), of: () => Effect.succeed(null)}),
 );

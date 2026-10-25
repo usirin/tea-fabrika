@@ -11,16 +11,24 @@
 //
 //   founded {id, name}   the ledger's founder, named by its config (`FOUNDER`), on first login
 //   invited {id, name}   a member invites a name; the invite keeps the id the keys service gives
-//   joined  {id, name}   that person's first login: the id must match, not only the name
+//   joined  {id, name}   that person's first login, by the invite's id
 //   removed {id}         a member takes a member (or an invite) off; their sessions end
 //
+// Access starts from an invitation. A person signs in by the name this ledger knows them by: the
+// door finds that name among its own members and open invites, and asks the keys service only
+// about those ids (`Keys.byId`). Before the first login the founder is known by id only, from
+// config, and goes by the name the keys service gives for that id. Any other name is refused
+// without asking anyone, with the same answer as a signature that does not match, so a refusal
+// does not tell who is a member. Only a signed-in member's invite asks about a new name
+// (`Keys.of`), once: from then on the ledger goes by the id, so a rename at the keys service
+// locks nobody out.
+//
 // How a person proves who they are: an SSH signature (`sshsig.ts`) over a challenge this ledger
-// gave out, by a key the keys service lists for the name they log in with. The door asks one
-// service, `Keys` (`keys.ts`), who goes by a name and which keys may sign for them, and never
-// asks GitHub, or anything else, itself. Today's answer is GitHub's (`keys-github.ts`): a name is
-// a login, the id is `github:<GitHub's numeric id>`. An agent holds its own key, and a grant its
-// person's key signed: it names the agent, its key, this ledger and an end. A grant makes an
-// agent's session, never a person's.
+// gave out, by a key the keys service lists for them. The door asks one service, `Keys`
+// (`keys.ts`), and never asks GitHub, or anything else, itself. Today's answer is GitHub's
+// (`keys-github.ts`): a name is a login, the id is `github:<GitHub's numeric id>`. An agent holds
+// its own key, and a grant its person's key signed: it names the agent, its key, this ledger and
+// an end. A grant makes an agent's session, never a person's.
 //
 // Two doors, by config:
 //
@@ -37,7 +45,7 @@
 // workerd runs this file in the ledger's Worker, bundled with the rest of it (worker-options.ts).
 // Node runs the same file in the tests, on node:sqlite.
 import {Effect, type ManagedRuntime, Option, Schema} from "effect";
-import {Keys, type Signers} from "./keys.ts";
+import {Keys, type KeysUnreachable, type Signers} from "./keys.ts";
 import type {Db, Event, SqlRow, Written} from "./rules.ts";
 import {readStream, writeUnguarded} from "./rules.ts";
 import {keyOnly, verify} from "./sshsig.ts";
@@ -264,8 +272,26 @@ export const membersOf = (rows: readonly SqlRow[]): Members => {
 	return {founded, members, invited};
 };
 
-/** A person the keys service knows: their id, and the name they were asked for by. */
+/**
+ * Who this ledger knows by `name`: its members and open invites who went by it when they came,
+ * in any case (on GitHub a login is one name in any case). Only these are asked about at a login.
+ * The name only finds them; the signature proves which, if any, is the one signing.
+ */
+export const knownBy = (m: Members, name: string): Known[] => {
+	const n = name.toLowerCase();
+	return [...m.members, ...m.invited]
+		.filter(([, was]) => was.toLowerCase() === n)
+		.map(([id, was]) => ({id, name: was}));
+};
+
+/** A person this ledger knows: their id, and the name it knows them by. */
 export type Known = {readonly id: string; readonly name: string};
+
+/**
+ * The one refusal for a login by a name this ledger does not know, and by a key not listed for the
+ * person it knows by that name: the answer does not tell who is a member.
+ */
+export const NOT_PROVEN = "not signed by a key of anyone this ledger knows by that name";
 
 // ---------------------------------------------------------------- texts that get signed
 
@@ -488,36 +514,56 @@ export class Door {
 	}
 
 	/**
-	 * Who goes by `name`, as the keys service answers: their id and the keys that may sign for them,
-	 * or null for nobody. The service's id is checked here, as config's is: it ends up in every
-	 * writer and holder.
+	 * One question to the keys service, as a refusal or an answer. Its answer's id is checked here,
+	 * as config's is: it ends up in every writer and holder.
 	 */
-	#ask(name: string): Promise<Let<Signers | null>> {
+	#ask(
+		about: string,
+		q: (k: Keys["Service"]) => Effect.Effect<Signers | null, KeysUnreachable>,
+		ok: (s: Signers) => boolean,
+	): Promise<Let<Signers | null>> {
 		return this.#keys.runPromise(
-			Keys.use((k) => k.of(name)).pipe(
+			Keys.use(q).pipe(
 				Effect.map(
 					(s): Let<Signers | null> =>
-						s === null || isPersonId(s.id)
+						s === null || (isPersonId(s.id) && ok(s))
 							? letIn(s)
-							: refuse(502, "the keys service gave an id that is no person's"),
+							: refuse(502, "the keys service gave an id that is no person's, or another's"),
 				),
 				Effect.catchTag("KeysUnreachable", (e) =>
-					Effect.succeed(refuse(502, `could not ask for the keys of ${name}: ${e.why}`)),
+					Effect.succeed(refuse(502, `could not ask for the keys of ${about}: ${e.why}`)),
 				),
 			),
 		);
 	}
 
-	/** Who goes by `name`, if `signature` over `text` is by a key the keys service lists for them. */
+	/**
+	 * Who this ledger knows by `name`, if `signature` over `text` is by a key the keys service lists
+	 * for them. Asks the keys service about those people only, by id: a name it does not know asks
+	 * nothing. Before the first login that is the founder, by the name the service gives them now.
+	 */
 	async #proven(name: unknown, text: string, signature: unknown): Promise<Let<Known>> {
 		if (!isName(name)) return refuse(400, "not a name");
 		if (typeof signature !== "string") return refuse(400, "no signature");
-		const asked = await this.#ask(name);
-		if (!asked.ok) return asked;
-		if (asked.value === null) return refuse(401, `nobody goes by ${name}`);
-		if ((await verify(signature, text, NAMESPACE, asked.value.keys)) === null)
-			return refuse(401, `not signed by a key listed for ${name}`);
-		return letIn({id: asked.value.id, name});
+		const c = this.#config;
+		const m = this.members();
+		const known = knownBy(m, name);
+		const founder = c.kind === "shared" && !m.founded ? c.founder : null;
+		const ids = [...known.map((k) => k.id), ...(founder === null ? [] : [founder])];
+		for (const id of new Set(ids)) {
+			const asked = await this.#ask(
+				id,
+				(k) => k.byId(id),
+				(s) => s.id === id,
+			);
+			if (!asked.ok) return asked;
+			const s = asked.value;
+			if (s === null) continue;
+			const as = known.find((k) => k.id === id)?.name ?? s.name;
+			if (as.toLowerCase() !== name.toLowerCase()) continue;
+			if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});
+		}
+		return refuse(401, NOT_PROVEN);
 	}
 
 	/** A person's login: a challenge, signed with a key the keys service lists for them. */
@@ -538,7 +584,8 @@ export class Door {
 		if (!m.members.has(id)) {
 			if (!m.founded && id === founder) this.#fact(me, "founded", {id, name});
 			else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});
-			else return refuse(403, `${name} is not invited to this ledger`);
+			// Taken off while they signed: as if this ledger never knew them.
+			else return refuse(401, NOT_PROVEN);
 		}
 		const a = this.#session("person", id, null, this.#now() + sessionMs);
 		await this.#store(a, "person");
@@ -586,20 +633,27 @@ export class Door {
 	}
 
 	/**
-	 * A member invites a name. The invite keeps the id the keys service gives for it now, so the
-	 * person who joins is that one, whatever name they go by then.
+	 * A member invites a name: the one step that asks the keys service about a name this ledger
+	 * does not know yet. The invite keeps the id and the name the service gives for it now, so the
+	 * person who joins is that one, and signs in by that name, whatever they go by there later.
 	 */
 	async invite(by: Stamp, name: unknown): Promise<Let<Known>> {
 		if (by.kind !== "user") return refuse(403, "only a person invites");
 		if (this.#config.kind !== "shared") return refuse(404, "a local ledger has one person");
 		if (!isName(name)) return refuse(400, "not a name");
-		const asked = await this.#ask(name);
+		const asked = await this.#ask(
+			name,
+			(k) => k.of(name),
+			(s) => isName(s.name),
+		);
 		if (!asked.ok) return asked;
 		if (asked.value === null) return refuse(404, `nobody goes by ${name}`);
 		const {id} = asked.value;
 		const m = this.members();
-		if (!m.members.has(id) && !m.invited.has(id)) this.#fact(by, "invited", {id, name});
-		return letIn({id, name});
+		const known = m.members.get(id) ?? m.invited.get(id);
+		if (known !== undefined) return letIn({id, name: known});
+		this.#fact(by, "invited", {id, name: asked.value.name});
+		return letIn({id, name: asked.value.name});
 	}
 
 	/** A member takes a member, or an invite, off, by the person's id. The last member stays. */

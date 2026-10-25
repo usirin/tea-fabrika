@@ -15,6 +15,7 @@ import {
 	hostOf,
 	MEMBERS,
 	NAMESPACE,
+	NOT_PROVEN,
 	PERSON_KINDS,
 	SESSION_MS,
 	type Stamp,
@@ -45,20 +46,35 @@ const newKey = async (namespace = NAMESPACE): Promise<Key> => {
 };
 
 /**
- * The keys service as far as the door asks: who goes by each name, and the keys listed for them.
- * `down` makes it unreachable.
+ * The keys service as far as the door asks: who goes by each name now, their id, and the keys
+ * listed for them. `asked` is every question it was put, `down` makes it unreachable, and `other`
+ * makes `byId` answer with another id than the one asked about.
  */
 const fakeKeys = () => {
-	const people = new Map<string, Signers>();
-	const state = {down: false};
+	const people = new Map<string, {id: string; keys: string[]}>();
+	const state = {down: false, asked: [] as string[], other: null as string | null};
+	const answer = (q: string, find: () => Signers | null) => {
+		state.asked.push(q);
+		return state.down
+			? Effect.fail(new KeysUnreachable({why: "down for the test"}))
+			: Effect.sync(find);
+	};
 	const keys = ManagedRuntime.make(
 		Layer.succeed(
 			Keys,
 			Keys.of({
+				byId: (id) =>
+					answer(`byId ${id}`, () => {
+						const found = [...people].find(([, p]) => p.id === id);
+						return found === undefined
+							? null
+							: {id: state.other ?? id, name: found[0], keys: found[1].keys};
+					}),
 				of: (name) =>
-					state.down
-						? Effect.fail(new KeysUnreachable({why: "down for the test"}))
-						: Effect.sync(() => people.get(name) ?? null),
+					answer(`of ${name}`, () => {
+						const p = people.get(name);
+						return p === undefined ? null : {...p, name};
+					}),
 			}),
 		),
 	);
@@ -339,6 +355,72 @@ describe("a shared door", () => {
 		expect(s.value.who).toEqual({kind: "user", id: "github:7"});
 		expect(await t.door.who(s.value.token)).toEqual({ok: true, value: s.value.who});
 		expect([...t.door.members().members]).toEqual([["github:7", "alice"]]);
+		// Asked by the id in config, never by the name typed.
+		expect(t.state.asked).toEqual(["byId github:7"]);
+	});
+
+	it("knows its founder before the first login by the name the keys service gives the id", async () => {
+		// Any case: on GitHub a login is one name in any case. The fact keeps the service's.
+		expect(await loginWith(t.door, "Alice", alice)).toMatchObject({ok: true});
+		expect([...t.door.members().members]).toEqual([["github:7", "alice"]]);
+		const u = setup(shared("github:7"));
+		u.people.set("alice", {id: "github:7", keys: [alice.line]});
+		// The founder's key, under a name that is not the founder's: refused.
+		expect(await loginWith(u.door, "bob", alice)).toEqual({
+			ok: false,
+			status: 401,
+			why: NOT_PROVEN,
+		});
+		expect(u.door.members().founded).toBe(false);
+	});
+
+	it("asks the keys service nothing about a name it does not know", async () => {
+		await loginWith(t.door, "alice", alice);
+		t.state.asked.length = 0;
+		// bob has keys at the keys service, and carol has none: neither is known here.
+		expect(await loginWith(t.door, "bob", bob)).toEqual({ok: false, status: 401, why: NOT_PROVEN});
+		expect(await loginWith(t.door, "carol", bob)).toEqual({
+			ok: false,
+			status: 401,
+			why: NOT_PROVEN,
+		});
+		// Nor while the keys service is down: the answer is the same, and nothing is asked.
+		t.state.down = true;
+		expect(await loginWith(t.door, "carol", bob)).toEqual({
+			ok: false,
+			status: 401,
+			why: NOT_PROVEN,
+		});
+		expect(t.state.asked).toEqual([]);
+	});
+
+	it("gives one refusal for a name it does not know and a key that does not match", async () => {
+		const a = await loginWith(t.door, "alice", alice);
+		if (!a.ok) throw new Error(a.why);
+		await t.door.invite(a.value.who, "bob");
+		const carol = await newKey();
+		t.people.set("carol", {id: "github:9", keys: [carol.line]});
+		const refusals = [
+			await loginWith(t.door, "carol", carol), // a real account, not known here
+			await loginWith(t.door, "dave", carol), // no account at all
+			await loginWith(t.door, "alice", bob), // a member, the wrong key
+			await loginWith(t.door, "bob", alice), // an invite, the wrong key
+		];
+		t.door.remove(a.value.who, "github:8");
+		refusals.push(await loginWith(t.door, "bob", bob)); // an invite taken back
+		for (const r of refusals) expect(r).toEqual({ok: false, status: 401, why: NOT_PROVEN});
+	});
+
+	it("lets a member in after a rename at the keys service, by the name it knows them by", async () => {
+		await loginWith(t.door, "alice", alice);
+		t.people.delete("alice");
+		t.people.set("alice-new", {id: "github:7", keys: [alice.line]});
+		t.state.asked.length = 0;
+		const s = await loginWith(t.door, "alice", alice);
+		expect(s).toMatchObject({ok: true, value: {who: {kind: "user", id: "github:7"}}});
+		expect(t.state.asked).toEqual(["byId github:7"]);
+		// The new name is one this ledger does not know.
+		expect(await loginWith(t.door, "alice-new", alice)).toMatchObject({ok: false, status: 401});
 	});
 
 	it("takes the id the keys service gives, whatever service it is", async () => {
@@ -348,9 +430,16 @@ describe("a shared door", () => {
 		expect(s).toMatchObject({ok: true, value: {who: {kind: "user", id: "ledger:k1"}}});
 	});
 
-	it("refuses an id from the keys service that could not be a writer's", async () => {
-		t.people.set("alice", {id: "github:7@elsewhere", keys: [alice.line]});
+	it("refuses an id from the keys service that could not be a writer's, or is not the one asked", async () => {
+		t.state.other = "github:7@elsewhere";
 		expect(await loginWith(t.door, "alice", alice)).toMatchObject({ok: false, status: 502});
+		t.state.other = "github:9";
+		expect(await loginWith(t.door, "alice", alice)).toMatchObject({ok: false, status: 502});
+		t.state.other = null;
+		const a = await loginWith(t.door, "alice", alice);
+		if (!a.ok) throw new Error(a.why);
+		t.people.set("bob", {id: "github:8@elsewhere", keys: [bob.line]});
+		expect(await t.door.invite(a.value.who, "bob")).toMatchObject({ok: false, status: 502});
 	});
 
 	it("lets nobody in, and invites nobody, while the keys service cannot be asked", async () => {
@@ -364,8 +453,10 @@ describe("a shared door", () => {
 	});
 
 	it("does not take the first person who comes as its founder", async () => {
-		expect(await loginWith(t.door, "bob", bob)).toMatchObject({ok: false, status: 403});
+		expect(await loginWith(t.door, "bob", bob)).toMatchObject({ok: false, status: 401});
 		expect(t.door.members().founded).toBe(false);
+		// Before the first login, only the founder's id is asked about, whatever the name.
+		expect(t.state.asked).toEqual(["byId github:7"]);
 	});
 
 	it("refuses a signature by a key the keys service does not list for the name", async () => {
@@ -424,18 +515,27 @@ describe("a shared door", () => {
 	it("lets in a person a member invited, by the keys service's id, not by the name", async () => {
 		const a = await loginWith(t.door, "alice", alice);
 		if (!a.ok) throw new Error(a.why);
+		t.state.asked.length = 0;
 		expect(await t.door.invite(a.value.who, "bob")).toEqual({
 			ok: true,
 			value: {id: "github:8", name: "bob"},
 		});
+		// The invite asks about the name once, and binds it to the id.
+		expect(t.state.asked).toEqual(["of bob"]);
+		expect([...t.door.members().invited]).toEqual([["github:8", "bob"]]);
 		// bob gives his name away; someone else takes it, with their own key.
 		const taker = await newKey();
 		t.people.delete("bob");
 		t.people.set("bob", {id: "github:99", keys: [taker.line]});
 		t.people.set("robert", {id: "github:8", keys: [bob.line]});
-		expect(await loginWith(t.door, "bob", taker)).toMatchObject({ok: false, status: 403});
-		const b = await loginWith(t.door, "robert", bob);
+		t.state.asked.length = 0;
+		expect(await loginWith(t.door, "bob", taker)).toMatchObject({ok: false, status: 401});
+		expect(await loginWith(t.door, "robert", bob)).toMatchObject({ok: false, status: 401});
+		// Signs in by the name this ledger knows, asked about by the invite's id only.
+		const b = await loginWith(t.door, "bob", bob);
 		expect(b).toMatchObject({ok: true, value: {who: {kind: "user", id: "github:8"}}});
+		expect(t.state.asked).toEqual(["byId github:8", "byId github:8"]);
+		expect([...t.door.members().members]).toContainEqual(["github:8", "bob"]);
 	});
 
 	it("lets only a person invite or remove", async () => {
@@ -452,7 +552,7 @@ describe("a shared door", () => {
 		if (!b.ok) throw new Error(b.why);
 		expect(t.door.remove(a.value.who, "github:8")).toEqual({ok: true, value: {id: "github:8"}});
 		expect(await t.door.who(b.value.token)).toMatchObject({ok: false, status: 401});
-		expect(await loginWith(t.door, "bob", bob)).toMatchObject({ok: false, status: 403});
+		expect(await loginWith(t.door, "bob", bob)).toMatchObject({ok: false, status: 401});
 		expect(t.door.remove(a.value.who, "github:7")).toMatchObject({ok: false, status: 403});
 		const kinds = readStream(t.db, MEMBERS).map((r) => r.kind);
 		expect(kinds).toEqual(["founded", "invited", "joined", "removed"]);
@@ -568,6 +668,16 @@ describe("a shared door", () => {
 		});
 
 		it("is refused on a grant from someone who is not a member", async () => {
+			// Not known here: the one refusal, and the keys service is not asked.
+			t.state.asked.length = 0;
+			expect(await agentLogin({grant: grantFor({name: "bob"}), by: bob})).toEqual({
+				ok: false,
+				status: 401,
+				why: NOT_PROVEN,
+			});
+			expect(t.state.asked).toEqual([]);
+			// Invited, not yet joined.
+			await t.door.invite({kind: "user", id: "github:7"}, "bob");
 			expect(await agentLogin({grant: grantFor({name: "bob"}), by: bob})).toMatchObject({
 				ok: false,
 				status: 403,

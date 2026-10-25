@@ -17,9 +17,19 @@ const lineOf = async (p: CryptoKeyPair) =>
 	keyLineOf(new Uint8Array(await crypto.subtle.exportKey("raw", p.publicKey)));
 
 const users = new Map<string, {id: number; keys: string[]}>();
+/** Every call the Worker made to the fake GitHub: its path, and its `authorization` header. */
+const calls: {path: string; auth: string | null}[] = [];
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
+	calls.push({path: url.pathname, auth: req.headers.get("authorization")});
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+	if (byId !== null) {
+		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
+		return found === undefined
+			? Response.json({message: "Not Found"}, {status: 404})
+			: Response.json({id: found[1].id, login: found[0]});
+	}
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
 	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
@@ -42,7 +52,12 @@ beforeAll(async () => {
 		ledgerOptions({
 			persist: false,
 			direct: 0,
-			door: {kind: "shared", founder: "github:7", keys: {kind: "github", api: fakeGitHub}},
+			// No cache: each login here is seen at the fake GitHub.
+			door: {
+				kind: "shared",
+				founder: "github:7",
+				keys: {kind: "github", cacheMs: 0, api: fakeGitHub},
+			},
 		}),
 	);
 	await mf.ready;
@@ -101,6 +116,32 @@ describe("the door in workerd", () => {
 		expect(s.who).toEqual({kind: "user", id: "github:7"});
 		person = Redacted.value(s.token);
 		expect(person.startsWith("fabrika_p_")).toBe(true);
+		// By the id in config, with no token: no authorization header.
+		expect(calls).toEqual([
+			{path: "/user/7", auth: null},
+			{path: "/users/alice/keys", auth: null},
+		]);
+	});
+
+	it("asks GitHub nothing about a name it does not know, and refuses it as a wrong key", async () => {
+		calls.length = 0;
+		const carol = await pairOf();
+		users.set("carol", {id: 9, keys: [await lineOf(carol)]});
+		const login = (name: string, key: CryptoKeyPair) =>
+			Effect.runPromise(
+				door()
+					.login(name)
+					.pipe(
+						Effect.provide(layerSignerKey(key)),
+						Effect.map(() => "let in"),
+						Effect.catchTag("DoorRefused", (x) => Effect.succeed(`${x.status} ${x.why}`)),
+					),
+			);
+		const unknown = await login("carol", carol);
+		expect(calls).toEqual([]);
+		const wrongKey = await login("alice", carol);
+		expect(unknown).toBe(wrongKey);
+		expect(unknown.startsWith("401 ")).toBe(true);
 	});
 
 	it("reads and writes nothing without a credential", async () => {
@@ -214,7 +255,7 @@ describe("the door in workerd", () => {
 					.login("bob")
 					.pipe(Effect.provide(layerSignerKey(bob))),
 			),
-		).toBe(403);
+		).toBe(401);
 		const invited = await run(door().invite(Redacted.make(person), "bob"));
 		expect(invited).toEqual({id: "github:8", name: "bob"});
 		const s = await run(
@@ -225,6 +266,26 @@ describe("the door in workerd", () => {
 		expect(s.who).toEqual({kind: "user", id: "github:8"});
 		const m = await run(door().members(Redacted.make(person)));
 		expect(m.members.map((x) => x.id).sort()).toEqual(["github:7", "github:8"]);
+	});
+
+	it("lets a member in after a rename on GitHub, by the name this ledger knows", async () => {
+		const was = users.get("bob");
+		if (was === undefined) throw new Error("bob is set up above");
+		users.delete("bob");
+		users.set("robert", was);
+		calls.length = 0;
+		try {
+			const s = await run(
+				door()
+					.login("bob")
+					.pipe(Effect.provide(layerSignerKey(bob))),
+			);
+			expect(s.who).toEqual({kind: "user", id: "github:8"});
+			expect(calls.map((c) => c.path)).toEqual(["/user/8", "/users/robert/keys"]);
+		} finally {
+			users.delete("robert");
+			users.set("bob", was);
+		}
 	});
 
 	it("takes a claim's host and makes the holder from the credential", async () => {
@@ -247,7 +308,7 @@ describe("two objects on one server", () => {
 	it("keep their own members, sessions and grants", async () => {
 		const other = doorOf({url, ledger: "other"});
 		// bob is a member of demo, not of other.
-		expect(await statusOf(other.login("bob").pipe(Effect.provide(layerSignerKey(bob))))).toBe(403);
+		expect(await statusOf(other.login("bob").pipe(Effect.provide(layerSignerKey(bob))))).toBe(401);
 		// demo's session opens nothing on other.
 		const read = await fetch(`${url}/other/read`, {
 			method: "POST",
@@ -269,6 +330,37 @@ describe("two objects on one server", () => {
 		expect(await statusOf(other.agentLogin(g).pipe(Effect.provide(layerSignerKey(triage))))).toBe(
 			401,
 		);
+	});
+});
+
+describe("a GitHub token", () => {
+	it("reaches the Worker as a binding and goes to GitHub as a bearer header", async () => {
+		const token = "github_pat_fake_for_the_test";
+		const withToken = new Miniflare(
+			ledgerOptions({
+				persist: false,
+				direct: 0,
+				door: {
+					kind: "shared",
+					founder: "github:7",
+					keys: {kind: "github", cacheMs: 0, token: Redacted.make(token), api: fakeGitHub},
+				},
+			}),
+		);
+		try {
+			await withToken.ready;
+			const base = (await withToken.unsafeGetDirectURL()).origin;
+			calls.length = 0;
+			const s = await run(
+				doorOf({url: base, ledger: "t"})
+					.login("alice")
+					.pipe(Effect.provide(layerSignerKey(alice))),
+			);
+			expect(s.who).toEqual({kind: "user", id: "github:7"});
+			expect(calls.map((c) => c.auth)).toEqual([`Bearer ${token}`, `Bearer ${token}`]);
+		} finally {
+			await withToken.dispose();
+		}
 	});
 });
 

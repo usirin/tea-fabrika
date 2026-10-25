@@ -42,6 +42,12 @@ export type KeysOptions = {
 	readonly kind: "github";
 	/** How long GitHub's answers are kept, in ms. Default `KEYS_CACHE_MS`, 5 minutes. */
 	readonly cacheMs?: number;
+	/**
+	 * A GitHub token, for the ledger's own budget of calls (5,000 an hour, not the 60 its address
+	 * shares). The Worker gets it as the `GITHUB_TOKEN` binding, a secret on Cloudflare. Left out:
+	 * GitHub is asked with no token.
+	 */
+	readonly token?: Redacted.Redacted<string>;
 	/** Where the ledger's calls to api.github.com go instead (a fake, in tests); left out, GitHub. */
 	readonly api?: (req: Request) => Promise<Response>;
 };
@@ -94,6 +100,7 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
 					...(d.sessionMs === undefined ? {} : {SESSION_MS: String(d.sessionMs)}),
 					KEYS: d.keys.kind,
 					...(d.keys.cacheMs === undefined ? {} : {KEYS_CACHE_MS: String(d.keys.cacheMs)}),
+					...(d.keys.token === undefined ? {} : {GITHUB_TOKEN: Redacted.value(d.keys.token)}),
 				};
 
 /**

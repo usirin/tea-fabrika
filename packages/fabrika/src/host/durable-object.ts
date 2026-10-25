@@ -17,7 +17,7 @@
 // door (`door.ts`): no credential, no read and no write; the writer and the holder come from the
 // credential, never from the request.
 import {DurableObject} from "cloudflare:workers";
-import {Layer, ManagedRuntime} from "effect";
+import {Layer, ManagedRuntime, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
 import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
 import {type Keys, layerNobody} from "./keys.ts";
@@ -45,7 +45,8 @@ type Env = {
 	MAX_DELIVERIES?: string;
 	/**
 	 * The door, by config (`configOf`): DOOR, LOCAL_PERSON, LOCAL_SECRET_HASH, FOUNDER, ORIGIN,
-	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS.
+	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS, and the
+	 * optional secret GITHUB_TOKEN.
 	 */
 	[door: string]: unknown;
 };
@@ -53,7 +54,8 @@ type Env = {
 /**
  * The `Keys` Layer the env names, or null when it names none this file knows, or says it wrong.
  *
- *   KEYS=github   GitHub's keys and ids (`keys-github.ts`), kept KEYS_CACHE_MS (default 5 min)
+ *   KEYS=github   GitHub's keys and ids (`keys-github.ts`), kept KEYS_CACHE_MS (default 5 min),
+ *                 asked with the GITHUB_TOKEN secret when it is set (none: GitHub's shared limit)
  *
  * The one place a Layer is picked: a new answer to `Keys` is one more line here.
  */
@@ -61,7 +63,11 @@ const keysOf = (env: Env): Layer.Layer<Keys> | null => {
 	const cache = typeof env.KEYS_CACHE_MS === "string" ? env.KEYS_CACHE_MS : "";
 	if (env.KEYS !== "github" || (cache !== "" && !/^[0-9]{1,12}$/.test(cache))) return null;
 	const cacheMs = cache === "" ? KEYS_CACHE_MS : Number(cache);
-	return layerGitHub({cacheMs}).pipe(Layer.provide(FetchHttpClient.layer));
+	const token =
+		typeof env.GITHUB_TOKEN === "string" && env.GITHUB_TOKEN !== ""
+			? {token: Redacted.make(env.GITHUB_TOKEN)}
+			: {};
+	return layerGitHub({cacheMs, ...token}).pipe(Layer.provide(FetchHttpClient.layer));
 };
 
 /** A shared door with no keys to ask is closed: nobody could prove who they are. */
