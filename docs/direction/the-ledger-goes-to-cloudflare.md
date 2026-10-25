@@ -12,10 +12,31 @@ get in. Not invited, they are refused. Who belongs is facts on that ledger, and
 nothing outside it knows.
 
 **Decided 2026-10-25: a person signs in with their SSH key, and every key
-GitHub lists for their login works.** No key is pinned to a ledger. GitHub is
-the one place a person's keys live: they remove an old key there, and every
+GitHub lists for their login works.** No key is pinned to a ledger. In the
+first version GitHub is the one place a person's keys live (see the next
+decision): they remove an old key there, and every
 ledger follows at the next login. So the ledger reads the keys again at each
 login, and its sessions are short. See section 1.
+
+**Decided the same day: where keys come from is an Effect service, and GitHub
+is only its first version.** The door asks one service which keys may sign
+for a person, and never calls GitHub itself. The aim is that each person puts
+their own public keys on the ledger, so a ledger needs no GitHub at all. That
+is OpenSSH's allowed signers list, the one `git` reads to check signed commits
+([ssh-keygen](https://man.openbsd.org/ssh-keygen#ALLOWED_SIGNERS),
+[git](https://git-scm.com/docs/git-config#Documentation/git-config.txt-gpgsshallowedSignersFile)).
+A person's id comes from the service too, so `github:<n>` is one kind of id,
+not the only one.
+
+```ts
+// A sketch. One question the door asks, two answers to it.
+class Keys extends Context.Service<Keys, {
+	readonly of: (name: string) => Effect.Effect<{id: string; keys: ReadonlyArray<string>} | null, KeysUnreachable>;
+}>()("fabrika/door/Keys") {}
+
+const layerGitHub = Layer.effect(Keys, /* GET /users/{login} and /users/{login}/keys */);
+const layerOnLedger = Layer.effect(Keys, /* "key added" and "key removed" facts, each written by its person */);
+```
 
 **Decided 2026-10-25: a project lives on one ledger server, never two, and
 the app opens several projects the way Obsidian opens vaults.**
