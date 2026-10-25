@@ -2,6 +2,8 @@
 
 **Proposed 2026-10-25.** Nothing here is built. It extends
 [the ticket is the lane's one view](./the-ticket-is-the-lane-view.md).
+*Read by the owner the same day. One change: beats and logs are on the shared
+record (section 3).*
 
 ```ts
 // A sketch. The ticket's window, top to bottom. Every line is made from facts; nothing is typed.
@@ -230,12 +232,21 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
 - **Cost:** a second stream per run, and the window polls it while a run is
   live. The log a tile opens is whatever the agent wrote: a Claude Code
   transcript today, our trace later. Two readers until the pipeline runs.
-- **How sure: 70%.** The doubts:
-  - whether the last tool's name is enough to tell "working" from "going in
-    circles". The owner watching a few live runs would show it.
-  - whether beats belong on the ledger at all, or only in the host's memory.
-    On the ledger, a reopened window shows the last beat; in memory, it costs
-    nothing to write. Counting how many beats a run writes would settle it.
+- **How sure: 70%.** The doubt: whether the last tool's name is enough to
+  tell "working" from "going in circles". The owner watching a few live runs
+  would show it.
+- **Decided the same day: beats and logs are on the shared record.** The
+  first version left open whether beats live only in the host's memory. In
+  memory, only the machine that runs the agent sees them, and only while it
+  runs. The owner needs to see what an agent does from another machine and at
+  another time, and a second person works the same tickets.
+  - Beats go on the ledger, in the run's own side stream. The ticket's fold
+    still never reads them.
+  - The agent's whole log goes to the `Blobs` service
+    ([services](./services-and-our-own-ci.md)), so "open log" works from any
+    machine.
+  - Counting beats per run now decides only whether old beats are trimmed
+    after a run ends. They are kept until then.
 
 ## 4. The bridge until our pipeline runs lanes
 
