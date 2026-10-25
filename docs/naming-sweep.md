@@ -278,14 +278,14 @@ a promise stage would inherit.
 | `Problem.why`: `gone`, `stale`, `red`, `not_caught`, `no_verdict` | why a record fails the gate | Stryker's states: Killed, Survived, NoCoverage (same Stryker page) | ok | `not_caught` is Stryker's Survived for a plant |
 | `Problem.pieces`, `.commit`, `.verdict`, `.which`, `.detail` | which pieces, since which commit, the verdict, which run, what went wrong | none needed | ok | |
 | `Removed.id` / `.promise` | a property in the base and not at the head | none needed | ok | `promise` follows `says` |
-| verify writer | the agent, not the builder, that writes each check before the build | test generator in Meta's ACH ([Meta, 2025](https://arxiv.org/abs/2501.12862)); evaluator in an evaluator-optimizer loop ([Anthropic, building effective agents](https://www.anthropic.com/engineering/building-effective-agents)) | differs | `tester`, outcome `send:tester:mutant_survived`. 55%: "tester" may read as a person |
-| `writeChecks` / `checks_write`, `checks_today`, `checks_hold`, `checks_kill_mutants` | the steps that write and run the property checks | tests or specs; "check" is also the move and a GitHub check run | two-ideas | `tests_write`, `tests_today`, ... while the tool is a test. 50% |
+| verify writer | the agent, not the builder, that writes each check before the build | test generator in Meta's ACH ([Meta, 2025](https://arxiv.org/abs/2501.12862)); evaluator in an evaluator-optimizer loop ([Anthropic, building effective agents](https://www.anthropic.com/engineering/building-effective-agents)) | differs | **picked 2026-10-24:** test writer, outcome `send:test_writer:mutant_survived` ([The test writer](./direction/the-test-writer.md)) |
+| `writeChecks` / `checks_write`, `checks_today`, `checks_hold`, `checks_kill_mutants` | the steps that write and run the property checks | tests or specs; "check" is also the move and a GitHub check run | two-ideas | **picked 2026-10-24:** `tests_write`, `tests_on_base`. "Check" is now only the move's name |
 | red first | a new property's check fails on today's code | red, green, refactor ([Fowler, TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html)) | ok | |
 | `in step` / `checks_in_step` | every record's prints match the code | no drift; none standard | ok | |
 | `mutant`, kill, survived, equivalent mutant | mutation testing's words | the same ([Stryker, introduction](https://stryker-mutator.io/docs/stryker-js/introduction/)) | ok | |
 | skip list | kinds of mutant left out, such as log text | Stryker ignorers ([Stryker, configuration](https://stryker-mutator.io/docs/stryker-js/configuration/)); Google's arid nodes | differs | `ignore list`, Stryker's own word. 75% |
 | disable comment | `// Stryker disable` on one line, with a reason | the same ([Stryker, disable mutants](https://stryker-mutator.io/docs/stryker-js/disable-mutants/)) | ok | |
-| `ask:owner:already_kept`, `ask:owner:not_kept` | the plan was wrong about today's code | none found | differs | `kept` became `"existing"` (picked 2026-10-24); these two names are not picked |
+| `ask:owner:already_kept`, `ask:owner:not_kept` | the plan was wrong about today's code | none found | differs | **picked 2026-10-24:** `ask:owner:already_passes`, `ask:owner:fails_on_base`, and a new `ask:owner:cannot_test` |
 | `ask:owner:check_change` | a diff touches a check | change to the test oracle | ok | |
 | `send:builder:promise_red` | ship found a property red or out of step | failed required check | differs | **follows the pick:** `property_red` |
 
