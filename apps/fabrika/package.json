@@ -28,6 +28,7 @@
 		"@types/react-dom": "catalog:",
 		"electron": "catalog:",
 		"esbuild": "catalog:",
+		"fast-check": "catalog:",
 		"playwright": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

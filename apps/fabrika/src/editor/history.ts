@@ -53,3 +53,41 @@ export const fileHistory = (path: string) =>
 		};
 		return history;
 	});
+
+/** One history for every tile's editor: a save from one is told to each that follows it. */
+export interface SharedHistory extends History {
+	/** Hear each save from now on, the follower's own too. Answers how to stop hearing them. */
+	readonly follow: (heard: (lines: readonly string[]) => void) => () => void;
+}
+
+/**
+ * Share `kept` among the tiles, as fish shares its history among its shells: a line typed in one
+ * tile is in every tile's Up and Ctrl-R from then on. Read once here; each save writes it whole.
+ *
+ *   const history = yield* sharedHistory(yield* fileHistory("<home>/history"));
+ *   history.follow((lines) => editorOfTile2.dispatch({type: "history", lines}));
+ *   yield* history.save(["counter"])   // tile 2's editor hears ["counter"]
+ *
+ * Two tiles that keep a line in the same instant each save their own whole list, and the later
+ * one wins: one of the two lines is lost. A person types in one tile at a time, so this is let be.
+ */
+export const sharedHistory = (kept: History) =>
+	Effect.gen(function* () {
+		let lines = yield* kept.load;
+		const followers = new Set<(lines: readonly string[]) => void>();
+		const history: SharedHistory = {
+			load: Effect.sync(() => lines),
+			save: (next) =>
+				Effect.sync(() => {
+					lines = next;
+					for (const heard of followers) heard(next);
+				}).pipe(Effect.andThen(kept.save(next))),
+			follow: (heard) => {
+				followers.add(heard);
+				return () => {
+					followers.delete(heard);
+				};
+			},
+		};
+		return history;
+	});

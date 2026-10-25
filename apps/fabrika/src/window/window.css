@@ -18,13 +18,90 @@ body,
 	color: var(--ink);
 }
 
-/* The terminal: the screen fills the window, with a small margin, as a terminal app's does. */
-body.terminal {
-	box-sizing: border-box;
-	padding: 8px;
+#root[role="alert"] {
+	padding: 16px;
+	white-space: pre-wrap;
 }
 
-#screen {
+/* The desk: the active workspace's tiles, and a status line under them, as tmux's. */
+.desk {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.workspace {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.stack {
+	flex: 1;
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+}
+
+.stack.horizontal {
+	flex-direction: row;
+}
+
+.stack.vertical {
+	flex-direction: column;
+}
+
+/* A child's share is its grow: the borders between them are a fixed few pixels. */
+.cell {
+	flex-basis: 0;
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+}
+
+.border {
+	flex: 0 0 4px;
+	margin: 0;
+	border: 0;
+	background: var(--line);
+	touch-action: none;
+}
+
+.stack.horizontal > .border {
+	cursor: col-resize;
+}
+
+.stack.vertical > .border {
+	cursor: row-resize;
+}
+
+.tile {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	box-sizing: border-box;
+	border: 1px solid var(--line);
+	overflow: hidden;
+}
+
+.tile.focused {
+	border-color: var(--key);
+}
+
+/* A tile's terminal fills its slot, with a small margin, as a terminal app's does. */
+.slot,
+.term {
+	position: absolute;
+	inset: 0;
+}
+
+.term {
+	padding: 4px 6px;
+	box-sizing: border-box;
+}
+
+.screen {
 	height: 100%;
 }
 
@@ -39,22 +116,63 @@ body.terminal {
 	white-space: pre;
 }
 
-.screen-text[role="alert"] {
-	position: static;
-	width: auto;
-	height: auto;
-	margin: 0;
-	clip-path: none;
-	white-space: pre-wrap;
-}
-
-/* A program's window. */
+/* A program's view: over its tile's terminal in the foreground, or in a tile of its own. */
 main.program {
+	position: absolute;
+	inset: 0;
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 	box-sizing: border-box;
 	padding: 16px;
+	background: var(--ground);
+	overflow: auto;
+	outline: none;
+}
+
+/* "Close it?", over the tile it is for, as tmux's confirm-before asks on its status line. */
+.ask {
+	position: absolute;
+	inset: auto 0 0 0;
+	padding: 8px 12px;
+	background: #2b2f3a;
+	border-top: 1px solid var(--key);
+}
+
+.ask p {
+	margin: 0;
+}
+
+kbd {
+	padding: 0 4px;
+	border: 1px solid var(--faint);
+	border-radius: 3px;
+}
+
+.status {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	padding: 2px 8px;
+	border-top: 1px solid var(--line);
+	color: var(--faint);
+	font-size: 12px;
+}
+
+.workspaces {
+	display: flex;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.workspaces li[aria-current="true"] {
+	color: var(--ink);
+	text-decoration: underline;
+}
+
+.prefix.armed {
+	color: var(--key);
 }
 
 .starting {

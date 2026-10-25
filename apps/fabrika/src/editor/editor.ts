@@ -93,7 +93,9 @@ export type EditorMsg =
 	/** tsh is gone. */
 	| {readonly type: "ended"}
 	/** tsh's job table changed. */
-	| {readonly type: "jobs"; readonly jobs: Shell.Jobs};
+	| {readonly type: "jobs"; readonly jobs: Shell.Jobs}
+	/** An editor, this one or another tile's, kept its history: the lines every tile shares. */
+	| {readonly type: "history"; readonly lines: readonly string[]};
 
 /** What the editor is handed at the start: the programs tsh knows, for Tab, and the history kept from before. */
 export interface EditorCtx {
@@ -492,6 +494,8 @@ export const editor = defineMachine({
 		ended: (s) =>
 			done(say(start(withMode(s, {kind: "ended"})), shownLine(s) === null ? "" : leave(s))),
 		jobs: (s, m) => [{...s, jobs: m.jobs}, []],
+		// Taken as it is: the lines came from an editor's `keep`, cleaned there already.
+		history: (s, m) => [{...s, history: m.lines.slice(-KEPT)}, []],
 		write_ok: noop,
 		write_err: noop,
 		line_ok: noop,

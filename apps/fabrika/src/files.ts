@@ -4,11 +4,11 @@ import {Effect, FileSystem, Path} from "effect";
 // Never `file://`, never a remote site (Electron's security checklist). A path is one of the
 // names below or it is not found, so no path can climb out of the folder.
 //
-//   fileOf("fabrika://app/")                    "/terminal.html"
-//   fileOf("fabrika://app/terminal.js?x=1")     "/terminal.js"
+//   fileOf("fabrika://app/")                    "/desk.html"
+//   fileOf("fabrika://app/desk.js?x=1")         "/desk.js"
 //   fileOf("fabrika://app/../main.mjs")         null: the url reads as /main.mjs, not one of them
-//   fileOf("https://example.com/terminal.js")   null
-//   pageOf("fabrika://app/program.html")        "program": a program's window
+//   fileOf("https://example.com/desk.js")       null
+//   isDesk("fabrika://app/desk.html")           true: the one page
 //
 // It names no platform: Effect's `FileSystem` reads the file, and main.ts hands it Node's.
 
@@ -17,39 +17,32 @@ export const SCHEME = "fabrika";
 const HOST = "app";
 
 /**
- * The Content Security Policy every answer carries: scripts and styles from the app's own files,
- * and nothing else. No inline script, no eval, no connection out, no frame.
+ * The Content Security Policy every file but the page carries: scripts and styles from the app's
+ * own files, and nothing else. No inline script, no eval, no connection out, no frame.
  */
 export const CSP =
 	"default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 /**
- * The terminal's page's policy: the same, and WebAssembly may be compiled. Its screen is
+ * The page's policy: the same, and WebAssembly may be compiled. Each tile's terminal is
  * ghostty-web, whose terminal is Ghostty's own, built to WebAssembly; Chromium compiles none
  * under `script-src 'self'` alone. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else: no
  * `eval`, no `new Function`, no inline script. The bytes compiled are in the page's own script.
  */
-export const TERMINAL_CSP =
+export const DESK_CSP =
 	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-/** The two kinds of page: the terminal, and a program's window. */
-export type Page = "terminal" | "program";
-
 const FILES = {
-	"/terminal.html": {type: "text/html; charset=utf-8", csp: TERMINAL_CSP, page: "terminal"},
-	"/terminal.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: null},
-	"/program.html": {type: "text/html; charset=utf-8", csp: CSP, page: "program"},
-	"/program.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: null},
-	"/window.css": {type: "text/css; charset=utf-8", csp: CSP, page: null},
-} as const satisfies Record<string, {type: string; csp: string; page: Page | null}>;
+	"/desk.html": {type: "text/html; charset=utf-8", csp: DESK_CSP, page: true},
+	"/desk.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: false},
+	"/window.css": {type: "text/css; charset=utf-8", csp: CSP, page: false},
+} as const satisfies Record<string, {type: string; csp: string; page: boolean}>;
 
 /** A file the protocol serves, by its path. */
 export type Served = keyof typeof FILES;
 
-/** Where the terminal window starts. */
-export const TERMINAL = `${SCHEME}://${HOST}/terminal.html`;
-/** Where a program's window starts. */
-export const PROGRAM = `${SCHEME}://${HOST}/program.html`;
+/** Where the window starts: the desk, the one page. */
+export const DESK = `${SCHEME}://${HOST}/desk.html`;
 
 const isServed = (path: string): path is Served => Object.hasOwn(FILES, path);
 
@@ -63,14 +56,14 @@ export const isOurs = (url: string): boolean => {
 export const fileOf = (url: string): Served | null => {
 	const parsed = URL.parse(url);
 	if (parsed === null || !isOurs(url)) return null;
-	const path = parsed.pathname === "/" ? "/terminal.html" : parsed.pathname;
+	const path = parsed.pathname === "/" ? "/desk.html" : parsed.pathname;
 	return isServed(path) ? path : null;
 };
 
-/** The page a url shows, or `null`: not one of the app's two pages. */
-export const pageOf = (url: string): Page | null => {
+/** Does the url show the desk, the app's one page? */
+export const isDesk = (url: string): boolean => {
 	const file = fileOf(url);
-	return file === null ? null : FILES[file].page;
+	return file !== null && FILES[file].page;
 };
 
 const headers = (file: Served | null) => ({

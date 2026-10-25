@@ -4,15 +4,15 @@ import {runMain} from "@effect/platform-node/NodeRuntime";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import {type BuildOptions, build} from "esbuild";
 
-// Build the app into dist/, with esbuild: four bundles and the windows' plain files.
+// Build the app into dist/, with esbuild: three bundles and the page's plain files.
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
-//   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be. Both windows use it.
-//   dist/terminal.js   the terminal window: ghostty-web, with its WebAssembly in the bundle
-//   dist/program.js    a program's window: React and every program window it knows, for Chromium
-//   dist/terminal.html, dist/program.html, dist/window.css
+//   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
+//   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
+//                      program view it knows, for Chromium
+//   dist/desk.html, dist/window.css
 //
-// The WebAssembly is in terminal.js twice, about 560 KiB each: ghostty-web's own bundle holds it
+// The WebAssembly is in desk.js twice, about 560 KiB each: ghostty-web's own bundle holds it
 // as a data: url, which the page cannot fetch, and the bytes the page compiles are a second copy
 // (src/window/terminal.ts). It is read from disk, so the cost is size, not time on a network.
 //
@@ -54,26 +54,17 @@ const program = Effect.gen(function* () {
 				external: ["electron"],
 			}),
 			bundle({
-				entryPoints: [at("src/window/terminal.ts")],
-				outfile: at("dist/terminal.js"),
-				platform: "browser",
-				format: "iife",
-				target: "chrome140",
-				minify: true,
-				loader: {".wasm": "binary"},
-			}),
-			bundle({
-				entryPoints: [at("src/window/program.tsx")],
-				outfile: at("dist/program.js"),
+				entryPoints: [at("src/window/desk.tsx")],
+				outfile: at("dist/desk.js"),
 				platform: "browser",
 				format: "iife",
 				target: "chrome140",
 				jsx: "automatic",
 				minify: true,
+				loader: {".wasm": "binary"},
 				define: {"process.env.NODE_ENV": '"production"'},
 			}),
-			fs.copyFile(at("src/window/terminal.html"), at("dist/terminal.html")),
-			fs.copyFile(at("src/window/program.html"), at("dist/program.html")),
+			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
 			fs.copyFile(at("src/window/window.css"), at("dist/window.css")),
 		],
 		{concurrency: "unbounded", discard: true},

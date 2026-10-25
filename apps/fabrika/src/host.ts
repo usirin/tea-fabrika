@@ -18,43 +18,44 @@ import {counter} from "@tea-fabrika/counter";
 import {Author, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
-import type {History} from "./editor/history.ts";
+import type {SharedHistory} from "./editor/history.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 
-// The app's host: tsh, with its line editor, behind a terminal, and a window for each run of a
-// program that has one. It names no platform: it is handed the terminal's page and a way to open
-// and close windows, so a test drives it with no Electron (host.test.ts). main.ts is the
-// Electron edge that wires it to real windows.
+// One tile's host: tsh, with its line editor, behind the tile's terminal, and a view for each run
+// of a program that has one. It names no platform: it is handed the terminal's page and a way to
+// tell its tile of its runs, so a test drives it with no Electron (host.test.ts). tiles.ts holds
+// one host per tile; main.ts is the Electron edge.
 //
-//   const host = yield* startHost({jobs: memoryStorage(), history: memoryHistory(), windows});
+//   const host = yield* startHost({jobs: memoryStorage(), history, runs});
 //   host.terminal.show((m) => port.postMessage(m));   // the screen so far, then each write
 //   host.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
 //   host.terminal.heard({type: "keys", data: "\r"});
-//   // windows.open("counter:1a2b", "counter", screen): the counter's window opens, and the prompt waits
+//   // runs.began("counter:1a2b", "counter", "foreground", screen): the counter covers the tile
 //   screen.heard({type: "msg", msg: {type: "press", value: "plus"}});    // the count is 1
 //   screen.closed();
-//   // the person closed it: its inputs close, as stdin's end. It ends, tsh prints 1, the prompt is back
+//   // its view was closed: its inputs close, as stdin's end. It ends, tsh prints 1, the prompt is back
 //
 // It is a terminal and a shell, as on Unix (README, "Job control"):
 //
 //   - The terminal is the line editor's (editor/editor.ts): keys in, bytes out. tsh is handed a
 //     whole line on Enter, as bash is by readline.
-//   - A program with a window run in the foreground opens its window, and the prompt waits for
-//     its end. Ctrl-C in the terminal stops it; its window closes.
-//   - `counter &` opens its window and gives the prompt back at once.
-//   - Closing a program's window closes its inputs: the program ends as it does on stdin's end.
+//   - A program with a view run in the foreground covers the tile, and the prompt waits for its
+//     end. Ctrl-C in the terminal stops it, and its view goes.
+//   - `counter &` opens its view in a new tile beside this one and gives the prompt back at once.
+//   - Closing a program's view closes its inputs: the program ends as it does on stdin's end.
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter and the
-// tracker. A run of one with a window is seen as it starts (`seenBy`): the host opens its window,
-// shows it its view's data on each change, and reads what its window sends by that program's
-// inputs.
+// tracker. A run of one with a view is seen as it starts (`seenBy`): the host tells its tile,
+// shows the view its data on each change, and reads what the view sends by that program's inputs.
+// Whether the run is in the foreground is read off tsh's job table, which tsh writes before the
+// run starts.
 //
 // Storage: the host is handed where tsh keeps its jobs, as the terminal tsh is
-// (packages/fabrika/src/shell/main.ts), and where the line editor keeps its history. main.ts
-// hands it files in the app's home; a test hands it memory. The next host on the same storage
-// finds the jobs as "from an earlier tsh, not running", and `attach %n` starts one again where
-// it left off, with its window.
+// (packages/fabrika/src/shell/main.ts), and the history every tile shares. tiles.ts hands it a
+// folder for its tile in the app's home; a test hands it memory. The next host on the same
+// storage finds the jobs as "from an earlier tsh, not running", and `attach %n` starts one again
+// where it left off, with its view.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
 // table, not its run.
@@ -66,7 +67,7 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 /** What became of a message from a page: read, and on its way, or refused, and why. */
 export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
 
-/** A window's page, as the host sees it. */
+/** A page, as the host sees it. */
 export interface Screen<To> {
 	/** Show on this page from now on, starting with what it shows now. A page loaded again is shown again. */
 	readonly show: (page: (m: To) => void) => void;
@@ -74,38 +75,45 @@ export interface Screen<To> {
 	readonly heard: (raw: unknown) => Heard;
 }
 
-/** A program's window, as the host sees it. */
+/** A program's view, as the host sees it. */
 export interface WindowScreen extends Screen<ToWindow> {
 	/**
-	 * The person closed the window. The run's inputs close, as a terminal closes a program's
-	 * stdin, and the program ends the way it ends on that. Said after the run ended, or while the
-	 * app quits, it changes nothing: quitting leaves jobs to be attached at the next start.
+	 * The view was closed. The run's inputs close, as a terminal closes a program's stdin, and
+	 * the program ends the way it ends on that. Said after the run ended, or while the app quits,
+	 * it changes nothing: quitting leaves jobs to be attached at the next start.
 	 */
 	readonly closed: () => void;
 }
 
-/** The windows of the runs with one, as the edge opens and closes them. */
-export interface Windows {
-	/** A run of `program` with a window started: open one, and show `screen` on it. */
-	readonly open: (run: string, program: string, screen: WindowScreen) => void;
-	/** That run ended: close its window, if it is still open. */
-	readonly close: (run: string) => void;
+/** In the foreground the run covers tsh's tile and tsh waits; in the background it opens beside it. */
+export type Placed = "foreground" | "background";
+
+/** What the host tells its tile of tsh's runs, for the edge to draw. */
+export interface Runs {
+	/** A run of `program` with a view started: show `screen` for it, where `placed` says. */
+	readonly began: (run: string, program: string, placed: Placed, screen: WindowScreen) => void;
+	/** That run ended: its view goes, if it is still shown. */
+	readonly ended: (run: string) => void;
+	/** How many of tsh's jobs run now. Closing the tile stops them, so the desk asks first. */
+	readonly running: (count: number) => void;
 }
 
 export interface Host {
 	/** The terminal's page: the bytes to draw, and the keys and size it sends. */
 	readonly terminal: Screen<ToTerminal>;
+	/** Stop one run of tsh's, as `stop` does: its tile was closed. A run not running changes nothing. */
+	readonly stop: (run: string) => Effect.Effect<void>;
 	/** Done when tsh has ended: `exit`, or Ctrl-D on an empty line. */
 	readonly ended: Effect.Effect<void>;
 }
 
-/** tsh's run. */
+/** tsh's run. In memory, so each tile's tsh has the same id with no clash. */
 export const TSH = "tsh:p1";
 
 /** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
 export const SCREEN_KEPT = 256 * 1024;
 
-/** The programs tsh comes with in the app, fixed for now: the small ones, and two with a window. */
+/** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
 const COUNTER = listed(counter, Layer.empty);
 const trackerOn = (ledger: Ledger["Service"]) =>
 	listed(
@@ -129,7 +137,7 @@ const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>
 			.pipe(Effect.tap((s) => (s.kind === "running" ? seen(s) : Effect.void))),
 });
 
-/** What was heard, read already, for the line editor or for one run with a window. */
+/** What was heard, read already, for the line editor or for one run with a view. */
 type Told =
 	| {readonly to: "editor"; readonly msg: EditorMsg}
 	| {
@@ -145,20 +153,30 @@ const kept = (screen: string): string => {
 	return tail.slice(tail.indexOf("\n") + 1);
 };
 
+/** Where the job holding `run` was started: tsh notes the job before its runs start. */
+const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
+	table?.jobs.find((job) => job.stages.some((st) => st.run === run))?.background === true
+		? "background"
+		: "foreground";
+
 /** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
 export const startHost = (options: {
 	readonly jobs: Storage;
-	readonly history: History;
-	readonly windows: Windows;
+	readonly history: SharedHistory;
+	readonly runs: Runs;
 }) =>
 	Effect.gen(function* () {
-		const {jobs, history, windows} = options;
+		const {jobs, history, runs} = options;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
-		/** The host's scope is closing: the app quits, and every run stops with it. */
+		/** The host's scope is closing: the tile closes or the app quits, and every run stops with it. */
 		let closing = false;
+		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
+		let table: () => Shell.Jobs | null = () => null;
+		/** The runs with a view now, by id, for `stop`. */
+		const live = new Map<string, AnyRunning>();
 
-		// What the editor and the windows are told, on one queue, in the order it was heard.
+		// What the editor and the views are told, on one queue, in the order it was heard.
 		const inbox = yield* Queue.unbounded<Told>();
 		const toEditor = (msg: EditorMsg) => Queue.offerUnsafe(inbox, {to: "editor", msg});
 
@@ -170,7 +188,7 @@ export const startHost = (options: {
 			page?.({type: "write", data});
 		};
 
-		/** A run of a program with a window: its window opens, is shown each change of its view, and closes at its end. */
+		/** A run of a program with a view: its tile is told, its view is shown each change, and it goes at the end. */
 		const opened = (running: AnyRunning) =>
 			Effect.gen(function* () {
 				const {run: r} = running;
@@ -198,7 +216,8 @@ export const startHost = (options: {
 						for (const name of Object.keys(r.program.inputs)) running.close(name);
 					},
 				};
-				windows.open(r.id, r.program.name, window);
+				live.set(r.id, running);
+				runs.began(r.id, r.program.name, placedIn(table(), r.id), window);
 				yield* machine.changes.pipe(
 					Stream.filter((state) => state !== null),
 					Stream.runForEach((state) =>
@@ -215,7 +234,8 @@ export const startHost = (options: {
 					Effect.ensuring(
 						Effect.sync(() => {
 							over = true;
-							windows.close(r.id);
+							live.delete(r.id);
+							runs.ended(r.id);
 						}),
 					),
 					Effect.forkIn(scope),
@@ -242,7 +262,8 @@ export const startHost = (options: {
 		// tsh's flags are this file's own: a refusal here is a mistake in it, not something to show.
 		if (started.kind !== "running")
 			return yield* Effect.die(`tsh refused its flags: ${started.why}`);
-		// Added after tsh started, so it runs before tsh stops: no window closed by the quit closes an input.
+		table = () => started.run.machines.jobs.state();
+		// Added after tsh started, so it runs before tsh stops: no view closed by the quit closes an input.
 		yield* Effect.addFinalizer(() =>
 			Effect.sync(() => {
 				closing = true;
@@ -258,7 +279,9 @@ export const startHost = (options: {
 		yield* started.run.machines.jobs.changes.pipe(
 			Stream.runForEach((jobs) =>
 				Effect.sync(() => {
-					if (jobs !== null) toEditor({type: "jobs", jobs});
+					if (jobs === null) return;
+					toEditor({type: "jobs", jobs});
+					runs.running(jobs.jobs.filter((job) => job.state === "running").length);
 				}),
 			),
 			Effect.forkScoped,
@@ -281,6 +304,9 @@ export const startHost = (options: {
 				keep: (c) => history.save(c.lines).pipe(Effect.as(null)),
 			},
 		})).ready;
+		// Every tile's editor hears each save, its own too, so a line typed anywhere is in its Ctrl-R.
+		const unfollow = history.follow((lines) => toEditor({type: "history", lines}));
+		yield* Effect.addFinalizer(() => Effect.sync(unfollow));
 
 		// What was heard, told in order by one fiber.
 		const tellOne = (told: Told) =>
@@ -305,6 +331,7 @@ export const startHost = (options: {
 					return {kind: "read"};
 				},
 			},
+			stop: (id) => Effect.suspend(() => live.get(id)?.stop ?? Effect.void).pipe(Effect.asVoid),
 			ended: Deferred.await(over),
 		};
 		return host;
