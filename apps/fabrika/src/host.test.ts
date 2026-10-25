@@ -6,48 +6,53 @@ import {tracker} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
-import {type History, memoryHistory} from "./editor/history.ts";
-import {startHost, type WindowScreen, type Windows} from "./host.ts";
+import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
+import {type Placed, type Runs, startHost, type WindowScreen} from "./host.ts";
 
-// The host, with a fake terminal page and fake windows and no Electron: what a person would see
-// in the terminal, read off its grid (editor/grid.ts), and what each program's window is shown.
+// The host, with a fake terminal page and a fake tile and no Electron: what a person would see
+// in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
 // The ledger is in memory.
 
-/** What the fake windows saw, in order. */
+/** What the fake tile saw, in order. */
 type Seen =
-	| {readonly kind: "open"; readonly run: string; readonly program: string}
+	| {readonly kind: "open"; readonly run: string; readonly program: string; readonly placed: Placed}
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
-	| {readonly kind: "close"; readonly run: string};
+	| {readonly kind: "close"; readonly run: string}
+	| {readonly kind: "running"; readonly count: number};
 
 const session = (
 	opts: {
 		readonly jobs?: Storage;
+		/** Kept between hosts, as the history file is. Each host shares it with no other. */
 		readonly history?: History;
+		/** Shared with another host, as two tiles share it. */
+		readonly shared?: SharedHistory;
 		readonly ledger?: Ledger["Service"];
 	} = {},
 ) =>
 	Effect.gen(function* () {
 		const seen: Seen[] = [];
 		const screens = new Map<string, WindowScreen>();
-		const windows: Windows = {
-			open: (run, program, screen) => {
+		const runs: Runs = {
+			began: (run, program, placed, screen) => {
 				screens.set(run, screen);
-				seen.push({kind: "open", run, program});
+				seen.push({kind: "open", run, program, placed});
 				screen.show((m) => seen.push({kind: "view", run, data: m.data}));
 			},
-			close: (run) => {
+			ended: (run) => {
 				const screen = screens.get(run);
 				if (screen === undefined) return;
 				screens.delete(run);
 				seen.push({kind: "close", run});
-				// As a real window does: closing it says `closed`, whoever closed it.
+				// As a real view does: taking it away says `closed`, whoever took it away.
 				screen.closed();
 			},
+			running: (count) => seen.push({kind: "running", count}),
 		};
 		const host = yield* startHost({
 			jobs: opts.jobs ?? memoryStorage(),
-			history: opts.history ?? memoryHistory(),
-			windows,
+			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
+			runs,
 		}).pipe(Effect.provideService(Ledger, opts.ledger ?? memoryService()));
 		let bytes = "";
 		host.terminal.show((m) => {
@@ -177,6 +182,7 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(seen.open.program).toBe("counter");
+		expect(seen.open.placed).toBe("foreground");
 		// The prompt waits while counter runs in the foreground: the cursor is on a fresh row.
 		expect(seen.busy).toEqual(["tsh$ counter", ""]);
 		expect(seen.wrong).toEqual({kind: "refused", why: "counter has no input line"});
@@ -274,6 +280,9 @@ describe("a program's window", () => {
 				s.type("counter &\r");
 				const open = yield* s.opened();
 				const back = yield* s.prompts(2);
+				const counted = yield* s.until("one running job", () =>
+					s.seen.find((x) => x.kind === "running" && x.count === 1),
+				);
 				s.type("say --text meanwhile\r");
 				yield* s.prompts(3);
 				s.press(open.run, "plus");
@@ -284,13 +293,41 @@ describe("a program's window", () => {
 						? s.rows()
 						: undefined,
 				);
-				return {back, rows};
+				const none = yield* s.until("no running job", () =>
+					s.seen.findLast((x) => x.kind === "running" && x.count === 0),
+				);
+				return {open, back, rows, counted, none};
 			}).pipe(Effect.scoped),
 		);
+		expect(seen.open.placed).toBe("background");
+		expect(seen.counted).toEqual({kind: "running", count: 1});
+		expect(seen.none).toEqual({kind: "running", count: 0});
 		expect(seen.back[0]).toBe("tsh$ counter &");
 		expect(seen.back.at(-1)).toBe("tsh$");
 		expect(seen.rows).toContain("meanwhile");
 		expect(seen.rows.at(-1)).toBe("tsh$");
+	});
+
+	it("is stopped by the host, as its tile is closed, and its job leaves tsh's table", async () => {
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("counter &\r");
+				const open = yield* s.opened();
+				yield* s.prompts(2);
+				yield* s.host.stop(open.run);
+				yield* s.closed(open.run);
+				// A run that is gone already: nothing to stop.
+				yield* s.host.stop(open.run);
+				yield* s.host.stop("counter:nope");
+				yield* s.until("no running job", () =>
+					s.seen.findLast((x) => x.kind === "running" && x.count === 0),
+				);
+				return s.rows();
+			}).pipe(Effect.scoped),
+		);
+		expect(rows[0]).toBe("tsh$ counter &");
+		expect(rows.at(-1)).toBe("tsh$");
 	});
 
 	it("does not open for a line tsh refuses", async () => {
@@ -302,7 +339,7 @@ describe("a program's window", () => {
 				return {rows, seen: [...s.seen]};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.seen).toEqual([]);
+		expect(seen.seen.filter((x) => x.kind !== "running")).toEqual([]);
 		expect(seen.rows[1]).toMatch(/^tsh: /);
 	});
 
@@ -343,6 +380,23 @@ describe("what is kept for the next start", () => {
 		);
 		expect(history.kept()).toEqual(["say --text one", "seq --to 2"]);
 		expect(rows).toEqual(["tsh$ seq --to 2"]);
+	});
+
+	it("shares the history between two tiles: a line typed in one is in the other's Up", async () => {
+		const rows = await go(
+			Effect.gen(function* () {
+				const shared = yield* sharedHistory(memoryHistory());
+				const one = yield* session({shared});
+				const two = yield* session({shared});
+				one.type("say --text from-one\r");
+				yield* one.prompts(2);
+				two.type("\x1b[A");
+				return yield* two.until("tile one's line", () =>
+					two.rows()[0] === "tsh$ say --text from-one" ? two.rows() : undefined,
+				);
+			}).pipe(Effect.scoped),
+		);
+		expect(rows).toEqual(["tsh$ say --text from-one"]);
 	});
 
 	it("keeps jobs in a folder: the app quits with counter's window up, the next host attaches it at 1", async () => {

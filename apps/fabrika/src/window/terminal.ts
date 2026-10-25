@@ -1,19 +1,29 @@
 import {Effect} from "effect";
 import {FitAddon, Ghostty, Terminal} from "ghostty-web";
 import wasm from "ghostty-web/ghostty-vt.wasm";
+import type {TileId} from "../desk/layout/index.ts";
 import {readToTerminal} from "../messages.ts";
 
-// The terminal window: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
-// built to WebAssembly, on a canvas. It sends the keys pressed and its size, and draws the bytes
-// it is sent, as a terminal emulator does with a pty. The line editor and tsh are in the main
-// process (host.ts). No React: there is nothing here to hold state for.
+// A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
+// built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
+// and draws the bytes it is sent, as a terminal emulator does with a pty. The line editor and tsh
+// are in the main process (host.ts, one per tile).
+//
+//   const term = terminalFor(ghostty, "t1");
+//   term.attach(slot);      // drawn in the tile's slot; moved, not made again, as the layout changes
+//   term.focus();           // its keys go to t1's tsh
+//   term.dispose();         // the tile closed: its port goes
+//
+// It lives outside React on purpose: a split moves a tile into a new stack, and React would make
+// the tile's element again, and with it a fresh terminal. The element is made once here, and the
+// desk's page moves it into whichever slot the tile has now.
 //
 // The setup started from the draft terminal program in pull request 61 (`programs/terminal`,
-// its `use-terminal.ts`): the terminal's options, fit on open, then follow the window's size,
+// its `use-terminal.ts`): the terminal's options, fit on open, then follow the element's size,
 // and the screen read back as text after each write, since Ghostty 0.4 declares `onRender` and
-// never fires it. What is new here: the WebAssembly is compiled from the bytes in this page's own
-// script, not fetched (`Ghostty.load` fetches a data: url, which this page's policy refuses), and
-// there is no React hook around it.
+// never fires it. The WebAssembly is compiled from the bytes in this page's own script, not
+// fetched (`Ghostty.load` fetches a data: url, which this page's policy refuses), once, and
+// every tile's terminal shares it.
 
 /** The app's own colors (window.css). */
 const THEME = {background: "#16181d", foreground: "#d8dce4", cursor: "#3b82f6"};
@@ -22,7 +32,7 @@ const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const MIRRORED = 200;
 
 /** Ghostty's terminal, compiled from the bytes bundled with this script. */
-const ghostty = Effect.tryPromise({
+export const loadGhostty = Effect.tryPromise({
 	try: async () => {
 		let memory: WebAssembly.Memory | null = null;
 		const {instance} = await WebAssembly.instantiate(wasm, {
@@ -41,19 +51,38 @@ const ghostty = Effect.tryPromise({
 		if (exported instanceof WebAssembly.Memory) memory = exported;
 		return new Ghostty(instance);
 	},
-	catch: (cause) => new Error("the terminal could not start its screen", {cause}),
+	catch: (cause) => new Error("the terminals could not start their screen", {cause}),
 });
 
 /** A width or height the main process takes: between 2 and 1000 cells (messages.ts). */
 const cells = (n: number) => Math.min(1000, Math.max(2, Math.floor(n)));
 
-const boot = Effect.gen(function* () {
-	const element = document.getElementById("screen");
-	const text = document.getElementById("screen-text");
-	if (element === null || text === null) return yield* Effect.die("the page has no screen");
+export interface TileTerminal {
+	/** Draw it in `slot`: the first time, the terminal opens there; after, it moves there. */
+	readonly attach: (slot: HTMLElement) => void;
+	/** Keys go to it. */
+	readonly focus: () => void;
+	/** The tile closed: the terminal goes, and so does its port. */
+	readonly dispose: () => void;
+}
+
+export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+	const port = `tile:${tile}`;
+	const element = document.createElement("div");
+	element.className = "term";
+	const screen = document.createElement("div");
+	screen.className = "screen";
+	// The screen as text: the canvas is blank to a screen reader, and to a test. A named region,
+	// so a screen reader can go to it. Not a live region: it is written whole after each write,
+	// and a live one would read it all out again each time.
+	const text = document.createElement("section");
+	text.className = "screen-text";
+	text.setAttribute("aria-label", `${tile} screen`);
+	element.append(screen, text);
+
 	const term = new Terminal({
-		ghostty: yield* ghostty,
-		fontSize: 14,
+		ghostty,
+		fontSize: 13,
 		fontFamily: FONT,
 		cursorBlink: true,
 		scrollback: 1000,
@@ -61,13 +90,12 @@ const boot = Effect.gen(function* () {
 	});
 	const fit = new FitAddon();
 	term.loadAddon(fit);
-	term.open(element);
-	fit.fit();
-	fit.observeResize();
+	let opened = false;
+
 	/**
-	 * The screen as text, for a screen reader and a test: the canvas is blank to both. It ends on
-	 * the cursor's row, blank or not, as that is where the next text goes. Ghostty 0.4's `baseY`
-	 * is always 0, so the screen's first row is found from the buffer's length.
+	 * The screen as text. It ends on the cursor's row, blank or not, as that is where the next
+	 * text goes. Ghostty 0.4's `baseY` is always 0, so the screen's first row is found from the
+	 * buffer's length.
 	 */
 	const mirror = () => {
 		const buffer = term.buffer.active;
@@ -77,28 +105,45 @@ const boot = Effect.gen(function* () {
 			rows.push(buffer.getLine(y)?.translateToString(true) ?? "");
 		text.textContent = rows.join("\n");
 	};
+	/**
+	 * Read the screen back once a frame at most, not after each write: a tile printing 2,000 lines
+	 * read 200 rows back 2,000 times, and held the whole page for seconds (experiment 141).
+	 */
+	let mirroring = false;
+	const mirrorSoon = () => {
+		if (mirroring) return;
+		mirroring = true;
+		requestAnimationFrame(() => {
+			mirroring = false;
+			mirror();
+		});
+	};
 	const size = (cols: number, rows: number) =>
-		window.fabrika.send({type: "size", cols: cells(cols), rows: cells(rows)});
-	term.onData((data) => window.fabrika.send({type: "keys", data}));
-	term.onResize(({cols, rows}) => size(cols, rows));
-	size(term.cols, term.rows);
-	window.fabrika.onMessage((raw) => {
-		const read = readToTerminal(raw);
-		if (read.kind === "read") term.write(read.msg.data, mirror);
-		else console.warn(`fabrika: refused a message from the app: ${read.why}`);
-	});
-	term.focus();
-});
+		window.fabrika.send(port, {type: "size", cols: cells(cols), rows: cells(rows)});
 
-Effect.runFork(
-	boot.pipe(
-		Effect.catchCause((cause) =>
-			Effect.sync(() => {
-				const text = document.getElementById("screen-text");
-				if (text === null) return;
-				text.setAttribute("role", "alert");
-				text.textContent = `the terminal could not start: ${String(cause)}`;
-			}),
-		),
-	),
-);
+	return {
+		attach: (slot) => {
+			if (element.parentElement !== slot) slot.append(element);
+			if (opened) return fit.fit();
+			opened = true;
+			term.open(screen);
+			fit.fit();
+			fit.observeResize();
+			term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
+			term.onResize(({cols, rows}) => size(cols, rows));
+			size(term.cols, term.rows);
+			// Heard only once it is open: the bytes that came before wait in the preload, in order.
+			window.fabrika.onMessage(port, (raw) => {
+				const read = readToTerminal(raw);
+				if (read.kind === "read") term.write(read.msg.data, mirrorSoon);
+				else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
+			});
+		},
+		focus: () => term.focus(),
+		dispose: () => {
+			window.fabrika.forget(port);
+			term.dispose();
+			element.remove();
+		},
+	};
+};

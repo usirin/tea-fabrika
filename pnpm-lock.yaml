@@ -235,6 +235,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
       playwright:
         specifier: 'catalog:'
         version: 1.64.1

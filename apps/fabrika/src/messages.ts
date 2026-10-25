@@ -1,10 +1,12 @@
 import {Cause, Exit, Schema} from "effect";
+import {Saved, TileIdSchema} from "./desk/desk.ts";
 
-// What the app's windows and the main process say to each other. There are two kinds of window,
-// and each has its own two message types. They are the protocol; the MessagePort that carries
-// them today is one way to carry them. No platform here: the windows import this file too.
+// What the app's one window and the main process say to each other. The window holds the desk
+// (desk/desk.ts), a terminal per tile, and a view per run of a program with one; each has its own
+// two message types, on a port of its own. They are the protocol; the MessagePort that carries
+// them today is one way to carry them. No platform here: the window imports this file too.
 //
-// The terminal window is a terminal and nothing more, as a terminal emulator is to a pty: it
+// A tile's terminal is a terminal and nothing more, as a terminal emulator is to a pty: it
 // sends the keys pressed and its size, and draws the bytes it is sent. The line editor and tsh
 // are in the main process (host.ts).
 //
@@ -12,8 +14,9 @@ import {Cause, Exit, Schema} from "effect";
 //   from the terminal    {type: "keys", data: "cou\t"}
 //                        {type: "size", cols: 100, rows: 30}
 //
-// A program's window draws one run of one program with a window, and sends what its window
-// sends. Its port is that run's: a message on it can only be for that run.
+// A program's view draws one run of one program with a view, in a tile, and sends what the
+// view sends. Its port is that run's: a message on it can only be for that run. Its types keep
+// the word "window", as the programs' own `WindowProps` do.
 //
 //   to a window          {type: "view", program: "counter", data: {n: 0}}
 //   from a window        {type: "msg", msg: {type: "press", value: "plus"}}
@@ -57,6 +60,55 @@ export const FromWindow = Schema.Struct({
 });
 export type FromWindow = typeof FromWindow.Type;
 
+/** A run with a view, as the desk names it: its id, and its program, which picks its view. */
+const Run = Schema.Struct({id: Schema.String, program: Schema.String});
+
+/**
+ * What the main process tells the desk (desk/desk.ts), on the desk's own port. `start` hands it
+ * the desk kept from before, not read yet: the page reads it with `restore`. The rest are the
+ * desk's own Msgs, as each tile's tsh sees its runs (tiles.ts).
+ *
+ *   {type: "start", saved: null}
+ *   {type: "covered", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
+ *   {type: "beside", tile: "t1", run: {id: "counter:3c4d", program: "counter"}}
+ *   {type: "over", run: "counter:1a2b"}
+ *   {type: "jobs", tile: "t1", running: 1}
+ *   {type: "ended", tile: "t2"}
+ */
+export const ToDesk = Schema.Union([
+	Schema.Struct({type: Schema.Literal("start"), saved: Schema.Unknown}),
+	Schema.Struct({type: Schema.Literal("covered"), tile: TileIdSchema, run: Run}),
+	Schema.Struct({type: Schema.Literal("beside"), tile: TileIdSchema, run: Run}),
+	Schema.Struct({type: Schema.Literal("over"), run: Schema.String}),
+	Schema.Struct({
+		type: Schema.Literal("jobs"),
+		tile: TileIdSchema,
+		running: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	}),
+	Schema.Struct({type: Schema.Literal("ended"), tile: TileIdSchema}),
+]);
+export type ToDesk = typeof ToDesk.Type;
+
+/**
+ * What the desk asks of the main process: its Cmds, but `send`, which goes on the tile's own
+ * port as keys. A tile's id names a folder in the app's home, so it is read by its pattern
+ * (`t` and a number) and nothing else passes.
+ *
+ *   {type: "open", tile: "t2"}       start t2's tsh, or show the one that runs
+ *   {type: "close", tile: "t2"}      end t2's tsh and its runs, and drop its jobs
+ *   {type: "stop", run: "counter:1a2b"}
+ *   {type: "save", desk: {...}}      keep the desk for the next start
+ *   {type: "quit"}                   the last tile closed
+ */
+export const FromDesk = Schema.Union([
+	Schema.Struct({type: Schema.Literal("open"), tile: TileIdSchema}),
+	Schema.Struct({type: Schema.Literal("close"), tile: TileIdSchema}),
+	Schema.Struct({type: Schema.Literal("stop"), run: Schema.String}),
+	Schema.Struct({type: Schema.Literal("save"), desk: Saved}),
+	Schema.Struct({type: Schema.Literal("quit")}),
+]);
+export type FromDesk = typeof FromDesk.Type;
+
 /** A message read: what it says, or why it was refused, in the schema's words. */
 export type Read<T> =
 	| {readonly kind: "read"; readonly msg: T}
@@ -81,3 +133,7 @@ export const readToTerminal = reader(ToTerminal);
 export const readFromWindow = reader(FromWindow);
 /** What a program's window reads from the host. */
 export const readToWindow = reader(ToWindow);
+/** What the main process reads from the desk. */
+export const readFromDesk = reader(FromDesk);
+/** What the desk reads from the main process. */
+export const readToDesk = reader(ToDesk);
