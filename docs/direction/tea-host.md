@@ -142,6 +142,14 @@ opt-in restart backoff, and resending a dead letter.
   behind home routers need no tunnel. If a deployed ledger's p99 append
   is over about 50 ms, a direct host-to-host path comes next, and it still
   records the message.
+  *Decided 2026-10-25: a send stays a ledger append, and there is no direct
+  host-to-host path. The 50 ms line above was an agent's lean, never agreed.
+  Experiment 144 measured the
+  deployed ledger from a laptop: an append takes 56 ms at p50 and 426 ms at
+  p99, and nothing was lost or doubled. That is good enough for two people
+  working together. A direct path would be a second system to keep right. A
+  person should not wait on a slow write (show the change, settle it behind),
+  but that is later, and only if it feels slow in use.*
 - **Settled since:** the ledger is one Durable Object everywhere, run
   locally in Miniflare (experiment 93); the local host restarts it when its
   memory passes a cap. See [the sync engine note](./a-local-first-sync-engine.md).
