@@ -98,10 +98,42 @@ run. What would settle it: building the form and seeing how small it is.
     of the link.
   - The earlier lean, a one-time copy on GitHub (70%), was wrong: comments on
     a copy reach nobody.
-- **How a pull request's status reaches the ticket.** Today `CodeHost` asks
-  GitHub again every few seconds (`packages/pipeline/src/code-host-github.ts`).
-  GitHub webhooks are wanted instead, behind the same `CodeHost` streams. Where
-  the webhook lands is open: a laptop has no public address.
+- **How a pull request's status reaches the ticket.** Lean for the first
+  version (2026-10-24, 80%): a watcher program on the ledger's host reads each
+  open pull request on its own Durable Object alarm and writes a `pr` fact
+  when something changed. Today `CodeHost` asks GitHub again every few seconds
+  (`packages/pipeline/src/code-host-github.ts`); the watcher sits behind the
+  same `CodeHost` streams, so no machine changes.
+
+  ```ts
+  // A sketch. The same code in Miniflare on a laptop and on Cloudflare for a team.
+  async alarm() {
+  	for (const pr of openPrs()) {
+  		const now = await codeHost.read(pr, {etag: pr.etag}); // 304 when nothing changed
+  		if (now.changed) await ledger.append({fact: "pr", ticket: pr.ticket, head: now.head, checks: now.checks});
+  	}
+  	if (openPrs().length > 0) await setAlarm(Date.now() + 15_000);
+  }
+  ```
+
+  - An unchanged read does not count against GitHub's rate limit
+    ([GitHub](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)).
+    GitHub's own advice is webhooks over polling; a few open pull requests
+    stay far inside its limits.
+  - An alarm runs at least once and is retried when it fails
+    ([Cloudflare](https://developers.cloudflare.com/durable-objects/api/alarms/)).
+    Each pass is a fresh read, so a missed pass loses nothing.
+  - Its own program, not the ledger: a Durable Object has one alarm, and the
+    ledger's is for leases.
+  - Cost: status up to 15 s late, and a read-only GitHub token where the
+    watcher runs.
+- **Later: webhooks through a tunnel to a local server.** A tunnel such as
+  Cloudflare Tunnel connects outward only and needs no public address
+  ([Cloudflare](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)).
+  It would let GitHub, and other services, reach the app on a laptop. Not for
+  the first version. Whatever reaches the tunnel reaches the laptop, so only
+  the webhook path is served, and every delivery's signature is checked
+  before anything else reads it.
 - **Ticket ids.** `demlik-1`, in Linear's style of a team key and a number, is
   a guess.
 - **The form.** The tracker program's window. `tsh` can drive the same
