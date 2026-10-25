@@ -580,6 +580,12 @@ const write = (
 	return {ok: false, why: "stale", rev: revOf(db, stream)};
 };
 
+/**
+ * The ledger's own write, for the door's facts in `door/members` (`door.ts`): no name check, no
+ * fence. It takes a `Db`, which only a driver holds, so no caller of the `Ledger` service reaches it.
+ */
+export const writeUnguarded = write;
+
 export const registerWith =
 	(rules: Rules) =>
 	(db: Db, now: number, name: string, writer: string): RegisterResult =>

@@ -7,8 +7,12 @@ thirty orders, and count. Thirty orders, thirty brewed, thirty poured.
 
 These are the finished files. The tutorial has you write them yourself; if a step goes wrong,
 compare with these. `pnpm typecheck` checks them, so they keep working as the package changes. They import `@kampus/fabrika` for the services,
-`@kampus/fabrika/local` for the ledger in Miniflare, and `@kampus/fabrika/http` for the hosts'
-way to it.
+`@kampus/fabrika/local` for the ledger in Miniflare and for the hosts' way to it.
+
+The ledger has a door: a request with no credential is refused. A local ledger keeps its one
+person's secret in its data folder (`.teahouse/door-secret`, readable by you only), and the hosts
+read it from there (`layerAttach`). So every write is stamped as that person, `user:owner`, and
+a holder reads like `host-a@1761000000000@user:owner`: the host's own tag, then who it is.
 
 You need Node `26.12.0`, `pnpm` 10, four terminals and a spare shell. Run everything from the
 repo root, after `pnpm install --frozen-lockfile`.
