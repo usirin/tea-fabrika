@@ -166,6 +166,54 @@ mutants.
 - **What it costs:** fabrika's own machines stay less tested for a while.
 - **How sure: 80%.** Experiment 122 is the first test of the verify step.
 
+## Proposed: a TLA+ spec that outlives its design is checked against real runs (2026-10-24)
+
+**Proposed**, from [experiment 139](../../experiments/139-tla-trace-validation.md).
+
+```ts
+// A sketch. A spec kept after its code exists is checked against real runs of that code.
+const steps = stepsOf(run.log, 8); // the ledger's log of one run, read as the spec's steps
+const c = yield* checkTraces(jar, {against: "v2", n: 8, fixed: true}, [steps]);
+// accepted: this run is a behaviour of the spec. Rejected: the spec or the code has drifted.
+```
+
+- **The rule above stays: TLA+ for a design with no code yet.** Once the code
+  exists, its checks are tests of the code: property tests, on the running
+  host where machines work together (experiment 116).
+- **New: a spec kept after its code exists is trusted only while real runs
+  of the code pass it.** That is trace validation
+  ([Cirstea et al. 2024](https://arxiv.org/abs/2404.16075)). A spec that no
+  run checks is a record of the design, not a check.
+  - It belongs in the TLA+ drift job of
+    [Scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md),
+    not in `pnpm test`, which needs no Java today.
+- **Not adopted: tests made from a spec's paths, or a trace check as a
+  ticket's gate.** On the hosted lane they caught nothing the repo's own
+  tests missed (below).
+
+**Why:**
+
+- **116's spec was wrong in three places, and it still found the hang.** It
+  rejected all 300 real runs of the fixed lane: its rows had no kind, its N
+  was the plan's length, and it promised an EXIT the host never sends after
+  the lane has exited. Only real runs could show this. The code was right
+  each time.
+- **It is cheap here.** The ledger is the trace, with one order for every
+  row, so the code logs nothing new. The trace spec is 56 lines; reading the
+  log as the spec's steps is 188; TLC checks 300 runs in about 1.2 s.
+- **On mutants it adds nothing to tests.** Of 46 Stryker mutants of the
+  lane that typecheck, the trace check and the path tests caught 8, and the
+  repo's tests caught all 8 too, in about a quarter of the time or less.
+
+**What it costs:** a spec and a log reader per machine kept this way, and
+Java where the drift job runs.
+
+**How sure: 75%.** The doubt: one small machine with six variables. CCF and
+MongoDB, with far larger specs, paid months for the same lever
+([NSDI 2025](https://arxiv.org/html/2406.17455v2),
+[VLDB 2020](https://arxiv.org/abs/2006.00915)). A second machine kept this
+way, with more state, would settle it.
+
 ## Not decided here
 
 - **How to test between machines, and "it ends" laws.** A test of the

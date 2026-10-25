@@ -25,6 +25,7 @@ import {
 	input,
 	Ledger,
 	type ProcessInfo,
+	type Row,
 	Self,
 	serve,
 } from "@kampus/fabrika";
@@ -168,8 +169,18 @@ const laneOfVariant = (v: Variant): typeof hostedLane => (v === "today" ? hosted
 
 // ---------------------------------------------------------------- the stand-in children
 
+/**
+ * What one stand-in child does: `before`, then its row (none for `no_row`), then `after`, then it
+ * exits. A property's child does both at once; a driven child waits to be told (./lane-trace.ts).
+ */
+export interface ChildPlan {
+	readonly ending: Ending;
+	readonly before: Effect.Effect<void>;
+	readonly after: Effect.Effect<void>;
+}
+
 const childProgram = (
-	endingOf: (name: string) => Ending,
+	planOf: (name: string) => ChildPlan,
 	ended: (name: string, at: number) => void,
 ) =>
 	defineProgram({
@@ -181,7 +192,8 @@ const childProgram = (
 			Effect.gen(function* () {
 				const self = yield* Self;
 				const ledger = yield* Ledger;
-				const ending = endingOf(self.name);
+				const {ending, before, after} = planOf(self.name);
+				yield* before;
 				if (ending !== "no_row") {
 					const outcome =
 						ending === "row_done"
@@ -196,6 +208,7 @@ const childProgram = (
 						)
 						.pipe(Effect.orDie);
 				}
+				yield* after;
 				yield* self.exit(ending === "no_row" ? "crash" : "normal", `stand-in: ${ending}`);
 				const at = yield* Clock.currentTimeMillis;
 				yield* Effect.sync(() => ended(self.name, at));
@@ -205,69 +218,129 @@ const childProgram = (
 
 // ---------------------------------------------------------------- one case
 
-/**
- * Run one lane whose children end as `endings` says, in the order the lane starts them, until the
- * lane writes its outcome row or `limitMs` of virtual time pass with every child it started ended.
- */
-export const runCase = (o: {
+/** Virtual milliseconds one child waits before its row, and between its row and its exit. */
+export interface Pause {
+	readonly before: number;
+	readonly after: number;
+}
+
+/** One case: the children's endings, the lane, and how long it may stay quiet. */
+export interface Case {
 	readonly endings: readonly Ending[];
 	readonly variant: Variant;
 	readonly limitMs: number;
 	/** Virtual time at which a case gives up whatever happens. */
 	readonly capMs?: number;
-}): Effect.Effect<Seen> =>
+	/** Each child's pauses, in the order the lane starts them. Left out: none, row and exit at once. */
+	readonly pauses?: readonly Pause[];
+	/**
+	 * After the lane's row, wait until every child it started has exited too, then one second more
+	 * for the lane's own exit: a trace ends at rest.
+	 */
+	readonly settle?: boolean;
+}
+
+/** The world a case runs in: one approved plan on a fresh memory ledger, under the TestClock. */
+export const worldOf = () =>
+	Layer.mergeAll(
+		memoryLedger(plan.facts).layer,
+		outside,
+		work,
+		noFaults,
+		nodeServices,
+		TestClock.layer(),
+	);
+
+/** The lane every case runs: the plan's. */
+export const LANE = laneOf(plan.id);
+
+/**
+ * Serve the lane on its job, and each child it names as `planOf` says, in the world's scope.
+ * `ended` hears each child exit, with the virtual time.
+ */
+export const startLane = (
+	variant: Variant,
+	planOf: (name: string) => ChildPlan,
+	ended: (name: string, at: number) => void,
+) =>
+	Effect.gen(function* () {
+		const program = childProgram(planOf, ended);
+		yield* ensureName(LANE, HOLDER);
+		yield* cast(LANE, "job", job, HOLDER);
+		const timing = {holder: HOLDER, ttlMs: TTL_MS, renewEveryMs: TTL_MS / 4};
+		const say = () => {};
+		yield* serve({name: LANE, program: hostedStage(laneOfVariant(variant), say), ...timing}).pipe(
+			Effect.orDie,
+		);
+		yield* serveChildren(LANE, (child) =>
+			serve({name: child, program, ...timing}).pipe(Effect.orDie),
+		);
+	});
+
+/** One tick of the case's clock: 50 ms of virtual time, then room for every fiber to run. */
+export const tick = Effect.gen(function* () {
+	yield* TestClock.adjust(TICK);
+	for (let k = 0; k < 20; k++) yield* Effect.yieldNow;
+});
+
+const pause = (ms: number) => (ms > 0 ? Effect.sleep(Duration.millis(ms)) : Effect.void);
+
+/** Ticks a settled case runs on after the lane's row: one second of virtual time. */
+const SETTLE_TICKS = 20;
+
+/**
+ * Run one lane whose children end as `endings` says, in the order the lane starts them, until the
+ * lane writes its outcome row or `limitMs` of virtual time pass with every child it started ended.
+ */
+export const runCase = (o: Case): Effect.Effect<Seen> =>
+	caseIn(o).pipe(Effect.scoped, Effect.provide(worldOf()));
+
+/**
+ * `runCase`, and the whole ledger log at its end, in the ledger's own order (experiment 139). The
+ * log is the run's trace: the lane's saved states, its children's rows, their exits and the EXITs.
+ */
+export const traceCase = (o: Case): Effect.Effect<Seen & {readonly log: readonly Row[]}> =>
+	Effect.gen(function* () {
+		const seen = yield* caseIn(o);
+		const log = yield* (yield* Ledger).read(0, 1_000_000).pipe(Effect.orDie);
+		return {...seen, log};
+	}).pipe(Effect.scoped, Effect.provide(worldOf()));
+
+const caseIn = (o: Case) =>
 	Effect.gen(function* () {
 		const children: {name: string; ending: Ending}[] = [];
 		const up = new Set<string>();
 		let lastEnd = 0;
-		const endingOf = (name: string): Ending => {
-			const ending = o.endings[children.length] ?? "row_stuck";
+		const planOf = (name: string): ChildPlan => {
+			const at = children.length;
+			const ending = o.endings[at] ?? "row_stuck";
+			const p = o.pauses?.[at] ?? {before: 0, after: 0};
 			children.push({name, ending});
 			up.add(name);
-			return ending;
+			return {ending, before: pause(p.before), after: pause(p.after)};
 		};
 		const ended = (name: string, at: number) => {
 			up.delete(name);
 			lastEnd = at;
 		};
-		const lane = laneOf(plan.id);
-		const say = () => {};
-		const stage = laneOfVariant(o.variant);
-		const program = childProgram(endingOf, ended);
-
-		yield* ensureName(lane, HOLDER);
-		yield* cast(lane, "job", job, HOLDER);
-		const timing = {holder: HOLDER, ttlMs: TTL_MS, renewEveryMs: TTL_MS / 4};
-		yield* serve({name: lane, program: hostedStage(stage, say), ...timing}).pipe(Effect.orDie);
-		yield* serveChildren(lane, (child) =>
-			serve({name: child, program, ...timing}).pipe(Effect.orDie),
-		);
+		yield* startLane(o.variant, planOf, ended);
 
 		const cap = o.capMs ?? 120_000;
 		const start = yield* Clock.currentTimeMillis;
 		for (;;) {
-			yield* TestClock.adjust(TICK);
-			for (let k = 0; k < 20; k++) yield* Effect.yieldNow;
+			yield* tick;
 			const now = yield* Clock.currentTimeMillis;
-			const row = yield* readOutcome(lane).pipe(Effect.orElseSucceed(() => null));
-			if (row !== null) return {ended: true, outcome: row.outcome, children, ms: now - start};
+			const row = yield* readOutcome(LANE).pipe(Effect.orElseSucceed(() => null));
+			if (row !== null && (o.settle !== true || up.size === 0 || now - start > cap)) {
+				// A settled trace also holds the lane's own exit, which comes after its row.
+				if (o.settle === true) for (let k = 0; k < SETTLE_TICKS; k++) yield* tick;
+				return {ended: true, outcome: row.outcome, children, ms: now - start} satisfies Seen;
+			}
 			const quiet = children.length > 0 && up.size === 0 && now - lastEnd > o.limitMs;
 			if (quiet || now - start > cap)
-				return {ended: false, outcome: null, children, ms: now - start};
+				return {ended: false, outcome: null, children, ms: now - start} satisfies Seen;
 		}
-	}).pipe(
-		Effect.scoped,
-		Effect.provide(
-			Layer.mergeAll(
-				memoryLedger(plan.facts).layer,
-				outside,
-				work,
-				noFaults,
-				nodeServices,
-				TestClock.layer(),
-			),
-		),
-	);
+	});
 
 // ---------------------------------------------------------------- the property
 
