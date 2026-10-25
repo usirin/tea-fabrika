@@ -19,6 +19,9 @@ export {parse} from "./grammar.ts";
 export {EMPTY, type Jobs} from "./jobs.ts";
 // What tsh starts, and from where.
 export {JobStorage, type ProgramList, Programs, programList, statusOf} from "./programs.ts";
+// Ctrl-R, bash's reverse-i-search: a key in, the search after it out. For a line editor of an
+// app's own (apps/fabrika's), so tsh searches its history the same way in both.
+export * as Search from "./search.ts";
 // tsh itself, as a program: lines in, printed values out. Its two outputs' schemas too, for an
 // app that builds its own schemas on them (apps/fabrika's pane view).
 export {Printed, Ready, tsh} from "./shell.ts";

@@ -2,7 +2,7 @@
 
 The smallest program with a window. It counts presses of +1 until done, and says the count. The
 fabrika app ([`apps/fabrika`](../../apps/fabrika/README.md)) lists it, so `counter` typed in the
-app's tsh takes over the window.
+app's tsh opens a window of its own.
 
 ```ts
 import {call, memoryStorage, readInput, viewOf} from "@kampus/fabrika";

@@ -164,6 +164,89 @@ readInput(counter, {type: "press", value: "plus"});   // {kind: "read", msg: {..
   a terminal feeds a foreground program's stdin; tsh waits for its end or
   Ctrl-C. Ctrl-C in the window goes to tsh.
 
+## Proposed 2026-10-25: a terminal window, and a window per program
+
+**Proposed**, not yet decided. It changes points 1 and 4 at the top of this
+note. The build is in [`apps/fabrika`](../../apps/fabrika/README.md).
+
+```text
+1. fabrika opens as a terminal window, running tsh with a line editor
+2. tsh comes with the owner's programs loaded
+3. the owner runs a program
+4. if that program has a GUI, it opens a window of its own; the terminal stays a terminal
+```
+
+```ts
+// Two kinds of window, each with its own two message types (apps/fabrika/src/messages.ts).
+// The terminal is a terminal and nothing more, as a terminal emulator is to a pty.
+type ToTerminal = {type: "write"; data: string};
+type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
+// A program window draws one run. Its port is that run's, so a message names no run.
+type ToWindow = {type: "view"; program: string; data: unknown};
+type FromWindow = {type: "msg"; msg: unknown};
+
+// The line editor is a tea machine in the main process: keys in, the bytes a terminal draws out.
+replay(editor, {ctx, msgs: [{type: "keys", data: "cou\t"}]});
+// writes "tsh$ counter ", Tab put in the one program that starts with "cou"
+replay(editor, {ctx, msgs: [{type: "keys", data: "counter\r"}]});
+// asks for line {text: "counter"}: tsh runs it, and counter's window opens
+```
+
+- **The terminal window runs tsh and nothing else.**
+  [ghostty-web](https://github.com/coder/ghostty-web) 0.4.0 draws it:
+  Ghostty's terminal, built to WebAssembly, on a canvas. The page sends keys
+  and its size, and draws the bytes it is sent.
+- **tsh and its line editor stay in the main process.** The editor is what
+  readline is to bash, written as a pure tea machine with tests. Its keys are
+  readline's emacs keys, by readline's own names. It keeps history across
+  restarts, searches it with Ctrl-R, and completes program names, flags and
+  job ids with Tab. There is no pty: tsh is not a process, so nothing needs
+  one.
+- **A run of a program with a window opens a window of its own,** as Unix
+  job control would have it: in the foreground the prompt waits; with `&` it
+  comes back at once; Ctrl-C in the terminal stops the foreground run, and its
+  window closes. Closing a window closes the run's inputs, as the end of
+  stdin does. Quitting the app keeps every job for `attach`.
+- **Every window keeps the same safety rules:** made by one function,
+  sandboxed, on the app's own scheme, every way out refused, and a port only
+  for that window's own top frame on its own page.
+- **The terminal's page lets in WebAssembly.** Its Content Security Policy adds
+  `'wasm-unsafe-eval'` to `script-src`, and nothing else. Chromium compiles no
+  WebAssembly without it. It does not let in `eval` or inline script. The
+  program windows keep the policy with no WebAssembly.
+
+### Why
+
+- **tsh is never hidden.** When a program took over the one window, tsh was
+  gone until it ended, and a program started with `&` covered tsh with no way
+  back. A terminal that stays a terminal has no such case.
+- **A real terminal is what people already know.** Cursor keys, Ctrl-R, Tab
+  and history are muscle memory from bash. An input box gave none of them.
+- **Job control is a known answer.** Foreground, background, Ctrl-C to the
+  foreground only, and the end of input are Unix's own rules. Nothing new to
+  learn, and nothing new to design.
+- **The editor is testable as data.** Keys in and bytes out, with no
+  Electron and no terminal: 42 tests fold keys through it and read the screen
+  back.
+
+### What it costs
+
+- **One more window per run.** The person moves between windows with the
+  operating system's own keys. A run with many windows open could get messy.
+- **A young dependency.** ghostty-web is at 0.4 (MIT, by Coder), held at an
+  exact version. It declares `onRender` but never fires it, so the page reads
+  the screen back after each write.
+- **The WebAssembly is in the terminal's script twice,** about 1.1 MB of its
+  1.5 MB: once in ghostty-web's own bundle as base64, and once as the bytes the
+  page compiles, since ghostty-web's own loader fetches a `data:` url, which
+  the policy refuses.
+- **A line editor of our own to keep.** Wide characters, bracketed paste and a
+  redraw on resize are not done yet (the app's README lists them).
+- **How sure:** 75%. The doubt is what closing a program's window should mean:
+  the end of its inputs (this proposal), or stop, as closing a terminal sends
+  `SIGHUP`. Watching people close windows with a job half done would settle
+  it.
+
 ## What would change it
 
 - A need to run fabrika on a machine with no screen, such as a remote server.

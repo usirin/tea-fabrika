@@ -58,7 +58,8 @@ What an app needs is public, in two places:
 - `Shell`, a namespace on the top level (`./index.ts`): the program list (`programList`,
   `Programs`, `JobStorage`, `SMALL`), tsh as a program (`tsh`), and the parts a test of a line
   uses (`parse`, `check`, `complete`, `describe`, `EMPTY`, `shapeLines`, `typeOf`, `Shorten`).
-  None of it names a platform.
+  `Search` is the Ctrl-R search (`search.ts`), for a line editor an app writes itself, as the
+  fabrika app does. None of it names a platform.
 - `@kampus/fabrika/shell`: `runTsh` and `homeOf`. The launcher holds a terminal, files and
   OpenTelemetry, so it is a subpath, not the top level.
 

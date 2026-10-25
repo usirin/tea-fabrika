@@ -18,61 +18,48 @@ body,
 	color: var(--ink);
 }
 
-main {
+/* The terminal: the screen fills the window, with a small margin, as a terminal app's does. */
+body.terminal {
+	box-sizing: border-box;
+	padding: 8px;
+}
+
+#screen {
+	height: 100%;
+}
+
+/* The screen as text: there for a screen reader and a test, out of sight. */
+.screen-text {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: pre;
+}
+
+.screen-text[role="alert"] {
+	position: static;
+	width: auto;
+	height: auto;
+	margin: 0;
+	clip-path: none;
+	white-space: pre-wrap;
+}
+
+/* A program's window. */
+main.program {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	box-sizing: border-box;
 	padding: 16px;
-	gap: 8px;
 }
 
-.lines {
-	flex: 1;
-	margin: 0;
-	overflow: auto;
-	white-space: pre-wrap;
-	line-height: 1.5;
-}
-
-form label {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-}
-
-.prompt {
+.starting {
+	margin: 16px;
 	color: var(--faint);
-}
-
-input {
-	flex: 1;
-	font: inherit;
-	color: inherit;
-	background: transparent;
-	border: none;
-	border-bottom: 1px solid var(--line);
-	padding: 4px 0;
-	outline: none;
-}
-
-input:focus {
-	border-bottom-color: var(--key);
-}
-
-.status,
-.starting,
-small {
-	margin: 0;
-	color: var(--faint);
-}
-
-.front header {
-	display: flex;
-	justify-content: space-between;
-	align-items: baseline;
-	border-bottom: 1px solid var(--line);
-	padding-bottom: 8px;
 }
 
 .counter {

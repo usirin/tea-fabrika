@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>fabrika</title>
+		<link rel="stylesheet" href="window.css" />
+		<script src="terminal.js" defer></script>
+	</head>
+	<body class="terminal">
+		<div id="screen"></div>
+		<!-- The screen as text: the canvas above is blank to a screen reader, and to a test. A named
+		     region, so a screen reader can go to it. Not a live region: it is written whole after
+		     each write, and a live one would read it all out again each time. -->
+		<section id="screen-text" class="screen-text" aria-label="tsh screen"></section>
+	</body>
+</html>

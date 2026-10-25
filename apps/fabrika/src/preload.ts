@@ -1,25 +1,26 @@
 import {contextBridge, ipcRenderer} from "electron";
 import {type Bridge, PORT_CHANNEL} from "./bridge.ts";
 
-// The preload: Electron at its thinnest edge, in the window's sandbox. It asks main for its end
-// of the MessagePort and gives the page `send` and `onView`, and nothing else: no ipcRenderer,
-// no port, no Node (Electron's security checklist, "do not expose Electron APIs").
+// The preload: Electron at its thinnest edge, in each window's sandbox. It asks main for its end
+// of the MessagePort and gives the page `send` and `onMessage`, and nothing else: no
+// ipcRenderer, no port, no Node (Electron's security checklist, "do not expose Electron APIs").
 //
 // Both names are there from the first instant, so the page never finds `window.fabrika`
 // missing. What the page sends before the port arrives waits here, in order, and goes once it
-// does. A view is the whole pane, so a listener added late is handed the newest one at once.
+// does. What main sends before the page listens waits too, and goes to the first listener, in
+// order: the terminal's screen is a stream of bytes, and a byte lost is a screen drawn wrong.
 
 let port: MessagePort | null = null;
 const waiting: unknown[] = [];
+const heard: unknown[] = [];
 const listeners: ((m: unknown) => void)[] = [];
-let newest: {readonly m: unknown} | null = null;
 
 ipcRenderer.once(PORT_CHANNEL, (event) => {
 	const [given] = event.ports;
 	if (given === undefined) return;
 	port = given;
 	given.onmessage = (e: MessageEvent) => {
-		newest = {m: e.data};
+		if (listeners.length === 0) heard.push(e.data);
 		for (const listener of listeners) listener(e.data);
 	};
 	for (const m of waiting.splice(0)) given.postMessage(m);
@@ -31,9 +32,9 @@ const bridge: Bridge = {
 		if (port === null) waiting.push(m);
 		else port.postMessage(m);
 	},
-	onView: (listener) => {
+	onMessage: (listener) => {
 		listeners.push(listener);
-		if (newest !== null) listener(newest.m);
+		if (listeners.length === 1) for (const m of heard.splice(0)) listener(m);
 	},
 };
 contextBridge.exposeInMainWorld("fabrika", bridge);

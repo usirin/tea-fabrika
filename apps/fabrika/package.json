@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The fabrika app: one Electron window running tsh, where a program with a window takes over until it ends. A walking skeleton.",
+	"description": "The fabrika app: a terminal window running tsh, and a window of its own for each run of a program that has one. A walking skeleton.",
 	"main": "dist/main.mjs",
 	"scripts": {
 		"build": "node build.ts",
@@ -17,6 +17,7 @@
 		"@kampus/fabrika": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",
 		"effect": "catalog:",
+		"ghostty-web": "catalog:",
 		"react": "catalog:",
 		"react-dom": "catalog:"
 	},

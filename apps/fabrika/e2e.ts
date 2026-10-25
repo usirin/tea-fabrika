@@ -1,5 +1,5 @@
 import {execFile} from "node:child_process";
-import {mkdir, mkdtemp, readdir} from "node:fs/promises";
+import {mkdir, mkdtemp, readdir, readFile} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -7,29 +7,35 @@ import {promisify} from "node:util";
 import {_electron, type ElectronApplication, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow, one
-// screenshot per step. Not part of `pnpm test` or CI: it opens a real window.
+// screenshot per step. Not part of `pnpm test` or CI: it opens real windows.
 //
 //   pnpm --filter @kampus/fabrika-app e2e
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e     screenshots there, not in a temp folder
 //
-//   1 tsh          the window opens on tsh
+//   1 terminal     the terminal window opens on tsh's prompt
 //   2 answer       `seq --to 3 | double`: double 2, double 4, double 6
-//   3 takeover     `counter`: its window takes over, at 0
-//   4 click        +1: its view is 1
-//   5 back         done: its window goes, tsh is back and printed 1
+//   3 tab          `cou` and Tab: the line is `counter `
+//   4 window       Enter: counter's own window opens, at 0, and the prompt waits
+//   5 click        +1 in counter's window: its view is 1
+//   6 closed       counter's window closed: tsh prints 1, and the prompt is back
+//   7 history      Up: `counter` is on the line again
 //
-// Then, with no screenshot: Ctrl-C stops a program with a window; the window cannot reach Node,
+// Then, with no screenshot: Ctrl-C in the terminal stops a foreground counter and its window
+// closes; `counter &` gives the prompt back with its window open; neither page can reach Node,
 // navigate away or open a window; a message the app does not know is refused; a second copy
 // quits and leaves the first; and what Electron's own Node can do (node:sqlite, its execPath).
 //
 // Then the app quits with a job in it, and is started again on the same home:
 //
-//   6 left         `counter`, +1, and the app quits with counter's window up, as on Cmd+Q
-//   7 found        started again: tsh says 1 job from an earlier tsh, not running
-//   8 attached     `attach %n`: counter's window takes over again, at 1
+//   8 left         `counter`, +1, and the app quits with counter's window up, as on Cmd+Q
+//   9 found        started again: tsh says 1 job from an earlier tsh, not running; Up shows the
+//                  last line typed before the quit
+//  10 attached     `attach %n`: counter's window opens again, at 1
 //
-// Playwright's API is promises, and this script stays in it, as Playwright's docs write it.
-// Node is here for temp folders, to start the second copy, and to look in the home.
+// The terminal draws on a canvas; the page keeps the screen as text too, for a screen reader,
+// and that is what this reads. Playwright's API is promises, and this script stays in it, as
+// Playwright's docs write it. Node is here for temp folders, to start the second copy, and to
+// look in the home.
 
 const here = import.meta.dirname;
 const electronPath: string = createRequire(import.meta.url)("electron");
@@ -52,118 +58,182 @@ const check = (what: string, ok: boolean, seen?: unknown) => {
 	console.log(`ok  ${what}`);
 };
 
-const line = async (page: Page, text: string) => {
-	const input = page.getByLabel("tsh line");
-	await input.fill(text);
-	await input.press("Enter");
+/** The terminal's screen, as text: its rows, with no trailing spaces. */
+const screen = async (page: Page) => (await page.locator("#screen-text").textContent()) ?? "";
+
+/** Wait until the screen passes `ok`, and answer it. */
+const until = async (page: Page, what: string, ok: (text: string) => boolean) => {
+	for (let i = 0; i < 200; i += 1) {
+		const text = await screen(page);
+		if (ok(text)) return text;
+		await page.waitForTimeout(50);
+	}
+	throw new Error(`waited for ${what}; the screen shows:\n${await screen(page)}`);
 };
 
-const outputOf = (page: Page) => page.getByLabel("tsh output");
-const waitReady = (page: Page) =>
-	page
-		.getByLabel("tsh status")
-		.filter({hasText: /^ready/})
-		.waitFor();
+const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+/** Wait until the prompt is up again, with nothing typed on it. */
+const prompted = (page: Page, what: string) => until(page, what, (t) => lastRow(t) === "tsh$");
 
-const flow = async (app: ElectronApplication) => {
-	const page = await app.firstWindow();
-	await page.getByLabel("tsh line").waitFor();
-	check(
-		"the window starts on our own scheme",
-		page.url() === "fabrika://app/index.html",
-		page.url(),
-	);
-	await shot(page, "1-tsh");
+/** Type a line at the prompt, wait to see it echoed, and press Enter. */
+const run = async (page: Page, line: string) => {
+	await page.keyboard.type(line);
+	await until(page, `the line ${line}`, (t) => lastRow(t) === `tsh$ ${line}`);
+	await page.keyboard.press("Enter");
+};
 
-	await line(page, "seq --to 3 | double");
-	await outputOf(page).filter({hasText: "double 6"}).waitFor();
-	await waitReady(page);
-	const answer = await outputOf(page).innerText();
-	check(
-		"tsh answers seq --to 3 | double",
-		["double 2", "double 4", "double 6"].every((l) => answer.includes(l)),
-		answer,
-	);
-	await shot(page, "2-answer");
+/** The next program window to open, once `start` is done. */
+const opens = async (app: ElectronApplication, start: () => Promise<void>) => {
+	const [window] = await Promise.all([app.waitForEvent("window"), start()]);
+	await window.getByLabel("count", {exact: true}).waitFor();
+	return window;
+};
 
-	await line(page, "counter");
-	const count = page.getByLabel("count", {exact: true});
-	await count.waitFor();
-	check("counter's window takes over, at 0", (await count.innerText()) === "0");
-	check("tsh is not shown under it", (await page.getByLabel("tsh line").count()) === 0);
-	await shot(page, "3-takeover");
+const countIn = (window: Page) => window.getByLabel("count", {exact: true});
 
-	await page.getByRole("button", {name: "+1"}).click();
-	await count.filter({hasText: /^1$/}).waitFor();
-	check("a click changes its view", (await count.innerText()) === "1");
-	await shot(page, "4-click");
+/** Close the program window on `url`, as the person does with its close button. */
+const closeWindow = (app: ElectronApplication, url: string) =>
+	app.evaluate(({BrowserWindow}, url) => {
+		BrowserWindow.getAllWindows()
+			.find((w) => w.webContents.getURL() === url)
+			?.close();
+	}, url);
 
-	await page.getByRole("button", {name: "done"}).click();
-	await page.getByLabel("tsh line").waitFor();
-	await waitReady(page);
-	const back = await outputOf(page).innerText();
-	check("done: tsh is back, and counter said 1", back.trimEnd().endsWith("tsh> counter\n1"), back);
-	await shot(page, "5-back");
-
-	// Ctrl-C from a program's window stops it, as from a terminal.
-	await line(page, "counter");
-	await count.waitFor();
-	await page.keyboard.press("Control+c");
-	await page.getByLabel("tsh status").filter({hasText: "ready, last status 130"}).waitFor();
-	check("Ctrl-C stops a program with a window: tsh is back, status 130", true);
-
-	// The window has the bridge's two names, and no Node, no Electron.
-	const reach = await page.evaluate(() => ({
+/** What a page can reach: the bridge's two names, and no Node. */
+const reachOf = (page: Page) =>
+	page.evaluate(() => ({
 		require: typeof (globalThis as {require?: unknown}).require,
 		process: typeof (globalThis as {process?: unknown}).process,
 		bridge: Object.keys(window.fabrika).sort(),
 		opened: window.open("https://example.com") === null,
 	}));
+
+const flow = async (app: ElectronApplication) => {
+	const terminal = await app.firstWindow();
+	await prompted(terminal, "the first prompt");
 	check(
-		"the window has send and onView only, and no Node",
-		reach.require === "undefined" &&
-			reach.process === "undefined" &&
-			reach.bridge.join() === "onView,send" &&
-			reach.opened,
-		reach,
+		"the terminal starts on our own scheme",
+		terminal.url() === "fabrika://app/terminal.html",
+		terminal.url(),
 	);
-	// A message for a run the pane does not show, or not of the protocol, is refused: tsh is untouched.
-	await page.evaluate(() => {
-		window.fabrika.send({
-			type: "msg",
-			pane: "p1",
-			to: "gone:1",
-			msg: {type: "press", value: "plus"},
-		});
-		window.fabrika.send({
-			type: "msg",
-			pane: "p9",
-			to: "tsh:p1",
-			msg: {type: "line", value: "say --text no"},
-		});
+	await shot(terminal, "1-terminal");
+
+	await run(terminal, "seq --to 3 | double");
+	const answer = await prompted(terminal, "seq's answer");
+	check(
+		"tsh answers seq --to 3 | double",
+		answer.includes("tsh$ seq --to 3 | double\ndouble 2\ndouble 4\ndouble 6\ntsh$"),
+		answer,
+	);
+	await shot(terminal, "2-answer");
+
+	await terminal.keyboard.type("cou");
+	await terminal.keyboard.press("Tab");
+	await until(terminal, "Tab's answer", (t) => lastRow(t) === "tsh$ counter");
+	check("Tab completes cou to counter", true);
+	await shot(terminal, "3-tab");
+
+	const counter = await opens(app, () => terminal.keyboard.press("Enter"));
+	check("counter opens its own window, at 0", (await countIn(counter).innerText()) === "0");
+	check("the window is counter's", (await counter.title()) === "counter", await counter.title());
+	const waiting = await screen(terminal);
+	check("the prompt waits while counter runs", lastRow(waiting) === "", waiting);
+	await shot(counter, "4-window");
+
+	await counter.getByRole("button", {name: "+1"}).click();
+	await countIn(counter).filter({hasText: /^1$/}).waitFor();
+	check("a click in counter's window changes its view", true);
+	await shot(counter, "5-click");
+
+	await Promise.all([counter.waitForEvent("close"), closeWindow(app, counter.url())]);
+	const closed = await prompted(terminal, "counter's count");
+	check(
+		"closing counter's window ends it: tsh prints 1, and the prompt is back",
+		closed.endsWith("tsh$ counter\n1\ntsh$"),
+		closed,
+	);
+	await shot(terminal, "6-closed");
+
+	await terminal.keyboard.press("ArrowUp");
+	await until(terminal, "the line before", (t) => lastRow(t) === "tsh$ counter");
+	check("Up brings back the line run before", true);
+	await shot(terminal, "7-history");
+
+	// Ctrl-C in the terminal stops the program in the foreground, and its window closes.
+	const stopped = await opens(app, () => terminal.keyboard.press("Enter"));
+	await Promise.all([stopped.waitForEvent("close"), terminal.keyboard.press("Control+c")]);
+	const afterStop = await prompted(terminal, "the prompt after Ctrl-C");
+	check(
+		"Ctrl-C in the terminal stops counter, and its window closes",
+		afterStop.includes("^C"),
+		afterStop,
+	);
+
+	// `&`: the window opens and the prompt comes back at once.
+	const behind = await opens(app, () => run(terminal, "counter &"));
+	const back = await prompted(terminal, "the prompt after &");
+	check(
+		"counter & opens its window and gives the prompt back",
+		/tsh\$ counter &\n\[\d+\] /.test(back),
+		back,
+	);
+	await run(terminal, "say --text meanwhile");
+	await until(terminal, "say's answer", (t) => t.includes("\nmeanwhile\n"));
+	await Promise.all([
+		behind.waitForEvent("close"),
+		behind.getByRole("button", {name: "done"}).click(),
+	]);
+	check("a background counter's done closes its window", true);
+
+	// Neither kind of window has more than the bridge's two names, and none has Node.
+	const left = await opens(app, () => run(terminal, "counter"));
+	for (const [name, page] of [
+		["terminal", terminal],
+		["counter", left],
+	] as const) {
+		const reach = await reachOf(page);
+		check(
+			`the ${name} window has send and onMessage only, and no Node`,
+			reach.require === "undefined" &&
+				reach.process === "undefined" &&
+				reach.bridge.join() === "onMessage,send" &&
+				reach.opened,
+			reach,
+		);
+	}
+	// A message not of the protocol is refused, from either window: tsh is told nothing.
+	await terminal.evaluate(() => {
+		window.fabrika.send({type: "line", value: "say --text no\r"});
+		window.fabrika.send({type: "keys", data: "say --text no\r", to: "tsh:p1"});
 		window.fabrika.send("rm -rf");
 	});
-	await line(page, "say --text still-here");
-	await outputOf(page).filter({hasText: "still-here"}).waitFor();
-	const after = await outputOf(page).innerText();
-	check("refused messages tell nothing", !after.includes("tsh> say --text no\n"), after);
-
-	// Counter at 1, and left up: the app quits with it, once the flow is done.
-	await line(page, "counter");
-	await count.waitFor();
-	await page.getByRole("button", {name: "+1"}).click();
-	await count.filter({hasText: /^1$/}).waitFor();
-	await shot(page, "6-left");
-
-	// Last in the window: Playwright waits on the navigation main refused, so the page is not driven after it.
-	await page.evaluate(() => {
-		window.location.href = "https://example.com";
+	await left.evaluate(() => {
+		window.fabrika.send({type: "msg", to: "tsh:p1", msg: {type: "line", value: "say --text no"}});
+		window.fabrika.send({type: "keys", data: "say --text no\r"});
 	});
-	await page.waitForTimeout(500);
-	const url = await app.evaluate(({BrowserWindow}) =>
-		BrowserWindow.getAllWindows()[0]?.webContents.getURL(),
-	);
-	check("the window cannot navigate away", url === "fabrika://app/index.html", url);
+	// Counter at 1, and left up: the app quits with it, once the flow is done.
+	await left.getByRole("button", {name: "+1"}).click();
+	await countIn(left).filter({hasText: /^1$/}).waitFor();
+	const refused = await screen(terminal);
+	check("refused messages tell tsh nothing", !refused.includes("\nno\n"), refused);
+	await shot(left, "8-left");
+
+	// Last in each window: Playwright waits on the navigation main refused, so the page is not driven after it.
+	for (const page of [left, terminal]) {
+		const url = page.url();
+		await page.evaluate(() => {
+			window.location.href = "https://example.com";
+		});
+		await page.waitForTimeout(500);
+		const now = await app.evaluate(
+			({BrowserWindow}, url) =>
+				BrowserWindow.getAllWindows()
+					.map((w) => w.webContents.getURL())
+					.includes(url),
+			url,
+		);
+		check(`the window on ${url} cannot navigate away`, now);
+	}
 
 	// A second copy, on the same home, brings the first forward and quits.
 	const second = await promisify(execFile)(electronPath, [here], {env, timeout: 20_000}).then(
@@ -172,8 +242,8 @@ const flow = async (app: ElectronApplication) => {
 	);
 	const windows = await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length);
 	check(
-		"a second copy quits, and the first keeps its one window",
-		second === "quit" && windows === 1,
+		"a second copy quits, and the first keeps its two windows",
+		second === "quit" && windows === 2,
 		{
 			second,
 			windows,
@@ -198,32 +268,35 @@ const flow = async (app: ElectronApplication) => {
 	check("node:sqlite runs in Electron's main process", typeof node.sqlite === "string", node);
 };
 
-/** Started again on the same home: tsh finds the job, and attach shows counter where it was. */
+/** Started again on the same home: tsh finds the job, Up finds the last line, and attach opens counter where it was. */
 const again = async (app: ElectronApplication) => {
-	const page = await app.firstWindow();
-	await page.getByLabel("tsh line").waitFor();
-	const said = outputOf(page).filter({hasText: "from an earlier tsh"});
-	await said.waitFor();
-	const found = await said.innerText();
-	const n = /1 job from an earlier tsh, not running: %(\d+)\./.exec(found)?.[1];
+	const terminal = await app.firstWindow();
+	const found = await until(terminal, "the earlier job", (t) => t.includes("from an earlier tsh"));
+	const n = /1 job from an earlier tsh, not running: %(\d+)\./.exec(
+		found.replaceAll("\n", ""),
+	)?.[1];
 	check("started again, tsh says counter's job is there and not running", n !== undefined, found);
-	await shot(page, "7-found");
+	await prompted(terminal, "the first prompt");
+	await terminal.keyboard.press("ArrowUp");
+	await until(terminal, "the last line", (t) => lastRow(t) === "tsh$ counter");
+	check("Up at the next start shows the last line typed before the quit", true);
+	await shot(terminal, "9-found");
 
-	await line(page, `attach %${n}`);
-	const count = page.getByLabel("count", {exact: true});
-	await count.waitFor();
-	check("attach: counter's window takes over again, at 1", (await count.innerText()) === "1");
-	await shot(page, "8-attached");
+	await terminal.keyboard.press("Control+u");
+	const counter = await opens(app, () => run(terminal, `attach %${n}`));
+	check("attach: counter's window opens again, at 1", (await countIn(counter).innerText()) === "1");
+	await shot(counter, "10-attached");
 
-	await page.getByRole("button", {name: "+1"}).click();
-	await count.filter({hasText: /^2$/}).waitFor();
-	await page.getByRole("button", {name: "done"}).click();
-	await page.getByLabel("tsh line").waitFor();
-	await waitReady(page);
-	const back = await outputOf(page).innerText();
+	await counter.getByRole("button", {name: "+1"}).click();
+	await countIn(counter).filter({hasText: /^2$/}).waitFor();
+	await Promise.all([
+		counter.waitForEvent("close"),
+		counter.getByRole("button", {name: "done"}).click(),
+	]);
+	const back = await prompted(terminal, "counter's count");
 	check(
 		"it counts on from 1: +1 and done, and tsh prints 2",
-		back.includes(`tsh> attach %${n}\n2\n`),
+		back.includes(`tsh$ attach %${n}\n2\n`),
 		back,
 	);
 };
@@ -239,6 +312,8 @@ try {
 }
 const kept = await readdir(join(home, "storage")).catch(() => []);
 check("the app kept its jobs in its home, in storage/", kept.length > 0, kept);
+const history = await readFile(join(home, "history"), "utf8").catch(() => "");
+check("the app kept its history in its home", history.endsWith("counter\n"), history);
 const next = await launch();
 try {
 	await again(next);
