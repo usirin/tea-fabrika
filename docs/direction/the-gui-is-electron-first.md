@@ -4,7 +4,11 @@ Decided 2026-10-24. Replaces [The GUI is a local web page first](./the-gui-is-a-
 of 2026-10-22.
 
 *2026-10-25: the window is tiled, as tmux and Tuval are, and every new tile
-runs tsh. See [the last section](#decided-2026-10-25-tiles-like-tmux).*
+runs tsh. See [tiles, like tmux](#decided-2026-10-25-tiles-like-tmux).*
+
+*2026-10-25, later: the app no longer runs the host. The host is a process of
+its own, as the tmux server is, and the app attaches to it. See
+[the last section](#decided-2026-10-25-later-tuval-and-tmux-decide-the-host-runs-apart).*
 
 ```text
 1. fabrika opens as a single window with tsh
@@ -306,6 +310,8 @@ update(desk, {type: "close"}); // the focused tile goes, and its tsh ends
   and tsh is back. The other tiles stay as they were.
 - **The page reads the prefix first.** Ctrl-B never reaches tsh or a
   program. Ctrl-B twice sends one Ctrl-B on, as tmux's `send-prefix` does.
+  *Replaced later the same day: the host decides what a key does, and the
+  page asks it (last section). Ctrl-B still never reaches tsh or a program.*
 
 ### Why
 
@@ -331,15 +337,23 @@ update(desk, {type: "close"}); // the focused tile goes, and its tsh ends
 - **A program started with `&`:** it opens in a new tile beside its tsh, and
   the prompt comes back. This is Tuval's "a window of its own", which split
   the target window and put the run in the new half. 80%.
+  *Wrong, dropped later the same day: `&` starts a job in the background, as
+  in bash, and nothing opens.*
 - **Closing a tile with a run in it:** a y or n question, then the tile's tsh
   and its runs end, as tmux's `kill-pane` hangs up the shell. It settles the
   75% doubt of the section above the tmux way. 75%, because Tuval's detach
   stopped nothing; seeing whether a closed tile's job is ever missed would
   settle it.
+  *Kept, with changes later the same day: the question comes every time, and
+  the programs get the end of their inputs before anything is stopped.*
 - **Quit and open again:** the layout comes back as it was, as Tuval kept its
   desk, and each tile's tsh comes back with its jobs for `attach`. 80%.
+  *Replaced later the same day: quitting the app stops nothing, and after the
+  host itself stops, every program comes back running.*
 - **Closing the last tile quits the app,** as tmux ends with its last pane.
   70%. A fresh tsh in a fresh tile may be kinder; a week of use would show.
+  *Wrong: macOS's rule wins. Closing the last tile closes the window, as
+  closing the last tab does in Terminal, and the app stays.*
 
 ### What the build found (2026-10-25)
 
@@ -403,6 +417,91 @@ What was guessed wrong:
   inputs. A crash leaves tile folders no `desk.json` names; nothing cleans
   them yet. The old single `storage/` folder of the terminal build is not
   moved over. Typing is 30 to 50 ms, mostly the trip to the main process.
+
+## Decided 2026-10-25, later: Tuval and tmux decide; the host runs apart
+
+**Decided** 2026-10-25, after reading how Tuval solved the same things
+(`apps/tuval` and `packages/tuval` in [kamp-us/phoenix](https://github.com/kamp-us/phoenix)). It
+changes the first decision of this note: the app no longer runs the host. It
+attaches to one.
+
+```text
+The rule: Tuval and tmux are the default. Where they agree, we follow them.
+Where they clash, the owner picks.
+```
+
+```ts
+// A sketch. The host is its own process, as the tmux server is; the app is a client of it.
+//   host     a Node process: the desk, every tile's tsh, every program, the one ledger
+//   app      Electron: a window that draws the desk and sends keys, and nothing else
+//   between  a socket file only the user can open, as tmux's is: no port, no secret
+//
+// open the app        attach to the host, or start one first if none runs
+// close the window    nothing stops; the dock brings the window back, on the same desk
+// quit the app        Cmd-Q: the window goes, the host goes on
+// the host stops      a reboot or a crash: at its next start, every program comes back running
+```
+
+- **The host runs apart from the app.** Tuval's kernel ran on a server and
+  the page only drew it, over one socket (`apps/tuval/src/shell/transport/server.ts`).
+  tmux's server holds every pane, and a terminal attaches to it. Here the app
+  finds the host on its socket file, or starts it, and attaches. Closing the
+  window or quitting the app stops nothing.
+- **The desk is a program on the host,** kept like every other program. The
+  page holds none of it, so a reload draws the same desk.
+- **The host decides what a key does.** It sends the page its Ctrl-B table.
+  Ctrl-B and the key after it go to the host, and the page holds keys until
+  the answer, so `Ctrl-B |` never lands in a text box. Typing in tsh already
+  goes to the host; typing in a program's text box stays in the page, as in
+  Tuval. The hold has no timer: the page waits for the answer, or for the
+  link to drop.
+- **Everything the app keeps is on the host's one ledger:** the layout and
+  every tile's jobs, as [tea-host](./tea-host.md) says, one ledger a host.
+  `desk.json` and the folder a tile go.
+- **When the host starts again, every program comes back running,** Tuval's
+  way (`packages/tuval/src/durability/restore.ts`). tmux brings nothing back. A program
+  that cannot come back shows "gone" in its tile.
+- **macOS's own rules hold.** The close button closes the window only, and
+  the app stays in the dock. Cmd-Q quits the app. Closing the last tile
+  closes the window, as closing the last tab does in Terminal.
+- **Closing a tile is tmux's.** A tile owns its tsh, as a pane owns its
+  shell, so Tuval's close, which only let go of a view, does not fit.
+  - Ctrl-B x always asks y or n.
+  - y gives the tile's tsh and its programs the end of their inputs. The tile
+    shows "closing" until they end, then goes.
+  - Ctrl-B x on a closing tile asks to stop them now.
+- **`&` starts a job in the background,** as in bash. Nothing opens.
+  `attach %n` brings it into the tile, as `fg` does.
+- **Ctrl-B w lists every workspace and tile,** as tmux's does, and Enter goes
+  there. Tuval's picker is not needed: it was Tuval's only way to start a
+  program, and here tsh is.
+
+### Why
+
+- **Both were used for years.** Reading what Tuval and tmux did is cheaper
+  than designing it again, and their keys are muscle memory.
+- **A lane runs for hours.** Closing a window should not end it.
+- **One store, one way to save.** A crash cannot leave the layout and the
+  jobs disagreeing, so nothing needs cleaning up after one.
+
+### What it costs
+
+- **A second process:** the link to it, starting it when it is missing, and
+  an old host still running after the app is updated.
+- **Memory while the window is closed:** the host, under 200 MB today.
+- **A trip to the host** for Ctrl-B and the key after it.
+- **How sure: 80%.** The doubt: an agent halfway through a call when the host
+  stops needs its own way back. The first real lane run would show it.
+
+### Later
+
+- `Ctrl-B :`, a command line on one table of commands, as tmux and Tuval
+  both have.
+- Tuval's board of every program, on `Ctrl-B p`, once the host starts a
+  program that no tile owns.
+- Keys a project cannot rebind, and key tables by focus.
+- A Durable Object for each job, on a team's host. Before it: count how often
+  jobs message each other in real runs, and time a call between two objects.
 
 ## What would change it
 

@@ -76,6 +76,11 @@ opt-in restart backoff, and resending a dead letter.
   *Changed 2026-10-24 by [Electron first](./the-gui-is-electron-first.md): the
   host runs in Electron's main process, and the window talks to it over one
   MessagePort, not a WebSocket.*
+  *Changed again 2026-10-25: the fabrika app is a client. Its host runs as a
+  process of its own, as the tmux server does, and the app attaches to it over
+  a socket file
+  ([the GUI note](./the-gui-is-electron-first.md#decided-2026-10-25-later-tuval-and-tmux-decide-the-host-runs-apart)).
+  More than one host, and tsh in a plain terminal, are still open.*
 - **Where a host's config lives.** Not in `tsh.toml`, which is tsh's alone.
   One part is settled (experiment 107): which ledger fabrika's tsh opens is
   the repository's pick, `[ledger] at` in its
