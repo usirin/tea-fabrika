@@ -2,7 +2,7 @@ import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
 import {arbMsg, arbRecordMsg, type MsgArbitraryTable} from "@demlik/tea/pbt";
-import {Effect, Layer, ManagedRuntime} from "effect";
+import {Effect, Exit, Layer, Logger, ManagedRuntime, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
@@ -18,10 +18,11 @@ import {keyLineOf, sign} from "./sshsig.ts";
 import * as realWriter from "./writer.ts";
 
 // The door's laws, on fast-check (and tea's pbt for the request stream): properties over random
-// runs of logins, invites, joins, removes, appends, grants, challenges and clock moves, against the
-// real Door on node:sqlite, the same file workerd runs. A fake keys service and a clock the test
-// turns. GitHub's own answer (`layerGitHub`) runs over a fake fetch and Effect's TestClock. Real
-// GitHub, the network and Cloudflare are never touched.
+// runs of logins, invites, joins, removes, renames, appends, grants, challenges and clock moves,
+// against the real Door on node:sqlite, the same file workerd runs. A fake keys service that keeps
+// every question it is put, and a clock the test turns. GitHub's own answer (`layerGitHub`) runs
+// over a fake fetch and Effect's TestClock. Real GitHub, the network and Cloudflare are never
+// touched.
 //
 // Nobody writes their own exam: this file writes the laws and never the door's code. Each planted
 // mistake is a text edit on a COPY of door.ts, writer.ts, keys.ts or keys-github.ts, imported from
@@ -44,7 +45,7 @@ type Mod = Pick<
 > &
 	Pick<typeof realWriter, "writerOf" | "writerText"> &
 	Pick<typeof realKeys, "Keys" | "KeysUnreachable" | "layerNobody"> &
-	Pick<typeof realGitHub, "layerGitHub" | "KEYS_CACHE_MS">;
+	Pick<typeof realGitHub, "layerGitHub" | "KEYS_CACHE_MS" | "TOKEN_REFUSED">;
 
 const real: Mod = {...realDoor, ...realWriter, ...realKeys, ...realGitHub};
 
@@ -58,17 +59,26 @@ afterAll(async () => {
 type File = "door" | "writer" | "keys" | "keys-github";
 const FILES: readonly string[] = ["door", "rules", "sshsig", "writer", "keys", "keys-github"];
 
-/** A copy of the door's files with one edit, imported from its own folder. The real code stays as it is. */
-async function plant(file: File, from: string, to: string): Promise<Mod> {
+/**
+ * A copy of the door's files with one mistake, imported from its own folder. The real code stays as
+ * it is. A mistake is one edit, or a few in the same file (`more`) when one mistake spans lines.
+ */
+async function plant(
+	file: File,
+	from: string,
+	to: string,
+	more: readonly (readonly [string, string])[] = [],
+): Promise<Mod> {
 	const dir = mkdtempSync(join(import.meta.dirname, ".door-laws-plant-"));
 	madeDirs.push(dir);
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
 		if (f === file) {
-			const count = text.split(from).length - 1;
-			if (count !== 1)
-				throw new Error(`plant edit on ${f}: "${from}" found ${count} times, want 1`);
-			text = text.replace(from, to);
+			for (const [a, b] of [[from, to] as const, ...more]) {
+				const count = text.split(a).length - 1;
+				if (count !== 1) throw new Error(`plant edit on ${f}: "${a}" found ${count} times, want 1`);
+				text = text.replace(a, () => b);
+			}
 		}
 		writeFileSync(join(dir, `${f}.ts`), text);
 	}
@@ -107,14 +117,37 @@ const key = (i: number): Key => {
 	return k;
 };
 
+/** One question the fake keys service was put, and what the ledger knew when it was put. */
+type Ask = {
+	readonly q: "of" | "byId";
+	readonly arg: string;
+	/** Put while the law was inside `Door.invite`. */
+	readonly inInvite: boolean;
+	/** `byId` only: the id was a member's, an open invite's, or the founder's before founding. */
+	readonly known: boolean;
+	/** The answer gave another id than the person's own. */
+	readonly lied: boolean;
+};
+
+type KeysState = {
+	/** The keys service is unreachable. */
+	down: boolean;
+	/** Each answer gives this id instead of the person's own; null: the true one. */
+	lie: ((id: string) => string) | null;
+	/** The law is inside `Door.invite` (see `invite` below). */
+	inInvite: boolean;
+};
+
 type World = {
 	readonly door: InstanceType<Mod["Door"]>;
 	readonly db: ReturnType<typeof openDb>["db"];
-	/** Who goes by each name, as the fake keys service answers. */
-	readonly people: Map<string, Signers>;
-	/** `down`: the keys service is unreachable. */
-	readonly state: {down: boolean};
+	/** Who goes by each name now, as the fake keys service answers: their id and their keys. */
+	readonly people: Map<string, {id: string; keys: string[]}>;
+	readonly state: KeysState;
+	/** Every question the keys service was put, in order. */
+	readonly asks: Ask[];
 	readonly clock: {t: number};
+	readonly founder: string;
 	readonly mod: Mod;
 };
 
@@ -125,34 +158,91 @@ const runtimeOf = (layer: Layer.Layer<Keys>): ManagedRuntime.ManagedRuntime<Keys
 	return rt;
 };
 
-/** The keys service as far as the door asks: `people`, read at each question, or unreachable. */
-const fakeKeys = (mod: Mod, people: Map<string, Signers>, state: {down: boolean}) =>
-	runtimeOf(
+/**
+ * The keys service as far as the door asks: `people`, read at each question, or unreachable. Each
+ * question goes in `asks`, with whether the ledger knew the id (`known`, read from the door's own
+ * members at that moment).
+ */
+const fakeKeys = (
+	mod: Mod,
+	w: Pick<World, "people" | "state" | "asks">,
+	knownNow: (id: string) => boolean,
+) => {
+	const answer = (name: string, p: {id: string; keys: string[]}): Signers => ({
+		id: w.state.lie === null ? p.id : w.state.lie(p.id),
+		name,
+		keys: [...p.keys],
+	});
+	const ask = (
+		q: Ask["q"],
+		arg: string,
+		find: () => readonly [string, {id: string; keys: string[]}] | undefined,
+	): Effect.Effect<Signers | null, KeysUnreachable> =>
+		Effect.suspend(() => {
+			const found = w.state.down ? undefined : find();
+			const got = found === undefined ? null : answer(...found);
+			w.asks.push({
+				q,
+				arg,
+				inInvite: w.state.inInvite,
+				known: q === "byId" && knownNow(arg),
+				lied: got !== null && found !== undefined && got.id !== found[1].id,
+			});
+			return w.state.down
+				? Effect.fail(new mod.KeysUnreachable({why: "down for the law"}))
+				: Effect.succeed(got);
+		});
+	return runtimeOf(
 		Layer.succeed(
 			mod.Keys,
 			mod.Keys.of({
-				of: (name): Effect.Effect<Signers | null, KeysUnreachable> =>
-					state.down
-						? Effect.fail(new mod.KeysUnreachable({why: "down for the law"}))
-						: Effect.sync(() => people.get(name) ?? null),
+				byId: (id) => ask("byId", id, () => [...w.people].find(([, p]) => p.id === id)),
+				of: (name) =>
+					ask("of", name, () => {
+						const p = w.people.get(name);
+						return p === undefined ? undefined : [name, p];
+					}),
 			}),
 		),
 	);
+};
 
 const sharedWorld = (mod: Mod, o: {founder?: string; sessionMs?: number} = {}): World => {
 	const {db} = openDb(":memory:");
 	rules.migrate(db);
 	const clock = {t: 1_000_000};
-	const people = new Map<string, Signers>();
-	const state = {down: false};
+	const founder = o.founder ?? "github:7";
+	const w = {
+		people: new Map<string, {id: string; keys: string[]}>(),
+		state: {down: false, lie: null, inInvite: false} as KeysState,
+		asks: [] as Ask[],
+	};
 	const config: DoorConfig = {
 		kind: "shared",
-		founder: o.founder ?? "github:7",
+		founder,
 		origin: null,
 		sessionMs: o.sessionMs ?? mod.SESSION_MS,
 	};
-	const door = new mod.Door(db, config, fakeKeys(mod, people, state), {now: () => clock.t});
-	return {door, db, people, state, clock, mod};
+	const ref: {door: InstanceType<Mod["Door"]> | null} = {door: null};
+	const knownNow = (id: string): boolean => {
+		const m = ref.door?.members();
+		return (
+			m !== undefined && (m.members.has(id) || m.invited.has(id) || (!m.founded && id === founder))
+		);
+	};
+	const door = new mod.Door(db, config, fakeKeys(mod, w, knownNow), {now: () => clock.t});
+	ref.door = door;
+	return {door, db, ...w, clock, founder, mod};
+};
+
+/** `Door.invite`, with the fake keys service told it is inside an invite. */
+const invite = async (W: World, by: Stamp, name: string) => {
+	W.state.inInvite = true;
+	try {
+		return await W.door.invite(by, name);
+	} finally {
+		W.state.inInvite = false;
+	}
 };
 
 const localDoor = (mod: Mod, person: string, secretHash: string): InstanceType<Mod["Door"]> => {
@@ -478,8 +568,9 @@ const challengeOnce: Law = {
 };
 
 /**
- * 6. An invite and a join bind to the keys service's id, so a name that changes hands lets nobody
- *    new in, and the invited person joins under a new name.
+ * 6. An invite and a join bind to the keys service's id, so a name that changes hands at the keys
+ *    service lets nobody new in: the new holder of the name, signing with their own listed key, is
+ *    a 401 and becomes no member. (What the renamed person gets is law 19.)
  */
 const bindToId: Law = {
 	name: "an invite and a join bind to the keys service's id, so a renamed name lets nobody new in",
@@ -488,7 +579,8 @@ const bindToId: Law = {
 			fc.asyncProperty(
 				fc.integer({min: 100, max: 500}),
 				fc.integer({min: 600, max: 999}),
-				async (bobId, takerId) => {
+				fc.boolean(),
+				async (bobId, takerId, joined) => {
 					const W = sharedWorld(mod);
 					W.people.set("alice", {id: "github:7", keys: [key(0).line]});
 					const alice = mustOk(await loginWith(W, "alice", key(0)));
@@ -498,13 +590,19 @@ const bindToId: Law = {
 						inv.ok && eq(inv.value, {id: `github:${bobId}`, name: "bob"}),
 						"the invite was refused, or did not answer the service's id and the name",
 					);
+					if (joined) mustOk(await loginWith(W, "bob", key(1)));
 					// The name "bob" is taken over by someone with a new id; the old id gets a new name.
 					W.people.set("bob", {id: `github:${takerId}`, keys: [key(2).line]});
 					W.people.set("robert", {id: `github:${bobId}`, keys: [key(1).line]});
+					const before = sessionCount(W);
 					const taker = await loginWith(W, "bob", key(2));
-					ensure(!taker.ok && taker.status === 403, "a name that changed hands let a new id in");
-					const robert = await loginWith(W, "robert", key(1));
-					ensure(robert.ok, "the invited id could not join under a new name");
+					ensure(!taker.ok && taker.status === 401, "a name that changed hands let a new id in");
+					ensure(sessionCount(W) === before, "a name that changed hands opened a session");
+					const m = W.door.members();
+					ensure(
+						!m.members.has(`github:${takerId}`) && !m.invited.has(`github:${takerId}`),
+						"a name that changed hands made its new holder a member",
+					);
 				},
 			),
 			OPTS_SIGN,
@@ -612,22 +710,50 @@ const listedKeys: Law = {
 	},
 };
 
-/** A fake api.github.com for `layerGitHub`: logins, their numeric ids and keys, and what was asked. */
-const fakeGitHub = () => {
+/**
+ * A fake api.github.com for `layerGitHub`: logins, their numeric ids and keys, and every request it
+ * got, with its `authorization` header. `refuse` answers 401: to a request with a token, or to all.
+ */
+const fakeGitHub = (o: {refuse?: "token" | "all"} = {}) => {
 	const users = new Map<string, {id: number; keys: string[]}>();
-	const fetch = async (input: string | URL | Request): Promise<Response> => {
-		const url = new URL(input instanceof Request ? input.url : input);
+	const asked: {path: string; auth: string | null}[] = [];
+	const notFound = () => Response.json({message: "Not Found"}, {status: 404});
+	const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+		const req = input instanceof Request ? input : new Request(input, init);
+		const url = new URL(req.url);
+		const auth = req.headers.get("authorization");
+		asked.push({path: url.pathname, auth});
+		if (o.refuse === "all" || (o.refuse === "token" && auth !== null))
+			return Response.json({message: "Bad credentials"}, {status: 401});
+		if (url.host !== "api.github.com") return notFound();
+		const byId = /^\/user\/([0-9]+)$/.exec(url.pathname)?.[1];
+		if (byId !== undefined) {
+			const hit = [...users].find(([, u]) => u.id === Number(byId));
+			return hit === undefined ? notFound() : Response.json({id: hit[1].id, login: hit[0]});
+		}
 		const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 		const login = m?.[1] === undefined ? "" : decodeURIComponent(m[1]);
 		const u = users.get(login);
-		if (url.host !== "api.github.com" || u === undefined)
-			return Response.json({message: "Not Found"}, {status: 404});
+		if (u === undefined) return notFound();
 		return m?.[2] === undefined
 			? Response.json({id: u.id, login})
 			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
 	};
-	return {users, fetch};
+	return {users, asked, fetch};
 };
+
+/** `layerGitHub` over a fake GitHub's fetch. */
+const githubLayer = (
+	mod: Mod,
+	gh: ReturnType<typeof fakeGitHub>,
+	o: Parameters<Mod["layerGitHub"]>[0],
+) =>
+	mod
+		.layerGitHub(o)
+		.pipe(
+			Layer.provide(FetchHttpClient.layer),
+			Layer.provide(Layer.succeed(FetchHttpClient.Fetch, gh.fetch as typeof fetch)),
+		);
 
 /**
  * 9b. The GitHub half: `layerGitHub` keeps an answer at most its cache time. Past it, a key taken
@@ -644,27 +770,26 @@ const githubCache: Law = {
 					const gh = fakeGitHub();
 					gh.users.set("alice", {id: 7, keys: ["ssh-ed25519 AAAA1", "ssh-ed25519 AAAA2"]});
 					const ttl = cacheMs ?? mod.KEYS_CACHE_MS;
-					const layer = mod
-						.layerGitHub(cacheMs === undefined ? {} : {cacheMs})
-						.pipe(
-							Layer.provide(FetchHttpClient.layer),
-							Layer.provide(Layer.succeed(FetchHttpClient.Fetch, gh.fetch as typeof fetch)),
-						);
-					const of = (name: string) => mod.Keys.use((k) => k.of(name));
+					const layer = githubLayer(mod, gh, cacheMs === undefined ? {} : {cacheMs});
+					// Both questions: by name (an invite) and by id (a login).
+					const of = mod.Keys.use((k) => k.of("alice"));
+					const byId = mod.Keys.use((k) => k.byId("github:7"));
 					const got = await Effect.runPromise(
 						Effect.gen(function* () {
-							const first = yield* of("alice");
+							const first = [yield* of, yield* byId];
 							gh.users.set("alice", {id: 7, keys: ["ssh-ed25519 AAAA2"]});
 							yield* TestClock.adjust(ttl + extra);
-							return {first, later: yield* of("alice")};
+							return {first, later: [yield* of, yield* byId]};
 						}).pipe(Effect.provide(layer), Effect.provide(TestClock.layer())),
 					);
+					const alice = (keys: string[]) => ({id: "github:7", name: "alice", keys});
+					const both = ["ssh-ed25519 AAAA1", "ssh-ed25519 AAAA2"];
 					ensure(
-						eq(got.first, {id: "github:7", keys: ["ssh-ed25519 AAAA1", "ssh-ed25519 AAAA2"]}),
-						`GitHub's first answer was ${JSON.stringify(got.first)}`,
+						eq(got.first, [alice(both), alice(both)]),
+						`GitHub's first answers were ${JSON.stringify(got.first)}`,
 					);
 					ensure(
-						eq(got.later, {id: "github:7", keys: ["ssh-ed25519 AAAA2"]}),
+						eq(got.later, [alice(["ssh-ed25519 AAAA2"]), alice(["ssh-ed25519 AAAA2"])]),
 						`a key taken off on GitHub was still listed ${ttl + extra} ms later, past the cache of ${ttl}`,
 					);
 				},
@@ -836,8 +961,9 @@ const idChecked: Law = {
 				const inv = await W.door.invite(alice.who, "eve");
 				ensure(!inv.ok && inv.status === 502, `an invite took the id ${a}@${b}`);
 				const before = sessionCount(W);
+				// The invite was refused, so the ledger does not know eve: a 401, and nobody is asked.
 				const eve = await loginWith(W, "eve", key(1));
-				ensure(!eve.ok && eve.status === 502, `a login took the id ${a}@${b}`);
+				ensure(!eve.ok && eve.status === 401, `a login took the id ${a}@${b}`);
 				ensure(sessionCount(W) === before, "a login with an @ id opened a session");
 			}),
 			OPTS_SIGN,
@@ -880,6 +1006,402 @@ const keysUnreachable: Law = {
 	},
 };
 
+// ---------------------------------------------------------------- random ledgers
+
+/**
+ * Four people at the fake keys service, each with one key of the pool. Key 4 is listed for nobody,
+ * key 5 is the agents' own, key 11 is never used to sign up anyone.
+ */
+const PEOPLE = [
+	{id: "github:7", name: "alice", key: 0},
+	{id: "github:8", name: "bob", key: 1},
+	{id: "github:9", name: "carol", key: 2},
+	{id: "github:10", name: "dave", key: 3},
+] as const;
+/** The names a random run types: the people's, other cases of them, and names nobody has yet. */
+const NAMES = ["alice", "bob", "carol", "dave", "Bob", "ALICE", "robert", "zed"] as const;
+const AGENT_KEY = 5;
+const NOBODY_KEY = 11;
+
+const at = <T>(xs: readonly T[], i: number): T => {
+	const x = xs[i % xs.length];
+	if (x === undefined) throw new Error(`nothing at ${i}`);
+	return x;
+};
+
+/** One step of a random run on a ledger whose founder is alice (`github:7`). */
+type Op =
+	/** Someone types a name and signs with a key of the pool (4: a key listed for nobody). */
+	| {readonly type: "login"; readonly as: number; readonly key: number}
+	/** A person signs in by the name they had at first, with their own key. */
+	| {readonly type: "self"; readonly who: number}
+	/** An agent logs in with a grant for a name, signed with a key of the pool. */
+	| {readonly type: "agent"; readonly as: number; readonly key: number}
+	/** A member invites a name. */
+	| {readonly type: "invite"; readonly by: number; readonly name: number}
+	/** A member takes a member or an invite off. */
+	| {readonly type: "remove"; readonly by: number; readonly who: number}
+	/** A person is renamed at the keys service, to a name nobody has there. */
+	| {readonly type: "rename"; readonly who: number; readonly to: number};
+
+const nameIx = fc.nat({max: NAMES.length - 1});
+const personIx = fc.nat({max: PEOPLE.length - 1});
+const arbOp: fc.Arbitrary<Op> = fc.oneof(
+	fc.record({type: fc.constant("login" as const), as: nameIx, key: fc.nat({max: 4})}),
+	fc.record({type: fc.constant("self" as const), who: personIx}),
+	fc.record({type: fc.constant("agent" as const), as: nameIx, key: fc.nat({max: 4})}),
+	fc.record({type: fc.constant("invite" as const), by: fc.nat({max: 3}), name: nameIx}),
+	fc.record({type: fc.constant("remove" as const), by: fc.nat({max: 3}), who: fc.nat({max: 7})}),
+	fc.record({type: fc.constant("rename" as const), who: personIx, to: nameIx}),
+);
+/** alice's first login: it founds the ledger. */
+const FOUND: Op = {type: "self", who: 0};
+/** A random run, from a ledger not yet founded. */
+const arbRun = fc.array(arbOp, {maxLength: 8});
+/** A random run that founds the ledger first. */
+const arbFounded = arbRun.map((ops) => [FOUND, ...ops]);
+
+/** A shared ledger whose founder is alice, with the four people at the keys service. */
+const peopleWorld = (mod: Mod): World => {
+	const W = sharedWorld(mod, {founder: "github:7"});
+	for (const p of PEOPLE) W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+	return W;
+};
+
+const grantFor = (W: World, name: string) =>
+	W.mod.grantText({
+		address: addressOf(W, "demo"),
+		agent: "triage",
+		key: key(AGENT_KEY).line,
+		for: name,
+		expires: W.clock.t + 60_000,
+	});
+
+const loginOp = (W: World, name: string, k: number) => loginWith(W, name, key(k));
+const agentOp = (W: World, name: string, k: number) =>
+	agentLogin(W, {grant: grantFor(W, name), by: key(k), signer: key(AGENT_KEY)});
+
+/** Run one step. A step that needs a member does nothing on a ledger with none. */
+const runOp = async (W: World, op: Op): Promise<void> => {
+	const m = W.door.members();
+	const members = [...m.members.keys()];
+	switch (op.type) {
+		case "login":
+			await loginOp(W, at(NAMES, op.as), op.key);
+			return;
+		case "self": {
+			const p = at(PEOPLE, op.who);
+			await loginOp(W, p.name, p.key);
+			return;
+		}
+		case "agent":
+			await agentOp(W, at(NAMES, op.as), op.key);
+			return;
+		case "invite":
+			if (members.length > 0)
+				await invite(W, {kind: "user", id: at(members, op.by)}, at(NAMES, op.name));
+			return;
+		case "remove": {
+			const off = [...members, ...m.invited.keys()];
+			if (members.length > 0)
+				W.door.remove({kind: "user", id: at(members, op.by)}, at(off, op.who));
+			return;
+		}
+		case "rename": {
+			const p = at(PEOPLE, op.who);
+			const to = at(NAMES, op.to);
+			const now = [...W.people].find(([, q]) => q.id === p.id);
+			if (now === undefined || W.people.has(to)) return;
+			W.people.delete(now[0]);
+			W.people.set(to, now[1]);
+			return;
+		}
+	}
+};
+
+const runOps = async (W: World, ops: readonly Op[]): Promise<void> => {
+	for (const op of ops) await runOp(W, op);
+};
+
+/** Does the ledger know someone by `name`, in any case: a member or an open invite. */
+const knowsName = (W: World, name: string): boolean => {
+	const m = W.door.members();
+	const n = name.toLowerCase();
+	return [...m.members.values(), ...m.invited.values()].some((was) => was.toLowerCase() === n);
+};
+
+const OPTS_RUN = {numRuns: 15, seed: 7} as const;
+
+/**
+ * 15. Once the ledger is founded, a login, a person's or an agent's, for a name the ledger does not
+ *     know (no member or open invite goes by it, in any case) asks the keys service nothing, not
+ *     `of` and not `byId`, and is a 401.
+ */
+const strangersAskNothing: Law = {
+	name: "once founded, a login for a name the ledger does not know asks the keys service nothing",
+	run: async (mod) => {
+		const typed = fc.oneof(fc.constantFrom(...NAMES), fc.stringMatching(/^[A-Za-z0-9-]{1,12}$/));
+		await fc.assert(
+			fc.asyncProperty(arbFounded, typed, fc.nat({max: 4}), async (ops, name, k) => {
+				const W = peopleWorld(mod);
+				await runOps(W, ops);
+				if (knowsName(W, name)) return;
+				const asked = W.asks.length;
+				const before = sessionCount(W);
+				const person = await loginOp(W, name, k);
+				const agent = await agentOp(W, name, k);
+				ensure(
+					W.asks.length === asked,
+					`a login for ${name}, whom the ledger does not know, asked ${JSON.stringify(W.asks.slice(asked))}`,
+				);
+				ensure(!person.ok && person.status === 401, `a login for ${name} was not a 401`);
+				ensure(!agent.ok && agent.status === 401, `an agent login for ${name} was not a 401`);
+				ensure(sessionCount(W) === before, `a login for ${name} opened a session`);
+			}),
+			OPTS_RUN,
+		);
+	},
+};
+
+/**
+ * 16. Every failed login with a well-formed name and signature gives the same answer: a name the
+ *     ledger does not know, a key not listed for the person it knows by that name, a founder's name
+ *     the keys service no longer gives, a removed member. So a refusal does not tell who is a member.
+ */
+const oneRefusal: Law = {
+	name: "every failed login with a well-formed name and signature gives the same status and why",
+	run: async (mod) => {
+		const tries = fc.array(fc.tuple(fc.constantFrom(...NAMES, "x-1", "Carol"), fc.nat({max: 4})), {
+			maxLength: 6,
+		});
+		await fc.assert(
+			fc.asyncProperty(arbRun, tries, async (ops, more) => {
+				const W = peopleWorld(mod);
+				await runOps(W, ops);
+				// Every name with a key listed for nobody, then random names and keys.
+				const all: (readonly [string, number])[] = [
+					...NAMES.map((n) => [n, NOBODY_KEY] as const),
+					...more,
+				];
+				const answers = new Set<string>();
+				for (const [n, k] of all) {
+					const r = await loginOp(W, n, k);
+					if (!r.ok) answers.add(JSON.stringify({status: r.status, why: r.why}));
+				}
+				ensure(answers.size === 1, `failed logins gave different answers: ${[...answers]}`);
+			}),
+			OPTS_RUN,
+		);
+	},
+};
+
+/** 17. Only `invite` ever asks the keys service by name (`Keys.of`): no login, no agent login. */
+const onlyInviteAsksByName: Law = {
+	name: "only an invite ever asks the keys service by name",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(arbRun, async (ops) => {
+				const W = peopleWorld(mod);
+				await runOps(W, ops);
+				const outside = W.asks.filter((a) => a.q === "of" && !a.inInvite);
+				ensure(outside.length === 0, `asked by name outside an invite: ${JSON.stringify(outside)}`);
+			}),
+			OPTS_RUN,
+		);
+	},
+};
+
+/**
+ * 18. A login asks the keys service by id (`Keys.byId`) only about an id the ledger knows at that
+ *     moment: a member, an open invite, or the founder before the ledger is founded. One fixed run
+ *     takes the founder off first, as random runs rarely do.
+ */
+const byIdOnlyKnown: Law = {
+	name: "a login asks by id only about a member, an open invite, or the founder before founding",
+	run: async (mod) => {
+		const check = (W: World) => {
+			const strange = W.asks.filter((a) => a.q === "byId" && !a.known);
+			ensure(strange.length === 0, `asked by id about strangers: ${JSON.stringify(strange)}`);
+		};
+		// alice founds and invites bob, bob joins and takes alice off, then signs in again, with his
+		// own key and with a key listed for nobody.
+		const founderOff: Op[] = [
+			FOUND,
+			{type: "invite", by: 0, name: 1},
+			{type: "self", who: 1},
+			{type: "remove", by: 1, who: 0},
+			{type: "self", who: 1},
+			{type: "login", as: 1, key: 4},
+		];
+		const W = peopleWorld(mod);
+		await runOps(W, founderOff);
+		ensure(!W.door.members().members.has("github:7"), "the fixed run did not take alice off");
+		check(W);
+		await fc.assert(
+			fc.asyncProperty(arbRun, async (ops) => {
+				const R = peopleWorld(mod);
+				await runOps(R, ops);
+				check(R);
+			}),
+			OPTS_RUN,
+		);
+	},
+};
+
+/**
+ * 19. A rename at the keys service never changes the result for the name the ledger knows: the
+ *     same login (a person's or an agent's, by that name in any case, with any key) answers the same
+ *     whether the person was renamed there or not, and whether their old name went to someone else.
+ */
+const renameKeepsResult: Law = {
+	name: "a rename at the keys service never changes the result for the name the ledger knows",
+	run: async (mod) => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.boolean(),
+				fc.constantFrom("robert", "bobby", "r-2"),
+				fc.boolean(),
+				fc.constantFrom("bob", "Bob", "BOB"),
+				fc.nat({max: 4}),
+				fc.boolean(),
+				async (joined, renamedTo, takenOver, typed, k, asAgent) => {
+					const once = async (renamed: boolean) => {
+						const W = peopleWorld(mod);
+						const alice = mustOk(await loginOp(W, "alice", 0));
+						mustOk(await invite(W, alice.who, "bob"));
+						if (joined) mustOk(await loginOp(W, "bob", 1));
+						if (renamed) {
+							W.people.delete("bob");
+							W.people.set(renamedTo, {id: "github:8", keys: [key(1).line]});
+							if (takenOver) W.people.set("bob", {id: "github:600", keys: [key(4).line]});
+						}
+						const r = asAgent ? await agentOp(W, typed, k) : await loginOp(W, typed, k);
+						return r.ok
+							? {ok: true, who: r.value.who, expires: r.value.expires}
+							: {ok: false, status: r.status, why: r.why};
+					};
+					const plain = await once(false);
+					const renamed = await once(true);
+					ensure(
+						eq(plain, renamed),
+						`a rename changed ${typed}'s result: ${JSON.stringify(plain)} became ${JSON.stringify(renamed)}`,
+					);
+				},
+			),
+			OPTS_SIGN,
+		);
+	},
+};
+
+/**
+ * 20. When the keys service answers a login with another id than the one asked about, the login is a
+ *     502, every time, and opens no session and writes no member fact.
+ */
+const otherIdIs502: Law = {
+	name: "an answer with another id than the one asked is always a 502, never a session",
+	run: async (mod) => {
+		const other = fc.constantFrom("github:8", "github:7", "github:9999", "x@y", "");
+		const tries = fc.array(fc.tuple(fc.constantFrom(...NAMES), fc.nat({max: 4}), fc.boolean()), {
+			maxLength: 4,
+		});
+		await fc.assert(
+			fc.asyncProperty(arbRun, other, tries, async (ops, lie, more) => {
+				const W = peopleWorld(mod);
+				await runOps(W, ops);
+				W.state.lie = (id) => (id === lie ? `${lie}0` : lie);
+				// Each person by their first name and own key, then random names, keys, and agents.
+				const all = [
+					...PEOPLE.map((p) => [p.name, p.key, false] as const),
+					...PEOPLE.map((p) => [p.name, p.key, true] as const),
+					...more,
+				];
+				for (const [n, k, asAgent] of all) {
+					const asked = W.asks.length;
+					const sessions = sessionCount(W);
+					const facts = rules.readStream(W.db, mod.MEMBERS).length;
+					const r = asAgent ? await agentOp(W, n, k) : await loginOp(W, n, k);
+					if (!W.asks.slice(asked).some((a) => a.lied)) continue;
+					ensure(!r.ok && r.status === 502, `${n} was let in on another id's answer`);
+					ensure(sessionCount(W) === sessions, `${n} opened a session on another id's answer`);
+					ensure(
+						rules.readStream(W.db, mod.MEMBERS).length === facts,
+						`${n} wrote a member fact on another id's answer`,
+					);
+				}
+			}),
+			OPTS_RUN,
+		);
+	},
+};
+
+/**
+ * 21. `layerGitHub`, over a fake fetch: a request GitHub answers 401 while it carries the token is
+ *     asked exactly once more, without it, with one `TOKEN_REFUSED` in the log. A 401 without a token
+ *     is not asked again. The token goes out only as `Bearer <token>`, and never into an error.
+ */
+const tokenRetry: Law = {
+	name: "a 401 with a token is asked once more without it, and a 401 without a token is not",
+	run: async (mod) => {
+		const token = "law-token-not-a-secret";
+		await fc.assert(
+			fc.asyncProperty(
+				fc.boolean(),
+				fc.constantFrom("token" as const, "all" as const),
+				fc.constantFrom("of" as const, "byId" as const),
+				async (withToken, refuse, q) => {
+					const gh = fakeGitHub({refuse});
+					gh.users.set("alice", {id: 7, keys: ["ssh-ed25519 AAAA1"]});
+					const logs: string[] = [];
+					const layer = githubLayer(
+						mod,
+						gh,
+						withToken ? {cacheMs: 0, token: Redacted.make(token)} : {cacheMs: 0},
+					);
+					const exit = await Effect.runPromiseExit(
+						mod.Keys.use((k) => (q === "of" ? k.of("alice") : k.byId("github:7"))).pipe(
+							Effect.provide(layer),
+							Effect.provide(Logger.layer([Logger.make((l) => logs.push(String(l.message)))])),
+						),
+					);
+					// Refused only with a token: GitHub never sees one without it, and answers.
+					const wantOk = refuse === "token";
+					ensure(
+						Exit.isSuccess(exit) === wantOk,
+						`${q} ended ${Exit.isSuccess(exit) ? "well" : "badly"}`,
+					);
+					const paths = [...new Set(gh.asked.map((a) => a.path))];
+					ensure(paths.length > 0, "GitHub was not asked");
+					const bearer = `Bearer ${token}`;
+					let retried = 0;
+					for (const path of paths) {
+						const auths = gh.asked.filter((a) => a.path === path).map((a) => a.auth);
+						const shown = `${path} was asked with ${JSON.stringify(auths)}`;
+						if (!withToken) {
+							ensure(eq(auths, [null]), shown);
+							continue;
+						}
+						// `of` asks two paths together, and the first to fail stops the other: that one may
+						// end before its second ask. A question that ends well asked each path twice.
+						ensure(eq(auths, [bearer, null]) || (!wantOk && eq(auths, [bearer])), shown);
+						if (auths.length === 2) retried++;
+					}
+					const warned = logs.filter((l) => l === mod.TOKEN_REFUSED).length;
+					ensure(
+						withToken ? warned >= retried && warned <= paths.length : warned === 0,
+						`the log said ${JSON.stringify(logs)} for ${retried} asks again`,
+					);
+					if (Exit.isFailure(exit))
+						ensure(
+							!JSON.stringify(exit.cause).includes(token) && !logs.some((l) => l.includes(token)),
+							"the token went into an error or the log",
+						);
+				},
+			),
+			{numRuns: 12, seed: 7},
+		);
+	},
+};
+
 const LAWS: readonly Law[] = [
 	writerIsStamp,
 	agentNeverUser,
@@ -896,6 +1418,13 @@ const LAWS: readonly Law[] = [
 	personKinds,
 	idChecked,
 	keysUnreachable,
+	strangersAskNothing,
+	oneRefusal,
+	onlyInviteAsksByName,
+	byIdOnlyKnown,
+	renameKeepsResult,
+	otherIdIs502,
+	tokenRetry,
 ];
 
 // ---------------------------------------------------------------- planted mistakes
@@ -940,12 +1469,20 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// A spent challenge is not deleted, so it works again.
 	challengeReused: () =>
 		plant("door", 'this.#db.all("DELETE FROM door_challenges WHERE nonce = ?", nonce);', ""),
-	// A join binds to the name, not the id.
+	// A login goes by the name: it asks who has the name now, takes that id, and joins whoever an
+	// invite's name matches.
 	bindsToLogin: () =>
 		plant(
 			"door",
-			'else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});',
-			'else if (m.invited.has(id) || [...m.invited.values()].includes(name)) this.#fact(me, "joined", {id, name});',
+			"(k) => k.byId(id),\n\t\t\t\t(s) => s.id === id,",
+			"(k) => k.of(name),\n\t\t\t\t() => true,",
+			[
+				["return letIn({id, name: as});", "return letIn({id: s.id, name: as});"],
+				[
+					'else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});',
+					'else if (m.invited.has(id) || [...m.invited.values()].includes(name)) this.#fact(me, "joined", {id, name});',
+				],
+			],
 		),
 	// The last member can be removed.
 	removesLast: () =>
@@ -972,15 +1509,15 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	pinsFirstKey: () =>
 		plant(
 			"door",
-			"(await verify(signature, text, NAMESPACE, asked.value.keys)) === null",
-			"(await verify(signature, text, NAMESPACE, asked.value.keys.slice(0, 1))) === null",
+			"(await verify(signature, text, NAMESPACE, s.keys)) !== null",
+			"(await verify(signature, text, NAMESPACE, s.keys.slice(0, 1))) !== null",
 		),
 	// GitHub's answer is kept forever, so a key taken off on GitHub keeps working.
 	cacheNeverExpires: () =>
 		plant(
 			"keys-github",
-			"timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero),",
-			"timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),",
+			"Exit.isSuccess(exit) ? Duration.millis(ms) : Duration.zero,",
+			"Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,",
 		),
 	// A grant is accepted for any object.
 	grantAnyObject: () =>
@@ -1007,13 +1544,61 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	agentAnswers: () =>
 		plant("door", 'if (who.kind !== "user" && isPersonKind(e.kind))', "if (false)"),
 	// The keys service's id is taken as it comes, "@" and all.
-	anyIdTaken: () => plant("door", "s === null || isPersonId(s.id)", "true"),
+	anyIdTaken: () =>
+		plant("door", "s === null || (isPersonId(s.id) && ok(s))", "s === null || ok(s)"),
 	// An unreachable keys service reads as nobody by that name.
 	unreachableIsNobody: () =>
 		plant(
 			"door",
 			"Effect.succeed(refuse(502, `could not ask for the keys of",
 			"Effect.succeed(letIn(null) || refuse(502, `could not ask for the keys of",
+		),
+	// Every member and open invite is asked about at each login, whatever name was typed.
+	asksEveryone: () =>
+		plant(
+			"door",
+			"const ids = [...known.map((k) => k.id), ...(founder === null ? [] : [founder])];",
+			"const ids = [...m.members.keys(), ...m.invited.keys(), ...(founder === null ? [] : [founder])];",
+		),
+	// A name nobody here goes by gets its own refusal, which tells who is a member.
+	saysNobody: () =>
+		plant(
+			"door",
+			"\t\t}\n\t\treturn refuse(401, NOT_PROVEN);",
+			'\t\t}\n\t\treturn refuse(401, known.length === 0 ? "nobody here goes by that name" : NOT_PROVEN);',
+		),
+	// A login that is proven asks once more, by name, for the name the person goes by now.
+	refreshesByName: () =>
+		plant(
+			"door",
+			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});",
+			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {\n\t\t\t\tawait this.#ask(as, (k) => k.of(as), () => true);\n\t\t\t\treturn letIn({id, name: as});\n\t\t\t}",
+		),
+	// The founder is asked about at every login by a known name, even after being taken off.
+	asksFounderAlways: () =>
+		plant(
+			"door",
+			'const founder = c.kind === "shared" && !m.founded ? c.founder : null;',
+			'const founder = c.kind === "shared" && (!m.founded || known.length > 0) ? c.founder : null;',
+		),
+	// The typed name is held to the name the keys service gives now, not the one the ledger knows.
+	goesByNewName: () =>
+		plant(
+			"door",
+			"const as = known.find((k) => k.id === id)?.name ?? s.name;",
+			"const as = s.name;",
+		),
+	// The keys service's answer is taken for the id asked about, whatever id it gives.
+	takesOtherId: () => plant("door", "(s) => s.id === id,", "() => true,"),
+	// A token GitHub refuses is never asked without.
+	noRetry: () =>
+		plant("keys-github", "if (res.status === 401 && o.token !== undefined) {", "if (false) {"),
+	// A 401 is asked again even when no token was sent.
+	retriesWithoutToken: () =>
+		plant(
+			"keys-github",
+			"if (res.status === 401 && o.token !== undefined) {",
+			"if (res.status === 401) {",
 		),
 };
 
@@ -1034,7 +1619,7 @@ describe("the door's laws", () => {
 			agentInvites: [personOnly.name],
 			longAgent: [agentSessionBound.name],
 			challengeReused: [challengeOnce.name],
-			bindsToLogin: [bindToId.name],
+			bindsToLogin: [bindToId.name, onlyInviteAsksByName.name, otherIdIs502.name],
 			removesLast: [removeEndsSessions.name],
 			closedIs401: [noCredential.name],
 			noCredIs403: [noCredential.name],
@@ -1046,6 +1631,14 @@ describe("the door's laws", () => {
 			agentAnswers: [personKinds.name],
 			anyIdTaken: [idChecked.name],
 			unreachableIsNobody: [keysUnreachable.name],
+			asksEveryone: [strangersAskNothing.name],
+			saysNobody: [oneRefusal.name],
+			refreshesByName: [onlyInviteAsksByName.name],
+			asksFounderAlways: [byIdOnlyKnown.name],
+			goesByNewName: [renameKeepsResult.name],
+			takesOtherId: [otherIdIs502.name],
+			noRetry: [tokenRetry.name],
+			retriesWithoutToken: [tokenRetry.name],
 		});
 		// Every law is caught by at least one plant.
 		const all = new Set(Object.values(caught).flat());
