@@ -38,6 +38,27 @@ const layerGitHub = Layer.effect(Keys, /* GET /users/{login} and /users/{login}/
 const layerOnLedger = Layer.effect(Keys, /* "key added" and "key removed" facts, each written by its person */);
 ```
 
+**Decided the same day: access starts from an invitation.** The door asks the
+keys service only about someone this ledger already knows: the founder, an
+open invite, or a member. Any other name is refused, and nothing outside is
+asked. An invite binds a name to an id once. After that, sign-in goes by that
+id, so a person renamed on GitHub still gets in by the name this ledger knows
+them by. Why: a sign-in anyone can start must not spend a budget outside the
+ledger. GitHub answers 60 calls an hour per address without a token, and
+Cloudflare's outgoing addresses are shared
+([rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)).
+The GitHub Layer also takes an optional token, which gives it 5,000 calls an
+hour of its own.
+
+```ts
+// A sketch. The door looks in its own members first, then asks by id.
+const login = (name: string, signed: Signed) => {
+	const id = known(members, name); // founder, invited or member; else null
+	if (id === null) return refuse(401, "not signed in"); // the same answer as a bad signature
+	return keysOf(id).pipe(/* check the signature against them */);
+};
+```
+
 **Decided 2026-10-25: a project lives on one ledger server, never two, and
 the app opens several projects the way Obsidian opens vaults.**
 
