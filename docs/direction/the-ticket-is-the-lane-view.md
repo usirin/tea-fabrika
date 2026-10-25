@@ -1,6 +1,6 @@
 # The ticket is the lane's one view
 
-Decided 2026-10-24. Two parts are still proposed, and they are marked.
+Decided 2026-10-24. One part is still proposed, and it is marked.
 
 ```ts
 // A sketch. A ticket is the key that ties one lane's facts together.
@@ -34,9 +34,15 @@ const forAgent = brief(state, facts); // the same rows as text, typed facts as s
     agent reads it as data.
   - Nothing reads a comment to learn where a lane is
     ([data first](./data-first-markdown-is-a-view.md)).
-- **Proposed: each fact says who or what wrote it,** a person or an agent, and
-  not only which member. An agent's comment and a person's then look different
-  in both views, and only a person's answer closes an ask.
+- **Each fact says who or what wrote it** (decided 2026-10-24). The ledger is
+  private, and each writer on it is a user or an agent. An agent session can
+  get its own identity when that is wanted.
+  - An agent's comment and a user's then look different in both views.
+  - Only a user's answer closes an ask.
+  - This holds because a user's key never goes into a box: agents run boxed,
+    with no real key ([programs run in a box](./programs-run-in-a-box.md)).
+  - A tap to sign each answer, such as Touch ID, was weighed and left out as
+    more than this needs.
 
 ## Why
 
