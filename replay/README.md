@@ -37,6 +37,9 @@ type-level, runtime and docs fixes; small and medium diffs; and chains where
 one issue came out of another's review (#460 then #463, #529 then #534, #556
 then #567, #568, #569 and #579). I preferred issues whose original report can be
 recovered, and dropped three whose report or triaged body names a person.
+A company outside the project is written `‹product›` (added 2026-10-24, in
+#333, #355, #360, #393 and #504). That one word is the only change from the
+text on GitHub.
 
 ## Where the raw report comes from
 

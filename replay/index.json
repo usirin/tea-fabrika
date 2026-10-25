@@ -141,7 +141,7 @@
 		},
 		{
 			"number": 360,
-			"title": "code-graph's published default rules name Binclusive's own functions and SDKs",
+			"title": "code-graph's published default rules name ‹product›'s own functions and SDKs",
 			"summary": "Default node-kind rules named one consumer's functions; defaults narrowed to generic names and pinned by a snapshot test.",
 			"file": "issues/360.json",
 			"packages": ["@demlik/code-graph"],
