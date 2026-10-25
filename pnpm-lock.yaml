@@ -443,6 +443,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
       miniflare:
         specifier: 'catalog:'
         version: 4.20260730.0

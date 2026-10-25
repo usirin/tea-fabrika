@@ -1,7 +1,7 @@
 // Order lines for guests, from outside any host.
 import {NodeRuntime} from "@effect/platform-node";
 import {cast} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {layerAttach} from "@kampus/fabrika/local";
 import {Console, Effect} from "effect";
 
 const guests = ["Ayşe", "Deniz", "Emre", "Selin", "Mert", "Zeynep", "Can", "Elif"];
@@ -16,5 +16,5 @@ const main = Effect.gen(function* () {
 });
 
 NodeRuntime.runMain(
-	main.pipe(Effect.provide(layerHttp({url: "http://127.0.0.1:8790", ledger: "teahouse"}))),
+	main.pipe(Effect.provide(layerAttach({persist: ".teahouse", ledger: "teahouse", port: 8790}))),
 );
