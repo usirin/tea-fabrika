@@ -496,6 +496,8 @@ describe("how long GitHub says to wait", () => {
 		expect(wait("00:00:00")).toBe(LIMIT_WAIT_MS);
 		// One second more is past the line: 1977, gone, so no wait.
 		expect(wait("00:00:01")).toBe(0);
+		// 2100 has no 29 Feb, but all of 2100 is past the line: 2000, gone, so no wait.
+		expect(limitWait(429, {"retry-after": "Tuesday, 29-Feb-00 00:00:00 GMT"}, at)).toBe(0);
 	});
 });
 
