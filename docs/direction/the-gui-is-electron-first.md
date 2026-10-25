@@ -3,6 +3,9 @@
 Decided 2026-10-24. Replaces [The GUI is a local web page first](./the-gui-is-a-local-web-page-first.md)
 of 2026-10-22.
 
+*2026-10-25: the window is tiled, as tmux and Tuval are, and every new tile
+runs tsh. See [the last section](#decided-2026-10-25-tiles-like-tmux).*
+
 ```text
 1. fabrika opens as a single window with tsh
 2. tsh comes with the owner's programs loaded
@@ -169,6 +172,10 @@ readInput(counter, {type: "press", value: "plus"});   // {kind: "read", msg: {..
 **Proposed**, not yet decided. It changes points 1 and 4 at the top of this
 note. The build is in [`apps/fabrika`](../../apps/fabrika/README.md).
 
+*Replaced in part the same day: the terminal and its line editor stay, but a
+program no longer opens a window of its own. It runs in a tile
+([next section](#decided-2026-10-25-tiles-like-tmux)).*
+
 ```text
 1. fabrika opens as a terminal window, running tsh with a line editor
 2. tsh comes with the owner's programs loaded
@@ -246,6 +253,93 @@ replay(editor, {ctx, msgs: [{type: "keys", data: "counter\r"}]});
   the end of its inputs (this proposal), or stop, as closing a terminal sends
   `SIGHUP`. Watching people close windows with a job half done would settle
   it.
+
+## Decided 2026-10-25: tiles, like tmux
+
+**Decided** 2026-10-25. It replaces "a window per program" in the section
+above. The terminal, ghostty-web and the line editor stay as they are.
+
+```text
+1. fabrika opens as one window with one tile, and the tile runs tsh
+2. Ctrl-B then | or - splits the focused tile; the new tile runs a fresh tsh
+3. a program with a GUI, run in the foreground, takes over its tile; when it ends, tsh is back
+4. Ctrl-B then h, j, k or l moves the focus; Ctrl-B then x closes the tile
+```
+
+```ts
+// A sketch. The layout is a pure tree, ported from Tuval's
+// (kamp-us/phoenix, apps/tuval/src/shell/layout): tiles and stacks of tiles.
+type Layout = TileNode | StackNode;
+type TileNode = {tag: "tile"; id: TileId; shows: {kind: "tsh"} | {kind: "run"; run: RunId}};
+type StackNode = {
+	tag: "stack";
+	id: StackId;
+	orientation: "horizontal" | "vertical"; // side by side, or top to bottom
+	children: ReadonlyArray<Layout>;
+	sizes: ReadonlyArray<number>; // percent of the stack, always summing to 100
+};
+
+// The desk is a tea machine. The keys after the prefix are its Msgs.
+update(desk, {type: "split", orientation: "horizontal"}); // a new tile beside, running a new tsh, focused
+update(desk, {type: "focus", to: "left"});
+update(desk, {type: "close"}); // the focused tile goes, and its tsh ends
+```
+
+| After Ctrl-B | What it does |
+|---|---|
+| `\|` or `-` | split side by side, or top to bottom |
+| `h` `j` `k` `l`, or the arrows | focus left, down, up, right |
+| `z` | zoom the focused tile; again to undo |
+| `x` | close the focused tile |
+| `N`, `Ctrl-H`, `Ctrl-L` | new workspace, previous, next |
+
+- **One window, tiled the way Tuval was.**
+  - Tuval's layout tree comes over as it is, with its tests: split, close,
+    focus by direction, resize, zoom. It is pure and imports nothing but one
+    Effect guard.
+  - A border is dragged to resize. Workspaces work as Tuval's did.
+  - The keys are Tuval's table, which is tmux's: Ctrl-B, then one key.
+- **Every new tile runs tsh,** as every new tmux pane runs a shell. Each tile
+  has its own tsh, with its own jobs.
+- **A program with a GUI runs inside its tile,** as vim runs inside a tmux
+  pane. In the foreground it covers its tile and tsh waits; Ctrl-C stops it
+  and tsh is back. The other tiles stay as they were.
+- **The page reads the prefix first.** Ctrl-B never reaches tsh or a
+  program. Ctrl-B twice sends one Ctrl-B on, as tmux's `send-prefix` does.
+
+### Why
+
+- **Tuval's tiling was used every day** and its keys are muscle memory. It is
+  the tmux model, which most terminal users already know.
+- **A tile has its size from the layout,** so no program needs a window size
+  of its own. The 520 by 420 windows of the terminal build had room for six
+  tickets.
+- **tsh is still never hidden.** A program covers one tile, not the app.
+
+### What it costs
+
+- **Many terminals on one page.** Each tile has its own ghostty-web terminal.
+  How many one page holds before it slows down is not measured yet.
+- **Ctrl-B is also readline's "back one character".** As in tmux, the prefix
+  wins. The left arrow does the same, and Ctrl-B twice sends it on.
+- **The windows of the terminal build go away,** and their code with them.
+- **How sure: 85%.** The doubt is the many terminals on one page. The build
+  will measure it.
+
+### Open, with a lean
+
+- **A program started with `&`:** it opens in a new tile beside its tsh, and
+  the prompt comes back. This is Tuval's "a window of its own", which split
+  the target window and put the run in the new half. 80%.
+- **Closing a tile with a run in it:** a y or n question, then the tile's tsh
+  and its runs end, as tmux's `kill-pane` hangs up the shell. It settles the
+  75% doubt of the section above the tmux way. 75%, because Tuval's detach
+  stopped nothing; seeing whether a closed tile's job is ever missed would
+  settle it.
+- **Quit and open again:** the layout comes back as it was, as Tuval kept its
+  desk, and each tile's tsh comes back with its jobs for `attach`. 80%.
+- **Closing the last tile quits the app,** as tmux ends with its last pane.
+  70%. A fresh tsh in a fresh tile may be kinder; a week of use would show.
 
 ## What would change it
 
