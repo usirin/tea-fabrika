@@ -114,6 +114,9 @@ has no single place that can say who was first.
 - Claims, asks and the desk keep talking only to the `Ledger` service, never to
   the file under it.
 - Nothing else moves early. The real run comes first.
+  *Changed 2026-10-25: two people sharing one fabrika, with their agents
+  talking across two machines, is now a core goal, so the shared ledger moves
+  early. See [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md).*
 
 ## Open
 
