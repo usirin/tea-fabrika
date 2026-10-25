@@ -31,15 +31,10 @@ export interface Shown {
 }
 
 /**
- * What a tile shows.
- *
- *   tsh   the tile's own tsh. A run with a view in its foreground covers it while it runs.
- *   run   a run started with `&`, in a tile of its own beside the tsh that started it (`of`).
- *         The tile goes when the run ends.
+ * What a tile shows: always its own tsh. A run with a view in its foreground covers it while it
+ * runs. A run started with `&` shows nowhere, as a job in bash's background, until `attach`.
  */
-export type Shows =
-	| {readonly kind: "tsh"; readonly run: Shown | null}
-	| {readonly kind: "run"; readonly run: Shown; readonly of: TileId};
+export type Shows = {readonly kind: "tsh"; readonly run: Shown | null};
 
 export interface TileNode {
 	readonly tag: "tile";
@@ -95,9 +90,8 @@ const isShown = (value: unknown): value is Shown =>
 	Predicate.isObject(value) && typeof value.id === "string" && typeof value.program === "string";
 
 export function isShows(value: unknown): value is Shows {
-	if (!Predicate.isObject(value)) return false;
-	if (value.kind === "tsh") return value.run === null || isShown(value.run);
-	return value.kind === "run" && isShown(value.run) && typeof value.of === "string";
+	if (!Predicate.isObject(value) || value.kind !== "tsh") return false;
+	return value.run === null || isShown(value.run);
 }
 
 export function isTileNode(value: unknown): value is TileNode {

@@ -116,7 +116,7 @@ body,
 	white-space: pre;
 }
 
-/* A program's view: over its tile's terminal in the foreground, or in a tile of its own. */
+/* A program's view: over its tile's terminal, while it runs in the foreground. */
 main.program {
 	position: absolute;
 	inset: 0;
@@ -129,7 +129,23 @@ main.program {
 	outline: none;
 }
 
-/* "Close it?", over the tile it is for, as tmux's confirm-before asks on its status line. */
+/* A closing tile: its programs were given the end of their inputs, and it waits for their end. */
+.tile.closing {
+	border-style: dashed;
+}
+
+.closing-note {
+	position: absolute;
+	top: 0;
+	right: 0;
+	margin: 0;
+	padding: 2px 8px;
+	background: #2b2f3a;
+	color: var(--faint);
+	font-size: 12px;
+}
+
+/* "close t2? (y/n)", over the tile it is for, as tmux's confirm-before asks on its status line. */
 .ask {
 	position: absolute;
 	inset: auto 0 0 0;

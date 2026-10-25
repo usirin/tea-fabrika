@@ -130,18 +130,17 @@ function ancestorsOf(stack: StackNode, id: TileId): StackNode[] | null {
  * Split `id` along `orientation`, giving the new tile half the split tile's share. A stack holding
  * one child turns to the new orientation instead of nesting; otherwise a different orientation
  * nests a stack under `ids.stack`. An unknown tile, or new ids already taken, leave the tree as it
- * is: `checkTree` is what proves a tree's ids unique. The new tile shows `shows`.
+ * is: `checkTree` is what proves a tree's ids unique. The new tile shows a fresh tsh.
  */
 export function split(
 	tree: LayoutTree,
 	id: TileId,
 	orientation: Orientation,
 	ids: SplitIds,
-	shows?: Shows,
 ): LayoutTree {
 	const taken = new Set<NodeId>(idsOf(tree.root));
 	if (taken.has(ids.tile) || taken.has(ids.stack)) return tree;
-	const root = splitIn(tree.root, id, orientation, ids, createTile(ids.tile, shows));
+	const root = splitIn(tree.root, id, orientation, ids, createTile(ids.tile));
 	return root ? {...tree, root} : tree;
 }
 

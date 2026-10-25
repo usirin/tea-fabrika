@@ -78,16 +78,32 @@ describe("the tiles", {timeout: 20_000}, () => {
 				yield* d.tiles.open("t1");
 				yield* d.tiles.open("t2");
 				d.type("t1", "counter &\r");
-				const beside = yield* d.heard((m) => m.type === "beside");
 				yield* d.heard((m) => m.type === "jobs" && m.tile === "t1" && m.running === 1);
 				d.type("t2", "jobs\r");
 				const two = yield* d.prompts("t2", 2);
-				return {beside, two, views: d.views};
+				return {two, told: [...d.told], views: [...d.views]};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.beside).toMatchObject({type: "beside", tile: "t1", run: {program: "counter"}});
-		expect(seen.views).toHaveLength(1);
 		expect(seen.two).toEqual(["tsh$ jobs", "tsh$"]);
+		// `&` is a job in the background, as in bash: no tile opens, and nothing covers one.
+		expect(seen.told.map((m) => m.type).filter((t) => t !== "jobs")).toEqual([]);
+		expect(seen.views).toEqual([]);
+	});
+
+	it("bring a job of the background in with `attach %n`, as bash's fg: it covers its tile", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				yield* d.tiles.open("t1");
+				d.type("t1", "counter &\r");
+				yield* d.prompts("t1", 2);
+				d.type("t1", "attach %1\r");
+				const covered = yield* d.heard((m) => m.type === "covered");
+				return {covered, views: [...d.views]};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.covered).toMatchObject({type: "covered", tile: "t1", run: {program: "counter"}});
+		expect(seen.views).toHaveLength(1);
 	});
 
 	it("tell the desk a run in the foreground covers its tile, and when it is over", async () => {
@@ -109,39 +125,85 @@ describe("the tiles", {timeout: 20_000}, () => {
 		expect(seen.gone).toEqual([`run:${run}`]);
 	});
 
-	it("stop a run by its id, whichever tile started it", async () => {
-		const over = await go(
+	it("close a tile with `close`, not `stop`: its programs end on their own, then its tsh", async () => {
+		const seen = await go(
 			Effect.gen(function* () {
 				const d = yield* desk();
-				yield* d.tiles.open("t1");
 				yield* d.tiles.open("t2");
-				d.type("t2", "counter &\r");
-				const beside = yield* d.heard((m) => m.type === "beside");
-				const run = beside.type === "beside" ? beside.run.id : "";
-				yield* d.tiles.stop(run);
-				return yield* d.heard((m) => m.type === "over" && m.run === run);
+				d.type("t2", "tally &\r");
+				yield* d.prompts("t2", 2);
+				d.type("t2", "counter\r");
+				yield* d.heard((m) => m.type === "covered");
+				yield* d.tiles.close("t2");
+				// Said again: nothing more happens.
+				yield* d.tiles.close("t2");
+				const ended = yield* d.heard((m) => m.type === "ended");
+				// The terminal draws what tsh said last a moment after tsh ended.
+				const rows = yield* d.until("tally's end", () =>
+					d.rows("t2").includes("[1] ended  tally") ? d.rows("t2") : undefined,
+				);
+				// Nothing is dropped until the desk says stop.
+				const before = [...d.dropped];
+				yield* d.tiles.stop("t2");
+				return {ended, before, rows, dropped: [...d.dropped], gone: [...d.gone]};
 			}).pipe(Effect.scoped),
 		);
-		expect(over.type).toBe("over");
+		expect(seen.ended).toEqual({type: "ended", tile: "t2"});
+		// The foreground counter ended on its inputs' end: it printed its count, and was not stopped.
+		expect(seen.rows.some((r) => r.includes("stopped") || r === "^C")).toBe(false);
+		expect(seen.before).toEqual([]);
+		expect(seen.dropped).toEqual(["t2"]);
+		expect(seen.gone.at(-1)).toBe("tile:t2");
+		expect(seen.gone.filter((n) => n.startsWith("run:"))).toHaveLength(1);
 	});
 
-	it("close a tile: its runs end, its port goes, and its folder is dropped", async () => {
+	it("stop a closing tile whose program does not end on its inputs' end", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				yield* d.tiles.open("t2");
+				d.type("t2", "sleep --ms 600000 &\r");
+				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
+				yield* d.tiles.close("t2");
+				d.told.length = 0;
+				// A page loaded now hears t2 is closing, so its question is stop.
+				yield* d.tiles.replay;
+				const replayed = [...d.told];
+				yield* d.tiles.stop("t2");
+				// A tile stopped already: nothing happens.
+				yield* d.tiles.stop("t2");
+				return {replayed, dropped: [...d.dropped], gone: [...d.gone], told: [...d.told]};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.replayed).toContainEqual({type: "closing", tile: "t2"});
+		expect(seen.dropped).toEqual(["t2"]);
+		expect(seen.gone).toEqual(["tile:t2"]);
+		expect(seen.told.some((m) => m.type === "ended")).toBe(false);
+	});
+
+	it("leave the other tiles' runs alone when one closes", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const d = yield* desk();
 				yield* d.tiles.open("t1");
 				yield* d.tiles.open("t2");
-				d.type("t2", "counter &\r");
-				yield* d.heard((m) => m.type === "beside");
+				d.type("t1", "counter\r");
+				const covered = yield* d.heard((m) => m.type === "covered");
+				d.type("t2", "tally &\r");
+				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.running === 1);
 				yield* d.tiles.close("t2");
-				// A tile closed already: nothing happens.
-				yield* d.tiles.close("t2");
-				return {gone: [...d.gone], dropped: [...d.dropped], told: [...d.told]};
+				yield* d.heard((m) => m.type === "ended" && m.tile === "t2");
+				yield* d.tiles.stop("t2");
+				d.told.length = 0;
+				yield* d.tiles.replay;
+				return {covered, told: [...d.told], gone: [...d.gone]};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.dropped).toEqual(["t2"]);
-		expect(seen.gone.at(-1)).toBe("tile:t2");
-		expect(seen.gone.filter((n) => n.startsWith("run:"))).toHaveLength(1);
+		const run = seen.covered.type === "covered" ? seen.covered.run.id : "";
+		// t1's counter still covers t1, and its port is still there.
+		expect(seen.told).toContainEqual(seen.covered);
+		expect(seen.told).toContainEqual({type: "jobs", tile: "t1", running: 1});
+		expect(seen.gone).not.toContain(`run:${run}`);
 	});
 
 	it("share the history: a line typed in t1 is t2's Up", async () => {
@@ -178,9 +240,9 @@ describe("the tiles", {timeout: 20_000}, () => {
 			Effect.gen(function* () {
 				const d = yield* desk();
 				yield* d.tiles.open("t1");
-				d.type("t1", "counter &\r");
+				d.type("t1", "counter\r");
 				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
-				yield* d.prompts("t1", 2);
+				yield* d.heard((m) => m.type === "covered");
 				d.told.length = 0;
 				d.views.length = 0;
 				// The page was loaded again: it opens t1 again, and is told what runs.
@@ -189,10 +251,10 @@ describe("the tiles", {timeout: 20_000}, () => {
 				return {told: [...d.told], views: [...d.views], rows: d.rows("t1")};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.told.map((m) => m.type)).toEqual(["beside", "jobs"]);
+		expect(seen.told.map((m) => m.type)).toEqual(["covered", "jobs"]);
 		expect(seen.views).toHaveLength(1);
 		// The same tsh, its screen shown again from the start.
-		expect(seen.rows[0]).toBe("tsh$ counter &");
+		expect(seen.rows[0]).toBe("tsh$ counter");
 	});
 
 	it("keep a tile's jobs when the app quits, for the next start's `attach`", async () => {

@@ -418,6 +418,58 @@ What was guessed wrong:
   them yet. The old single `storage/` folder of the terminal build is not
   moved over. Typing is 30 to 50 ms, mostly the trip to the main process.
 
+#### Built 2026-10-25, later: the tmux close, `&` in the background, macOS's window
+
+Three parts of the later decision below were built, with the host still in
+the main process. No decision changed.
+
+```ts
+// What the desk says now: close is soft, stop is hard, and nothing quits.
+type FromDesk =
+	| {type: "open" | "close" | "stop"; tile: TileId}  // close: end of inputs; stop: end now
+	| {type: "save"; desk: Saved}
+	| {type: "empty"};                                  // the last tile went: close the window
+
+type ToDesk =
+	| {type: "start"; saved: unknown}
+	| {type: "covered"; tile: TileId; run: {id: string; program: string}}
+	| {type: "over"; run: string}
+	| {type: "jobs"; tile: TileId; running: number}
+	| {type: "closing" | "ended"; tile: TileId};
+
+// Ctrl-B x on t2, busy:      "close t2? (y/n)"     y: close {tile: "t2"}, t2 shows "closing"
+// its last run ends:         ended {tile: "t2"}    stop {tile: "t2"}, and t2 goes
+// Ctrl-B x on closing t2:    "stop t2 now? (y/n)"  y: stop {tile: "t2"}
+```
+
+- **Ctrl-B x always asks.** Only y says yes. y on a busy tile ends the inputs
+  of its tsh and of every run that tsh started. It stops nothing. There is
+  no timer.
+- **Closing the inputs was enough for most programs.** tsh, counter and the
+  tracker all end on it. `sleep` does not, so a tile running it stays
+  "closing" until y on "stop t2 now?". That is the case the second question
+  is for.
+- **tsh had to wait for its jobs' last words.** When its line closed, it
+  ended before a job's end line was printed. It now waits for the watchers of
+  jobs that just ended.
+- **`attach` of a running background job had to tell the host.** The job
+  table now has a `foreground` step, so the tile covers the run, as `fg`
+  brings it to the terminal.
+- **Closing t2 leaves runs shown in other tiles alone.** Only what t2's own
+  tsh started gets the end of its inputs.
+- **The window follows macOS.** The red button closes the window only. The
+  dock icon or a second start makes a new window on the same desk, and the
+  main process plays the live runs back to it. Cmd-Q quits. The last tile
+  closing closes the window. On Windows and Linux, closing the window quits.
+- **Jobs live through a closed window, not through Cmd-Q,** while the host
+  is in the main process.
+- **No hollow cursor.** ghostty-web 0.4.0 draws only filled cursors, and
+  none that knows focus.
+- **New edges:** a closing tile that ends while no window is open goes when
+  the next window opens; if it was the last tile, that window closes again
+  at once. An old `desk.json` with run tiles in it is not read, and the app
+  starts on one fresh tile.
+
 ## Decided 2026-10-25, later: Tuval and tmux decide; the host runs apart
 
 **Decided** 2026-10-25, after reading how Tuval solved the same things

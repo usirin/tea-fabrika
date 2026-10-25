@@ -70,21 +70,21 @@ const Run = Schema.Struct({id: Schema.String, program: Schema.String});
  *
  *   {type: "start", saved: null}
  *   {type: "covered", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
- *   {type: "beside", tile: "t1", run: {id: "counter:3c4d", program: "counter"}}
  *   {type: "over", run: "counter:1a2b"}
  *   {type: "jobs", tile: "t1", running: 1}
+ *   {type: "closing", tile: "t2"}    t2 was closing before this page loaded
  *   {type: "ended", tile: "t2"}
  */
 export const ToDesk = Schema.Union([
 	Schema.Struct({type: Schema.Literal("start"), saved: Schema.Unknown}),
 	Schema.Struct({type: Schema.Literal("covered"), tile: TileIdSchema, run: Run}),
-	Schema.Struct({type: Schema.Literal("beside"), tile: TileIdSchema, run: Run}),
 	Schema.Struct({type: Schema.Literal("over"), run: Schema.String}),
 	Schema.Struct({
 		type: Schema.Literal("jobs"),
 		tile: TileIdSchema,
 		running: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	}),
+	Schema.Struct({type: Schema.Literal("closing"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("ended"), tile: TileIdSchema}),
 ]);
 export type ToDesk = typeof ToDesk.Type;
@@ -95,17 +95,17 @@ export type ToDesk = typeof ToDesk.Type;
  * (`t` and a number) and nothing else passes.
  *
  *   {type: "open", tile: "t2"}       start t2's tsh, or show the one that runs
- *   {type: "close", tile: "t2"}      end t2's tsh and its runs, and drop its jobs
- *   {type: "stop", run: "counter:1a2b"}
+ *   {type: "close", tile: "t2"}      give t2's tsh and its programs the end of their inputs
+ *   {type: "stop", tile: "t2"}       stop what still runs in t2, and drop its jobs: t2 is gone
  *   {type: "save", desk: {...}}      keep the desk for the next start
- *   {type: "quit"}                   the last tile closed
+ *   {type: "empty"}                  the last tile closed: the window closes, the app stays
  */
 export const FromDesk = Schema.Union([
 	Schema.Struct({type: Schema.Literal("open"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("close"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("stop"), run: Schema.String}),
+	Schema.Struct({type: Schema.Literal("stop"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("save"), desk: Saved}),
-	Schema.Struct({type: Schema.Literal("quit")}),
+	Schema.Struct({type: Schema.Literal("empty")}),
 ]);
 export type FromDesk = typeof FromDesk.Type;
 

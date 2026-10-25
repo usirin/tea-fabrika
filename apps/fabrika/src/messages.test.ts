@@ -1,5 +1,12 @@
 import {describe, expect, it} from "vitest";
-import {readFromTerminal, readFromWindow, readToTerminal, readToWindow} from "./messages.ts";
+import {
+	readFromDesk,
+	readFromTerminal,
+	readFromWindow,
+	readToDesk,
+	readToTerminal,
+	readToWindow,
+} from "./messages.ts";
 
 // The envelope of each message type, read strictly. What is inside a window's `msg` is read by
 // its run's program, in host.test.ts.
@@ -40,5 +47,22 @@ describe("a program's window", () => {
 	it("is refused a message that names another run", () => {
 		expect(readFromWindow({type: "msg", to: "tsh:p1", msg: null}).kind).toBe("refused");
 		expect(readToWindow({type: "view", data: {n: 0}}).kind).toBe("refused");
+	});
+});
+
+describe("the desk's port", () => {
+	it("has no `beside`: a run started with & opens no tile", () => {
+		const run = {id: "counter:1a2b", program: "counter"};
+		expect(readToDesk({type: "beside", tile: "t1", run}).kind).toBe("refused");
+		expect(readToDesk({type: "covered", tile: "t1", run}).kind).toBe("read");
+		expect(readToDesk({type: "closing", tile: "t2"}).kind).toBe("read");
+	});
+
+	it("asks to close a tile, to stop one, and to empty, and stops no run by its id", () => {
+		expect(readFromDesk({type: "close", tile: "t2"}).kind).toBe("read");
+		expect(readFromDesk({type: "stop", tile: "t2"}).kind).toBe("read");
+		expect(readFromDesk({type: "empty"}).kind).toBe("read");
+		expect(readFromDesk({type: "stop", run: "counter:1a2b"}).kind).toBe("refused");
+		expect(readFromDesk({type: "quit"}).kind).toBe("refused");
 	});
 });

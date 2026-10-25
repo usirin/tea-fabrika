@@ -16,6 +16,7 @@ import {type Placed, type Runs, startHost, type WindowScreen} from "./host.ts";
 /** What the fake tile saw, in order. */
 type Seen =
 	| {readonly kind: "open"; readonly run: string; readonly program: string; readonly placed: Placed}
+	| {readonly kind: "forward"; readonly run: string}
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
 	| {readonly kind: "close"; readonly run: string}
 	| {readonly kind: "running"; readonly count: number};
@@ -39,6 +40,7 @@ const session = (
 				seen.push({kind: "open", run, program, placed});
 				screen.show((m) => seen.push({kind: "view", run, data: m.data}));
 			},
+			forward: (run) => seen.push({kind: "forward", run}),
 			ended: (run) => {
 				const screen = screens.get(run);
 				if (screen === undefined) return;
@@ -308,26 +310,74 @@ describe("a program's window", () => {
 		expect(seen.rows.at(-1)).toBe("tsh$");
 	});
 
-	it("is stopped by the host, as its tile is closed, and its job leaves tsh's table", async () => {
-		const rows = await go(
+	it("comes to the foreground on `attach %n`, as bash's fg, and the prompt waits for its end", async () => {
+		const seen = await go(
 			Effect.gen(function* () {
 				const s = yield* session();
 				s.type("counter &\r");
 				const open = yield* s.opened();
 				yield* s.prompts(2);
-				yield* s.host.stop(open.run);
-				yield* s.closed(open.run);
-				// A run that is gone already: nothing to stop.
-				yield* s.host.stop(open.run);
-				yield* s.host.stop("counter:nope");
-				yield* s.until("no running job", () =>
-					s.seen.findLast((x) => x.kind === "running" && x.count === 0),
+				const before = s.seen.some((x) => x.kind === "forward");
+				s.type("attach %1\r");
+				const forward = yield* s.until("counter forward", () =>
+					s.seen.find((x) => x.kind === "forward"),
 				);
-				return s.rows();
+				s.press(open.run, "plus");
+				s.press(open.run, "done");
+				yield* s.closed(open.run);
+				const rows = yield* s.prompts(3);
+				return {open, before, forward, rows};
 			}).pipe(Effect.scoped),
 		);
-		expect(rows[0]).toBe("tsh$ counter &");
-		expect(rows.at(-1)).toBe("tsh$");
+		expect(seen.open.placed).toBe("background");
+		expect(seen.before).toBe(false);
+		expect(seen.forward).toEqual({kind: "forward", run: seen.open.run});
+		expect(seen.rows).toContain("tsh$ attach %1");
+		expect(seen.rows.at(-1)).toBe("tsh$");
+	});
+
+	it("closes: its programs get the end of their inputs and end on their own, then tsh ends", async () => {
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("tally &\r");
+				yield* s.prompts(2);
+				s.type("counter &\r");
+				const open = yield* s.opened();
+				yield* s.prompts(3);
+				yield* s.host.close;
+				// Said again: nothing more happens.
+				yield* s.host.close;
+				yield* s.closed(open.run);
+				yield* s.host.ended;
+				// The terminal draws what tsh said last a moment after tsh ended.
+				return yield* s.until("both ends", () =>
+					s.rows().includes("[1] ended  tally") && s.rows().includes("[2] ended  counter")
+						? s.rows()
+						: undefined,
+				);
+			}).pipe(Effect.scoped),
+		);
+		// Each ended on its own, as on stdin's end: not "stopped".
+		expect(rows).toContain("[1] ended  tally");
+		expect(rows).toContain("[2] ended  counter");
+		expect(rows.some((r) => r.includes("stopped") || r.includes("stop with tsh"))).toBe(false);
+	});
+
+	it("closes, and a program that does not end on its inputs' end keeps tsh running", async () => {
+		const still = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("sleep --ms 600000 &\r");
+				yield* s.until("one running job", () =>
+					s.seen.find((x) => x.kind === "running" && x.count === 1),
+				);
+				yield* s.host.close;
+				const ended = yield* s.host.ended.pipe(Effect.timeoutOption("300 millis"));
+				return ended._tag;
+			}).pipe(Effect.scoped),
+		);
+		expect(still).toBe("None");
 	});
 
 	it("does not open for a line tsh refuses", async () => {

@@ -16,10 +16,11 @@ import {
 	type DeskCmd,
 	type DeskMsg,
 	deskMachine,
+	empty,
 	fresh,
 	type Open,
 	open,
-	quit,
+	questionOf,
 	restore,
 	save,
 	savedOf,
@@ -111,30 +112,78 @@ describe("the desk", () => {
 		expect(activeOf(opened(fold(prefixed("h", 20), zoomed).s)).layout.zoomed).toBeNull();
 	});
 
-	it("closes a tile with nothing running at once: its tsh ends, focus goes to the tile beside", () => {
-		const {s, cmds} = fold([...prefixed("|"), ...prefixed("x", 10)]);
+	it("asks before closing a tile with nothing running, and y closes it at once", () => {
+		const two = fold(prefixed("|")).s;
+		const asked = fold(prefixed("x", 10), two);
+		expect(opened(asked.s).ask).toBe("t2");
+		expect(questionOf(opened(asked.s), "t2")).toBe("close t2? (y/n)");
+		expect(asked.cmds).toEqual([]);
+		const {s, cmds} = fold([{type: "key", key: "y", at: 20}], asked.s);
 		expect(ids(s)).toEqual(["t1"]);
 		expect(focus(s)).toBe("t1");
-		expect(cmds).toContainEqual({type: "close", tile: "t2"});
+		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
+		expect(cmds.some((c) => c.type === "close")).toBe(false);
 	});
 
-	it("asks y or n before closing a tile whose tsh runs a job; n keeps it", () => {
+	it("takes only y for yes: any other key says no and keeps the tile", () => {
+		const asked = fold([...prefixed("|"), ...prefixed("x", 10)]).s;
+		for (const key of ["n", "Y", "a", "<c-b>", "<c-c>", "x", "<enter>"]) {
+			expect(claims(asked, key, 20)).toBe(true);
+			const no = fold([{type: "key", key, at: 20}], asked);
+			expect(ids(no.s)).toEqual(["t1", "t2"]);
+			expect(opened(no.s).ask).toBeNull();
+			expect(no.cmds).toEqual([]);
+		}
+	});
+
+	it("gives a busy tile's programs the end of their inputs on y, and takes it away when its tsh ended", () => {
 		const busy = fold([...prefixed("|"), {type: "jobs", tile: "t2", running: 1}]).s;
-		const asked = fold(prefixed("x", 10), busy);
-		expect(opened(asked.s).ask).toBe("t2");
-		expect(asked.cmds).toEqual([]);
-		const no = fold([{type: "key", key: "n", at: 20}], asked.s);
-		expect(ids(no.s)).toEqual(["t1", "t2"]);
-		expect(opened(no.s).ask).toBeNull();
-		const yes = fold([{type: "key", key: "y", at: 20}], asked.s);
-		expect(ids(yes.s)).toEqual(["t1"]);
-		expect(yes.cmds).toContainEqual({type: "close", tile: "t2"});
+		const yes = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], busy);
+		expect(ids(yes.s)).toEqual(["t1", "t2"]);
+		expect(opened(yes.s).closing).toEqual(["t2"]);
+		expect(yes.cmds).toEqual([{type: "close", tile: "t2"}]);
+		// The programs ended, then tsh: the tile goes, and what is left of it is stopped.
+		const ended = fold(
+			[
+				{type: "jobs", tile: "t2", running: 0},
+				{type: "ended", tile: "t2"},
+			],
+			yes.s,
+		);
+		expect(ids(ended.s)).toEqual(["t1"]);
+		expect(opened(ended.s).closing).toEqual([]);
+		expect(ended.cmds).toContainEqual({type: "stop", tile: "t2"});
 	});
 
-	it("quits when the last tile closes, as tmux ends with its last pane", () => {
-		const {s, cmds} = fold(prefixed("x"));
+	it("asks a closing tile to stop now, and y stops it", () => {
+		const covered = fold([
+			...prefixed("|"),
+			{type: "covered", tile: "t2", run: counter},
+			...prefixed("x", 10),
+			{type: "key", key: "y", at: 20},
+		]).s;
+		expect(opened(covered).closing).toEqual(["t2"]);
+		const asked = fold(prefixed("x", 30), covered).s;
+		expect(opened(asked).ask).toBe("t2");
+		expect(questionOf(opened(asked), "t2")).toBe("stop t2 now? (y/n)");
+		const no = fold([{type: "key", key: "n", at: 40}], asked).s;
+		expect(ids(no)).toEqual(["t1", "t2"]);
+		expect(opened(no).closing).toEqual(["t2"]);
+		const yes = fold([{type: "key", key: "y", at: 40}], asked);
+		expect(ids(yes.s)).toEqual(["t1"]);
+		expect(yes.cmds).toContainEqual({type: "stop", tile: "t2"});
+	});
+
+	it("hears a tile was closing before the page loaded: its question is stop", () => {
+		const two = fold([...prefixed("|"), {type: "closing", tile: "t2"}]).s;
+		expect(opened(two).closing).toEqual(["t2"]);
+		expect(questionOf(opened(two), "t2")).toBe("stop t2 now? (y/n)");
+	});
+
+	it("empties when the last tile closes: the window closes, as with Terminal's last tab", () => {
+		const {s, cmds} = fold([...prefixed("x"), {type: "key", key: "y", at: 10}]);
 		expect(s).toEqual({at: "over"});
-		expect(cmds).toEqual([{type: "close", tile: "t1"}, {type: "quit"}]);
+		expect(cmds).toEqual([{type: "stop", tile: "t1"}, {type: "empty"}]);
 	});
 
 	it("covers a tile with a foreground run, hands Ctrl-C to its tsh, and shows tsh again when it ends", () => {
@@ -150,35 +199,6 @@ describe("the desk", () => {
 		const back = fold([{type: "over", run: counter.id}], covered).s;
 		expect(findTile(activeOf(opened(back)).layout, "t1")?.shows).toEqual({kind: "tsh", run: null});
 		expect(claims(back, "<c-c>", 0)).toBe(false);
-	});
-
-	it("puts a run started with & in a tile of its own beside its tsh, and takes the tile away at its end", () => {
-		const beside = fold([{type: "beside", tile: "t1", run: counter}]).s;
-		expect(ids(beside)).toEqual(["t1", "t2"]);
-		expect(focus(beside)).toBe("t1");
-		expect(findTile(activeOf(opened(beside)).layout, "t2")?.shows).toEqual({
-			kind: "run",
-			run: counter,
-			of: "t1",
-		});
-		expect(ids(fold([{type: "over", run: counter.id}], beside).s)).toEqual(["t1"]);
-	});
-
-	it("closes a tsh's run tiles with it, and stops a run whose own tile is closed", () => {
-		const beside = fold([...prefixed("|"), {type: "beside", tile: "t1", run: counter}]).s;
-		expect(ids(beside)).toEqual(["t1", "t3", "t2"]);
-		const t1 = fold(
-			[{type: "click", tile: "t1"}, ...prefixed("x", 10), {type: "key", key: "y", at: 20}],
-			beside,
-		);
-		expect(ids(t1.s)).toEqual(["t2"]);
-		expect(t1.cmds).toContainEqual({type: "close", tile: "t1"});
-		const own = fold(
-			[{type: "click", tile: "t3"}, ...prefixed("x", 10), {type: "key", key: "y", at: 20}],
-			beside,
-		);
-		expect(ids(own.s)).toEqual(["t1", "t2"]);
-		expect(own.cmds).toContainEqual({type: "stop", run: counter.id});
 	});
 
 	it("makes workspaces with N, and walks them with Ctrl-H and Ctrl-L, repeating within 500 ms", () => {
@@ -201,7 +221,7 @@ describe("the desk", () => {
 
 	it("closes a workspace with its last tile, and moves to the one next to it", () => {
 		const two = fold(prefixed("N")).s;
-		const {s} = fold(prefixed("x", 10), two);
+		const {s} = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], two);
 		expect(opened(s).workspaces.map((w) => w.id)).toEqual(["w1"]);
 		expect(opened(s).active).toBe("w1");
 	});
@@ -217,7 +237,7 @@ describe("the desk", () => {
 		const two = fold(prefixed("|")).s;
 		const {s, cmds} = fold([{type: "ended", tile: "t2"}], two);
 		expect(ids(s)).toEqual(["t1"]);
-		expect(cmds).toContainEqual({type: "close", tile: "t2"});
+		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
 	});
 });
 
@@ -231,13 +251,15 @@ describe("a kept desk", () => {
 		expect(cmds).toEqual(["t1", "t2", "t3", "t4"].map((tile) => ({type: "open", tile})));
 	});
 
-	it("drops what ran: a run's own tile goes, a covered tile shows tsh", () => {
+	it("drops what ran: a covered tile shows tsh, and nothing is closing", () => {
 		const ran = fold([
+			...prefixed("|"),
 			{type: "covered", tile: "t1", run: counter},
-			{type: "beside", tile: "t1", run: {id: "counter:2", program: "counter"}},
+			{type: "closing", tile: "t2"},
 		]).s;
 		const back = restore(savedOf(opened(ran)));
-		expect(back === null ? null : ids(back)).toEqual(["t1"]);
+		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+		expect(back?.closing).toEqual([]);
 		expect(back === null ? null : findTile(activeOf(back).layout, "t1")?.shows).toEqual({
 			kind: "tsh",
 			run: null,
@@ -297,13 +319,13 @@ type MsgOf<T> = T extends Machine<infer _S, infer M, infer _C, infer _U, infer _
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
 
-const [opening, closing, stopping, sending, saving, quitting] = [
+const [opening, closing, stopping, sending, saving, emptying] = [
 	open({tile: "t1"}),
 	close({tile: "t1"}),
-	stop({run: "counter:1"}),
+	stop({tile: "t1"}),
 	send({tile: "t1", data: "x"}),
 	save({desk: savedOf(fresh())}),
-	quit({}),
+	empty({}),
 ] as const;
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
@@ -315,9 +337,9 @@ const table: MsgArbitraryTable<MsgOf<typeof deskMachine>> = {
 		sizes: fc.dictionary(tile, fc.double({min: 0, max: 200, noNaN: true})),
 	}),
 	covered: arbRecordMsg("covered", {tile, run}),
-	beside: arbRecordMsg("beside", {tile, run}),
 	over: arbRecordMsg("over", {run: run.map((r) => r.id)}),
 	jobs: arbRecordMsg("jobs", {tile, running: fc.nat({max: 2})}),
+	closing: arbRecordMsg("closing", {tile}),
 	ended: arbRecordMsg("ended", {tile}),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
 	open_err: failed(open.errType, opening),
@@ -329,15 +351,15 @@ const table: MsgArbitraryTable<MsgOf<typeof deskMachine>> = {
 	send_err: failed(send.errType, sending),
 	save_ok: fc.constant(save.ok(saving, null, 0)),
 	save_err: failed(save.errType, saving),
-	quit_ok: fc.constant(quit.ok(quitting, null, 0)),
-	quit_err: failed(quit.errType, quitting),
+	empty_ok: fc.constant(empty.ok(emptying, null, 0)),
+	empty_err: failed(empty.errType, emptying),
 };
 /**
  * Lists of Msgs, mostly keys. Not tea's `arbMsgSequence`: at fast-check's default size its lists
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
  */
 const lists = fc.array(
-	arbMsg(table, {weights: {key: 24, click: 2, covered: 2, beside: 2, over: 2, jobs: 2}}),
+	arbMsg(table, {weights: {key: 24, click: 2, covered: 2, over: 2, jobs: 2, closing: 1}}),
 	{maxLength: 60, size: "max"},
 );
 
@@ -357,14 +379,14 @@ export const broken = (s: Desk): readonly string[] => {
 		for (const t of tilesOf(ws)) {
 			if (seen.has(t.id)) out.push(`${t.id} is in two places`);
 			seen.add(t.id);
-			if (t.shows.kind === "run" && findTile(ws.layout, t.shows.of) === null)
-				out.push(`${t.id} is a run of ${t.shows.of}, which is gone`);
 		}
 	}
 	if (s.ask !== null && findTile(activeOf(s).layout, s.ask) === null)
 		out.push(`asks in ${s.ask}, not a tile of the active workspace`);
 	for (const t of Object.keys(s.running))
 		if (whereIs(s, t) === undefined) out.push(`counts jobs of ${t}, which is gone`);
+	for (const t of s.closing) if (whereIs(s, t) === undefined) out.push(`${t} closing, and gone`);
+	if (new Set(s.closing).size !== s.closing.length) out.push("a tile closing twice");
 	return out;
 };
 
@@ -384,35 +406,42 @@ describe("the desk's laws", () => {
 		);
 	});
 
-	it("asks to open a tile's tsh for every tile it makes, and to close it for every tile that goes", () => {
+	it("asks to open a tile's tsh for every tile it makes, and to stop it for every tile that goes", () => {
 		propertyInvariant(
 			deskMachine,
 			stubCtxThrowingProxy(),
 			lists,
 			(step) => {
-				const before = tshTiles(step.prev);
-				const after = tshTiles(step.next);
+				const before = tileIds(step.prev);
+				const after = tileIds(step.next);
 				const opens = step.cmds.flatMap((c) => (c.type === "open" ? [c.tile] : []));
-				const closes = step.cmds.flatMap((c) => (c.type === "close" ? [c.tile] : []));
+				const stops = step.cmds.flatMap((c) => (c.type === "stop" ? [c.tile] : []));
 				const made = [...after].filter((t) => !before.has(t));
 				const gone = [...before].filter((t) => !after.has(t));
-				return same(opens, made) && same(closes, gone);
+				return same(opens, made) && same(stops, gone);
+			},
+			{numRuns: 400},
+		);
+	});
+
+	it("asks to close a tile only as it starts closing, and never one that is gone", () => {
+		propertyInvariant(
+			deskMachine,
+			stubCtxThrowingProxy(),
+			lists,
+			(step) => {
+				const was = step.prev.at === "open" ? step.prev.closing : [];
+				const now = step.next.at === "open" ? step.next.closing : [];
+				const closes = step.cmds.flatMap((c) => (c.type === "close" ? [c.tile] : []));
+				return closes.every((t) => now.includes(t) && !was.includes(t));
 			},
 			{numRuns: 400},
 		);
 	});
 });
 
-const tshTiles = (s: Desk): ReadonlySet<string> =>
-	new Set(
-		s.at === "over"
-			? []
-			: s.workspaces.flatMap((ws) =>
-					tilesOf(ws)
-						.filter((t) => t.shows.kind === "tsh")
-						.map((t) => t.id),
-				),
-	);
+const tileIds = (s: Desk): ReadonlySet<string> =>
+	new Set(s.at === "over" ? [] : s.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id)));
 
 const same = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((x) => b.includes(x));
