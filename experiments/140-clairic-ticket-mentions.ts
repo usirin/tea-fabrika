@@ -136,11 +136,27 @@ interface Results {
  * replaced, and is never read back.
  */
 const RAW = join(CACHE, "calls.json");
-// The name itself is kept out of this public file: base64, read at run time.
-const PRIVATE = new RegExp(atob("YmluY2x1c2l2ZQ=="), "gi");
+// The name itself is in no committed file, in any form. It is read from
+// `private-words.txt` beside RAW, one word a line, under the ignored `runs/`.
+// Without that file no results are written, so a fresh clone cannot leak it.
+const PRIVATE_WORDS = join(CACHE, "private-words.txt");
 const COMPANY = "[a company]";
+const privateWords = (): RegExp => {
+	const words = existsSync(PRIVATE_WORDS)
+		? readFileSync(PRIVATE_WORDS, "utf8")
+				.split("\n")
+				.map((word) => word.trim())
+				.filter((word) => word !== "")
+		: [];
+	if (words.length === 0)
+		throw new Error(`${PRIVATE_WORDS} is missing or empty: no results are written without it`);
+	return new RegExp(
+		words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+		"gi",
+	);
+};
 /** An item as the committed files and the labels write it. */
-const shown = (text: string) => text.replace(PRIVATE, COMPANY);
+const shown = (text: string) => text.replace(privateWords(), COMPANY);
 
 const load = (): Results =>
 	existsSync(RAW) ? JSON.parse(readFileSync(RAW, "utf8")) : {fields: FIELDS, calls: {}};
