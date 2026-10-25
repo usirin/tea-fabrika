@@ -1,0 +1,16 @@
+{
+	"name": "exp-144-durable-objects-live",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 144: the ledger's Durable Object on real Cloudflare, deployed with Alchemy. Not in the workspace: install it alone with `pnpm install --ignore-workspace`.",
+	"scripts": {
+		"deploy": "alchemy deploy",
+		"destroy": "alchemy destroy"
+	},
+	"dependencies": {
+		"@alchemy.run/cloudflare": "2.0.0-beta.84",
+		"@effect/platform-node": "4.0.6",
+		"alchemy": "2.0.0-beta.84",
+		"effect": "4.0.6"
+	}
+}
