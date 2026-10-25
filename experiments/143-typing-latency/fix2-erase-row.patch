@@ -1,0 +1,35 @@
+diff -ruN a/apps/fabrika/src/editor/editor.ts b/apps/fabrika/src/editor/editor.ts
+--- a/apps/fabrika/src/editor/editor.ts
++++ b/apps/fabrika/src/editor/editor.ts
+@@ -209,11 +209,26 @@
+ 	parts: [...acc.parts, ...parts],
+ });
+ 
+-/** Move to `next`, drawing the prompt line again. */
+-const redraw = (acc: Acc, next: Editor): Acc => ({
+-	s: next,
+-	parts: [...acc.parts, backFrom(acc.s) + drawn(next)],
+-});
++/** The prompt line of `s`, if it fits its one row with the cursor. */
++const inRow = (s: Editor): {readonly text: string; readonly at: number} | null => {
++	const now = shownLine(s);
++	return now !== null && cells(now.text) < s.cols ? now : null;
++};
++
++/**
++ * Move to `next`, drawing the prompt line again. Experiment 143: a line that fits its row, before
++ * and after, is cleared to the end of its row only (CSI K), not to the end of the screen (CSI J),
++ * so the terminal marks one row changed and draws one row, not every row under the prompt.
++ */
++const redraw = (acc: Acc, next: Editor): Acc => {
++	const before = inRow(acc.s);
++	const after = inRow(next);
++	const part =
++		before !== null && after !== null
++			? `\r\x1b[K${after.text}\r${after.at > 0 ? `\x1b[${after.at}C` : ""}`
++			: backFrom(acc.s) + drawn(next);
++	return {s: next, parts: [...acc.parts, part]};
++};
+ 
+ const withMode = (s: Editor, mode: Mode): Editor => ({...s, mode});
+ 

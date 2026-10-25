@@ -1,0 +1,32 @@
+diff -ruN a/ghostty-web/dist/ghostty-web.js b/ghostty-web/dist/ghostty-web.js
+--- a/ghostty-web/dist/ghostty-web.js
++++ b/ghostty-web/dist/ghostty-web.js
+@@ -142,10 +142,10 @@
+   // ==========================================================================
+   write(A) {
+     const B = typeof A == "string" ? new TextEncoder().encode(A) : A, g = this.exports.ghostty_wasm_alloc_u8_array(B.length);
+-    new Uint8Array(this.memory.buffer).set(B, g), this.exports.ghostty_terminal_write(this.handle, g, B.length), this.exports.ghostty_wasm_free_u8_array(g, B.length);
++    new Uint8Array(this.memory.buffer).set(B, g), this.exports.ghostty_terminal_write(this.handle, g, B.length), this.exports.ghostty_wasm_free_u8_array(g, B.length), this.viewFresh = !1;
+   }
+   resize(A, B) {
+-    A === this._cols && B === this._rows || (this._cols = A, this._rows = B, this.exports.ghostty_terminal_resize(this.handle, A, B), this.invalidateBuffers(), this.initCellPool());
++    A === this._cols && B === this._rows || (this._cols = A, this._rows = B, this.exports.ghostty_terminal_resize(this.handle, A, B), this.invalidateBuffers(), this.initCellPool(), this.viewFresh = !1);
+   }
+   free() {
+     this.viewportBufferPtr && (this.exports.ghostty_wasm_free_u8_array(this.viewportBufferPtr, this.viewportBufferSize), this.viewportBufferPtr = 0), this.exports.ghostty_terminal_free(this.handle);
+@@ -223,12 +223,14 @@
+    * Returns a reusable cell array (zero allocation after warmup).
+    */
+   getViewport() {
++    if (this.viewFresh)
++      return this.cellPool;
+     const A = this._cols * this._rows, B = A * K.CELL_SIZE;
+     return (!this.viewportBufferPtr || this.viewportBufferSize < B) && (this.viewportBufferPtr && this.exports.ghostty_wasm_free_u8_array(this.viewportBufferPtr, this.viewportBufferSize), this.viewportBufferPtr = this.exports.ghostty_wasm_alloc_u8_array(B), this.viewportBufferSize = B), this.exports.ghostty_render_state_get_viewport(
+       this.handle,
+       this.viewportBufferPtr,
+       A
+-    ) < 0 ? this.cellPool : (this.parseCellsIntoPool(this.viewportBufferPtr, A), this.cellPool);
++    ) < 0 ? this.cellPool : (this.parseCellsIntoPool(this.viewportBufferPtr, A), this.viewFresh = !0, this.cellPool);
+   }
+   // ==========================================================================
+   // Compatibility methods (delegate to render state)
