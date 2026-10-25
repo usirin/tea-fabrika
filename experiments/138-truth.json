@@ -1,0 +1,151 @@
+{
+	"note": "Each body edit or rename on a kamp-us/demlik issue after its first ready-for:agent label that the first reading in 138-tracker-on-demlik.ts left as `other`, read by hand on 2026-10-24 from the line diff (STEP=edits LABEL=other). Key: issue number @ edit time. `meaningful`: the edit changes what is asked or what gets built. `what`: scope (the ask grew, shrank or changed), bundle (another ticket's work folded in), criteria (a criterion reworded inside a larger edit), ruling (an owner's call written in), format (headings or checkboxes only), wording (same meaning, other words), revert (undone within a minute), meta (a field such as appetite or arc). Edits the first reading named criteria, plan or ruling are not here: they are counted as meaningful.",
+	"edits": {
+		"20@2026-09-15T03:00:51Z": {
+			"meaningful": true,
+			"what": "bundle",
+			"why": "another ticket's five criteria folded in"
+		},
+		"20@2026-09-15T03:00:52Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "title widened to name the folded-in work"
+		},
+		"34@2026-09-15T03:03:25Z": {
+			"meaningful": false,
+			"what": "format",
+			"why": "a heading went from level 2 to level 3"
+		},
+		"330@2026-09-24T07:31:22Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "re-shaped from an epic to one feature with a new consumer named"
+		},
+		"330@2026-09-24T07:39:19Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "two criteria now name a different adapter"
+		},
+		"330@2026-09-24T07:42:49Z": {
+			"meaningful": false,
+			"what": "format",
+			"why": "the same criteria turned into checkboxes under a heading"
+		},
+		"331@2026-09-24T07:39:20Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "re-shaped after an owner's call, new subpath added"
+		},
+		"331@2026-09-24T07:42:50Z": {
+			"meaningful": false,
+			"what": "format",
+			"why": "the same criteria turned into checkboxes under a heading"
+		},
+		"332@2026-09-24T07:40:45Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "a criterion now names a different file and a new dependency note"
+		},
+		"385@2026-09-25T08:15:21Z": {
+			"meaningful": true,
+			"what": "ruling",
+			"why": "an owner's ruling removed the model call from the tool"
+		},
+		"409@2026-09-26T00:54:41Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "the pull request must close one ticket and only refer to the other"
+		},
+		"418@2026-09-26T00:52:08Z": {
+			"meaningful": true,
+			"what": "bundle",
+			"why": "three more tickets' criteria folded into one lane"
+		},
+		"428@2026-09-26T06:50:34Z": {
+			"meaningful": true,
+			"what": "bundle",
+			"why": "a further ticket and a new command folded in"
+		},
+		"428@2026-09-26T07:49:33Z": {
+			"meaningful": true,
+			"what": "bundle",
+			"why": "a further ticket folded in"
+		},
+		"430@2026-09-26T00:50:09Z": {
+			"meaningful": false,
+			"what": "revert",
+			"why": "two criteria and an enrichment block added, removed 35 s later"
+		},
+		"430@2026-09-26T00:50:44Z": {
+			"meaningful": false,
+			"what": "revert",
+			"why": "the edit 35 s earlier taken back"
+		},
+		"493@2026-09-26T21:49:25Z": {
+			"meaningful": true,
+			"what": "bundle",
+			"why": "another ticket folded in and the problem restated"
+		},
+		"510@2026-10-01T01:58:28Z": {
+			"meaningful": false,
+			"what": "wording",
+			"why": "the title caught up with a body that already asked for this"
+		},
+		"510@2026-10-01T01:58:46Z": {
+			"meaningful": false,
+			"what": "wording",
+			"why": "a count fixed and a triage note reworded"
+		},
+		"511@2026-10-01T01:04:01Z": {
+			"meaningful": false,
+			"what": "meta",
+			"why": "appetite written as a cycle count"
+		},
+		"524@2026-10-02T11:13:01Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "a criterion now asks for every site, clean or not"
+		},
+		"569@2026-10-04T21:47:00Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "a third helper added to the ask"
+		},
+		"575@2026-10-04T20:44:18Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "a guard test folded into the chore"
+		},
+		"600@2026-10-10T21:26:29Z": { "meaningful": false, "what": "meta", "why": "the arc renamed" },
+		"664@2026-10-13T08:07:27Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "two criteria widened to an error phase"
+		},
+		"665@2026-10-13T08:07:28Z": {
+			"meaningful": true,
+			"what": "criteria",
+			"why": "a new typed-failure criterion and changed rules"
+		},
+		"669@2026-10-13T08:07:33Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "three pattern docs and a stop case added"
+		},
+		"670@2026-10-13T08:07:17Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "title narrowed to one of its three problems"
+		},
+		"682@2026-10-16T19:11:47Z": {
+			"meaningful": true,
+			"what": "scope",
+			"why": "a second rename folded in and owner rulings written in"
+		},
+		"714@2026-10-19T13:16:09Z": {
+			"meaningful": true,
+			"what": "ruling",
+			"why": "the order between two tickets ruled: this one now waits"
+		}
+	}
+}

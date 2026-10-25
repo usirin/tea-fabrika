@@ -1,0 +1,1751 @@
+{
+	"counted": {
+		"issues": 447,
+		"open": 55,
+		"built": 261,
+		"truncated": [],
+		"accounts": 2,
+		"assoc": {
+			"issue:MEMBER": 447,
+			"comment:MEMBER": 1463
+		},
+		"labelFamilies": {
+			"status:": 364,
+			"p2": 103,
+			"type:": 329,
+			"ready-for:": 326,
+			"p1": 220,
+			"closed-by-triage": 16,
+			"grilling:": 15,
+			"p0": 3,
+			"wayfinding:": 1,
+			"prototyping:": 28,
+			"class:": 100
+		},
+		"comments": {
+			"total": 1463,
+			"median": 3,
+			"p90": 6,
+			"max": 43,
+			"medianBuilt": 3,
+			"kinds": {
+				"marker": 732,
+				"lane_note": 86,
+				"closing_note": 311,
+				"ruling": 67,
+				"finding": 267
+			},
+			"beforeBuild": {
+				"marker": {
+					"comments": 276,
+					"tickets": 199
+				},
+				"lane_note": {
+					"comments": 27,
+					"tickets": 22
+				},
+				"closing_note": {
+					"comments": 8,
+					"tickets": 8
+				},
+				"ruling": {
+					"comments": 25,
+					"tickets": 25
+				},
+				"finding": {
+					"comments": 46,
+					"tickets": 34
+				}
+			},
+			"findingTickets": [
+				24,
+				30,
+				63,
+				68,
+				73,
+				81,
+				113,
+				214,
+				221,
+				273,
+				339,
+				355,
+				357,
+				385,
+				396,
+				397,
+				423,
+				428,
+				430,
+				441,
+				538,
+				565,
+				583,
+				593,
+				599,
+				601,
+				604,
+				631,
+				635,
+				692,
+				693,
+				709,
+				729,
+				730
+			],
+			"rulingTickets": [
+				50,
+				51,
+				68,
+				94,
+				112,
+				115,
+				117,
+				123,
+				143,
+				154,
+				163,
+				271,
+				272,
+				297,
+				385,
+				397,
+				567,
+				568,
+				599,
+				601,
+				612,
+				631,
+				635,
+				640,
+				656
+			],
+			"carriedIntoBody": 31,
+			"notCarriedIntoBody": 40,
+			"beforeYes": {
+				"finding": 25,
+				"ruling": 16
+			},
+			"afterYes": {
+				"finding": 21,
+				"ruling": 9
+			}
+		},
+		"uses": {
+			"anyLabel": {
+				"all": 422,
+				"built": 260
+			},
+			"anyComment": {
+				"all": 413,
+				"built": 255
+			},
+			"rulingComment": {
+				"all": 40,
+				"built": 26
+			},
+			"findingComment": {
+				"all": 147,
+				"built": 84
+			},
+			"bodyEdited": {
+				"all": 270,
+				"built": 216
+			},
+			"renamed": {
+				"all": 6,
+				"built": 5
+			},
+			"mentionsInBody": {
+				"all": 381,
+				"built": 234
+			},
+			"crossReferenced": {
+				"all": 388,
+				"built": 233
+			},
+			"taskList": {
+				"all": 297,
+				"built": 257
+			},
+			"criteriaHeading": {
+				"all": 297,
+				"built": 257
+			},
+			"image": {
+				"all": 0,
+				"built": 0
+			},
+			"milestone": {
+				"all": 326,
+				"built": 256
+			},
+			"assignee": {
+				"all": 11,
+				"built": 2
+			},
+			"parent": {
+				"all": 69,
+				"built": 44
+			},
+			"children": {
+				"all": 10,
+				"built": 4
+			},
+			"reactions": {
+				"all": 0,
+				"built": 0
+			}
+		}
+	},
+	"partTwo": {
+		"yesTickets": 291,
+		"edits": 138,
+		"bodyEdits": 135,
+		"renames": 3,
+		"renamesMeaningful": 2,
+		"byKind": {
+			"criteria": 85,
+			"plan": 4,
+			"ruling": 19,
+			"other": 30
+		},
+		"otherWhat": {
+			"bundle": 5,
+			"scope": 8,
+			"format": 3,
+			"criteria": 6,
+			"ruling": 2,
+			"revert": 2,
+			"wording": 2,
+			"meta": 2
+		},
+		"when": {
+			"before_pr": 47,
+			"after_pr": 84,
+			"no_pr": 7
+		},
+		"whenByKind": {
+			"criteria": {
+				"before_pr": 14,
+				"after_pr": 71,
+				"no_pr": 0
+			},
+			"plan": {
+				"before_pr": 2,
+				"after_pr": 0,
+				"no_pr": 2
+			},
+			"ruling": {
+				"before_pr": 9,
+				"after_pr": 8,
+				"no_pr": 2
+			},
+			"other": {
+				"before_pr": 22,
+				"after_pr": 5,
+				"no_pr": 3
+			}
+		},
+		"whenText": {
+			"before_pr": 22,
+			"after_pr": 5,
+			"no_pr": 3
+		},
+		"textWithinHour": 24,
+		"hoursMedian": 0.6,
+		"within10Min": 36,
+		"fired": {
+			"wholeBody": 92,
+			"titleAndWholeBody": 93,
+			"titleAndText": 23,
+			"bodyTextOnly": 22,
+			"titleAndTextMeaningful": 18,
+			"titleAndTextCosmetic": 7,
+			"titleAndTextMeaningfulAfterHour": 3,
+			"onlyCosmetic": 5
+		},
+		"pitch": {
+			"tickets": 23,
+			"edits": 11,
+			"byKind": {
+				"criteria": 5,
+				"plan": 3,
+				"ruling": 2,
+				"other": 1
+			},
+			"firedWholeBody": 9,
+			"firedText": 1
+		},
+		"planApproved": [
+			{
+				"n": 41,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 52,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 214,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 273,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 538,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 604,
+				"markers": 2,
+				"digests": 2
+			},
+			{
+				"n": 657,
+				"markers": 1,
+				"digests": 1
+			},
+			{
+				"n": 700,
+				"markers": 1,
+				"digests": 1
+			}
+		],
+		"otherEdits": [
+			"20@2026-09-15T03:00:51Z",
+			"20@2026-09-15T03:00:52Z",
+			"34@2026-09-15T03:03:25Z",
+			"330@2026-09-24T07:31:22Z",
+			"330@2026-09-24T07:39:19Z",
+			"330@2026-09-24T07:42:49Z",
+			"331@2026-09-24T07:39:20Z",
+			"331@2026-09-24T07:42:50Z",
+			"332@2026-09-24T07:40:45Z",
+			"385@2026-09-25T08:15:21Z",
+			"409@2026-09-26T00:54:41Z",
+			"418@2026-09-26T00:52:08Z",
+			"428@2026-09-26T06:50:34Z",
+			"428@2026-09-26T07:49:33Z",
+			"430@2026-09-26T00:50:09Z",
+			"430@2026-09-26T00:50:44Z",
+			"493@2026-09-26T21:49:25Z",
+			"510@2026-10-01T01:58:46Z",
+			"510@2026-10-01T01:58:28Z",
+			"511@2026-10-01T01:04:01Z",
+			"524@2026-10-02T11:13:01Z",
+			"569@2026-10-04T21:47:00Z",
+			"575@2026-10-04T20:44:18Z",
+			"600@2026-10-10T21:26:29Z",
+			"664@2026-10-13T08:07:27Z",
+			"665@2026-10-13T08:07:28Z",
+			"669@2026-10-13T08:07:33Z",
+			"670@2026-10-13T08:07:17Z",
+			"682@2026-10-16T19:11:47Z",
+			"714@2026-10-19T13:16:09Z"
+		],
+		"unread": []
+	},
+	"partThree": {
+		"pulls": 305,
+		"merged": 292,
+		"shapes": {
+			"none": 42,
+			"closes_one": 222,
+			"closes_many": 7,
+			"refs_only": 21
+		},
+		"closesAPullNumber": [],
+		"githubAgreesWithBody": 288,
+		"namesMoreThanOneTicket": 32,
+		"done": 351,
+		"closedBy": {
+			"byMergedPr": 261,
+			"byHandAfterMergedPr": 25,
+			"byHandNoPr": 65,
+			"byCommit": 0
+		},
+		"byHandAfter": [
+			52,
+			325,
+			389,
+			405,
+			410,
+			413,
+			415,
+			417,
+			422,
+			424,
+			425,
+			426,
+			427,
+			429,
+			431,
+			438,
+			439,
+			440,
+			444,
+			452,
+			453,
+			458,
+			461,
+			473,
+			494
+		],
+		"ticketsWithManyClosingPrs": 0
+	},
+	"triage": {
+		"triaged": 345,
+		"withCommentsBefore": [
+			{
+				"n": 24,
+				"comments": 2
+			},
+			{
+				"n": 36,
+				"comments": 3
+			},
+			{
+				"n": 41,
+				"comments": 1
+			},
+			{
+				"n": 63,
+				"comments": 1
+			},
+			{
+				"n": 68,
+				"comments": 1
+			},
+			{
+				"n": 221,
+				"comments": 1
+			},
+			{
+				"n": 271,
+				"comments": 1
+			},
+			{
+				"n": 339,
+				"comments": 1
+			},
+			{
+				"n": 410,
+				"comments": 2
+			},
+			{
+				"n": 422,
+				"comments": 1
+			},
+			{
+				"n": 423,
+				"comments": 1
+			},
+			{
+				"n": 424,
+				"comments": 1
+			},
+			{
+				"n": 425,
+				"comments": 1
+			},
+			{
+				"n": 426,
+				"comments": 1
+			},
+			{
+				"n": 428,
+				"comments": 1
+			},
+			{
+				"n": 441,
+				"comments": 2
+			},
+			{
+				"n": 555,
+				"comments": 1
+			},
+			{
+				"n": 567,
+				"comments": 1
+			},
+			{
+				"n": 631,
+				"comments": 1
+			},
+			{
+				"n": 635,
+				"comments": 1
+			}
+		],
+		"runs": {
+			"24": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real bug in what the package ships: the examples are its worked docs, they no longer compile, and the gate that would catch it isn't in CI. No other ticket covers it, and the fix is clear: repair the four files and wire the step into the workflow in the same change."
+								}
+							},
+							"error": null,
+							"usd": 0.040529,
+							"ms": 3197,
+							"input": 4563,
+							"output": 160,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real gap in what the package ships: the examples that serve as its documentation don't compile, and nothing in CI checks them. The fix is clear: repair the four files and wire typecheck:consumers (and the lint scope, after fixing biome's ignore list) into the workflow, so a plan can carry the question of which surfaces to gate, leaning toward the published-facing ones."
+								}
+							},
+							"error": null,
+							"usd": 0.050474,
+							"ms": 4851,
+							"input": 5393,
+							"output": 316,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"36": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "no",
+									"rule": "replaced",
+									"reason": "superseded: replaced by a later design — the host-neutral core with Promise and Effect engines is now carried by umbrella plan #273, which grew out of wayfinding #245 and spikes #252, #259/#260 and #264",
+									"why": "#36 is the early spike report that proposed splitting demlik into a neutral core with tea-promise and tea-effect hosts. Wayfinding #245 and its spikes then designed that seam differently (one run loop over an engine record, subs as plain data, no interpret on Machine), and open plan #273 now carries that work."
+								}
+							},
+							"error": null,
+							"usd": 0.1137083,
+							"ms": 8029,
+							"input": 12606,
+							"output": 583,
+							"cached": 0,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "duplicate",
+									"of": 273,
+									"why": "#36 asks for a pure core with no Promise or Effect in it, running on a tea-promise engine and a tea-effect engine. Open plan #273, 'One pure core running on a Promise engine and an Effect engine', asks for that same change; it is the plan that came out of wayfinding map #245, where this epic's open questions were worked through."
+								}
+							},
+							"error": null,
+							"usd": 0.1108479,
+							"ms": 5705,
+							"input": 12622,
+							"output": 403,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"41": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers collapsing the export map or finishing the half-done resilient-call migration, and ADR 0016 now allows removals while 0.x, so this is real new work: a staged series of small removals. The one owner question, where the chart family should live, only blocks child 8, so the plan can hold that child and go ahead with the rest."
+								}
+							},
+							"error": null,
+							"usd": 0.060628699999999994,
+							"ms": 5197,
+							"input": 6685,
+							"output": 309,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers collapsing the export map or finishing the half-done resilient-call migration, and no no-rule applies. The order of the removals is mostly laid out already, so this is an epic to plan. The one open owner call, where the chart family lives (child 8), can be planned as blocked on the owner, so the whole ticket doesn't need a ruling first."
+								}
+							},
+							"error": null,
+							"usd": 0.0641073,
+							"ms": 5735,
+							"input": 7191,
+							"output": 278,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"63": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 28,
+									"why": "The fix is a config line in this repo's .fabrika.jsonc, so it counts as work here even though the verb belongs to the pipeline tool. Open plan #28 is about the same broken `build check --surface code` lane (the `--force` passed to tsc), and declaring codeValidators without `--force` adds to that same fix."
+								}
+							},
+							"error": null,
+							"usd": 0.0864309,
+							"ms": 7354,
+							"input": 9407,
+							"output": 487,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 28,
+									"why": "The fix is a config line in this repo's `.fabrika.jsonc`: declare `codeValidators` as `pnpm typecheck` and `pnpm lint:worktree`, with no `--force`. Every build lane here hits this. It belongs to plan #28's work because the same declaration also keeps the verb from adding turbo's `--force` to the plain `tsc` typecheck."
+								}
+							},
+							"error": null,
+							"usd": 0.0905253,
+							"ms": 7297,
+							"input": 9621,
+							"output": 604,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"68": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "duplicate",
+									"of": 69,
+									"why": "#69 reports the same problem: driveToDone parks forever when the machine quiesces on a State that is neither terminal nor failed. #68 adds design options, but the defect it describes is the same."
+								}
+							},
+							"error": null,
+							"usd": 0.07803619999999999,
+							"ms": 3747,
+							"input": 9030,
+							"output": 221,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "When the start chain quiesces on a State that is neither terminal nor failed, what should driveToDone do, given that Sub-driven machines can still legitimately reach terminal after quiescence?",
+									"options": [
+										"(a) Keep the hang as the Sub-driven contract and document this fourth outcome on driveToDone",
+										"(b) Reject with a typed DriveStalledError<S> carrying the stalled State, either always or only when no Subs are active at quiescence, so the finally reaches stop()",
+										"(c) Add an optional deadline option that rejects when terminal is not reached in time"
+									],
+									"why": "This is a real bug in the shipped driveToDone: it hangs without a rejection or stop(). #69 was folded into this ticket, so #68 is the original, not a duplicate. The ticket itself names a three-way fork for an owner to settle before a builder picks one."
+								}
+							},
+							"error": null,
+							"usd": 0.0870419,
+							"ms": 5243,
+							"input": 9582,
+							"output": 444,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"221": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 215,
+									"why": "This is a real runtime gap in shipped jev protocol code. parseAnswers casts to a type that claims every criterion has a probability, but nothing checks the keys at runtime. It is a case the jev door work (plan #215, child #216) missed, and the ticket already sketches the fix: a new JevErr variant plus tests."
+								}
+							},
+							"error": null,
+							"usd": 0.0787115,
+							"ms": 6549,
+							"input": 8588,
+							"output": 435,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real bug in shipped code: parseAnswers casts a choice answer to a type that promises every criterion has a probability, but it never checks the keys. Two fixes are already clear and belong in one change: a new JevErr arm that checks the probabilities keys against question.criteria, and typing JEV_ERR_TAGS so the compiler catches a missing tag. Epic #214 and its protocol child #216 are closed, so this starts new work."
+								}
+							},
+							"error": null,
+							"usd": 0.08209229999999999,
+							"ms": 7090,
+							"input": 8871,
+							"output": 489,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"271": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Ruling #268 drops mountResilientCall, which was the fix for #228's hand-wiring footguns, so two run-time traps about verb order come back with nothing guarding against them. That is a real gap in a shipped package, not a repeat of #228. The work is to reshape the settle verbs so the wrong order can't happen and to write a how-to; the plan can carry the ticket's suggestion as its lean. No open plan covers verb order: #273 is about the engines and #272 is a doc fix."
+								}
+							},
+							"error": null,
+							"usd": 0.09739779999999999,
+							"ms": 8906,
+							"input": 10331,
+							"output": 666,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real trap that comes back once the #268 ruling removes mountResilientCall, and the founders have already agreed the fix: one rc.settle returning { call, cmds, outcome }, plus a how-to. That leaves building work, and it is not the same change as #228, which brought in the mount helper, or as the open plans #272 and #273."
+								}
+							},
+							"error": null,
+							"usd": 0.0958691,
+							"ms": 5515,
+							"input": 10829,
+							"output": 388,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"339": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is real doc drift: after PR 338 a Cmd handler can return a list of Msgs, but the shipped pattern docs and two code comments still say it returns one Msg or nothing. No other ticket or open plan covers these four spots, so it is a small doc and comment fix of its own, with no choice an owner has to make."
+								}
+							},
+							"error": null,
+							"usd": 0.11677299999999999,
+							"ms": 4941,
+							"input": 13668,
+							"output": 278,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Pattern docs and code comments still say a Cmd handler returns one Msg or nothing, after PR #338 added the list form (and #316 changed the null-boots-fresh rule). That is a wrong doc in what tea ships, and the fix is a plain write-pattern editing pass that no open plan covers."
+								}
+							},
+							"error": null,
+							"usd": 0.12603309999999998,
+							"ms": 8458,
+							"input": 13854,
+							"output": 661,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"410": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "no",
+									"rule": "carried",
+									"reason": "duplicate: folded into another ticket that carries this work. Open plan #426 (stage 5 of the lowering pipeline #422) says it takes over #410's evidence-first way of asking for Jev verdicts.",
+									"why": "Open plan #426 says outright that #410's evidence-first idea moves into it. That makes #426 the open ticket carrying this work, so #410 does not need its own plan."
+								}
+							},
+							"error": null,
+							"usd": 0.1508589,
+							"ms": 5978,
+							"input": 17492,
+							"output": 428,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "no",
+									"rule": "carried",
+									"reason": "duplicate: folded into another ticket that carries this work. The evidence-first step is now part of open plan #426 (stage 5 branch-label question, where Jev names the atoms and spans a label rests on before giving it), which is under the staged lowering pipeline #422.",
+									"why": "A member's comment folds #410 into #426 and #427. #426's own summary says #410's evidence-first ask moves there, so another open ticket already carries this work."
+								}
+							},
+							"error": null,
+							"usd": 0.15317999999999998,
+							"ms": 5665,
+							"input": 17973,
+							"output": 349,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"422": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is the umbrella for the lowering pipeline, and it asks for real work: one shared contract for every stage, covering the span format, the content-hash key and the confident / unknown / abstained fact states. No other ticket carries that contract, and the stage tickets #423–#431 already point to this one as their parent. So it starts its own plan instead of being a duplicate or a tracking page."
+								}
+							},
+							"error": null,
+							"usd": 0.1617422,
+							"ms": 7419,
+							"input": 18745,
+							"output": 475,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is the umbrella for the lowering pipeline, and it carries work none of its stage tickets (#423–#431) covers: the shared artifact contract (span format, content-hash key, and the confident / unknown / abstained fact states) that every stage builds against. A member has already filed the stage tickets under it, so this is real work and not just a tracking page."
+								}
+							},
+							"error": null,
+							"usd": 0.1625938,
+							"ms": 6438,
+							"input": 19026,
+							"output": 403,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"423": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is the stage-2 branch-lowering pass for code-graph from the #422 pipeline, and no other ticket carries it. It is concrete build work (new extraction, schema and a fixture test), blocked on #397. The atom grammar and the logging list can be settled in the plan with a lean, like the sibling stage tickets that each have their own plan."
+								}
+							},
+							"error": null,
+							"usd": 0.156999,
+							"ms": 8650,
+							"input": 17593,
+							"output": 801,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Stage 2 of the #422 pipeline (branch-level lowering) is a real gap that no other ticket covers, and like its sibling stage tickets it is its own piece of work. The atom grammar and the logging rule can be settled in the prototype and fixture the ticket proposes, after #397 lands."
+								}
+							},
+							"error": null,
+							"usd": 0.1620261,
+							"ms": 10291,
+							"input": 17954,
+							"output": 805,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"424": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers a lexicon. It is stage 3 of the #422 lowering pipeline and has a clear model to follow: the vocabulary file and the propose-then-review flow. The other stages (#423, #425, #426) each have their own plan, so this one starts its own work too."
+								}
+							},
+							"error": null,
+							"usd": 0.1519121,
+							"ms": 6584,
+							"input": 17579,
+							"output": 461,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Stage 3 of the #422 lowering pipeline: nothing like the lexicon exists yet, no rule for a no fits, and the ticket already suggests a shape a plan can follow (copy the vocabulary's file, fingerprint and propose command, plus a spot check from the prototype numbers). The other stages each have their own open plan, so this one starts its own too."
+								}
+							},
+							"error": null,
+							"usd": 0.16547989999999999,
+							"ms": 11168,
+							"input": 18152,
+							"output": 899,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"425": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Stage 4 of the #422 pipeline: bottom-up callee summaries over the SCC-condensed call graph. No other ticket asks for this, and the ticket names concrete work: expose the condensation from scc.ts and make the callee fact a closed union of confident label or `unknown`. Its sibling stages (#423, #424, #426, #428, #429, #431) each have their own plan, so this one starts its own too rather than adding to #422's."
+								}
+							},
+							"error": null,
+							"usd": 0.1509203,
+							"ms": 6683,
+							"input": 17461,
+							"output": 450,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "#425 is stage 4 of the #422 lowering pipeline: build an SCC-condensed call graph and bottom-up callee summaries where a low-confidence callee reads as `unknown`. No other ticket covers this, and the other stages (#423, #424, #426, #428, #429, #431) each have their own plans, so this stage starts its own plan."
+								}
+							},
+							"error": null,
+							"usd": 0.15173479999999998,
+							"ms": 5780,
+							"input": 17826,
+							"output": 352,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"426": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers stage 5 of the #422 lowering pipeline, the per-branch rule/defence/plumbing question. #414 and #410 feed into it but don't cover it, and the sibling stages (#423–#431) each got their own plan. The work is concrete: a new Jev question with an evidence step, measured against a gold set, so it can be planned for a builder."
+								}
+							},
+							"error": null,
+							"usd": 0.1560168,
+							"ms": 8227,
+							"input": 17646,
+							"output": 626,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is stage 5 of the #422 lowering pipeline: a new branch-label Jev question that takes in #414's question set and #410's evidence step, and no other ticket covers it. The other stages (#423, #424, #425, #428, #429, #431) each have their own plan. The plan can carry the prototype's lean to drop `rederived` and work it out later from stage-6 groups, so no owner ruling is needed first."
+								}
+							},
+							"error": null,
+							"usd": 0.1563447,
+							"ms": 7273,
+							"input": 17935,
+							"output": 524,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"428": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 422,
+									"why": "This is stage 6 (grouping branches by rule) of the open lowering-pipeline umbrella #422. Its sibling stages #423–#431 are filed the same way, it has a concrete fixture-based acceptance check, and no other ticket covers rule-group clustering. #395 is related but asks for something different: more sources for pair candidates, not grouping lowered branches into rule groups."
+								}
+							},
+							"error": null,
+							"usd": 0.15469590000000003,
+							"ms": 6465,
+							"input": 17977,
+							"output": 439,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 422,
+									"why": "This is stage 6 (rule-group clustering) of the open lowering-pipeline umbrella #422. Its siblings for stages 2–5, 7 and 8 are already their own plans, and #395 asks for something narrower: pair candidates that don't look alike, not N-branch rule groups. The prototype showed the deterministic clustering works and the Jev confirm step is weak, so the plan can build the clustering and the fixture test first, and start the confirm work with the ~20-group gold set the comment suggests."
+								}
+							},
+							"error": null,
+							"usd": 0.16312130000000002,
+							"ms": 8796,
+							"input": 18511,
+							"output": 644,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"441": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real bug in what structure-sweep ships. The new IMPORT regex from #437 drops a legal multi-line import when its bindings hold a comment with a quote, so the evidence is incomplete and, under --redact, a path can reach Jev unhidden. No other ticket covers this regex gap: #419 fixed the bare-import case, and #438, #439 and #440 fix other defects in the same file."
+								}
+							},
+							"error": null,
+							"usd": 0.1467797,
+							"ms": 6612,
+							"input": 17135,
+							"output": 364,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "A real evidence and redaction bug in structure-sweep's IMPORT regex, which #437 introduced and #419 did not cover. The owners' comment makes it the lane that moves sweep onto oxc-parser and carries #438, #439 and #440; it only waits on #397 and isn't part of it."
+								}
+							},
+							"error": null,
+							"usd": 0.15683949999999997,
+							"ms": 9165,
+							"input": 17648,
+							"output": 671,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"555": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "A real typing bug in a public @demlik/tea API: a union Model with a parameterless init fails to infer, and the error points at the update cells. The fix has a clear lean (keep init's return out of Model inference, e.g. NoInfer, with a TSDoc note as fallback), so it can be planned without an owner ruling."
+								}
+							},
+							"error": null,
+							"usd": 0.15439699999999998,
+							"ms": 8333,
+							"input": 17398,
+							"output": 648,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real typing bug in what @demlik/tea ships. defineMachine gets the wrong Model type when a function written with no parameter (init, or an update cell per the comment) returns a union literal, and the error points at the wrong line. No other ticket covers it. The fix is to type those returns from types.model, for example with NoInfer, and to add a TSDoc note if that can't be done, which a plan can carry."
+								}
+							},
+							"error": null,
+							"usd": 0.15272229999999998,
+							"ms": 6350,
+							"input": 17701,
+							"output": 434,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"567": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real gap in what tea ships: the spawn TSDoc and the how-to promise the table never holds a stopped child, but a child stopped with run.stop() stays in it. The fix can be planned with a lean toward stating the limit in the docs, since the issue already ruled out spawn knowing the run. Like its sibling follow-ups #568 and #569, it starts work of its own."
+								}
+							},
+							"error": null,
+							"usd": 0.1522387,
+							"ms": 7124,
+							"input": 17500,
+							"output": 493,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real gap in what @demlik/tea ships: a child stopped with `run.stop()` stays in the host's table, while the docs promise the table never holds a stopped child. The founder has already said to add a `stop` helper and either make that promise true or state its limit, so a plan can carry that choice with a lean. No owner ruling is needed first. It is new work of its own, separate from #568 (notify failures) and #569 (links)."
+								}
+							},
+							"error": null,
+							"usd": 0.15496259999999998,
+							"ms": 7744,
+							"input": 17804,
+							"output": 509,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"631": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket asks for an Effect-schema wrapper around Cmd.define, and no rule for a no fits: it's a small new helper in ./effect with clear acceptance criteria. Its open questions (the name, and whether ./agent tools get the same treatment) are things a plan can settle with a lean, so they don't need an owner ruling first."
+								}
+							},
+							"error": null,
+							"usd": 0.1670464,
+							"ms": 6499,
+							"input": 19677,
+							"output": 368,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "How should the Effect-schema Cmd helper handle schemas whose two sides differ? The downstream trial shows a transformation on `input` never runs (so the acceptance fixture for it can't be observed). It also shows a transforming `ok` schema gets `malformed_result` every time. Should the helper refuse such schemas, or type handlers by the encoded side? And should the helper also cover agent tools in ./agent?",
+									"options": [
+										"Refuse schemas whose two sides differ: use Schema.Codec<T, NoInfer<T>> so they fail to compile (Schema.toType is the way through), drop the input-transformation fixture case, and use the same helper for agent tools",
+										"Accept transforming schemas and type the handler by the ok schema's encoded side, so the decode runs at settle; change the input fixture to show the transformation is not applied",
+										"Ship the helper for Cmd.define only, exactly as the trial did, and move agent tools and the transformation question to a separate issue"
+									],
+									"why": "This is a new ask from a host of the library, with no duplicate in the backlog. The downstream trial found that one acceptance criterion can't be met and that schemas whose two sides differ break handlers. Choosing between refusing those schemas and retyping handlers changes the public API and the acceptance criteria, so an owner should decide before a builder starts."
+								}
+							},
+							"error": null,
+							"usd": 0.1836729,
+							"ms": 10320,
+							"input": 20637,
+							"output": 802,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				}
+			},
+			"635": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "Should tea own a typed-port program model (in/out/request ports, payload fit, route graph, defineProgram) that Tuval now builds on its own? If so, where does 'program' end and 'desk' begin, which entry holds it, and what happens to today's definePort? This is weighed against the rulings in #325/#316, #312/#556, ADR 0020 and ADR 0022.",
+									"options": [
+										"Keep the current line: tea exposes primitives only (definePort, fromPort, run/spawn/tell). Tuval keeps its program model, and tea at most documents a how-to recipe.",
+										"Move only the port layer into a new Effect-only entry: typed in/out/request port declarations with schemas, the payload-fit check and the queues. The route graph, the registry and defineProgram stay in Tuval.",
+										"Move the whole program model, including the route graph and defineProgram, into tea. This reverses or revises the no-registry and no-battery rulings and renames or replaces today's definePort."
+									],
+									"why": "This is the first time a host has asked tea to own a typed in/out port program model, so a no doesn't fit, but the ticket itself says the request pulls against earlier owner rulings (#325, #312/#556, ADR 0020, ADR 0022). An owner has to set the direction before anything is built. #636's spike is related but asks a narrower question, so this is not a duplicate."
+								}
+							},
+							"error": null,
+							"usd": 0.18674759999999999,
+							"ms": 8512,
+							"input": 21364,
+							"output": 670,
+							"cached": 1215,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "Should tea own a program idea (typed in/out/request ports, payload fit, route graph, defineProgram) so Tuval can become a GUI shell? If it should, where does program end and desk begin, and what happens to today's definePort, given the earlier rulings that tea has no registry or supervisor (#312/#556), does no DI (ADR 0020) and has no battery layer (ADR 0022)?",
+									"options": [
+										"Keep the program model in Tuval. tea only fills gaps in the primitives it already has (Cmd.define as the out/ask port with a runtime input check, a schema for Msgs that arrive from outside, spawn/tell) and the host composes them, as #325 ruled.",
+										"Move only the port layer into tea: typed in/out ports over Standard Schema, the payload-fit check and an Elm-style Program unit. Retire or rename definePort. The route graph and registry stay in the host.",
+										"Move the full program model into tea (in a new entry or under ./effect), route-graph compile and registry included, and record a new ADR that reverses #312/#556 and ADR 0020 where they conflict."
+									],
+									"why": "This is the first time a host has asked tea to own a program and typed-port model, and the full read of Tuval brings new facts. But the ticket itself says the request pulls against the rulings in #325, #312/#556 and ADRs 0020/0022, so an owner has to set the direction before anything is built. Spike #636 can feed that decision, but it does not answer it."
+								}
+							},
+							"error": null,
+							"usd": 0.2401328,
+							"ms": 15451,
+							"input": 25718,
+							"output": 1327,
+							"cached": 26808,
+							"problems": []
+						}
+					]
+				}
+			}
+		},
+		"repeats": {
+			"36": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "duplicate",
+									"of": 273,
+									"why": "#36 asks for one host-neutral TEA core with a Promise host and an Effect host. Open plan #273, which came out of the later wayfinding #245 and its spikes, asks for the same change: one pure core running on a Promise engine and an Effect engine."
+								}
+							},
+							"error": null,
+							"usd": 0.0183978,
+							"ms": 7085,
+							"input": 381,
+							"output": 567,
+							"cached": 12225,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "duplicate",
+									"of": 273,
+									"why": "#36 asks for one pure core with a Promise engine and an Effect engine. Open plan #273 asks for exactly that, and it builds on the wayfinding work (#245 through #259) that grew out of #36's reopened epic."
+								}
+							},
+							"error": null,
+							"usd": 0.015118099999999999,
+							"ms": 5591,
+							"input": 381,
+							"output": 395,
+							"cached": 13456,
+							"problems": []
+						}
+					]
+				}
+			},
+			"41": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers collapsing the export map or finishing the half-done `resilient-call` move. The maintainer has already set the order, and ADR 0016 lets removals land now, so this is real epic work to plan in children. The one open question, where the chart family lives, holds only child 8 and can wait inside the plan rather than block the whole."
+								}
+							},
+							"error": null,
+							"usd": 0.0116245,
+							"ms": 5254,
+							"input": 381,
+							"output": 312,
+							"cached": 7519,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "No other ticket covers collapsing the export map or finishing the resilient-call migration, and no rule for saying no applies. The work is real, and ADR 0016 lets it happen now. The one open owner choice, where the chart family lives (child 8), can be planned as blocked until an owner rules, so it does not stop planning the rest of the epic."
+								}
+							},
+							"error": null,
+							"usd": 0.010649299999999999,
+							"ms": 4612,
+							"input": 381,
+							"output": 261,
+							"cached": 8025,
+							"problems": []
+						}
+					]
+				}
+			},
+			"63": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 28,
+									"why": "Adding a codeValidators config line to this repo's .fabrika.jsonc is work that belongs here: the pipeline_tool rule names a config line as in-scope. It is the repo-side fix for the same red code-surface check that open plan #28 covers, and it deliberately leaves out turbo's --force flag."
+								}
+							},
+							"error": null,
+							"usd": 0.017327099999999998,
+							"ms": 7233,
+							"input": 381,
+							"output": 549,
+							"cached": 10241,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 28,
+									"why": "Declaring codeValidators (pnpm typecheck, pnpm lint:worktree, no --force) in .fabrika.jsonc is a repo config change. It is the in-repo fix that gets `build check --surface code` to pass, the same goal plan #28 already carries."
+								}
+							},
+							"error": null,
+							"usd": 0.027623799999999997,
+							"ms": 11497,
+							"input": 381,
+							"output": 1063,
+							"cached": 10455,
+							"problems": []
+						}
+					]
+				}
+			},
+			"68": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "duplicate",
+									"of": 69,
+									"why": "#69 reports the same problem: driveToDone waits forever when the start chain quiesces on a State that is neither terminal nor failed. #68 adds the fork between documenting, rejecting and a deadline, but the defect is the same one."
+								}
+							},
+							"error": null,
+							"usd": 0.010623,
+							"ms": 5128,
+							"input": 381,
+							"output": 219,
+							"cached": 9864,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "How should driveToDone behave when the start chain quiesces on a State that is neither terminal nor failed? Sub-driven machines can still legitimately reach terminal after quiescence.",
+									"options": [
+										"(a) Accept the hang as the Sub-driven contract and document this fourth outcome on driveToDone",
+										"(b) Reject with a typed DriveStalledError<S> carrying the stalled State, only when the machine has no active Subs at quiescence",
+										"(b') Reject with DriveStalledError<S> every time the drive quiesces on a non-terminal State",
+										"(c) Take an optional deadline and reject when it passes"
+									],
+									"why": "This is a real bug in what @demlik/tea ships: driveToDone can hang and never reach stop(). #69 was folded into this ticket, so #68 is the original, not a duplicate. The ticket names a trade-off against Sub-driven machines and asks for a decision before a second caller works around it, so an owner has to choose."
+								}
+							},
+							"error": null,
+							"usd": 0.0159356,
+							"ms": 7091,
+							"input": 381,
+							"output": 480,
+							"cached": 10416,
+							"problems": []
+						}
+					]
+				}
+			},
+			"221": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 215,
+									"why": "This is a real bug in shipped code. parseAnswers returns a value typed as having every criteria key in probabilities, but it never checks the keys, so a partial or mis-keyed answer still parses as ok. The fix is clear (a key-totality check against question.criteria plus tests) and it covers a case the jev door work in plan #215 missed."
+								}
+							},
+							"error": null,
+							"usd": 0.015402899999999999,
+							"ms": 7010,
+							"input": 381,
+							"output": 472,
+							"cached": 9422,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real bug in shipped code. parseAnswers lets a choice answer whose probabilities keys don't match the criteria pass, even though its type claims every key is there. The fix is clear: a new JevErr variant plus tests, and the comment adds a compile-time check on JEV_ERR_TAGS. #216 and epic #214 are closed, so this is new follow-up work. #215 is a grilling session, not a build plan."
+								}
+							},
+							"error": null,
+							"usd": 0.017661299999999998,
+							"ms": 7459,
+							"input": 381,
+							"output": 571,
+							"cached": 9705,
+							"problems": []
+						}
+					]
+				}
+			},
+			"428": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": 422,
+									"why": "This is stage 6 (grouping branches by rule) of the lowering pipeline that umbrella plan #422 covers. Its sibling stages #423–#431 are each filed separately, and it comes with a concrete acceptance fixture. It overlaps #395 (duplicates that don't look alike) but asks for a different unit, a rule group of N lowered branches instead of a function pair, so it isn't a duplicate."
+								}
+							},
+							"error": null,
+							"usd": 0.0179236,
+							"ms": 6340,
+							"input": 381,
+							"output": 457,
+							"cached": 18811,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "Stage 6 of the lowering pipeline (#422) asks for a real change: branch rule groups from deterministic clustering plus a Jev check, which no other ticket carries. The prototype shows the clustering half works, so the plan can start with the fixture test and the gold set, then rework the confirm question."
+								}
+							},
+							"error": null,
+							"usd": 0.0348448,
+							"ms": 15093,
+							"input": 381,
+							"output": 1301,
+							"cached": 19345,
+							"problems": []
+						}
+					]
+				}
+			},
+			"555": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real typing bug in what @demlik/tea ships: a parameterless init with a union Model breaks inference, and the error shows up on the update cells instead of on init. No other ticket covers it. The fix can be planned with a lean: type init's return from types.model, for example with NoInfer, and fall back to a TSDoc note if that can't work."
+								}
+							},
+							"error": null,
+							"usd": 0.0158124,
+							"ms": 5290,
+							"input": 381,
+							"output": 361,
+							"cached": 18232,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "This is a real typing bug in what @demlik/tea ships: zero-parameter init or update cells take part in inferring the union Model, and the error shows up on the wrong lines. No other ticket covers it. The fix is clear enough to plan: keep those returns out of Model inference, for example with NoInfer on types.model. If that cannot be done, the fallback is a TSDoc note."
+								}
+							},
+							"error": null,
+							"usd": 0.0160643,
+							"ms": 5907,
+							"input": 381,
+							"output": 359,
+							"cached": 18535,
+							"problems": []
+						}
+					]
+				}
+			},
+			"631": {
+				"tracker": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "plan",
+									"partOf": null,
+									"why": "A host (tea-fabrika) is asking for a thin helper in the Effect entry that wraps `Cmd.define` and does the Standard Schema conversion inside. Its placement is already settled by ADR 0021 §5, and the open name question can go into the plan with a lean, so it needs no owner ruling first. No other ticket or open plan covers this work."
+								}
+							},
+							"error": null,
+							"usd": 0.023165599999999998,
+							"ms": 8140,
+							"input": 381,
+							"output": 692,
+							"cached": 20511,
+							"problems": []
+						}
+					]
+				},
+				"github": {
+					"tries": [
+						{
+							"answer": {
+								"sort": {
+									"answer": "yes",
+									"next": "ruling",
+									"ask": "Should tea ship a Cmd-from-Effect-Schema helper in ./effect? If so, what should it do with schemas whose decoded and encoded types differ (transformations, brands)? That choice also decides whether the fixture case with a transforming input schema is dropped, since tea never runs a Cmd's input schema.",
+									"options": [
+										"Ship the helper and refuse transforming or branded schemas at the type level (Schema.Codec<T, NoInfer<T>>, as tea-fabrika does). Drop the input-transformation fixture case and point users to Schema.toType.",
+										"Ship the helper and type handlers by the schema's input (encoded) side, so a transforming ok schema works. Keep a transformation fixture for ok only.",
+										"Don't add the helper to tea. Document the wrapper pattern in the Effect how-to and leave the helper to hosts."
+									],
+									"why": "No other ticket asks for this, and it is a host's first request for a new export, which the bar says is a yes for the owner to rule on. The downstream findings show that an acceptance criterion can't be observed and that a semantic trade-off over transforming schemas has to be chosen before a builder starts."
+								}
+							},
+							"error": null,
+							"usd": 0.0251371,
+							"ms": 10006,
+							"input": 381,
+							"output": 771,
+							"cached": 21471,
+							"problems": []
+						}
+					]
+				}
+			}
+		}
+	}
+}

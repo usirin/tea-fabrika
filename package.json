@@ -50,6 +50,7 @@
 		"@demlik/structure-sweep": "catalog:",
 		"@effect/tsgo": "catalog:",
 		"@types/node": "catalog:",
+		"fast-check": "catalog:",
 		"miniflare": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
