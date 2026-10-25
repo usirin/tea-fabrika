@@ -479,14 +479,23 @@ describe("how long GitHub says to wait", () => {
 		])
 			expect(limitWait(429, {"retry-after": date}, now)).toBe(null);
 	});
-	it("takes a two-digit year as the nearest, never more than 50 years ahead", () => {
+	it("takes a two-digit year as the latest, never more than 50 years ahead", () => {
 		const at = Date.UTC(2026, 0, 1);
 		const wait = (yy: string) =>
 			limitWait(429, {"retry-after": `Thursday, 01-Jan-${yy} 00:00:05 GMT`}, at);
 		expect(wait("26")).toBe(5000);
-		// 2076 is 50 years ahead, 2077 more: that is 1977, gone, so no wait.
-		expect(wait("76")).toBe(LIMIT_WAIT_MS);
+		// 2075 is less than 50 years ahead; 2077 is more: that is 1977, gone, so no wait.
+		expect(wait("75")).toBe(LIMIT_WAIT_MS);
 		expect(wait("77")).toBe(0);
+	});
+	it("draws the 50-year line by the time, not the year", () => {
+		const at = Date.UTC(2027, 0, 15);
+		const wait = (time: string) =>
+			limitWait(429, {"retry-after": `Friday, 15-Jan-77 ${time} GMT`}, at);
+		// Exactly 50 years ahead is still 2077: the longest wait.
+		expect(wait("00:00:00")).toBe(LIMIT_WAIT_MS);
+		// One second more is past the line: 1977, gone, so no wait.
+		expect(wait("00:00:01")).toBe(0);
 	});
 });
 
