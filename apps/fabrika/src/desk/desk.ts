@@ -45,13 +45,15 @@ import {
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
-// What it is told, besides keys and clicks, comes from the main process, where each tile's tsh
-// runs (tiles.ts): a run with a view is in a tile's foreground (`covered`), a run ended (`over`),
-// a tile's running jobs (`jobs`), a tile was closing before this page loaded (`closing`), a tile's
-// tsh ended (`ended`). A run started with `&` is a job in the background, as in bash, and the desk
-// hears nothing of it until `attach` brings it to the foreground.
+// It runs in the host process (host/serve.ts), as tmux's server holds its windows and panes: a
+// page only draws the desk it is sent, and sends its keys and clicks. What it is told, besides
+// keys and clicks, comes from the tiles beside it (tiles.ts): a run with a view is in a tile's
+// foreground (`covered`), a run ended (`over`), a tile's running jobs (`jobs`), a tile's tsh
+// ended (`ended`). `closing` is no longer said by anyone: it was for a page loaded again, and the
+// desk no longer lives in the page. A run started with `&` is a job in the background, as in
+// bash, and the desk hears nothing of it until `attach` brings it to the foreground.
 //
-// What it asks for, each a Cmd (the page carries them to the main process, window/desk.tsx):
+// What it asks for, each a Cmd (the host carries them out, host/serve.ts):
 //
 //   open {tile}          start the tile's tsh, or show the one that runs
 //   close {tile}         give the tile's tsh and its programs the end of their inputs
@@ -114,12 +116,12 @@ export type DeskMsg =
 	| {readonly type: "over"; readonly run: string}
 	/** How many jobs run in a tile's tsh now. */
 	| {readonly type: "jobs"; readonly tile: TileId; readonly running: number}
-	/** A tile was closing before this page loaded: the main process still waits on its programs. */
+	/** A tile is closing: its programs were given their inputs' end. Said by no one since the desk moved to the host. */
 	| {readonly type: "closing"; readonly tile: TileId}
 	/** A tile's tsh ended: `exit`, Ctrl-D on an empty line, or its programs ended after a close. */
 	| {readonly type: "ended"; readonly tile: TileId};
 
-/** A tile's id: `t` and a number. The main process names a folder by it, so nothing else passes. */
+/** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
 
 const Done = Schema.Null;
@@ -138,6 +140,54 @@ export const Saved = Schema.Struct({
 	next: Schema.Int,
 });
 export type Saved = typeof Saved.Type;
+
+/** The prefix, as it is sent to a page. */
+const PrefixSchema = Schema.Union([
+	Schema.Struct({armed: Schema.Literal(false)}),
+	Schema.Struct({armed: Schema.Literal(true), until: Schema.NullOr(Schema.Number)}),
+]);
+
+const WorkspaceSchema = Schema.Struct({
+	id: Schema.String,
+	layout: Schema.declare(isLayoutTree),
+	focused: TileIdSchema,
+});
+
+/**
+ * The whole desk, as the host sends it to every page to draw (messages.ts, `ToPage`). The page reads it
+ * strictly, and draws nothing it does not read.
+ */
+export const DeskSchema = Schema.Union([
+	Schema.Struct({
+		at: Schema.Literal("open"),
+		workspaces: Schema.NonEmptyArray(WorkspaceSchema),
+		active: Schema.String,
+		prefix: PrefixSchema,
+		ask: Schema.NullOr(TileIdSchema),
+		running: Schema.Record(Schema.String, Schema.Int),
+		closing: Schema.Array(TileIdSchema),
+		next: Schema.Int,
+	}),
+	Schema.Struct({at: Schema.Literal("over")}),
+]);
+
+/**
+ * Which keys the desk takes now, for a page to send it and not the tile: every key (a question is
+ * asked, or the prefix is armed), or only these. It is `claims`, asked ahead: `all` is the desk
+ * listening to the next key whatever it is, and the host answers whether it took it.
+ */
+export interface Takes {
+	readonly all: boolean;
+	readonly keys: readonly string[];
+}
+
+/** What the desk takes at `now`, by `claims`: the prefix and Ctrl-C over a program, or every key. */
+export const takenNow = (s: Desk, now: number): Takes => {
+	if (s.at === "over") return {all: false, keys: []};
+	const armed = s.prefix.armed && (s.prefix.until === null || now <= s.prefix.until);
+	if (s.ask !== null || armed) return {all: true, keys: []};
+	return {all: false, keys: [PREFIX, "<c-c>"].filter((key) => claims(s, key, now))};
+};
 
 export const open = Cmd.define("open", {input: Tile, ok: Done, err: []});
 export const close = Cmd.define("close", {input: Tile, ok: Done, err: []});
@@ -495,9 +545,9 @@ const decodeSaved = Schema.decodeUnknownOption(Saved);
 
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the
- * desk. A tile covered by a run shows its tsh again: the main process says again what runs now
- * (`covered`), and after a quit nothing does, and `attach` brings the run back. The prefix is not
- * armed, nothing is asked, and nothing is closing until the main process says so.
+ * desk. The host reads it as it starts. A tile covered by a run shows its tsh again: after the
+ * host stopped nothing runs, and `attach` brings the run back. The prefix is not armed, nothing
+ * is asked, and nothing is closing.
  */
 export const restore = (raw: unknown): Open | null => {
 	const read = decodeSaved(raw);

@@ -1,15 +1,16 @@
 import {describe, expect, it} from "vitest";
+import {fresh, takenNow} from "./desk/desk.ts";
 import {
-	readFromDesk,
+	readFromPage,
 	readFromTerminal,
 	readFromWindow,
-	readToDesk,
+	readToPage,
 	readToTerminal,
 	readToWindow,
 } from "./messages.ts";
 
 // The envelope of each message type, read strictly. What is inside a window's `msg` is read by
-// its run's program, in host.test.ts.
+// its run's program, in tsh.test.ts.
 
 describe("from the terminal", () => {
 	it("reads keys and a size", () => {
@@ -51,18 +52,28 @@ describe("a program's window", () => {
 });
 
 describe("the desk's port", () => {
-	it("has no `beside`: a run started with & opens no tile", () => {
-		const run = {id: "counter:1a2b", program: "counter"};
-		expect(readToDesk({type: "beside", tile: "t1", run}).kind).toBe("refused");
-		expect(readToDesk({type: "covered", tile: "t1", run}).kind).toBe("read");
-		expect(readToDesk({type: "closing", tile: "t2"}).kind).toBe("read");
+	it("sends the page the whole desk, with the keys the desk takes now", () => {
+		const desk = fresh();
+		const sent = {type: "desk", desk, takes: takenNow(desk, 0)};
+		expect(readToPage(sent)).toEqual({kind: "read", msg: sent});
+		expect(sent.takes).toEqual({all: false, keys: ["<c-b>"]});
+		expect(readToPage({type: "desk", desk: {at: "over"}, takes: {all: false, keys: []}}).kind).toBe(
+			"read",
+		);
+		// A desk that breaks its own shape is not drawn.
+		const broken = {...desk, workspaces: []};
+		expect(readToPage({type: "desk", desk: broken, takes: sent.takes}).kind).toBe("refused");
+		expect(readToPage({type: "answer", id: 3, took: true}).kind).toBe("read");
 	});
 
-	it("asks to close a tile, to stop one, and to empty, and stops no run by its id", () => {
-		expect(readFromDesk({type: "close", tile: "t2"}).kind).toBe("read");
-		expect(readFromDesk({type: "stop", tile: "t2"}).kind).toBe("read");
-		expect(readFromDesk({type: "empty"}).kind).toBe("read");
-		expect(readFromDesk({type: "stop", run: "counter:1a2b"}).kind).toBe("refused");
-		expect(readFromDesk({type: "quit"}).kind).toBe("refused");
+	it("takes keys, clicks and a border let go from the page, and nothing that opens or stops a tile", () => {
+		expect(readFromPage({type: "press", id: 0, key: "<c-b>"}).kind).toBe("read");
+		expect(readFromPage({type: "press", id: 0, key: "<c-b>", at: 12}).kind).toBe("refused");
+		expect(readFromPage({type: "click", tile: "t2"}).kind).toBe("read");
+		expect(readFromPage({type: "click", tile: "../t2"}).kind).toBe("refused");
+		expect(readFromPage({type: "resize", stack: "s1", sizes: {t1: 40, t2: 60}}).kind).toBe("read");
+		expect(readFromPage({type: "open", tile: "t2"}).kind).toBe("refused");
+		expect(readFromPage({type: "stop", tile: "t2"}).kind).toBe("refused");
+		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");
 	});
 });

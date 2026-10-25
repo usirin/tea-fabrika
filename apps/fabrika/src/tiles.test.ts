@@ -4,17 +4,17 @@ import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {memoryHistory, sharedHistory} from "./editor/history.ts";
-import type {Screen} from "./host.ts";
-import type {ToDesk, ToTerminal} from "./messages.ts";
-import {type Place, startTiles} from "./tiles.ts";
+import type {ToTerminal} from "./messages.ts";
+import {type Place, startTiles, type TileNews} from "./tiles.ts";
+import type {Screen} from "./tsh.ts";
 
 // The tiles, with fake ports and memory folders and no Electron: what the desk is told, what each
 // tile's terminal shows, and which folders go.
 
-/** The tiles of one start of the app. `folders` outlive it, as the home's folders do. */
+/** The tiles of one start of the host. `folders` outlive it, as the home's folders do. */
 const desk = (folders = new Map<string, Place>()) =>
 	Effect.gen(function* () {
-		const told: ToDesk[] = [];
+		const told: TileNews[] = [];
 		const gone: string[] = [];
 		const dropped: string[] = [];
 		const views: string[] = [];
@@ -62,7 +62,7 @@ const desk = (folders = new Map<string, Place>()) =>
 					? all
 					: undefined;
 			});
-		const heard = (check: (m: ToDesk) => boolean) =>
+		const heard = (check: (m: TileNews) => boolean) =>
 			until("a message for the desk", () => told.find(check));
 		return {tiles, told, gone, dropped, views, rows, type, until, prompts, heard};
 	});
@@ -166,16 +166,12 @@ describe("the tiles", {timeout: 20_000}, () => {
 				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
 				yield* d.tiles.close("t2");
 				d.told.length = 0;
-				// A page loaded now hears t2 is closing, so its question is stop.
-				yield* d.tiles.replay;
-				const replayed = [...d.told];
 				yield* d.tiles.stop("t2");
 				// A tile stopped already: nothing happens.
 				yield* d.tiles.stop("t2");
-				return {replayed, dropped: [...d.dropped], gone: [...d.gone], told: [...d.told]};
+				return {dropped: [...d.dropped], gone: [...d.gone], told: [...d.told]};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.replayed).toContainEqual({type: "closing", tile: "t2"});
 		expect(seen.dropped).toEqual(["t2"]);
 		expect(seen.gone).toEqual(["tile:t2"]);
 		expect(seen.told.some((m) => m.type === "ended")).toBe(false);
@@ -194,15 +190,17 @@ describe("the tiles", {timeout: 20_000}, () => {
 				yield* d.tiles.close("t2");
 				yield* d.heard((m) => m.type === "ended" && m.tile === "t2");
 				yield* d.tiles.stop("t2");
-				d.told.length = 0;
-				yield* d.tiles.replay;
 				return {covered, told: [...d.told], gone: [...d.gone]};
 			}).pipe(Effect.scoped),
 		);
 		const run = seen.covered.type === "covered" ? seen.covered.run.id : "";
-		// t1's counter still covers t1, and its port is still there.
-		expect(seen.told).toContainEqual(seen.covered);
-		expect(seen.told).toContainEqual({type: "jobs", tile: "t1", running: 1});
+		// t1's counter still covers t1: it is not over, and its port is still there.
+		expect(seen.told).not.toContainEqual({type: "over", run});
+		expect(seen.told.filter((m) => m.type === "jobs" && m.tile === "t1").at(-1)).toEqual({
+			type: "jobs",
+			tile: "t1",
+			running: 1,
+		});
 		expect(seen.gone).not.toContain(`run:${run}`);
 	});
 
@@ -235,7 +233,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 		expect(ended).toEqual({type: "ended", tile: "t1"});
 	});
 
-	it("show a tile that runs on a fresh port, and tell a page loaded again what runs", async () => {
+	it("show a tile that runs again, on the same tsh: nothing starts twice", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const d = yield* desk();
@@ -244,20 +242,16 @@ describe("the tiles", {timeout: 20_000}, () => {
 				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
 				yield* d.heard((m) => m.type === "covered");
 				d.told.length = 0;
-				d.views.length = 0;
-				// The page was loaded again: it opens t1 again, and is told what runs.
 				yield* d.tiles.open("t1");
-				yield* d.tiles.replay;
-				return {told: [...d.told], views: [...d.views], rows: d.rows("t1")};
+				return {told: [...d.told], rows: d.rows("t1")};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.told.map((m) => m.type)).toEqual(["covered", "jobs"]);
-		expect(seen.views).toHaveLength(1);
+		expect(seen.told).toEqual([]);
 		// The same tsh, its screen shown again from the start.
 		expect(seen.rows[0]).toBe("tsh$ counter");
 	});
 
-	it("keep a tile's jobs when the app quits, for the next start's `attach`", async () => {
+	it("keep a tile's jobs when the host stops, for the next start's `attach`", async () => {
 		const folders = new Map<string, Place>();
 		const found = await go(
 			Effect.gen(function* () {
