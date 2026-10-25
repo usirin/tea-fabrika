@@ -128,7 +128,7 @@ root; `pnpm lint` checks it).
 
 - `effect` and `@demlik/tea` are peers: one copy, the app's.
 - Optional peers, needed only by the subpath that uses them:
-  - `miniflare` for `/local`;
+  - `miniflare` and `esbuild` for `/local` (esbuild bundles the ledger's Worker);
   - the Agent SDK for `/agents/claude`;
   - ACP for `/agents/acp`;
   - `@effect/opentelemetry` and the four `@opentelemetry/*` packages for `/otel`.

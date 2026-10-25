@@ -1,9 +1,9 @@
 // SSH signatures in the SSHSIG format: what `ssh-keygen -Y sign -n <namespace>` writes, and what
-// `ssh-keygen -Y verify` checks. The door uses it to check that a person holds a key GitHub lists
-// for their login (docs: https://docs.github.com/en/rest/users/keys#list-public-keys-for-a-user).
+// `ssh-keygen -Y verify` checks. The door uses it to check that a person holds a key the keys
+// service lists for them (`keys.ts`; on GitHub's, the keys GitHub lists for their login).
 //
 //   const armored = await sign(text, NAMESPACE, key)     // -----BEGIN SSH SIGNATURE----- ...
-//   await verify(armored, text, NAMESPACE, githubKeys)   // the key line that signed it, or null
+//   await verify(armored, text, NAMESPACE, listedKeys)   // the key line that signed it, or null
 //
 // The format, from OpenSSH's own spec (PROTOCOL.sshsig,
 // https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.sshsig):
@@ -19,7 +19,7 @@
 // Ed25519 keys only, for now. RSA and ECDSA keys, keys with a passphrase (the signing side), an
 // ssh-agent and hardware keys (`sk-ssh-ed25519@openssh.com`) are not in it yet.
 //
-// Erasable TypeScript, no imports: workerd loads this file with its types stripped
+// Erasable TypeScript, no imports: workerd runs this file bundled into the ledger's Worker
 // (worker-options.ts), and Node runs the same file. Both have WebCrypto's Ed25519.
 
 type Bytes = Uint8Array<ArrayBuffer>;

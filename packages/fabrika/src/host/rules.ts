@@ -61,7 +61,8 @@
 //   - A start past a `children` limit is refused, not ended: OTP's `{error, max_children}`.
 //   - Wall time counts from the name's registration, across restarts, as a Job's deadline does.
 //
-// Erasable TypeScript only: workerd gets this file with its types stripped, and no imports.
+// Erasable TypeScript only, and no imports: workerd runs this file bundled into the ledger's Worker
+// (worker-options.ts), and Node runs it as it is.
 
 export type Value = string | number | null;
 export type SqlRow = Record<string, Value>;

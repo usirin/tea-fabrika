@@ -1,5 +1,6 @@
 // What signs a login: an SSH key, as the door checks it (`door.ts`, `sshsig.ts`). A person's key is
-// one GitHub lists for their login. An agent's key is its own, named in a grant its person signed.
+// one the ledger's keys service lists for them (`keys.ts`; on GitHub's, a key GitHub lists for their
+// login). An agent's key is its own, named in a grant its person signed.
 //
 //   const session = yield* door.login("alice")          // signs this ledger's challenge with Signer
 //   const g = yield* grant({address, agent: "triage", key: agentKey, for: "alice", expires})

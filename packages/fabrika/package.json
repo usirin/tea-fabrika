@@ -105,6 +105,7 @@
 		"@opentelemetry/resources": "^2.11.0",
 		"@opentelemetry/sdk-trace-base": "^2.11.0",
 		"effect": "^4.0.0",
+		"esbuild": "^0.28.2",
 		"miniflare": "^4.20260730.0"
 	},
 	"peerDependenciesMeta": {
@@ -127,6 +128,9 @@
 			"optional": true
 		},
 		"@opentelemetry/sdk-trace-base": {
+			"optional": true
+		},
+		"esbuild": {
 			"optional": true
 		},
 		"miniflare": {

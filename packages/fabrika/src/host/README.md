@@ -36,7 +36,7 @@ pass either one: `self.run` types `store` and `onError` as `never`. See
 ## Where it sits
 
 - Above `program` in `layer-rules.json`. It imports that part, `@demlik/tea` as published,
-  `effect`, `@effect/platform-node` and `miniflare`. Nothing else of this repo.
+  `effect`, `@effect/platform-node`, `miniflare` and `esbuild`. Nothing else of this repo.
 - tea does not change for it.
 
 ## What's in it
@@ -48,10 +48,12 @@ Layer on its own subpath.
 |---|---|---|
 | `@kampus/fabrika` | `ledger.ts` | `Ledger` (the service), its tagged errors, `Row`, `Lease`, `streams(name)`, `inboxOf` |
 | `@kampus/fabrika` | `writer.ts` | `Writer`: who wrote a row, a user, an agent for a user, or an agent from before the door. `writerOf` reads it from a row's `writer` text (`user:<id>`, `agent:<id> for:<user id>`, old `agent:<id>`); any other text names neither. `writerText` writes that text |
-| `@kampus/fabrika`, the names | `door.ts` | The door: the one way into a ledger from the network. It turns a credential into a person, an agent for a person, or a refusal, and stamps that as the writer and in the holder. Members as facts on the ledger (`door/members`), SSH-signed logins checked against GitHub, sessions, and `trustedArgs`: what a request may say. `PERSON_KINDS`: the kinds only a person writes (today `answered`, the owner's answer to an ask), refused from an agent's session; `Writes`: a program's table of who writes each of its facts, held to that list by its type. Plain TypeScript: workerd runs it. The top level exports the names a host signs and reads (`challengeText`, `grantText`, `holderOf`, `hostOf`, ...) |
+| `@kampus/fabrika`, the names | `door.ts` | The door: the one way into a ledger from the network. It turns a credential into a person, an agent for a person, or a refusal, and stamps that as the writer and in the holder. Members as facts on the ledger (`door/members`), SSH-signed logins checked against the keys `Keys` lists, sessions, and `trustedArgs`: what a request may say. `PERSON_KINDS`: the kinds only a person writes (today `answered`, the owner's answer to an ask), refused from an agent's session; `Writes`: a program's table of who writes each of its facts, held to that list by its type. workerd runs it, bundled into the ledger's Worker. The top level exports the names a host signs and reads (`challengeText`, `grantText`, `holderOf`, `hostOf`, ...) |
+| `@kampus/fabrika` | `keys.ts` | `Keys`: the one question the door asks about a person, who goes by a name and which keys may sign for them. The id it gives is what the ledger keeps. `layerNobody`: nobody goes by any name |
+| (inside the ledger) | `keys-github.ts` | `layerGitHub`: `Keys` from GitHub. A name is a login, the id is `github:<GitHub's numeric id>`, so a renamed login stays the same person. Answers kept 5 minutes (`KEYS_CACHE_MS`) |
 | `@kampus/fabrika` | `sshsig.ts` | SSH signatures as `ssh-keygen -Y sign` makes them (SSHSIG), Ed25519, on WebCrypto. `keyLineOf`, `keyOnly` are exported |
 | `@kampus/fabrika` | `signer.ts` | `Signer`: what signs a login, an SSH key. `layerSignerKey` over a WebCrypto Ed25519 pair; `grant` signs a person's grant to an agent |
-| `@kampus/fabrika/local` | `local.ts`, `worker-options.ts` | `layerLocal`: the ledger in a Miniflare child, with a local door whose secret is in the data folder. Own process group, a fixed direct socket, restarted past 500 MB. `LocalLedger` is the handle on the child. `layerAttach`: the same ledger from another process, by its secret. `ledgerOptions`: Miniflare options for the Durable Object and its door, for a caller that runs it itself |
+| `@kampus/fabrika/local` | `local.ts`, `worker-options.ts` | `layerLocal`: the ledger in a Miniflare child, with a local door whose secret is in the data folder. Own process group, a fixed direct socket, restarted past 500 MB. `LocalLedger` is the handle on the child. `layerAttach`: the same ledger from another process, by its secret. `ledgerOptions`: Miniflare options for the Durable Object and its door, for a caller that runs it itself. The Worker is bundled by esbuild (an optional peer, beside miniflare), as Cloudflare's own tools bundle one |
 | `@kampus/fabrika/local` | `inside.ts` | `layerInside`: a `Ledger` over the Durable Object's binding, past the door, for tests that name their own writers (the laws) |
 | `@kampus/fabrika/http` | `http.ts` | `layerHttp`: a `Ledger` over HTTP to any running ledger, with a token and a small pool of connections. It sends no writer. `doorOf`: the door's steps (login, agent login, who, members, invite, remove, agent token). `answers`: does anything answer on a URL |
 | `@kampus/fabrika/memory` | `memory.ts` | `layerMemory`: the rules written a second time over Maps, for tests |

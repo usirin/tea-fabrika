@@ -107,18 +107,24 @@ export class LocalLedger extends Context.Service<
 const DAEMON = beside(import.meta.url, "daemon");
 
 /**
- * Miniflare is an optional peer of the package, and only the child imports it. Without this check
- * its absence would surface 30 s later as the child's stack trace; with it, as one line, at once.
+ * Miniflare and esbuild (which bundles the ledger's Worker) are optional peers of the package, and
+ * only the child loads them. Without this check their absence would surface 30 s later as the
+ * child's stack trace; with it, as one line, at once.
  */
-const miniflareInstalled = Effect.try({
-	// Resolved from here, the folder the child starts from, so it finds what the child would.
-	try: () => import.meta.resolve("miniflare"),
-	catch: () =>
-		new LocalError({
-			message:
-				"@kampus/fabrika/local runs the ledger in Miniflare, which is not installed: install miniflare (npm install miniflare)",
+const miniflareInstalled = Effect.forEach(
+	["miniflare", "esbuild"],
+	(peer) =>
+		Effect.try({
+			// Resolved from here, the folder the child starts from, so it finds what the child would.
+			try: () => import.meta.resolve(peer),
+			catch: () =>
+				new LocalError({
+					message: `@kampus/fabrika/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
+				}),
 		}),
-});
+	// One after the other: the first one missing is the one named.
+	{concurrency: 1},
+);
 
 /** A free TCP port on 127.0.0.1. Node at the edge: Effect has no "pick me a port". */
 const freePort = Effect.callback<number, LocalError>((resume) => {

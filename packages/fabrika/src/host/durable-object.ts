@@ -1,6 +1,7 @@
 // The ledger as a Cloudflare Durable Object: one SQLite database, every rule in `rules.ts`. It runs
 // in workerd (Cloudflare, or Miniflare on a laptop: `local.ts`), not in Node. workerd gets this file
-// and `rules.ts` with their types stripped by Node's own stripper, so both stay erasable TypeScript.
+// bundled with what it imports, `effect` too (worker-options.ts), as Cloudflare's own tools bundle
+// a Worker.
 //
 // Lifted from experiment 97 (experiments/97-one-ledger/ledger.ts). What changed: `register` is new;
 // the experiment-only calls (`tryExec`, `openCriteria`) are gone. 99 adds OTP's process calls.
@@ -16,7 +17,11 @@
 // door (`door.ts`): no credential, no read and no write; the writer and the holder come from the
 // credential, never from the request.
 import {DurableObject} from "cloudflare:workers";
-import {configOf, Door, githubApi, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
+import {Layer, ManagedRuntime} from "effect";
+import {FetchHttpClient} from "effect/http";
+import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
+import {type Keys, layerNobody} from "./keys.ts";
+import {KEYS_CACHE_MS, layerGitHub} from "./keys-github.ts";
 import * as L from "./rules.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
@@ -40,10 +45,28 @@ type Env = {
 	MAX_DELIVERIES?: string;
 	/**
 	 * The door, by config (`configOf`): DOOR, LOCAL_PERSON, LOCAL_SECRET_HASH, FOUNDER, ORIGIN,
-	 * SESSION_MS, KEYS_CACHE_MS.
+	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS.
 	 */
 	[door: string]: unknown;
 };
+
+/**
+ * The `Keys` Layer the env names, or null when it names none this file knows, or says it wrong.
+ *
+ *   KEYS=github   GitHub's keys and ids (`keys-github.ts`), kept KEYS_CACHE_MS (default 5 min)
+ *
+ * The one place a Layer is picked: a new answer to `Keys` is one more line here.
+ */
+const keysOf = (env: Env): Layer.Layer<Keys> | null => {
+	const cache = typeof env.KEYS_CACHE_MS === "string" ? env.KEYS_CACHE_MS : "";
+	if (env.KEYS !== "github" || (cache !== "" && !/^[0-9]{1,12}$/.test(cache))) return null;
+	const cacheMs = cache === "" ? KEYS_CACHE_MS : Number(cache);
+	return layerGitHub({cacheMs}).pipe(Layer.provide(FetchHttpClient.layer));
+};
+
+/** A shared door with no keys to ask is closed: nobody could prove who they are. */
+const closedWithout = (config: DoorConfig, keys: Layer.Layer<Keys> | null): DoorConfig =>
+	config.kind === "shared" && keys === null ? {kind: "closed" as const} : config;
 type Stub = {fetch(req: Request): Promise<Response>} & Record<
 	string,
 	((...args: unknown[]) => Promise<unknown>) | undefined
@@ -74,10 +97,13 @@ export class Ledger extends DurableObject {
 			tx: (fn) => ctx.storage.transactionSync(fn),
 		};
 		L.migrate(this.db);
+		const keys = keysOf(env);
+		// One runtime for the object's life: the Layer is built once, so what it keeps (GitHub's
+		// answers, for their cache time) is kept across logins. A local or closed door asks nobody.
 		this.door = new Door(
 			this.db,
-			configOf(env),
-			githubApi((url, init) => fetch(url, init)),
+			closedWithout(configOf(env), keys),
+			ManagedRuntime.make(keys ?? layerNobody),
 			{wrote: (w) => this.wake(w.stream, w.rev, w.pos)},
 		);
 	}
@@ -316,11 +342,11 @@ export class Ledger extends DurableObject {
 		if (step === "members") {
 			const m = this.door.members();
 			return Response.json({
-				members: [...m.members].map(([id, login]) => ({id: `github:${id}`, login})),
-				invited: [...m.invited].map(([id, login]) => ({id: `github:${id}`, login})),
+				members: [...m.members].map(([id, name]) => ({id, name})),
+				invited: [...m.invited].map(([id, name]) => ({id, name})),
 			});
 		}
-		if (step === "invite") return answer(await this.door.invite(me, body.login));
+		if (step === "invite") return answer(await this.door.invite(me, body.name));
 		if (step === "remove") return answer(this.door.remove(me, body.id));
 		if (step === "agent") return answer(await this.door.addAgent(me, body.name));
 		return new Response("not found", {status: 404});

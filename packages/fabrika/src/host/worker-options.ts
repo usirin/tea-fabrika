@@ -1,48 +1,68 @@
-// Miniflare's options for the ledger's Durable Object: the worker's files, types stripped by Node's
-// own stripper (no bundler), and the SQLite-backed object. Lifted from experiment 97
-// (experiments/97-one-ledger/worker.ts). Used by the local daemon, and by a test or a script that
-// runs Miniflare in its own process. From the build the files are `.js` already, and stripping
-// leaves them as they are.
+// Miniflare's options for the ledger's Durable Object: the Worker, bundled by esbuild from
+// `durable-object.ts` and what it imports (`effect` too: workerd has no node_modules to find it
+// in), and the SQLite-backed object. Lifted from experiment 97 (experiments/97-one-ledger/worker.ts).
+// Used by the local daemon, and by a test or a script that runs Miniflare in its own process. From
+// the build the files are `.js`, and esbuild bundles those the same way.
 //
 // The door (`door.ts`) is picked here. With no `door`, the ledger's HTTP face refuses every
 // request, and only code holding the binding reaches it (`inside.ts`, for tests).
 //
-// Node at the edge: reading the files, Node's type stripper, and node:crypto's SHA-256 (the door
-// keeps a hash of the local secret, never the secret).
+// Node at the edge: esbuild's Node API, loaded with Node's `require` when the options are made (an
+// optional peer: `@kampus/fabrika/local` still loads without it), and node:crypto's SHA-256 (the
+// door keeps a hash of the local secret, never the secret).
 import {createHash} from "node:crypto";
-import {readFileSync} from "node:fs";
-import {stripTypeScriptTypes} from "node:module";
+import {createRequire} from "node:module";
 import {fileURLToPath} from "node:url";
 import {Redacted} from "effect";
+import type * as Esbuild from "esbuild";
 import {beside} from "./beside.ts";
 
-/** The worker's modules: the Durable Object, its rules, the door and the SSH signatures it checks. */
-const modules = () =>
-	["durable-object", "rules", "door", "sshsig"].map((name) => ({
-		type: "ESModule" as const,
-		path: beside(import.meta.url, name),
-		contents: stripTypeScriptTypes(readFileSync(beside(import.meta.url, name), "utf8")),
-	}));
+/**
+ * The Worker as one module: the Durable Object, its rules, the door, the SSH signatures it checks
+ * and the `Keys` Layers. `cloudflare:*` is workerd's own, so it stays an import.
+ */
+const modules = () => {
+	const {buildSync}: typeof Esbuild = createRequire(import.meta.url)("esbuild");
+	const entry = beside(import.meta.url, "durable-object");
+	const out = buildSync({
+		entryPoints: [entry],
+		bundle: true,
+		format: "esm",
+		platform: "neutral",
+		target: "es2023",
+		external: ["cloudflare:*"],
+		write: false,
+		logLevel: "silent",
+	});
+	return [{type: "ESModule" as const, path: entry, contents: out.outputFiles[0]?.text ?? ""}];
+};
+
+/** Where a shared door's keys come from. Only GitHub's today (`keys-github.ts`). */
+export type KeysOptions = {
+	readonly kind: "github";
+	/** How long GitHub's answers are kept, in ms. Default `KEYS_CACHE_MS`, 5 minutes. */
+	readonly cacheMs?: number;
+	/** Where the ledger's calls to api.github.com go instead (a fake, in tests); left out, GitHub. */
+	readonly api?: (req: Request) => Promise<Response>;
+};
 
 /** Which door the ledger has. */
 export type DoorOptions =
 	/** One laptop: `person` is who every request with `secret` is. */
 	| {readonly kind: "local"; readonly person: string; readonly secret: Redacted.Redacted<string>}
 	/**
-	 * A shared ledger: members on the ledger, SSH proof against GitHub. `founder`: GitHub's numeric
-	 * id of the person who made it. `origin`: the server's public origin, which challenges and
-	 * grants name before the object's name (default: the request's own origin). `github`: where the ledger's calls to
-	 * api.github.com go instead (a fake, in tests); left out, they go to GitHub. `sessionMs` and
-	 * `keysCacheMs`: how long a person's session lasts, and how long the door keeps a login's keys
-	 * from GitHub (door.ts: `SESSION_MS`, 4 hours, and `KEYS_CACHE_MS`, 5 minutes, when left out).
+	 * A shared ledger: members on the ledger, SSH proof against the keys `keys` names. `founder`:
+	 * the id of the person who made it, as that keys service gives it (`github:<n>`). `origin`:
+	 * the server's public origin, which challenges and grants name before the object's name
+	 * (default: the request's own origin). `sessionMs`: how long a person's session lasts
+	 * (door.ts: `SESSION_MS`, 4 hours, when left out).
 	 */
 	| {
-			readonly kind: "github";
-			readonly founder: number;
+			readonly kind: "shared";
+			readonly founder: string;
 			readonly origin?: string;
 			readonly sessionMs?: number;
-			readonly keysCacheMs?: number;
-			readonly github?: (req: Request) => Promise<Response>;
+			readonly keys: KeysOptions;
 	  };
 
 export interface LedgerOptions {
@@ -68,11 +88,12 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
 					LOCAL_SECRET_HASH: createHash("sha256").update(Redacted.value(d.secret)).digest("hex"),
 				}
 			: {
-					DOOR: "github",
-					FOUNDER: String(d.founder),
+					DOOR: "shared",
+					FOUNDER: d.founder,
 					...(d.origin === undefined ? {} : {ORIGIN: d.origin}),
 					...(d.sessionMs === undefined ? {} : {SESSION_MS: String(d.sessionMs)}),
-					...(d.keysCacheMs === undefined ? {} : {KEYS_CACHE_MS: String(d.keysCacheMs)}),
+					KEYS: d.keys.kind,
+					...(d.keys.cacheMs === undefined ? {} : {KEYS_CACHE_MS: String(d.keys.cacheMs)}),
 				};
 
 /**
@@ -94,8 +115,8 @@ export const ledgerOptions = (o: LedgerOptions) => ({
 		...doorBindings(o.door),
 	},
 	// Miniflare sends the Worker's own outgoing `fetch` here, so a test's GitHub is a fake.
-	...(o.door?.kind === "github" && o.door.github !== undefined
-		? {outboundService: o.door.github}
+	...(o.door?.kind === "shared" && o.door.keys.api !== undefined
+		? {outboundService: o.door.keys.api}
 		: {}),
 	host: "127.0.0.1",
 	...(o.direct === undefined ? {} : {unsafeDirectSockets: [{host: "127.0.0.1", port: o.direct}]}),

@@ -30,7 +30,8 @@ export {
 	holderOf,
 	hostOf,
 	isAgentName,
-	isLogin,
+	isName,
+	isPersonId,
 	isPersonKind,
 	MEMBERS,
 	NAMESPACE,
@@ -41,6 +42,8 @@ export {
 	type Writes,
 } from "./host/door.ts";
 export * from "./host/host.ts";
+// Where the door gets a person's keys: the service it asks, for a Layer written elsewhere.
+export * from "./host/keys.ts";
 export * from "./host/ledger.ts";
 // Names in two places. The ledger's records win over the host's and the
 // rules' plain types of the same name, which they encode.

@@ -7,8 +7,9 @@ import {grant, layerSignerKey} from "./signer.ts";
 import {keyLineOf} from "./sshsig.ts";
 import {ledgerOptions} from "./worker-options.ts";
 
-// The door in workerd, under Miniflare, over HTTP as a host reaches it. GitHub is a fake: the
-// Worker's own calls to api.github.com come here (`outboundService`). Keys are made in the test.
+// The door in workerd, under Miniflare, over HTTP as a host reaches it, asking GitHub's `Keys`
+// Layer (`keys-github.ts`). GitHub is a fake: the Worker's own calls to api.github.com come here
+// (`outboundService`). Keys are made in the test.
 
 const pairOf = async () =>
 	(await crypto.subtle.generateKey({name: "Ed25519"}, true, ["sign", "verify"])) as CryptoKeyPair;
@@ -41,7 +42,7 @@ beforeAll(async () => {
 		ledgerOptions({
 			persist: false,
 			direct: 0,
-			door: {kind: "github", founder: 7, github: fakeGitHub},
+			door: {kind: "shared", founder: "github:7", keys: {kind: "github", api: fakeGitHub}},
 		}),
 	);
 	await mf.ready;
@@ -215,7 +216,7 @@ describe("the door in workerd", () => {
 			),
 		).toBe(403);
 		const invited = await run(door().invite(Redacted.make(person), "bob"));
-		expect(invited).toEqual({id: 8, login: "bob"});
+		expect(invited).toEqual({id: "github:8", name: "bob"});
 		const s = await run(
 			door()
 				.login("bob")

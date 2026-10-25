@@ -145,10 +145,10 @@ export const Session = Schema.Struct({
 });
 export type Session = typeof Session.Type;
 
-const Member = Schema.Struct({id: Schema.String, login: Schema.String});
+/** A person on a shared ledger: their id (`github:<n>`), and the name they went by when they came. */
+const Member = Schema.Struct({id: Schema.String, name: Schema.String});
 const Members = Schema.Struct({members: Schema.Array(Member), invited: Schema.Array(Member)});
 const Challenge = Schema.Struct({text: Schema.String});
-const Invited = Schema.Struct({id: Schema.Number, login: Schema.String});
 const Who = Schema.Struct({who: Schema.Union([User, Agent])});
 
 /** The door of one ledger, at `url` (its base) and `ledger` (its name). */
@@ -186,13 +186,16 @@ export const doorOf = (o: {readonly url: string; readonly ledger: string}) => {
 		);
 	const challenge = step(Challenge, "challenge", {}).pipe(Effect.map((c) => c.text));
 	return {
-		/** A person's login: this ledger's challenge, signed by the `Signer` (a key GitHub lists). */
-		login: (login: string) =>
+		/**
+		 * A person's login by `name` (on GitHub's keys, their login): this ledger's challenge, signed
+		 * by the `Signer`, a key the ledger's keys service lists for them.
+		 */
+		login: (name: string) =>
 			Effect.gen(function* () {
 				const signer = yield* Signer;
 				const text = yield* challenge;
 				return yield* step(Session, "login", {
-					login,
+					name,
 					challenge: text,
 					signature: yield* signer.sign(text),
 				});
@@ -212,8 +215,8 @@ export const doorOf = (o: {readonly url: string; readonly ledger: string}) => {
 		who: (token: Redacted.Redacted<string>) =>
 			step(Who, "who", {}, token).pipe(Effect.map((w) => w.who)),
 		members: (token: Redacted.Redacted<string>) => step(Members, "members", {}, token),
-		invite: (token: Redacted.Redacted<string>, login: string) =>
-			step(Invited, "invite", {login}, token),
+		invite: (token: Redacted.Redacted<string>, name: string) =>
+			step(Member, "invite", {name}, token),
 		remove: (token: Redacted.Redacted<string>, id: string) =>
 			step(Schema.Struct({id: Schema.String}), "remove", {id}, token),
 		/** On a local ledger: a token for one of the person's agents. */

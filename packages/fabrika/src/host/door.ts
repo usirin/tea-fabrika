@@ -9,20 +9,22 @@
 // Each ledger stands alone and keeps its own members, as facts in its own `door/members` stream.
 // Nothing outside it knows who belongs, and a session it gives out opens only it.
 //
-//   founded {id, login}   the ledger's founder, named by its config (`FOUNDER`), on first login
-//   invited {id, login}   a member invites a GitHub login; the invite keeps GitHub's numeric id
-//   joined  {id, login}   that person's first login: the id must match, not only the login
-//   removed {id}          a member takes a member (or an invite) off; their sessions end
+//   founded {id, name}   the ledger's founder, named by its config (`FOUNDER`), on first login
+//   invited {id, name}   a member invites a name; the invite keeps the id the keys service gives
+//   joined  {id, name}   that person's first login: the id must match, not only the name
+//   removed {id}         a member takes a member (or an invite) off; their sessions end
 //
 // How a person proves who they are: an SSH signature (`sshsig.ts`) over a challenge this ledger
-// gave out, by a key GitHub lists for the login (`GET /users/{login}/keys`), and GitHub's numeric
-// id for that login (`GET /users/{login}`). An agent holds its own key, and a grant its person's
-// key signed: it names the agent, its key, this ledger and an end. A grant makes an agent's
-// session, never a person's.
+// gave out, by a key the keys service lists for the name they log in with. The door asks one
+// service, `Keys` (`keys.ts`), who goes by a name and which keys may sign for them, and never
+// asks GitHub, or anything else, itself. Today's answer is GitHub's (`keys-github.ts`): a name is
+// a login, the id is `github:<GitHub's numeric id>`. An agent holds its own key, and a grant its
+// person's key signed: it names the agent, its key, this ledger and an end. A grant makes an
+// agent's session, never a person's.
 //
 // Two doors, by config:
 //
-//   github   the shared ledger: members, SSH proof, sessions (above)
+//   shared   the shared ledger: members, SSH proof, sessions (above)
 //   local    one laptop: one person from config, proven by a secret the starter holds
 //            (`local.ts`), and agent tokens that person mints
 //
@@ -32,8 +34,10 @@
 // ask: an approval, a ruling) is refused from an agent's session on every write, so an agent
 // tricked into approving its own work is stopped here, whatever its host does.
 //
-// Erasable TypeScript: workerd loads this file with its types stripped, beside `rules.ts` and
-// `sshsig.ts` (worker-options.ts). Node runs the same file in the tests, on node:sqlite.
+// workerd runs this file in the ledger's Worker, bundled with the rest of it (worker-options.ts).
+// Node runs the same file in the tests, on node:sqlite.
+import {Effect, type ManagedRuntime, Option, Schema} from "effect";
+import {Keys, type Signers} from "./keys.ts";
 import type {Db, Event, SqlRow, Written} from "./rules.ts";
 import {readStream, writeUnguarded} from "./rules.ts";
 import {keyOnly, verify} from "./sshsig.ts";
@@ -41,8 +45,9 @@ import {keyOnly, verify} from "./sshsig.ts";
 // ---------------------------------------------------------------- who
 
 /**
- * What the door says a credential is: a person (on a GitHub door, `github:<GitHub's numeric user
- * id>`), or an agent and the person it works for. Nothing else may be stamped as a writer.
+ * What the door says a credential is: a person (on a shared door, the id the keys service gives,
+ * such as `github:<GitHub's numeric user id>`), or an agent and the person it works for. Nothing
+ * else may be stamped as a writer.
  */
 export type Stamp =
 	| {readonly kind: "user"; readonly id: string}
@@ -60,8 +65,15 @@ export const stampText = (s: Stamp): string =>
 export const holderOf = (host: string, s: Stamp): string => `${host}@${stampText(s)}`;
 
 /**
+ * A person's id, as the door takes one from config or from the keys service: no spaces, and no
+ * "@", which `hostOf` reads as the end of a host's tag. Up to 200 characters.
+ */
+export const isPersonId = (s: unknown): s is string => typeof s === "string" && PERSON_ID.test(s);
+const PERSON_ID = /^[^\s@]{1,200}$/;
+
+/**
  * The host's own tag in a holder, as the host named itself to `claim`. A stamp has no "@" in it
- * (a person's id, an agent's name and `github:<n>` never do), so the last "@" ends the host's tag.
+ * (`isPersonId`, and an agent's name never has one), so the last "@" ends the host's tag.
  * A holder written past no door (an RPC caller, the node:sqlite ledger) comes back whole.
  */
 export const hostOf = (holder: string): string => {
@@ -109,25 +121,21 @@ export type Writes<K extends string> = {
 	readonly [k in K]: k extends PersonKind ? "person" : "anyone";
 };
 
-// GitHub is the one place a person's keys live. Every key GitHub lists for a member's login may
-// sign in; nothing here pins one. A key taken off on GitHub stops letting anyone in once the
-// door's copy of the list is old (`KEYS_CACHE_MS`), and every session it opened has ended
-// (`SESSION_MS`). So a session is short, and an agent's session never outlives its person's.
+// The keys service is the one place a person's keys live. Every key it lists for a member may sign
+// in; nothing here pins one. A key taken off there stops letting anyone in once the service's own
+// answer is new (GitHub's is kept a few minutes: `keys-github.ts`), and every session it opened
+// has ended (`SESSION_MS`). So a session is short, and an agent's session never outlives its
+// person's.
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 /**
- * How long a person's session lasts on a GitHub door, by default: 4 hours. A key taken off on
- * GitHub works at most this long after (plus the cache). Shorter means more logins, each one an
- * SSH signature and two GitHub calls; 4 hours is two logins in a working day.
+ * How long a person's session lasts on a shared door, by default: 4 hours. A key taken off at the
+ * keys service works at most this long after (plus that service's cache). Shorter means more
+ * logins, each one an SSH signature and a question to the keys service; 4 hours is two logins in a
+ * working day.
  */
 export const SESSION_MS = 4 * HOUR;
-/**
- * How long the door keeps a login's id and keys from GitHub, by default: 5 minutes. Long enough
- * that a burst of logins (an app and its agents) asks GitHub once, as GitHub allows only 60 calls
- * an hour without a token; short enough that a key taken off there is gone soon after.
- */
-export const KEYS_CACHE_MS = 5 * MINUTE;
 /** How long a local door's agent token lasts: one laptop, minted by the secret's holder. */
 export const LOCAL_AGENT_MS = 30 * 24 * HOUR;
 /** How long a challenge may wait for its signature. */
@@ -147,22 +155,21 @@ export type DoorConfig =
 	| {readonly kind: "closed"}
 	| {readonly kind: "local"; readonly person: string; readonly secretHash: string}
 	/**
-	 * `founder`: GitHub's numeric id of the person who made the ledger. `origin`: the server's
-	 * public origin, as challenges and grants name it before the object's name (null: the
-	 * request's own). `sessionMs` and `keysCacheMs`: `SESSION_MS` and `KEYS_CACHE_MS` unless the
-	 * env says otherwise.
+	 * `founder`: the id of the person who made the ledger, as the keys service gives it
+	 * (`github:<n>`). `origin`: the server's public origin, as challenges and grants name it before
+	 * the object's name (null: the request's own). `sessionMs`: `SESSION_MS` unless the env says
+	 * otherwise. Where keys come from is not here: that is the `Keys` Layer's own config.
 	 */
 	| {
-			readonly kind: "github";
-			readonly founder: number;
+			readonly kind: "shared";
+			readonly founder: string;
 			readonly origin: string | null;
 			readonly sessionMs: number;
-			readonly keysCacheMs: number;
 	  };
 
 /**
  * The Worker's env, as the door reads it. Anything missing or malformed closes the door, but for
- * `SESSION_MS` and `KEYS_CACHE_MS`: left out, they are the defaults.
+ * `SESSION_MS`: left out, it is the default.
  */
 export const configOf = (env: Record<string, unknown>): DoorConfig => {
 	const s = (k: string) => (typeof env[k] === "string" ? (env[k] as string) : "");
@@ -175,125 +182,80 @@ export const configOf = (env: Record<string, unknown>): DoorConfig => {
 				: null;
 	if (
 		s("DOOR") === "local" &&
-		// No "@" in a person's id: `hostOf` splits a holder at its last one.
-		/^[^\s@]+$/.test(s("LOCAL_PERSON")) &&
+		isPersonId(s("LOCAL_PERSON")) &&
 		/^[0-9a-f]{64}$/.test(s("LOCAL_SECRET_HASH"))
 	)
 		return {kind: "local", person: s("LOCAL_PERSON"), secretHash: s("LOCAL_SECRET_HASH")};
 	const sessionMs = ms("SESSION_MS", SESSION_MS, MINUTE);
-	const keysCacheMs = ms("KEYS_CACHE_MS", KEYS_CACHE_MS, 0);
 	if (
-		s("DOOR") === "github" &&
-		/^[1-9][0-9]*$/.test(s("FOUNDER")) &&
+		s("DOOR") === "shared" &&
+		isPersonId(s("FOUNDER")) &&
 		sessionMs !== null &&
-		keysCacheMs !== null &&
 		(s("ORIGIN") === "" || /^https?:\/\/[^/\s]+$/.test(s("ORIGIN")))
 	)
-		return {
-			kind: "github",
-			founder: Number(s("FOUNDER")),
-			origin: s("ORIGIN") || null,
-			sessionMs,
-			keysCacheMs,
-		};
+		return {kind: "shared", founder: s("FOUNDER"), origin: s("ORIGIN") || null, sessionMs};
 	return {kind: "closed"};
 };
 
-// ---------------------------------------------------------------- GitHub, as far as the door needs it
-
-/** A GitHub account: its numeric id, which never changes, and its login, which may. */
-export type GitHubUser = {readonly id: number; readonly login: string};
-
-export interface GitHub {
-	/** `GET /users/{login}`; null: no such login. */
-	user(login: string): Promise<GitHubUser | null>;
-	/** `GET /users/{login}/keys`: the public keys GitHub lists, as key lines. */
-	keys(login: string): Promise<string[]>;
-}
-
-/** A GitHub login as GitHub allows it: letters, digits and single dashes, up to 39. */
-export const isLogin = (s: unknown): s is string =>
-	typeof s === "string" && /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(s);
-
 /**
- * GitHub's REST API, with no token: both calls are public.
- * https://docs.github.com/en/rest/users/users#get-a-user
- * https://docs.github.com/en/rest/users/keys#list-public-keys-for-a-user
+ * A name a person logs in or is invited by, as the door takes it: up to 100 characters, no
+ * spaces (a grant names it on one line). Which names are someone's is the keys service's
+ * answer: on GitHub's, a login.
  */
-export const githubApi = (get: (url: string, init: RequestInit) => Promise<Response>): GitHub => {
-	const call = async (path: string): Promise<unknown> => {
-		const res = await get(`https://api.github.com${path}`, {
-			headers: {
-				accept: "application/vnd.github+json",
-				"user-agent": "fabrika-ledger",
-				"x-github-api-version": "2022-11-28",
-			},
-		});
-		if (res.status === 404) return null;
-		if (!res.ok) throw new Error(`GitHub answered ${res.status} for ${path}`);
-		return res.json();
-	};
-	return {
-		async user(login) {
-			const u = (await call(`/users/${encodeURIComponent(login)}`)) as {
-				id?: unknown;
-				login?: unknown;
-			};
-			if (u === null || typeof u.id !== "number" || !Number.isInteger(u.id) || !isLogin(u.login))
-				return null;
-			return {id: u.id, login: u.login};
-		},
-		async keys(login) {
-			const ks = await call(`/users/${encodeURIComponent(login)}/keys`);
-			if (!Array.isArray(ks)) return [];
-			return ks.flatMap((k: {key?: unknown}) => (typeof k.key === "string" ? [k.key] : []));
-		},
-	};
-};
+export const isName = (s: unknown): s is string => typeof s === "string" && NAME.test(s);
+const NAME = /^\S{1,100}$/;
 
 // ---------------------------------------------------------------- members
 
 type MemberFact =
-	| {kind: "founded" | "invited" | "joined"; id: number; login: string}
-	| {kind: "removed"; id: number};
+	| {kind: "founded" | "invited" | "joined"; id: string; name: string}
+	| {kind: "removed"; id: string};
 
 export type Members = {
 	readonly founded: boolean;
-	/** GitHub id → login, as it was when they joined. */
-	readonly members: ReadonlyMap<number, string>;
-	/** GitHub id → login, as it was when invited. */
-	readonly invited: ReadonlyMap<number, string>;
+	/** Person's id → the name they went by when they joined. */
+	readonly members: ReadonlyMap<string, string>;
+	/** Person's id → the name they went by when invited. */
+	readonly invited: ReadonlyMap<string, string>;
 };
 
+const PersonId = Schema.String.check(Schema.isPattern(PERSON_ID));
+/** A member fact's data: `{id, name}`, and `{id}` for `removed`. */
+const readCame = Schema.decodeUnknownOption(
+	Schema.fromJsonString(
+		Schema.Struct({id: PersonId, name: Schema.String.check(Schema.isPattern(NAME))}),
+	),
+);
+const readRemoved = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Struct({id: PersonId})),
+);
+
 const factOf = (kind: string, data: string): MemberFact | null => {
-	try {
-		const d = JSON.parse(data) as {id?: unknown; login?: unknown};
-		if (typeof d.id !== "number") return null;
-		if (kind === "removed") return {kind, id: d.id};
-		if ((kind === "founded" || kind === "invited" || kind === "joined") && isLogin(d.login))
-			return {kind, id: d.id, login: d.login};
-		return null;
-	} catch {
-		return null;
+	if (kind === "removed") {
+		const d = readRemoved(data);
+		return Option.isSome(d) ? {kind, id: d.value.id} : null;
 	}
+	if (kind !== "founded" && kind !== "invited" && kind !== "joined") return null;
+	const d = readCame(data);
+	return Option.isSome(d) ? {kind, id: d.value.id, name: d.value.name} : null;
 };
 
 /** The members, folded from `door/members` in order. */
 export const membersOf = (rows: readonly SqlRow[]): Members => {
 	let founded = false;
-	const members = new Map<number, string>();
-	const invited = new Map<number, string>();
+	const members = new Map<string, string>();
+	const invited = new Map<string, string>();
 	for (const r of rows) {
 		// Only the door writes here; a row that does not read is skipped, never trusted.
 		const f = factOf(String(r.kind), String(r.data));
 		if (f === null) continue;
 		if (f.kind === "founded") {
 			founded = true;
-			members.set(f.id, f.login);
+			members.set(f.id, f.name);
 		} else if (f.kind === "invited") {
-			if (!members.has(f.id)) invited.set(f.id, f.login);
+			if (!members.has(f.id)) invited.set(f.id, f.name);
 		} else if (f.kind === "joined") {
-			if (invited.delete(f.id)) members.set(f.id, f.login);
+			if (invited.delete(f.id)) members.set(f.id, f.name);
 		} else {
 			members.delete(f.id);
 			invited.delete(f.id);
@@ -302,11 +264,8 @@ export const membersOf = (rows: readonly SqlRow[]): Members => {
 	return {founded, members, invited};
 };
 
-const personOf = (id: number): Person => ({kind: "user", id: `github:${id}`});
-const githubIdOf = (person: string): number | null => {
-	const m = /^github:([1-9][0-9]*)$/.exec(person);
-	return m ? Number(m[1]) : null;
-};
+/** A person the keys service knows: their id, and the name they were asked for by. */
+export type Known = {readonly id: string; readonly name: string};
 
 // ---------------------------------------------------------------- texts that get signed
 
@@ -319,7 +278,7 @@ export type Grant = {
 	readonly agent: string;
 	/** The agent's own public key, a key line. */
 	readonly key: string;
-	/** The person's GitHub login. */
+	/** The name the person logs in by (`isName`): on GitHub's keys service, their login. */
 	readonly for: string;
 	readonly expires: number;
 };
@@ -339,10 +298,10 @@ export const grantOf = (text: string): Grant | null => {
 			text,
 		);
 	if (m === null) return null;
-	const [, address = "", agent, key = "", login, expires] = m;
+	const [, address = "", agent, key = "", name, expires] = m;
 	const line = keyOnly(key);
-	if (!isAgentName(agent) || !isLogin(login) || line === null || line !== key) return null;
-	const g: Grant = {address, agent, key: line, for: login, expires: Number(expires)};
+	if (!isAgentName(agent) || !isName(name) || line === null || line !== key) return null;
+	const g: Grant = {address, agent, key: line, for: name, expires: Number(expires)};
 	return grantText(g) === text ? g : null;
 };
 
@@ -386,26 +345,27 @@ const MIGRATION = [
 
 export type LoginAnswer = {readonly token: string; readonly who: Stamp; readonly expires: number};
 
+/**
+ * The door. `keys` runs the one question the door asks about a person (`Keys`): the caller builds
+ * it once from the Layer it picked, so whatever that Layer keeps (GitHub's cache) lives as long as
+ * the door does.
+ */
 export class Door {
 	readonly #db: Db;
 	readonly #config: DoorConfig;
-	readonly #github: GitHub;
+	readonly #keys: ManagedRuntime.ManagedRuntime<Keys, never>;
 	readonly #now: () => number;
 	readonly #wrote: (w: Written) => void;
-	readonly #keys = new Map<
-		string,
-		{readonly at: number; readonly user: GitHubUser | null; readonly keys: readonly string[]}
-	>();
 
 	constructor(
 		db: Db,
 		config: DoorConfig,
-		github: GitHub,
+		keys: ManagedRuntime.ManagedRuntime<Keys, never>,
 		o: {now?: () => number; wrote?: (w: Written) => void} = {},
 	) {
 		this.#db = db;
 		this.#config = config;
-		this.#github = github;
+		this.#keys = keys;
 		this.#now = o.now ?? Date.now;
 		this.#wrote = o.wrote ?? (() => {});
 		db.tx(() => {
@@ -424,7 +384,7 @@ export class Door {
 	 */
 	address(origin: string, object: string): string {
 		const c = this.#config;
-		return `${c.kind === "github" && c.origin !== null ? c.origin : origin}/${object}`;
+		return `${c.kind === "shared" && c.origin !== null ? c.origin : origin}/${object}`;
 	}
 
 	members(): Members {
@@ -446,18 +406,15 @@ export class Door {
 		)[0];
 		if (row === undefined) return refuse(401, "no such session, or it has ended");
 		const person = String(row.person);
-		if (c.kind === "github") {
-			const id = githubIdOf(person);
-			if (id === null || !this.members().members.has(id))
-				return refuse(403, "not a member of this ledger");
-		}
+		if (c.kind === "shared" && !this.members().members.has(person))
+			return refuse(403, "not a member of this ledger");
 		if (row.kind === "agent") return letIn({kind: "agent", id: String(row.agent), for: person});
 		return letIn({kind: "user", id: person});
 	}
 
 	/** A fresh challenge for a login, good once and for `CHALLENGE_MS`. */
 	challenge(address: string): Let<{readonly text: string}> {
-		if (this.#config.kind !== "github") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
 		const now = this.#now();
 		const nonce = newToken("");
 		const text = challengeText({address, nonce, expires: now + CHALLENGE_MS});
@@ -531,62 +488,59 @@ export class Door {
 	}
 
 	/**
-	 * A login's id and the keys GitHub lists for it, asked again on each login once the copy here is
-	 * `keysCacheMs` old. In memory only: an object that wakes up asks again.
+	 * Who goes by `name`, as the keys service answers: their id and the keys that may sign for them,
+	 * or null for nobody. The service's id is checked here, as config's is: it ends up in every
+	 * writer and holder.
 	 */
-	async #fromGitHub(
-		login: string,
-	): Promise<{readonly user: GitHubUser | null; readonly keys: readonly string[]}> {
-		const ttl = this.#config.kind === "github" ? this.#config.keysCacheMs : 0;
-		const now = this.#now();
-		const kept = this.#keys.get(login);
-		if (kept !== undefined && now - kept.at < ttl) return kept;
-		const [user, keys] = await Promise.all([this.#github.user(login), this.#github.keys(login)]);
-		const fresh = {at: now, user, keys};
-		// Old copies go when the map grows: it never holds more than a few hundred logins.
-		if (this.#keys.size >= 256) this.#keys.clear();
-		this.#keys.set(login, fresh);
-		return fresh;
+	#ask(name: string): Promise<Let<Signers | null>> {
+		return this.#keys.runPromise(
+			Keys.use((k) => k.of(name)).pipe(
+				Effect.map(
+					(s): Let<Signers | null> =>
+						s === null || isPersonId(s.id)
+							? letIn(s)
+							: refuse(502, "the keys service gave an id that is no person's"),
+				),
+				Effect.catchTag("KeysUnreachable", (e) =>
+					Effect.succeed(refuse(502, `could not ask for the keys of ${name}: ${e.why}`)),
+				),
+			),
+		);
 	}
 
-	/** Which GitHub user `login` is, if `signature` over `text` is by a key GitHub lists for them. */
-	async #proven(login: unknown, text: string, signature: unknown): Promise<Let<GitHubUser>> {
-		if (!isLogin(login)) return refuse(400, "not a GitHub login");
+	/** Who goes by `name`, if `signature` over `text` is by a key the keys service lists for them. */
+	async #proven(name: unknown, text: string, signature: unknown): Promise<Let<Known>> {
+		if (!isName(name)) return refuse(400, "not a name");
 		if (typeof signature !== "string") return refuse(400, "no signature");
-		let user: GitHubUser | null;
-		let keys: readonly string[];
-		try {
-			({user, keys} = await this.#fromGitHub(login));
-		} catch (e) {
-			return refuse(502, `could not ask GitHub: ${e instanceof Error ? e.message : String(e)}`);
-		}
-		if (user === null) return refuse(401, "no such GitHub login");
-		if ((await verify(signature, text, NAMESPACE, keys)) === null)
-			return refuse(401, `not signed by a key GitHub lists for ${login}`);
-		return letIn(user);
+		const asked = await this.#ask(name);
+		if (!asked.ok) return asked;
+		if (asked.value === null) return refuse(401, `nobody goes by ${name}`);
+		if ((await verify(signature, text, NAMESPACE, asked.value.keys)) === null)
+			return refuse(401, `not signed by a key listed for ${name}`);
+		return letIn({id: asked.value.id, name});
 	}
 
-	/** A person's login: a challenge, signed with a key GitHub lists for them. */
+	/** A person's login: a challenge, signed with a key the keys service lists for them. */
 	async login(body: {
-		login?: unknown;
+		name?: unknown;
 		challenge?: unknown;
 		signature?: unknown;
 	}): Promise<Let<LoginAnswer>> {
-		if (this.#config.kind !== "github") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
 		const {founder, sessionMs} = this.#config;
 		const spent = this.#spend(body.challenge);
 		if (spent !== null) return spent;
-		const proven = await this.#proven(body.login, String(body.challenge), body.signature);
+		const proven = await this.#proven(body.name, String(body.challenge), body.signature);
 		if (!proven.ok) return proven;
-		const {id, login} = proven.value;
+		const {id, name} = proven.value;
 		const m = this.members();
-		const me = personOf(id);
+		const me: Person = {kind: "user", id};
 		if (!m.members.has(id)) {
-			if (!m.founded && id === founder) this.#fact(me, "founded", {id, login});
-			else if (m.invited.has(id)) this.#fact(me, "joined", {id, login});
-			else return refuse(403, `${login} is not invited to this ledger`);
+			if (!m.founded && id === founder) this.#fact(me, "founded", {id, name});
+			else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});
+			else return refuse(403, `${name} is not invited to this ledger`);
 		}
-		const a = this.#session("person", me.id, null, this.#now() + sessionMs);
+		const a = this.#session("person", id, null, this.#now() + sessionMs);
 		await this.#store(a, "person");
 		return letIn(a);
 	}
@@ -601,7 +555,7 @@ export class Door {
 		address: string,
 		body: {grant?: unknown; granted?: unknown; challenge?: unknown; signature?: unknown},
 	): Promise<Let<LoginAnswer>> {
-		if (this.#config.kind !== "github") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
 		const spent = this.#spend(body.challenge);
 		if (spent !== null) return spent;
 		const g = typeof body.grant === "string" ? grantOf(body.grant) : null;
@@ -618,7 +572,7 @@ export class Door {
 			(await verify(body.signature, String(body.challenge), NAMESPACE, [g.key])) === null
 		)
 			return refuse(401, "the challenge is not signed by the grant's key");
-		const person = personOf(proven.value.id).id;
+		const person = proven.value.id;
 		const live = this.#db.all(
 			"SELECT MAX(expires_at) AS until FROM door_sessions WHERE kind = 'person' AND person = ? AND expires_at > ?",
 			person,
@@ -631,37 +585,36 @@ export class Door {
 		return letIn(a);
 	}
 
-	/** A member invites a GitHub login. The invite keeps the numeric id GitHub has for it now. */
-	async invite(by: Stamp, login: unknown): Promise<Let<GitHubUser>> {
+	/**
+	 * A member invites a name. The invite keeps the id the keys service gives for it now, so the
+	 * person who joins is that one, whatever name they go by then.
+	 */
+	async invite(by: Stamp, name: unknown): Promise<Let<Known>> {
 		if (by.kind !== "user") return refuse(403, "only a person invites");
-		if (this.#config.kind !== "github") return refuse(404, "a local ledger has one person");
-		if (!isLogin(login)) return refuse(400, "not a GitHub login");
-		let user: GitHubUser | null;
-		try {
-			user = await this.#github.user(login);
-		} catch (e) {
-			return refuse(502, `could not ask GitHub: ${e instanceof Error ? e.message : String(e)}`);
-		}
-		if (user === null) return refuse(404, "no such GitHub login");
+		if (this.#config.kind !== "shared") return refuse(404, "a local ledger has one person");
+		if (!isName(name)) return refuse(400, "not a name");
+		const asked = await this.#ask(name);
+		if (!asked.ok) return asked;
+		if (asked.value === null) return refuse(404, `nobody goes by ${name}`);
+		const {id} = asked.value;
 		const m = this.members();
-		if (!m.members.has(user.id) && !m.invited.has(user.id)) this.#fact(by, "invited", {...user});
-		return letIn(user);
+		if (!m.members.has(id) && !m.invited.has(id)) this.#fact(by, "invited", {id, name});
+		return letIn({id, name});
 	}
 
-	/** A member takes a member, or an invite, off. The last member stays. */
-	remove(by: Stamp, person: unknown): Let<{readonly id: string}> {
+	/** A member takes a member, or an invite, off, by the person's id. The last member stays. */
+	remove(by: Stamp, id: unknown): Let<{readonly id: string}> {
 		if (by.kind !== "user") return refuse(403, "only a person removes");
-		if (this.#config.kind !== "github") return refuse(404, "a local ledger has one person");
-		const id = typeof person === "string" ? githubIdOf(person) : null;
-		if (id === null) return refuse(400, "not a person's id (github:<id>)");
+		if (this.#config.kind !== "shared") return refuse(404, "a local ledger has one person");
+		if (!isPersonId(id)) return refuse(400, "not a person's id");
 		const m = this.members();
 		if (!m.members.has(id) && !m.invited.has(id)) return refuse(404, "not a member or an invite");
 		if (m.members.has(id) && m.members.size === 1) return refuse(403, "the last member stays");
 		this.#db.tx(() => {
 			this.#fact(by, "removed", {id});
-			this.#db.all("DELETE FROM door_sessions WHERE person = ?", personOf(id).id);
+			this.#db.all("DELETE FROM door_sessions WHERE person = ?", id);
 		});
-		return letIn({id: personOf(id).id});
+		return letIn({id});
 	}
 
 	/** On a local ledger: the person mints a token for one of their agents. */
