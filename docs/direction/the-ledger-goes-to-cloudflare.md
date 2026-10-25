@@ -17,12 +17,44 @@ the one place a person's keys live: they remove an old key there, and every
 ledger follows at the next login. So the ledger reads the keys again at each
 login, and its sessions are short. See section 1.
 
-**Decided 2026-10-25: the laptop's own ledger stays the default.** A project
-keeps its work on the laptop until its person connects it to a shared ledger,
-the way a git repository has no remote until `git remote add`. Connecting is
-per project: one project can be shared while another stays on the laptop for
-solo hacking, and nothing needs a network or a login until a project is
-connected. See section 3.
+**Decided 2026-10-25: a project lives on one ledger server, never two, and
+the app opens several projects the way Obsidian opens vaults.**
+
+- **One project, one server.** By default a project's server runs on the
+  laptop: the same Durable Object code, in Miniflare. Or the project is on a
+  remote server on Cloudflare.
+- **Never a local copy beside a remote one.** Within a project, that mix is
+  where things go bad. Hosts that each hold their own full copy would be the
+  sync-engine model, a separate idea for later. One server is the easier take.
+- **Several projects, like vaults.** In Obsidian a vault is a folder with its
+  own settings, each vault opens in its own window, and a vault switcher moves
+  between them
+  ([Obsidian](https://obsidian.md/help/manage-vaults)). The same here: a solo
+  project on the laptop's server and a shared one on Cloudflare, each in its
+  own window, with its own desk.
+- This keeps [tea-host](./tea-host.md)'s rule, every host uses exactly one
+  ledger, if each open project gets its own host. Whether one host holds
+  several projects instead is open.
+
+*Changed the same day, twice.* First: a project is connected on its own, like
+`git remote add`, with the screen in a second, local ledger. Then: the whole
+app talks to one server. The owner settled on the lines above.
+
+**Decided 2026-10-25: a ledger server is the whole storage layer, made of many
+Durable Objects, used fully from the start.** One object per project holds the
+shared work. One object per person holds that person's layout, workspaces and
+settings, so two people's desks stay apart on one server. One per lane may
+come too. This replaces section 9's lean of one object first. Experiments 144,
+real Cloudflare measured from a laptop, and 145, the many-objects shape in
+Miniflare, are running to settle the details.
+
+**Decided 2026-10-25: the server is declared and deployed with Alchemy,** the
+same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
+Alchemy's latest version rather than phoenix's pinned one. Experiment 144
+deploys with it, and says how today's Durable Object ledger fits Alchemy's
+shape. The owner wants Alchemy as the one way to stand up any infrastructure,
+on the laptop too: local servers, Docker containers, and our own kinds through
+its custom resources. Experiment 146 tests that with small spikes.
 
 **Everything else below is proposed.** Nothing is built or deployed yet.
 
@@ -278,22 +310,23 @@ the door. `Author` stops being a choice: the host asks the door who it is.
 agent's, so a bug in the host could send an agent's text down the person's
 path. A law test that walks every way a write leaves the host would settle it.
 
-## 3. What syncs and what stays on each laptop
+## 3. What each object on the server holds
 
-**Decided the same day: a project's ledger is shared whole, with no list per
-program.** Once a project is connected, every client reads and writes that one
-ledger. Nothing syncs between clients; the doorbell only tells each client that
-something new landed. Every stream in the project's ledger goes with it, so a
-new program needs no line here. Only the person's own screen lives apart, in
-the app's own ledger, which is always on the laptop.
+**Decided the same day: every client reads and writes the one server, and a
+project's object is shared whole, with no list per program.** Nothing syncs
+between clients; the doorbell only tells each client that something new
+landed. Every stream in a project goes with it, so a new program needs no line
+here. A person's own screen lives in that person's object on the same server.
 
 ```ts
-// A sketch. Two ledgers per host, and no list of program prefixes.
-const project = connected ? layerHttp({url}) : layerSqliteSync({path: "<project>/ledger.sqlite"});
-const app = layerSqliteSync({path: "<home>/ledger.sqlite"}); // desk/, tsh/, host/: this person's screen
+// A sketch. One server per host, local or remote; many objects inside it.
+const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 
-// A program asks for the project's ledger and never learns where it is.
-// Only the desk, tsh and the host's kept programs are handed the app's.
+//   project/<id>      shared work: tickets, lanes, asks, agents' talk, members
+//   person/<id>       one person's desk, workspaces, tsh history, settings; open to that person only
+
+// A program is handed one object's ledger and never learns where it lives.
+// The desk, tsh and the host's kept programs are handed the person's object.
 ```
 
 | Kind of fact | Where | Why |
@@ -308,20 +341,22 @@ const app = layerSqliteSync({path: "<home>/ledger.sqlite"}); // desk/, tsh/, hos
 | Spend and limits per ticket | shared | A cap must hold across both people's agents. |
 | Members | shared | The door reads them on every call. |
 | CI jobs and results | shared | Any runner may claim a job. |
-| Desk layout, tiles, workspaces, focus | this laptop | It is one person's screen. It must come back with no network. |
-| Each tile's tsh jobs, history, scrollback | this laptop | Same. A tile's tsh runs on this host only. |
-| A half-written comment | this laptop | Not a fact until it is sent. |
+| Desk layout, tiles, workspaces, focus | the person's object | One person's screen. The other person never sees it. |
+| Each tile's tsh jobs, history | the person's object | Same. A tile's tsh runs on this host only. |
+| Scrollback | this laptop, not a fact | The terminal's own buffer. |
+| A half-written comment | this laptop, not a fact | Not a fact until it is sent. |
 | Who is online now | neither, for now | Live only, never a fact. Later, if needed. |
 
-- **The project's ledger is the whole project; the screen is the app's.**
-  Why: the desk must come back offline (the restore lane), and the second
-  person has no use for the owner's tiles. A program never has to say where
-  its rows go. Cost: one host talks to two ledgers, and the restore lane puts
-  the desk in the app's ledger, not the project's. **How sure: 80%.** The
-  doubt: a program that keeps one person's view inside a project, like a
-  filter, would need the app's ledger too. None does today.
-- **A stream lives wholly in one ledger.** So a claim, its fence and its
-  appends never cross, and a read never spans both: `pos` counts per ledger.
+- **A project's object is the whole project; a person's object is their
+  screen.** Why: one server keeps one truth, and the second person has no use
+  for the owner's tiles. A program never has to say where its rows go. Cost:
+  the desk needs the server to come back. On the laptop's own server that is
+  always there. On a remote one, an offline start is the open question:
+  experiment 145 tries a read copy of the person's object kept as a cache,
+  and says whether that is still one ledger. **How sure: 75%,** until 145
+  answers it.
+- **A stream lives wholly in one object.** So a claim, its fence and its
+  appends never cross, and a read never spans two: `pos` counts per object.
 
 ## 4. A ledger, and who belongs to it
 
