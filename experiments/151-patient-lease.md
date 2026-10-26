@@ -235,9 +235,10 @@ Every ledger write a lane or stage makes, sorted:
 
 ## The laws
 
-A second agent wrote the laws for this lane, and this lane did not change them (pull request
-112). Each law that today's code broke was kept as a
-known bug. The fix turned these red, and each moved to its laws list with its body unchanged:
+A second agent wrote the laws for this lane, and this lane did not change them
+([pull request 112](https://github.com/usirin/tea-fabrika/pull/112)). Each law that today's code
+broke was kept as a known bug. The fix turned these red, and each moved to its laws list with its
+body unchanged:
 
 | Law file | Moved |
 |---|---|
@@ -288,6 +289,12 @@ What the laws agent found, judged by the rule and not by the code:
   run and do not shrink, as the editor's laws do: no law's answer changes.
 - **A gap no law covers:** W8 checks that the write was sent, not that it waited for the renew,
   so a gate with no lease check passes it. Only G3 catches that plant.
+- **The gap, closed by W9** (G5 in `lane-writes.laws.test.ts`, written by a third agent from the
+  rule): while the lease has run out, or the alarm took its row, the gate sends nothing; once the
+  renew lands, the write goes out once. Each send is judged on the ledger's own row at that
+  moment, in a world where the lease really runs out. The code keeps it. Its plant (the gate takes
+  rule B for an outside write and sends on a run-out lease) is caught by W9 alone. W9 also
+  catches the no-lease-check plant and the run-out-is-lost plant.
 
 ```ts
 // W8's world (lane-writes.laws.test.ts, `runGate`, the "late" case), cut short: before each

@@ -24,6 +24,8 @@ import * as realGate from "./idempotency.ts";
 // temp folder, and the exact laws it breaks are checked below. Before lane 18 the code broke
 // three laws, kept as known bugs. The fix turned two red. The third, `gateWaitsForRenew`, kept
 // failing because its world never renewed the lease; its world was fixed, and all three moved.
+// It checks only that the write was sent, so `gateHoldsOnRunOut` came after: no send on a lease
+// that has run out, judged on the ledger's own row.
 
 type Service = Ledger["Service"];
 
@@ -275,11 +277,17 @@ interface GateWrite {
 /**
  * The lease check's world. `takeover`: another host claims the name this long past the lease's
  * end, just before the send. `late`: the lease looks run out, or its row is gone (the alarm ran),
- * until the host's renew comes back this long after; nobody claimed.
+ * until the host's renew comes back this long after; nobody claimed. `runOut`: the same on the
+ * ledger itself, with nothing hidden: just before the send the clock passes the lease's end (and,
+ * if `gone`, the alarm's removal of its row), and the renew comes back `back` ms after that.
  */
 type LeaseWorld =
 	| {readonly kind: "takeover"; readonly after: number}
-	| {readonly kind: "late"; readonly gone: boolean; readonly back: number};
+	| {readonly kind: "late"; readonly gone: boolean; readonly back: number}
+	| {readonly kind: "runOut"; readonly gone: boolean; readonly back: number};
+
+/** The in-memory ledger's alarm: it removes a run-out lease's row this long past its end. */
+const ALARM = 1000;
 
 const runGate = (
 	mod: Mod,
@@ -305,18 +313,20 @@ const runGate = (
 		};
 		let ledger = cut(l, net);
 		const sent: string[] = [];
+		/** For each send: was the ledger's own row this fence's, and not run out, at that moment? */
+		const liveAtSend: boolean[] = [];
 		let backAt = Number.POSITIVE_INFINITY;
 		const lw = o.lease;
-		if (lw?.kind === "late") {
+		if (lw?.kind === "late" || lw?.kind === "runOut") {
 			const seen = ledger;
 			// The host's renew comes back at `backAt` and lands on the real row, at the first lease
 			// read from then on. Rule B lets it: the newest fence renews past its lease's end, and
-			// after the alarm too (`lease_resumed`), while nobody claimed. This world first only
+			// after the alarm too (`lease_resumed`), while nobody claimed. The `late` world first only
 			// stopped hiding the row at `backAt` and never renewed it. With `back` past the 10 s ttl,
 			// the gate then read the claim's own row, run out or gone, and waited on for good. That
 			// was the world's mistake, not the gate's: the gate must wait for a live lease, since a
 			// comment on GitHub carries no fence, and on a lease past its end another host may claim
-			// at once and send it too.
+			// at once and send it too. The `runOut` world hides nothing.
 			let renewed = false;
 			const renewBack = Effect.suspend(() =>
 				renewed || Date.now() < backAt
@@ -334,27 +344,38 @@ const runGate = (
 				lease: (name) =>
 					Effect.andThen(
 						renewBack,
-						Effect.flatMap(seen.lease(name), (row) =>
-							Date.now() >= backAt || row === null
-								? Effect.succeed(row)
-								: Effect.succeed(lw.gone ? null : {...row, expires_at: Date.now() - 1}),
-						),
+						lw.kind === "runOut"
+							? seen.lease(name)
+							: Effect.flatMap(seen.lease(name), (row) =>
+									Date.now() >= backAt || row === null
+										? Effect.succeed(row)
+										: Effect.succeed(lw.gone ? null : {...row, expires_at: Date.now() - 1}),
+								),
 					),
 			};
 		}
+		/** What happens to the lease just before the send. */
+		const beforeSend = (lw: LeaseWorld): Effect.Effect<void> => {
+			const renewIn = (back: number) =>
+				Effect.sync(() => {
+					backAt = Date.now() + back;
+				});
+			switch (lw.kind) {
+				case "takeover":
+					return Effect.gen(function* () {
+						yield* Effect.sleep(ttl + lw.after);
+						const rev = (yield* Effect.orDie(l.readLast(NAME, 1)))[0]?.rev ?? 0;
+						yield* Effect.orDie(l.claim(NAME, "b", rev, ttl));
+					});
+				case "late":
+					return renewIn(lw.back);
+				case "runOut":
+					return Effect.andThen(Effect.sleep(ttl + (lw.gone ? 2 * ALARM : 1)), renewIn(lw.back));
+			}
+		};
 		const faults = mod.gate.Faults.of({
 			at: (point) =>
-				point.startsWith("before-send:") && lw !== undefined
-					? lw.kind === "takeover"
-						? Effect.gen(function* () {
-								yield* Effect.sleep(ttl + lw.after);
-								const rev = (yield* Effect.orDie(l.readLast(NAME, 1)))[0]?.rev ?? 0;
-								yield* Effect.orDie(l.claim(NAME, "b", rev, ttl));
-							})
-						: Effect.sync(() => {
-								backAt = Date.now() + lw.back;
-							})
-					: Effect.void,
+				point.startsWith("before-send:") && lw !== undefined ? beforeSend(lw) : Effect.void,
 		});
 		const write: realGate.Write<string> = {
 			op: "comment",
@@ -364,10 +385,13 @@ const runGate = (
 				Effect.succeed(sent.includes(key) ? Option.some(`found ${key}`) : Option.none()),
 			send: (key) =>
 				mod.gate.useKey(key).pipe(
-					Effect.map((text) => {
-						sent.push(text);
-						return `sent ${text}`;
-					}),
+					Effect.flatMap((text) =>
+						Effect.map(Effect.orDie(l.lease(NAME)), (row) => {
+							sent.push(text);
+							liveAtSend.push(row !== null && row.fence === c.fence && row.expires_at > Date.now());
+							return `sent ${text}`;
+						}),
+					),
 				),
 		};
 		const once = Effect.gen(function* () {
@@ -379,7 +403,7 @@ const runGate = (
 		);
 		const end = await drive(once, o.budget);
 		const rows = await Effect.runPromise(l.readStream(realGate.writesOf(NAME)));
-		return {end, sent, rows};
+		return {end, sent, liveAtSend, rows};
 	});
 
 const KEY = `${NAME}#comment:pr@abc`;
@@ -459,6 +483,39 @@ const gateWaitsForRenew: Law<{readonly gone: boolean; readonly back: number}> = 
 	},
 };
 
+/**
+ * G5. Rule B is for fenced writes only. A comment on GitHub carries no fence and cannot be refused
+ * later, and on a lease past its end another host may claim at any moment and send it too. So
+ * while the lease has run out, or the alarm took its row, the gate sends nothing. Once the renew
+ * lands, the waiting write goes out once. Each send is judged on the ledger's own row at that
+ * moment. G4 sees only that the write was sent, so a gate that sends at once on a run-out lease
+ * passed it (experiment 151 found the gap).
+ */
+const gateHoldsOnRunOut: Law<{readonly gone: boolean; readonly back: number}> = {
+	name: "while its lease has run out, the gate sends nothing; once it is renewed, the write goes out once",
+	// The spread covers the first minute, where most drops end; a wait near the grace's end is a
+	// fixed case. Spread over the whole grace, as G4's is, the plant test took 31 s, not 23 s.
+	worlds: fc.record({
+		gone: fc.boolean(),
+		back: fc.oneof(
+			fc.constantFrom(1, 2500, 60_000, GRACE - 3 * ALARM),
+			fc.integer({min: 1, max: 60_000}),
+		),
+	}),
+	check: async (mod, {gone, back}) => {
+		const budget = TTL + 2 * ALARM + back + BACK_WITHIN;
+		const {end, sent, liveAtSend} = await runGate(mod, {
+			lease: {kind: "runOut", gone, back},
+			budget,
+		});
+		const world = `the lease ${gone ? "row was gone" : "had run out"} until a renew ${back} ms on`;
+		if (liveAtSend.includes(false)) return `${world}, and the gate sent the write before the renew`;
+		return end?.ok && sent.length === 1
+			? null
+			: `${world}, and the write ${end === null ? "was never sent" : shownEnd(end, budget)}${sent.length > 1 ? `, sent ${sent.length} times` : ""}: wanted it sent once after the renew`;
+	},
+};
+
 // ---------------------------------------------------------------- the laws and the plants
 
 /** A law with its kind of world closed over: each law makes and checks its own. */
@@ -480,6 +537,8 @@ const LAWS: readonly Checked[] = [
 	checked(gateWaitsOut),
 	// A known bug until its world renewed the row at `backAt` (see `runGate`): the gate was right.
 	checked(gateWaitsForRenew),
+	// Added after lane 18, for the gap experiment 151 found. The gate keeps it.
+	checked(gateHoldsOnRunOut),
 ];
 const BUGS: readonly (readonly [Checked, RegExp])[] = [];
 
@@ -521,6 +580,13 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			'if (o.planted !== "no_lease_check" && !(yield* leaseHeld))',
 			"if (o.planted === undefined && false && !(yield* leaseHeld))",
 		),
+	// The lease check takes rule B for an outside write: with no newer fence it sends, on a lease
+	// past its end too. Added with `gateHoldsOnRunOut`, which alone catches it.
+	sendsOnRunOut: () =>
+		plantGate(
+			"if (lease !== null && lease.expires_at - Date.now() > marginMs) return true;",
+			"return true;",
+		),
 };
 
 describe("a lane's own writes for a short drop (lane 18, part 2)", () => {
@@ -559,8 +625,10 @@ describe("a lane's own writes for a short drop (lane 18, part 2)", () => {
 			sentIdPerTry: [factLandsOnce.name],
 			gateIdPerTry: [gateOnce.name],
 			otherFenceMissed: [gateOtherFence.name],
-			noLeaseCheck: [gateOtherFence.name],
-			runOutIsLost: [gateWaitsForRenew.name],
+			// G5 catches these two as well: one sends on a run-out lease, the other never sends.
+			noLeaseCheck: [gateOtherFence.name, gateHoldsOnRunOut.name],
+			runOutIsLost: [gateWaitsForRenew.name, gateHoldsOnRunOut.name],
+			sendsOnRunOut: [gateHoldsOnRunOut.name],
 		});
 	});
 });
