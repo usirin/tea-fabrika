@@ -11,6 +11,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: 2.0.0-beta.84
         version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(effect@4.0.6)(ws@8.22.0))(effect@4.0.6)
+      '@cloudflare/containers':
+        specifier: 0.3.7
+        version: 0.3.7
       '@cloudflare/workers-types':
         specifier: 5.20261025.1
         version: 5.20261025.1
@@ -125,6 +128,9 @@ packages:
         optional: true
       pg:
         optional: true
+
+  '@cloudflare/containers@0.3.7':
+    resolution: {integrity: sha512-DM9dm3FnIBSyiSJ1FLavKwl/lk3oAmTaynCzZQ9pZR0ncRPquSxkxd8Nu2MFILxmDDsPkxKsSNEh9mHHMty4Fw==}
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -1085,6 +1091,8 @@ snapshots:
     dependencies:
       alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(effect@4.0.6)(ws@8.22.0)
       effect: 4.0.6
+
+  '@cloudflare/containers@0.3.7': {}
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 

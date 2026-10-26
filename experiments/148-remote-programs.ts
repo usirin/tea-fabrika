@@ -8,6 +8,8 @@
 // The second is the live part (148-remote-programs/live.ts): the same stack on Cloudflare,
 // without the box, destroyed in a `finally`. `live-box small|full` is the live box round
 // (148-remote-programs/live-box.ts), the stack with its box, and the same `finally`.
+// `egress local|live` is the egress round (148-remote-programs/egress.ts): Cloudflare's own allow
+// list, on the laptop and on Cloudflare.
 //
 // It builds the Worker (148-remote-programs/build.ts), starts the stand-in model and the stack's
 // local stage, plays two people on the laptop (148-remote-programs/attach.ts), and writes
@@ -302,7 +304,13 @@ const main = async () => {
 	console.log(`wrote ${out}`);
 };
 
-if (process.argv[2] === "live" || process.argv[2] === "live-box") {
+const lives = {
+	live: "./148-remote-programs/live.ts",
+	"live-box": "./148-remote-programs/live-box.ts",
+	egress: "./148-remote-programs/egress.ts",
+};
+const part = lives[process.argv[2] as keyof typeof lives] as string | undefined;
+if (part !== undefined) {
 	// Alchemy reads the working folder once, as it loads (experiment 147), and would read a `.env`
 	// there: so first a fresh, empty temp folder, then Alchemy.
 	const work = mkdtempSync(join(tmpdir(), "tf-exp-148-"));
@@ -310,9 +318,5 @@ if (process.argv[2] === "live" || process.argv[2] === "live-box") {
 	process.env.ALCHEMY_HOME = join(work, "alchemy-home");
 	process.env.DO_NOT_TRACK = "1";
 	delete process.env.TYPESAFE_API_KEY;
-	await import(
-		process.argv[2] === "live"
-			? "./148-remote-programs/live.ts"
-			: "./148-remote-programs/live-box.ts"
-	);
+	await import(part);
 } else await main();

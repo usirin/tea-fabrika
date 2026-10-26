@@ -5,6 +5,7 @@
 	"description": "Experiment 148: fabrika programs as jobs on a project's host on Cloudflare, each on its starter's own key. Kept outside the workspace on purpose.",
 	"dependencies": {
 		"@alchemy.run/cloudflare": "2.0.0-beta.84",
+		"@cloudflare/containers": "0.3.7",
 		"@cloudflare/workers-types": "5.20261025.1",
 		"@effect/platform-node": "4.0.6",
 		"alchemy": "2.0.0-beta.84",

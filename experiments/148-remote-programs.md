@@ -24,7 +24,9 @@ Cloudflare on its starter's own subscription token. Confidence 80%.**
   process's environment and 769 MB of memory, and found no key, no sealing secret and no session.
 - **The decided design ran once: Claude Code 2.1.310, unmodified, in a box on Cloudflare, on its
   starter's own `CLAUDE_CODE_OAUTH_TOKEN`.** It answered "Hi there!" in 1.6 s (1.3 s of it the
-  API), the whole job 4.8 s. The box reached `api.anthropic.com` and nothing else. See Q6.
+  API), the whole job 4.8 s. The box reached `api.anthropic.com` and nothing else. See Q6. That
+  lock ends TLS in our own Worker, so it is not used with a real token again, and Cloudflare's
+  own allow list cannot lock HTTPS without ending TLS either (Q7).
 - **Facts carry the starter's stamp.** Every job's change lands on the project's ledger as
   `agent:host for:github:1`: 53 rows in the local run, 17 to 48 live.
 - **One rule, now seen live: a job's object stays awake while its box runs.** With the 5 s beat, a
@@ -89,7 +91,13 @@ CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node experiments/148-remote-p
 # the live box round: small (a first box, the asks) or full; with TF_CLAUDE_TOKEN, Claude Code too
 CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node experiments/148-remote-programs.ts live-box full
 #   then `live-box sweep`: list by the tf-exp-148 prefix and delete what is there
+# the egress round (Q7): Cloudflare's own allow list, on the laptop, then on Cloudflare
+env -u TYPESAFE_API_KEY nice -n 15 node experiments/148-remote-programs.ts egress local
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node experiments/148-remote-programs.ts egress live
 ```
+
+- The egress round's answers are in `results/148-remote-programs-egress-local.json`,
+  `-egress-live-1.json` (the first deploy, the library's boxes only) and `-egress-live.json`.
 
 - The live box round's answers are in `results/148-remote-programs-live-box.json` (full),
   `-live-box-2.json` (a second full run), `-live-box-token.json` (the real call) and
@@ -412,7 +420,10 @@ await this.box.interceptOutboundHttps("api.anthropic.com", ctx.exports.Anthropic
   way out is a name the JobBox catches. For HTTPS the catch ends TLS at Cloudflare, so the box
   trusts Cloudflare's certificate, and the request goes through our Worker on its way. The Worker
   passes it on as it came and reads nothing. Cloudflare has no allow list that passes TLS
-  through untouched. Its own `allowedHosts` uses the same catch.
+  through untouched. Its own `allowedHosts` uses the same catch (tested in Q7).
+- **This lock must not be used with a real token again.** Our Worker sees the request in clear,
+  the token included, even if it reads nothing. Anthropic's terms do not let a developer stand
+  between a person and their Claude sign-in. Q7 looked for a lock that opens nothing.
 - **The probe now finds the token, as it should.** The token is in the box by design. Where the
   probe found it is kept out of this public write-up and went to the owner.
 - **The output check.** Output that holds the token as it is gets withheld before it leaves the
@@ -423,6 +434,74 @@ await this.box.interceptOutboundHttps("api.anthropic.com", ctx.exports.Anthropic
 - **How sure: 75%.** It worked once. The doubts: one call is not a load, and the rules for a
   token inside a platform's box are read from Anthropic's docs, not confirmed by Anthropic.
 
+## Q7. Can Cloudflare's own allow list lock a box to api.anthropic.com without opening TLS?
+
+**Answer: no.** With `enableInternet = false`, `allowedHosts = ["api.anthropic.com"]` and
+`interceptHttps = false`, the box cannot reach `https://api.anthropic.com` at all. It is refused
+like every other host. The only way the allow list lets HTTPS out is with `interceptHttps = true`,
+and then Cloudflare ends TLS and hands the request to a Worker, which is the lock Q6 used.
+Confidence 90%.
+
+```ts
+// egress-worker.ts: the config asked about, with @cloudflare/containers 0.3.7 (the newest on npm).
+export class Locked extends Container {
+	enableInternet = false;
+	allowedHosts = ["api.anthropic.com"];
+	interceptHttps = false; // and no outbound handler
+}
+// What the library does with it (dist/lib/container.js), before start():
+//   ctx.container.interceptAllOutboundHttp(ContainerProxy)            port 80 only
+//   if (interceptHttps) ctx.container.interceptOutboundHttps("*", ContainerProxy)
+// ContainerProxy is a WorkerEntrypoint: it checks the request's host against allowedHosts
+// and answers 520 or does fetch(request). The platform's own start() takes only
+// enableInternet: boolean (workers-types 5.20261025.1). There is no list below the Worker.
+```
+
+- **The allow list is JavaScript in a Worker, not a network rule.** `allowedHosts` is read only by
+  the library's `ContainerProxy` entrypoint. It can only see what a catch hands it: plain HTTP,
+  or HTTPS after Cloudflare has ended TLS. With `interceptHttps` off, HTTPS is never caught, and
+  with `enableInternet` off nothing else lets it out.
+- **The newer API is the same idea.** The Sandbox SDK 1.0 migration page replaces these fields
+  with your own `Outbound` entrypoint behind `interceptAllOutboundHttp` and
+  `interceptOutboundHttps("*")`. It also ends TLS in a Worker.
+- **The library's own boxes never started on Cloudflare.** `Locked` and `Opened` each failed 9
+  tries over two deploys ("port connection closed", then 150 to 180 s timeouts). Locally they
+  ran. So the cloud column below comes from `Raw`: the same platform calls by hand, the
+  library's `ContainerProxy` with the props it would give. Setting the catches before or after
+  `start()` made no difference to `Raw`, so the order is not why. No cause found. One doubt is
+  ours: under Alchemy the library needs one shim (`withImage`, which adds the image at
+  `start()`), and that shim may be what fails live.
+- **No Cloudflare CA without the catch.** `/etc/cloudflare/certs/cloudflare-containers-ca.crt`
+  is not there with `interceptHttps` off, and is there with it on.
+
+What each try got, live on Cloudflare (`Raw`, second deploy; the library's boxes locally gave the
+same):
+
+| Try, from the box | allowedHosts, interceptHttps off | the same, interceptHttps on | open internet (control) |
+|---|---|---|---|
+| `https://api.anthropic.com/` | refused (timeout) | 404, cert by Cloudflare's intercept CA | 404, cert by Google Trust Services |
+| `https://example.com`, `https://www.google.com` | refused (timeout) | 520 from the Worker | 200 |
+| `http://example.com` | 520 from the Worker | 520 from the Worker | 200 |
+| TLS to 1.1.1.1:443, no name | refused (timeout) | refused (TLS alert) | cert by SSL.com |
+| TCP to 1.1.1.1:443 and :53 | refused (timeout) | 443 open, 53 timeout | open |
+| Anthropic's IP, name `example.com` | refused (timeout) | Cloudflare's intercept CA, for example.com | example.com's own cert |
+| Anthropic's IP, name `api.anthropic.com` | refused (timeout) | Cloudflare's intercept CA | Google Trust Services |
+| DNS for api.anthropic.com, example.com | resolved | resolved | resolved |
+| Cloudflare's CA file in the box | no | yes | no |
+
+- **Locally (workerd and Docker) the answers match**, with one difference: a raw TCP connect
+  succeeds locally (the catch's helper container accepts it) and is then reset, where on
+  Cloudflare it times out. A local "open" here does not mean bytes got out.
+- **Is there another Cloudflare way?** None was found in Containers. What would keep TLS whole
+  is a tunnel: the box sends its HTTPS through a local CONNECT proxy, over a caught WebSocket, to
+  a Worker that opens a TCP socket to `api.anthropic.com:443` and only moves bytes. Our code then
+  sees only encrypted bytes. This is a sketch, not tried, and whether moving those bytes counts
+  as standing between a person and their sign-in is a question for Anthropic's terms, not a run.
+  How sure that it can work: 60%; a spike would settle it.
+
+What it cannot tell us: one region, two deploys, reachability only. No token and no model call
+went through any box. Why the library's own boxes did not start live is open.
+
 ## What it costs
 
 - **Money, first live round:** under $0.01 for three live deploys of a few minutes each, no box,
@@ -431,6 +510,9 @@ await this.box.interceptOutboundHttps("api.anthropic.com", ctx.exports.Anthropic
   (at about $0.005 for 10 minutes of a box, under $0.01), Workers and Durable Objects
   negligible. One real Claude Code call on the owner's subscription, not billed by the call
   (Claude Code showed $0.0013). Registry storage for the seven leftover artifacts is not counted.
+- **Money, egress round (Q7):** under $0.02. Two deploys, the smallest box size, a few seconds a
+  box, and the library's boxes that never answered at most about an hour of the smallest size in
+  all. No model call. Two more platform artifacts are left in the registry (409, as in Q5).
 - **Code:** `worker.ts` holds the door, the four objects and the two entrypoints; the host itself
   (`host/session.ts`) has no platform name in it.
 
@@ -451,6 +533,9 @@ the leftover registry artifacts, and the open page that missed a job's end (Q4).
 - Cloudflare: [Durable Object container API](https://developers.cloudflare.com/containers/api/durable-object-container/),
   [Container class](https://developers.cloudflare.com/containers/api/container-class/),
   [outbound traffic](https://developers.cloudflare.com/containers/configuration/outbound-traffic/),
+  [outbound traffic, platform details](https://developers.cloudflare.com/containers/platform-details/outbound-traffic/),
+  [Sandbox SDK 1.0 outbound migration](https://developers.cloudflare.com/sandbox/sdk/migrate/outbound-traffic/),
+  [`@cloudflare/containers` 0.3.7](https://www.npmjs.com/package/@cloudflare/containers) (its `dist/lib/container.js`),
   [limits](https://developers.cloudflare.com/containers/platform/limits/),
   [pricing](https://developers.cloudflare.com/containers/platform/pricing/),
   [snapshots](https://developers.cloudflare.com/containers/guides/snapshots/),
@@ -491,3 +576,7 @@ the leftover registry artifacts, and the open page that missed a job's end (Q4).
 - **Many people, many jobs.** Two people and a handful of jobs. No load.
 - **The 14.4 s first attach.** One run in three. No cause found.
 - **The terms question** (Q3) is not a thing a run can answer.
+- **A lock to api.anthropic.com that opens no TLS.** Cloudflare's own allow list cannot do it
+  (Q7). The byte tunnel sketched there is not tried.
+- **Why `@cloudflare/containers`' own boxes did not start on Cloudflare** with an allow list set
+  (Q7). The same calls by hand worked.
