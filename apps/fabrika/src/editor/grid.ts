@@ -1,9 +1,11 @@
 // A terminal's grid, for tests: what a run of bytes leaves on the screen, and where the cursor is.
 // It knows only what the line editor writes (./screen.ts): text with a VT100's wrap at the last
-// column, CR, LF, cursor up and right, clear below, home and clear screen. Anything else is drawn
-// as the character it is, so a test sees it.
+// column, CR, LF, cursor up and right, clear to the end of the row, clear below, home and clear
+// screen. Anything else is drawn as the character it is, so a test sees it: a CSI sequence it does
+// not know is written out as `^[[` and the rest.
 //
 //   gridOf("tsh$ seq\r\x1b[5C", 80)    {rows: ["tsh$ seq"], cursor: {row: 0, col: 5}}
+//   gridOf("tsh$ seq\r\x1b[K", 80)     {rows: [""], cursor: {row: 0, col: 0}}
 
 export interface Grid {
 	/** Every row written, oldest first, with no trailing spaces. */
@@ -23,6 +25,19 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 		row += 1;
 		if (row >= rows.length) rows.push([]);
 	};
+	const put = (c: string) => {
+		if (waiting) {
+			down();
+			col = 0;
+			waiting = false;
+		}
+		const line = rows[row] ?? [];
+		while (line.length < col) line.push(" ");
+		line[col] = c;
+		rows[row] = line;
+		if (col === cols - 1) waiting = true;
+		else col += 1;
+	};
 	const chars = [...bytes];
 	for (let i = 0; i < chars.length; i += 1) {
 		const c = chars[i] ?? "";
@@ -39,6 +54,12 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) end += 1;
 			const n = Number(chars.slice(i + 2, end).join("") || "0");
 			const final = chars[end];
+			const known = ["A", "C", "H", "K", "J"].includes(final ?? "") && (final !== "K" || n === 0);
+			if (!known) {
+				for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) put(d);
+				i = end;
+				continue;
+			}
 			i = end;
 			waiting = false;
 			if (final === "A") row = Math.max(top(), row - Math.max(1, n));
@@ -46,25 +67,16 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 			else if (final === "H") {
 				row = top();
 				col = 0;
+			} else if (final === "K") {
+				// To the end of the row, the cursor where it was.
+				rows[row] = (rows[row] ?? []).slice(0, col);
 			} else if (final === "J" && n === 2) {
 				for (let r = top(); r < rows.length; r += 1) rows[r] = [];
 			} else if (final === "J") {
 				rows[row] = (rows[row] ?? []).slice(0, col);
 				rows.length = row + 1;
 			}
-		} else {
-			if (waiting) {
-				down();
-				col = 0;
-				waiting = false;
-			}
-			const line = rows[row] ?? [];
-			while (line.length < col) line.push(" ");
-			line[col] = c;
-			rows[row] = line;
-			if (col === cols - 1) waiting = true;
-			else col += 1;
-		}
+		} else put(c);
 	}
 	return {rows: rows.map((r) => r.join("").trimEnd()), cursor: {row, col}};
 }

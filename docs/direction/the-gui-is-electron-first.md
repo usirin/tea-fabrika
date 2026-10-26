@@ -561,6 +561,48 @@ Where they clash, the owner picks.
 - A Durable Object for each job, on a team's host. Before it: count how often
   jobs message each other in real runs, and time a call between two objects.
 
+### What the build found: the host apart (2026-10-25)
+
+The host now runs apart, and the app attaches to it. The answer first: quit
+the app with `counter` up in a tile, start it again, and the same desk comes
+back with `counter` still at 1. Nothing restarted. The ledger state and
+coming back after a host stop are the next lane.
+
+```text
+<home>/host/sock    the link: a Unix socket, 0600, in a 0700 folder; NDJSON, one message a line
+<home>/host/pid     the host's pid: how a test stops its own host
+<home>/host/log     what the host logs
+
+app   {"type":"hello","version":1}
+host  {"type":"hello","version":1}          up; on another version the app says so and stops there
+app   {"type":"page"}                       the host shows the page the keys, the desk and each tile
+page  {"type":"press","id":3,"key":"<c-b>"} on the desk's port: a key the desk takes
+host  {"type":"desk",...} then {"type":"answer","id":3,"took":true}
+```
+
+- **The host is the app's own binary, run as Node** (`ELECTRON_RUN_AS_NODE=1`
+  on `dist/host.mjs`), started detached and let go. No second runtime ships.
+  The doubt: a signed app may turn off that switch (Electron's `RunAsNode`
+  fuse). Then the host needs a Node of its own.
+- **The framing is NDJSON,** Effect's own `Ndjson`, every line read with an
+  Effect Schema at both ends. tmux sends binary records; NDJSON was picked
+  for being readable in a log and already in Effect.
+- **The handshake is a small tea machine** (`apps/fabrika/src/link.ts`). The
+  host always answers with its own version, so an app of another version can
+  say which one it met. Neither side stops the other.
+- **The desk runs in the host,** the same machine as before, unchanged. The
+  page draws it. Two windows on one host draw the same desk.
+- **The page holds keys while a press is out,** in order, with no timer
+  (`apps/fabrika/src/desk/hold.ts`). With every desk the host says which keys
+  it takes now, so a key it does not take is never held.
+- **Quitting hung at first.** The scope now closes in the same turn as
+  `before-quit`, and a quit asked inside that event is undone when its
+  `preventDefault` returns. The quit is now asked on the next turn.
+- **Not done, and open:** a link that drops while the app runs is not tried
+  again (tmux's client exits; Tuval tried again: the owner picks). Two apps
+  starting at once can race to start a host; tmux takes a lock file. The
+  link's version counts message shapes, not what they mean.
+
 ## What would change it
 
 - A need to run fabrika on a machine with no screen, such as a remote server.

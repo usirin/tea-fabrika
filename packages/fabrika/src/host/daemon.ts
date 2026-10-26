@@ -4,18 +4,31 @@
 // would leave workerd serving (experiment 93).
 //
 // Env: PERSIST (the data folder), PORT (the direct socket's port), GRACE_MS (the expiry grace),
-// MAX_DELIVERIES (crashes in a row before a message is set aside; "off": never).
+// MAX_DELIVERIES (crashes in a row before a message is set aside; "off": never), DOOR_PERSON and
+// DOOR_SECRET (the local door: who the one person is, and the secret that proves it). With no
+// secret, the door is closed.
 // Prints one JSON line when ready, `{ready: origin, ms, pid}`. Stops on SIGTERM, and when the process that
 // started it is gone.
 //
 // Node at the edge, all of it: a process that `local.ts` signals, around Miniflare, a Node library.
+import {Redacted} from "effect";
 import {Miniflare} from "miniflare";
 import {ledgerOptions} from "./worker-options.ts";
 
 const t0 = performance.now();
+const secret = process.env.DOOR_SECRET;
 const mf = new Miniflare(
 	ledgerOptions({
 		persist: process.env.PERSIST ?? false,
+		...(secret === undefined || secret === ""
+			? {}
+			: {
+					door: {
+						kind: "local" as const,
+						person: process.env.DOOR_PERSON ?? "owner",
+						secret: Redacted.make(secret),
+					},
+				}),
 		graceMs: Number(process.env.GRACE_MS ?? "1000"),
 		...(process.env.MAX_DELIVERIES === undefined
 			? {}

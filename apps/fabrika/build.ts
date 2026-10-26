@@ -4,9 +4,10 @@ import {runMain} from "@effect/platform-node/NodeRuntime";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import {type BuildOptions, build} from "esbuild";
 
-// Build the app into dist/, with esbuild: three bundles and the page's plain files.
+// Build the app into dist/, with esbuild: four bundles and the page's plain files.
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
+//   dist/host.mjs      the host process: ESM for the same Node, run by Electron's binary as Node
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
@@ -19,6 +20,10 @@ import {type BuildOptions, build} from "esbuild";
 // `pnpm --filter @kampus/fabrika-app build`, or `start`, which builds and opens the app.
 
 const here = import.meta.dirname;
+
+/** Some of what the bundles hold is CommonJS and calls `require`; ESM has none of its own. */
+const REQUIRE =
+	'import {createRequire} from "node:module"; const require = createRequire(import.meta.url);';
 
 const bundle = (options: BuildOptions) =>
 	Effect.tryPromise({
@@ -40,10 +45,16 @@ const program = Effect.gen(function* () {
 				format: "esm",
 				target: "node24",
 				external: ["electron"],
-				// Some of what the host bundles is CommonJS and calls `require`; ESM has none of its own.
-				banner: {
-					js: 'import {createRequire} from "node:module"; const require = createRequire(import.meta.url);',
-				},
+				banner: {js: REQUIRE},
+			}),
+			bundle({
+				entryPoints: [at("src/host/main.ts")],
+				outfile: at("dist/host.mjs"),
+				platform: "node",
+				format: "esm",
+				target: "node24",
+				// Run as plain Node: nothing of Electron is there to be imported.
+				banner: {js: REQUIRE},
 			}),
 			bundle({
 				entryPoints: [at("src/preload.ts")],

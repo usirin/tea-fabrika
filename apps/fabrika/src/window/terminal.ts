@@ -7,7 +7,7 @@ import {readToTerminal} from "../messages.ts";
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
 // and draws the bytes it is sent, as a terminal emulator does with a pty. The line editor and tsh
-// are in the main process (host.ts, one per tile).
+// are in the host process (tsh.ts, one per tile).
 //
 //   const term = terminalFor(ghostty, "t1");
 //   term.attach(slot);      // drawn in the tile's slot; moved, not made again, as the layout changes

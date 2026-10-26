@@ -11,6 +11,12 @@
 // `layerLocal` gives both the `Ledger` and `LocalLedger`, the handle on the child: its URL, its
 // restarts, and `crash` (SIGKILL the group, start again), which the fault tests use.
 //
+// The local door (`door.ts`): one person, from `person` (default "owner"), proven by a secret.
+// The secret is made once and kept in the data folder, `door-secret`, readable by this user only:
+// whoever can read that folder can read the ledger's own files too, so it guards no less than the
+// data does. Another process on this machine joins with `layerAttach`, which reads the same file.
+// With `persist` in memory, the secret is too, and only this process holds it.
+//
 // Node at the edge: `process.execPath` to start the child, a free port from `node:net`, and `ps`
 // for the group's memory. The child itself is started and signalled through Effect's ChildProcess.
 import {createServer} from "node:net";
@@ -21,7 +27,10 @@ import {
 	Duration,
 	Effect,
 	Exit,
+	FileSystem,
 	Layer,
+	Path,
+	Redacted,
 	Ref,
 	Schedule,
 	Schema,
@@ -31,6 +40,7 @@ import {
 } from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
 import {beside} from "./beside.ts";
+import {newToken} from "./door.ts";
 import {layerHttp} from "./http.ts";
 
 export class LocalError extends Schema.TaggedError<LocalError>()("LocalError", {
@@ -52,13 +62,35 @@ export interface LocalOptions {
 	/** How often the memory is read. Default 2 s. */
 	readonly checkEvery?: Duration.Duration;
 	readonly maxSockets?: number;
+	/** Who the one person on this laptop's ledger is: their writer is `user:<person>`. Default "owner". */
+	readonly person?: string;
 }
+
+const SECRET_FILE = "door-secret";
+
+/** The local door's secret: kept in the data folder (made once, this user only), or in memory. */
+const secretOf = (persist: string | false) =>
+	Effect.gen(function* () {
+		if (persist === false) return Redacted.make(newToken("fabrika_l_"));
+		const fs = yield* FileSystem.FileSystem;
+		const path = (yield* Path.Path).join(persist, SECRET_FILE);
+		if (!(yield* fs.exists(path))) {
+			yield* fs.makeDirectory(persist, {recursive: true});
+			// `wx`: two starters at once, and one of them writes it; the other reads what it wrote.
+			yield* fs
+				.writeFileString(path, newToken("fabrika_l_"), {flag: "wx", mode: 0o600})
+				.pipe(Effect.ignore);
+		}
+		return Redacted.make((yield* fs.readFileString(path)).trim());
+	}).pipe(Effect.mapError((e) => new LocalError({message: `the door's secret: ${String(e)}`})));
 
 export class LocalLedger extends Context.Service<
 	LocalLedger,
 	{
 		readonly url: string;
 		readonly port: number;
+		/** The local door's secret: what lets this process in as the person. */
+		readonly token: Redacted.Redacted<string>;
 		/** The child's pid, which is its process group's id. */
 		readonly pid: Effect.Effect<number>;
 		/** Restarts so far: crashes and memory-cap restarts. */
@@ -75,18 +107,24 @@ export class LocalLedger extends Context.Service<
 const DAEMON = beside(import.meta.url, "daemon");
 
 /**
- * Miniflare is an optional peer of the package, and only the child imports it. Without this check
- * its absence would surface 30 s later as the child's stack trace; with it, as one line, at once.
+ * Miniflare and esbuild (which bundles the ledger's Worker) are optional peers of the package, and
+ * only the child loads them. Without this check their absence would surface 30 s later as the
+ * child's stack trace; with it, as one line, at once.
  */
-const miniflareInstalled = Effect.try({
-	// Resolved from here, the folder the child starts from, so it finds what the child would.
-	try: () => import.meta.resolve("miniflare"),
-	catch: () =>
-		new LocalError({
-			message:
-				"@kampus/fabrika/local runs the ledger in Miniflare, which is not installed: install miniflare (npm install miniflare)",
+const miniflareInstalled = Effect.forEach(
+	["miniflare", "esbuild"],
+	(peer) =>
+		Effect.try({
+			// Resolved from here, the folder the child starts from, so it finds what the child would.
+			try: () => import.meta.resolve(peer),
+			catch: () =>
+				new LocalError({
+					message: `@kampus/fabrika/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
+				}),
 		}),
-});
+	// One after the other: the first one missing is the one named.
+	{concurrency: 1},
+);
 
 /** A free TCP port on 127.0.0.1. Node at the edge: Effect has no "pick me a port". */
 const freePort = Effect.callback<number, LocalError>((resume) => {
@@ -125,6 +163,7 @@ export const startLocal = (o: LocalOptions) =>
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 		const port = o.port ?? (yield* freePort);
 		const url = `http://127.0.0.1:${port}`;
+		const token = yield* secretOf(o.persist);
 		const restarts = yield* Ref.make(0);
 		const lock = yield* Semaphore.make(1);
 
@@ -137,6 +176,8 @@ export const startLocal = (o: LocalOptions) =>
 						PERSIST: o.persist,
 						PORT: String(port),
 						GRACE_MS: String(o.graceMs ?? 1000),
+						DOOR_PERSON: o.person ?? "owner",
+						DOOR_SECRET: Redacted.value(token),
 						...(o.maxDeliveries === undefined
 							? {}
 							: {
@@ -230,6 +271,7 @@ export const startLocal = (o: LocalOptions) =>
 		return LocalLedger.of({
 			url,
 			port,
+			token,
 			pid: Ref.get(child).pipe(Effect.map((c) => c.pid)),
 			restarts: Ref.get(restarts),
 			memoryMb,
@@ -247,9 +289,44 @@ export const layerLocal = (o: LocalOptions) => {
 			return layerHttp({
 				url: l.url,
 				ledger: o.ledger,
+				token: l.token,
 				...(o.maxSockets === undefined ? {} : {maxSockets: o.maxSockets}),
 			});
 		}),
 	);
 	return ledger.pipe(Layer.provideMerge(local));
 };
+
+export interface AttachOptions {
+	/** The data folder the ledger was started on: its door's secret is there. */
+	readonly persist: string;
+	readonly ledger: string;
+	/** The ledger's direct socket. */
+	readonly port: number;
+	readonly maxSockets?: number;
+}
+
+/**
+ * The `Ledger` of a local ledger another process started on this machine (`layerLocal` with a
+ * `persist` folder), as its one person: the door's secret is read from that folder.
+ */
+export const layerAttach = (o: AttachOptions) =>
+	Layer.unwrap(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const path = (yield* Path.Path).join(o.persist, SECRET_FILE);
+			const secret = yield* fs
+				.readFileString(path)
+				.pipe(
+					Effect.mapError(
+						() => new LocalError({message: `no ledger was started on ${o.persist}: no ${path}`}),
+					),
+				);
+			return layerHttp({
+				url: `http://127.0.0.1:${o.port}`,
+				ledger: o.ledger,
+				token: Redacted.make(secret.trim()),
+				...(o.maxSockets === undefined ? {} : {maxSockets: o.maxSockets}),
+			});
+		}),
+	).pipe(Layer.provide(NodeServices.layer));

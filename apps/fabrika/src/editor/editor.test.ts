@@ -3,8 +3,9 @@ import {listed, Shell} from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
 import {Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {type EditorMsg, editor} from "./editor.ts";
+import {type Editor, type EditorMsg, editor} from "./editor.ts";
 import {gridOf} from "./grid.ts";
+import {back, cells, draw, PROMPT} from "./screen.ts";
 
 // The line editor, folded with `replay` and read back off a terminal's grid (grid.ts): what a
 // person would see, and where the cursor is, never the bytes by eye.
@@ -327,6 +328,115 @@ describe("a line longer than the terminal is wide", () => {
 				cols: 10,
 			}),
 		).toEqual(["tsh$ say a", "bcdefghij", "abcdefghij", "tsh$ |"]);
+	});
+});
+
+describe("a redraw of a line that fits its row", () => {
+	/** The bytes the last message wrote, and the run before and after it. */
+	const last = (
+		msgs: readonly EditorMsg[],
+		opts: {history?: readonly string[]; cols?: number} = {},
+	) => {
+		const before = run(msgs.slice(0, -1), opts);
+		const after = run(msgs, opts);
+		return {before, after, wrote: after.bytes.slice(before.bytes.length)};
+	};
+
+	/** The prompt line a state shows, and where its cursor is, as the editor works it out. */
+	const lineOf = (state: Editor, history: readonly string[]) => {
+		const {mode} = state;
+		if (mode.kind === "prompt") {
+			const left = PROMPT + mode.line.left;
+			return {text: left + mode.line.right, at: cells(left)};
+		}
+		if (mode.kind === "search") {
+			const text = Shell.Search.shown([...history].reverse(), mode.search);
+			return {text, at: cells(text)};
+		}
+		throw new Error(`no prompt line in ${mode.kind}`);
+	};
+
+	/**
+	 * The screen after the last message, and the screen the old full redraw would leave in its
+	 * place: back to the prompt's first cell, clear to the end of the screen, the line again.
+	 */
+	const both = (
+		msgs: readonly EditorMsg[],
+		opts: {history?: readonly string[]; cols?: number} = {},
+	) => {
+		const cols = opts.cols ?? 80;
+		const {before, after, wrote} = last(msgs, opts);
+		const was = lineOf(before.state, opts.history ?? []);
+		const now = lineOf(after.state, opts.history ?? []);
+		const full = back(was.at, cols) + draw(now.text, now.at, cols);
+		const grid = (bytes: string) => {
+			const {rows, cursor} = gridOf(bytes, cols);
+			return {rows, cursor};
+		};
+		return {wrote, now: grid(after.bytes), old: grid(before.bytes + full)};
+	};
+
+	const history = ["seq --to 3", "say hi", "counter"];
+
+	it("clears that row only, never to the end of the screen", () => {
+		const {wrote} = last([keys("seq --to 3"), keys("\x7f")]);
+		expect(wrote).toContain("\x1b[K");
+		expect(wrote).not.toContain("\x1b[J");
+		expect(seen([keys("seq --to 3"), keys("\x7f")])).toEqual(["tsh$ seq --to |"]);
+	});
+
+	it("leaves the screen the old full redraw left, for hand-picked edits", () => {
+		const cases: readonly {msgs: readonly EditorMsg[]; history?: readonly string[]}[] = [
+			// A letter, a Backspace and a Delete with the cursor in the middle of the line.
+			{msgs: [keys("seq --to 3\x02\x02"), keys("x")]},
+			{msgs: [keys("seq --to 3\x02\x02"), keys("\x7f")]},
+			{msgs: [keys("seq --to 3\x01"), keys("\x1b[3~")]},
+			// Ctrl-U and Ctrl-W, at the end and in the middle; Ctrl-U down to the prompt alone.
+			{msgs: [keys("seq --to 3\x02\x02"), keys("\x15")]},
+			{msgs: [keys("seq --to 3"), keys("\x15")]},
+			{msgs: [keys("seq --to 3"), keys("\x17")]},
+			{msgs: [keys("say hi there\x1bb"), keys("\x17")]},
+			// The history: Up to a longer line, and Down back to a shorter one.
+			{msgs: [keys("x"), keys("\x1b[A")], history},
+			{msgs: [keys("\x1b[A\x1b[A"), keys("\x1b[B")], history},
+			// Into a Ctrl-R search, and a letter in it.
+			{msgs: [keys("dou"), keys("\x12")], history},
+			{msgs: [keys("\x12sa"), keys("y")], history},
+			// With text from tsh, and a Tab's list, above the prompt.
+			{msgs: [keys("seq"), {type: "printed", text: "one\ntwo"}, keys("\x7f")]},
+			{msgs: [keys("s\t\t"), keys("a")]},
+		];
+		for (const {msgs, history = []} of cases) {
+			const {wrote, now, old} = both(msgs, {history});
+			expect(wrote).not.toContain("\x1b[J");
+			expect(now).toEqual(old);
+		}
+	});
+
+	it("draws a line that grows onto a second row whole, and one that shrinks back to one row", () => {
+		expect(last([keys("say "), keys("a")], {cols: 10}).wrote).toContain("\x1b[J");
+		expect(seen([keys("say "), keys("a")], {cols: 10})).toEqual(["tsh$ say a", "|"]);
+		expect(last([keys("say abcdefghij"), keys("k")], {cols: 10}).wrote).toContain("\x1b[J");
+		expect(last([keys("say a"), keys("\x7f")], {cols: 10}).wrote).toContain("\x1b[J");
+		expect(seen([keys("say a"), keys("\x7f")], {cols: 10})).toEqual(["tsh$ say |"]);
+		expect(last([keys("say abcdefghij"), keys("\x15")], {cols: 10}).wrote).toContain("\x1b[J");
+		expect(seen([keys("say abcdefghij"), keys("\x15")], {cols: 10})).toEqual(["tsh$ |"]);
+	});
+
+	it("draws a line with a wide character whole, as a terminal may wrap it where the editor does not", () => {
+		expect(last([keys("say 漢字"), keys("x")]).wrote).toContain("\x1b[J");
+		expect(last([keys("say 😀"), keys("x")]).wrote).toContain("\x1b[J");
+		// Accents and other narrow letters past ASCII stay on the one-row path.
+		expect(last([keys("say çok güzel"), keys("x")]).wrote).not.toContain("\x1b[J");
+	});
+
+	it("draws the line whole once after the width changes, then one row again", () => {
+		const msgs: EditorMsg[] = [keys("say hi"), {type: "size", cols: 40}, keys("x")];
+		expect(last(msgs).wrote).toContain("\x1b[J");
+		expect(last([...msgs, keys("y")]).wrote).not.toContain("\x1b[J");
+		// A size message with the same width changes nothing.
+		const same: EditorMsg[] = [keys("say hi"), {type: "size", cols: 80}, keys("x")];
+		expect(last(same).wrote).not.toContain("\x1b[J");
 	});
 });
 

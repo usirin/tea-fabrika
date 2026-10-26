@@ -1,0 +1,36 @@
+diff -ruN a/apps/fabrika/src/window/terminal.ts b/apps/fabrika/src/window/terminal.ts
+--- a/apps/fabrika/src/window/terminal.ts
++++ b/apps/fabrika/src/window/terminal.ts
+@@ -129,6 +129,19 @@
+ 			{timeout: 250},
+ 		);
+ 	};
++	/**
++	 * Experiment 143: local echo, as mosh predicts it. One printable character typed with the
++	 * cursor at the end of tsh's prompt line is drawn at once, before tsh answers. tsh's own redraw
++	 * of the line comes after, and writes the same cells over it. Anywhere else, nothing is guessed.
++	 */
++	const echoes = (data: string) => {
++		if (data.length !== 1 || data < " " || data > "~") return false;
++		const buffer = term.buffer.active;
++		const x = buffer.cursorX;
++		const row =
++			buffer.getLine(buffer.length - term.rows + buffer.cursorY)?.translateToString(true) ?? "";
++		return row.startsWith("tsh$") && x >= row.length && x < term.cols - 1;
++	};
+ 	const size = (cols: number, rows: number) =>
+ 		window.fabrika.send(port, {type: "size", cols: cells(cols), rows: cells(rows)});
+ 
+@@ -160,6 +173,12 @@
+ 				if (timed(port)) probe("data", data);
+ 				window.fabrika.send(port, {type: "keys", data});
+ 				if (timed(port)) probe("sent");
++				if (!echoes(data)) return;
++				if (timed(port)) {
++					waiting = true;
++					probe("local");
++				}
++				term.write(data);
+ 			});
+ 			term.onResize(({cols, rows}) => size(cols, rows));
+ 			size(term.cols, term.rows);
