@@ -1,0 +1,2143 @@
+{
+ "experiment": 150,
+ "commit": "2a7f305e677b22459423f84e60c2fbd54b5f3e94",
+ "keys": 250,
+ "check": {
+  "copy": "raw",
+  "checks": [
+   {
+    "what": "the desk starts on the door's page",
+    "ok": true
+   },
+   {
+    "what": "t1's tsh answers",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B | then Ctrl-B -: three tiles, each at its own prompt",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B h and Ctrl-B l move focus",
+    "ok": true
+   },
+   {
+    "what": "a click focuses a tile",
+    "ok": true
+   },
+   {
+    "what": "counter covers t3, at 0",
+    "ok": true
+   },
+   {
+    "what": "t1 is as it was",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-C over counter goes to t3's tsh: counter stops, the prompt is back",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B x asks on a tile with nothing running too, and n keeps it",
+    "ok": true
+   },
+   {
+    "what": "y closes a tile with nothing running at once",
+    "ok": true
+   },
+   {
+    "what": "tracker & opens no tile: a job in the background, and t2's prompt is back",
+    "ok": true
+   },
+   {
+    "what": "attach %1 brings the tracker in, covering t2, as fg does",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B z zooms t2",
+    "ok": true
+   },
+   {
+    "what": "y on a busy tile: it shows closing, and waits, as sleep does not end on its inputs' end",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B x on a closing tile asks to stop now, and n keeps it closing",
+    "ok": true
+   },
+   {
+    "what": "y stops t1, and the tracker in t2 runs on",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B twice sends one Ctrl-B on: the cursor went back one",
+    "ok": true
+   },
+   {
+    "what": "a line typed in one tile is in another's Up",
+    "ok": true
+   },
+   {
+    "what": "the page has send, onMessage and forget only, and no Node",
+    "ok": true
+   },
+   {
+    "what": "messages not of the protocol tell tsh nothing",
+    "ok": true
+   },
+   {
+    "what": "the link is still up after the refused messages: counter runs in the new tile",
+    "ok": true
+   },
+   {
+    "what": "a reload draws the same desk: counter at 1 and the tracker, nothing restarted",
+    "ok": true
+   },
+   {
+    "what": "a second tab shows the same desk, and a click in it shows in the first",
+    "ok": true
+   },
+   {
+    "what": "the tab closed and opened again: the same desk, counter at 2 and the tracker run on",
+    "ok": true
+   },
+   {
+    "what": "y on t2: the tracker gets the end of its inputs, ends, and t2 goes",
+    "ok": true
+   },
+   {
+    "what": "the browser quit, and the host runs on",
+    "ok": true
+   },
+   {
+    "what": "the tile left with counter has its jobs in its own folder, and no closed tile has",
+    "ok": true
+   },
+   {
+    "what": "the host kept the desk in the home",
+    "ok": true
+   },
+   {
+    "what": "the host kept the history in the home",
+    "ok": true
+   },
+   {
+    "what": "a new browser: the same desk, with counter still up at 2",
+    "ok": true
+   },
+   {
+    "what": "done: counter ends, the tsh that ran it all along prints 2",
+    "ok": true
+   },
+   {
+    "what": "Ctrl-B | splits, through the host",
+    "ok": true
+   },
+   {
+    "what": "closing the last tile: the tab loads again, on one fresh tile with a fresh tsh",
+    "ok": true
+   },
+   {
+    "what": "a host of another version: the page does not attach, and says both versions",
+    "ok": true
+   },
+   {
+    "what": "the host of another version still runs: nothing stopped it",
+    "ok": true
+   },
+   {
+    "what": "nothing of this run left: no host, no door",
+    "ok": true
+   }
+  ],
+  "skipped": [
+   {
+    "step": "a second copy quits, and the first keeps its one window",
+    "why": "one copy is Electron's single-instance lock. A tab has none: a second tab is a second client of the same host, checked instead"
+   },
+   {
+    "step": "the page cannot navigate away",
+    "why": "main.ts refuses navigation for its window. A browser tab may always navigate; the bridge goes with the page, and nothing is left attached"
+   },
+   {
+    "step": "window.open is refused",
+    "why": "Electron's window-open handler. In a browser the page's own code could open a tab; only the page's CSP and the browser's popup rules hold it"
+   },
+   {
+    "step": "the dock icon (`activate`) and macOS's window rules",
+    "why": "there is no app and no dock: closing the tab and opening the url again stands in for them"
+   }
+  ]
+ },
+ "safety": [
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "same-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://127.0.0.1:<port>)"
+   ]
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour",
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error in connection establishment: net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: The request client is not a secure context and the resource is in more-pri"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error in connection establishment: net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS",
+    "Access to fetch at 'http://rebind.test:<port>/desk.html' from origin 'http://rebind.test:<port>' has been blocked by CORS policy: The request client is not a secure context and the resource is in more"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "host,origin,cookie",
+   "refusals": 8
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "same-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error in connection establishment: net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: The request client is not a secure context and the resource is in more-pri"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error in connection establishment: net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS",
+    "Access to fetch at 'http://rebind.test:<port>/desk.html' from origin 'http://rebind.test:<port>' has been blocked by CORS policy: The request client is not a secure context and the resource is in more"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": []
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 200 OK"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "as shipped",
+   "guards": "none",
+   "refusals": 1
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "same-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://127.0.0.1:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour",
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Host header (rebind.test:<port>)",
+    "refused: a foreign Host header (rebind.test:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin,cookie",
+   "refusals": 12
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "same-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://127.0.0.1:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour",
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 200 OK"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin,cookie",
+   "refusals": 10
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "same-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour",
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Host header (rebind.test:<port>)",
+    "refused: a foreign Host header (rebind.test:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,cookie",
+   "refusals": 10
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "same-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://127.0.0.1:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "cross-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://localhost:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://attacker.example)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Host header (rebind.test:<port>)",
+    "refused: a foreign Host header (rebind.test:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host,origin",
+   "refusals": 9
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "same-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour",
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: no session cookie",
+    "refused: no session cookie"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 200 OK"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "cookie",
+   "refusals": 8
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "same-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://127.0.0.1:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "cross-site page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://localhost:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "public page",
+   "heard": [
+    "WebSocket connection to 'ws://127.0.0.1:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403",
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": "blocked",
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://attacker.example)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 200,
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Origin (http://rebind.test:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 200 OK"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "origin",
+   "refusals": 6
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "same-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "public page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "DNS rebinding",
+   "heard": [
+    "WebSocket connection to 'ws://rebind.test:<port>/link' failed: Error during WebSocket handshake: Unexpected response code: 403"
+   ],
+   "open": false,
+   "read": false,
+   "typed": false,
+   "fetch": 403,
+   "closed": 1006,
+   "said": [
+    "refused: a foreign Host header (rebind.test:<port>)",
+    "refused: a foreign Host header (rebind.test:<port>)"
+   ]
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "host",
+   "refusals": 5
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "same-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://127.0.0.1:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "cross-site page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://localhost:<port>' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "public page",
+   "heard": [
+    "Access to fetch at 'http://127.0.0.1:<port>/desk.html' from origin 'http://attacker.example' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resour"
+   ],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": "blocked",
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "DNS rebinding",
+   "heard": [],
+   "open": true,
+   "read": true,
+   "typed": true,
+   "fetch": 200,
+   "closed": null,
+   "said": []
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "program, no cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "program, the cookie",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "program, foreign Host",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "program, no Origin",
+   "status": "HTTP/1.1 101 Switching Protocols"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "files, foreign Host",
+   "status": "HTTP/1.1 200 OK"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "attacker": "a wrong token",
+   "status": "HTTP/1.1 403 Forbidden"
+  },
+  {
+   "browser": "LNA off",
+   "guards": "none",
+   "refusals": 1
+  }
+ ],
+ "typing": [
+  {
+   "run": "electron.base",
+   "where": "electron",
+   "copy": "base",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 15.5,
+    "p95": 41.4
+   },
+   "host": {
+    "n": 250,
+    "p50": 15.5,
+    "p95": 41.4
+   },
+   "trip": {
+    "n": 250,
+    "p50": 0.8,
+    "p95": 8.4
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.1,
+    "p95": 9.2
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    7.41,
+    7.66,
+    12
+   ]
+  },
+  {
+   "run": "electron.base.r2",
+   "where": "electron",
+   "copy": "base",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 16.4,
+    "p95": 37.5
+   },
+   "host": {
+    "n": 250,
+    "p50": 16.4,
+    "p95": 37.5
+   },
+   "trip": {
+    "n": 250,
+    "p50": 0.8,
+    "p95": 5.6
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8,
+    "p95": 8.9
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    12.68,
+    12.8,
+    12
+   ]
+  },
+  {
+   "run": "electron.f2",
+   "where": "electron",
+   "copy": "f2",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 16.2,
+    "p95": 41.8
+   },
+   "host": {
+    "n": 250,
+    "p50": 16.2,
+    "p95": 41.8
+   },
+   "trip": {
+    "n": 250,
+    "p50": 0.9,
+    "p95": 8.5
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.6,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    7.37,
+    6.83,
+    12
+   ]
+  },
+  {
+   "run": "electron.f2.r2",
+   "where": "electron",
+   "copy": "f2",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 16.7,
+    "p95": 44
+   },
+   "host": {
+    "n": 250,
+    "p50": 16.7,
+    "p95": 44
+   },
+   "trip": {
+    "n": 250,
+    "p50": 0.9,
+    "p95": 10.8
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    11.85,
+    12.01,
+    12
+   ]
+  },
+  {
+   "run": "electron.f24",
+   "where": "electron",
+   "copy": "f24",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 16.7,
+    "p95": 32
+   },
+   "host": {
+    "n": 250,
+    "p50": 42.7,
+    "p95": 49.7
+   },
+   "trip": {
+    "n": 250,
+    "p50": 9.9,
+    "p95": 16.8
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.6,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    6.83,
+    7.03,
+    12
+   ]
+  },
+  {
+   "run": "electron.f24.r2",
+   "where": "electron",
+   "copy": "f24",
+   "rtt": null,
+   "first": {
+    "n": 250,
+    "p50": 17.5,
+    "p95": 31.4
+   },
+   "host": {
+    "n": 250,
+    "p50": 42.2,
+    "p95": 49.6
+   },
+   "trip": {
+    "n": 250,
+    "p50": 9.4,
+    "p95": 16.7
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    11.37,
+    16.3,
+    12
+   ]
+  },
+  {
+   "run": "tab0.base",
+   "where": "tab0",
+   "copy": "base",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 16.4,
+    "p95": 31.7
+   },
+   "host": {
+    "n": 250,
+    "p50": 16.4,
+    "p95": 31.7
+   },
+   "trip": {
+    "n": 250,
+    "p50": 1,
+    "p95": 2.7
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.2,
+    "p95": 8.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    6.79,
+    7.86,
+    12
+   ]
+  },
+  {
+   "run": "tab0.base.r2",
+   "where": "tab0",
+   "copy": "base",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 16.2,
+    "p95": 30.3
+   },
+   "host": {
+    "n": 250,
+    "p50": 16.2,
+    "p95": 30.3
+   },
+   "trip": {
+    "n": 250,
+    "p50": 1,
+    "p95": 1.8
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.3,
+    "p95": 8.9
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    16.3,
+    16.17,
+    12
+   ]
+  },
+  {
+   "run": "tab0.f2",
+   "where": "tab0",
+   "copy": "f2",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 15.8,
+    "p95": 32
+   },
+   "host": {
+    "n": 250,
+    "p50": 15.8,
+    "p95": 32
+   },
+   "trip": {
+    "n": 250,
+    "p50": 0.9,
+    "p95": 1.7
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    7.87,
+    6.92,
+    12
+   ]
+  },
+  {
+   "run": "tab0.f2.r2",
+   "where": "tab0",
+   "copy": "f2",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 14.6,
+    "p95": 30.8
+   },
+   "host": {
+    "n": 250,
+    "p50": 14.6,
+    "p95": 30.8
+   },
+   "trip": {
+    "n": 250,
+    "p50": 1,
+    "p95": 2.2
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    16.17,
+    17.68,
+    12
+   ]
+  },
+  {
+   "run": "tab0.f24",
+   "where": "tab0",
+   "copy": "f24",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 14.2,
+    "p95": 31.3
+   },
+   "host": {
+    "n": 250,
+    "p50": 43.7,
+    "p95": 50.3
+   },
+   "trip": {
+    "n": 250,
+    "p50": 11.1,
+    "p95": 18.1
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    6.92,
+    6.07,
+    12
+   ]
+  },
+  {
+   "run": "tab0.f24.r2",
+   "where": "tab0",
+   "copy": "f24",
+   "rtt": 0,
+   "first": {
+    "n": 250,
+    "p50": 12.8,
+    "p95": 32
+   },
+   "host": {
+    "n": 250,
+    "p50": 43,
+    "p95": 50.4
+   },
+   "trip": {
+    "n": 250,
+    "p50": 11.5,
+    "p95": 19.3
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    19.47,
+    26.24,
+    12
+   ]
+  },
+  {
+   "run": "tab30.base",
+   "where": "tab30",
+   "copy": "base",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 44.9,
+    "p95": 60.2
+   },
+   "host": {
+    "n": 250,
+    "p50": 44.9,
+    "p95": 60.2
+   },
+   "trip": {
+    "n": 250,
+    "p50": 31.1,
+    "p95": 41.2
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.5,
+    "p95": 12.2
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    12.07,
+    8.66,
+    12
+   ]
+  },
+  {
+   "run": "tab30.base.r2",
+   "where": "tab30",
+   "copy": "base",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 43.8,
+    "p95": 57.6
+   },
+   "host": {
+    "n": 250,
+    "p50": 43.8,
+    "p95": 57.6
+   },
+   "trip": {
+    "n": 250,
+    "p50": 30.8,
+    "p95": 34.5
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.1,
+    "p95": 8.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    6.07,
+    6.42,
+    12
+   ]
+  },
+  {
+   "run": "tab30.f2",
+   "where": "tab30",
+   "copy": "f2",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 42.5,
+    "p95": 58.2
+   },
+   "host": {
+    "n": 250,
+    "p50": 42.5,
+    "p95": 58.2
+   },
+   "trip": {
+    "n": 250,
+    "p50": 30.8,
+    "p95": 38.3
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    8.45,
+    8.76,
+    12
+   ]
+  },
+  {
+   "run": "tab30.f2.r2",
+   "where": "tab30",
+   "copy": "f2",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 42.9,
+    "p95": 51
+   },
+   "host": {
+    "n": 250,
+    "p50": 42.9,
+    "p95": 51
+   },
+   "trip": {
+    "n": 250,
+    "p50": 31.1,
+    "p95": 33.8
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.6
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    6.42,
+    5.82,
+    12
+   ]
+  },
+  {
+   "run": "tab30.f24",
+   "where": "tab30",
+   "copy": "f24",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 14.2,
+    "p95": 30.8
+   },
+   "host": {
+    "n": 250,
+    "p50": 49.3,
+    "p95": 75.1
+   },
+   "trip": {
+    "n": 250,
+    "p50": 42,
+    "p95": 53.7
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.4
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    8.46,
+    7.25,
+    12
+   ]
+  },
+  {
+   "run": "tab30.f24.r2",
+   "where": "tab30",
+   "copy": "f24",
+   "rtt": 30,
+   "first": {
+    "n": 250,
+    "p50": 14.1,
+    "p95": 29.9
+   },
+   "host": {
+    "n": 250,
+    "p50": 52.6,
+    "p95": 83.4
+   },
+   "trip": {
+    "n": 250,
+    "p50": 42.9,
+    "p95": 58
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    5.82,
+    13.29,
+    12
+   ]
+  },
+  {
+   "run": "tab80.base",
+   "where": "tab80",
+   "copy": "base",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 94.8,
+    "p95": 107.8
+   },
+   "host": {
+    "n": 250,
+    "p50": 94.8,
+    "p95": 107.8
+   },
+   "trip": {
+    "n": 250,
+    "p50": 81.1,
+    "p95": 87.7
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.9,
+    "p95": 11.6
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    16.49,
+    10.56,
+    12
+   ]
+  },
+  {
+   "run": "tab80.base.r2",
+   "where": "tab80",
+   "copy": "base",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 96.4,
+    "p95": 144.4
+   },
+   "host": {
+    "n": 250,
+    "p50": 96.4,
+    "p95": 144.4
+   },
+   "trip": {
+    "n": 250,
+    "p50": 82.7,
+    "p95": 129
+   },
+   "draw": {
+    "n": 250,
+    "p50": 8.2,
+    "p95": 8.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    13.29,
+    21.47,
+    12
+   ]
+  },
+  {
+   "run": "tab80.f2",
+   "where": "tab80",
+   "copy": "f2",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 92,
+    "p95": 104.5
+   },
+   "host": {
+    "n": 250,
+    "p50": 92,
+    "p95": 104.5
+   },
+   "trip": {
+    "n": 250,
+    "p50": 80.9,
+    "p95": 86.1
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    10.56,
+    8.04,
+    12
+   ]
+  },
+  {
+   "run": "tab80.f2.r2",
+   "where": "tab80",
+   "copy": "f2",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 93.7,
+    "p95": 108
+   },
+   "host": {
+    "n": 250,
+    "p50": 93.7,
+    "p95": 108
+   },
+   "trip": {
+    "n": 250,
+    "p50": 81.9,
+    "p95": 92.1
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 0,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    10.34,
+    14.11,
+    12
+   ]
+  },
+  {
+   "run": "tab80.f24",
+   "where": "tab80",
+   "copy": "f24",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 13.8,
+    "p95": 31.2
+   },
+   "host": {
+    "n": 250,
+    "p50": 97.2,
+    "p95": 116.5
+   },
+   "trip": {
+    "n": 250,
+    "p50": 91.7,
+    "p95": 101.2
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    8.04,
+    8.66,
+    12
+   ]
+  },
+  {
+   "run": "tab80.f24.r2",
+   "where": "tab80",
+   "copy": "f24",
+   "rtt": 80,
+   "first": {
+    "n": 250,
+    "p50": 14.4,
+    "p95": 31.5
+   },
+   "host": {
+    "n": 250,
+    "p50": 97.7,
+    "p95": 116.8
+   },
+   "trip": {
+    "n": 250,
+    "p50": 91.7,
+    "p95": 102.6
+   },
+   "draw": {
+    "n": 250,
+    "p50": 0.4,
+    "p95": 0.5
+   },
+   "localShare": 1,
+   "frameMs": 16.7,
+   "dpr": 2,
+   "timeouts": 0,
+   "aligned": true,
+   "last": "tsh$",
+   "focused": false,
+   "load": [
+    13.46,
+    12.73,
+    12
+   ]
+  }
+ ]
+}
