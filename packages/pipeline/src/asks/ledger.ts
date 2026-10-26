@@ -1,6 +1,6 @@
 import {type Appended, type Fenced, Ledger, type Row, streams, type Writes} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
-import {Duration, Effect, Layer, Schedule, Schema} from "effect";
+import {Duration, Effect, Layer, Schema} from "effect";
 import {Row as BookRow} from "../criteria/book.ts";
 import {LaneId, Owner, PlanId, TaskId, TicketId} from "../ids.ts";
 import {Revision} from "../stages/plan/plan.ts";
@@ -194,23 +194,29 @@ const encode = Schema.encodeSync(Fact);
 const decode = Schema.decodeUnknownExit(Fact);
 const parseJson = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
-/** A ledger that does not answer is tried again for about two seconds; after that the pipeline cannot go on. */
+/**
+ * A ledger that does not answer is asked again, with no limit on tries, a second apart at most:
+ * a lane rides out a wifi drop (experiment 151). Every call it wraps is safe to send again (a
+ * read, or a write under a fixed message id). The host stops a lane at its lease's end plus the
+ * grace; a caller with no host sets its own timeout. Experiment 149: after two seconds this died
+ * with words the host does not read as a lost lease, so the host wrote a crash and the name went
+ * down.
+ */
 export const steady = <A, E extends {readonly _tag: string}, R>(
 	what: string,
 	e: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, Exclude<E, {readonly _tag: "LedgerUnreachable"}>, R> =>
-	e.pipe(
-		Effect.retry({
-			times: 40,
-			schedule: Schedule.spaced(Duration.millis(50)),
-			while: (x: E) => x._tag === "LedgerUnreachable",
-		}),
-		Effect.catch((x: E) =>
-			x._tag === "LedgerUnreachable"
-				? Effect.die(`${what}: the ledger did not answer`)
-				: Effect.fail(x as Exclude<E, {readonly _tag: "LedgerUnreachable"}>),
-		),
-	);
+	Effect.gen(function* () {
+		for (let tries = 1; ; tries++) {
+			const r = yield* Effect.result(e);
+			if (r._tag === "Success") return r.success;
+			const x = r.failure;
+			if (x._tag !== "LedgerUnreachable")
+				return yield* Effect.fail(x as Exclude<E, {readonly _tag: "LedgerUnreachable"}>);
+			if (tries === 1) yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
+			yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
+		}
+	});
 
 const homeOrDie = (fact: Fact): Effect.Effect<string> => {
 	const home = homeOf(fact);
@@ -237,8 +243,8 @@ export interface WriteOptions {
 
 /**
  * Send a fact to its home's inbox, by anyone: a desk, a stage, a script. Under one message id it is
- * written once, however many times it is sent. With `hold`, only while that lease is live: a lane
- * that lost its lease sends nothing (`Fenced`).
+ * written once, however many times it is sent. With `hold`, only while that lease's claim is the
+ * newest: a lane whose ticket another lane claimed sends nothing (`Fenced`).
  */
 export const sendFact = (
 	fact: Fact,

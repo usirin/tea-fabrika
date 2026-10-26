@@ -143,7 +143,11 @@ export class Ledger extends DurableObject {
 
 	async renew(name: string, fence: number, ttlMs: number) {
 		const res = L.renew(this.db, Date.now(), name, fence, ttlMs, this.graceMs);
-		if (res.ok) await this.arm();
+		if (res.ok) {
+			// 151: a renew after the lease's `lease_expired` writes `lease_resumed`.
+			this.wakeAll(res.written);
+			await this.arm();
+		}
 		return res;
 	}
 
@@ -178,19 +182,19 @@ export class Ledger extends DurableObject {
 	}
 
 	async demonitor(fence: number, ref: string) {
-		return L.demonitor(this.db, Date.now(), fence, ref);
+		return L.demonitor(this.db, fence, ref);
 	}
 
 	async link(fence: number, other: string) {
-		return L.link(this.db, Date.now(), fence, other);
+		return L.link(this.db, fence, other);
 	}
 
 	async unlink(fence: number, other: string) {
-		return L.unlink(this.db, Date.now(), fence, other);
+		return L.unlink(this.db, fence, other);
 	}
 
 	async trapExit(fence: number, on: boolean) {
-		return L.trapExit(this.db, Date.now(), fence, on);
+		return L.trapExit(this.db, fence, on);
 	}
 
 	async startChild(fence: number, child: string, after: number | null, limits?: L.Limits | null) {

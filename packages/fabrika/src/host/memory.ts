@@ -68,6 +68,8 @@ type Proc = {
 	trapExit: boolean;
 	suspect: number | null;
 	strikes: number;
+	/** 151: the newest claim's fence, kept here and not on the lease; null: none since a start or exit. */
+	fence: number | null;
 	/** 102: when it was registered; its limits (dollars in micro-dollars) and its subtree's use. */
 	at: number;
 	max: {usd: number | null; tokens: number | null; wallMs: number | null; children: number | null};
@@ -108,11 +110,10 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			.some((n) => names.has(n)) ||
 		[...names.keys()].some((n) => n.startsWith(`${name}/`)) ||
 		isInbox(name);
-	/** The name whose live lease this fence is, or null. */
-	const fencedName = (now: number, fence: number) =>
-		[...leases].find(([, l]) => l.fence === fence && l.expiresAt > now)?.[0] ?? null;
-	const fenceHolds = (now: number, stream: string, fence: number) => {
-		const name = fencedName(now, fence);
+	/** The name this fence is the newest claim of, or null: whatever the time (151). */
+	const fencedName = (fence: number) => [...names].find(([, p]) => p.fence === fence)?.[0] ?? null;
+	const fenceHolds = (stream: string, fence: number) => {
+		const name = fencedName(fence);
 		if (name === null) return false;
 		return stream === name || stream.startsWith(`${name}/`) || openInbox(stream);
 	};
@@ -157,6 +158,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		trapExit: false,
 		suspect: null,
 		strikes: 0,
+		fence: null,
 		at,
 		max: {usd: null, tokens: null, wallMs: null, children: null},
 		deadline: null,
@@ -185,7 +187,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	): AppendResult => {
 		const owner = ownerOf(stream);
 		if (owner === null) return {ok: false, why: "unknown"};
-		if (fence !== null && !fenceHolds(now, stream, fence)) return {ok: false, why: "fenced"};
+		if (fence !== null && !fenceHolds(stream, fence)) return {ok: false, why: "fenced"};
 		if (fence === null && !openInbox(stream)) return {ok: false, why: "denied"};
 		if (isLedgerWord(e)) return {ok: false, why: "denied"};
 		return insert(now, stream, expected, e);
@@ -206,21 +208,38 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		if (live && live.expiresAt > now)
 			return {ok: false, why: "held", holder: live.holder, expiresAt: live.expiresAt};
 		const expiresAt = now + ttlMs;
-		const data = {holder, ttlMs, expiresAt, replaces: live ? live.fence : null};
+		const data = {holder, ttlMs, expiresAt, replaces: proc.fence};
 		const r = insert(now, name, expectedRev, {kind: "claimed", writer: holder, data});
 		if (!r.ok) return {ok: false, why: "stale", rev: revOf(name)};
 		leases.set(name, {holder, expiresAt, fence: r.pos, stop: false});
+		proc.fence = r.pos;
 		jobs.set(name, expiresAt + graceMs);
 		return {ok: true, fence: r.pos, rev: r.rev, expiresAt, incarnation: proc.incarnation};
 	};
 
+	/** `rules.ts`'s `renew`: by the newest fence at any time; after a `lease_expired`, `lease_resumed`. */
 	const renew = (now: number, name: string, fence: number, ttlMs: number): RenewResult => {
+		if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};
+		const expiresAt = now + ttlMs;
+		const out: Written[] = [];
 		const l = leases.get(name);
-		if (!l || l.fence !== fence || l.expiresAt <= now) return {ok: false, why: "lost"};
-		if (l.stop) return {ok: false, why: "stop"};
-		l.expiresAt = now + ttlMs;
-		jobs.set(name, l.expiresAt + graceMs);
-		return {ok: true, expiresAt: l.expiresAt};
+		if (l !== undefined) {
+			if (l.stop) return {ok: false, why: "stop"};
+			l.expiresAt = expiresAt;
+		} else {
+			const since = (streams.get(name) ?? []).some((e) => e.kind === "cancel" && e.pos > fence);
+			if (since) return {ok: false, why: "stop"};
+			if (ttlMs <= 0) return {ok: true, expiresAt, written: out};
+			const holder = log[fence - 1]?.writer ?? "";
+			leases.set(name, {holder, expiresAt, fence, stop: false});
+			say(now, out, name, {
+				kind: "lease_resumed",
+				writer: "ledger",
+				data: {fence, holder, expiresAt},
+			});
+		}
+		jobs.set(name, expiresAt + graceMs);
+		return {ok: true, expiresAt, written: out};
 	};
 
 	const cancel = (now: number, name: string, writer: string): CancelResult => {
@@ -268,7 +287,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 				kind: "exited",
 				writer: e.writer,
 				data: {
-					fence: leases.get(name)?.fence ?? null,
+					fence: p.fence,
 					incarnation: p.incarnation,
 					reason: e.reason,
 					why: e.why,
@@ -282,6 +301,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			leases.delete(name);
 			jobs.delete(name);
 			p.down = r.pos;
+			p.fence = null;
 			strike(now, name, p, e, out);
 			for (const [key, m] of monitors) {
 				if (m.target !== name) continue;
@@ -353,7 +373,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			if (was?.fence === fence)
 				return {ok: true, pos: p.down, incarnation: p.incarnation, dup: true, written: []};
 		}
-		if (p === undefined || fencedName(now, fence) !== name) return {ok: false, why: "fenced"};
+		if (p === undefined || fencedName(fence) !== name) return {ok: false, why: "fenced"};
 		const out: Written[] = [];
 		const incarnation = p.incarnation;
 		const pos = takeDown(now, name, {reason, why, suspect, by: null, writer}, out);
@@ -363,7 +383,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	};
 
 	const monitor = (now: number, fence: number, ref: string, target: string): MonitorResult => {
-		const watcher = fencedName(now, fence);
+		const watcher = fencedName(fence);
 		if (watcher === null) return {ok: false, why: "fenced"};
 		const held = monitors.get(`${watcher}\u0000${ref}`);
 		if (held) return {ok: true, incarnation: held.incarnation, written: []};
@@ -391,15 +411,15 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		return {ok: true, incarnation: t.incarnation, written: []};
 	};
 
-	const demonitor = (now: number, fence: number, ref: string): FlagResult => {
-		const watcher = fencedName(now, fence);
+	const demonitor = (fence: number, ref: string): FlagResult => {
+		const watcher = fencedName(fence);
 		if (watcher === null) return {ok: false, why: "fenced"};
 		monitors.delete(`${watcher}\u0000${ref}`);
 		return {ok: true};
 	};
 
-	const link = (now: number, fence: number, other: string): LinkResult => {
-		const me = fencedName(now, fence);
+	const link = (fence: number, other: string): LinkResult => {
+		const me = fencedName(fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		if (other === me) return {ok: true};
 		const o = names.get(other);
@@ -408,16 +428,16 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		return {ok: true};
 	};
 
-	const unlink = (now: number, fence: number, other: string): FlagResult => {
-		const me = fencedName(now, fence);
+	const unlink = (fence: number, other: string): FlagResult => {
+		const me = fencedName(fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		links.get(me)?.delete(other);
 		links.get(other)?.delete(me);
 		return {ok: true};
 	};
 
-	const trapExit = (now: number, fence: number, on: boolean): FlagResult => {
-		const me = fencedName(now, fence);
+	const trapExit = (fence: number, on: boolean): FlagResult => {
+		const me = fencedName(fence);
 		const p = me === null ? undefined : names.get(me);
 		if (p === undefined) return {ok: false, why: "fenced"};
 		p.trapExit = on;
@@ -431,7 +451,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		after: number | null,
 		limits: Limits | null,
 	): StartResult => {
-		const me = fencedName(now, fence);
+		const me = fencedName(fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
 		const out: Written[] = [];
@@ -488,7 +508,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		signal: Signal,
 		why: string,
 	): ExitChildResult => {
-		const me = fencedName(now, fence);
+		const me = fencedName(fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		const c = names.get(child);
 		if (c === undefined || c.parent !== me) return {ok: false, why: "denied"};
@@ -641,7 +661,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		(c.tokens === undefined || (Number.isInteger(c.tokens) && c.tokens >= 0));
 
 	const hold = (now: number, fence: number, id: string, cost: Cost): HoldResult => {
-		const me = fencedName(now, fence);
+		const me = fencedName(fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		if (!costOk(cost)) return {ok: false, why: "denied"};
 		const spend = ids.get(`${me}/spend`);
@@ -824,10 +844,10 @@ const serviceOf = (
 		exit: (name, fence, reason, why, suspect, writer) =>
 			step((now) => m.exit(now, name, fence, reason, why, suspect, writer)),
 		monitor: (fence, ref, target) => step((now) => m.monitor(now, fence, ref, target)),
-		demonitor: (fence, ref) => step((now) => m.demonitor(now, fence, ref)),
-		link: (fence, other) => step((now) => m.link(now, fence, other)),
-		unlink: (fence, other) => step((now) => m.unlink(now, fence, other)),
-		trapExit: (fence, on) => step((now) => m.trapExit(now, fence, on)),
+		demonitor: (fence, ref) => step(() => m.demonitor(fence, ref)),
+		link: (fence, other) => step(() => m.link(fence, other)),
+		unlink: (fence, other) => step(() => m.unlink(fence, other)),
+		trapExit: (fence, on) => step(() => m.trapExit(fence, on)),
 		startChild: (fence, child, after, limits) =>
 			step((now) => m.startChild(now, fence, child, after, limits)),
 		exitChild: (fence, child, incarnation, signal, why) =>

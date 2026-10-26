@@ -59,7 +59,10 @@ export class Stale extends Schema.TaggedError<Stale>()("Stale", {
 	stream: Schema.String,
 	rev: Schema.Number,
 }) {}
-/** Kafka's ProducerFenced: the fence names no live lease that may write this stream. Stop writing. */
+/**
+ * Kafka's ProducerFenced: the fence is not the newest claim of a name that may write this stream
+ * (a newer claim took it, or it exited). Stop writing. Time alone never fences (151).
+ */
 export class Fenced extends Schema.TaggedError<Fenced>()("Fenced", {stream: Schema.String}) {}
 /** EventStoreDB's AccessDenied: a registered name's stream with no fence; a name inside another. */
 export class Denied extends Schema.TaggedError<Denied>()("Denied", {stream: Schema.String}) {}
@@ -73,7 +76,7 @@ export class Held extends Schema.TaggedError<Held>()("Held", {
 	holder: Schema.String,
 	expiresAt: Schema.Number,
 }) {}
-/** etcd's lease not found: this fence's lease ran out or was taken over. */
+/** etcd's lease not found: a newer claim took the name, or it exited. A lease past its end is not lost. */
 export class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
 	name: Schema.String,
 }) {}
@@ -302,8 +305,9 @@ export class Ledger extends Context.Service<
 		/** Register `name`: from now on writes under it are guarded, and its inbox is open. */
 		readonly register: (name: string, writer: string) => Call<Registered, Denied>;
 		/**
-		 * One event: at `expected + 1`, or at the end with "any". With a fence, only while its lease is
-		 * live and may write here (its name's streams, and any inbox). With none, only an inbox.
+		 * One event: at `expected + 1`, or at the end with "any". With a fence, only while it is its
+		 * name's newest claim, live or past its end (151), and may write here (its name's streams,
+		 * and any inbox). With none, only an inbox.
 		 */
 		readonly append: (
 			stream: string,
@@ -325,7 +329,10 @@ export class Ledger extends Context.Service<
 			expectedRev: number,
 			ttlMs: number,
 		) => Call<Claimed, Held | Stale | Denied | UnknownName | Down>;
-		/** Move the lease's end on. */
+		/**
+		 * Move the lease's end on: while `fence` is the name's newest claim, past the lease's end too
+		 * (151). After the lease's `lease_expired`, it writes `lease_resumed`.
+		 */
 		readonly renew: (
 			name: string,
 			fence: number,
@@ -520,7 +527,7 @@ const appendError = (stream: string, r: Exclude<AppendResult, {ok: true}>) =>
 				? new Denied({stream})
 				: new UnknownName({stream});
 
-/** A fenced call's refusal: the fence names no live lease. */
+/** A fenced call's refusal: the fence is no name's newest claim. */
 const flag =
 	(what: string) =>
 	(r: FlagResult): Effect.Effect<void, Fenced> =>
@@ -812,7 +819,7 @@ export const Wire = {
 	usage: Schema.NullOr(UsageSchema),
 	process: Schema.NullOr(Process),
 	renew: Schema.Union([
-		Schema.Struct({ok: Schema.Literal(true), expiresAt: Schema.Number}),
+		Schema.Struct({ok: Schema.Literal(true), expiresAt: Schema.Number, written: Written}),
 		Refused("lost"),
 		Refused("stop"),
 	]),

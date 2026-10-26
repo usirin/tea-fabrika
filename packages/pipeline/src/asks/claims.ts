@@ -15,6 +15,9 @@ import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from ".
 //   lost      a process that dies, freezes or loses the ledger stops renewing. Its lease runs
 //             out; the next claim takes the name with a new fence, and every write under the old
 //             fence is refused (`Fenced`): the old holder cannot write as the lane any more.
+//             Until a next claim comes, the old fence still writes (151): a process back from a
+//             wifi drop renews and goes on. It lets the ticket go on its own only past the
+//             lease's end plus `graceMs` with no answer.
 //
 // The fences live in this process only (`Lanes`): a lane started again after a crash, under the
 // same id, has none, so it waits for its old lease to run out and claims again.
@@ -42,6 +45,12 @@ export const newLane = (ticket: TicketId, id?: string): Effect.Effect<LaneId, ne
 export interface LanesOptions {
 	/** How long a lease lives unless renewed. Default 30 s; it is renewed every third of that. */
 	readonly ttlMs?: number;
+	/**
+	 * 151: how long past its lease's end a lane keeps its ticket while no renew comes back, as the
+	 * host's lease clock does (`serve`'s `graceMs`). The ledger fences it once another lane claims
+	 * the ticket, so waiting out a wifi drop costs nothing. Default 10 minutes.
+	 */
+	readonly graceMs?: number;
 }
 
 /** The leases this process holds, one per ticket, each renewed while it is held. */
@@ -74,6 +83,7 @@ export const layerLanes = (o: LanesOptions = {}) =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			const ttlMs = o.ttlMs ?? 30_000;
+			const graceMs = o.graceMs ?? 600_000;
 			const held = new Map<TicketId, {readonly lane: LaneId; readonly fence: number}>();
 			const renewals = yield* FiberMap.make<TicketId>();
 
@@ -81,15 +91,35 @@ export const layerLanes = (o: LanesOptions = {}) =>
 				Effect.sync(() => held.delete(ticket)).pipe(
 					Effect.andThen(FiberMap.remove(renewals, ticket)),
 				);
-			/** Renew every third of the time to live, until the lease is lost or cancelled. */
-			const renewing = (ticket: TicketId, fence: number) =>
+			/**
+			 * Renew every third of the time to live, until the lease is lost or cancelled. The lease
+			 * clock (151): `until`, the lease's end as this process may count on it (the renew's
+			 * send time plus the ttl). While the ledger does not answer, renew every second; past
+			 * `until` plus the grace with no answer, let the ticket go, where a person sees it.
+			 */
+			const renewing = (ticket: TicketId, fence: number, claimedUntil: number) =>
 				Effect.gen(function* () {
+					const every = ttlMs / 3;
+					let until = claimedUntil;
+					let away = false;
 					for (;;) {
-						yield* Effect.sleep(Duration.millis(ttlMs / 3));
+						yield* Effect.sleep(Duration.millis(away ? Math.min(1000, every) : every));
+						const sentAt = Date.now();
 						const r = yield* ledger.renew(ticketName(ticket), fence, ttlMs).pipe(Effect.result);
-						// A ledger that does not answer is asked again at the next turn: the lease may still live.
-						if (r._tag === "Success" || r.failure._tag === "LedgerUnreachable") continue;
-						// Lost or cancelled: this process holds the ticket no more.
+						if (r._tag === "Success") {
+							until = Math.max(until, sentAt + ttlMs);
+							away = false;
+							continue;
+						}
+						// No answer: the fence holds until another lane claims, so ask again soon.
+						if (r.failure._tag === "LedgerUnreachable") {
+							away = true;
+							if (Date.now() < until + graceMs) continue;
+							yield* Effect.logWarning(
+								`${ticketName(ticket)}: no word from the ledger for ${Math.round(graceMs / 1000)} s past the lease's end; the lane lets its ticket go`,
+							);
+						}
+						// Lost, cancelled, or the lease clock ran out: this process holds the ticket no more.
 						if (held.get(ticket)?.fence === fence) held.delete(ticket);
 						return;
 					}
@@ -103,12 +133,16 @@ export const layerLanes = (o: LanesOptions = {}) =>
 					yield* ensureName(name, lane);
 					let rev = (yield* steady("read a registry", ledger.readLast(name, 1)))[0]?.rev ?? 0;
 					for (;;) {
+						const sentAt = Date.now();
 						const r = yield* steady("claim", ledger.claim(name, lane, rev, ttlMs)).pipe(
 							Effect.result,
 						);
 						if (r._tag === "Success") {
 							held.set(ticket, {lane, fence: r.success.fence});
-							yield* FiberMap.run(renewals, ticket)(renewing(ticket, r.success.fence));
+							yield* FiberMap.run(
+								renewals,
+								ticket,
+							)(renewing(ticket, r.success.fence, sentAt + ttlMs));
 							return lane;
 						}
 						const e = r.failure;

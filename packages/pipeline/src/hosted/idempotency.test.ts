@@ -14,8 +14,8 @@ import {
 	writesOf,
 } from "./idempotency.ts";
 
-// The S6 gate: a write leaves the ledger at most once per key, only under a live lease, and only
-// with a key the gate handed out.
+// The S6 gate: a write leaves the ledger at most once per key, only under a live lease whose claim
+// is the newest, and only with a key the gate handed out.
 
 const NAME = "ship:7";
 
@@ -161,8 +161,10 @@ describe("the idempotency gate", () => {
 		expect(said.map((n) => n.step)).toEqual(["refused_fence"]);
 	});
 
-	it("a lease that has run out (no one took it yet) stops the send; the planted mistake sends", async () => {
-		const send = async (planted: boolean) => {
+	// 151: a lease past its end is not lost until someone newer claims. The gate waits there: the
+	// holder's renew lets the send go, another holder's claim refuses it.
+	it("a lease that has run out holds the send until it is renewed, and refuses it once another holder claims; the planted mistake sends", async () => {
+		const send = async (next: "nothing" | "renew" | "claim", planted = false) => {
 			const w = world();
 			const {said, say} = notes();
 			await run(
@@ -177,15 +179,23 @@ describe("the idempotency gate", () => {
 						say,
 						...(planted ? {planted: "no_lease_check" as const} : {}),
 					});
-					// The intent row lands; the lease runs out before the send.
+					// The intent row lands; the lease runs out before the send, and then what comes next.
+					const then = Effect.gen(function* () {
+						yield* Effect.sleep(Duration.millis(800));
+						if (next === "renew") yield* ledger.renew(NAME, a.fence, 30_000);
+						if (next === "claim") yield* claimed("b", 30_000);
+					});
+					yield* Effect.forkScoped(then);
 					yield* Effect.sleep(Duration.millis(150));
 					yield* g.once(w.write()).pipe(Effect.timeoutOption(Duration.millis(2_500)));
 				}),
 			);
 			return {sent: w.sent.length, steps: said.map((n) => n.step)};
 		};
-		expect(await send(false)).toEqual({sent: 0, steps: ["intent", "refused_lease"]});
-		const planted = await send(true);
+		expect(await send("nothing")).toEqual({sent: 0, steps: ["intent"]});
+		expect(await send("renew")).toEqual({sent: 1, steps: ["intent", "send", "sent", "done"]});
+		expect(await send("claim")).toEqual({sent: 0, steps: ["intent", "refused_lease"]});
+		const planted = await send("nothing", true);
 		expect(planted.sent).toBe(1);
 	});
 

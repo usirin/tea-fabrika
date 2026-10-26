@@ -6,9 +6,9 @@
 //              registry tail's `lease_expired`, each send it to claiming.
 //   claiming   one claim in flight. The ledger's compare-and-set picks one winner.
 //   owning     it won, under a fence, until a time. The program runs (a Sub), a clock renews the
-//              lease, and a second clock runs to the lease's end. A renew that says `lost`, a
-//              newer claim or this fence's expiry in the tail, the program losing its lease, or
-//              the lease clock running out sends it back to watching.
+//              lease, and a second clock runs to the lease's end plus the grace. A renew that
+//              says `lost`, a newer claim in the tail, the program losing its lease, or the lease
+//              clock running out sends it back to watching.
 //   exiting    (99) the program ended by itself: it returned (`normal`) or crashed. One `exit`
 //              in flight, under the fence, with the lease still renewed. The ledger's answer, or
 //              the `exited` event in the tail, sends it to down.
@@ -28,6 +28,13 @@
 // The program is a Sub, not a Cmd: it is on exactly while the state is owning, under that state's
 // fence. Leaving owning turns it off, which stops the program. (Elm: something that stays open is
 // a Sub.)
+//
+// New in 151: a wifi drop is not a lost lease. The ledger fences a holder only once a newer claim
+// takes the name (Kafka's producer epoch), so an owner the ledger does not answer loses nothing by
+// waiting. Its program runs on to the lease's end plus `graceMs` (Chubby's grace period), and stops
+// there, where a person sees it. While away it renews every `awayRenewMs`; a renew that comes back
+// ends being away. Only the ledger's word ends it sooner: `lost`, or a newer claim in the tail. The
+// ledger's own `lease_expired` of this fence is no such word any more: it ends nothing.
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import type {ExitReason} from "./rules.ts";
 
@@ -36,6 +43,16 @@ export interface HostSettings {
 	readonly renewEveryMs: number;
 	/** How long to wait before claiming again after a failed or lost claim. */
 	readonly retryMs: number;
+	/**
+	 * 151: how long past the lease's end an owner that hears nothing keeps its program (Chubby's
+	 * grace period). Default 0: it stops at the lease's end.
+	 */
+	readonly graceMs?: number;
+	/**
+	 * 151: after a renew with no answer, the next ones come this often, until one comes back
+	 * (Kubernetes' leader election `retryPeriod`). Default `renewEveryMs`.
+	 */
+	readonly awayRenewMs?: number;
 }
 
 /** What an exit says: OTP's reason, the words of the crash, and the inbox rev it was likely on. */
@@ -65,6 +82,8 @@ export type Host =
 			readonly started: boolean;
 			/** Renew clocks set so far: each renew sets a new one. */
 			readonly ticks: number;
+			/** 151: the last renew had no answer, so they come every `awayRenewMs`. Absent: false. */
+			readonly away?: boolean;
 	  }
 	| {
 			readonly phase: "exiting";
@@ -72,6 +91,7 @@ export type Host =
 			readonly incarnation: number;
 			readonly until: number;
 			readonly ticks: number;
+			readonly away?: boolean;
 			readonly exit: ExitWord;
 	  }
 	/** The name exited at `pos` (its `exited` event) and waits for a restart. */
@@ -132,7 +152,8 @@ export type HostCmd =
 export type HostSub =
 	| Sub<"registry_tail", {readonly on: true}>
 	| Sub<"program", {readonly fence: number; readonly incarnation: number}>
-	| Sub<"lease_clock", {readonly fence: number; readonly until: number}>;
+	/** It sends `lease_due` for the lease's end `until`, at `at`: that end plus the grace. */
+	| Sub<"lease_clock", {readonly fence: number; readonly until: number; readonly at: number}>;
 
 export const START: Host = {phase: "watching", waitMs: 0, tries: 0};
 
@@ -142,24 +163,43 @@ export const programOf = (
 ): {readonly fence: number; readonly incarnation: number} | null =>
 	s.phase === "owning" ? {fence: s.fence, incarnation: s.incarnation} : null;
 
-/** The renew clock, or `null`: off. It runs while owning and while exiting. */
-export const renewClockOf = (s: Host, every: number) =>
+/**
+ * The renew clock, or `null`: off. It runs while owning and while exiting, every `every`, or
+ * every `awayMs` once a renew had no answer.
+ */
+export const renewClockOf = (s: Host, every: number, awayMs = every) =>
 	s.phase === "owning" || s.phase === "exiting"
-		? {ms: every, msg: {type: "renew_due" as const, fence: s.fence, tick: s.ticks}}
+		? {
+				ms: s.away === true ? awayMs : every,
+				msg: {type: "renew_due" as const, fence: s.fence, tick: s.ticks},
+			}
 		: null;
 
-/** The lease clock, or `null`: off. */
-export const leaseClockOf = (s: Host) =>
-	s.phase === "owning" || s.phase === "exiting" ? {fence: s.fence, until: s.until} : null;
+/** The lease clock, or `null`: off. It goes off `graceMs` past the lease's end. */
+export const leaseClockOf = (s: Host, graceMs = 0) =>
+	s.phase === "owning" || s.phase === "exiting"
+		? {fence: s.fence, until: s.until, at: s.until + graceMs}
+		: null;
 
 const watching = (waitMs: number, tries: number): Host => ({phase: "watching", waitMs, tries});
 
-/** Did this Msg take the lease from an owner under `fence`, whose lease runs `until`? */
+/**
+ * Did this Msg take the lease from an owner under `fence`, whose lease runs `until`? The ledger's
+ * `lost`, a newer claim, or its own lease clock. 151: not the ledger's `lease_expired` of this
+ * fence: the fence holds until a newer claim, so a host that is back renews and goes on.
+ */
 export const losesLease = (fence: number, until: number, m: HostMsg): boolean =>
 	(m.type === "renew_lost" && m.fence === fence) ||
-	(m.type === "seen_expiry" && m.fence === fence) ||
 	(m.type === "seen_claim" && m.fence > fence) ||
 	(m.type === "lease_due" && m.fence === fence && m.until === until);
+
+type Holding = Extract<Host, {readonly phase: "owning" | "exiting"}>;
+/** 151: a renew had no answer: ask again every `awayRenewMs` from now, not at the next regular one. */
+const away = <S extends Holding>(s: S): S =>
+	s.away === true ? s : {...s, ticks: s.ticks + 1, away: true};
+/** A renew came back: the lease runs to the later end, and it is not away any more. */
+const back = <S extends Holding>(s: S, until: number): S =>
+	until > s.until || s.away === true ? {...s, until: Math.max(s.until, until), away: false} : s;
 
 /** The exit an owner asks for when its program ended this way, or `null`: no exit (lease lost, stopped). */
 export const exitOf = (end: ProgramEnd): ExitWord | null =>
@@ -198,6 +238,7 @@ export const hostUpdate =
 									until: m.until,
 									started: false,
 									ticks: 0,
+									away: false,
 								},
 								[],
 							];
@@ -216,7 +257,7 @@ export const hostUpdate =
 					if (exit === null) return [watching(settings.retryMs, 0), []];
 					const {fence, incarnation, until, ticks} = s;
 					return [
-						{phase: "exiting", fence, incarnation, until, ticks, exit},
+						{phase: "exiting", fence, incarnation, until, ticks, away: s.away === true, exit},
 						[{type: "exit", fence, ...exit}],
 					];
 				}
@@ -224,9 +265,9 @@ export const hostUpdate =
 				if (m.type === "program_started" && m.fence === s.fence) return [{...s, started: true}, []];
 				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks)
 					return [{...s, ticks: s.ticks + 1}, [{type: "renew", fence: s.fence}]];
+				if (m.type === "renew_unknown" && m.fence === s.fence) return [away(s), []];
 				// A late answer to an older renew may carry an earlier `until`: the lease only grows.
-				if (m.type === "renewed" && m.fence === s.fence && m.until > s.until)
-					return [{...s, until: m.until}, []];
+				if (m.type === "renewed" && m.fence === s.fence) return [back(s, m.until), []];
 				return [s, []];
 			}
 			case "exiting":
@@ -240,8 +281,8 @@ export const hostUpdate =
 					return [watching(settings.retryMs, 0), []];
 				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks)
 					return [{...s, ticks: s.ticks + 1}, [{type: "renew", fence: s.fence}]];
-				if (m.type === "renewed" && m.fence === s.fence && m.until > s.until)
-					return [{...s, until: m.until}, []];
+				if (m.type === "renew_unknown" && m.fence === s.fence) return [away(s), []];
+				if (m.type === "renewed" && m.fence === s.fence) return [back(s, m.until), []];
 				return [s, []];
 			case "down":
 				if (m.type === "seen_restart" && m.pos > s.pos) return [watching(0, 0), []];
@@ -259,10 +300,10 @@ export const hostSubs = (settings: HostSettings) => [
 			? {ms: s.waitMs, msg: {type: "claim_due" as const, tries: s.tries}}
 			: null,
 	),
-	sub("timer", (s) => renewClockOf(s, settings.renewEveryMs)),
+	sub("timer", (s) => renewClockOf(s, settings.renewEveryMs, settings.awayRenewMs)),
 	sub("registry_tail", () => ({on: true as const})),
 	sub("program", programOf),
-	sub("lease_clock", leaseClockOf),
+	sub("lease_clock", (s) => leaseClockOf(s, settings.graceMs)),
 ];
 
 /** The machine, every message type a cell of the one update. */

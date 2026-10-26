@@ -25,7 +25,7 @@ import {
 	Stream,
 } from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {readFacts, sendFact} from "../asks/ledger.ts";
+import {readFacts, sendFact, steady} from "../asks/ledger.ts";
 import {bookOf, foldLedger, latestOf, openAsks} from "../asks/rules.ts";
 import {standingAt} from "../criteria/book.ts";
 import {type PlanId, ticketOf} from "../ids.ts";
@@ -118,14 +118,15 @@ const handlers = (o: {
 			const ledger = yield* Ledger;
 			if ((yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null))) !== null)
 				return {started: false};
-			yield* ledger
-				.append(
+			yield* steady(
+				"note a child",
+				ledger.append(
 					childrenOf(self.name),
 					"any",
 					{kind: "child", writer: self.holder, id: cmd.child, data: {child: cmd.child}},
 					self.fence,
-				)
-				.pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
+				),
+			).pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
 			const started = yield* self.startChild(
 				cmd.child,
 				null,

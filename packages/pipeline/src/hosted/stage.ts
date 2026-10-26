@@ -15,6 +15,7 @@
 import type {EffectBootingRuntime} from "@demlik/tea/effect";
 import {defineProgram, envelope, input, Ledger, type Limits, Self} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schema, type Scope, Stream} from "effect";
+import {steady} from "../asks/ledger.ts";
 import {agentOf} from "./agent.ts";
 import {gate, Idempotency, type WriteNote} from "./idempotency.ts";
 
@@ -134,17 +135,16 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 				const outcome = yield* stage
 					.finish(end, job, name)
 					.pipe(Effect.provideService(Idempotency, idempotency));
-				const wrote = yield* ledger
-					.append(
+				// 151: sent again with no limit while the ledger does not answer; its id makes that safe.
+				const wrote = yield* steady(
+					"write the outcome",
+					ledger.append(
 						outcomeOf(name),
 						"any",
 						{kind: "outcome", writer: holder, id: "outcome", data: {outcome}},
 						fence,
-					)
-					.pipe(
-						Effect.retry({while: (e) => e._tag === "LedgerUnreachable", times: 40}),
-						Effect.result,
-					);
+					),
+				).pipe(Effect.result);
 				// A lost lease: the next holder writes it.
 				if (wrote._tag === "Failure") return yield* Effect.never;
 				yield* Effect.sync(() => say({ev: "outcome", name, fence, outcome}));
