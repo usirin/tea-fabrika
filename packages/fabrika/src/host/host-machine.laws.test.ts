@@ -29,11 +29,12 @@ import * as realHost from "./host-machine.ts";
 //
 // Nobody writes their own exam: this file writes the laws and never the machine. Each planted
 // mistake is a text edit on a COPY of host-machine.ts in a temp folder, and the exact laws it
-// breaks are checked below. Today's machine breaks three of these laws: they are kept as known
-// bugs, which pass while the law fails for the rule's reason and turn red the day the fix lands.
+// breaks are checked below. Before lane 18 the machine broke three of these laws. They were kept
+// as known bugs, which passed while the law failed for the rule's reason; the fix turned them red,
+// and they moved to the laws.
 //
-// The settings the fix needs are passed as experiment 149 named them (`graceMs`, `retryRenewMs`).
-// Today's machine has neither and reads neither.
+// The settings the fix needs are passed as experiment 149 named them (`graceMs`, `retryRenewMs`),
+// and the machine reads both.
 
 // ---------------------------------------------------------------- the module under test
 
@@ -291,18 +292,42 @@ function runIn(machine: Machine, world: World): Trace {
 		return at;
 	};
 
+	// The queue is a binary heap on (at, n): the same order as a scan for the smallest, in log time.
+	// A world at the lane's pace with a renew each second holds tens of thousands of events. With a
+	// scan, the planted-mistake test took 88 s on a laptop, past the 60 s limit; with the heap, 18 s.
 	let n = 0;
 	const queue: Event[] = [];
-	const push = (e: Pending) => queue.push({...e, n: n++});
+	const sooner = (i: number, j: number) => {
+		const a = queue[i];
+		const b = queue[j];
+		return a !== undefined && b !== undefined && (a.at < b.at || (a.at === b.at && a.n < b.n));
+	};
+	const swap = (i: number, j: number) => {
+		const a = queue[i];
+		const b = queue[j];
+		if (a === undefined || b === undefined) return;
+		queue[i] = b;
+		queue[j] = a;
+	};
+	const push = (e: Pending) => {
+		queue.push({...e, n: n++});
+		for (let i = queue.length - 1; i > 0 && sooner(i, (i - 1) >> 1); i = (i - 1) >> 1)
+			swap(i, (i - 1) >> 1);
+	};
 	const pop = (): Event | undefined => {
-		let best = 0;
-		for (let i = 1; i < queue.length; i++) {
-			const a = queue[i];
-			const b = queue[best];
-			if (a !== undefined && b !== undefined && (a.at < b.at || (a.at === b.at && a.n < b.n)))
-				best = i;
+		const top = queue[0];
+		const last = queue.pop();
+		if (top === undefined || last === undefined || queue.length === 0) return top;
+		queue[0] = last;
+		for (let i = 0; ; ) {
+			const l = 2 * i + 1;
+			const r = l + 1;
+			const m = r < queue.length && sooner(r, l) ? r : l;
+			if (m >= queue.length || !sooner(m, i)) break;
+			swap(i, m);
+			i = m;
 		}
-		return queue.splice(best, 1)[0];
+		return top;
 	};
 
 	// The ledger, as rule B has it: the host's renews work until another host claims.
@@ -533,13 +558,24 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	lostMissed: () => plant(['(m.type === "renew_lost" && m.fence === fence) ||\n\t', ""]),
 	// The lease clock is not heard: a host cut off for good runs its program on forever.
 	clockMissed: () =>
-		plant([' ||\n\t(m.type === "lease_due" && m.fence === fence && m.until === until)', ""]),
-	// It renews every second always, away or not: a quick fix for being away that floods the ledger.
-	alwaysEachSecond: () =>
 		plant([
-			'? {ms: every, msg: {type: "renew_due" as const, fence: s.fence, tick: s.ticks}}',
-			'? {ms: Math.min(every, 1000), msg: {type: "renew_due" as const, fence: s.fence, tick: s.ticks}}',
+			' ||\n\t(m.type === "lease_due" && m.fence === fence && m.until >= until + graceMs)',
+			"",
 		]),
+	// It renews every second always, away or not: a quick fix for being away that floods the ledger.
+	// Lane 18 split the clock's pace into `away` and not; the plant takes the away pace for both.
+	alwaysEachSecond: () =>
+		plant(["ms: s.away === true ? retryRenewMs : every,", "ms: Math.min(every, 1000),"]),
+	// The next two came with lane 18: their laws were known bugs until then, which is how each was
+	// seen to fail. Now they hold, so each needs a mistake of its own.
+	// The ledger's own `lease_expired` of this fence ends the program, as before rule B.
+	expiryIsLost: () =>
+		plant([
+			'(m.type === "seen_claim" && m.fence > fence) ||',
+			'(m.type === "seen_claim" && m.fence > fence) ||\n\t(m.type === "seen_expiry" && m.fence === fence) ||',
+		]),
+	// Being away changes nothing: renews keep their regular pace, as before lane 18.
+	awayPaceMissed: () => plant(["ms: s.away === true ? retryRenewMs : every,", "ms: every,"]),
 };
 
 // ---------------------------------------------------------------- the tests
@@ -567,11 +603,15 @@ describe("the host's laws for a short drop (lane 18, part 2), on createHost", ()
 		const caught: Record<string, readonly string[]> = {};
 		for (const [name, make] of Object.entries(PLANTS)) caught[name] = broken(await make());
 		expect(caught).toEqual({
-			unknownIsLost: [unknownKeeps.name],
+			// `runsOnThroughGrace` was a known bug when this list was first written. It sees this
+			// plant too: the program stops on a renew with no answer, long before the grace.
+			unknownIsLost: [unknownKeeps.name, runsOnThroughGrace.name],
 			newerClaimMissed: [lostStops.name],
 			lostMissed: [lostStops.name],
 			clockMissed: [stopsByGrace.name],
 			alwaysEachSecond: [backKeepsPace.name],
+			expiryIsLost: [expiryKeeps.name],
+			awayPaceMissed: [awayRenewsEachSecond.name],
 		});
 		const all = new Set(Object.values(caught).flat());
 		expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);

@@ -21,8 +21,9 @@ import * as realGate from "./idempotency.ts";
 // on this machine's clock.
 //
 // Nobody writes their own exam: each planted mistake is a text edit on a COPY of the file in a
-// temp folder, and the exact laws it breaks are checked below. Today's code breaks three laws:
-// kept as known bugs, which pass while the law fails for the rule's reason.
+// temp folder, and the exact laws it breaks are checked below. Before lane 18 the code broke
+// three laws, kept as known bugs. The fix turned two red. The third, `gateWaitsForRenew`, kept
+// failing because its world never renewed the lease; its world was fixed, and all three moved.
 
 type Service = Ledger["Service"];
 
@@ -308,13 +309,36 @@ const runGate = (
 		const lw = o.lease;
 		if (lw?.kind === "late") {
 			const seen = ledger;
+			// The host's renew comes back at `backAt` and lands on the real row, at the first lease
+			// read from then on. Rule B lets it: the newest fence renews past its lease's end, and
+			// after the alarm too (`lease_resumed`), while nobody claimed. This world first only
+			// stopped hiding the row at `backAt` and never renewed it. With `back` past the 10 s ttl,
+			// the gate then read the claim's own row, run out or gone, and waited on for good. That
+			// was the world's mistake, not the gate's: the gate must wait for a live lease, since a
+			// comment on GitHub carries no fence, and on a lease past its end another host may claim
+			// at once and send it too.
+			let renewed = false;
+			const renewBack = Effect.suspend(() =>
+				renewed || Date.now() < backAt
+					? Effect.void
+					: Effect.orDie(l.renew(NAME, c.fence, ttl)).pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									renewed = true;
+								}),
+							),
+						),
+			);
 			ledger = {
 				...seen,
 				lease: (name) =>
-					Effect.flatMap(seen.lease(name), (row) =>
-						Date.now() >= backAt || row === null
-							? Effect.succeed(row)
-							: Effect.succeed(lw.gone ? null : {...row, expires_at: Date.now() - 1}),
+					Effect.andThen(
+						renewBack,
+						Effect.flatMap(seen.lease(name), (row) =>
+							Date.now() >= backAt || row === null
+								? Effect.succeed(row)
+								: Effect.succeed(lw.gone ? null : {...row, expires_at: Date.now() - 1}),
+						),
 					),
 			};
 		}
@@ -454,13 +478,10 @@ const LAWS: readonly Checked[] = [
 	// appends and lease check after 40.
 	checked(factWaitsOut),
 	checked(gateWaitsOut),
+	// A known bug until its world renewed the row at `backAt` (see `runGate`): the gate was right.
+	checked(gateWaitsForRenew),
 ];
-const BUGS: readonly (readonly [Checked, RegExp])[] = [
-	[
-		checked(gateWaitsForRenew),
-		/^the lease (row was gone|had run out) until a renew \d+ ms on, and the write was never sent: wanted it sent after the renew$/,
-	],
-];
+const BUGS: readonly (readonly [Checked, RegExp])[] = [];
 
 const PLANTS: Record<string, () => Promise<Mod>> = {
 	// A fact in its own stream gets a new id each try: a resend of one that landed lands again.
@@ -477,16 +498,23 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${fact.type}` is that line's own template
 			"steady(`send ${fact.type}`, Effect.suspend(() => ledger.send(inbox, crypto.randomUUID(), event, o.hold?.fence)));",
 		),
-	// The gate's rows get a new id each try.
+	// The gate's rows get a new id each try. Lane 18 moved its retry into `steady`.
 	gateIdPerTry: () =>
 		plantGate(
-			'ledger.append(stream, "any", {kind, writer: o.holder, data, id}, o.fence).pipe(',
+			'ledger.append(stream, "any", {kind, writer: o.holder, data, id}, o.fence),',
 			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${...}` is that line's own template
-			'Effect.suspend(() => ledger.append(stream, "any", {kind, writer: o.holder, data, id: `${id}:${Date.now()}`}, o.fence)).pipe(',
+			'Effect.suspend(() => ledger.append(stream, "any", {kind, writer: o.holder, data, id: `${id}:${Date.now()}`}, o.fence)),',
 		),
 	// The lease check does not look at whose lease it is.
 	otherFenceMissed: () =>
 		plantGate("if (lease !== null && lease.fence !== o.fence) return false;\n\t\t\t\t", ""),
+	// The lease check takes a lease past its end, or a row the alarm took, for a lost one: the
+	// clock fences, as before rule B. Added with `gateWaitsForRenew`, so it is seen to fail.
+	runOutIsLost: () =>
+		plantGate(
+			"if (lease !== null && lease.fence !== o.fence) return false;",
+			"if (lease === null || lease.fence !== o.fence || lease.expires_at <= Date.now()) return false;",
+		),
 	// The send goes out with no lease check at all.
 	noLeaseCheck: () =>
 		plantGate(
@@ -532,6 +560,7 @@ describe("a lane's own writes for a short drop (lane 18, part 2)", () => {
 			gateIdPerTry: [gateOnce.name],
 			otherFenceMissed: [gateOtherFence.name],
 			noLeaseCheck: [gateOtherFence.name],
+			runOutIsLost: [gateWaitsForRenew.name],
 		});
 	});
 });

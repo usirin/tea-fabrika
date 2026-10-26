@@ -235,8 +235,8 @@ Every ledger write a lane or stage makes, sorted:
 
 ## The laws
 
-A second agent wrote the laws for this lane, and this lane did not change them
-(https://github.com/usirin/tea-fabrika/pull/112). Each law that today's code broke was kept as a
+A second agent wrote the laws for this lane, and this lane did not change them (pull request
+112). Each law that today's code broke was kept as a
 known bug. The fix turned these red, and each moved to its laws list with its body unchanged:
 
 | Law file | Moved |
@@ -270,6 +270,35 @@ Two things the laws agent was told, and is judging:
   anchors need moving: 6 tests, in the four new law files. The laws themselves run, and pass.
   `journal.laws.test.ts` also builds a journal without the new `signal` (the program's stop), so
   `pnpm typecheck` fails there until it passes one.
+
+What the laws agent found, judged by the rule and not by the code:
+
+- **W8: the world was wrong, not the gate.** The world now renews the row when the network comes
+  back, as rule B lets the newest fence do. W8 passes and moved to the laws. The gate still waits
+  for a live lease.
+- **Every plant points at the line that does its job now**, and each is still caught. Laws that
+  were known bugs now also catch older plants (no dedupe also breaks the newest fence's writes);
+  each list says so beside it.
+- **New plants, so every law is seen to fail.** 149's rule as a plant (memory and SQL); the
+  ledger's own `lease_expired` stops the program; being away keeps the regular pace; the gate
+  takes a run-out lease for lost.
+- **The host's plant test took 88 s**, past the 60 s limit. Its world's queue scanned for the
+  next event, and a world at the lane's pace with a renew each second holds tens of thousands.
+  A heap with the same order made it 18 s. The fence's plant checks stop at the first failing
+  run and do not shrink, as the editor's laws do: no law's answer changes.
+- **A gap no law covers:** W8 checks that the write was sent, not that it waited for the renew,
+  so a gate with no lease check passes it. Only G3 catches that plant.
+
+```ts
+// W8's world (lane-writes.laws.test.ts, `runGate`, the "late" case), cut short: before each
+// lease read, the host's renew lands on the real row, once, when the network is back.
+const renewBack = Effect.suspend(() =>
+	renewed || Date.now() < backAt
+		? Effect.void
+		: Effect.orDie(l.renew(NAME, c.fence, ttl)).pipe(Effect.andThen(Effect.sync(() => (renewed = true)))),
+);
+ledger = {...seen, lease: (name) => Effect.andThen(renewBack, /* the read as before */ seen.lease(name))};
+```
 
 ## What the industry does
 

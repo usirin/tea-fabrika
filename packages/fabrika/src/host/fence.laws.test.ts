@@ -24,8 +24,9 @@ import * as realSqlite from "./sqlite.ts";
 // Nobody writes their own exam: this file writes the laws and never the ledger's code. Each planted
 // mistake is a text edit on a COPY of the ledger's files, imported from a temp folder, so the real
 // code is untouched. The exact list of laws each plant breaks is checked below, as the Door's laws
-// do (door.laws.test.ts). Today's ledger breaks three of these laws: they are kept as known bugs,
-// which pass while the law fails for the rule's reason and turn red the day the fix lands.
+// do (door.laws.test.ts). Before lane 18 the ledger broke three of these laws. They were kept as
+// known bugs, which passed while the law failed for the rule's reason; the fix turned them red,
+// and they moved to the laws.
 
 // ---------------------------------------------------------------- the module under test
 
@@ -531,30 +532,43 @@ const implOf = (kind: (typeof IMPLS)[number], mod: Mod = real): Impl => ({kind, 
 
 // ---------------------------------------------------------------- planted mistakes
 
-/** The names of the laws a ledger breaks, of those that hold today. */
+/**
+ * The names of the laws a ledger breaks, of those that hold today. A plant needs only to be seen
+ * failing, not its smallest case, so fast-check stops at the first failing run and does not shrink
+ * it, as the editor's laws do (apps/fabrika/src/editor/editor.laws.test.ts). No law's answer
+ * changes: only the search for a smaller case is left out.
+ */
 const broken = async (impl: Impl): Promise<readonly string[]> => {
-	const out: string[] = [];
-	for (const law of LAWS)
-		if (
-			await assertLaw(law, impl).then(
-				() => false,
-				() => true,
+	const before = fc.readConfigureGlobal();
+	fc.configureGlobal({...before, endOnFailure: true});
+	try {
+		const out: string[] = [];
+		for (const law of LAWS)
+			if (
+				await assertLaw(law, impl).then(
+					() => false,
+					() => true,
+				)
 			)
-		)
-			out.push(law.name);
-	return out;
+				out.push(law.name);
+		return out;
+	} finally {
+		fc.configureGlobal(before);
+	}
 };
 
 /** Each plant edits a copy of the ledger's files, on the one implementation it names. */
 const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => Promise<Mod>}> = {
-	// An older fence passes while a newer lease is live: the fence is compared, not matched.
+	// An older fence's write passes once a newer claim exists: the fence is compared, not matched.
+	// Lane 18 moved the write's check from the lease's row to the name's newest fence; the plant
+	// follows it, in the write's check alone, as before.
 	olderFencePassesSql: {
 		kind: "sqlite",
 		make: () =>
 			plant([
 				"rules",
-				'const lease = db.all(\n\t\t"SELECT stream FROM leases WHERE fence = ? AND expires_at > ?",',
-				'const lease = db.all(\n\t\t"SELECT stream FROM leases WHERE fence >= ? AND expires_at > ?",',
+				"const name = fencedName(db, fence);",
+				'const row = db.all("SELECT name FROM names WHERE fence >= ?", fence)[0];\n\tconst name = row ? str(row.name) : null;',
 			]),
 	},
 	olderFencePassesMemory: {
@@ -562,8 +576,8 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				"l.fence === fence && l.expiresAt > now",
-				"l.fence >= fence && l.expiresAt > now",
+				"const name = fencedName(fence);",
+				"const name = [...names].find(([, p]) => p.fence !== null && p.fence >= fence)?.[0] ?? null;",
 			]),
 	},
 	// A fence reaches p0 and px too: the prefix is matched without its slash.
@@ -645,23 +659,39 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 				"if (live && live.expiresAt > now - 1000)",
 			]),
 	},
-	// A renew by an older fence moves the lease on.
+	// A renew by an older fence moves the lease on: its check takes any fence up to the newest.
+	// Lane 18 moved the renew's check to the name's newest fence. On SQL the plant also finds the
+	// lease's row by its name alone, as memory.ts does: with the row found by fence, the older
+	// fence's renew would insert a second row for the name, the primary key would throw, and every
+	// law would break on that, not on the mistake.
 	olderRenewsSql: {
 		kind: "sqlite",
 		make: () =>
-			plant([
-				"rules",
-				'"SELECT expires_at, stop FROM leases WHERE stream = ? AND fence = ?",',
-				'"SELECT expires_at, stop FROM leases WHERE stream = ? AND fence >= ?",',
-			]),
+			plant(
+				[
+					"rules",
+					'if (fencedName(db, fence) !== name) return {ok: false, why: "lost"};',
+					'if (!db.all("SELECT 1 FROM names WHERE name = ? AND fence >= ?", name, fence)[0]) return {ok: false, why: "lost"};',
+				],
+				[
+					"rules",
+					'const lease = db.all("SELECT stop FROM leases WHERE stream = ? AND fence = ?", name, fence)[0];',
+					'const lease = db.all("SELECT stop FROM leases WHERE stream = ?", name)[0];',
+				],
+				[
+					"rules",
+					'"UPDATE leases SET expires_at = ? WHERE stream = ? AND fence = ?",\n\t\t\t\texpiresAt,\n\t\t\t\tname,\n\t\t\t\tfence,',
+					'"UPDATE leases SET expires_at = ? WHERE stream = ?",\n\t\t\t\texpiresAt,\n\t\t\t\tname,',
+				],
+			),
 	},
 	olderRenewsMemory: {
 		kind: "memory",
 		make: () =>
 			plant([
 				"memory",
-				"if (!l || l.fence !== fence || l.expiresAt <= now)",
-				"if (!l || l.fence < fence || l.expiresAt <= now)",
+				'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+				'if ((names.get(name)?.fence ?? 0) < fence) return {ok: false, why: "lost"};',
 			]),
 	},
 	// The expiry grace grows to 10 minutes: the patient ledger of experiment 149's first try.
@@ -697,6 +727,35 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 				"data: {fence: l.fence, holder: l.holder},\n\t\t\t\t});\n\t\t\t\tleases.delete(name);",
 				"data: {fence: l.fence, holder: l.holder},\n\t\t\t\t});",
 			]),
+	},
+	// Experiment 149's first try: a fence is good while its lease's row is there, so until the
+	// alarm, not until a newer claim. Added with lane 18: the laws about after the alarm were known
+	// bugs until then, which is how each was seen to fail. On SQL every fenced call asks
+	// `fencedName`; memory.ts's renew asks the name on its own, so it takes a second edit.
+	fenceUntilAlarmSql: {
+		kind: "sqlite",
+		make: () =>
+			plant([
+				"rules",
+				'db.all("SELECT name FROM names WHERE fence = ?", fence)',
+				'db.all("SELECT stream AS name FROM leases WHERE fence = ?", fence)',
+			]),
+	},
+	fenceUntilAlarmMemory: {
+		kind: "memory",
+		make: () =>
+			plant(
+				[
+					"memory",
+					"const fencedName = (fence: number) => [...names].find(([, p]) => p.fence === fence)?.[0] ?? null;",
+					"const fencedName = (fence: number) => [...leases].find(([, l]) => l.fence === fence)?.[0] ?? null;",
+				],
+				[
+					"memory",
+					'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+					'if (leases.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+				],
+			),
 	},
 	// No dedupe: a resend lands again.
 	noDedupeSql: {
@@ -742,27 +801,17 @@ describe("the fence's laws (lane 18, rule B)", () => {
 	}
 
 	// Experiment 149's first try (experiments/149-wifi-blips/patient/rules.ts): a fence is good
-	// while its lease's row is there, so until the alarm, not until a newer claim. Its three edits,
-	// on a copy of today's SQL. The laws tell it from rule B: it keeps every law and the first known
-	// bug, and breaks only the two about after the alarm.
+	// while its lease's row is there, so until the alarm, not until a newer claim. It took three
+	// edits on the SQL before lane 18. Rule B now sends every fenced call, writes and renews alike,
+	// through `fencedName`, which reads the name's newest fence; 149 read the lease's row instead,
+	// so one edit there is 149's rule. The laws tell it from rule B: it keeps every law but the two
+	// about after the alarm.
 	it("sqlite: experiment 149's ledger fails only the laws about after the alarm", async () => {
-		const mod = await plant(
-			[
-				"rules",
-				'const lease = db.all(\n\t\t"SELECT stream FROM leases WHERE fence = ? AND expires_at > ?",\n\t\tfence,\n\t\tnow,\n\t)[0];',
-				'const lease = db.all("SELECT stream FROM leases WHERE fence = ?", fence)[0];',
-			],
-			[
-				"rules",
-				'if (!lease || num(lease.expires_at) <= now) return {ok: false, why: "lost"};',
-				'if (!lease) return {ok: false, why: "lost"};',
-			],
-			[
-				"rules",
-				'const row = db.all("SELECT stream FROM leases WHERE fence = ? AND expires_at > ?", fence, now)[0];',
-				'const row = db.all("SELECT stream FROM leases WHERE fence = ?", fence)[0];',
-			],
-		);
+		const mod = await plant([
+			"rules",
+			'db.all("SELECT name FROM names WHERE fence = ?", fence)',
+			'db.all("SELECT stream AS name FROM leases WHERE fence = ?", fence)',
+		]);
 		const out: Record<string, string> = {};
 		for (const law of [...LAWS, ...BUGS.map(([l]) => l)])
 			out[law.name] = await assertLaw(law, implOf("sqlite", mod)).then(
@@ -788,21 +837,28 @@ describe("the fence's laws (lane 18, rule B)", () => {
 		inboxIgnoresFenceSql: [olderReplyRefused, landsOnce],
 		inboxIgnoresFenceMemory: [olderReplyRefused, landsOnce],
 		idBeforeFenceSql: [olderRefused],
-		// On SQL the claim answers ok but the live row stays the old holder's: the old fence still
-		// writes and the new one does not, so every law that trusts a claim's answer breaks.
-		claimsLiveSql: [olderRefused, olderReplyRefused, claims, olderRenewLost, expiryJob, landsOnce],
+		// On SQL the claim answers ok but the live row stays the old holder's. Before lane 18 the old
+		// fence then still wrote and the new one did not, and every law that trusts a claim's answer
+		// broke. Rule B keeps the newest fence on the name, so the old fence is refused as it should
+		// be. What is left: the new fence's renew finds no row of its own, and the alarm runs on the
+		// old row's end, for the old fence.
+		claimsLiveSql: [claims, expiryJob, newestRenews],
 		claimsLiveMemory: [claims],
 		claimWaitsForAlarmSql: [claims],
 		claimWaitsForAlarmMemory: [claims],
 		// The older renew moves the newer lease on in secret: its end is later than the ledger said.
-		olderRenewsSql: [olderRenewLost, expiryJob],
+		olderRenewsSql: [claims, olderRenewLost, expiryJob],
 		olderRenewsMemory: [claims, olderRenewLost, expiryJob],
 		longGraceSql: [expiryJob],
 		longGraceMemory: [expiryJob],
 		rowKeptSql: [expiryJob],
 		rowKeptMemory: [expiryJob],
-		noDedupeSql: [landsOnce],
-		noDedupeMemory: [landsOnce],
+		fenceUntilAlarmSql: [newestAfterAlarm, newestRenews],
+		fenceUntilAlarmMemory: [newestAfterAlarm, newestRenews],
+		// `newestFenceWrites` was a known bug when this list was first written. It sees this plant
+		// too: the newest fence's resend of a write that landed answers ok, not dup.
+		noDedupeSql: [landsOnce, newestFenceWrites],
+		noDedupeMemory: [landsOnce, newestFenceWrites],
 	};
 
 	for (const kind of IMPLS) {

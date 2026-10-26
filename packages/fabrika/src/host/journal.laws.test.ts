@@ -18,8 +18,8 @@ import {memoryService} from "./memory.ts";
 // timers), and moves it on by hand. Nothing sleeps on this machine's clock.
 //
 // Nobody writes their own exam: each planted mistake is a text edit on a COPY of journal.ts in a
-// temp folder, and the exact laws it breaks are checked below. Today's journal breaks one law: it
-// is kept as a known bug, which passes while the law fails for the rule's reason.
+// temp folder, and the exact laws it breaks are checked below. Before lane 18 the journal broke
+// one law, kept as a known bug; the fix turned it red, and it moved to the laws.
 
 type Mod = {readonly journalStore: typeof realJournal.journalStore};
 const real: Mod = {journalStore: realJournal.journalStore};
@@ -88,6 +88,8 @@ const cut = (l: Ledger["Service"], net: {until: number; lands: boolean}): Ledger
 
 const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 	vi.useFakeTimers({toFake: ["setTimeout", "clearTimeout", "Date"], now: 0});
+	// The program's stop, as the host gives it: a save still waiting when the run ends stops here.
+	const stop = new AbortController();
 	try {
 		const l = memoryService();
 		await Effect.runPromise(l.register(NAME, "test"));
@@ -99,6 +101,7 @@ const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 			fence: c.fence,
 			holder: "h1",
 			note: () => {},
+			signal: stop.signal,
 		});
 		const done: Done[] = [];
 		let expected = 0;
@@ -124,6 +127,7 @@ const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 		const rows = await Effect.runPromise(l.readStream(STREAM));
 		return {done, ids: rows.map((r) => r.id)};
 	} finally {
+		stop.abort();
 		vi.useRealTimers();
 	}
 };
@@ -213,8 +217,13 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${...}` is that line's own template
 			"ledger.append(o.stream, expected, {...event, id: `${event.id}:${tries}`}, o.fence)",
 		),
-	// No answer is taken for a refusal: the first drop ends the save.
-	noResend: () => plant("if (tries >= 20) {", "if (tries >= 1) {"),
+	// No answer is taken for a refusal: the first drop ends the save. Lane 18 took out the give-up
+	// after 20 tries this plant first edited; it comes back here at one try, where no answer is said.
+	noResend: () =>
+		plant(
+			'if (tries === 1) note(false, "unreachable", null);',
+			'if (tries >= 1) { note(false, "unreachable", null); return yield* Effect.fail(new StoreConflictError(expected, -1)); }',
+		),
 };
 
 describe("the journal's laws for a short drop (lane 18, part 2)", () => {
@@ -248,6 +257,11 @@ describe("the journal's laws for a short drop (lane 18, part 2)", () => {
 			}
 			caught[name] = out;
 		}
-		expect(caught).toEqual({idPerTry: [landsOnce.name], noResend: [landsOnce.name]});
+		// `waitsOut` was a known bug when this list was first written, so only `landsOnce` was run.
+		// Now both run, and both see each plant: a save that does not land breaks both.
+		expect(caught).toEqual({
+			idPerTry: [landsOnce.name, waitsOut.name],
+			noResend: [landsOnce.name, waitsOut.name],
+		});
 	});
 });
