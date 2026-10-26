@@ -8,7 +8,6 @@ import {
 	back,
 	CLEAR,
 	CLEAR_BELOW,
-	cells,
 	columns,
 	draw,
 	fitsRow,
@@ -16,6 +15,7 @@ import {
 	PROMPT,
 	redrawRow,
 	shown,
+	spot,
 } from "./screen.ts";
 
 // tsh's line editor, as a tea machine: keys in, the bytes a terminal draws out. It is what
@@ -75,8 +75,8 @@ export interface Editor {
 	/** The terminal's width, in cells. */
 	readonly cols: number;
 	/**
-	 * The width changed since the prompt line was last redrawn. The terminal may have moved the
-	 * line onto other rows, so the next redraw clears to the end of the screen, not of one row.
+	 * The width changed since the prompt line was last redrawn. The terminal reflowed the line
+	 * onto other rows, so the next redraw clears to the end of the screen, not of one row.
 	 */
 	readonly resized: boolean;
 	/** tsh's job table, for `%1` on Tab. */
@@ -168,16 +168,20 @@ export const fresh = (ctx: EditorCtx): Editor => ({
 	programs: ctx.programs,
 });
 
-/** What the prompt line shows now, from the prompt's first cell, and where the cursor is in it. */
+/**
+ * What the prompt line shows now, from the prompt's first cell, and where the cursor is in it at
+ * the terminal's width (screen.ts). After a width change, that is where the terminal's reflow
+ * put it.
+ */
 const shownLine = (s: Editor): {readonly text: string; readonly at: number} | null => {
 	const {mode} = s;
 	if (mode.kind === "prompt") {
 		const before = PROMPT + mode.line.left;
-		return {text: before + mode.line.right, at: cells(before)};
+		return {text: before + mode.line.right, at: spot(before, s.cols)};
 	}
 	if (mode.kind === "search") {
 		const text = Shell.Search.shown(newestFirst(s.history), mode.search);
-		return {text, at: cells(text)};
+		return {text, at: spot(text, s.cols)};
 	}
 	return null;
 };
@@ -196,21 +200,18 @@ const drawn = (s: Editor): string => {
 	return now === null ? "" : draw(now.text, now.at, s.cols);
 };
 
-/** From `before`'s cursor to the end of its line. */
+/**
+ * From `before`'s cursor to just after its line, as the terminal leaves it: on a line that fills
+ * its last row, still on that row, waiting to wrap.
+ */
 const toEnd = (before: Editor): string => {
 	const now = shownLine(before);
-	return now === null
-		? ""
-		: back(now.at, before.cols) + draw(now.text, cells(now.text), before.cols);
+	return now === null ? "" : back(now.at, before.cols) + CLEAR_BELOW + now.text;
 };
 
 /** From `before`'s cursor to a fresh row under its line. */
-const leave = (before: Editor): string => {
-	const now = shownLine(before);
-	if (now === null) return "";
-	// A line that fills its last row to the end left the cursor on the next row already (screen.ts).
-	return toEnd(before) + (cells(now.text) % before.cols === 0 ? "" : NEWLINE);
-};
+const leave = (before: Editor): string =>
+	shownLine(before) === null ? "" : toEnd(before) + NEWLINE;
 
 const say = (acc: Acc, ...parts: readonly Part[]): Acc => ({
 	...acc,
@@ -259,7 +260,7 @@ const wordAfter = (chars: readonly string[], at: number) => {
 	return i;
 };
 
-/** The line cut at `at` cells, counted from its start. */
+/** The line cut at `at` characters, counted from its start. */
 const cutAt = (chars: readonly string[], at: number): Line => ({
 	left: chars.slice(0, at).join(""),
 	right: chars.slice(at).join(""),
@@ -424,7 +425,7 @@ const completed = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>): Acc => {
 	if (only === undefined) return say(acc, BELL);
 	if (candidates.length === 1) return put(only.endsWith("=") ? only : `${only} `);
 	const shared = sharedStart(candidates);
-	if (cells(shared) > cells(word)) return put(shared);
+	if (shared.length > word.length) return put(shared);
 	if (s.last !== "complete") return say(acc, BELL);
 	return say(acc, leave(s), columns(candidates.map(clean), s.cols), drawn(s));
 };

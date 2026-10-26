@@ -9,6 +9,7 @@
 		"build": "node build.ts",
 		"start": "node build.ts && electron .",
 		"e2e": "node build.ts && node e2e.ts",
+		"table": "node table.ts",
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
