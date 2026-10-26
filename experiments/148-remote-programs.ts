@@ -6,7 +6,8 @@
 //   CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node experiments/148-remote-programs.ts live
 //
 // The second is the live part (148-remote-programs/live.ts): the same stack on Cloudflare,
-// without the box, destroyed in a `finally`.
+// without the box, destroyed in a `finally`. `live-box small|full` is the live box round
+// (148-remote-programs/live-box.ts), the stack with its box, and the same `finally`.
 //
 // It builds the Worker (148-remote-programs/build.ts), starts the stand-in model and the stack's
 // local stage, plays two people on the laptop (148-remote-programs/attach.ts), and writes
@@ -301,7 +302,7 @@ const main = async () => {
 	console.log(`wrote ${out}`);
 };
 
-if (process.argv[2] === "live") {
+if (process.argv[2] === "live" || process.argv[2] === "live-box") {
 	// Alchemy reads the working folder once, as it loads (experiment 147), and would read a `.env`
 	// there: so first a fresh, empty temp folder, then Alchemy.
 	const work = mkdtempSync(join(tmpdir(), "tf-exp-148-"));
@@ -309,5 +310,9 @@ if (process.argv[2] === "live") {
 	process.env.ALCHEMY_HOME = join(work, "alchemy-home");
 	process.env.DO_NOT_TRACK = "1";
 	delete process.env.TYPESAFE_API_KEY;
-	await import("./148-remote-programs/live.ts");
+	await import(
+		process.argv[2] === "live"
+			? "./148-remote-programs/live.ts"
+			: "./148-remote-programs/live-box.ts"
+	);
 } else await main();

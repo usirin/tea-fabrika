@@ -35,8 +35,13 @@ interface Env {
 	readonly LEDGER: {readonly getByName: (project: string) => LedgerStub};
 	/** The secret every person's key is sealed under. A Worker secret: never in a box. */
 	readonly KEY_SEAL: string;
-	/** Where the model is: the stand-in on the laptop, or https://api.anthropic.com. */
+	/**
+	 * Where the model is: the stand-in on the laptop, https://api.anthropic.com, or "standin": the
+	 * stand-in as this Worker's own second entrypoint, for a live round with no real model.
+	 */
 	readonly UPSTREAM: string;
+	/** The second entrypoint's made-up keys, {key: person}. Set only when UPSTREAM is "standin". */
+	readonly FAKE_KEYS?: string;
 	/** The stand-in door's sessions: {token: person}. */
 	readonly SESSIONS: string;
 	/** A job's box is stopped after this long, whatever it is doing. */
@@ -88,11 +93,14 @@ const hex = (b: ArrayBuffer | Uint8Array) =>
 const unhex = (s: string) =>
 	new Uint8Array((s.match(/../g) ?? []).map((x) => Number.parseInt(x, 16)));
 
+/** What a person keeps here: a model key (the relay's stand-in path), or a Claude subscription token. */
+type Kept = "key" | "token";
+
 /** AES-GCM under a key drawn from KEY_SEAL for this one person: one person's row opens no other's. */
-const sealKey = async (seal: string, who: string) => {
+const sealKey = async (seal: string, who: string, kind: Kept = "key") => {
 	const base = await crypto.subtle.importKey("raw", bytes(seal), "HKDF", false, ["deriveKey"]);
 	return crypto.subtle.deriveKey(
-		{name: "HKDF", hash: "SHA-256", salt: bytes("exp148/person-key"), info: bytes(who)},
+		{name: "HKDF", hash: "SHA-256", salt: bytes(`exp148/person-${kind}`), info: bytes(who)},
 		base,
 		{name: "AES-GCM", length: 256},
 		false,
@@ -100,21 +108,26 @@ const sealKey = async (seal: string, who: string) => {
 	);
 };
 
-/** One person: their model key, sealed at rest in this object's own storage. */
+/**
+ * One person: their model key and their Claude subscription token, each sealed at rest in this
+ * object's own storage. The key is opened only by the relay, per call, and never reaches a box.
+ * The token is opened only by the person's own job object, to start the person's box with it:
+ * the decided design (docs/direction/programs-run-in-a-box.md) hands it to Claude Code itself.
+ */
 export class Person extends DurableObject<Env> {
-	async put(who: string, key: string) {
+	async put(who: string, secret: string, kind: Kept = "key") {
 		const iv = crypto.getRandomValues(new Uint8Array(12));
-		const k = await sealKey(this.env.KEY_SEAL, who);
-		const sealed = await crypto.subtle.encrypt({name: "AES-GCM", iv}, k, bytes(key));
-		this.ctx.storage.kv.put("key", {who, iv: hex(iv), sealed: hex(sealed)});
+		const k = await sealKey(this.env.KEY_SEAL, who, kind);
+		const sealed = await crypto.subtle.encrypt({name: "AES-GCM", iv}, k, bytes(secret));
+		this.ctx.storage.kv.put(kind, {who, iv: hex(iv), sealed: hex(sealed)});
 		return {who};
 	}
 
-	/** The key, open, for the one call the relay makes now. Never kept open, never sent to a box. */
-	async open(who: string): Promise<string | null> {
-		const row = this.ctx.storage.kv.get<{who: string; iv: string; sealed: string}>("key");
+	/** Open, for the one use now. Never kept open. */
+	async open(who: string, kind: Kept = "key"): Promise<string | null> {
+		const row = this.ctx.storage.kv.get<{who: string; iv: string; sealed: string}>(kind);
 		if (row === undefined || row.who !== who) return null;
-		const k = await sealKey(this.env.KEY_SEAL, who);
+		const k = await sealKey(this.env.KEY_SEAL, who, kind);
 		const open = await crypto.subtle.decrypt(
 			{name: "AES-GCM", iv: unhex(row.iv)},
 			k,
@@ -155,16 +168,74 @@ export class ModelRelay extends WorkerEntrypoint<Env, BoxProps> {
 			if (v !== null) headers.set(h, v);
 		}
 		headers.set("x-api-key", key);
-		return fetch(`${this.env.UPSTREAM}/v1/messages`, {method: "POST", headers, body: req.body});
+		const upstream = this.env.UPSTREAM === STANDIN ? "http://standin" : this.env.UPSTREAM;
+		const call = new Request(`${upstream}/v1/messages`, {
+			method: "POST",
+			headers,
+			body: req.body,
+		});
+		// The live round's stand-in is this Worker's own entrypoint: the call never leaves Cloudflare.
+		if (this.env.UPSTREAM === STANDIN) return this.ctx.exports.Standin.fetch(call);
+		return fetch(call);
 	}
 }
 
-/** http://host.internal/done, from inside a box: its job ended, with what it printed. */
+const STANDIN = "standin";
+
+/** The one host a box with its starter's Claude token may reach. */
+const ANTHROPIC = "api.anthropic.com";
+
+/**
+ * https://api.anthropic.com, from inside a box that carries its starter's Claude token. Cloudflare
+ * has no allow list that passes TLS through untouched: a box with no internet reaches a host only
+ * through a catch, and an HTTPS catch ends TLS at Cloudflare and hands the request to a Worker. So
+ * this one passes it on as it came. It reads no header and adds none: the token in it is Claude
+ * Code's own, sent by Claude Code.
+ */
+export class AnthropicPass extends WorkerEntrypoint<Env, BoxProps> {
+	async fetch(req: Request) {
+		return fetch(req);
+	}
+}
+
+/** Where a box finds the CA that Cloudflare's HTTPS catch signs with. */
+const CATCH_CA = "/etc/cloudflare/certs/cloudflare-containers-ca.crt";
+
+/** What a job hands back, with its starter's token taken out if it is there as it is. */
+const withheld = (said: string, token: string | null) =>
+	token !== null && said.includes(token)
+		? {said: "[withheld: the job's output held its starter's token]", leak: true}
+		: {said, leak: false};
+
+/**
+ * The stand-in model as a second entrypoint, for a live round (standin.ts is the laptop's). It
+ * answers a made-up key it knows, and says whose it was and which header names came with it.
+ */
+export class Standin extends WorkerEntrypoint<Env> {
+	async fetch(req: Request) {
+		const keys = JSON.parse(this.env.FAKE_KEYS ?? "{}") as Record<string, string>;
+		const who = keys[req.headers.get("x-api-key") ?? ""];
+		if (who === undefined) return Response.json({error: "unknown key"}, {status: 401});
+		const names = [...req.headers.keys()].sort().join(",");
+		return Response.json({
+			content: [{type: "text", text: `standin answered ${who}; headers ${names}`}],
+		});
+	}
+}
+
+/**
+ * http://host.internal, from inside a box: `/began`, its first sign of life (a cold start's end),
+ * and `/done`, its job ended, with what it printed.
+ */
 export class JobDone extends WorkerEntrypoint<Env, BoxProps> {
 	async fetch(req: Request) {
 		const {project, job} = this.ctx.props;
-		if (req.method !== "POST" || new URL(req.url).pathname !== "/done")
-			return new Response("not found", {status: 404});
+		const path = new URL(req.url).pathname;
+		if (req.method === "POST" && path === "/began") {
+			await this.env.JOBS.getByName(`${project}/${job}`).began();
+			return Response.json({ok: true});
+		}
+		if (req.method !== "POST" || path !== "/done") return new Response("not found", {status: 404});
 		const body = (await req.json()) as {said?: unknown; code?: unknown};
 		const ended: Ended = {
 			said: String(body.said ?? "").slice(0, 64 * 1024),
@@ -190,7 +261,13 @@ interface JobRow extends BoxProps {
 	readonly until: number;
 	/** How many beats the job's object has had while its box ran. */
 	readonly beats: number;
+	/** Whether the job's object beats. Off only when the driver asks, to see what an idle object does. */
+	readonly beat: boolean;
+	/** From begin to the box's first call out: the cold start, as the job's object saw it. */
+	readonly firstMs?: number;
 	readonly ended?: Ended;
+	/** Whether what the job said held its starter's token, as it is, and was withheld. */
+	readonly leak?: boolean;
 	readonly took?: number;
 }
 
@@ -205,10 +282,28 @@ export class JobBox extends DurableObject<Env> {
 	}
 
 	/** Start the job's box, once. Asked again, it answers how the job is. */
-	async begin(o: BoxProps & {readonly cmd: string}): Promise<{row: JobRow; fresh: boolean}> {
+	async begin(
+		o: BoxProps & {readonly cmd: string; readonly beat?: boolean},
+	): Promise<{row: JobRow; fresh: boolean}> {
 		const kept = this.row();
 		if (kept !== undefined) return {row: kept, fresh: false};
 		const t0 = Date.now();
+		// Kept before the box starts: its first call out may come before the catches are set.
+		this.ctx.storage.kv.put("job", {
+			project: o.project,
+			who: o.who,
+			job: o.job,
+			cmd: o.cmd,
+			state: "running",
+			startMs: -1,
+			at: t0,
+			calls: 0,
+			until: t0 + Number(this.env.JOB_TIMEOUT_MS),
+			beats: 0,
+			beat: o.beat !== false,
+		} satisfies JobRow);
+		// The starter's own Claude token, if they keep one: Claude Code in the box signs in with it.
+		const token = await this.env.PEOPLE.getByName(o.who).open(o.who, "token");
 		this.box.start({
 			image: this.box.images.Job,
 			enableInternet: false,
@@ -219,23 +314,36 @@ export class JobBox extends DurableObject<Env> {
 			...(this.env.BOX_SIZE
 				? {instance: JSON.parse(this.env.BOX_SIZE) as ContainerStartResources}
 				: {}),
-			env: {JOB_CMD: o.cmd, JOB: o.job},
+			env: {
+				JOB_CMD: o.cmd,
+				JOB: o.job,
+				...(token === null
+					? {}
+					: {
+							CLAUDE_CODE_OAUTH_TOKEN: token,
+							NODE_EXTRA_CA_CERTS: CATCH_CA,
+							CLAUDE_CONFIG_DIR: "/work/.claude",
+							CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+						}),
+			},
 		});
 		const props = {project: o.project, who: o.who, job: o.job};
 		await this.box.interceptOutboundHttp("model.internal", this.ctx.exports.ModelRelay({props}));
 		await this.box.interceptOutboundHttp("host.internal", this.ctx.exports.JobDone({props}));
-		const row: JobRow = {
-			...o,
-			state: "running",
-			startMs: Date.now() - t0,
-			at: t0,
-			calls: 0,
-			until: t0 + Number(this.env.JOB_TIMEOUT_MS),
-			beats: 0,
-		};
+		if (token !== null)
+			await this.box.interceptOutboundHttps(ANTHROPIC, this.ctx.exports.AnthropicPass({props}));
+		// Read again: the box may have called /began or even /done meanwhile.
+		const row: JobRow = {...(this.row() as JobRow), startMs: Date.now() - t0};
 		this.ctx.storage.kv.put("job", row);
-		await this.ctx.storage.setAlarm(Date.now() + BEAT_MS);
+		if (row.beat && row.state === "running") await this.ctx.storage.setAlarm(Date.now() + BEAT_MS);
 		return {row, fresh: true};
+	}
+
+	/** The box's first call out: its cold start is over. */
+	async began() {
+		const row = this.row();
+		if (row === undefined || row.firstMs !== undefined) return;
+		this.ctx.storage.kv.put("job", {...row, firstMs: Date.now() - row.at});
 	}
 
 	/** One model call more, if the job runs and has calls left. */
@@ -248,10 +356,21 @@ export class JobBox extends DurableObject<Env> {
 	}
 
 	/** The job ended: kept, its box goes, and the host is told. */
-	async finish(ended: Ended) {
+	async finish(said: Ended) {
 		const row = this.row();
 		if (row === undefined || row.state === "done") return;
-		const done: JobRow = {...row, state: "done", ended, took: Date.now() - row.at};
+		// Before what the job said goes anywhere (this row, the host, the ledger, a page): no token
+		// in it, as it is. A token encoded or cut up gets past this; see the write-up.
+		const token = await this.env.PEOPLE.getByName(row.who).open(row.who, "token");
+		const checked = withheld(said.said, token);
+		const ended: Ended = {...said, said: checked.said};
+		const done: JobRow = {
+			...row,
+			state: "done",
+			ended,
+			leak: checked.leak,
+			took: Date.now() - row.at,
+		};
 		this.ctx.storage.kv.put("job", done);
 		await this.ctx.storage.deleteAlarm();
 		// After this answer is on its way: the box is still sending it.
@@ -325,6 +444,13 @@ export class ProjectHost extends DurableObject<Env> {
 	/** Box jobs a program waits on now, by job: in memory only, like the sessions. */
 	private readonly waiting = new Map<string, (e: Ended) => void>();
 	private readonly wake: Wake = {born: Date.now(), opened: []};
+
+	constructor(ctx: DurableObjectState, env: Env) {
+		super(ctx, env);
+		// Every wake, kept: the driver reads when the host was made again, and so what woke it.
+		const wakes = ctx.storage.kv.get<number[]>("wakes") ?? [];
+		ctx.storage.kv.put("wakes", [...wakes, this.wake.born].slice(-50));
+	}
 
 	private project() {
 		return this.ctx.storage.kv.get<string>("project") ?? "";
@@ -405,9 +531,15 @@ export class ProjectHost extends DurableObject<Env> {
 	}
 
 	/** Start the job's box, or find it, and wait for its end. The wait holds no I/O: it does not keep the object awake. */
-	private async runBox(project: string, who: string, job: string, cmd: string): Promise<Ended> {
+	private async runBox(
+		project: string,
+		who: string,
+		job: string,
+		cmd: string,
+		beat = true,
+	): Promise<Ended> {
 		const begun = await this.env.JOBS.getByName(`${project}/${job}`)
-			.begin({project, who, job, cmd})
+			.begin({project, who, job, cmd, beat})
 			.catch((e: unknown) => ({error: String(e)}));
 		if ("error" in begun) return {said: `the box did not start: ${begun.error}`, code: 125};
 		const {row, fresh} = begun;
@@ -462,6 +594,7 @@ export class ProjectHost extends DurableObject<Env> {
 			case "/status":
 				return Response.json({
 					wake: this.wake,
+					wakes: this.ctx.storage.kv.get("wakes") ?? [],
 					timers: live.size,
 					// The host sets no alarm of its own: nothing it runs today waits on a clock.
 					alarm: await this.ctx.storage.getAlarm(),
@@ -473,6 +606,14 @@ export class ProjectHost extends DurableObject<Env> {
 				// The driver's stand-in for an eviction: the object is thrown away, its storage kept.
 				this.ctx.abort("evicted by the driver");
 				return new Response("gone");
+			case "/nobeat": {
+				// The driver's: one box job whose object does not beat, started outside tsh, to see
+				// whether an idle job object and its box are dropped. Its end is heard as any job's.
+				const job = `nobeat-${crypto.randomUUID()}`;
+				const ended = this.runBox(this.project(), who, job, await req.text(), false);
+				this.ctx.waitUntil(ended.then(() => undefined));
+				return Response.json({job});
+			}
 			case "/probe":
 				return Response.json(
 					await this.env.JOBS.getByName(
@@ -521,6 +662,8 @@ export default {
 		if (who === null) return new Response("sign in first", {status: 401});
 		if (url.pathname === "/person/key" && req.method === "PUT")
 			return Response.json(await env.PEOPLE.getByName(who).put(who, await req.text()));
+		if (url.pathname === "/person/token" && req.method === "PUT")
+			return Response.json(await env.PEOPLE.getByName(who).put(who, await req.text(), "token"));
 		if (url.pathname === "/person/row") return Response.json(await env.PEOPLE.getByName(who).row());
 		const m = url.pathname.match(/^\/p\/([\w.-]+)\/([\w-]+)(?:\/(.*))?$/);
 		if (m === null) return new Response("not found", {status: 404});

@@ -1,14 +1,23 @@
-// Experiment 148's job runner: the box's one process. It runs the job's command with sh, keeps
-// what it printed, and tells the host it ended, through the only door it has out:
+// Experiment 148's job runner: the box's one process. It says it is up, runs the job's command
+// with sh, keeps what it printed, and tells the host it ended, through the only door it has out:
 //
 //   JOB_CMD="node /app/ask.mjs hello" node run.mjs
-//   POST http://host.internal/done {said, code}       caught outside the box, by its JobBox
+//   POST http://host.internal/began                   caught outside the box, by its JobBox
+//   POST http://host.internal/done {said, code}
 //
 // It holds nothing secret: JOB_CMD and JOB, the job's id, are all its environment adds.
 import {spawn} from "node:child_process";
 
 const cmd = process.env.JOB_CMD ?? "true";
 const MAX = 64 * 1024;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// First a sign of life, so the host can time the cold start. At most 4 s: the job runs anyway.
+for (let i = 0; i < 40; i++) {
+	const res = await fetch("http://host.internal/began", {method: "POST"}).catch(() => null);
+	if (res?.ok) break;
+	await pause(100);
+}
 let said = "";
 const child = spawn("sh", ["-c", cmd], {stdio: ["ignore", "pipe", "pipe"]});
 const keep = (chunk) => {
@@ -29,5 +38,5 @@ for (let i = 0; i < 40; i++) {
 	} catch {
 		// the catch is not set yet, in the first moment of the box
 	}
-	await new Promise((r) => setTimeout(r, 250));
+	await pause(250);
 }
