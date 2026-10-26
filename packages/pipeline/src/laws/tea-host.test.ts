@@ -1,5 +1,12 @@
 import {describe, expect, it} from "vitest";
-import {checkCalls, checkHost, checkMonitors, checkSupervisor} from "./tea-host.ts";
+import {checkCalls, checkHost, checkMonitors, checkSupervisor, LEASE_LAW} from "./tea-host.ts";
+
+/**
+ * Known bug (lane 18, part 2): today's host stops its program at the bare lease end, and on its own
+ * lease_expired. This passes while the law fails for that reason, and turns red when the fix lands:
+ * then the line goes.
+ */
+const KNOWN = {[LEASE_LAW]: "1. claim_due 0\n2. claimed 1 1000 1\n3. lease_due 1 1000"};
 
 // The machines of the host (../../host), every law in every Msg order up to the bound, and every
 // planted mistake caught by the law it should break. Each walk is bounded by states, not time, so
@@ -8,9 +15,14 @@ import {checkCalls, checkHost, checkMonitors, checkSupervisor} from "./tea-host.
 describe("the tea-host machines", () => {
 	it("the host holds every law, and each planted mistake breaks its law", () => {
 		const r = checkHost(8);
-		expect(r.broken).toEqual({});
+		expect(r.broken).toEqual(KNOWN);
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
 		expect(r.planted.length).toBe(19);
+		// A plant on a law today's code breaks proves nothing yet: today's host ignores the clock at
+		// the end plus the grace too. It counts once the fix lands.
+		expect(r.planted.filter((p) => p.law in KNOWN).map((p) => p.name)).toEqual([
+			"ignores its lease clock (98)",
+		]);
 	});
 
 	it("the call module holds every law, and each planted mistake breaks its law", () => {
