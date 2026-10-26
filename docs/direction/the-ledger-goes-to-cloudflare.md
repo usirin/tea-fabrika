@@ -588,6 +588,35 @@ type Lease =
   need program cursors keyed by message id instead of inbox rev, and it would
   block asks, outside writes and new tickets while offline.
 
+**Decided 2026-10-25, after experiment 149: take both parts of its fix and keep
+the 30 s lease. The ledger's part is Kafka's rule: a fence stays good until
+someone newer claims, and the clock plays no part in it.**
+
+```ts
+// A sketch. The lane on tracker #18 builds it and measures it as experiment 151.
+// The ledger:
+//   a fenced write        taken while its fence is the newest one given out for that lease, at any time
+//   a claim past the end  takes the lease at once, with a bigger fence: a dead host goes as fast as today
+//   a late renew          works with the newest fence while nobody claimed; an older fence is "lost"
+//   the expiry job        stays at its 1 s grace, and rule B still holds after it ran
+// The host:
+//   no word from the ledger is not a lost lease; it stops at the lease's end plus 10 minutes
+```
+
+- **Why.** One rule, with nothing to keep in step. The other way, which is
+  what experiment 149 ran, kept the lease's row for 10 minutes. Then the
+  ledger's grace and the host's grace had to match, and `lease_expired` came
+  10 minutes late. Kafka's producer epoch
+  ([KIP-98](https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging))
+  and fencing tokens
+  ([Kleppmann, 2016](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html))
+  both refuse an old writer because someone newer claimed, not because time
+  passed.
+- **What it costs.** Experiment 149's matrix runs again on the real code
+  before the fix merges, on the laptop, for $0. The lease laws that assume
+  expiry is final change, written by an agent that does not build the fix.
+- **How sure: 70%.** Rule B never ran in experiment 149. The rerun settles it.
+
 ## 6. Sharing a project: the whole ledger is copied
 
 **Decided the same day: sharing a project copies its whole ledger, every row of
