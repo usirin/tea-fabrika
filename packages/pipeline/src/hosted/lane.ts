@@ -25,7 +25,7 @@ import {
 	Stream,
 } from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {readFacts, sendFact, steady} from "../asks/ledger.ts";
+import {readFacts, sendFact, steady, steadyCall} from "../asks/ledger.ts";
 import {bookOf, foldLedger, latestOf, openAsks} from "../asks/rules.ts";
 import {standingAt} from "../criteria/book.ts";
 import {type PlanId, ticketOf} from "../ids.ts";
@@ -127,10 +127,9 @@ const handlers = (o: {
 					self.fence,
 				),
 			).pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
-			const started = yield* self.startChild(
-				cmd.child,
-				null,
-				cmd.usd === null ? undefined : {usd: cmd.usd},
+			const started = yield* steadyCall(
+				"start a child",
+				self.startChild(cmd.child, null, cmd.usd === null ? undefined : {usd: cmd.usd}),
 			);
 			if (started.how !== "ok") return yield* failed;
 			const sent = yield* self.send(streams(cmd.child).inbox, "job", cmd.job);
@@ -284,7 +283,7 @@ export const hostedLane: Stage<Lane, LaneMsg, LaneJob, Outside | Idempotency | N
 	boot: (self) =>
 		Effect.gen(function* () {
 			// Its children's ends come as EXITs: read, never fatal. The outcome rows say how each ended.
-			yield* self.trapExit(true);
+			yield* steadyCall("trap exits", self.trapExit(true));
 			const context = yield* Effect.context<Needs>();
 			const job = yield* jobOf(self);
 			const h = handlers({

@@ -4,7 +4,7 @@ import {describe, expect, it} from "vitest";
 import {defineProgram} from "../program/program.ts";
 import {input} from "../program/shape.ts";
 import {cast, envelope, type HostEvent, Self, savedState, serve} from "./host.ts";
-import {Ledger} from "./ledger.ts";
+import {Ledger, LedgerUnreachable} from "./ledger.ts";
 import {layerMemory} from "./memory.ts";
 import {whereis} from "./observer.ts";
 
@@ -138,5 +138,119 @@ describe("serve", () => {
 			);
 		});
 		expect(typeof refused).toBe("object");
+	});
+});
+
+/** `ledger` behind a link that can drop: while `link.down`, every call goes unanswered. */
+const behind = (ledger: Ledger["Service"], link: {down: boolean}): Ledger["Service"] => {
+	const wrapped: Record<string, unknown> = {};
+	for (const [key, call] of Object.entries(ledger))
+		wrapped[key] =
+			key === "watch"
+				? call
+				: (...args: unknown[]) =>
+						Effect.suspend(() =>
+							link.down
+								? Effect.fail(new LedgerUnreachable({method: key, message: "the link is down"}))
+								: (call as (...a: unknown[]) => Effect.Effect<unknown>)(...args),
+						);
+	return wrapped as Ledger["Service"];
+};
+
+// Experiment 151: no word from the ledger is not a lost lease. A fence is good until someone newer
+// claims, so a host cut off past its lease's end goes on when it is back, with no restart.
+describe("serve, cut off from the ledger", () => {
+	const serveCounter = (holder: string, link: {down: boolean}, events: HostEvent[]) =>
+		Effect.gen(function* () {
+			const ledger = yield* Ledger;
+			const scope = yield* Scope.make();
+			yield* serve({
+				name: "counter:1",
+				holder,
+				program: counterProgram,
+				ttlMs: 300,
+				renewEveryMs: 100,
+				graceMs: 60_000,
+				listen: (e) => events.push(e),
+			}).pipe(Effect.provideService(Ledger, behind(ledger, link)), Scope.provide(scope));
+			return scope;
+		});
+
+	it("a host cut off past its lease's end, the expiry job run in the middle, goes on when it is back: no restart, the count exact", async () => {
+		const events: HostEvent[] = [];
+		const link = {down: false};
+		const out = await Effect.runPromise(
+			Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* ledger.register("counter:1", "test");
+				const scope = yield* serveCounter("a", link, events);
+				for (let i = 0; i < 10; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+				yield* until(Effect.map(countOf, (n) => n === 10));
+				link.down = true;
+				yield* sleep(1_500);
+				link.down = false;
+				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+				yield* until(Effect.map(countOf, (n) => n === 20));
+				const n = yield* countOf;
+				const kinds = (yield* ledger.readStream("counter:1")).map((r) => r.kind);
+				yield* Scope.close(scope, Exit.void);
+				return {n, kinds};
+			}).pipe(Effect.provide(layerMemory())),
+		);
+		expect(out.n).toBe(20);
+		expect(out.kinds.filter((k) => k === "claimed" || k.startsWith("lease_"))).toEqual([
+			"claimed",
+			"lease_expired",
+			"lease_resumed",
+		]);
+		expect(events.filter((e) => e.ev === "program" && e.phase === "started").length).toBe(1);
+		expect(events.filter((e) => e.ev === "tea_error")).toEqual([]);
+	});
+
+	it("a host cut off while another host claims the name is refused when it is back: it stops, and the count stays exact", async () => {
+		const events: HostEvent[] = [];
+		const cut = {down: false};
+		const open = {down: false};
+		const out = await Effect.runPromise(
+			Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* ledger.register("counter:1", "test");
+				const a = yield* serveCounter("a", cut, events);
+				for (let i = 0; i < 10; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+				yield* until(Effect.map(countOf, (n) => n === 10));
+				cut.down = true;
+				// The lease runs out; b takes the name while a cannot hear it.
+				const b = yield* serveCounter("b", open, events);
+				yield* until(Effect.map(whereis("counter:1"), (w) => w.holder === "b"));
+				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+				yield* until(Effect.map(countOf, (n) => n === 20));
+				cut.down = false;
+				yield* sleep(1_000);
+				const n = yield* countOf;
+				const saves = (yield* ledger.readStream("counter:1/state")).map(
+					(r) => (JSON.parse(String(r.data)) as {fence: number}).fence,
+				);
+				yield* Scope.close(a, Exit.void);
+				yield* Scope.close(b, Exit.void);
+				return {n, saves};
+			}).pipe(Effect.provide(layerMemory())),
+		);
+		expect(out.n).toBe(20);
+		// No save under a's fence landed after b's first: the fences in the journal never go back.
+		expect(out.saves).toEqual([...out.saves].sort((x, y) => x - y));
+		const started = events.flatMap((e) =>
+			e.ev === "program" && e.phase === "started" ? [e.fence] : [],
+		);
+		expect(started.length).toBe(2);
+		// a's program, back, is stopped: its fence is not the newest any more.
+		const stopped = events.flatMap((e) =>
+			e.ev === "program" && e.phase === "stopped" ? [e.fence] : [],
+		);
+		expect(stopped).toContain(started[0]);
+		// Back, a may read the new messages before it hears of b: its save is refused, and nothing lands.
+		const errors = events.flatMap((e) => (e.ev === "tea_error" ? [e] : []));
+		expect(errors.every((e) => e.fence === started[0] && /store conflict/.test(e.error))).toBe(
+			true,
+		);
 	});
 });

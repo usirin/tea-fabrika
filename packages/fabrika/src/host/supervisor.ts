@@ -904,15 +904,17 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 				const self = yield* Self;
 				if (self.name !== name)
 					return yield* Effect.die(`supervisor for ${name} served under ${self.name}`);
+				// 151: at the start too, a ledger that does not answer is asked again until it does. Its
+				// fence holds until someone newer claims, so waiting loses nothing; the host's lease
+				// clock ends the run past its grace. (Both gave up after a second, and the host
+				// started the run again.)
+				const again = Schedule.spaced(Duration.millis(AGAIN_MS));
 				// Exits first: a child's exit must come as a message, never take this name down.
-				if ((yield* self.trapExit(true)) !== "ok") return yield* fencedOut("trap_exit");
-				// A ledger that does not answer for a second ends this run as a lost lease, not a crash.
-				const info = yield* self.reads
-					.processInfo(name)
-					.pipe(
-						Effect.retry({times: 19, schedule: Schedule.spaced(Duration.millis(50))}),
-						Effect.orDie,
-					);
+				const trapped = yield* self
+					.trapExit(true)
+					.pipe(Effect.repeat({until: (w) => w !== "unreachable", schedule: again}));
+				if (trapped !== "ok") return yield* fencedOut("trap_exit");
+				const info = yield* self.reads.processInfo(name).pipe(Effect.retry(again), Effect.orDie);
 				const startOne = (s: Start) =>
 					Effect.gen(function* () {
 						yield* sleepUntil(s.notBefore);

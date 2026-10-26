@@ -15,7 +15,7 @@
 import type {EffectBootingRuntime} from "@demlik/tea/effect";
 import {defineProgram, envelope, input, Ledger, type Limits, Self} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schema, type Scope, Stream} from "effect";
-import {steady} from "../asks/ledger.ts";
+import {steady, steadyCall} from "../asks/ledger.ts";
 import {agentOf} from "./agent.ts";
 import {gate, Idempotency, type WriteNote} from "./idempotency.ts";
 
@@ -109,8 +109,11 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 				});
 
 				if (stage.agent !== null) {
-					yield* self.trapExit(true);
-					const started = yield* self.startChild(agentOf(name), null, stage.agent(job));
+					yield* steadyCall("trap exits", self.trapExit(true));
+					const started = yield* steadyCall(
+						"start the agent",
+						self.startChild(agentOf(name), null, stage.agent(job)),
+					);
 					yield* note(`agent_${started.how}`);
 				}
 				const idempotency = yield* gate({

@@ -213,8 +213,37 @@ export const steady = <A, E extends {readonly _tag: string}, R>(
 			const x = r.failure;
 			if (x._tag !== "LedgerUnreachable")
 				return yield* Effect.fail(x as Exclude<E, {readonly _tag: "LedgerUnreachable"}>);
-			if (tries === 1) yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
-			yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
+			yield* askAgain(what, tries);
+		}
+	});
+
+/** The wait before the next try: 100 ms, doubling to a second. */
+const askAgain = (what: string, tries: number) =>
+	Effect.gen(function* () {
+		if (tries === 1) yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
+		yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
+	});
+
+/** A `Self` call's answer other than no word from the ledger. */
+type Heard<W> = Exclude<W, "unreachable" | {readonly how: "unreachable"}>;
+const heard = <W>(w: W): w is Heard<W> =>
+	w !== "unreachable" &&
+	!(typeof w === "object" && w !== null && "how" in w && w.how === "unreachable");
+
+/**
+ * `steady` for the calls a program makes on `Self` (`trapExit`, `startChild`, `monitor`): those
+ * answer "unreachable" after about a second with no word from the ledger, and here they are asked
+ * again until the ledger answers. Each is safe to send again: a flag set twice, or a start that
+ * finds its child up (`started: false`). Found by reading, for experiment 151: a lane whose child
+ * start met a drop of a second ended stuck ("did not start"), and a stage whose `trapExit` met one
+ * ran on without the trap.
+ */
+export const steadyCall = <W>(what: string, call: Effect.Effect<W>): Effect.Effect<Heard<W>> =>
+	Effect.gen(function* () {
+		for (let tries = 1; ; tries++) {
+			const w = yield* call;
+			if (heard(w)) return w;
+			yield* askAgain(what, tries);
 		}
 	});
 

@@ -188,7 +188,7 @@ describe("the idempotency gate", () => {
 					yield* Effect.forkScoped(then);
 					yield* Effect.sleep(Duration.millis(150));
 					yield* g.once(w.write()).pipe(Effect.timeoutOption(Duration.millis(2_500)));
-				}),
+				}).pipe(Effect.scoped),
 			);
 			return {sent: w.sent.length, steps: said.map((n) => n.step)};
 		};
