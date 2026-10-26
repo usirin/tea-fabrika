@@ -35,6 +35,7 @@ yield* tell(run, "do", {kind: "close", ticket: 1});
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
 | `@tea-fabrika/tracker/window` | `src/window.tsx` | `TrackerWindow`: the list, the composer, a ticket's timeline. Plain React. |
+| | `src/links.ts` | `piecesOf`: a body cut into text and links, by GitHub's autolink rule, for http and https. Pure. |
 
 - **The ledger is the only copy.** The machine is not kept. Started again, it reads the ledger
   from the start. Its state is what it read, plus the writes not yet saved.
@@ -49,6 +50,19 @@ yield* tell(run, "do", {kind: "close", ticket: 1});
   comment before `filed`), is kept out of every ticket and listed under "rows did not read".
 - **Quit waits for writes.** `{kind: "quit"}` ends the program once every write asked for is on
   the ledger.
+- **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
+  not in a title. Where a URL ends is GitHub's rule (`src/links.ts` has it whole): a trailing
+  `.` `,` `:` `!` `?` `*` `_` `~` `'` `"` is left out, and so is a `)` that closes no `(`.
+
+  ```ts
+  piecesOf("Or (https://example.org/x).")
+  // [{kind: "text", text: "Or ("}, {kind: "link", url: "https://example.org/x"},
+  //  {kind: "text", text: ")."}]
+  ```
+
+  A link shows its own URL and is `target="_blank"`: the app hands it to the person's own
+  browser, and its window stays where it is
+  ([`apps/fabrika`, "Links"](../../apps/fabrika/README.md#links)).
 
 ## Keys
 
@@ -75,6 +89,9 @@ The common path needs no mouse. The focus goes where the next step is.
   a place: asks are new facts in `Fact`; an agent is another `Author` on the same ledger, and the
   poll already shows what it writes; sync and the watcher are programs that read and write the
   same streams.
+- Markdown in bodies, for now. Agents write Markdown, so it is next: `[text](url)` shows as
+  written today, with its URL a link. A Markdown link whose text is not its URL will need the
+  person to see where it goes before the click.
 
 ## Commands
 
