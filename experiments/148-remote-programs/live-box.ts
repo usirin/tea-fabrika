@@ -606,9 +606,12 @@ const main = async () => {
 		note("afterCleanup", await ours());
 		mkdirSync(join(import.meta.dirname, "..", "results"), {recursive: true});
 		const text = `${JSON.stringify(results, null, "\t")}\n`;
-		// The last check: nothing the run saves holds the token in any form it knows.
-		if (tokenForms.some((f) => text.includes(f))) throw new Error("the results held the token");
-		writeFileSync(resultsFile, text);
+		// The last check: nothing the run saves holds the token in any form it knows. If it does,
+		// nothing is written and the run fails, but the work folder still goes.
+		if (tokenForms.some((f) => text.includes(f))) {
+			console.error("not written: the results held the token");
+			process.exitCode = 1;
+		} else writeFileSync(resultsFile, text);
 		// Alchemy's state holds the account id and the address in plain text (experiment 144).
 		rmSync(work, {recursive: true, force: true});
 	}

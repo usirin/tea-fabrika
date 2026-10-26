@@ -158,15 +158,15 @@
 		"rowHoldsToken": "no"
 	},
 	"tokenPrintedBase64": {
-		"outputGotEncodedToken": "yes",
-		"withheld": false
+		"tested": true,
+		"result": "kept out of the public record; sent to the owner"
 	},
 	"tokenOnLedger": {
 		"plain": "no",
-		"encoded": "yes"
+		"encoded": "kept out of the public record; sent to the owner"
 	},
 	"tokenProbe": {
-		"other": {}
+		"result": "no box answered the probe in this run"
 	},
 	"claudeCall": {
 		"wallMs": 6434,

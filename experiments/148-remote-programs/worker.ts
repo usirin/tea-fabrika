@@ -309,8 +309,8 @@ export class JobBox extends DurableObject<Env> {
 			enableInternet: false,
 			// 1/4 vCPU and 1 GiB, "basic"'s size. The default under a Durable Object is lite,
 			// 256 MiB: too small for the probe here, and for an agent run. Local workerd refuses the
-			// name "basic" ("Invalid container instance type"), so locally the size is given in
-			// numbers here; on Cloudflare the application says "basic" (stack.ts).
+			// name "basic" ("Invalid container instance type"), and Alchemy refuses a size on an
+			// application owned by a Durable Object, so both stages give it in numbers here.
 			...(this.env.BOX_SIZE
 				? {instance: JSON.parse(this.env.BOX_SIZE) as ContainerStartResources}
 				: {}),

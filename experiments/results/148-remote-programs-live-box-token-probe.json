@@ -170,101 +170,27 @@
 		"rowHoldsToken": "no"
 	},
 	"tokenPrintedBase64": {
-		"outputGotEncodedToken": "yes",
-		"withheld": false
+		"tested": true,
+		"result": "kept out of the public record; sent to the owner"
 	},
 	"tokenOnLedger": {
 		"plain": "no",
-		"encoded": "yes"
+		"encoded": "kept out of the public record; sent to the owner"
 	},
 	"tokenProbe": {
-		"tries": [],
 		"root": {
-			"key": [],
-			"seal": [],
-			"session": [],
-			"token": [
-				{
-					"where": "/proc/1(node-MainThread)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/1(node-MainThread)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/1(node-MainThread)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/14(sh)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/14(sh)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/15(sleep)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/15(sleep)/mem",
-					"n": 1
-				},
-				{
-					"where": "/run/crun/cloudchamber/config.json",
-					"n": 1
-				},
-				{
-					"where": "/var/run/crun/cloudchamber/config.json",
-					"n": 1
-				}
-			]
+			"key": 0,
+			"seal": 0,
+			"session": 0,
+			"token": "found"
 		},
 		"job": {
-			"key": [],
-			"seal": [],
-			"session": [],
-			"token": [
-				{
-					"where": "/proc/1(node-MainThread)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/1(node-MainThread)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/1(node-MainThread)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/14(sh)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/14(sh)/mem",
-					"n": 1
-				},
-				{
-					"where": "/proc/15(sleep)/environ",
-					"n": 1
-				},
-				{
-					"where": "/proc/15(sleep)/mem",
-					"n": 1
-				},
-				{
-					"where": "/run/crun/cloudchamber/config.json",
-					"n": 1
-				},
-				{
-					"where": "/var/run/crun/cloudchamber/config.json",
-					"n": 1
-				}
-			]
-		}
+			"key": 0,
+			"seal": 0,
+			"session": 0,
+			"token": "found"
+		},
+		"where": "kept out of the public record; sent to the owner"
 	},
 	"facts": {
 		"ok": 32,
