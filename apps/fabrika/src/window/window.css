@@ -449,6 +449,20 @@ button:focus-visible {
 	line-height: 1.5;
 }
 
+/* A URL in a body: blue and underlined, and a long one wraps rather than widen the tile. */
+.tracker-body a {
+	color: #60a5fa;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	overflow-wrap: anywhere;
+}
+
+.tracker-body a:focus-visible {
+	outline: 2px solid var(--key);
+	outline-offset: 1px;
+	border-radius: 2px;
+}
+
 .tracker-pending {
 	opacity: 0.6;
 }

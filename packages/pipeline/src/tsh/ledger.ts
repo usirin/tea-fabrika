@@ -19,12 +19,19 @@ import {layerLocal} from "@kampus/fabrika/local";
 import {layerSqlite} from "@kampus/fabrika/sqlite";
 import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 
-/** The ledger's port for a data folder: the same folder, the same port, from 40000 to 59999. */
+/**
+ * The ledger's port for a data folder: the same folder, the same port, from 12000 to 31999.
+ *
+ * Below 32768, where Linux starts giving out the local ports of outgoing connections (macOS and
+ * Windows start at 49152). A fixed port inside that range can be held at any moment by any
+ * connection on the machine, and on Linux the ledger then cannot listen on it. The range was 40000
+ * to 59999 until CI hit that, twice.
+ */
 export const portOf = (persist: string): number => {
 	// FNV-1a, 32 bits: a fixed spread of folder names over the range, nothing secret.
 	let h = 0x811c9dc5;
 	for (let i = 0; i < persist.length; i++) h = Math.imul(h ^ persist.charCodeAt(i), 0x01000193);
-	return 40_000 + ((h >>> 0) % 20_000);
+	return 12_000 + ((h >>> 0) % 20_000);
 };
 
 /** A ledger's name as the Durable Object's URL takes it: lower-case letters, digits and dashes. */

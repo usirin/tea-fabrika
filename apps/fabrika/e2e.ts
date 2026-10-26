@@ -18,6 +18,8 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //   3 counter        `counter` in t3: counter covers t3, at 1 after a click; t1 and t2 as they were
 //   4 close-asked    Ctrl-B x on t3, with nothing running: "close t3? (y/n)"; n keeps it, y closes it
 //   5 attached       `tracker &` in t2 opens no tile; `attach %1` brings it in, covering t2
+//   5b link          a ticket filed with URLs in its body; a click on one hands it to the browser,
+//                    and the window stays on the desk
 //   6 zoomed         Ctrl-B z: t2 fills the window
 //   7 closing        `sleep --ms 600000 &` in t1, Ctrl-B x, y: t1 shows "closing", as sleep runs on
 //   8 stop-asked     Ctrl-B x on the closing t1: "stop t1 now? (y/n)"; y and t1 goes
@@ -25,7 +27,11 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; Ctrl-C over counter
 // is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
 // Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
-// the page cannot navigate away; and a second copy quits and leaves the first.
+// window.open hands http and https to the browser and refuses file:, javascript: and the app's
+// own; the page cannot navigate away; and a second copy quits and leaves the first.
+//
+// No run opens a real browser: every launch swaps main's `shell.openExternal` for a list first,
+// and reads the swap back before anything is clicked.
 //
 // Then the window's own close button, as macOS has it:
 //
@@ -160,6 +166,27 @@ const reachOf = (page: Page) =>
 		opened: window.open("https://example.com") === null,
 	}));
 
+/**
+ * Main's `shell.openExternal`, swapped for a list, so the run never opens a real browser. Read
+ * back: a swap that did not take stops the run before anything is clicked.
+ */
+const noBrowser = async (app: ElectronApplication) => {
+	const swapped = await app.evaluate(({shell}) => {
+		const opened: string[] = [];
+		Object.assign(globalThis, {opened});
+		const list = async (url: string) => {
+			opened.push(url);
+		};
+		shell.openExternal = list;
+		return shell.openExternal === list;
+	});
+	if (!swapped)
+		throw new Error("shell.openExternal was not swapped: this run would open a real browser");
+};
+/** What main has asked the browser to open, in order. */
+const openedOutside = (app: ElectronApplication) =>
+	app.evaluate(() => (globalThis as {opened?: string[]}).opened ?? []);
+
 /** The dock icon, clicked: Electron's `activate`, and the window it brings. */
 const activate = async (app: ElectronApplication) => {
 	const next = app.waitForEvent("window");
@@ -253,6 +280,47 @@ const flow = async (app: ElectronApplication) => {
 	check("attach %1 brings the tracker in, covering t2, as fg does", true);
 	await shot(page, "5-attached");
 
+	const tracker = tile(page, "t2").getByLabel("tracker view");
+	await tracker.getByLabel("new ticket title").fill("Links");
+	await tracker
+		.getByLabel("new ticket body")
+		.fill("See https://example.com/a_(b). Or (https://example.org/x), not javascript:alert(1).");
+	await tracker.getByRole("button", {name: "File ticket"}).click();
+	await tracker.getByRole("button", {name: /Links/}).click();
+	const link = tracker.getByRole("link", {name: "https://example.com/a_(b)", exact: true});
+	await link.waitFor();
+	const shown = await tracker
+		.getByRole("link")
+		.evaluateAll((all) =>
+			all.map((a) => [a.textContent, a.getAttribute("target"), a.getAttribute("rel")].join(" ")),
+		);
+	check(
+		"a ticket's body links its http and https URLs, GitHub's way: no trailing . ) or ,",
+		shown.join() ===
+			[
+				"https://example.com/a_(b) _blank noreferrer",
+				"https://example.org/x _blank noreferrer",
+			].join(),
+		shown,
+	);
+	await link.click();
+	const clicked = await until(
+		"the link to go to the browser",
+		() => openedOutside(app),
+		(o) => o.length > 0,
+	);
+	check(
+		"a click on a link hands its URL to the browser",
+		clicked.join() === "https://example.com/a_(b)",
+		clicked,
+	);
+	check(
+		"and the window stays on the desk, with no window of its own",
+		page.url() === "fabrika://app/desk.html" && (await windowCount(app)) === 1,
+		page.url(),
+	);
+	await shot(page, "5b-link");
+
 	await prefixed(page, "z");
 	await tilesAre(page, ["t2"]);
 	check("Ctrl-B z zooms t2", true);
@@ -333,6 +401,20 @@ const flow = async (app: ElectronApplication) => {
 			reach.opened,
 		reach,
 	);
+	await page.evaluate(() => {
+		window.open("javascript:alert(1)");
+		window.open("file:///etc/hosts");
+		window.open("fabrika://app/desk.html");
+		window.open("x-custom://open");
+	});
+	await page.waitForTimeout(300);
+	const outside = await openedOutside(app);
+	check(
+		"window.open hands only http and https to the browser: file:, javascript:, the app's own and a custom scheme are refused",
+		outside.join() === ["https://example.com/a_(b)", "https://example.com/"].join() &&
+			(await windowCount(app)) === 1,
+		outside,
+	);
 	await page.evaluate((next) => {
 		window.fabrika.send(`tile:${next}`, {type: "line", value: "say --text no\r"});
 		window.fabrika.send(`tile:${next}`, {type: "keys", data: "say --text no\r", to: "tsh:p1"});
@@ -373,6 +455,8 @@ const flow = async (app: ElectronApplication) => {
 		BrowserWindow.getAllWindows()[0]?.webContents.getURL(),
 	);
 	check("the page cannot navigate away", url === "fabrika://app/desk.html", url);
+	const after = await openedOutside(app);
+	check("and a navigation opens nothing in the browser either", after.length === 2, after);
 	return next;
 };
 
@@ -470,12 +554,18 @@ const again = async (app: ElectronApplication, left: string) => {
 if (process.platform !== "darwin")
 	throw new Error("this run checks macOS's window rules: run it on a Mac");
 
-const launch = (on: string) =>
-	_electron.launch({
+const launch = async (on: string) => {
+	const app = await _electron.launch({
 		executablePath: electronPath,
 		args: [here],
 		env: {...process.env, FABRIKA_HOME: on},
 	});
+	await noBrowser(app).catch(async (e: unknown) => {
+		await app.close().catch(() => {});
+		throw e;
+	});
+	return app;
+};
 
 /** Is there a process with this pid? Signal 0 asks, and sends nothing. */
 const alive = (pid: number) => {

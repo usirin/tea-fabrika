@@ -176,7 +176,8 @@ describe("the owner's desk in tsh", () => {
 		const deep = join(at.folder, "packages", "app");
 		mkdirSync(deep, {recursive: true});
 		const run = await tsh({folder: deep, home: at.home}, ["desk"]);
-		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
+		// Once on CI tsh printed nothing here, its ledger not started, and what it said was lost: say it.
+		expect(run.out, run.err).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
 	});
