@@ -1,8 +1,10 @@
+import {run} from "@demlik/tea/effect";
+import {backoffDelay, defaultRng} from "@demlik/tea/retry-backoff";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import {Cause, Effect, type FileSystem, Layer, Path} from "effect";
-import {ChildProcess} from "effect/process";
+import {Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream} from "effect";
+import {ChildProcess, type ChildProcessSpawner} from "effect/process";
 import {
 	app,
 	BrowserWindow,
@@ -19,8 +21,9 @@ import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
-import type {ToPage} from "./messages.ts";
+import {readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
+import {type Note, noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -39,6 +42,9 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   Ctrl-B table, and a port for every tile's terminal and every run shown
 //   a port          what the page sends on one goes to the host as {type: "on", port, m}; what
 //                   the host sends for one goes to the page. Read by the host, not here
+//   the link drops  the reconnect machine (reconnect.ts) waits a moment and attaches again, the
+//                   same way as at the start, so a host that was killed is started again. The
+//                   window says so calmly; after five minutes it stops and offers Try again
 //
 // What this file does, by Electron's security checklist
 // (https://www.electronjs.org/docs/latest/tutorial/security):
@@ -234,20 +240,21 @@ const portsFor = (current: () => BrowserWindow | null) => {
 	return {push, post, gone, reset};
 };
 
-/** The link to the host now: being made, up, or down, with why in words for the window. */
-type Link =
-	| {readonly at: "connecting"}
-	| {readonly at: "up"; readonly wire: Wire<Up>}
-	| {readonly at: "down"; readonly why: string};
-
-/** Why the app did not attach, as the window says it. */
-const sayWhy = (e: unknown): string => {
-	if (e instanceof NoHost) return `The host did not start: ${e.why}.`;
-	if (!(e instanceof Unattached)) return `The host could not be started: ${String(e)}.`;
-	if (e.why.kind === "version")
-		return `The host that runs speaks version ${e.why.theirs} of the link, and this app speaks ${e.why.ours}. The app did not attach. That host runs on, with its jobs.`;
-	return `The host did not answer: ${e.why.what}.`;
+/** What one try to attach came to, from why it failed, in words for the window. */
+const triedOf = (e: unknown): Tried => {
+	if (e instanceof NoHost) return {kind: "lost", why: `The host did not start: ${e.why}.`};
+	if (!(e instanceof Unattached))
+		return {kind: "lost", why: `The host could not be started: ${String(e)}.`};
+	if (e.why.kind === "version") return {kind: "refused", theirs: e.why.theirs, ours: e.why.ours};
+	return {kind: "lost", why: `The host did not answer: ${e.why.what}.`};
 };
+
+/** The link that is up now, and the scope it lives in: closed once the link ends. */
+type Held = {readonly wire: Wire<Up>; readonly scope: Scope.Closeable};
+
+/** Is what the window says now the same as what it was told last? */
+const same = (a: Note | null, b: Note | null) =>
+	a === null || b === null ? a === b : a.now === b.now && a.why === b.why;
 
 const main = Effect.gen(function* () {
 	yield* Effect.tryPromise({
@@ -261,22 +268,27 @@ const main = Effect.gen(function* () {
 	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
 	const home = app.getPath("userData");
 
+	const scope = yield* Effect.scope;
+	const clock = yield* Effect.clockWith(Effect.succeed);
+
 	/** The desk's window now, or none: closed, and on macOS the app runs on in the dock. */
 	let current: BrowserWindow | null = null;
 	/** The current window's page said hello, and is to be shown the desk once the link is up. */
 	let paged = false;
-	let link: Link = {at: "connecting"};
+	/** The link while it is up. Down, the reconnect machine (reconnect.ts) says what is done. */
+	let held: Held | null = null;
+	/** What the window was told of the link last, while it is down. */
+	let said: Note | null = null;
 	const ports = portsFor(() => current);
 
-	const toHost = (m: Up) => {
-		if (link.at === "up") link.wire.send(m);
+	const toHost = (m: Up) => held?.wire.send(m);
+	/** What a port's page sends goes to the host, under the port's name. */
+	const onTo = (name: string) => (raw: unknown) => {
+		if (plain(raw)) toHost({type: "on", port: name, m: raw});
+		else console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
 	};
 	/** A port whose messages go to the host, under its name. */
-	const relay = (name: string) =>
-		ports.push(name, (raw) => {
-			if (plain(raw)) toHost({type: "on", port: name, m: raw});
-			else console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
-		});
+	const relay = (name: string) => ports.push(name, onTo(name));
 	const toPage = (m: ToPage) => ports.post("desk", m);
 	const fromHost = (m: Down) => {
 		switch (m.type) {
@@ -294,11 +306,6 @@ const main = Effect.gen(function* () {
 				return current?.close();
 		}
 	};
-	const down = (why: string) => {
-		link = {at: "down", why};
-		toPage({type: "down", why});
-	};
-
 	/** Start the host on this home: the app's own binary as Node, detached, and let go. */
 	const startHost = Effect.gen(function* () {
 		const handle = yield* ChildProcess.make(process.execPath, [path.join(DIST, "host.mjs")], {
@@ -313,19 +320,62 @@ const main = Effect.gen(function* () {
 		yield* handle.unref.pipe(Effect.asVoid);
 		return handle.exitCode;
 	});
-	yield* attach({home, deliver: fromHost, start: startHost}).pipe(
-		Effect.matchEffect({
-			onFailure: (e) => Effect.sync(() => down(sayWhy(e))),
-			onSuccess: (wire) =>
-				Effect.gen(function* () {
-					link = {at: "up", wire};
-					if (paged) wire.send({type: "page"});
-					const why = yield* wire.ended;
-					down(`The link to the host ended: ${why}.`);
-				}),
-		}),
-		Effect.forkScoped,
-	);
+	/**
+	 * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
+	 * start one the same way the app's start does, so the kept desk comes back.
+	 */
+	const starting = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner | Path.Path>();
+	const tryAttach = Effect.gen(function* () {
+		const link = yield* Scope.fork(scope);
+		const exit = yield* attach({home, deliver: fromHost, start: startHost}).pipe(
+			Scope.provide(link),
+			Effect.provideContext(starting),
+			Effect.exit,
+		);
+		if (Exit.isFailure(exit)) {
+			yield* Scope.close(link, exit);
+			return triedOf(Cause.squash(exit.cause));
+		}
+		held = {wire: exit.value, scope: link};
+		if (paged) exit.value.send({type: "page"});
+		return {kind: "up"} as const;
+	});
+	/** The link that is up, until it ends: then its scope closes, and the machine is told why. */
+	const watch = Effect.gen(function* () {
+		const link = held;
+		const why = link === null ? "it was not there" : yield* link.wire.ended;
+		if (held === link) held = null;
+		if (link !== null) yield* Scope.close(link.scope, Exit.void);
+		return {
+			type: "ended",
+			why: `The link to the host ended: ${why}.`,
+			at: clock.currentTimeMillisUnsafe(),
+		} as const;
+	});
+	const reconnect = yield* run(reconnectMachine, {
+		interpret: {
+			attach: () => tryAttach,
+			jitter: (c) => Effect.sync(() => backoffDelay(c.attempt, POLICY, defaultRng)),
+		},
+		subscribe: {link: () => Stream.fromEffect(watch)},
+		clock: () => clock.currentTimeMillisUnsafe(),
+	});
+	// The window hears of the link only when what it would say changes: not on every wait.
+	reconnect.observe((_, s) => {
+		const note = noteOf(s);
+		if (same(note, said)) return;
+		said = note;
+		if (note !== null) toPage(note);
+	});
+	/** The desk's port: Try again is the app's own, and the rest goes on to the host. */
+	const deskPort = () => {
+		const toDesk = onTo("desk");
+		ports.push("desk", (raw) => {
+			if (readToApp(raw).kind === "read")
+				Effect.runFork(reconnect.dispatch({type: "again"}).pipe(Effect.ignore));
+			else toDesk(raw);
+		});
+	};
 
 	/**
 	 * The window there is, brought forward, or a new one: its page says hello as it loads. Quiet,
@@ -360,9 +410,9 @@ const main = Effect.gen(function* () {
 		// A hello is a page load: the ports of the page before are dead, and it is shown everything again.
 		ports.reset();
 		paged = true;
-		relay("desk");
-		if (link.at === "up") link.wire.send({type: "page"});
-		if (link.at === "down") toPage({type: "down", why: link.why});
+		deskPort();
+		if (held !== null) held.wire.send({type: "page"});
+		else if (said !== null) toPage(said);
 	});
 	app.on("second-instance", showWindow);
 	// The dock icon, on macOS: the window there is, or a new one on the same desk.
