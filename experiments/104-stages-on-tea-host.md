@@ -203,7 +203,9 @@ Durable Object in Miniflare:
 
 - **One local ledger per fabrika home**, its data under
   `<fabrika home>/ledgers/local`. Its port is a hash of that folder
-  (40000 to 59999), so two homes never share one.
+  (40000 to 59999), so two homes never share one. *Later, wrong range:*
+  Linux gives outgoing connections local ports from 32768 to 60999, and one
+  of them held the ledger's port twice on CI. It is now 12000 to 31999.
 - **One object per repository**, named after the old sqlite file
   (`github-demlik`, `folders-<name>-<hash>`).
 - **One tsh at a time per home.** tsh starts the ledger lazily, after it

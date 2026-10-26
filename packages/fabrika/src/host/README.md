@@ -198,8 +198,9 @@ yield* self.charge("t3", {usd: 0.031, tokens: 1550})        // what it spent; it
 `pnpm test` runs the law suite on the Durable Object, node:sqlite and memory, every planted
 mistake, a counter handed from one host to another, a supervisor restarting a child, each
 strategy's stops and starts in order (`supervisor-tree.test.ts`), setting a
-poison message aside and giving up, and a watcher seeing one DOWN per death and none for a
-takeover. The machine laws for the host, the supervisor and the monitor module are in
+poison message aside and giving up, a watcher seeing one DOWN per death and none for a
+takeover, and a local ledger on a taken port failing as soon as its child ends (`local.test.ts`).
+The machine laws for the host, the supervisor and the monitor module are in
 `packages/pipeline/src/laws/tea-host.ts`, beside the law checker, which is the pipeline's (it
 walks fabrika's machines through its public names). The long fault runs are in `experiments/98-tea-host-package.ts`
 (killed hosts, a frozen host, a host in a Docker container) and
