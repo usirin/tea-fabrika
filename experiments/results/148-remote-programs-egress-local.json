@@ -1,0 +1,293 @@
+{
+	"date": "2026-10-26",
+	"anthropicIp": "160.79.104.10",
+	"rawLocked": {
+		"status": 200,
+		"ms": 1875,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"https://example.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"https://www.google.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"http://example.com/": {
+				"status": "520"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "no",
+			"/etc/cloudflare": "none"
+		}
+	},
+	"rawLockedEarly": {
+		"status": 200,
+		"ms": 1840,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"https://example.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"https://www.google.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"http://example.com/": {
+				"status": "520"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "no",
+			"/etc/cloudflare": "none"
+		}
+	},
+	"rawOpened": {
+		"status": 200,
+		"ms": 2059,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "404"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"https://example.com/": {
+				"status": "520"
+			},
+			"https://www.google.com/": {
+				"status": "520"
+			},
+			"http://example.com/": {
+				"status": "520"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "example.com",
+				"trusted": true
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "yes",
+			"/etc/cloudflare": [
+				"certs"
+			]
+		}
+	},
+	"locked": {
+		"status": 200,
+		"ms": 1953,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"https://example.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"https://www.google.com/": {
+				"status": "refused: ECONNRESET"
+			},
+			"http://example.com/": {
+				"status": "520"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "no",
+			"/etc/cloudflare": "none"
+		}
+	},
+	"opened": {
+		"status": 200,
+		"ms": 2204,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "404"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"https://example.com/": {
+				"status": "520"
+			},
+			"https://www.google.com/": {
+				"status": "520"
+			},
+			"http://example.com/": {
+				"status": "520"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "refused: ECONNRESET"
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "example.com",
+				"trusted": true
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "Cloudflare TLS proxy-everything Intercept CA",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "yes",
+			"/etc/cloudflare": [
+				"certs"
+			]
+		}
+	},
+	"open": {
+		"status": 200,
+		"ms": 2481,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "404"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "Google Trust Services / WE1",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"https://example.com/": {
+				"status": "200"
+			},
+			"https://www.google.com/": {
+				"status": "200"
+			},
+			"http://example.com/": {
+				"status": "200"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "SSL Corp / SSL.com SSL Intermediate CA ECC R2",
+				"subject": "cloudflare-dns.com",
+				"trusted": true
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "SSL Corporation / Cloudflare TLS Issuing ECC CA 3",
+				"subject": "example.com",
+				"trusted": true
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "Google Trust Services / WE1",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "no",
+			"/etc/cloudflare": "none"
+		}
+	},
+	"cleanup": {
+		"containers": 0,
+		"images": 0
+	},
+	"devLog": [
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Locked-Containers] create (local)",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Locked-Containers/Locked] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Open-Containers] create (local)",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Open-Containers/Open] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Opened-Containers] create (local)",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Opened-Containers/Opened] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Raw-Containers] create (local)",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/Raw-Containers/Raw] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress] create (local)",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/LOCKED] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/OPEN] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/OPENED] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/RAW] create",
+		"[20:34:35.985] INFO (#20): [tf-exp-148-egress/SESSION] create",
+		"[20:34:35.990] INFO (#611): [tf-exp-148-egress] pre-creating (local)",
+		"[20:34:35.991] INFO (#614): [tf-exp-148-egress/Opened-Containers] pre-creating (local)",
+		"[20:34:35.992] INFO (#616): [tf-exp-148-egress/Open-Containers] pre-creating (local)",
+		"[20:34:35.993] INFO (#612): [tf-exp-148-egress/Locked-Containers] pre-creating (local)",
+		"[20:34:35.993] INFO (#618): [tf-exp-148-egress/Raw-Containers] pre-creating (local)",
+		"[20:34:35.998] INFO (#614): [tf-exp-148-egress/Opened-Containers] creating (local)",
+		"[20:34:35.998] INFO (#612): [tf-exp-148-egress/Locked-Containers] creating (local)",
+		"[20:34:35.999] INFO (#616): [tf-exp-148-egress/Open-Containers] creating (local)",
+		"[20:34:35.999] INFO (#618): [tf-exp-148-egress/Raw-Containers] creating (local)",
+		"[20:34:36.008] INFO (#611): [tf-exp-148-egress] creating (local)",
+		"[20:34:36.013] INFO (#611): [tf-exp-148-egress] ready at http://localhost:1337",
+		"[20:34:36.015] INFO (#660): [tf-exp-148-egress/Locked-Containers] created (local) (22ms)",
+		"[20:34:36.015] INFO (#661): [tf-exp-148-egress/Raw-Containers] created (local) (22ms)",
+		"[20:34:36.015] INFO (#662): [tf-exp-148-egress/Opened-Containers] created (local) (24ms)",
+		"[20:34:36.015] INFO (#663): [tf-exp-148-egress/Open-Containers] created (local) (23ms)",
+		"[20:34:36.015] INFO (#668): [tf-exp-148-egress] created (local) (25ms)",
+		"[20:34:37.301] INFO (#230): [tf-exp-148-egress] Started in 1289ms → http://localhost:1337/ (logs: <repo>/experiments/148-remote-programs/.alchemy/log/local/tf-exp-148-egress)",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Raw-bbc9dab063587735cac13b1399b42022a1b1dcd4e87c143e061077ed58196a5d; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Raw-8ed7d08b490dd8baa96e0cc2f7541b79d4110e0aad5f79a4469244da762779cc; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Raw-0e98828bbab63bef0d270bbfcc1cd0e1671de30fa6ff563f2bebe4036ea6af33; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Locked-b3e2bdb42949e8e2550644c1f48c34e6abca615305a0663c6e73fabb34a57173; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Opened-9ce485be577f4b9aa4a66a49c4e542b5274157d504f981f42bd1b9ba8754eeb5; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined",
+		"[tf-exp-148-egress] workerd/server/container-client.c++:1926: warning: Creating a container with explicitly configured Docker privileges. Capabilities, devices, and security options may grant host-level access.; containerName = workerd-tf-exp-148-egress-tf-exp-148-e6uwskehbdmyvhgkdkl4k7sav-Open-4abd2f08885e482dcdafc55c8f30966333813a0bb644cd6bcc5e1147be32a147; privileges.capabilities = SYS_ADMIN; devices = { pathOnHost = /dev/fuse, pathInContainer = /dev/fuse, cgroupPermissions = rwm }; privileges.securityOpt = apparmor:unconfined"
+	]
+}

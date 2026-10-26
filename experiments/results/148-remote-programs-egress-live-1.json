@@ -1,0 +1,215 @@
+{
+	"date": "2026-10-26",
+	"anthropicIp": "160.79.104.10",
+	"before": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-4ltc3uhglvzkgibr",
+				"tags": [
+					"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-lvsipu2pbxdlhkfk",
+				"tags": [
+					"sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"deploy": {
+		"ms": 47420,
+		"url": true
+	},
+	"lockedRetries": [
+		"Error: 200: Failed to start container: Container port connection closed unexpectedly.",
+		"TimeoutError: The operation was aborted due to timeout",
+		"Error: 200: Failed to start container: Container port connection closed unexpectedly.",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout"
+	],
+	"openedRetries": [
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout",
+		"TimeoutError: The operation was aborted due to timeout"
+	],
+	"open": {
+		"status": 200,
+		"ms": 2209,
+		"answer": {
+			"https://api.anthropic.com/": {
+				"status": "404"
+			},
+			"tls api.anthropic.com": {
+				"issuer": "Google Trust Services / WE1",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"https://example.com/": {
+				"status": "200"
+			},
+			"https://www.google.com/": {
+				"status": "200"
+			},
+			"http://example.com/": {
+				"status": "200"
+			},
+			"tls 1.1.1.1, no name": {
+				"issuer": "SSL Corp / SSL.com SSL Intermediate CA ECC R2",
+				"subject": "cloudflare-dns.com",
+				"trusted": true
+			},
+			"tcp 1.1.1.1:443": "open",
+			"tcp 1.1.1.1:53": "open",
+			"tls anthropic ip, name example.com": {
+				"issuer": "SSL Corporation / Cloudflare TLS Issuing ECC CA 3",
+				"subject": "example.com",
+				"trusted": true
+			},
+			"tls anthropic ip, name api.anthropic.com": {
+				"issuer": "Google Trust Services / WE1",
+				"subject": "api.anthropic.com",
+				"trusted": true
+			},
+			"tcp anthropic ip:443": "open",
+			"dns api.anthropic.com": "resolved",
+			"dns example.com": "resolved",
+			"ca file": "no",
+			"/etc/cloudflare": "none"
+		}
+	},
+	"destroy": {
+		"ms": 2072,
+		"ok": true
+	},
+	"swept": [
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:92711b8c7e02f3b9: head 200, delete 204",
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:buildcache: head 200, delete 204",
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:0c3ef304290a4bfe8748ad9738852760342ab48279aa3c3c08d8ae02b21eabc8\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c\"}",
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:sha256:0c3ef304290a4bfe8748ad9738852760342ab48279aa3c3c08d8ae02b21eabc8: head 404, delete 404 {\"errors\":[{\"code\":\"MANIFEST_UNKNOWN\",\"message\":\"manifest unknown\",\"detail\":{\"Tag\":\"sha256:0c3ef304290a4bfe8748ad9738852760342ab48279aa3c3c08d8ae02b21eabc8\"}}]}",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-lvsipu2pbxdlhkfk:sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:0c3ef304290a4bfe8748ad9738852760342ab48279aa3c3c08d8ae02b21eabc8\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c\"}",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-lvsipu2pbxdlhkfk:sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5:sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:0c3ef304290a4bfe8748ad9738852760342ab48279aa3c3c08d8ae02b21eabc8\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c\"}",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-lvsipu2pbxdlhkfk:sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200"
+	],
+	"afterCleanup": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-egress-opened-cloud-mdparvbtlnwhque5",
+				"tags": [
+					"sha256:069bf1681936a17888aa6a38c400b75a21c3b3248f8dbf5c9116680e883e4a6c"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-4ltc3uhglvzkgibr",
+				"tags": [
+					"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-lvsipu2pbxdlhkfk",
+				"tags": [
+					"sha256:6df98bd09e013aa00b1ee2225d51b58d7e24b36ea9ed6466e126b3eed19059e8"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	}
+}

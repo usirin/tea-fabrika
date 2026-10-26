@@ -80,3 +80,38 @@ export const stackOf = (inputs: StackInputs) =>
 			return {url: worker.url};
 		}),
 	);
+
+/**
+ * The egress round's stack (egress.ts): one Worker, three boxes set up only through
+ * `@cloudflare/containers` and one by hand (egress-worker.ts), the same image as the job box. The same on both
+ * stages. SESSION is a made-up token per run, from the driver.
+ */
+export const egressStackOf = (secrets?: SecretProviders) =>
+	Alchemy.Stack(
+		"tf-exp-148-egress",
+		{
+			providers: Cloudflare.providers(),
+			state: Alchemy.localState(),
+			...(secrets === undefined ? {} : {secrets}),
+		},
+		Effect.gen(function* () {
+			const box = (id: string) =>
+				Cloudflare.Container(id, {
+					schedulingPolicy: "durable_object",
+					context: `${import.meta.dirname}/box`,
+				});
+			const worker = yield* Cloudflare.Worker("tf-exp-148-egress", {
+				main: `${import.meta.dirname}/dist/egress.mjs`,
+				compatibility: {date: "2026-10-01"},
+				observability: {enabled: false},
+				env: {
+					LOCKED: Cloudflare.DurableObject("Locked", {containers: [box("Locked")]}),
+					OPENED: Cloudflare.DurableObject("Opened", {containers: [box("Opened")]}),
+					OPEN: Cloudflare.DurableObject("Open", {containers: [box("Open")]}),
+					RAW: Cloudflare.DurableObject("Raw", {containers: [box("Raw")]}),
+					SESSION: yield* Config.Redacted("SESSION"),
+				},
+			});
+			return {url: worker.url};
+		}),
+	);

@@ -4,7 +4,7 @@
 FROM node:26.12.0-slim
 RUN npm install -g @anthropic-ai/claude-code@2.1.310 && npm cache clean --force
 WORKDIR /app
-COPY run.mjs ask.mjs probe.mjs net.mjs /app/
+COPY run.mjs ask.mjs probe.mjs net.mjs egress.mjs /app/
 RUN mkdir -p /work && chown node:node /work
 USER node
 WORKDIR /work
