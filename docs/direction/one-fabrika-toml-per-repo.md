@@ -44,6 +44,9 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   the way `createShip({ waits })` is. No settings list on the root names its
   children, and no machine reads the computer it runs on. The file is read
   once, at the edge, and each machine is handed its values.
+- **The project's ledger server is named here** (2026-10-25): `[ledger] name`,
+  the project's own Worker on Cloudflare, one Worker per project. Not built
+  yet. See [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md).
 - **The first file's `[lane] attempts` knob no longer fits.** Since
   2026-10-12 there is no cap on build rounds; a stall rule stops the loop
   instead ([done is per criterion](./done-is-per-criterion.md)). It stays in

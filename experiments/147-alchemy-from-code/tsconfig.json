@@ -1,0 +1,7 @@
+{
+	// Experiment 147's own type check, outside `pnpm typecheck` like every experiment:
+	//   node_modules/.bin/tsc -p experiments/147-alchemy-from-code
+	// worker.ts is left out: it runs in workerd and needs Cloudflare's types (experiment 144).
+	"extends": "../../tsconfig.base.json",
+	"include": ["cli.run.ts", "host.ts", "ledger.ts", "net-watch.ts", "parts.ts", "run.ts"]
+}

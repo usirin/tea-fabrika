@@ -108,6 +108,15 @@ import {defineProgram, serve} from "@kampus/libfabrika"; // the library: program
 - **Old experiments move to a private place before the core moves**
   (2026-10-22). The work has moved past them. This repo stays the place for
   new experiments. Where the old ones go is open.
+- **Later, not now: a general Effect platform package for Electron**
+  (2026-10-25). Effect publishes `@effect/platform-node`, `-bun` and
+  `-browser`, and nothing for Electron. Code with no fabrika in it, such as a
+  `Socket` over Electron's MessagePort, could one day be its own package,
+  `@kampus/effect-platform-electron`, in `kamp-us/fabrika`, the way Effect's
+  own repo keeps `effect` and its platform packages side by side. Not now:
+  first, fabrika runs well for the two people who use it. Until then such
+  code stays inside the app, and fabrika's own platform code stays on
+  subpaths, as above.
 - **`@demlik/tea` is never edited from this repo** (2026-10-17). A change tea
   needs is written up as a finding or an ask for tea's owners. tea stays small.
 - **Agents are ordinary programs, in a suite of their own.** Not a part of tea,

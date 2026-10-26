@@ -34,6 +34,19 @@ renewed                   // -> {...s, away: false, until: max(s.until, m.until)
 // under the same id, with no try limit, instead of giving up after 1 to 2 s.
 ```
 
+*Found at review, the same day: the sketch leaves out a third part.* The patient ledger ran with
+its expiry grace at 10 minutes (`graceMs: 600_000` in `patientOptions`). Today's ran at 1 s, the
+default in `durable-object.ts` (`EXPIRY_GRACE_MS`), `daemon.ts` and `local.ts`. The grace is when
+the expiry job writes `lease_expired` and deletes the lease's row. Part 1 holds a fence while the
+row is there, so at 1 s it covers a drop only up to the lease plus 1 s. Two ways to take it:
+
+- Raise the ledger's grace to the host's 10 minutes. That is what ran. The cost: `lease_expired`,
+  which the host's registry tail turns into `seen_expiry`, comes 10 minutes late. The kill runs show
+  a waiting host still claims after one lease, so that path does not wait for it.
+- Write part 1 as "a fence holds unless a newer claim exists", Kafka's epoch from the industry
+  section. Then the row and the grace no longer matter, and the expiry job can stay at 1 s. Not
+  tested.
+
 ## How it was run
 
 All on this laptop, no deploy, no agent, no model, $0.
@@ -201,7 +214,8 @@ The live tail's WebSocket doorbell has no ping or heartbeat.
 - **What it costs.** A few dozen changed lines in `rules.ts` and `host-machine.ts`. Three retry loops
   also lose their limits: the journal save, `steady()` in the pipeline's ledger calls, and the
   gate's lease check. A program that waits forever needs a way out that a person can see: the grace
-  (10 minutes) ends it. Plus the false "slow" fix in `Link`.
+  (10 minutes) ends it. Plus the false "slow" fix in `Link`. Plus the ledger's expiry grace, or a
+  part 1 that does not need it (the note under the sketch).
 - **Lease length.** A longer lease only matters when a second host waits. P120 kept 60 s drops with B
   waiting, but a dead host then holds its ticket for 2 minutes. Pick the lease for "how long may a
   dead laptop block a teammate", not for blips. Blips no longer depend on it.

@@ -39,6 +39,10 @@ opt-in restart backoff, and resending a dead letter.
   people want jobs to keep running with their laptops closed. How it is
   built is open. Experiment 148 starts from the Durable Object and container
   in [PR 61](https://github.com/usirin/tea-fabrika/pull/61).
+  *Changed 2026-10-25:* the key is the person's own Claude subscription
+  token, never a Console API key, and it goes into their own job's box for
+  Claude Code to use unchanged, since that is the way Anthropic allows. No
+  relay adds it ([programs run in a box](./programs-run-in-a-box.md)).
 
   ```ts
   // A sketch. The same job on two hosts. Only where the host runs changes.
@@ -47,6 +51,28 @@ opt-in restart backoff, and resending a dead letter.
   // laptop host:      the program in a box on the laptop; the relay on the laptop adds the key
   // Cloudflare host:  the program in a container; a Worker adds github:7's key on the way out
   ```
+
+  *Changed the same day: a host on Cloudflare does not run when it is not
+  needed, so it is not a long-lived container.* The lean, proposed until
+  experiment 148 reports, is that the host is a Durable Object, the way the
+  [sync note](./a-local-first-sync-engine.md) already allows. It wakes on a
+  message or an alarm, steps its programs, writes to the ledger and sleeps. A
+  container is only for a job that needs a real machine: an agent run, git, a
+  build. The host starts one per job and stops it when the job ends. By the
+  [one-command rule](./local-is-the-cloud.md), the laptop's host is then the
+  same Durable Object in Miniflare, with Docker for the job boxes.
+
+  ```ts
+  // A sketch. What the host does when it is a Durable Object.
+  //   a message or an alarm   wake; rebuild the programs from the ledger (evicted after about 10 s idle, exp 144)
+  //   step                    run each program's update; write what it says to the ledger
+  //   a job needs a machine   start a container for it; stop it when the job ends
+  //   nothing left to do      set one alarm for the earliest timer, and sleep: no tick every second
+  ```
+  What it asks: timers become one alarm, every wake rebuilds from the ledger,
+  and nothing keeps a fiber open between messages. **How sure: 75%.** The
+  doubt is how long the rebuild takes on each wake on Cloudflare, and whether
+  the laptop app can reach a host in Miniflare without an open port.
 - **Every host uses exactly one ledger, and config picks which:** a team's
   Durable Object, your own Cloudflare account's Durable Object (to share
   context between your own agents, wherever they run), or a local one. There
@@ -120,6 +146,14 @@ opt-in restart backoff, and resending a dead letter.
   behind home routers need no tunnel. If a deployed ledger's p99 append
   is over about 50 ms, a direct host-to-host path comes next, and it still
   records the message.
+  *Decided 2026-10-25: a send stays a ledger append, and there is no direct
+  host-to-host path. The 50 ms line above was an agent's lean, never agreed.
+  Experiment 144 measured the
+  deployed ledger from a laptop: an append takes 56 ms at p50 and 426 ms at
+  p99, and nothing was lost or doubled. That is good enough for two people
+  working together. A direct path would be a second system to keep right. A
+  person should not wait on a slow write (show the change, settle it behind),
+  but that is later, and only if it feels slow in use.*
 - **Settled since:** the ledger is one Durable Object everywhere, run
   locally in Miniflare (experiment 93); the local host restarts it when its
   memory passes a cap. See [the sync engine note](./a-local-first-sync-engine.md).

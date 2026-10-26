@@ -12,7 +12,8 @@ the tests run on the local one.
 //   fabrika up --local    alchemy dev: workerd and Docker on the laptop, no Cloudflare account
 //   fabrika up --cloud    alchemy deploy: the same resources on Cloudflare
 const ledger = Cloudflare.Worker("ledger", {main: "./server.ts", env: {PROJECT, PERSON, INDEX}});
-const host = Cloudflare.Container("host", {schedulingPolicy: "durable_object", dockerfile: "./host/Dockerfile"});
+const host = Cloudflare.DurableObject("Host"); // sleeps when idle (tea-host.md, changed 2026-10-25)
+const job = Cloudflare.Container("job", {schedulingPolicy: "durable_object", dockerfile: "./job/Dockerfile"}); // one per job, Docker on the laptop
 // Never `.pipe(Alchemy.remote())`: a resource with no local twin fails `pnpm lint`.
 ```
 
@@ -27,7 +28,11 @@ const host = Cloudflare.Container("host", {schedulingPolicy: "durable_object", d
 - **Phoenix shows the cost of one remote piece.** Its database is marked
   remote, so every dev session there needs Cloudflare credentials, while its
   Worker and Durable Objects run locally (`apps/web/alchemy.run.ts` in
-  kamp-us/phoenix). One exception made all of dev depend on the cloud.
+  kamp-us/phoenix). One exception made all of dev depend on the cloud. It was
+  not a free choice: when phoenix set it up, Alchemy needed it to keep its
+  state. Alchemy's 2.0 betas have `Alchemy.localState()`, a store in a local
+  folder that needs no account (experiment 147), so we have no reason to
+  repeat it.
 
 ## How it is kept
 

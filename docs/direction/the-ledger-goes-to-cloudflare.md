@@ -102,6 +102,30 @@ come too. This replaces section 9's lean of one object first. Experiments 144,
 real Cloudflare measured from a laptop, and 145, the many-objects shape in
 Miniflare, are running to settle the details.
 
+**Decided 2026-10-25: one Worker per project.** Each project's server is its
+own Worker with its own deploy. In it sit the project's object and one object
+per person. The Worker's name is the project's pick, a key in its
+[fabrika.toml](./one-fabrika-toml-per-repo.md):
+
+```toml
+[ledger]
+name = "acme-ledger"   # the project's Worker. A new name is a new, empty server.
+```
+
+- **Why:** a deploy is easy; experiment 147 runs one from code. A careless
+  rename or a bad deploy then hits one project, not all of them, and one
+  project can try a new server version first.
+- **Cost:** a new project needs a deploy, and a person logs in to each
+  project's server.
+- **A rename is kept safe by what Alchemy and the file already give,** with no
+  check of our own. `RemovalPolicy.retain()` stays on the Worker, so a rename
+  leaves the old Worker and its data in place, and putting the old name back
+  takes it back (experiment 147). tsh reads `fabrika.toml` only from the
+  default branch, so a rename comes only through a reviewed pull request.
+- The account's own part of the Worker's address stays out of the file.
+- The other choice was one Worker in front of every project, an object each.
+  Its connect example, `…/acme`, is further down and is to be redrawn.
+
 **Decided 2026-10-25: the server is declared and deployed with Alchemy,** the
 same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
 Alchemy's latest version rather than phoenix's pinned one. Experiment 144
@@ -524,6 +548,45 @@ is what costs most. Cost: the tracker's poll Sub moves to `tail`. The window
 needs one "away" banner. A lane can lose its ticket on a long drop. **How
 sure: 80%.** The doubt is a laptop that sleeps: how often its socket comes back
 broken. The experiment below measures it.
+
+**Decided the same day: the first version rides out a wifi blip. A laptop that
+stays offline for long waits.**
+
+```ts
+// A sketch, to be measured in experiment 149. A lane's own view of its lease.
+type Lease =
+	| {state: "held"; until: number} // renewed on time
+	| {state: "jeopardy"; since: number} // a renew failed: keep working, hold outside writes
+	| {state: "lost"}; // the grace ran out, or the ledger says another host has it
+```
+
+- **Why blips come first.** Every laptop's wifi drops for seconds or minutes.
+  Today that costs a lane its ticket after about 30 s and a restart. Long
+  offline work matters less: an agent needs Anthropic's servers, so a laptop
+  with no internet cannot run agent steps anyway.
+- **What "rides out" means.** The lane keeps its ticket and does not restart.
+  Its writes land once and in order. Nothing outside happens twice. The window
+  says plainly what happened.
+- **How it is found.** Experiment 149 measures today's behaviour on drops from
+  2 s to 5 min, for both a clean refusal and a silent hang. It tries ttl and
+  renew pairs and a grace period, the shape Chubby calls "jeopardy" (a lease
+  in doubt, held while the client waits)
+  ([Burrows, OSDI 2006](https://research.google/pubs/the-chubby-lock-service-for-loosely-coupled-distributed-systems/)).
+  It also counts how often this laptop's link really drops.
+- **Hosts can be anywhere either way.** Every host uses the project's one
+  ledger, so a lane on the laptop, one on Cloudflare and one on another
+  person's laptop are already one record. Offline work is the only thing a
+  branch-and-merge ledger would add.
+- **Kept for later: a checked-out lane.** The lane takes its claim online with
+  a long ttl. Offline, it writes only its own one-writer streams to an outbox.
+  It uploads them in order under the same fence: a fast-forward, or nothing.
+  A person can free the ticket, and that fences the upload. It is LiveStore's
+  shape (the server sets the order, and the client replays on top before it
+  pushes) ([LiveStore](https://docs.livestore.dev/reference/syncing/)) with a
+  git-lfs-style lock for the claim
+  ([git-lfs](https://github.com/git-lfs/git-lfs/wiki/File-Locking)). It would
+  need program cursors keyed by message id instead of inbox rev, and it would
+  block asks, outside writes and new tickets while offline.
 
 ## 6. Sharing a project: the whole ledger is copied
 

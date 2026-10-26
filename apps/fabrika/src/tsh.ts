@@ -21,16 +21,16 @@ import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 
-// One tile's host: tsh, with its line editor, behind the tile's terminal, and a view for each run
+// One tile's tsh: tsh, with its line editor, behind the tile's terminal, and a view for each run
 // of a program that has one. It names no platform: it is handed the terminal's page and a way to
-// tell its tile of its runs, so a test drives it with no Electron (host.test.ts). tiles.ts holds
-// one host per tile; main.ts is the Electron edge.
+// tell its tile of its runs, so a test drives it with no Electron (tsh.test.ts). tiles.ts holds
+// one per tile, in the host process (host/main.ts).
 //
-//   const host = yield* startHost({jobs: memoryStorage(), history, runs});
-//   host.terminal.show((m) => port.postMessage(m));   // the screen so far, then each write
-//   host.terminal.heard({type: "keys", data: "cou\t"});
+//   const tsh = yield* startTsh({jobs: memoryStorage(), history, runs});
+//   const stop = tsh.terminal.show((m) => send(m));   // the screen so far, then each write
+//   tsh.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
-//   host.terminal.heard({type: "keys", data: "\r"});
+//   tsh.terminal.heard({type: "keys", data: "\r"});
 //   // runs.began("counter:1a2b", "counter", "foreground", screen): the counter covers the tile
 //   screen.heard({type: "msg", msg: {type: "press", value: "plus"}});    // the count is 1
 //   screen.closed();
@@ -51,30 +51,36 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter and the
 // tracker. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
-// a view is drawn: the host tells its tile, shows the view its data on each change, and reads
+// a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
 // tsh's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
-// Storage: the host is handed where tsh keeps its jobs, as the terminal tsh is
+// Storage: it is handed where tsh keeps its jobs, as the terminal tsh is
 // (packages/fabrika/src/shell/main.ts), and the history every tile shares. tiles.ts hands it a
-// folder for its tile in the app's home; a test hands it memory. The next host on the same
+// folder for its tile in the app's home; a test hands it memory. The next tsh on the same
 // storage finds the jobs as "from an earlier tsh, not running", and `attach %n` starts one again
 // where it left off, with its view.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
 // table, not its run.
 //
-// The ledger: the host is handed one, as the `Ledger` service, and gives it to the tracker. main.ts
-// hands it a node:sqlite file in the app's home; a test hands it memory. The tracker writes as the
-// owner, the one person at the app for now.
+// The ledger: it is handed one, as the `Ledger` service, and gives it to the tracker. The host
+// process hands it a node:sqlite file in the app's home; a test hands it memory. The tracker
+// writes as the owner, the one person at the app for now.
+//
+// A screen shows on any number of pages at once, as a tmux pane shows in every client attached:
+// `show` adds one, and the function it answers takes it away again.
 
 /** What became of a message from a page: read, and on its way, or refused, and why. */
 export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
 
-/** A page, as the host sees it. */
+/** A page, as tsh sees it. */
 export interface Screen<To> {
-	/** Show on this page from now on, starting with what it shows now. A page loaded again is shown again. */
-	readonly show: (page: (m: To) => void) => void;
+	/**
+	 * Show on this page too from now on, starting with what it shows now. Answers how to stop
+	 * showing on it: a page closed, or loaded again, is shown again with a fresh call.
+	 */
+	readonly show: (page: (m: To) => void) => () => void;
 	/** A message from the page: read, then acted on, in the order heard. One that does not read is refused. */
 	readonly heard: (raw: unknown) => Heard;
 }
@@ -83,8 +89,8 @@ export interface Screen<To> {
 export interface WindowScreen extends Screen<ToWindow> {
 	/**
 	 * The view was closed. The run's inputs close, as a terminal closes a program's stdin, and
-	 * the program ends the way it ends on that. Said after the run ended, or while the app quits,
-	 * it changes nothing: quitting leaves jobs to be attached at the next start.
+	 * the program ends the way it ends on that. Said after the run ended, or while the host stops,
+	 * it changes nothing: a host stopping leaves jobs to be attached at its next start.
 	 */
 	readonly closed: () => void;
 }
@@ -104,13 +110,13 @@ export interface Runs {
 	readonly running: (count: number) => void;
 }
 
-export interface Host {
+export interface Tsh {
 	/** The terminal's page: the bytes to draw, and the keys and size it sends. */
 	readonly terminal: Screen<ToTerminal>;
 	/**
 	 * Give tsh and every program it started the end of their inputs. When the last of its jobs has
 	 * ended, tsh's own line closes and tsh ends. Nothing is stopped: a program that does not end on
-	 * its inputs' end runs on, until the host's scope closes. Said again, it changes nothing.
+	 * its inputs' end runs on, until its scope closes. Said again, it changes nothing.
 	 */
 	readonly close: Effect.Effect<void>;
 	/** Done when tsh has ended: `exit`, Ctrl-D on an empty line, or after `close`. */
@@ -173,8 +179,8 @@ const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
 const runningIn = (table: Shell.Jobs | null): number =>
 	table?.jobs.filter((job) => job.state === "running").length ?? 0;
 
-/** Start the host: tsh keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
-export const startHost = (options: {
+/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
+export const startTsh = (options: {
 	readonly jobs: Storage;
 	readonly history: SharedHistory;
 	readonly runs: Runs;
@@ -183,7 +189,7 @@ export const startHost = (options: {
 		const {jobs, history, runs} = options;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
-		/** The host's scope is closing: the tile closes or the app quits, and every run stops with it. */
+		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
 		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
 		let table: () => Shell.Jobs | null = () => null;
@@ -202,12 +208,12 @@ export const startHost = (options: {
 		const inbox = yield* Queue.unbounded<Told>();
 		const toEditor = (msg: EditorMsg) => Queue.offerUnsafe(inbox, {to: "editor", msg});
 
-		// The terminal's screen: each write goes to the page, and is kept for a page loaded again.
+		// The terminal's screen: each write goes to every page, and is kept for a page loaded again.
 		let screen = "";
-		let page: ((m: ToTerminal) => void) | null = null;
+		const pages = new Set<(m: ToTerminal) => void>();
 		const write = (data: string) => {
 			screen = kept(screen + data);
-			page?.({type: "write", data});
+			for (const page of pages) page({type: "write", data});
 		};
 
 		/** A run of a program with a view: its tile is told, its view is shown each change, and it goes at the end. */
@@ -218,12 +224,14 @@ export const startHost = (options: {
 				const machine = declared === undefined ? undefined : r.machines[declared.machine];
 				if (declared === undefined || machine === undefined) return;
 				let newest: ToWindow | null = null;
-				let shownOn: ((m: ToWindow) => void) | null = null;
+				const shownOn = new Set<(m: ToWindow) => void>();
 				let over = false;
 				const window: WindowScreen = {
 					show: (next) => {
-						shownOn = next;
-						if (newest !== null) next(newest);
+						const one = (m: ToWindow) => next(m);
+						shownOn.add(one);
+						if (newest !== null) one(newest);
+						return () => shownOn.delete(one);
 					},
 					heard: (raw) => {
 						const envelope = readFromWindow(raw);
@@ -251,7 +259,7 @@ export const startHost = (options: {
 								data: declared.of(state),
 							};
 							newest = view;
-							shownOn?.(view);
+							for (const page of shownOn) page(view);
 						}),
 					),
 					Effect.ensuring(
@@ -365,11 +373,13 @@ export const startHost = (options: {
 					told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
 		yield* Queue.take(inbox).pipe(Effect.flatMap(tellOne), Effect.forever, Effect.forkScoped);
 
-		const host: Host = {
+		const tsh: Tsh = {
 			terminal: {
 				show: (next) => {
-					page = next;
-					if (screen !== "") next({type: "write", data: screen});
+					const one = (m: ToTerminal) => next(m);
+					pages.add(one);
+					if (screen !== "") one({type: "write", data: screen});
+					return () => pages.delete(one);
 				},
 				heard: (raw) => {
 					const read = readFromTerminal(raw);
@@ -387,5 +397,5 @@ export const startHost = (options: {
 			}),
 			ended: Deferred.await(over),
 		};
-		return host;
+		return tsh;
 	});

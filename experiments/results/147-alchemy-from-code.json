@@ -1,0 +1,535 @@
+{
+	"host": {
+		"importAlchemyMs": 1050,
+		"steps": [
+			{
+				"step": "create (first call)",
+				"ms": 86,
+				"pid": 47178,
+				"reloads": 0
+			},
+			{
+				"step": "same inputs",
+				"ms": 4,
+				"pid": 47178,
+				"reloads": 0
+			},
+			{
+				"step": "programs changed",
+				"ms": 4,
+				"pid": 47178,
+				"reloads": 1
+			},
+			{
+				"step": "ledger changed",
+				"ms": 87,
+				"pid": 47179,
+				"reloads": 0,
+				"oldAlive": false
+			},
+			{
+				"step": "SIGKILL, then deploy",
+				"ms": 4,
+				"pid": 47179,
+				"reloads": 0,
+				"alive": false
+			},
+			{
+				"step": "drift repair, from code",
+				"ms": 88,
+				"result": {
+					"resources": {
+						"laptop": {
+							"fqn": "laptop",
+							"logicalId": "laptop",
+							"resourceType": "Fabrika.Host",
+							"action": "recreated",
+							"attr": {
+								"pid": 47184,
+								"socket": "<work>/host/host.sock",
+								"home": "<work>/host",
+								"startedAt": 1792967307259,
+								"programs": [
+									"counter",
+									"tsh"
+								],
+								"reloads": 0
+							}
+						}
+					}
+				}
+			},
+			{
+				"step": "destroy",
+				"ms": 34
+			},
+			{
+				"step": "warm 1: create",
+				"ms": 59,
+				"pid": 47185,
+				"reloads": 0
+			},
+			{
+				"step": "warm 1: same inputs",
+				"ms": 3,
+				"pid": 47185,
+				"reloads": 0
+			},
+			{
+				"step": "warm 1: programs changed",
+				"ms": 3,
+				"pid": 47185,
+				"reloads": 1
+			},
+			{
+				"step": "warm 1: destroy",
+				"ms": 29
+			},
+			{
+				"step": "warm 2: create",
+				"ms": 60,
+				"pid": 47186,
+				"reloads": 0
+			},
+			{
+				"step": "warm 2: same inputs",
+				"ms": 2,
+				"pid": 47186,
+				"reloads": 0
+			},
+			{
+				"step": "warm 2: programs changed",
+				"ms": 3,
+				"pid": 47186,
+				"reloads": 1
+			},
+			{
+				"step": "warm 2: destroy",
+				"ms": 29
+			},
+			{
+				"step": "warm 3: create",
+				"ms": 58,
+				"pid": 47187,
+				"reloads": 0
+			},
+			{
+				"step": "warm 3: same inputs",
+				"ms": 2,
+				"pid": 47187,
+				"reloads": 0
+			},
+			{
+				"step": "warm 3: programs changed",
+				"ms": 3,
+				"pid": 47187,
+				"reloads": 1
+			},
+			{
+				"step": "warm 3: destroy",
+				"ms": 29
+			},
+			{
+				"step": "warm 4: create",
+				"ms": 58,
+				"pid": 47188,
+				"reloads": 0
+			},
+			{
+				"step": "warm 4: same inputs",
+				"ms": 2,
+				"pid": 47188,
+				"reloads": 0
+			},
+			{
+				"step": "warm 4: programs changed",
+				"ms": 3,
+				"pid": 47188,
+				"reloads": 1
+			},
+			{
+				"step": "warm 4: destroy",
+				"ms": 29
+			},
+			{
+				"step": "warm 5: create",
+				"ms": 57,
+				"pid": 47189,
+				"reloads": 0
+			},
+			{
+				"step": "warm 5: same inputs",
+				"ms": 2,
+				"pid": 47189,
+				"reloads": 0
+			},
+			{
+				"step": "warm 5: programs changed",
+				"ms": 3,
+				"pid": 47189,
+				"reloads": 1
+			},
+			{
+				"step": "warm 5: destroy",
+				"ms": 29
+			}
+		],
+		"net": [
+			"a unix socket"
+		]
+	},
+	"dev": {
+		"importAlchemyMs": 983,
+		"facts": {
+			"cloudflareEnv": [],
+			"noScopeAfterReturn": {
+				"status": 0,
+				"created": null
+			},
+			"first": {
+				"status": 200,
+				"created": true
+			},
+			"again": {
+				"status": 200,
+				"created": false
+			},
+			"childSockets": {
+				"pids": 1,
+				"remote": [
+					"127.0.0.1:61559",
+					"127.0.0.1:61561"
+				]
+			},
+			"afterRedeploy": {
+				"status": 200,
+				"created": false
+			},
+			"afterScopeClosed": {
+				"status": 0,
+				"created": null
+			},
+			"localRenamePlan": [
+				"Ledger: update"
+			],
+			"localRenameKeptRow": {
+				"status": 200,
+				"created": true
+			},
+			"net": [
+				"127.0.0.1:61557",
+				"127.0.0.1:61606",
+				"127.0.0.1:61641",
+				"127.0.0.1:61670",
+				"127.0.0.1:61722",
+				"::1:1338",
+				"::1:1340",
+				"::1:1342",
+				"::1:1344",
+				"::1:1347",
+				"fetch http://localhost:1337",
+				"fetch http://localhost:1338",
+				"fetch http://localhost:1340",
+				"fetch http://localhost:1342",
+				"fetch http://localhost:1344",
+				"fetch http://localhost:1347",
+				"localhost -> 127.0.0.1",
+				"localhost -> ::1"
+			],
+			"anyCloudflare": false
+		},
+		"steps": [
+			{
+				"step": "dev deploy, no scope (first call)",
+				"ms": 131
+			},
+			{
+				"step": "dev destroy",
+				"ms": 35
+			},
+			{
+				"step": "dev deploy, our scope",
+				"ms": 20
+			},
+			{
+				"step": "dev same inputs, our scope",
+				"ms": 20
+			},
+			{
+				"step": "dev destroy",
+				"ms": 33
+			},
+			{
+				"step": "warm 1: dev deploy",
+				"ms": 16
+			},
+			{
+				"step": "warm 1: deploy to first answer",
+				"ms": 77,
+				"answered": {
+					"status": 200,
+					"created": false
+				}
+			},
+			{
+				"step": "warm 1: dev same inputs",
+				"ms": 21
+			},
+			{
+				"step": "warm 1: dev destroy",
+				"ms": 31
+			},
+			{
+				"step": "warm 2: dev deploy",
+				"ms": 17
+			},
+			{
+				"step": "warm 2: deploy to first answer",
+				"ms": 79,
+				"answered": {
+					"status": 200,
+					"created": false
+				}
+			},
+			{
+				"step": "warm 2: dev same inputs",
+				"ms": 17
+			},
+			{
+				"step": "warm 2: dev destroy",
+				"ms": 33
+			},
+			{
+				"step": "warm 3: dev deploy",
+				"ms": 17
+			},
+			{
+				"step": "warm 3: deploy to first answer",
+				"ms": 79,
+				"answered": {
+					"status": 200,
+					"created": false
+				}
+			},
+			{
+				"step": "warm 3: dev same inputs",
+				"ms": 17
+			},
+			{
+				"step": "warm 3: dev destroy",
+				"ms": 33
+			},
+			{
+				"step": "dev deploy, before the rename",
+				"ms": 17
+			},
+			{
+				"step": "dev rename (retain off)",
+				"ms": 15
+			},
+			{
+				"step": "dev destroy",
+				"ms": 33
+			}
+		]
+	},
+	"host-up": {
+		"steps": [
+			{
+				"step": "create, then this process exits",
+				"ms": 84,
+				"pid": 50960
+			}
+		]
+	},
+	"host-down": {
+		"pid": 50960,
+		"aliveAfterDeployerExited": true,
+		"aliveAfterDestroy": false,
+		"steps": [
+			{
+				"step": "same inputs, from a new process",
+				"ms": 25,
+				"pid": 50960,
+				"samePid": true
+			},
+			{
+				"step": "destroy, from a new process",
+				"ms": 34
+			}
+		]
+	},
+	"live": {
+		"importAlchemyMs": 978,
+		"facts": {
+			"before": {
+				"scripts": [],
+				"namespaces": [],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"first": {
+				"status": 200,
+				"created": true
+			},
+			"again": {
+				"status": 200,
+				"created": false
+			},
+			"afterUpdate": {
+				"status": 200,
+				"created": false
+			},
+			"afterGuard": {
+				"scripts": [
+					"tf-exp-147-ledger-a"
+				],
+				"namespaces": [
+					"tf-exp-147-ledger-a / tf-exp-147-ledger-a_Ledger"
+				],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"afterRename": {
+				"scripts": [
+					"tf-exp-147-ledger-a",
+					"tf-exp-147-ledger-b"
+				],
+				"namespaces": [
+					"tf-exp-147-ledger-a / tf-exp-147-ledger-a_Ledger",
+					"tf-exp-147-ledger-b / tf-exp-147-ledger-b_Ledger"
+				],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"oldNameStillHolds": {
+				"status": 200,
+				"created": false
+			},
+			"newNameStartsEmpty": {
+				"status": 200,
+				"created": true
+			},
+			"afterRetainedDestroy": {
+				"scripts": [
+					"tf-exp-147-ledger-a",
+					"tf-exp-147-ledger-b"
+				],
+				"namespaces": [
+					"tf-exp-147-ledger-a / tf-exp-147-ledger-a_Ledger",
+					"tf-exp-147-ledger-b / tf-exp-147-ledger-b_Ledger"
+				],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"redeployRetained": "ok",
+			"retainedKeptRow": {
+				"status": 200,
+				"created": false
+			},
+			"afterDestroy": {
+				"scripts": [
+					"tf-exp-147-ledger-a"
+				],
+				"namespaces": [
+					"tf-exp-147-ledger-a / tf-exp-147-ledger-a_Ledger"
+				],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"swept": [
+				"tf-exp-147-ledger-a"
+			],
+			"afterSweep": {
+				"scripts": [],
+				"namespaces": [],
+				"otherScripts": 12,
+				"otherNamespaces": 12
+			},
+			"net": [
+				"2606:4700:300a::6813:c01d:443",
+				"2606:4700:300a::6813:c0ae:443",
+				"2606:4700:3030::6815:3129:443",
+				"2606:4700:3034::ac43:8d4a:443",
+				"api.cloudflare.com -> 104.19.192.174",
+				"api.cloudflare.com -> 104.19.192.175",
+				"api.cloudflare.com -> 104.19.192.176",
+				"api.cloudflare.com -> 104.19.192.177",
+				"api.cloudflare.com -> 104.19.192.29",
+				"api.cloudflare.com -> 104.19.193.29",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c01d",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c0ae",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c0af",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c0b0",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c0b1",
+				"api.cloudflare.com -> 2606:4700:300a::6813:c11d",
+				"fetch https://api.cloudflare.com"
+			]
+		},
+		"steps": [
+			{
+				"step": "live create (first call)",
+				"ms": 2886
+			},
+			{
+				"step": "live same inputs",
+				"ms": 56
+			},
+			{
+				"step": "live same inputs, again",
+				"ms": 22
+			},
+			{
+				"step": "live update (a new key hash binding)",
+				"ms": 1845
+			},
+			{
+				"step": "guarded rename: plan, then refuse",
+				"ms": 8,
+				"refused": true
+			},
+			{
+				"step": "live rename with retain (replace)",
+				"ms": 1762
+			},
+			{
+				"step": "live destroy, retain on",
+				"ms": 12
+			},
+			{
+				"step": "live same inputs, retain off",
+				"ms": 18
+			},
+			{
+				"step": "live destroy, retain off",
+				"ms": 453
+			}
+		]
+	},
+	"cli-live": {
+		"steps": [
+			{
+				"step": "cli create",
+				"ms": 3626
+			},
+			{
+				"step": "cli same inputs",
+				"ms": 800
+			},
+			{
+				"step": "cli same inputs, again",
+				"ms": 797
+			},
+			{
+				"step": "cli destroy",
+				"ms": 1399
+			}
+		],
+		"afterSweep": {
+			"scripts": [],
+			"namespaces": [],
+			"otherScripts": 12,
+			"otherNamespaces": 12
+		}
+	}
+}

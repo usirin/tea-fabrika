@@ -1,0 +1,420 @@
+{
+	"date": "2026-10-25",
+	"bundle": {
+		"bytes": 1257015,
+		"nodeImports": []
+	},
+	"before": {
+		"scripts": [],
+		"namespaces": [],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"containers": 403
+	},
+	"deploy": {
+		"ms": 3799,
+		"url": true
+	},
+	"afterDeploy": {
+		"scripts": [
+			"tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j"
+		],
+		"namespaces": [
+			"tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j / tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j_JobBox",
+			"tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j / tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j_Ledger",
+			"tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j / tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j_Person",
+			"tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j / tf-exp-148-tf-exp-148-cloud-ofg3dpm3xh5ty36j_ProjectHost"
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"containers": 403
+	},
+	"firstAnswer": {
+		"ms": 313,
+		"tries": 1
+	},
+	"keyAtRest": {
+		"fields": [
+			"who",
+			"iv",
+			"sealed"
+		],
+		"holdsKeyText": false
+	},
+	"noSession": 401,
+	"firstOpen": {
+		"attachMs": 14403,
+		"opened": {
+			"type": "opened",
+			"ms": 0,
+			"attached": [],
+			"born": 1792969483531,
+			"fresh": true
+		}
+	},
+	"counterBg": {
+		"line": "counter &",
+		"printed": [
+			"[1] counter:4611495e"
+		],
+		"ms": 83
+	},
+	"jobsAfterPresses": {
+		"line": "jobs",
+		"printed": [
+			"[1] running   counter",
+			"      3 so far"
+		],
+		"ms": 48
+	},
+	"boxJob": {
+		"line": "box --run 'echo hi'",
+		"printed": "the box did not start: TypeError: Cannot read properties of undefined (reading 'start') (exit 125)",
+		"ms": 3984
+	},
+	"statusOpen": {
+		"wake": {
+			"born": 1792969483531,
+			"opened": [
+				{
+					"who": "github:1",
+					"ms": 0,
+					"attached": []
+				}
+			]
+		},
+		"timers": 0,
+		"alarm": null,
+		"facts": {
+			"ok": 3,
+			"refused": 0
+		},
+		"inMemory": [
+			"github:1"
+		],
+		"boxes": {}
+	},
+	"lineAfterIdle": {
+		"line": {
+			"line": "jobs",
+			"heard": [
+				"tsh: 1 job from an earlier tsh, not running: %1. attach %n starts one again; jobs lists them.",
+				"[1] attached counter:4611495e",
+				"<ready>",
+				"[1] running   counter",
+				"<ready>"
+			]
+		},
+		"evicted": true
+	},
+	"lineAwake": {
+		"line": "jobs",
+		"heard": [
+			"[1] running   counter",
+			"      3 so far",
+			"<ready>"
+		]
+	},
+	"idleWithPageOpen": {
+		"idleMs": 30000,
+		"evicted": true,
+		"statusMs": 2648,
+		"born": 1792969563541
+	},
+	"idlePageClosed": [
+		{
+			"idleMs": 15000,
+			"evicted": true,
+			"statusMs": 500,
+			"born": 1792969579122
+		},
+		{
+			"idleMs": 30000,
+			"evicted": true,
+			"statusMs": 112,
+			"born": 1792969609243
+		},
+		{
+			"idleMs": 70000,
+			"evicted": true,
+			"statusMs": 217,
+			"born": 1792969679458
+		}
+	],
+	"wakesAfterIdle": [
+		{
+			"attachMs": 723,
+			"opened": {
+				"type": "opened",
+				"ms": 0,
+				"attached": [
+					1
+				],
+				"born": 1792969695058,
+				"fresh": true
+			},
+			"jobs": {
+				"line": "jobs",
+				"heard": [
+					"[1] attached counter:4611495e",
+					"<ready>",
+					"[1] running   counter",
+					"      3 so far",
+					"<ready>"
+				]
+			}
+		},
+		{
+			"attachMs": 340,
+			"opened": {
+				"type": "opened",
+				"ms": 0,
+				"attached": [
+					1
+				],
+				"born": 1792969716484,
+				"fresh": true
+			},
+			"jobs": {
+				"line": "jobs",
+				"heard": [
+					"[1] attached counter:4611495e",
+					"<ready>",
+					"[1] running   counter",
+					"      3 so far",
+					"<ready>"
+				]
+			}
+		},
+		{
+			"attachMs": 328,
+			"opened": {
+				"type": "opened",
+				"ms": 0,
+				"attached": [
+					1
+				],
+				"born": 1792969737819,
+				"fresh": true
+			},
+			"jobs": {
+				"line": "jobs",
+				"heard": [
+					"[1] attached counter:4611495e",
+					"<ready>",
+					"[1] running   counter",
+					"      3 so far",
+					"<ready>"
+				]
+			}
+		}
+	],
+	"attachAwake": [
+		{
+			"attachMs": 329,
+			"fresh": false
+		},
+		{
+			"attachMs": 240,
+			"fresh": false
+		},
+		{
+			"attachMs": 429,
+			"fresh": false
+		}
+	],
+	"counterDone": {
+		"line": "tell %1 press done",
+		"printed": "[1] 4",
+		"ms": 414
+	},
+	"timersAfter": 0,
+	"facts": {
+		"ok": 16,
+		"refused": 0
+	},
+	"ledger": [
+		{
+			"pos": 1,
+			"stream": "jobs/github:1",
+			"rev": 1,
+			"writer": "agent:host for:github:1",
+			"kind": "registered",
+			"at": 1792969484217,
+			"data": "{}",
+			"id": null
+		},
+		{
+			"pos": 2,
+			"stream": "jobs/github:1/inbox",
+			"rev": 1,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969484272,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 3,
+			"stream": "jobs/github:1/inbox",
+			"rev": 2,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969484276,
+			"data": "{\"n\":2,\"text\":\"box --run 'echo hi'\",\"state\":\"running\",\"background\":false,\"runs\":[\"box:c9c0bb2a\"]}",
+			"id": null
+		},
+		{
+			"pos": 4,
+			"stream": "jobs/github:1/inbox",
+			"rev": 3,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969488075,
+			"data": "{\"n\":2}",
+			"id": null
+		},
+		{
+			"pos": 5,
+			"stream": "jobs/github:1/inbox",
+			"rev": 4,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969518393,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 6,
+			"stream": "jobs/github:1/inbox",
+			"rev": 5,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969518394,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 7,
+			"stream": "jobs/github:1/inbox",
+			"rev": 6,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969518394,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 8,
+			"stream": "jobs/github:1/inbox",
+			"rev": 7,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969695367,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 9,
+			"stream": "jobs/github:1/inbox",
+			"rev": 8,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969695370,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 10,
+			"stream": "jobs/github:1/inbox",
+			"rev": 9,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969695371,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 11,
+			"stream": "jobs/github:1/inbox",
+			"rev": 10,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969716615,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 12,
+			"stream": "jobs/github:1/inbox",
+			"rev": 11,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969716621,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 13,
+			"stream": "jobs/github:1/inbox",
+			"rev": 12,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969716621,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 14,
+			"stream": "jobs/github:1/inbox",
+			"rev": 13,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969737883,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 15,
+			"stream": "jobs/github:1/inbox",
+			"rev": 14,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969737885,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 16,
+			"stream": "jobs/github:1/inbox",
+			"rev": 15,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969737887,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:4611495e\"]}",
+			"id": null
+		},
+		{
+			"pos": 17,
+			"stream": "jobs/github:1/inbox",
+			"rev": 16,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969745323,
+			"data": "{\"n\":1}",
+			"id": null
+		}
+	],
+	"destroy": {
+		"ms": 844,
+		"ok": true
+	},
+	"swept": [],
+	"afterCleanup": {
+		"scripts": [],
+		"namespaces": [],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"containers": 403
+	}
+}

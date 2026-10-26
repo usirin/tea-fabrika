@@ -1,7 +1,7 @@
 // A host for the poet and the book, on the same ledger as part one.
 import {NodeRuntime} from "@effect/platform-node";
 import {type HostEvent, Ledger, serve} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {layerAttach} from "@kampus/fabrika/local";
 import {Console, Effect} from "effect";
 import {bookProgram, poetProgram} from "./programs.ts";
 
@@ -36,5 +36,5 @@ const main = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 NodeRuntime.runMain(
-	main.pipe(Effect.provide(layerHttp({url: "http://127.0.0.1:8790", ledger: "teahouse"}))),
+	main.pipe(Effect.provide(layerAttach({persist: ".teahouse", ledger: "teahouse", port: 8790}))),
 );
