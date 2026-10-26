@@ -16,7 +16,7 @@ import {
 	session,
 	shell,
 } from "electron";
-import {attach, NoHost} from "./attach.ts";
+import {attach, NoHello, NoHost} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
@@ -243,6 +243,8 @@ const portsFor = (current: () => BrowserWindow | null) => {
 /** What one try to attach came to, from why it failed, in words for the window. */
 const triedOf = (e: unknown): Tried => {
 	if (e instanceof NoHost) return {kind: "lost", why: `The host did not start: ${e.why}.`};
+	if (e instanceof NoHello)
+		return {kind: "lost", why: `The host did not answer: it said no hello within ${e.within}.`};
 	if (!(e instanceof Unattached))
 		return {kind: "lost", why: `The host could not be started: ${String(e)}.`};
 	if (e.why.kind === "version") return {kind: "refused", theirs: e.why.theirs, ours: e.why.ours};
