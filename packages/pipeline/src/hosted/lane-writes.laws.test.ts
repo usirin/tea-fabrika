@@ -450,18 +450,12 @@ const LAWS: readonly Checked[] = [
 	checked(factLandsOnce),
 	checked(gateOnce),
 	checked(gateOtherFence),
+	// Were known bugs until lane 18: `steady` gave up after 40 tries, 50 ms apart, and the gate's
+	// appends and lease check after 40.
+	checked(factWaitsOut),
+	checked(gateWaitsOut),
 ];
 const BUGS: readonly (readonly [Checked, RegExp])[] = [
-	// `steady`: 40 tries, 50 ms apart, then the lane dies.
-	[
-		checked(factWaitsOut),
-		/^a fact to its (facts|inbox) in a \d+ ms drop failed after \d+ ms: wanted it to land within 2000 ms of the network coming back$/,
-	],
-	// The gate's appends: 40 tries, then `unknown`. Its lease check: 40 reads, then a lost lease.
-	[
-		checked(gateWaitsOut),
-		/^a write with a \d+ ms drop at its (intent|lease|done) (was never sent|failed after \d+ ms): wanted it sent once the network came back$/,
-	],
 	[
 		checked(gateWaitsForRenew),
 		/^the lease (row was gone|had run out) until a renew \d+ ms on, and the write was never sent: wanted it sent after the renew$/,

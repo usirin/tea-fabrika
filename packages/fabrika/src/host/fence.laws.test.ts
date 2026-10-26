@@ -510,27 +510,17 @@ const LAWS: readonly Law[] = [
 	olderRenewLost,
 	expiryJob,
 	landsOnce,
+	newestFenceWrites,
+	newestAfterAlarm,
+	newestRenews,
 ];
 
 /**
- * Laws that today's ledger breaks: rule B is not built yet (lane 18). Each is run as a known
- * failure that must fail for the rule's reason, the newest fence refused past its lease's end. The
- * day the fix lands this list turns red: then the law moves to `LAWS`.
+ * Laws that found a bug in the real ledger. Each is run as a known failure that must fail for the
+ * rule's reason, so the suite stays green and the day the bug is fixed this list turns red: then
+ * the law moves to `LAWS`. Lane 18 built rule B, and its three moved.
  */
-const BUGS: readonly (readonly [Law, RegExp])[] = [
-	[
-		newestFenceWrites,
-		/^a write to \w+ by the newest fence \d+, at \d+, \d+ ms past the lease's end: fenced, wanted ok$/,
-	],
-	[
-		newestAfterAlarm,
-		/^a write to \w+ by the newest fence \d+, at \d+, \d+ ms past the lease's end, after the alarm: fenced, wanted ok$/,
-	],
-	[
-		newestRenews,
-		/^a renew by the newest fence \d+, at \d+, \d+ ms past the lease's end(, after the alarm)?: lost, wanted ok$/,
-	],
-];
+const BUGS: readonly (readonly [Law, RegExp])[] = [];
 
 /** The law's own words in what fast-check threw: it keeps the law's error as the cause of its own. */
 const messageOf = (e: unknown): string =>

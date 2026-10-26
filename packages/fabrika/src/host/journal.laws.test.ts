@@ -195,14 +195,12 @@ const waitsOut: Law = {
 	},
 };
 
-const LAWS: readonly Law[] = [landsOnce];
-/** Today's journal gives up after 20 tries, 50 ms apart: about a second. */
-const BUGS: readonly (readonly [Law, RegExp])[] = [
-	[
-		waitsOut,
-		/^a save in a \d+ ms drop failed after 9\d\d ms: wanted it to land within 2000 ms of the network coming back$/,
-	],
-];
+const LAWS: readonly Law[] = [landsOnce, waitsOut];
+/**
+ * Laws the real journal breaks, each run as a known failure for its reason. The journal gave up
+ * after 20 tries, 50 ms apart, about a second, until lane 18: then `waitsOut` moved.
+ */
+const BUGS: readonly (readonly [Law, RegExp])[] = [];
 
 const messageOf = (e: unknown): string =>
 	e instanceof Error ? (e.cause instanceof Error ? e.cause.message : e.message) : String(e);

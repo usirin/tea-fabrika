@@ -487,7 +487,7 @@ const backKeepsPace = timedLaw(
 	},
 );
 
-const LAWS: readonly Law[] = [unknownKeeps, lostStops, stopsByGrace, backKeepsPace];
+const LAWS: readonly Law[] = [unknownKeeps, lostStops, stopsByGrace, backKeepsPace, expiryKeeps];
 
 /**
  * Laws today's machine breaks: part 2 is not built yet (lane 18). Each must fail for the rule's
@@ -502,7 +502,6 @@ const BUGS: readonly (readonly [Law, RegExp])[] = [
 		awayRenewsEachSecond,
 		/^after no answer at \d+, the next renew came at \d+, \d+ ms later: wanted within 1000 ms$/,
 	],
-	[expiryKeeps, /^seen_expiry 1 stopped the program under fence 1, and nobody claimed$/],
 ];
 
 /** The law's own words in what fast-check threw: it keeps the law's error as the cause of its own. */
