@@ -36,7 +36,7 @@ pass either one: `self.run` types `store` and `onError` as `never`. See
 ## Where it sits
 
 - Above `program` in `layer-rules.json`. It imports that part, `@demlik/tea` as published,
-  `effect`, `@effect/platform-node` and `miniflare`. Nothing else of this repo.
+  `effect`, `@effect/platform-node`, `miniflare` and `esbuild`. Nothing else of this repo.
 - tea does not change for it.
 
 ## What's in it
@@ -47,9 +47,15 @@ Layer on its own subpath.
 | Import | File | What it gives |
 |---|---|---|
 | `@kampus/fabrika` | `ledger.ts` | `Ledger` (the service), its tagged errors, `Row`, `Lease`, `streams(name)`, `inboxOf` |
-| `@kampus/fabrika` | `writer.ts` | `Writer`: who wrote a row, a user or an agent. `writerOf` reads it from a row's `writer` text (`user:<id>`, `agent:<id>`); any other text names neither. `writerText` writes that text |
-| `@kampus/fabrika/local` | `local.ts`, `worker-options.ts` | `layerLocal`: the ledger in a Miniflare child. Own process group, a fixed direct socket, restarted past 500 MB. `LocalLedger` is the handle on the child. `ledgerOptions`: Miniflare options for the Durable Object, for a caller that runs it itself |
-| `@kampus/fabrika/http` | `http.ts` | `layerHttp`: a `Ledger` over HTTP to any running ledger, with a small pool of connections |
+| `@kampus/fabrika` | `writer.ts` | `Writer`: who wrote a row, a user, an agent for a user, or an agent from before the door. `writerOf` reads it from a row's `writer` text (`user:<id>`, `agent:<id> for:<user id>`, old `agent:<id>`); any other text names neither. `writerText` writes that text |
+| `@kampus/fabrika`, the names | `door.ts` | The door: the one way into a ledger from the network. It turns a credential into a person, an agent for a person, or a refusal, and stamps that as the writer and in the holder. Members as facts on the ledger (`door/members`), SSH-signed logins checked against the keys `Keys` lists, sessions, and `trustedArgs`: what a request may say. `PERSON_KINDS`: the kinds only a person writes (today `answered`, the owner's answer to an ask), refused from an agent's session; `Writes`: a program's table of who writes each of its facts, held to that list by its type. workerd runs it, bundled into the ledger's Worker. The top level exports the names a host signs and reads (`challengeText`, `grantText`, `holderOf`, `hostOf`, ...) |
+| `@kampus/fabrika` | `keys.ts` | `Keys`: the two questions the door asks about a person. `byId`: who has an id now, by what name, and which keys may sign for them, asked at a login about people this ledger already knows. `of`: the same for a name, asked only by a member's invite. The id is what the ledger keeps. `layerNobody`: nobody has any id or name |
+| (inside the ledger) | `keys-github.ts` | `layerGitHub`: `Keys` from GitHub. A name is a login, the id is `github:<GitHub's numeric id>`, so a renamed login stays the same person. Answers kept 5 minutes (`KEYS_CACHE_MS`), a failure 30 seconds (`KEYS_FAIL_MS`). When GitHub says its limit is spent, nothing is asked until the reset it names. With a token (`token`, the Worker's `GITHUB_TOKEN` secret) the ledger has its own budget of 5,000 calls an hour; without one it shares 60 an hour with its outgoing address. A token GitHub refuses is dropped for that call, with a warning in the log |
+| `@kampus/fabrika` | `sshsig.ts` | SSH signatures as `ssh-keygen -Y sign` makes them (SSHSIG), Ed25519, on WebCrypto. `keyLineOf`, `keyOnly` are exported |
+| `@kampus/fabrika` | `signer.ts` | `Signer`: what signs a login, an SSH key. `layerSignerKey` over a WebCrypto Ed25519 pair; `grant` signs a person's grant to an agent |
+| `@kampus/fabrika/local` | `local.ts`, `worker-options.ts` | `layerLocal`: the ledger in a Miniflare child, with a local door whose secret is in the data folder. Own process group, a fixed direct socket, restarted past 500 MB. `LocalLedger` is the handle on the child. `layerAttach`: the same ledger from another process, by its secret. `ledgerOptions`: Miniflare options for the Durable Object and its door, for a caller that runs it itself. The Worker is bundled by esbuild (an optional peer, beside miniflare), as Cloudflare's own tools bundle one |
+| `@kampus/fabrika/local` | `inside.ts` | `layerInside`: a `Ledger` over the Durable Object's binding, past the door, for tests that name their own writers (the laws) |
+| `@kampus/fabrika/http` | `http.ts` | `layerHttp`: a `Ledger` over HTTP to any running ledger, with a token and a small pool of connections. It sends no writer. `doorOf`: the door's steps (login, agent login, who, members, invite, remove, agent token). `answers`: does anything answer on a URL |
 | `@kampus/fabrika/memory` | `memory.ts` | `layerMemory`: the rules written a second time over Maps, for tests |
 | `@kampus/fabrika/sqlite` | `sqlite.ts` | `layerSqlite`: the same SQL as the Durable Object, on a node:sqlite file. `layerSqliteSync`: the same, on one connection in the caller's thread, for a host bundled into one file with no worker beside it (the fabrika app) |
 | `@kampus/fabrika` | `rules.ts` | The SQL and its migrations, shared by the Durable Object and node:sqlite |
@@ -58,9 +64,12 @@ Layer on its own subpath.
 | `@kampus/fabrika`, as `Call` | `call.ts` | gen_server:call as a tea module: send, a reply-to, a deadline, a retry under the same id. `Call.update`, as Elm names a module's update |
 | `@kampus/fabrika`, as `Monitor` | `monitor.ts` | Monitors as a tea module: keep watching a name, monitor again after each DOWN, and report every death once (a `down`, or a `gap` of deaths no monitor was on) |
 | `@kampus/fabrika` | `supervisor.ts` | OTP's `supervisor` as a tea program: `one_for_one`, `one_for_all`, `rest_for_one`, a supervisor under a supervisor, its calls, `shutdown` per child, opt-in restart backoff. `supervisor(name, spec)` gives the program, or refuses the spec |
-| `@kampus/fabrika` | `dead-letters.ts` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source); `limitEnds(name)` lists the runs a limit ended |
+| `@kampus/fabrika` | `dead-letters.ts` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source; behind a door, only a person may); `limitEnds(name)` lists the runs a limit ended |
 | `@kampus/fabrika` | `observer.ts` | `whereis` and `getState`: who holds a name, and its last saved state. Writes nothing |
 | `@kampus/fabrika/laws` | `laws.ts` | The ledger's law suite, `runLaws`, and `layerPlanted` (the SQL with one mistake) |
+
+To make the GitHub token: create a fine-grained personal access token with public repositories
+(read-only) and no permissions, and set it as the Worker's `GITHUB_TOKEN` secret.
 
 Some names were in two files. On the top level, the ledger's records win: `DeadLetter`, `Stale`,
 `Fenced`, `EndReason`, `LimitKind` and `Over` are `ledger.ts`'s. A program's run wins over the

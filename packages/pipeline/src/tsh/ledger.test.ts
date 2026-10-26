@@ -56,7 +56,8 @@ describe("localLedger", () => {
 		const third = await open(layer);
 		try {
 			const lease = await Effect.runPromise((third.ledger as Ledger["Service"]).lease("operate:7"));
-			expect(lease?.holder).toBe("tsh-a");
+			// Past the local door: the host's tag, then its one person.
+			expect(lease?.holder).toBe("tsh-a@user:owner");
 		} finally {
 			await Effect.runPromise(Scope.close(third.scope, Exit.void));
 		}

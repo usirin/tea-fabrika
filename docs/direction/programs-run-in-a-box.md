@@ -183,6 +183,18 @@ The doubt is the edges nobody has run yet, listed below.
     above.
   - Lean: the second, 70%. A short question to Anthropic would settle which
     one the terms allow.
+  - *Decided 2026-10-25: never a Console API key, on a laptop or on
+    Cloudflare.* Each job runs on its starter's own Claude subscription token.
+    Anthropic's page says its rule does not stop "an end user from signing in
+    to the unmodified Claude Code binary with their own Claude subscription,
+    including where a platform hosts Claude Code", and `claude setup-token` is
+    made for scripts and CI. Both fit the second way, and the second way puts
+    a real login in the box, which the rule decided on 2026-10-24 forbids.
+    The first way keeps that rule, but our code passes the token on, which
+    the same page bars developers from. Which one is still open. Also open for
+    the cloud: there the token sits in a Cloudflare account, which with one
+    Worker per project may be the other person's account, not on its own
+    person's machine.
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is

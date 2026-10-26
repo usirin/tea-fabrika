@@ -1,0 +1,12 @@
+{
+	"name": "exp-147-alchemy-from-code",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 147: Alchemy's deploy called from code, in one long-lived process, with no CLI. Kept outside the workspace on purpose: install it alone with `pnpm install --ignore-workspace`.",
+	"dependencies": {
+		"@alchemy.run/cloudflare": "2.0.0-beta.84",
+		"@effect/platform-node": "4.0.6",
+		"alchemy": "2.0.0-beta.84",
+		"effect": "4.0.6"
+	}
+}

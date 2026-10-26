@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {Duration, Effect, type Layer} from "effect";
 import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import {layerHttp} from "./http.ts";
+import {layerInside} from "./inside.ts";
 import {type LawResult, law30Wall, layerPlanted, PLANTED, type Planted, runLaws} from "./laws.ts";
 import {Ledger} from "./ledger.ts";
 import {layerMemory} from "./memory.ts";
@@ -17,11 +17,9 @@ import {ledgerOptions} from "./worker-options.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "tea-host-laws-"));
 let mf: Miniflare;
-let url = "";
 beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
-	url = (await mf.unsafeGetDirectURL()).origin;
 });
 afterAll(async () => {
 	await mf.dispose();
@@ -36,7 +34,7 @@ const broken = (rs: readonly LawResult[]) => rs.filter((r) => !r.pass);
 
 describe("the ledger's laws", () => {
 	it("hold on the Durable Object", async () => {
-		const rs = await lawsOn(layerHttp({url, ledger: "laws"}));
+		const rs = await lawsOn(layerInside(mf, "laws"));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});
