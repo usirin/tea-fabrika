@@ -8,6 +8,7 @@ import {
 	useState,
 } from "react";
 import type {Do, Shown, Summary, Ticket, tracker, Write} from "./index.ts";
+import {piecesOf} from "./links.ts";
 
 // The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
 // `do`. All it keeps is what a person is typing and which ticket is picked, so a half-written
@@ -16,6 +17,9 @@ import type {Do, Shown, Summary, Ticket, tracker, Write} from "./index.ts";
 //   the list     ↑ ↓ or j k pick a ticket, Enter opens it, c goes to the new ticket's title, q quits
 //   new ticket   Enter in the title goes to the body; Ctrl+Enter (⌘+Enter) files; Esc goes to the list
 //   a ticket     the comment box has the focus; Ctrl+Enter comments; Esc goes back to the list
+//
+// A URL in a body is a link (links.ts). It opens a new window, `target="_blank"`, which the app
+// never makes: it hands an http or https URL to the person's own browser instead.
 
 type Send = (d: Do) => void;
 
@@ -327,7 +331,7 @@ function TicketPage(props: {
 									<time className="tracker-quiet">{whenOf(e.at, Date.now())}</time>
 								</p>
 								{"body" in e.fact && e.fact.body !== "" ? (
-									<div className="tracker-body">{e.fact.body}</div>
+									<Body text={e.fact.body} onKey={onPageKey} />
 								) : null}
 							</li>
 						))}
@@ -335,7 +339,7 @@ function TicketPage(props: {
 							// biome-ignore lint/suspicious/noArrayIndexKey: two pending comments may say the same thing; their order is all that tells them apart.
 							<li key={i} className="tracker-entry tracker-pending">
 								<p className="tracker-meta">saving…</p>
-								{"body" in w ? <div className="tracker-body">{w.body}</div> : null}
+								{"body" in w ? <Body text={w.body} onKey={onPageKey} /> : null}
 							</li>
 						))}
 					</ol>
@@ -373,6 +377,32 @@ function TicketPage(props: {
 		</div>
 	);
 }
+
+/**
+ * A ticket's or a comment's body, as written, with each http and https URL in it a link. The link
+ * shows its own URL, so what it says is what opens. Esc on it goes back to the list, as everywhere
+ * on the page.
+ */
+const Body = ({
+	text,
+	onKey,
+}: {
+	readonly text: string;
+	readonly onKey: (e: KeyboardEvent) => void;
+}) => (
+	<div className="tracker-body">
+		{piecesOf(text).map((piece, i) =>
+			piece.kind === "text" ? (
+				piece.text
+			) : (
+				// biome-ignore lint/suspicious/noArrayIndexKey: the pieces are cut fresh from one body and never move; their order is all there is.
+				<a key={i} href={piece.url} target="_blank" rel="noreferrer" onKeyDown={onKey}>
+					{piece.url}
+				</a>
+			),
+		)}
+	</div>
+);
 
 const verbOf = (type: Ticket["timeline"][number]["fact"]["type"]): ReactNode => {
 	switch (type) {

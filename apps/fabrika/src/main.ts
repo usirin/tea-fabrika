@@ -12,6 +12,7 @@ import {
 	type MessagePortMain,
 	protocol,
 	session,
+	shell,
 } from "electron";
 import {attach, NoHost} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
@@ -19,6 +20,7 @@ import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
 import type {ToPage} from "./messages.ts";
+import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -49,6 +51,9 @@ import {Unattached, type Wire} from "./wire.ts";
 //   own files       over the app's own scheme (`protocol.handle`, files.ts): no `file://`, no remote site
 //   no way out      navigation, redirects, new windows, webviews and permission requests are refused,
 //                   for every web contents the app makes
+//   links           a link's new window is refused too. Its URL goes to the person's own browser
+//                   (`shell.openExternal`) when it is http or https and the desk page asked;
+//                   any other scheme is refused (outside.ts)
 //   a port each     a MessageChannelMain for the desk, one per tile and one per run (bridge.ts). A
 //                   hello is answered only from the window's own top frame, on the desk page of our
 //                   own files, and a port goes only to that page. A message on a tile's port is
@@ -95,13 +100,39 @@ protocol.registerSchemesAsPrivileged([
 	{scheme: SCHEME, privileges: {standard: true, secure: true}},
 ]);
 
-/** Refuse every way out of the app's own files, for every web contents it ever makes. */
+/** The person's own browser: Electron hands the URL to the system, which opens its default one. */
+const browser = Browser.of({
+	open: (url) =>
+		Effect.tryPromise({
+			try: () => shell.openExternal(url),
+			catch: (cause) => new NotOpened({url, why: String(cause)}),
+		}),
+});
+
+/**
+ * Refuse every way out of the app's own files, for every web contents it ever makes. A link's new
+ * window is refused like any other, and its URL goes to the person's own browser, or is refused.
+ */
 const guard = () => {
 	app.on("web-contents-created", (_event, contents) => {
 		contents.on("will-navigate", (e) => e.preventDefault());
 		contents.on("will-redirect", (e) => e.preventDefault());
 		contents.on("will-attach-webview", (e) => e.preventDefault());
-		contents.setWindowOpenHandler(() => ({action: "deny"}));
+		contents.setWindowOpenHandler(({url}) => {
+			Effect.runFork(
+				openOutside({url, from: contents.getURL()}).pipe(
+					Effect.provideService(Browser, browser),
+					Effect.match({
+						onFailure: (e) => console.warn(`fabrika: the browser did not open ${e.url}: ${e.why}`),
+						onSuccess: (out) => {
+							if (out.kind === "refused")
+								console.warn(`fabrika: refused to open ${url}: ${out.why}`);
+						},
+					}),
+				),
+			);
+			return {action: "deny"};
+		});
 	});
 	session.defaultSession.setPermissionRequestHandler((_contents, _permission, decide) =>
 		decide(false),

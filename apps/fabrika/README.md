@@ -77,7 +77,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused. Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
+| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
+| `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
@@ -93,7 +94,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, and a host of another version. It stops its own host by its pid and checks with `pgrep`. Not in `pnpm test`. macOS only. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, and a host of another version. It stops its own host by its pid and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
 
@@ -165,6 +166,28 @@ one for the desk (`desk`). Not one port for everything.
   `forget` its port. The preload takes only names of these three shapes.
 - How sure: 85%. A single port with a tile id in each message would be simpler, and safe as
   long as the host checks the id; the port does that check for free.
+
+## Links
+
+A link in a program's view opens in the person's own browser, never in the app's window, as
+Electron's security checklist has it (items 13 to 15).
+
+```ts
+// In a view: a plain link that asks for a new window.
+<a href="https://example.com/a" target="_blank" rel="noreferrer">https://example.com/a</a>
+
+// In main: no window is ever made. The URL goes to outside.ts, then to shell.openExternal.
+openOutside({url: "https://example.com/a", from: DESK})  // {kind: "open", url: "https://example.com/a"}
+openOutside({url: "file:///etc/hosts", from: DESK})      // {kind: "refused", why: "file: is not http or https"}
+```
+
+- **Only http and https open,** read by the URL parser, and opened as it writes the URL back, so
+  the URL checked is the URL opened. Anything else (`file:`, `javascript:`, `fabrika:`, a custom
+  scheme) is refused, and main says so on its console.
+- **Only the desk page may ask.** A window open from any other page is refused.
+- **The window never navigates.** A link with no `target="_blank"` does nothing: main refuses the
+  navigation, and nothing opens outside.
+- The tracker links URLs in a ticket's and a comment's body (`programs/tracker/src/links.ts`).
 
 ## The line editor
 
