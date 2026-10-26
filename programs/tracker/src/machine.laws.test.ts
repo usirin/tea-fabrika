@@ -3,16 +3,18 @@ import {
 	arbConstantMsg,
 	arbMsg,
 	arbRecordMsg,
+	foldEvents,
 	type MsgArbitraryTable,
 	propertyInvariant,
 	propertyTrace,
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import type {MsgOf} from "@kampus/fabrika";
+import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {load, over, PROBLEMS, save, type Tracker, tracker} from "./machine.ts";
+import {load, over, PROBLEMS, save, Tracker, tracker} from "./machine.ts";
 import type {Entry, Fact, Write} from "./ticket.ts";
 
 // The tracker's laws, on tea's pbt: after every step of any list of Msgs, from the real init.
@@ -322,5 +324,41 @@ describe("the tracker's laws", () => {
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------- law: every reachable state is kept
+
+/**
+ * Every state `machine` reaches from its init, saved through `Tracker` (the schema the program's
+ * `tickets` kind declares) and loaded back. It is kept nowhere today, but this is what it would be
+ * read back through.
+ */
+const keepsEvery = (machine: Machine, runs = 150) =>
+	fc.assert(
+		fc.asyncProperty(lists, async (list) => {
+			const handle = await Effect.runPromise(memoryStorage().open("tracker:r1", null));
+			const store = handle.store("tickets", "tickets", Tracker);
+			for (const s of foldEvents(machine, ctx, null, list).states) {
+				await store.save(s);
+				expect(store.migrate(await store.load())).toEqual(s);
+			}
+		}),
+		{numRuns: runs, seed: 1},
+	);
+
+describe("the tracker's state is kept", () => {
+	it("every state it reaches from its init saves and loads back equal", async () => {
+		await keepsEvery(tracker);
+	});
+
+	it("the law is seen to fail on a planted mistake: a tracker that keeps the whole answer of a read dies at its first save", async () => {
+		const keepsTheAnswer = plant({
+			load_ok: (s, m) => {
+				const [next, cmds] = real.load_ok(s, m);
+				return [{...next, ...m.value}, cmds];
+			},
+		});
+		await expect(keepsEvery(keepsTheAnswer, 20)).rejects.toThrow(/Counterexample/);
 	});
 });
