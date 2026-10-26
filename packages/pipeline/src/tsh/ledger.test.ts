@@ -17,11 +17,15 @@ describe("ledgerNameOf and portOf", () => {
 		);
 	});
 
-	it("a data folder has one port, in range", () => {
+	it("a data folder has one port, below the ports any system gives outgoing connections", () => {
 		expect(portOf("/home/a/ledgers/local")).toBe(portOf("/home/a/ledgers/local"));
 		expect(portOf("/home/a/ledgers/local")).not.toBe(portOf("/home/b/ledgers/local"));
-		expect(portOf("/x")).toBeGreaterThanOrEqual(40_000);
-		expect(portOf("/x")).toBeLessThan(60_000);
+		// Linux gives outgoing connections local ports from 32768, macOS and Windows from 49152.
+		const ports = Array.from({length: 2_000}, (_, i) =>
+			portOf(`/tmp/h-${i.toString(36)}/ledgers/local`),
+		);
+		expect(Math.min(...ports)).toBeGreaterThanOrEqual(12_000);
+		expect(Math.max(...ports)).toBeLessThan(32_000);
 	});
 });
 
@@ -36,7 +40,8 @@ describe("localLedger", () => {
 		const persist = mkdtempSync(join(tmpdir(), "tsh-ledger-"));
 		const layer = localLedger({persist, ledger: "github-demlik", waitMs: 600});
 		const first = await open(layer);
-		expect(first.ledger).not.toBeNull();
+		// Twice on CI this failed with nothing but "expected null": say why the ledger did not start.
+		expect(first.ledger, String(first.exit)).not.toBeNull();
 		const second = await open(layer);
 		try {
 			expect(Exit.isFailure(second.exit)).toBe(true);

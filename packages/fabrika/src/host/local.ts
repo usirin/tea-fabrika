@@ -27,6 +27,7 @@ import {
 	Duration,
 	Effect,
 	Exit,
+	Fiber,
 	FileSystem,
 	Layer,
 	Path,
@@ -188,7 +189,7 @@ export const startLocal = (o: LocalOptions) =>
 					detached: true,
 					forceKillAfter: Duration.seconds(3),
 				}).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
-				const ready = yield* Deferred.make<number>();
+				const ready = yield* Deferred.make<number, LocalError>();
 				// Every stdout line is read, so the pipe never fills; the first ready line is the answer.
 				yield* handle.stdout.pipe(
 					Stream.decodeText(),
@@ -201,19 +202,40 @@ export const startLocal = (o: LocalOptions) =>
 					Effect.forkScoped,
 				);
 				const err: string[] = [];
-				yield* handle.stderr.pipe(
+				const errRead = yield* handle.stderr.pipe(
 					Stream.decodeText(),
 					Stream.runForEach((t) => Effect.sync(() => err.push(t))),
 					Effect.ignore,
 					Effect.forkScoped,
 				);
+				// The child's end is an answer too, and at once: a child that has ended will never be
+				// ready. A port that is taken ends it within a second, as workerd cannot listen on it;
+				// waiting out the clock instead made that a 30 s hang (CI saw it twice). What it said is
+				// read to the end first, so the answer names why.
+				yield* handle.exitCode.pipe(
+					Effect.flatMap((code) =>
+						Fiber.join(errRead).pipe(
+							Effect.andThen(
+								Deferred.fail(
+									ready,
+									new LocalError({
+										message: `the ledger stopped before it was ready (exit ${code}): ${err.join("").slice(0, 500)}`,
+									}),
+								),
+							),
+						),
+					),
+					Effect.ignore,
+					Effect.forkScoped,
+				);
+				// The clock only for a child that lives on and never says it is ready: no event comes.
 				yield* Deferred.await(ready).pipe(
 					Effect.timeoutOrElse({
 						duration: Duration.seconds(30),
 						orElse: () =>
 							Effect.fail(
 								new LocalError({
-									message: `the ledger did not start: ${err.join("").slice(0, 500)}`,
+									message: `the ledger did not say it was ready in 30 s: ${err.join("").slice(0, 500)}`,
 								}),
 							),
 					}),
