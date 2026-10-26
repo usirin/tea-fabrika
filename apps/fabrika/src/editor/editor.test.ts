@@ -5,7 +5,7 @@ import {Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {type Editor, type EditorMsg, editor} from "./editor.ts";
 import {gridOf} from "./grid.ts";
-import {back, cells, draw, PROMPT} from "./screen.ts";
+import {back, draw, PROMPT, spot} from "./screen.ts";
 
 // The line editor, folded with `replay` and read back off a terminal's grid (grid.ts): what a
 // person would see, and where the cursor is, never the bytes by eye.
@@ -343,15 +343,15 @@ describe("a redraw of a line that fits its row", () => {
 	};
 
 	/** The prompt line a state shows, and where its cursor is, as the editor works it out. */
-	const lineOf = (state: Editor, history: readonly string[]) => {
+	const lineOf = (state: Editor, history: readonly string[], cols: number) => {
 		const {mode} = state;
 		if (mode.kind === "prompt") {
 			const left = PROMPT + mode.line.left;
-			return {text: left + mode.line.right, at: cells(left)};
+			return {text: left + mode.line.right, at: spot(left, cols)};
 		}
 		if (mode.kind === "search") {
 			const text = Shell.Search.shown([...history].reverse(), mode.search);
-			return {text, at: cells(text)};
+			return {text, at: spot(text, cols)};
 		}
 		throw new Error(`no prompt line in ${mode.kind}`);
 	};
@@ -366,8 +366,8 @@ describe("a redraw of a line that fits its row", () => {
 	) => {
 		const cols = opts.cols ?? 80;
 		const {before, after, wrote} = last(msgs, opts);
-		const was = lineOf(before.state, opts.history ?? []);
-		const now = lineOf(after.state, opts.history ?? []);
+		const was = lineOf(before.state, opts.history ?? [], cols);
+		const now = lineOf(after.state, opts.history ?? [], cols);
 		const full = back(was.at, cols) + draw(now.text, now.at, cols);
 		const grid = (bytes: string) => {
 			const {rows, cursor} = gridOf(bytes, cols);

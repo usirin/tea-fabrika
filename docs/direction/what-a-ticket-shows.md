@@ -1,9 +1,10 @@
 # What a ticket's view shows
 
-**Proposed 2026-10-25.** Nothing here is built. It extends
+**Decided 2026-10-25: sections 1, 2, 3 and 5, as written. Section 4, the
+bridge, is dropped.** Nothing here is built. It extends
 [the ticket is the lane's one view](./the-ticket-is-the-lane-view.md).
-*Read by the owner the same day. One change: beats and logs are on the shared
-record (section 3).*
+*Read by the owner the same day. Two changes: beats and logs are on the shared
+record (section 3), and no bridge for today's agents (section 4).*
 
 ```ts
 // A sketch. The ticket's window, top to bottom. Every line is made from facts; nothing is typed.
@@ -27,8 +28,9 @@ The answer in five lines:
 - **A lane writes about nine kinds of fact.** Each shows as one short row.
 - **A running agent is one live row,** updated in place. Its tool calls are
   never rows; "open log" opens the whole log in a tile.
-- **Until our pipeline runs lanes,** Claude Code hooks write the start and end
-  of each agent run, and the main session writes each stage's answer.
+- **No bridge for today's agents.** The view is built for lanes our pipeline
+  runs, where code writes the start and end of each agent run. Until then,
+  agents post plain comments on the ticket.
 - **Done is a merged pull request with every criterion met.** Code says it,
   never an agent. A person can close a ticket without it being done.
 
@@ -248,7 +250,18 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
   - Counting beats per run now decides only whether old beats are trimmed
     after a run ends. They are kept until then.
 
-## 4. The bridge until our pipeline runs lanes
+## 4. The bridge until our pipeline runs lanes (dropped)
+
+**Dropped 2026-10-25, by the owner.** Adding hooks only so today's Claude Code
+agents can post to the ledger is not worth it.
+
+- The view is built for lanes our pipeline runs. There, code starts each agent,
+  so code writes `started` and `ended`, and nothing has to be bridged.
+- Until then, an agent on a lane posts plain comments on its ticket, through
+  the tracker. The ticket shows them as comments, not as lane facts.
+- What this costs: tickets of lanes run today have no live row and no
+  "open log". Their top line comes from the tracker's own four facts.
+- The research below is kept as it was, in case the question comes back.
 
 Today a lane is run by plain Claude Code subagents, outside our ledger. Four
 ways they could write the facts above as `agent:` writers.
@@ -310,11 +323,12 @@ const write = (writer: Writer, fact: unknown) =>
     only the kinds above. It never takes `answered`. An agent cannot close an
     ask or say a ticket is done through it.
   - That still rests on the agent not reaching the host's socket another way.
-    Today the ledger takes the writer the caller names
-    (`packages/fabrika/src/host/writer.ts`). Until it stamps the writer from a
-    key, a false `user:` row is one call away for anything with a shell. Today's
-    fabrika has the same hole: its agents act on GitHub with the owner's own
-    login.
+    When this was written, the ledger took the writer the caller named
+    (`packages/fabrika/src/host/writer.ts`). *Fixed later the same day:* the
+    door now stamps the writer from a checked credential, and only a person's
+    session may write `answered` (`PERSON_KINDS` in
+    `packages/fabrika/src/host/door.ts`). Today's fabrika still has the hole:
+    its agents act on GitHub with the owner's own login.
 - **Why not B alone:** [`field/README.md`](../../field/README.md) already
   notes an agent-written row that says `minutes: 0` on every run, so the
   minutes are measured by hand. A step an agent must
@@ -359,8 +373,8 @@ const write = (writer: Writer, fact: unknown) =>
     never stays open after its PR merges".
 - **Why:** the owner wants one place to check "is it done?". If an agent could
   write done, the owner would have to check the agent.
-- **Cost:** the merge must reach the ticket. Until the watcher runs, a merge
-  that the main session does not report leaves the ticket at "next: ship".
+- **Cost:** the merge must reach the ticket. Until the watcher runs, a merged
+  ticket stays open until the owner closes it.
   GitHub closes an issue on merge from a `Closes #N` line; here the watcher
   does the same work.
 - **How sure: 85%.** The doubt is a plan that covers many tickets. Each of
@@ -375,7 +389,7 @@ const write = (writer: Writer, fact: unknown) =>
 - Whether a beat names a file ("last: Edit login.ts") or only the tool. A
   path says more and can leak more.
 - How long "never ended" waits before it says so. The host knows when a
-  process is gone; the bridge does not.
+  process is gone.
 
 ## What it cannot tell us
 

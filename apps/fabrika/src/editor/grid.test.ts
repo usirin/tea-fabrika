@@ -26,6 +26,14 @@ describe("the test grid", () => {
 		});
 	});
 
+	it("gives a wide character two cells, and puts one that does not fit on the next row", () => {
+		expect(gridOf("漢字", 3)).toEqual({rows: ["漢", "字"], cursor: {row: 1, col: 2}});
+	});
+
+	it("gives an accent no cell: it joins the letter before it", () => {
+		expect(gridOf("éx", 80)).toEqual({rows: ["éx"], cursor: {row: 0, col: 2}});
+	});
+
 	it("writes a CSI sequence it does not know out, so a test sees it", () => {
 		expect(gridOf("a\x1b[2Kb\x1b[31mc", 80).rows).toEqual(["a^[[2Kb^[[31mc"]);
 	});

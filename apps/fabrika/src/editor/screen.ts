@@ -1,60 +1,71 @@
+import {cells, spot} from "./cells.ts";
+
 // The bytes the line editor writes to the terminal: text, and a few VT100 cursor moves. Pure, so
 // the editor's tests read them back with a grid (./grid.ts), not by eye.
 //
-//   draw("tsh$ seq", 8, 80)      clear below, write it, and leave the cursor 8 cells in
+//   draw("tsh$ seq", 8, 80)      clear below, write it and a blank, and leave the cursor 8 cells in
 //   back(8, 80)                  "\r": back to the prompt's first cell, on the same row
 //   back(85, 80)                 "\r\x1b[1A": a row up as well, the line wrapped once
 //   shown("a\x1b]0;x\x07b")      "a^[]0;x^Gb": a program's text cannot move the cursor or retitle the window
 //
-//   redrawRow("tsh$ seq", 5)     "\r\x1b[K", write it, and leave the cursor 5 cells in: one row only
+//   redrawRow("tsh$ seq", 5)     "\r\x1b[K", write it and a blank, and leave the cursor 5 cells in: one row only
 //
 // The editor redraws the whole prompt line on each change, as linenoise does: back to its first
 // cell, clear to the end of the screen, write it again. A line longer than the terminal is wide
 // wraps onto more rows, and `back` counts them. A line that fits its one row, before and after a
 // change, is cleared to the end of that row only (`redrawRow`): a terminal then has one changed
-// row to draw, not every row under the prompt (experiment 143). Every character is one cell for
-// now: a wide one (CJK, most emoji) puts the cursor off by one cell per character.
+// row to draw, not every row under the prompt (experiment 143).
+//
+// Cells are counted as ghostty-web counts them (`spot`, ./cells.ts): a wide character takes two,
+// an accent joins the cell before it. `at` is a cursor's place in the line as `spot` counts it,
+// `row * cols + column` from the prompt's first cell.
+//
+// A width change: the editor writes nothing. The terminal reflows the line, which is one line to
+// it, wrapped where the row ends, and carries the cursor with its cell, as fish leaves it to a
+// terminal that reflows. The next redraw goes back to the prompt by the new width. For that the
+// cursor always sits on a cell that was written, so a blank goes after the line: ghostty-web
+// 0.4.0 does not carry a cursor on a cell never written. readline writes a space at a full row's
+// end for a like reason, to know where the cursor is.
 
 export const PROMPT = "tsh$ ";
 
 const CSI = "\x1b[";
 
-/** How many cells a text takes: one per code point. */
-export const cells = (text: string): number => [...text].length;
+export {cells, spot};
 
 const up = (rows: number) => (rows > 0 ? `${CSI}${rows}A` : "");
 const right = (cols: number) => (cols > 0 ? `${CSI}${cols}C` : "");
 
-/** From `at` cells past the prompt's first cell, back to that cell. */
+/** From the cursor at `at`, back to the prompt's first cell. */
 export const back = (at: number, cols: number): string => `\r${up(Math.floor(at / cols))}`;
 
 /**
  * Write `text` from the cursor, which is on the prompt's first cell, clearing everything below it
- * first, and leave the cursor `at` cells in.
+ * first, and leave the cursor at `at`. Blanks go after the line up to the cursor's cell: one, or
+ * two when a U+FE0E after the cursor took a cell back from a wide emoji before it.
  */
 export const draw = (text: string, at: number, cols: number): string => {
-	const end = cells(text);
-	// A row filled to its last cell leaves the cursor waiting on it: a new row puts it where `end` says.
-	const wrap = end > 0 && end % cols === 0 ? "\r\n" : "";
-	const rows = Math.floor(end / cols) - Math.floor(at / cols);
-	return `${CSI}J${text}${wrap}${up(rows)}\r${right(at % cols)}`;
+	const end = spot(text, cols);
+	const blanks = Math.max(1, at + 1 - end);
+	const rows = Math.floor((end + blanks - 1) / cols) - Math.floor(at / cols);
+	return `${CSI}J${text}${" ".repeat(blanks)}${up(rows)}\r${right(at % cols)}`;
 };
 
 /**
- * Whether `text` surely fits one row `cols` wide, with room for the cursor after it. Only when no
- * character could be wide: `cells` counts a wide one as one cell, and a terminal gives it two, so
- * a line with one might wrap on the screen where `cells` says it fits. Wide characters start at
- * U+1100 (Unicode's East Asian Width), so a line with none below that is never wider than `cells`.
+ * Whether `text` fits one row `cols` wide, with room for the cursor after it, and has no
+ * character at or past U+1100, where wide characters start (Unicode's East Asian Width). The
+ * guard is from when `cells` gave a wide character one cell. `cells` is right now, but the row
+ * path was tested with the guard (the laws in editor.laws.test.ts), so it stays.
  */
 export const fitsRow = (text: string, cols: number): boolean =>
 	cells(text) < cols && [...text].every((c) => (c.codePointAt(0) ?? 0) < 0x1100);
 
 /**
- * Write `text` over the row the cursor is on, from its first cell, clearing the rest of the row,
- * and leave the cursor `at` cells in. For a line that fits its row (`fitsRow`), drawn over a line
- * that fit it too: nothing else of the line is on another row.
+ * Write `text` and a blank over the row the cursor is on, from its first cell, clearing the rest
+ * of the row, and leave the cursor at `at`. For a line that fits its row (`fitsRow`), drawn over
+ * a line that fit it too: nothing else of the line is on another row.
  */
-export const redrawRow = (text: string, at: number): string => `\r${CSI}K${text}\r${right(at)}`;
+export const redrawRow = (text: string, at: number): string => `\r${CSI}K${text} \r${right(at)}`;
 
 /** Clear the screen, as Ctrl-L does: the cursor goes to the top row, and the rows above stay in the scrollback. */
 export const CLEAR = `${CSI}H${CSI}2J`;
@@ -98,7 +109,7 @@ export const columns = (items: readonly string[], cols: number): string => {
 		const row: string[] = [];
 		for (let c = 0; c < across; c += 1) {
 			const item = items[c * down + r];
-			if (item !== undefined) row.push(item.padEnd(width));
+			if (item !== undefined) row.push(item + " ".repeat(width - cells(item)));
 		}
 		rows.push(row.join("").trimEnd());
 	}
