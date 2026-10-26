@@ -10,6 +10,10 @@ runs tsh. See [tiles, like tmux](#decided-2026-10-25-tiles-like-tmux).*
 its own, as the tmux server is, and the app attaches to it. See
 [the last section](#decided-2026-10-25-later-tuval-and-tmux-decide-the-host-runs-apart).*
 
+*2026-10-25, later still: the app is the only desk for now, and the host keeps
+only its socket file. A browser desk waits. See
+[no browser desk for now](#decided-2026-10-25-later-still-no-browser-desk-for-now).*
+
 ```text
 1. fabrika opens as a single window with tsh
 2. tsh comes with the owner's programs loaded
@@ -603,7 +607,42 @@ host  {"type":"desk",...} then {"type":"answer","id":3,"took":true}
   starting at once can race to start a host; tmux takes a lock file. The
   link's version counts message shapes, not what they mean.
 
+## Decided 2026-10-25, later still: no browser desk for now
+
+**Decided** 2026-10-25, after
+[experiment 150](../../experiments/150-browser-desk.md). A plain browser tab
+can be the desk, but for now the app is the only one. The host keeps only its
+socket file and never listens on a port.
+
+```text
+your laptop   the app -> the host's socket file (0600). No port, so no web page can try.
+a cloud host  the app -> that host's one door, signed in with the person's SSH key (experiment 148).
+a browser     later: only for a device with no fabrika on it, such as a phone or a tablet.
+```
+
+- **Why.** A tab needs a port on 127.0.0.1. In experiment 150, with no
+  guards, a page served by any other local server typed into tsh, with
+  Chromium's Local Network Access checks on. Three guards held: `Origin`, a
+  cookie from a one-time token, and `Host`. No port holds better than three
+  guards. A cloud host has its own door anyway, and the app attaches through
+  it, so a browser there adds only a login of its own to build.
+- **What it costs.** No desk on a device without the app: a phone, a tablet,
+  a borrowed computer. Neither of the two people needs that now.
+- **What is kept from experiment 150:**
+  - Local echo (experiment 143's fix 4), for the app once it attaches to a
+    cloud host over a real round trip. At 80 ms a letter showed in 14 ms
+    instead of 95.
+  - The page needs nothing of Electron: 36 of the app's checks passed in a
+    tab as it is. A tablet desk later starts from there.
+  - When it is built, 150's "door" is named the relay, since the Door is
+    the ledger's SSH login.
+- **How sure: 85%.** It changes if one of the two wants the desk on a phone
+  or a tablet.
+
 ## What would change it
 
 - A need to run fabrika on a machine with no screen, such as a remote server.
   Then a web page comes back, with the secret and the `Origin` check.
+  *2026-10-25: a remote server is met by the app attaching to a cloud host.
+  A web page comes back only for a device with no fabrika app, with
+  experiment 150's three guards.*
