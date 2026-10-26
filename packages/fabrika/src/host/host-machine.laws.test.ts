@@ -599,21 +599,33 @@ describe("the host's laws for a short drop (lane 18, part 2), on createHost", ()
 		},
 	);
 
-	it("each law is seen to fail on a planted mistake, and only the laws it should", async () => {
-		const caught: Record<string, readonly string[]> = {};
-		for (const [name, make] of Object.entries(PLANTS)) caught[name] = broken(await make());
-		expect(caught).toEqual({
-			// `runsOnThroughGrace` was a known bug when this list was first written. It sees this
-			// plant too: the program stops on a renew with no answer, long before the grace.
-			unknownIsLost: [unknownKeeps.name, runsOnThroughGrace.name],
-			newerClaimMissed: [lostStops.name],
-			lostMissed: [lostStops.name],
-			clockMissed: [stopsByGrace.name],
-			alwaysEachSecond: [backKeepsPace.name],
-			expiryIsLost: [expiryKeeps.name],
-			awayPaceMissed: [awayRenewsEachSecond.name],
-		});
-		const all = new Set(Object.values(caught).flat());
+	// The exact laws each plant breaks.
+	const CAUGHT: Record<string, readonly Law[]> = {
+		// `runsOnThroughGrace` was a known bug when this list was first written. It sees this
+		// plant too: the program stops on a renew with no answer, long before the grace.
+		unknownIsLost: [unknownKeeps, runsOnThroughGrace],
+		newerClaimMissed: [lostStops],
+		lostMissed: [lostStops],
+		clockMissed: [stopsByGrace],
+		alwaysEachSecond: [backKeepsPace],
+		expiryIsLost: [expiryKeeps],
+		awayPaceMissed: [awayRenewsEachSecond],
+	};
+
+	// One test per plant, so each has its own time limit and a failure names its plant. All the
+	// plants in one test took 24 s on a laptop and ran past the 60 s limit on CI.
+	it.each(Object.entries(PLANTS))(
+		"the planted mistake %s fails only the laws it should",
+		async (name, make) => {
+			expect(broken(await make())).toEqual((CAUGHT[name] ?? []).map((law) => law.name));
+		},
+	);
+
+	// Every plant has its list, and every law is caught by at least one plant: each plant's test
+	// above checks that it breaks exactly its list, so the lists are what the plants break.
+	it("each law is seen to fail on a planted mistake", () => {
+		expect(Object.keys(CAUGHT).sort()).toEqual(Object.keys(PLANTS).sort());
+		const all = new Set(Object.values(CAUGHT).flatMap((laws) => laws.map((law) => law.name)));
 		expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);
 	});
 });

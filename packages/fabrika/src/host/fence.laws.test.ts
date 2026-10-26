@@ -861,18 +861,21 @@ describe("the fence's laws (lane 18, rule B)", () => {
 		noDedupeMemory: [landsOnce, newestFenceWrites],
 	};
 
+	// One test per plant, so each has its own time limit and a failure names its plant. All of
+	// sqlite's plants in one test took 30 s on a laptop and ran past the 60 s limit on CI.
 	for (const kind of IMPLS) {
-		it(`${kind}: each law is seen to fail on a planted mistake, and only the laws it should`, async () => {
-			const mine = Object.entries(PLANTS).filter(([, p]) => p.kind === kind);
-			const caught: Record<string, readonly string[]> = {};
-			const want: Record<string, readonly string[]> = {};
-			for (const [name, p] of mine) {
-				caught[name] = await broken(implOf(kind, await p.make()));
-				want[name] = (CAUGHT[name] ?? []).map((law) => law.name);
-			}
-			expect(caught).toEqual(want);
-			// Every law is caught by at least one plant on this ledger.
-			const all = new Set(Object.values(caught).flat());
+		const mine = Object.entries(PLANTS).filter(([, p]) => p.kind === kind);
+		it.each(mine)(
+			`${kind}: the planted mistake %s fails only the laws it should`,
+			async (name, p) => {
+				const caught = await broken(implOf(kind, await p.make()));
+				expect(caught).toEqual((CAUGHT[name] ?? []).map((law) => law.name));
+			},
+		);
+		// Every law is caught by at least one plant on this ledger: each plant's test above checks
+		// that it breaks exactly its list, so the lists are what the plants break.
+		it(`${kind}: each law is seen to fail on a planted mistake`, () => {
+			const all = new Set(mine.flatMap(([name]) => (CAUGHT[name] ?? []).map((law) => law.name)));
 			expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);
 		});
 	}
