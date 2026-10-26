@@ -15,9 +15,12 @@ const SHAPES = {
 	key: /fake-key-[0-9a-f]{32}/g,
 	seal: /seal-[0-9a-f]{32}/g,
 	session: /sess-[0-9a-f]{32}/g,
+	// A Claude subscription token, the shape `claude setup-token` makes. In a box whose starter
+	// has one, it is there on purpose: the decided design hands it to Claude Code.
+	token: /sk-ant-oat01-[A-Za-z0-9_-]{20,}/g,
 };
 
-const found = {key: [], seal: [], session: []};
+const found = {key: [], seal: [], session: [], token: []};
 const looked = {
 	user: process.getuid?.(),
 	env: 0,

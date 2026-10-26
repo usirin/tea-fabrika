@@ -1,0 +1,493 @@
+{
+	"date": "2026-10-26",
+	"bundle": {
+		"bytes": 1384686,
+		"nodeImports": []
+	},
+	"before": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"deploy": {
+		"ms": 48629,
+		"url": true
+	},
+	"afterDeploy": {
+		"scripts": [
+			"tf-exp-148-tf-exp-148-cloud-kkyw5th4rhdvwseo"
+		],
+		"namespaces": [
+			"tf-exp-148-tf-exp-148-cloud-kkyw5th4rhdvwseo_JobBox",
+			"tf-exp-148-tf-exp-148-cloud-kkyw5th4rhdvwseo_Ledger",
+			"tf-exp-148-tf-exp-148-cloud-kkyw5th4rhdvwseo_Person",
+			"tf-exp-148-tf-exp-148-cloud-kkyw5th4rhdvwseo_ProjectHost"
+		],
+		"containerApps": [
+			"tf-exp-148-jobbox-containers-cloud-ypd2lvkebydkly4n"
+		],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"8b7b1ae0477d34ee",
+					"buildcache",
+					"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa",
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"firstBox": [
+		{
+			"afterDeployMs": 10819,
+			"printed": "hi (exit 0)",
+			"ms": 10301,
+			"startMs": 8907,
+			"firstMs": 9708,
+			"took": 9795,
+			"code": 0
+		}
+	],
+	"askA": {
+		"line": "box --run 'node /app/ask.mjs hello'",
+		"printed": "standin answered github:1; headers anthropic-version,content-length,content-type,x-api-key (exit 0)",
+		"ms": 1568,
+		"job": "02bb78bc-597c-4d4e-9001-76e79de2045a"
+	},
+	"askB": {
+		"line": "box --run 'node /app/ask.mjs hi'",
+		"printed": "standin answered github:2; headers anthropic-version,content-length,content-type,x-api-key (exit 0)",
+		"ms": 2968,
+		"job": "7584e502-b4c7-4a21-b762-2b61a74ef969"
+	},
+	"askNoKey": {
+		"line": "box --run 'node /app/ask.mjs hi'",
+		"printed": "ask failed: 403 github:3 has no key yet (exit 1)",
+		"ms": 2237,
+		"job": "cdfb7576-eb5e-4786-b38b-7f95d8d826d9"
+	},
+	"instancesAfterAsks": {
+		"status": 200,
+		"count": 0,
+		"states": []
+	},
+	"coldStarts": [
+		{
+			"ms": 1583,
+			"startMs": 297,
+			"firstMs": 863,
+			"took": 958,
+			"code": 0
+		},
+		{
+			"ms": 10126,
+			"startMs": 8183,
+			"firstMs": 9310,
+			"took": 9428,
+			"code": 0
+		},
+		{
+			"ms": 3612,
+			"startMs": 709,
+			"firstMs": 2212,
+			"took": 3020,
+			"code": 0
+		},
+		{
+			"ms": 1564,
+			"startMs": 262,
+			"firstMs": 888,
+			"took": 983,
+			"code": 0
+		}
+	],
+	"probe": {
+		"probeMs": 20904,
+		"found": {
+			"root": {
+				"found": {
+					"key": [],
+					"seal": [],
+					"session": [],
+					"token": []
+				},
+				"looked": {
+					"user": 0,
+					"env": 3,
+					"cmdline": 3,
+					"memBytes": 769036288,
+					"procRefused": [],
+					"memRefused": [],
+					"files": 7249,
+					"fileBytes": 218472575
+				},
+				"processes": 3
+			},
+			"job": {
+				"found": {
+					"key": [],
+					"seal": [],
+					"session": [],
+					"token": []
+				},
+				"looked": {
+					"user": 1000,
+					"env": 3,
+					"cmdline": 3,
+					"memBytes": 769191936,
+					"procRefused": [],
+					"memRefused": [],
+					"files": 7249,
+					"fileBytes": 218472575
+				},
+				"processes": 3
+			}
+		}
+	},
+	"sleeperJob": {
+		"startMs": 402,
+		"firstMs": 1096,
+		"took": 41465,
+		"code": 0
+	},
+	"instancesAfterSleeper": [
+		{
+			"at": 0,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 5772,
+			"status": 200,
+			"count": 0,
+			"states": []
+		}
+	],
+	"instancesBeatOn": [
+		{
+			"at": 0,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 6309,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 12039,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 17788,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 23765,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 29496,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 35507,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 41302,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 47104,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 52970,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 59165,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 65569,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 71626,
+			"status": 200,
+			"count": 0,
+			"states": []
+		}
+	],
+	"beatOn": {
+		"startMs": 365,
+		"firstMs": 1228,
+		"took": 42001,
+		"code": 0,
+		"beats": 8,
+		"state": "done",
+		"hostBornBefore": -1164,
+		"hostBornNow": 78116,
+		"jobEndedAt": 41285,
+		"hostWokeByJobEnd": false,
+		"hostBox": {
+			"who": "github:1",
+			"state": "done",
+			"code": 0
+		}
+	},
+	"jobsAfterWake": {
+		"opened": {
+			"type": "opened",
+			"ms": 0,
+			"attached": [],
+			"born": 1792976306396,
+			"fresh": true
+		},
+		"printed": []
+	},
+	"instancesBeatOff": [
+		{
+			"at": 0,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 6200,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 12040,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 18191,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 24448,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 30491,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 36213,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 41901,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 48173,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 53986,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 59614,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 65809,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 71827,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 78345,
+			"status": 200,
+			"count": 0,
+			"states": []
+		},
+		{
+			"at": 84087,
+			"status": 200,
+			"count": 0,
+			"states": []
+		}
+	],
+	"beatOff": {
+		"startMs": 644,
+		"firstMs": 1156,
+		"took": 26739,
+		"code": -1,
+		"state": "done",
+		"running": false,
+		"said": "",
+		"beats": 0
+	},
+	"facts": {
+		"ok": 48,
+		"refused": 0
+	},
+	"destroy": {
+		"ms": 6247,
+		"ok": true
+	},
+	"afterDestroy": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"8b7b1ae0477d34ee",
+					"buildcache",
+					"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa",
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"swept": [
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:8b7b1ae0477d34ee: head 200, delete 204",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:buildcache: head 200, delete 204",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa: head 404, delete 404 {\"errors\":[{\"code\":\"MANIFEST_UNKNOWN\",\"message\":\"manifest unknown\",\"detail\":{\"Tag\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\"}}]}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200"
+	],
+	"afterCleanup": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	}
+}

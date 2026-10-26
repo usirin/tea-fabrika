@@ -13,6 +13,7 @@ const res = await fetch("http://model.internal/v1/messages", {
 		// What a box might send to pass as someone: the relay drops it.
 		authorization: "Bearer placeholder",
 	},
+	signal: AbortSignal.timeout(30000),
 	body: JSON.stringify({
 		model: "claude-haiku-4-5",
 		max_tokens: 64,

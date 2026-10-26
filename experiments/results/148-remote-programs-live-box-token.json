@@ -1,0 +1,343 @@
+{
+	"date": "2026-10-26",
+	"bundle": {
+		"bytes": 1384919,
+		"nodeImports": []
+	},
+	"before": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"deploy": {
+		"ms": 54538,
+		"url": true
+	},
+	"afterDeploy": {
+		"scripts": [
+			"tf-exp-148-tf-exp-148-cloud-ql4ejmzl52zwrmn6"
+		],
+		"namespaces": [
+			"tf-exp-148-tf-exp-148-cloud-ql4ejmzl52zwrmn6_JobBox",
+			"tf-exp-148-tf-exp-148-cloud-ql4ejmzl52zwrmn6_Ledger",
+			"tf-exp-148-tf-exp-148-cloud-ql4ejmzl52zwrmn6_Person",
+			"tf-exp-148-tf-exp-148-cloud-ql4ejmzl52zwrmn6_ProjectHost"
+		],
+		"containerApps": [
+			"tf-exp-148-jobbox-containers-cloud-i5lilaghckifcx6k"
+		],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-4ltc3uhglvzkgibr",
+				"tags": [
+					"7a3989dcf0be7259",
+					"buildcache",
+					"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927",
+					"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"firstBox": [
+		{
+			"afterDeployMs": 10897,
+			"printed": "hi\n (exit 0)",
+			"ms": 10799,
+			"startMs": 8902,
+			"firstMs": 9656,
+			"took": 9762,
+			"code": 0
+		}
+	],
+	"askA": {
+		"line": "node /app/ask.mjs hello",
+		"printed": "standin answered github:1; headers anthropic-version,content-length,content-type,x-api-key\n (exit 0)",
+		"ms": 10035,
+		"job": "0f0f29df-c26c-483f-b811-89d0c09425df"
+	},
+	"askB": {
+		"line": "node /app/ask.mjs hi",
+		"printed": "standin answered github:2; headers anthropic-version,content-length,content-type,x-api-key\n (exit 0)",
+		"ms": 2134,
+		"job": "d9b36237-b87c-4417-af11-bb5a453b36fc"
+	},
+	"askNoKey": {
+		"line": "node /app/ask.mjs hi",
+		"printed": "ask failed: 403 github:3 has no key yet\n (exit 1)",
+		"ms": 2476,
+		"job": "e9a38202-b648-4919-b6bf-0a91eacc8dfb"
+	},
+	"instancesAfterAsks": {
+		"status": 200,
+		"shape": "instances,durable_objects",
+		"count": 0,
+		"states": []
+	},
+	"token": {
+		"shape": true,
+		"hash": "13a7fffb"
+	},
+	"tokenNet": {
+		"printed": "{\"https://api.anthropic.com/\":\"404\",\"https://example.com/\":\"refused: The operation was aborted due to timeout\",\"http://example.com/\":\"refused: The operation was aborted due to timeout\",\"https://claude.ai/\":\"refused: The operation was aborted due to timeout\",\"https://statsig.anthropic.com/\":\"refused: The operation was aborted due to timeout\",\"https://1.1.1.1/\":\"refused: ECONNRESET\",\"tcp 1.1.1.1:53\":\"refused: timeout\"}\n (exit 0)",
+		"startMs": 308,
+		"firstMs": 656,
+		"took": 61310,
+		"code": 0
+	},
+	"tokenPrinted": {
+		"outputGotToken": "no",
+		"withheld": true,
+		"rowHoldsToken": "no"
+	},
+	"tokenPrintedBase64": {
+		"tested": true,
+		"result": "kept out of the public record; sent to the owner"
+	},
+	"tokenOnLedger": {
+		"plain": "no",
+		"encoded": "kept out of the public record; sent to the owner"
+	},
+	"tokenProbe": {
+		"result": "no box answered the probe in this run"
+	},
+	"claudeCall": {
+		"wallMs": 6434,
+		"startMs": 288,
+		"firstMs": 815,
+		"took": 4786,
+		"code": 0,
+		"answer": {
+			"is_error": false,
+			"subtype": "success",
+			"result": "Hi there!",
+			"duration_ms": 1646,
+			"duration_api_ms": 1289,
+			"num_turns": 1,
+			"total_cost_usd": 0.00128221,
+			"usage": {
+				"input_tokens": 2,
+				"cache_creation_input_tokens": 5837,
+				"cache_read_input_tokens": 11111,
+				"output_tokens": 7,
+				"output_tokens_details": {
+					"thinking_tokens": 0
+				},
+				"server_tool_use": {
+					"web_search_requests": 0,
+					"web_fetch_requests": 0
+				},
+				"service_tier": "standard",
+				"cache_creation": {
+					"ephemeral_1h_input_tokens": 5837,
+					"ephemeral_5m_input_tokens": 0
+				},
+				"inference_geo": "global",
+				"iterations": [],
+				"speed": "standard",
+				"fallback_credit": null
+			}
+		},
+		"outputGotToken": "no"
+	},
+	"tokenOnPage": {
+		"plain": "no",
+		"encoded": "no"
+	},
+	"facts": {
+		"ok": 36,
+		"refused": 0
+	},
+	"destroy": {
+		"ms": 2090,
+		"ok": true
+	},
+	"afterDestroy": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-4ltc3uhglvzkgibr",
+				"tags": [
+					"7a3989dcf0be7259",
+					"buildcache",
+					"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927",
+					"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	},
+	"swept": [
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:7a3989dcf0be7259: head 200, delete 204",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:buildcache: head 200, delete 204",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80: head 404, delete 404 {\"errors\":[{\"code\":\"MANIFEST_UNKNOWN\",\"message\":\"manifest unknown\",\"detail\":{\"Tag\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\"}}]}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200",
+		"image tf-exp-148-job-cloud-4ltc3uhglvzkgibr:sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927\"}",
+		"image tf-exp-148-job-cloud-6rl3ma66fasjmz3g:sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602\"}",
+		"image tf-exp-148-job-cloud-i7cz7qo4xifsdboy:sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb\"}",
+		"image tf-exp-148-job-cloud-mp35mdfk7iuj74vu:sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:c9b963fb5ec0e8720331c410faa10520897c8d6f1ee87f5a0813ee5aba3e5b80\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1\"}",
+		"image tf-exp-148-job-cloud-r54xuv6xjdlbm53h:sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:41ef4eb0506a3b917b3d75de867b90334737158a8e981f826ab13e7b02de3caa\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e\"}",
+		"image tf-exp-148-job-cloud-xaau6m6iv42xrygt:sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd: head 200, delete 409 {\"code\":\"SINGLETON_ARTIFACT_EXISTS\",\"subjectDigest\":\"sha256:68c5f0284ca59965bd1232bc1162b09af3c0da12560103ff2f9ab638b94de5c2\",\"artifactType\":\"application/vnd.cloudchamber.btrfs-chain.v1\",\"committedDigest\":\"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd\"}",
+		"registry gc: 200"
+	],
+	"afterCleanup": {
+		"scripts": [],
+		"namespaces": [],
+		"containerApps": [],
+		"images": [
+			{
+				"repo": "tf-exp-148-job-cloud-4ltc3uhglvzkgibr",
+				"tags": [
+					"sha256:b73c2c3edacbb846d6f901397891facea46269112e62215a3f7fc6d516416927"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-6rl3ma66fasjmz3g",
+				"tags": [
+					"sha256:7fcf2d157e6705042eb9db0b023b186c6723badb22d6858a27a5b5f13e62c602"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-i7cz7qo4xifsdboy",
+				"tags": [
+					"sha256:86731501c0934072b98a168b1788563c14892a89b4b01976ebbea2235ec80aeb"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-mp35mdfk7iuj74vu",
+				"tags": [
+					"sha256:27aaf9a757275bbf82cf688d626e3e2b3c93dba1cce6dadcd0b7f38ba4cbd0c1"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-r54xuv6xjdlbm53h",
+				"tags": [
+					"sha256:467d42cc1a02aca8fdc3bf1b8b2cc16790745e5cfe6f3f1f6f2612000099b62e"
+				]
+			},
+			{
+				"repo": "tf-exp-148-job-cloud-xaau6m6iv42xrygt",
+				"tags": [
+					"sha256:7611f65d1ef129bb215abadb5f06a123801a2cb762efaaa0280889c345dfa4bd"
+				]
+			}
+		],
+		"otherScripts": 12,
+		"otherNamespaces": 12,
+		"otherRepos": 5
+	}
+}
