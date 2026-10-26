@@ -292,7 +292,7 @@ describe("tracing: a kept job", () => {
 				const {line, heard, started} = yield* session(list, storage);
 				const id = (yield* line("tally &")).said[0]?.split(" ")[1] ?? "";
 				yield* line("tell %1 add 2");
-				yield* heard("[1] 2");
+				yield* heard("[1] total 2");
 				yield* started.stop;
 				return id;
 			}).pipe(Effect.scoped, Effect.provide(first.layer)),
@@ -303,7 +303,7 @@ describe("tracing: a kept job", () => {
 				const {line, heard} = yield* session(list, storage);
 				yield* line(`attach ${run} &`);
 				yield* line("tell %1 add 3");
-				yield* heard("[1] 5");
+				yield* heard("[1] total 5");
 			}).pipe(Effect.scoped, Effect.provide(second.layer)),
 		);
 		const typed = (spans: readonly ReadableSpan[], text: string) =>

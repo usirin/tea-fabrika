@@ -158,23 +158,52 @@ describe("the acp program's kinds are kept", () => {
 		);
 	});
 
-	// Known bug, found by this law: an update kind named as one of a plain object's own names
-	// (`constructor`, `__proto__`, `toString`) is counted from what the object inherits under that
-	// name, not from 0, so its count is text and the transcript leaves its own schema. It is never
-	// saved today, but its counts are wrong where they are shown. Pinned: this test fails the day the
-	// count starts at 0.
+	// A known bug until the transcript read its counts with Object.hasOwn: an update kind named as a
+	// name every object inherits was counted from what the object inherits under that name, so its
+	// count was text and the transcript left its own schema.
 	it.each(["constructor", "__proto__"])(
-		"known bug: an update kind named %s is counted as text, and the transcript leaves its schema",
+		"every transcript it reaches from its init saves and loads back equal, with an update kind named %s",
 		async (what) => {
+			await keepsEvery(
+				transcript.machine,
+				transcript.state,
+				transcriptLists(fc.constant(what)),
+				100,
+			);
+		},
+	);
+
+	it.each(["constructor", "__proto__"])(
+		"the law for an update kind named %s is seen to fail on a planted mistake: a count read by any key, own or inherited, which counts it as text",
+		async (what) => {
+			const real = transcript.machine;
+			// The fold as it was: each count read by the name the harness picked, inherited or not.
+			const readsInherited: typeof real = {
+				...real,
+				update: {
+					...real.update,
+					seen: (s, m) => {
+						let t = s;
+						for (const e of m.events) {
+							if (e.kind !== "other") {
+								t = real.update.seen(t, {type: "seen", events: [e]})[0];
+								continue;
+							}
+							t = {...t, other: {...t.other, [e.what]: (t.other[e.what] ?? 0) + 1}};
+						}
+						return [t, []];
+					},
+				},
+			};
 			await expect(
-				keepsEvery(transcript.machine, transcript.state, transcriptLists(fc.constant(what)), 100),
+				keepsEvery(readsInherited, transcript.state, transcriptLists(fc.constant(what)), 100),
 			).rejects.toThrow(
 				`Counterexample: [[{"type":"seen","events":[{"kind":"other","what":"${what}"}]}]]`,
 			);
-			const once = foldEvents(transcript.machine, ctx, null, [
+			const once = foldEvents(readsInherited, ctx, null, [
 				{type: "seen", events: [{kind: "other", what}]},
 			]).finalState;
-			expect(typeof Object.getOwnPropertyDescriptor(once.other, what)?.value).toBe("string");
+			expect(typeof once.other[what]).toBe("string");
 		},
 	);
 

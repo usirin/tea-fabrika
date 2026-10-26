@@ -458,7 +458,16 @@ export interface Child<S> {
 	readonly state: S;
 }
 
+/**
+ * The children by their item's key. Each read goes through {@link childOf}, so
+ * a key is only ever a key: `constructor` is no child unless one was spawned
+ * under it.
+ */
 export type Children<S> = Readonly<Record<string, Child<S>>>;
+
+/** The child under `key`, or `undefined`: never a name every object inherits. */
+const childOf = <S>(children: Children<S>, key: string): Child<S> | undefined =>
+	Object.hasOwn(children, key) ? children[key] : undefined;
 
 /**
  * Spawn: a child per item. Each child is a nested model the parent steps;
@@ -473,7 +482,7 @@ export function spawn<S>(
 	state: S,
 	slots: number,
 ): Children<S> | null {
-	if (key in children) return children;
+	if (childOf(children, key) !== undefined) return children;
 	const taken = new Set(Object.values(children).map((c) => c.slot));
 	const slot = Array.from({length: slots}, (_, i) => i).find((i) => !taken.has(i));
 	return slot === undefined ? null : {...children, [key]: {slot, state}};
@@ -485,7 +494,7 @@ export function stepChild<S, C>(
 	key: string,
 	step: (state: S) => readonly [S, readonly C[]],
 ): readonly [Children<S>, readonly C[]] {
-	const child = children[key];
+	const child = childOf(children, key);
 	if (child === undefined) return [children, []];
 	const [state, cmds] = step(child.state);
 	return [{...children, [key]: {slot: child.slot, state}}, cmds];

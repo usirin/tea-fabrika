@@ -168,7 +168,7 @@ export const Transcript = Schema.Struct({
 	/** Asks not answered yet. */
 	asks: Schema.Array(Ask),
 	answered: Schema.Struct({allowed: Count, refused: Count, cancelled: Count}),
-	/** Updates the fold does not use, counted by kind. */
+	/** Updates the fold does not use, counted by kind. A kind is the harness's word: see `count`. */
 	other: Schema.Record(Schema.String, Count),
 });
 export type Transcript = typeof Transcript.Type;
@@ -272,9 +272,22 @@ export function seenOf(update: SessionUpdate): Seen {
 
 // ---------------------------------------------------------------- the fold
 
-const count = (table: Readonly<Record<string, number>>, key: string) => ({
-	...table,
-	[key]: (table[key] ?? 0) + 1,
+/** The count kept under `name`, read only as the record's own key: never a name every object inherits. */
+const own = (counts: Readonly<Record<string, number>>, name: string): number | undefined =>
+	Object.hasOwn(counts, name) ? counts[name] : undefined;
+
+/**
+ * The counts with one more under `name`. The name is the harness's word, so
+ * `constructor` or `__proto__` counts from 0 like any other. A plain record
+ * keeps it, as tea keeps a state: plain data, which a Map is not. The spread
+ * writes the name as an own key too, never as the record's prototype.
+ *
+ *   count({}, "constructor")                  {constructor: 1}
+ *   count({constructor: 1}, "constructor")    {constructor: 2}
+ */
+const count = (counts: Readonly<Record<string, number>>, name: string) => ({
+	...counts,
+	[name]: (own(counts, name) ?? 0) + 1,
 });
 
 /** A turn of this start, or `null` for an event replayed from before it. */

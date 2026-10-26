@@ -65,8 +65,8 @@ describe("tsh: a job saved by older code", () => {
 				const second = (yield* line("tally &")).err[0]?.split(" ")[1] ?? "";
 				yield* line("tell %1 add 2");
 				yield* line("tell %2 add 3");
-				yield* heard("[1] 2");
-				yield* heard("[2] 3");
+				yield* heard("[1] total 2");
+				yield* heard("[2] total 3");
 				yield* started.stop;
 				return {first, second};
 			}).pipe(Effect.scoped),
@@ -92,7 +92,7 @@ describe("tsh: a job saved by older code", () => {
 				// The other job opens, with its own total.
 				expect((yield* line("attach %2 &")).err).toEqual([`[2] attached ${ids.second}`]);
 				yield* line("tell %2 add 1");
-				yield* heard("[2] 4");
+				yield* heard("[2] total 4");
 				expect((yield* line("jobs")).out).toEqual([
 					"[1] detached  tally",
 					"[2] running   tally",

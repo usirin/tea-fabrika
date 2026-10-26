@@ -93,7 +93,7 @@ describe("tsh over jobs saved by older code", () => {
 							const n = i + 1;
 							out.push((yield* line("tally &")).err[0]?.split(" ")[1] ?? "");
 							yield* line(`tell %${n} add ${job.add}`);
-							yield* heard(`[${n}] ${job.add}`);
+							yield* heard(`[${n}] total ${job.add}`);
 						}
 						yield* started.stop;
 						return out;
@@ -121,7 +121,7 @@ describe("tsh over jobs saved by older code", () => {
 							}
 							expect(err).toEqual([`[${n}] attached ${ids[i]}`]);
 							yield* line(`tell %${n} add 1`);
-							yield* heard(`[${n}] ${job.add + 1}`);
+							yield* heard(`[${n}] total ${job.add + 1}`);
 						}
 						return (yield* line("jobs")).out;
 					}).pipe(Effect.scoped),
