@@ -80,6 +80,14 @@ test:
 - **No real key goes into a box, the model login included.** A proxy outside
   adds the key to each request, and the box holds a fake one. A key inside the
   box is a key the agent has: a program can read its own environment.
+  *Changed 2026-10-25, for the model login only.* A job's box gets its
+  starter's own Claude subscription token as `CLAUDE_CODE_OAUTH_TOKEN`, made
+  with `claude setup-token`, and Claude Code uses it unchanged. Why: that is
+  the way Anthropic allows, and code of ours that passes a session token on is
+  the way it bars. Losing the account would cost more than a clean box gains.
+  Every other key still stays out. Proposed, to shrink what an agent can do
+  with the token: the box's network reaches only Anthropic, and every output
+  is checked for the token's exact text before it leaves the box.
 - **Code that comes out of a box runs only in a box.** The agent changes files,
   and those files leave the box. Tests, installs and anything else that runs
   them run boxed too. The builder's own checks run in the builder's box.
@@ -98,6 +106,8 @@ test:
   turn this way, in sandbox-runtime and in Docker, with no login in the box.
 - **Proposed: the model is reached through a relay on the host** (experiment
   137, 80%; not yet the owner's call).
+  *Dropped 2026-10-25 for a subscription login,* which goes in the box (the
+  changed rule above).
   One relay for each box holds the login and adds it to each model call. The
   box holds a placeholder login, and Claude Code needs no change. The relay
   forwards only the model's one path, for allowed models, under a cap for
@@ -195,6 +205,13 @@ The doubt is the edges nobody has run yet, listed below.
     the cloud: there the token sits in a Cloudflare account, which with one
     Worker per project may be the other person's account, not on its own
     person's machine.
+  - *Decided later the same day: the second way, the token in the box,*
+    because it is the one Anthropic's page allows. The rule above is changed
+    to match. The cap the relay held is gone with it; the subscription's own
+    limits remain. Still open: a person's token kept in an account another
+    person holds can be read by whoever holds that account's Cloudflare
+    token, their agents included. The two people trust each other, so this
+    is accepted for now and written here.
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is

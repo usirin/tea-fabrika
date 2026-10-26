@@ -949,22 +949,25 @@ const personKinds: Law = {
 				const {db} = openDb(":memory:");
 				rules.migrate(db);
 				const person: Stamp = {kind: "user", id: agent.for};
+				// The ledger's time, which no step here depends on: the driver takes it as an input.
+				const now = 0;
 				dispatch(
 					db,
 					rules.RULES,
 					0,
+					now,
 					"register",
 					mustOk(mod.trustedArgs("register", [name], person)),
 				);
 				const inbox = `${name}/inbox`;
 				const a = mod.trustedArgs("append", [inbox, "any", event, null], agent);
-				if (a.ok) dispatch(db, rules.RULES, 0, "append", a.value);
+				if (a.ok) dispatch(db, rules.RULES, 0, now, "append", a.value);
 				ensure(
 					rules.readStream(db, inbox).length === 0,
 					`an agent's answered was stored in ${inbox}`,
 				);
 				const p = mustOk(mod.trustedArgs("append", [inbox, "any", event, null], person));
-				const res = dispatch(db, rules.RULES, 0, "append", p) as {ok: boolean};
+				const res = dispatch(db, rules.RULES, 0, now, "append", p) as {ok: boolean};
 				ensure(res.ok, `a person's answered did not land in ${inbox}`);
 				const rows = rules.readStream(db, inbox);
 				ensure(
