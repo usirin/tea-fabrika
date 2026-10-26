@@ -616,6 +616,12 @@ someone newer claims, and the clock plays no part in it.**
   before the fix merges, on the laptop, for $0. The lease laws that assume
   expiry is final change, written by an agent that does not build the fix.
 - **How sure: 70%.** Rule B never ran in experiment 149. The rerun settles it.
+- **Built and measured, 2026-10-26: [experiment 151](../../experiments/151-patient-lease.md).**
+  On the real code, with the expiry job at 1 s, every drop up to 5 minutes kept the lane with
+  no restart while nobody else wanted it (474 of 474), a longer drop with a second host waiting
+  went to that host cleanly (236 of 236), a dead host's ticket frees as fast as before, and
+  nothing landed twice in 1,090 runs. A late renew writes `lease_resumed`. **How sure now:
+  85%.** The doubt left is 149's: loopback, not a real wifi drop.
 
 ## 6. Sharing a project: the whole ledger is copied
 
