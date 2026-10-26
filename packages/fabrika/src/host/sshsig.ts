@@ -122,10 +122,14 @@ export const keyOnly = (line: string): string | null => {
 	return blob === null ? null : `${ED25519} ${toBase64(blob)}`;
 };
 
-const HASHES: Record<string, string> = {sha512: "SHA-512", sha256: "SHA-256"};
+/** WebCrypto's name for each hash a signature may name. A Map: the name is the signature's word, so `constructor` is no hash. */
+const HASHES: ReadonlyMap<string, string> = new Map([
+	["sha512", "SHA-512"],
+	["sha256", "SHA-256"],
+]);
 
 const signedData = async (message: string, namespace: string, hash: string): Promise<Bytes> => {
-	const algo = HASHES[hash];
+	const algo = HASHES.get(hash);
 	if (algo === undefined) throw new Error(`no such hash: ${hash}`);
 	const digest = new Uint8Array(await crypto.subtle.digest(algo, enc.encode(message)));
 	return concat([enc.encode(MAGIC), str(namespace), str(""), str(hash), str(digest)]);
@@ -171,7 +175,7 @@ export const verify = async (
 	keys: readonly string[],
 ): Promise<string | null> => {
 	const p = parse(armored);
-	if (p === null || p.namespace !== namespace || HASHES[p.hash] === undefined) return null;
+	if (p === null || p.namespace !== namespace || !HASHES.has(p.hash)) return null;
 	const line = keys.find((k) => {
 		const blob = keyBlobOf(k);
 		return blob !== null && same(blob, p.key);

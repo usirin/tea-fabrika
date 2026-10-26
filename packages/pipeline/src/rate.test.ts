@@ -172,10 +172,28 @@ describe("the count per rule", () => {
 		});
 	});
 
+	// A rule's name is the check's word, so it may be a name every object has.
+	it.each(["constructor", "toString", "__proto__"])(
+		"counts a rule named %s from zero, under its own name",
+		(rule) => {
+			const tally = tallyOf(
+				[
+					{id: "a", rule},
+					{id: "b", rule},
+				],
+				facts([rated("a", "fix")]),
+				() => "open",
+			);
+			expect(Object.keys(tally)).toEqual([rule]);
+			expect(Object.getPrototypeOf(tally)).toBe(Object.prototype);
+			expect(Object.hasOwn(tally, rule) ? tally[rule] : null).toEqual({fix: 1, noise: 0, open: 1});
+		},
+	);
+
 	it("counts every distinct finding exactly once", () => {
 		const finding = fc.record({
 			id: fc.constantFrom("a", "b", "c", "d", "e"),
-			rule: fc.constantFrom("scope", "survived"),
+			rule: fc.constantFrom("scope", "survived", "constructor", "__proto__"),
 		});
 		fc.assert(
 			fc.property(

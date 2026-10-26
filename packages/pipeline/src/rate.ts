@@ -112,6 +112,10 @@ export const none: Tally = {fix: 0, noise: 0, open: 0};
 /**
  * The count for each rule that has findings, from users' ratings only, with
  * what silence means for each rule. A finding listed twice counts once.
+ *
+ * A rule's name is the check's own word, so it may be `constructor` or
+ * `__proto__`: the count is kept in a Map, and the record it hands back has
+ * each rule as an own key, plain data a parent can keep in its state.
  */
 export function tallyOf(
 	findings: readonly Finding[],
@@ -120,14 +124,16 @@ export function tallyOf(
 ): Readonly<Record<string, Tally>> {
 	const seen = new Map(findings.map((f) => [f.id, f]));
 	const rated = userRatings(facts);
-	const tally: Record<string, Tally> = {};
+	const tally = new Map<string, Tally>();
 	for (const finding of seen.values()) {
-		const t = tally[finding.rule] ?? none;
+		const t = tally.get(finding.rule) ?? none;
 		const counted = count(finding, rated, facts.shipped, silence(finding.rule));
-		tally[finding.rule] =
-			counted === null ? {...t, open: t.open + 1} : {...t, [counted]: t[counted] + 1};
+		tally.set(
+			finding.rule,
+			counted === null ? {...t, open: t.open + 1} : {...t, [counted]: t[counted] + 1},
+		);
 	}
-	return tally;
+	return Object.fromEntries(tally);
 }
 
 /**
