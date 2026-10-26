@@ -89,11 +89,12 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
-| `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
+| `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The six message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
+| `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, and a host of another version. It stops its own host by its pid and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
@@ -216,6 +217,11 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
 - **Type-ahead.** Keys pressed while a line runs wait, and go to the next prompt.
 - **Text from tsh while the prompt is up** (a background job ending) goes above the prompt, and
   the prompt is drawn again under it, with what was typed.
+- **Wide characters and accents.** The editor counts cells as ghostty-web does: a CJK character
+  or an emoji takes two, an accent joins the letter before it, an emoji with U+FE0F takes two.
+- **A resize** leaves the line to the terminal, which reflows it. The editor writes nothing then;
+  its next redraw finds the prompt by the new width. A blank after the line keeps the cursor on
+  a written cell, which the reflow carries with the text.
 
 ## The terminal
 
@@ -281,13 +287,13 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 
 ## What it does not do yet
 
-- **Wide characters.** The editor counts one cell per character, so a CJK character or an emoji
-  on the line puts the cursor off.
+- **The cursor moves one code point at a time.** It can stop between a letter and its accent,
+  which readline steps over, or inside an emoji made of several.
+- **A line with a wide character is drawn whole on each key,** not one row: the one-row redraw
+  is for lines with no character at or past U+1100.
 - **Bracketed paste.** A pasted newline runs the line, as in a terminal with no bracketed paste.
 - **An escape sequence cut across two messages** is read as two keys. Keys come from one
   `onData` each, so this has not been seen.
-- **A resize does not redraw the line** already on the screen; the next one is drawn at the new
-  width.
 - **No Ctrl-Z and no `bg`:** a run in the foreground cannot be sent to the background.
 - **The screen's text is not a live region**: a screen reader is not told of new text.
 - **A program view is built into the app's bundle;** one from outside the app's build cannot be
