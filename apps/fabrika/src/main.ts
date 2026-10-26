@@ -16,6 +16,7 @@ import {
 import {attach, NoHost} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
 import type {ToPage} from "./messages.ts";
 import {Unattached, type Wire} from "./wire.ts";
@@ -69,14 +70,25 @@ import {Unattached, type Wire} from "./wire.ts";
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
 // A test sets it, to run on a fresh one. The host is started on the same home, by name, always.
 //
+// A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
+// accessory app, with no Dock icon, never the active app. Its window is shown without focus,
+// drawn while hidden and covered, and never focused, not even by the dock-activate path.
+// FABRIKA_FOREGROUND=1 shows it as the owner's. DOM focus inside the page is not OS focus: a
+// tile's terminal still takes keys sent over the DevTools protocol.
+//
 // The host is the app's own Electron binary run as Node (`ELECTRON_RUN_AS_NODE=1`, host/main.ts
 // says why), with no stdin, stdout or stderr, and let go (`unref`): quitting the app leaves it.
 
 /** The bundle's folder: main.mjs, host.mjs, preload.cjs and the page's own files, side by side. */
 const DIST = import.meta.dirname;
 
-const given = process.env.FABRIKA_HOME;
-if (given !== undefined && given !== "") app.setPath("userData", given);
+const launch = launchOf(process.env);
+if (launch.kind !== "owner") app.setPath("userData", launch.home);
+// Before `ready`, so no Dock icon shows even for a moment, and Chromium starts with the switches.
+if (launch.kind === "quiet") {
+	if (process.platform === "darwin") app.setActivationPolicy("accessory");
+	for (const name of QUIET_SWITCHES) app.commandLine.appendSwitch(name);
+}
 // Before `ready`, as Electron asks: a standard, secure scheme, so the page's own files have
 // an origin of their own and run as on https.
 protocol.registerSchemesAsPrivileged([
@@ -97,21 +109,29 @@ const guard = () => {
 	session.defaultSession.setPermissionCheckHandler(() => false);
 };
 
-/** The one window, with the same safe settings the app's windows always had. */
-const deskWindow = (preload: string) => {
+/**
+ * The one window, with the same safe settings the app's windows always had. Quiet, it is made
+ * hidden and drawn anyway, then shown without taking focus.
+ */
+const deskWindow = (preload: string, launch: Launch) => {
+	const quiet = launch.kind === "quiet";
 	const window = new BrowserWindow({
 		width: 1200,
 		height: 760,
 		title: "fabrika",
 		backgroundColor: "#16181d",
+		show: !quiet,
+		paintWhenInitiallyHidden: true,
 		webPreferences: {
 			sandbox: true,
 			contextIsolation: true,
 			nodeIntegration: false,
 			webSecurity: true,
+			backgroundThrottling: !quiet,
 			preload,
 		},
 	});
+	if (quiet) window.showInactive();
 	window
 		.loadURL(DESK)
 		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
@@ -276,14 +296,18 @@ const main = Effect.gen(function* () {
 		Effect.forkScoped,
 	);
 
-	/** The window there is, brought forward, or a new one: its page says hello as it loads. */
+	/**
+	 * The window there is, brought forward, or a new one: its page says hello as it loads. Quiet,
+	 * the window there is is only shown, never focused.
+	 */
 	const showWindow = () => {
 		if (current !== null) {
+			if (launch.kind === "quiet") return current.showInactive();
 			if (current.isMinimized()) current.restore();
 			current.focus();
 			return;
 		}
-		const made = deskWindow(path.join(DIST, "preload.cjs"));
+		const made = deskWindow(path.join(DIST, "preload.cjs"), launch);
 		current = made;
 		made.once("closed", () => {
 			if (current !== made) return;
