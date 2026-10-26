@@ -29,6 +29,7 @@ const outputs = {said: output(Schema.String, "What it is doing.")};
 const machines = {
 	idle: kind({
 		machine: idle,
+		state: Schema.Struct({open: Schema.Boolean}),
 		parent: "main",
 		options: () => ({ctx: undefined}),
 		drawing: () => ({name: "idle", steps: {}}),

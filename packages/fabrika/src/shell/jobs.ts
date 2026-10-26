@@ -1,4 +1,5 @@
 import {defineMachine} from "@demlik/tea";
+import {Schema} from "effect";
 
 // tsh's one machine: the job table. It holds what a job is (its line, and for
 // each program in it the program's name, its flags, its run id and how it is
@@ -18,32 +19,35 @@ import {defineMachine} from "@demlik/tea";
 // shell's `jobs`. What it said was printed while it ran.
 
 /** One program of a job. `flags` as the program took them. */
-export interface StageRecord {
-	readonly program: string;
-	readonly flags: Readonly<Record<string, unknown>>;
+export const StageRecord = Schema.Struct({
+	program: Schema.String,
+	flags: Schema.Record(Schema.String, Schema.Unknown),
 	/** The run's id: its run in storage, the same at every start of the job. */
-	readonly run: string;
+	run: Schema.String,
 	/** Into the next stage of the job. `null` for the last. */
-	readonly wire: {readonly output: string; readonly input: string} | null;
-	readonly ended: boolean;
-}
+	wire: Schema.NullOr(Schema.Struct({output: Schema.String, input: Schema.String})),
+	ended: Schema.Boolean,
+});
+export type StageRecord = typeof StageRecord.Type;
 
 /** `running`: started by this tsh. `detached`: started by an earlier one, and not again yet. */
-export type JobState = "running" | "detached";
+export const JobState = Schema.Literals(["running", "detached"]);
+export type JobState = typeof JobState.Type;
 
-export interface Job {
+export const Job = Schema.Struct({
 	/** The job's number, `%n` on a line: the lowest free one when it began. */
-	readonly n: number;
-	readonly text: string;
-	readonly stages: readonly [StageRecord, ...StageRecord[]];
-	readonly state: JobState;
+	n: Schema.Int,
+	text: Schema.String,
+	stages: Schema.NonEmptyArray(StageRecord),
+	state: JobState,
 	/** Started with `&`: the prompt came back while it ran. */
-	readonly background: boolean;
-}
+	background: Schema.Boolean,
+});
+export type Job = typeof Job.Type;
 
-export interface Jobs {
-	readonly jobs: readonly Job[];
-}
+/** The table: its state's schema, which it is kept and read back through. */
+export const Jobs = Schema.Struct({jobs: Schema.Array(Job)});
+export type Jobs = typeof Jobs.Type;
 
 export type JobsMsg =
 	| {

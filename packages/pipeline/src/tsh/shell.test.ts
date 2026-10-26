@@ -37,7 +37,8 @@ type Show = Shell.Show;
 
 const SMALL_LIST = programList(SMALL);
 
-type Waiting = {readonly phase: "waiting" | "over"};
+const Waiting = Schema.Struct({phase: Schema.Literals(["waiting", "over"])});
+type Waiting = typeof Waiting.Type;
 const waiting = defineMachine({
 	types: {
 		model: {} as Waiting,
@@ -60,6 +61,7 @@ const feed = defineProgram({
 	machines: {
 		wait: kind({
 			machine: waiting,
+			state: Waiting,
 			parent: "main",
 			options: () => ({
 				ctx: undefined,

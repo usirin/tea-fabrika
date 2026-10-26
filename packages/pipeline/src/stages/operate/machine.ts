@@ -1,22 +1,22 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
 import {LaneId} from "../../ids.ts";
-import {act, intentOf} from "../../primitives.ts";
+import {act, intentOf, keptAct} from "../../primitives.ts";
 import {Item} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {problemsOf} from "../review/machine.ts";
 import {TextKind} from "../review/pack.ts";
 import {Reviewed} from "../review/program.ts";
 import {EFFORTS, Settings} from "../review/reviewer.ts";
-import type {LoopOutcome} from "./outcome.ts";
+import {LoopOutcome} from "./outcome.ts";
 import {
 	afterBuild,
 	afterReview,
 	afterShip,
 	BuildEnd,
-	type Next,
+	Next,
 	openItems,
-	type Round,
+	Round,
 	ShipEnd,
 	shipItems,
 } from "./stop.ts";
@@ -68,44 +68,41 @@ export const LoopSettings = Schema.Struct({
 });
 export type LoopSettings = typeof LoopSettings.Type;
 
+/** A ticket, and the lane that claims or lets it go. */
+const LaneIn = Schema.Struct({ticket: Schema.String, lane: LaneId});
+const BuildIn = Schema.Struct({
+	ticket: Schema.String,
+	/** The lane that holds the ticket: the handler builds only while it still does. */
+	lane: LaneId,
+	number: Schema.Finite,
+	round: Schema.Finite,
+	open: Schema.Array(Item),
+	settings: Settings,
+});
+const ReviewIn = Schema.Struct({
+	ticket: Schema.String,
+	pr: Schema.String,
+	round: Schema.Finite,
+	rubrics: Schema.String,
+	settings: Settings,
+});
+
 export const claimTicket = act("loop_claim", {
-	input: Schema.Struct({ticket: Schema.String, lane: LaneId}),
+	input: LaneIn,
 	/** The lane that holds the ticket after the claim: this one, or the one that held it before. */
 	ok: LaneId,
 	err: Unknown,
 });
 
 export const releaseTicket = act("loop_release", {
-	input: Schema.Struct({ticket: Schema.String, lane: LaneId}),
+	input: LaneIn,
 	ok: Schema.Literal("released"),
 	err: Unknown,
 });
 
-export const runBuild = act("loop_build", {
-	input: Schema.Struct({
-		ticket: Schema.String,
-		/** The lane that holds the ticket: the handler builds only while it still does. */
-		lane: LaneId,
-		number: Schema.Finite,
-		round: Schema.Finite,
-		open: Schema.Array(Item),
-		settings: Settings,
-	}),
-	ok: BuildEnd,
-	err: Unknown,
-});
+export const runBuild = act("loop_build", {input: BuildIn, ok: BuildEnd, err: Unknown});
 
-export const runReview = act("loop_review", {
-	input: Schema.Struct({
-		ticket: Schema.String,
-		pr: Schema.String,
-		round: Schema.Finite,
-		rubrics: Schema.String,
-		settings: Settings,
-	}),
-	ok: Reviewed,
-	err: Unknown,
-});
+export const runReview = act("loop_review", {input: ReviewIn, ok: Reviewed, err: Unknown});
 
 /** One verdict to post: the kind, pass or fail, the reason, and the review's text. */
 export const Post = Schema.Struct({
@@ -116,26 +113,25 @@ export const Post = Schema.Struct({
 });
 export type Post = typeof Post.Type;
 
+const PostIn = Schema.Struct({pr: Schema.String, head: Schema.String, posts: Schema.Array(Post)});
+const ShipIn = Schema.Struct({
+	ticket: Schema.String,
+	/** The lane that holds the ticket: the handler ships only while it still does. */
+	lane: LaneId,
+	pr: Schema.String,
+	round: Schema.Finite,
+	/** The head the review passed, which this round built: the only one the loop sends to ship. */
+	head: Schema.String,
+	mode: Schema.Literals(["read", "write"]),
+});
+
 export const postVerdicts = act("loop_post", {
-	input: Schema.Struct({pr: Schema.String, head: Schema.String, posts: Schema.Array(Post)}),
+	input: PostIn,
 	ok: Schema.Literal("posted"),
 	err: Unknown,
 });
 
-export const runShip = act("loop_ship", {
-	input: Schema.Struct({
-		ticket: Schema.String,
-		/** The lane that holds the ticket: the handler ships only while it still does. */
-		lane: LaneId,
-		pr: Schema.String,
-		round: Schema.Finite,
-		/** The head the review passed, which this round built: the only one the loop sends to ship. */
-		head: Schema.String,
-		mode: Schema.Literals(["read", "write"]),
-	}),
-	ok: ShipEnd,
-	err: Unknown,
-});
+export const runShip = act("loop_ship", {input: ShipIn, ok: ShipEnd, err: Unknown});
 
 type ClaimCmd = ReturnType<typeof claimTicket>;
 type ReleaseCmd = ReturnType<typeof releaseTicket>;
@@ -145,35 +141,65 @@ type PostCmd = ReturnType<typeof postVerdicts>;
 type ShipCmd = ReturnType<typeof runShip>;
 export type LoopCmd = ClaimCmd | BuildCmd | ReviewCmd | PostCmd | ShipCmd | ReleaseCmd;
 
-type Held = {
-	readonly ticket: string;
-	readonly number: number;
+const Held = Schema.Struct({
+	ticket: Schema.String,
+	number: Schema.Finite,
 	/** This loop's lane: the one its claim names. */
-	readonly lane: LaneId;
-	readonly settings: LoopSettings;
-	readonly rounds: readonly Round[];
-};
-type At = Held & {readonly round: number};
-type Ended = {
-	readonly outcome: LoopOutcome;
+	lane: LaneId,
+	settings: LoopSettings,
+	rounds: Schema.Array(Round),
+});
+type Held = typeof Held.Type;
+const At = Schema.Struct({...Held.fields, round: Schema.Finite});
+type At = typeof At.Type;
+const Ended = Schema.Struct({
+	outcome: LoopOutcome,
 	/** The last stage outcome the loop read before it ended, by name, or why no stage could be run. */
-	readonly said: string;
-};
+	said: Schema.String,
+});
+type Ended = typeof Ended.Type;
 
-export type Loop =
-	| {readonly phase: "idle"}
-	| (Held & {readonly phase: "claiming"; readonly asked: ClaimCmd})
-	| (At & {readonly phase: "building"; readonly asked: BuildCmd})
-	| (At & {readonly phase: "reviewing"; readonly pr: string; readonly asked: ReviewCmd})
-	| (At & {
-			readonly phase: "posting";
-			readonly pr: string;
-			readonly next: Next;
-			readonly asked: PostCmd;
-	  })
-	| (At & {readonly phase: "shipping"; readonly pr: string; readonly asked: ShipCmd})
-	| (Held & Ended & {readonly phase: "releasing"; readonly asked: ReleaseCmd})
-	| (Held & Ended & {readonly phase: "over"});
+/** The loop machine's state, and the schema it is kept and read back through. */
+export const Loop = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("claiming"),
+		asked: keptAct(claimTicket, LaneIn),
+	}),
+	Schema.Struct({
+		...At.fields,
+		phase: Schema.Literal("building"),
+		asked: keptAct(runBuild, BuildIn),
+	}),
+	Schema.Struct({
+		...At.fields,
+		phase: Schema.Literal("reviewing"),
+		pr: Schema.String,
+		asked: keptAct(runReview, ReviewIn),
+	}),
+	Schema.Struct({
+		...At.fields,
+		phase: Schema.Literal("posting"),
+		pr: Schema.String,
+		next: Next,
+		asked: keptAct(postVerdicts, PostIn),
+	}),
+	Schema.Struct({
+		...At.fields,
+		phase: Schema.Literal("shipping"),
+		pr: Schema.String,
+		asked: keptAct(runShip, ShipIn),
+	}),
+	Schema.Struct({
+		...Held.fields,
+		...Ended.fields,
+		phase: Schema.Literal("releasing"),
+		asked: keptAct(releaseTicket, LaneIn),
+	}),
+	Schema.Struct({...Held.fields, ...Ended.fields, phase: Schema.Literal("over")}),
+]);
+export type Loop = typeof Loop.Type;
 
 export type LoopMsg =
 	| {

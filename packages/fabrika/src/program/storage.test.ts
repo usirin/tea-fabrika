@@ -11,7 +11,15 @@ import {fileStorage} from "./storage-node.ts";
 // Each kind is checked the same way: what one storage value kept, a second one
 // over the same place finds (as the next process would), runs on other ids
 // find none of it, a newer open makes an older handle stale, and a torn write
-// reads as the value before it.
+// reads as the value before it. Every state goes in and out through its
+// machine's schema: one older code saved, which the schema does not take, is
+// refused and left as it was.
+
+const N = Schema.Struct({n: Schema.Int});
+const Over = Schema.Struct({over: Schema.Boolean});
+const Phase = Schema.Struct({phase: Schema.String});
+/** The same machine's state as older code kept it: a key the schema above does not have. */
+const Older = Schema.Struct({count: Schema.Int});
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -51,21 +59,72 @@ describe.each(kinds)("storage %s", (_, place) => {
 	it("keeps each machine run's state under its id, an id with a slash in it too, apart from other runs", async () => {
 		const open = place();
 		const r1 = await go(open().open("ship:r1", null));
-		await r1.store<{n: number}>("ship", "r1/1/issue/ship").save({n: 1});
-		await r1.store<{n: number}>("ship", "other").save({n: 2});
+		await r1.store("ship", "r1/1/issue/ship", N).save({n: 1});
+		await r1.store("ship", "other", N).save({n: 2});
 		const r2 = await go(open().open("ship:r2", null));
-		await r2.store<{n: number}>("ship", "r1/1/issue/ship").save({n: 3});
+		await r2.store("ship", "r1/1/issue/ship", N).save({n: 3});
 
 		const next = await go(open().open("ship:r1", null));
-		const listed = await go(next.list("ship"));
-		expect(listed.map((l) => [l.id, l.state]).sort()).toEqual([
-			["other", {n: 2}],
-			["r1/1/issue/ship", {n: 1}],
-		]);
-		expect(await next.store("ship", "r1/1/issue/ship").load()).toEqual({n: 1});
-		expect(await go(next.read("ship", "nothing"))).toBeNull();
+		const listed = await go(next.list("ship", N));
+		expect(listed.map((l) => (l.kind === "kept" ? [l.id, l.state] : [l.id, l.why])).sort()).toEqual(
+			[
+				["other", {n: 2}],
+				["r1/1/issue/ship", {n: 1}],
+			],
+		);
+		expect(await next.store("ship", "r1/1/issue/ship", N).load()).toEqual({n: 1});
+		expect(await go(next.read("ship", "nothing", N))).toBeNull();
 		const r3 = await go(open().open("ship:r3", null));
-		expect(await go(r3.list("ship"))).toEqual([]);
+		expect(await go(r3.list("ship", N))).toEqual([]);
+	});
+
+	it("a kept state its schema does not take was saved by older code: migrate refuses it, read fails StateRefused, list shows it refused beside the rest, and it is left as it was", async () => {
+		const open = place();
+		const old = await go(open().open("ship:r1", null));
+		await old.store("ship", "a", Older).save({count: 1});
+		await old.store("ship", "b", N).save({n: 2});
+
+		const next = await go(open().open("ship:r1", null));
+		const store = next.store("ship", "a", N);
+		const raw = await store.load();
+		expect(raw).toEqual({count: 1});
+		expect(store.migrate(raw)).toMatchObject({
+			_tag: "refusal",
+			reason: expect.stringContaining("ship run a was saved by older code"),
+		});
+		expect(await tagOf(next.read("ship", "a", N))).toBe("StateRefused");
+		const listed = await go(next.list("ship", N));
+		expect(listed.map((l) => [l.id, l.kind])).toEqual([
+			["a", "refused"],
+			["b", "kept"],
+		]);
+		// Refused, not dropped: older code finds it as it left it.
+		expect(await go(next.read("ship", "a", Older))).toEqual({count: 1});
+	});
+
+	it("a good state loads as its schema reads it; nothing kept is null, and migrate says nothing too", async () => {
+		const run = await go(place()().open("ship:r1", null));
+		const store = run.store("ship", "k", N);
+		expect(await store.load()).toBeNull();
+		expect(store.migrate(null)).toBeNull();
+		expect(store.migrate(undefined)).toBeNull();
+		await store.save({n: 4});
+		expect(store.migrate(await store.load())).toEqual({n: 4});
+	});
+
+	it("a save its own schema does not take is not kept: a key the schema does not name fails it, so a schema that forgot a field fails at once", async () => {
+		const run = await go(place()().open("ship:r1", null));
+		await run.store("ship", "k", N).save({n: 1});
+		const loose: {n: number} = {n: 2, ...{extra: true}};
+		const saved = await run
+			.store("ship", "k", N)
+			.save(loose)
+			.then(
+				() => "ok",
+				(e: unknown) => (e instanceof Error ? e.message : String(e)),
+			);
+		expect(saved).toContain("does not fit its own schema");
+		expect(await go(run.read("ship", "k", N))).toEqual({n: 1});
 	});
 
 	it("keeps one record per run: the flags of its first start, its closed inputs once each, and how it ended", async () => {
@@ -92,11 +151,11 @@ describe.each(kinds)("storage %s", (_, place) => {
 	it("a newer open makes the older handle stale: every write through it fails Stale, and nothing it tried is kept", async () => {
 		const open = place();
 		const older = await go(open().open("ship:r1", null));
-		await older.store<{n: number}>("ship", "k").save({n: 1});
+		await older.store("ship", "k", N).save({n: 1});
 		const newer = await go(open().open("ship:r1", null));
 
 		const save = await older
-			.store<{n: number}>("ship", "k")
+			.store("ship", "k", N)
 			.save({n: 2})
 			.then(
 				() => "ok",
@@ -109,18 +168,18 @@ describe.each(kinds)("storage %s", (_, place) => {
 			await tagOf(older.end("ended")),
 		]).toEqual(["Stale", "Stale", "Stale", "Stale"]);
 
-		expect(await go(newer.read("ship", "k"))).toEqual({n: 1});
+		expect(await go(newer.read("ship", "k", N))).toEqual({n: 1});
 		expect(newer.found.closed).toEqual([]);
-		await newer.store<{n: number}>("ship", "k").save({n: 3});
-		expect(await go(newer.read("ship", "k"))).toEqual({n: 3});
+		await newer.store("ship", "k", N).save({n: 3});
+		expect(await go(newer.read("ship", "k", N))).toEqual({n: 3});
 		expect((await go(open().record("ship:r1")))?.closed).toEqual([]);
 	});
 
 	it("keeps every run, over or not, until its parent clears it; clearing one twice, or one never kept, changes nothing", async () => {
 		const open = place();
 		const run = await go(open().open("ship:r1", null));
-		await run.store<{over: boolean}>("ship", "asked").save({over: true});
-		const bare = run.store<{over: boolean}>("ship", "bare");
+		await run.store("ship", "asked", Over).save({over: true});
+		const bare = run.store("ship", "bare", Over);
 		await bare.save({over: false});
 		await bare.save({over: true});
 		expect((await go(open().record("ship:r1")))?.machines).toEqual([
@@ -131,8 +190,8 @@ describe.each(kinds)("storage %s", (_, place) => {
 		await go(run.clear("ship", "asked"));
 		await go(run.clear("ship", "asked"));
 		await go(run.clear("ship", "never"));
-		expect(await go(run.read("ship", "asked"))).toBeNull();
-		expect(await go(run.read("ship", "bare"))).toEqual({over: true});
+		expect(await go(run.read("ship", "asked", Over))).toBeNull();
+		expect(await go(run.read("ship", "bare", Over))).toEqual({over: true});
 		await go(run.clear("ship", "bare"));
 		expect((await go(open().record("ship:r1")))?.machines).toEqual([]);
 	});
@@ -153,11 +212,11 @@ describe.each(kinds)("storage %s", (_, place) => {
 	it("removes a run whole; a handle still on it is stale", async () => {
 		const open = place();
 		const run = await go(open().open("ship:r1", null));
-		await run.store<{n: number}>("ship", "k").save({n: 1});
+		await run.store("ship", "k", N).save({n: 1});
 		await go(open().remove("ship:r1"));
 
 		expect(await go(open().record("ship:r1"))).toBeNull();
-		expect(await go(run.read("ship", "k"))).toBeNull();
+		expect(await go(run.read("ship", "k", N))).toBeNull();
 		expect(await tagOf(run.close("pr"))).toBe("Stale");
 	});
 
@@ -205,10 +264,10 @@ describe.each(kinds)("storage %s", (_, place) => {
 	it("hands back a copy: a state changed after it was saved is not what is found", async () => {
 		const run = await go(place()().open("ship:r1", null));
 		const state = {n: 1};
-		await run.store<{n: number}>("ship", "k").save(state);
+		await run.store("ship", "k", N).save(state);
 		state.n = 2;
 
-		expect(await run.store("ship", "k").load()).toEqual({n: 1});
+		expect(await run.store("ship", "k", N).load()).toEqual({n: 1});
 	});
 });
 
@@ -232,18 +291,18 @@ describe("a torn write", () => {
 		).pipe(Layer.provide(KeyValueStore.layerMemory));
 		const storage = storageOf(tears);
 		const run = await go(storage.open("ship:r1", {mode: "write"}));
-		await run.store<{phase: string}>("ship", "k").save({phase: "enqueueing"});
+		await run.store("ship", "k", Phase).save({phase: "enqueueing"});
 
 		tearNext = true;
-		await run.store<{phase: string}>("ship", "k").save({phase: "queued"});
-		expect(await go(run.read("ship", "k"))).toEqual({phase: "enqueueing"});
+		await run.store("ship", "k", Phase).save({phase: "queued"});
+		expect(await go(run.read("ship", "k", Phase))).toEqual({phase: "enqueueing"});
 
 		tearNext = true;
 		await go(run.close("pr"));
 		// The record's close was torn: the record before it is read, and a restart opens cleanly on it.
 		const next = await go(storage.open("ship:r1", null));
 		expect(next.found).toMatchObject({flags: {mode: "write"}, closed: []});
-		expect(await go(next.read("ship", "k"))).toEqual({phase: "enqueueing"});
+		expect(await go(next.read("ship", "k", Phase))).toEqual({phase: "enqueueing"});
 	});
 
 	it("in a folder: a record file cut in half on disk, and the next process opens the run on the record before it", async () => {

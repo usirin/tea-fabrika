@@ -37,7 +37,15 @@ import {
 	type PayloadOf,
 	type Shape,
 } from "./shape.ts";
-import {type Handle, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
+import {
+	type Handle,
+	type Listed as KeptListed,
+	memoryStorage,
+	type StateRefused,
+	type StateSchema,
+	type Storage,
+	type StorageFailed,
+} from "./storage.ts";
 import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
@@ -52,7 +60,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 //     flags: {mode: flag(Mode, "read or write, for the whole run.")},
 //     inputs: {pr: input(Url, "A pull request to ship. Tell it any time.")},
 //     outputs: {outcome: output(Shipped, "How one pull request ended.")},
-//     machines: {ship: kind({machine: shipMachine, parent: "main", options, recovered, drawing,
+//     machines: {ship: kind({machine: shipMachine, state: Ship, parent: "main", options, recovered, drawing,
 //       status: (s) => s.phase === "queued" ? `${s.pr}: in the merge queue` : s.phase})},  // one line per copy, typed by ship's state
 //     main: ({flags, inputs, send, machines}) =>
 //       inputs.pr.pipe(Stream.runForEach((pr) => shipOne(machines.ship.get(idOf(pr)), pr).pipe(Effect.flatMap((o) => send("outcome", o))))),
@@ -130,12 +138,12 @@ export type StreamOf<D> =
 
 // ---------------------------------------------------------------- kinds and refs
 //
-// A program declares each machine it runs once, as a kind: the machine, who
-// starts its runs again after a crash, tea's run options, the Msg a run found
-// part way gets, and how its trace draws it. `main` then reaches one run of a
-// kind by its id, and sends it the start Msg:
+// A program declares each machine it runs once, as a kind: the machine, its
+// state's schema, who starts its runs again after a crash, tea's run options,
+// the Msg a run found part way gets, and how its trace draws it. `main` then
+// reaches one run of a kind by its id, and sends it the start Msg:
 //
-//   machines: {ship: kind({machine: ship, parent: "main", options: () => ({...}), recovered: (s) => ..., drawing})},
+//   machines: {ship: kind({machine: ship, state: Ship, parent: "main", options: () => ({...}), recovered: (s) => ..., drawing})},
 //   main: ({machines}) => machines.ship.get(id).start({type: "start", pr}),
 //
 // The shape and the names are the durable-entity systems' (experiment 75):
@@ -171,6 +179,13 @@ export interface Kind<
 	P extends string,
 > {
 	readonly machine: Machine<S, M, C, U, Ctx>;
+	/**
+	 * Its state's schema, an Effect Schema: every state a run keeps is written
+	 * and read through it, as Elm reads saved data through a `Decoder`. A kept
+	 * state it refuses was saved by older code: that run does not start, and
+	 * fails `StateRefused`; every other run starts as before.
+	 */
+	readonly state: StateSchema<NoInfer<S>>;
 	/**
 	 * Who starts its runs again after a crash, under the same id: `main`, or
 	 * another machine of the program (Temporal's parent workflow). Checked
@@ -252,24 +267,20 @@ export interface Ref<S, M extends {type: string}, C extends Cmd, I, B> {
 		KeptFailed<C, I> | AlreadyStarted,
 		Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 	>;
-	/** Its state as kept. `null`: none is. */
-	readonly read: Effect.Effect<S | null, StorageFailed>;
+	/** Its state as kept. `null`: none is. One its kind's schema refuses fails `StateRefused`. */
+	readonly read: Effect.Effect<S | null, StorageFailed | StateRefused>;
 	/** Drop it: its parent is done with it. Clearing one not kept changes nothing. */
 	readonly clear: Effect.Effect<void, StorageFailed>;
 }
 
-/** One run of a machine, as the storage kept it. */
-export interface KeptRun<S> {
-	readonly id: string;
-	/** As last saved. */
-	readonly state: S;
-}
+/** One run of a machine, as the storage kept it: its state as last saved, or why its kind's schema refused it. */
+export type KeptRun<S> = KeptListed<S>;
 
 /** The runs of one kind. */
 export interface Refs<S, M extends {type: string}, C extends Cmd, I, B> {
 	/** One run, by its id. Nothing is read or started. */
 	get(id: string): Ref<S, M, C, I, B>;
-	/** Every run of it kept, finished or not: for a host or a tidy-up, not for driving work. */
+	/** Every run of it kept, finished or not: for a host or a tidy-up, not for driving work. One refused is listed as refused. */
 	readonly list: Effect.Effect<readonly KeptRun<S>[], StorageFailed>;
 }
 
@@ -465,7 +476,7 @@ export type Parented<F extends Flags, O extends Outputs, Ks extends Kinds> = {
 /**
  * Define a program. A blank name or description is refused here; `flag`,
  * `input` and `output` refuse a blank one of theirs. So is a kind with no
- * status line, or a `parent` that names no machine of the program, or the
+ * status line or no state schema, or a `parent` that names no machine of the program, or the
  * machine itself: past the types, the check still holds. A `view` that names
  * no machine of the program is refused too.
  */
@@ -492,6 +503,8 @@ export function defineProgram<
 	for (const [name, declared] of Object.entries<AnyKind>(machines)) {
 		if (typeof declared.status !== "function")
 			throw new Error(`${definition.name} says no status line for ${name}`);
+		if (!Schema.isSchema(declared.state))
+			throw new Error(`${definition.name} gives no state schema for ${name}`);
 		if (
 			declared.parent === name ||
 			(declared.parent !== "main" && !Object.hasOwn(machines, declared.parent))

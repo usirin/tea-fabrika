@@ -1,5 +1,6 @@
 import type {SessionUpdate} from "@agentclientprotocol/sdk";
 import {defineMachine} from "@demlik/tea";
+import {Schema} from "effect";
 
 // What one ACP session shows a person: its transcript, folded from the
 // harness's `session/update` events. Plain Elm: events in, state out. No Cmd,
@@ -24,9 +25,16 @@ import {defineMachine} from "@demlik/tea";
 // `earlier` saying how many turns came before.
 
 /** How the session was opened at this start. */
-export type How = "new" | "load" | "resume";
+export const How = Schema.Literals(["new", "load", "resume"]);
+export type How = typeof How.Type;
 
-export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
+export const ToolStatus = Schema.Literals(["pending", "in_progress", "completed", "failed"]);
+export type ToolStatus = typeof ToolStatus.Type;
+
+/** A count: a whole number, 0 or more. */
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+/** A turn of this start, or `null`: from before it. */
+const TurnOf = Schema.NullOr(Schema.Finite);
 
 /** One ACP update, in our words. */
 export type Seen =
@@ -64,93 +72,106 @@ export type Seen =
 	| {readonly kind: "other"; readonly what: string};
 
 /** Something the harness itself says, not the model: a fallback, a warning. */
-export interface Notice {
-	readonly severity: string;
-	readonly title: string;
-	readonly turn: number | null;
-}
+export const Notice = Schema.Struct({
+	severity: Schema.String,
+	title: Schema.String,
+	turn: TurnOf,
+});
+export type Notice = typeof Notice.Type;
 
-export interface Step {
-	readonly text: string;
-	readonly status: string;
-}
+export const Step = Schema.Struct({text: Schema.String, status: Schema.String});
+export type Step = typeof Step.Type;
 
-export interface Message {
-	readonly who: "user" | "agent";
-	readonly text: string;
+export const Message = Schema.Struct({
+	who: Schema.Literals(["user", "agent"]),
+	text: Schema.String,
 	/** The harness's message id, when it gives one. */
-	readonly id: string | null;
+	id: Schema.NullOr(Schema.String),
 	/** The turn of this start it came in. `null`: replayed from before. */
-	readonly turn: number | null;
-}
+	turn: TurnOf,
+});
+export type Message = typeof Message.Type;
 
-export interface Tool {
-	readonly id: string;
+export const Tool = Schema.Struct({
+	id: Schema.String,
 	/** The tool's own name (`Read`, `exec_command`), or its ACP kind when the harness gives none. */
-	readonly name: string;
-	readonly title: string;
-	readonly status: ToolStatus;
-	readonly turn: number | null;
-}
+	name: Schema.String,
+	title: Schema.String,
+	status: ToolStatus,
+	turn: TurnOf,
+});
+export type Tool = typeof Tool.Type;
 
 /** Tokens, as ACP's `PromptResponse.usage` gives them. */
-export interface Usage {
-	readonly input: number;
-	readonly output: number;
-	readonly cached: number;
-	readonly total: number;
-}
+export const Usage = Schema.Struct({
+	input: Schema.Finite,
+	output: Schema.Finite,
+	cached: Schema.Finite,
+	total: Schema.Finite,
+});
+export type Usage = typeof Usage.Type;
 
-export type Stop = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
+export const Stop = Schema.Literals([
+	"end_turn",
+	"max_tokens",
+	"max_turn_requests",
+	"refusal",
+	"cancelled",
+]);
+export type Stop = typeof Stop.Type;
 
-export interface Ended {
-	readonly n: number;
-	readonly stop: Stop;
-	readonly usage: Usage | null;
-}
+export const Ended = Schema.Struct({n: Schema.Finite, stop: Stop, usage: Schema.NullOr(Usage)});
+export type Ended = typeof Ended.Type;
 
 /** A permission ask, as the harness put it. Its option ids are the harness's own. */
-export interface Ask {
-	readonly id: string;
-	readonly tool: string;
-	readonly title: string;
-	readonly kind: string;
+export const Ask = Schema.Struct({
+	id: Schema.String,
+	tool: Schema.String,
+	title: Schema.String,
+	kind: Schema.String,
 	/** The kinds of the options offered: allow_once, reject_once, ... */
-	readonly options: readonly string[];
-}
+	options: Schema.Array(Schema.String),
+});
+export type Ask = typeof Ask.Type;
 
-export type Answer = "allowed" | "refused" | "cancelled";
+export const Answer = Schema.Literals(["allowed", "refused", "cancelled"]);
+export type Answer = typeof Answer.Type;
 
-export type Phase = "starting" | "loading" | "idle" | "turn" | "cancelling";
+export const Phase = Schema.Literals(["starting", "loading", "idle", "turn", "cancelling"]);
+export type Phase = typeof Phase.Type;
 
-export interface Transcript {
-	readonly phase: Phase;
-	readonly how: How | null;
+/** The transcript: the machine's state, and its schema. */
+export const Transcript = Schema.Struct({
+	phase: Phase,
+	how: Schema.NullOr(How),
 	/** Turns ended before this start: what a resumed session cannot show. */
-	readonly earlier: number;
+	earlier: Count,
 	/** The turn running now. */
-	readonly turn: number | null;
-	readonly messages: readonly Message[];
-	readonly thoughts: number;
-	readonly tools: readonly Tool[];
-	readonly plan: readonly Step[];
-	readonly mode: string | null;
-	readonly title: string | null;
+	turn: Schema.NullOr(Schema.Finite),
+	messages: Schema.Array(Message),
+	thoughts: Count,
+	tools: Schema.Array(Tool),
+	plan: Schema.Array(Step),
+	mode: Schema.NullOr(Schema.String),
+	title: Schema.NullOr(Schema.String),
 	/** The context window: tokens used of its size, and the session's cost so far when the harness says it. */
-	readonly context: {
-		readonly used: number;
-		readonly size: number;
-		readonly cost: number | null;
-	} | null;
+	context: Schema.NullOr(
+		Schema.Struct({
+			used: Schema.Finite,
+			size: Schema.Finite,
+			cost: Schema.NullOr(Schema.Finite),
+		}),
+	),
 	/** What the harness said of its own, apart from the model's words. */
-	readonly notices: readonly Notice[];
-	readonly turns: readonly Ended[];
+	notices: Schema.Array(Notice),
+	turns: Schema.Array(Ended),
 	/** Asks not answered yet. */
-	readonly asks: readonly Ask[];
-	readonly answered: Readonly<Record<Answer, number>>;
+	asks: Schema.Array(Ask),
+	answered: Schema.Struct({allowed: Count, refused: Count, cancelled: Count}),
 	/** Updates the fold does not use, counted by kind. */
-	readonly other: Readonly<Record<string, number>>;
-}
+	other: Schema.Record(Schema.String, Count),
+});
+export type Transcript = typeof Transcript.Type;
 
 export const EMPTY: Transcript = {
 	phase: "starting",

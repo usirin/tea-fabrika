@@ -32,10 +32,8 @@ import {KeyValueStore} from "effect/persistence";
 // ---------------------------------------------------------------- the job box, as a program
 
 /** What a box job comes to: what it printed, and how it ended. */
-export interface Ended {
-	readonly said: string;
-	readonly code: number;
-}
+export const Ended = Schema.Struct({said: Schema.String, code: Schema.Int});
+export type Ended = typeof Ended.Type;
 
 /** Run one job in a box of its own. `job` is the job's id: asked again, the same job answers, never a second box. */
 export class Boxes extends Context.Service<
@@ -43,10 +41,9 @@ export class Boxes extends Context.Service<
 	{readonly run: (job: string, cmd: string) => Effect.Effect<Ended>}
 >()("exp148/Boxes") {}
 
-interface BoxState {
-	readonly job: string | null;
-	readonly ended: Ended | null;
-}
+/** The job's state, and the schema it is kept and read back through. */
+const BoxState = Schema.Struct({job: Schema.NullOr(Schema.String), ended: Schema.NullOr(Ended)});
+type BoxState = typeof BoxState.Type;
 type BoxMsg =
 	| {readonly type: "began"; readonly job: string}
 	| {readonly type: "ended"; readonly ended: Ended};
@@ -72,6 +69,7 @@ export const box = defineProgram({
 	machines: {
 		job: kind({
 			machine: boxMachine,
+			state: BoxState,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "job", steps: {}}),

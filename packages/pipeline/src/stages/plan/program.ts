@@ -5,7 +5,7 @@ import {TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {refOf} from "../traced.ts";
 import {planInterpret, planSubscribe} from "./handlers.ts";
-import {type PlanAsk, PlanReport, type PlanState, plan} from "./machine.ts";
+import {type PlanAsk, PlanReport, PlanState, plan} from "./machine.ts";
 import {PLAN_NAMES, PlanOutcome} from "./outcome.ts";
 import {EFFORTS, type Settings} from "./services.ts";
 
@@ -47,6 +47,7 @@ const status = (s: PlanState): string => {
 /** The plan machine as a kind. A run found part way resumes; one kept before it began starts from the caller's Msg. */
 export const planKind = kind({
 	machine: plan,
+	state: PlanState,
 	parent: "main",
 	options: () => ({
 		ctx: undefined,

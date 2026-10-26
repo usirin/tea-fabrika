@@ -81,7 +81,8 @@ export const SHIP_NAMES = ship.names;
 export const isShipName = ship.isName;
 
 /** A merge either finishes the ticket or only lands part of it. */
-export type Landing = "whole" | "part";
+export const Landing = Schema.Literals(["whole", "part"]);
+export type Landing = typeof Landing.Type;
 
 /** The one place a landing becomes an outcome, so the gate and the machine cannot say it differently. */
 export const landed = (landing: Landing, commit: string, cleanup: Cleanup): ShipOutcome => ({

@@ -11,7 +11,7 @@ import type {
 	SubscribeServices,
 } from "@demlik/tea/effect";
 import {Deferred, Effect, Latch, type Scope, Stream} from "effect";
-import type {Handle, StorageFailed} from "./storage.ts";
+import type {Handle, StateRefused, StateSchema, StorageFailed} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
 // How a program starts one copy of one of its machines, kept: what a ref's
@@ -22,10 +22,13 @@ import {type Drawing, runTraced} from "./trace.ts";
 //   const runtime = yield* machines.ship.get(id).start({type: "start", pr});
 //   const end = yield* runtime.done();
 //
-// 1. The kept state is read first, before the machine exists, and `first`
-//    says from it which Msg goes first: the kind's `recovered` Msg for a run
-//    that stopped part way, the caller's start Msg for one that never began,
-//    or nothing.
+// 1. The kept state is read first, before the machine exists, through the
+//    kind's state schema, and `first` says from it which Msg goes first: the
+//    kind's `recovered` Msg for a run that stopped part way, the caller's
+//    start Msg for one that never began, or nothing. A kept state the schema
+//    refuses was saved by older code: the start fails `StateRefused`, before
+//    any of the kind's own code reads it, and nothing is booted or written.
+//    tea's own load goes through the same schema (`handle.store`).
 // 2. The machine is booted with every Listen and every timer held shut. tea
 //    loads the kept state at boot and opens the Listens that state asks for
 //    at once; a Listen that answers fast could move the machine on before
@@ -89,12 +92,17 @@ export type KeptRuntime<M extends {type: string}, S, C extends Cmd, I> = EffectR
 	CellErrors<C, I>
 >;
 
-/** How a kept run can fail to start: its storage, tea's load or save, or the first Msg's Cmd. */
-export type KeptFailed<C extends Cmd, I> = StorageFailed | StoreFailed | Stopped | CellErrors<C, I>;
+/** How a kept run can fail to start: its storage, a kept state its schema refuses, tea's load or save, or the first Msg's Cmd. */
+export type KeptFailed<C extends Cmd, I> =
+	| StorageFailed
+	| StateRefused
+	| StoreFailed
+	| Stopped
+	| CellErrors<C, I>;
 
 /**
- * Run `machine`, kept under `id` in `handle`'s run, from where it was kept.
- * `show` is called with the booted machine before its first Msg, so a viewer
+ * Run `machine`, kept under `id` in `handle`'s run through its `state`
+ * schema, from where it was kept. `show` is called with the booted machine before its first Msg, so a viewer
  * sees it from the kept state on. `drawing`: how its trace shows it
  * (`runTraced`), from the state as it was kept. `broken`: how a failure tea
  * reports once the run is closing ends the program run. See the note at the
@@ -112,6 +120,7 @@ export const runKept = <
 	handle: Handle,
 	name: string,
 	machine: Machine<S, M, C, U, Ctx>,
+	state: StateSchema<S>,
 	id: string,
 	options: KeptOptions<S, M, C, U, Ctx, I, B>,
 	first: First<S, M>,
@@ -124,8 +133,7 @@ export const runKept = <
 	Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 > =>
 	Effect.gen(function* () {
-		// Saved by this program's own machine under this name: its own state.
-		const kept = (yield* handle.read(name, id)) as S | null;
+		const kept = yield* handle.read(name, id, state);
 		// A run kept already over is finished: it is never sent a first Msg, so nothing in it runs again.
 		const over = kept !== null && options.terminal?.(kept) === true;
 		const msg = over ? null : first(kept);
@@ -156,7 +164,7 @@ export const runKept = <
 		const opts = {
 			...options,
 			subscribe: held,
-			store: handle.store(name, id),
+			store: handle.store(name, id, state),
 			onError,
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
 		const booting = yield* runTraced(name, machine, opts, drawing(kept));

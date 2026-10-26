@@ -2,7 +2,15 @@ import {run} from "@demlik/tea/effect";
 import {defineProgram, input, kind} from "@kampus/fabrika";
 import {Effect, Schema, Stream} from "effect";
 import {loadCell, pollRunner, saveCell} from "./ledger.ts";
-import {over, Shown, shownOf, statusOf, type TrackerMsg, tracker as tickets} from "./machine.ts";
+import {
+	over,
+	Shown,
+	shownOf,
+	statusOf,
+	Tracker,
+	type TrackerMsg,
+	tracker as tickets,
+} from "./machine.ts";
 import {TicketNumber, Write} from "./ticket.ts";
 
 // The tracker: tickets on the ledger, one stream of facts each (./ticket.ts), and a window to work
@@ -69,6 +77,7 @@ export const tracker = defineProgram({
 	machines: {
 		tickets: kind({
 			machine: tickets,
+			state: Tracker,
 			parent: "main",
 			options: () => options,
 			drawing: () => ({

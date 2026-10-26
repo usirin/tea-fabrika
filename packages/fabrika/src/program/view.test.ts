@@ -24,6 +24,7 @@ const clicks = defineProgram({
 	machines: {
 		count: kind({
 			machine: count,
+			state: Schema.Struct({n: Schema.Int}),
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "count", steps: {}}),

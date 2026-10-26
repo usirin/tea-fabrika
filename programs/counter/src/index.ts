@@ -34,6 +34,7 @@ export const counter = defineProgram({
 	machines: {
 		count: kind({
 			machine: count,
+			state: Shown,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "count", steps: {}}),

@@ -1,13 +1,13 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
 import {Schema} from "effect";
-import {createRefineLoop, type Refining} from "../../combos.ts";
-import {gather, listen} from "../../primitives.ts";
+import {createRefineLoop, refiningOf} from "../../combos.ts";
+import {gather, keptCmd, listen} from "../../primitives.ts";
 import {planProblems} from "./check.ts";
-import type {PlanOutcome} from "./outcome.ts";
+import {PlanOutcome} from "./outcome.ts";
 import {PlanDraft} from "./plan.ts";
-import {type Brief, planDraft, promptFor} from "./planner.ts";
-import {Facts, type PlanMsg, PlanTicket, type Settings} from "./services.ts";
+import {Brief, planDraft, promptFor} from "./planner.ts";
+import {Facts, type PlanMsg, PlanTicket, Settings} from "./services.ts";
 
 // The plan machine: one ticket in, one typed outcome and a plan out. One
 // agent sits inside it, the planner, and the machine decides everything
@@ -30,17 +30,12 @@ const Unknown = ["unknown"] as const;
 export const PlanAsk = Schema.Struct({ticket: Schema.String, tries: Schema.Finite});
 export type PlanAsk = typeof PlanAsk.Type;
 
-export const readTicket = gather("plan_ticket", {
-	input: Schema.Struct({ticket: Schema.String}),
-	ok: PlanTicket,
-	err: Unknown,
-});
+const TicketIn = Schema.Struct({ticket: Schema.String});
+const FactsIn = Schema.Struct({ticket: PlanTicket});
 
-export const readFacts = gather("plan_facts", {
-	input: Schema.Struct({ticket: PlanTicket}),
-	ok: Facts,
-	err: Unknown,
-});
+export const readTicket = gather("plan_ticket", {input: TicketIn, ok: PlanTicket, err: Unknown});
+
+export const readFacts = gather("plan_facts", {input: FactsIn, ok: Facts, err: Unknown});
 
 type TicketCmd = ReturnType<typeof readTicket>;
 type FactsCmd = ReturnType<typeof readFacts>;
@@ -100,22 +95,41 @@ export const refine = createRefineLoop({
 });
 
 /** `key`: the conversation's name, new for every start; the agent refuses a name a kept one has. */
-type Held = {readonly ask: PlanAsk; readonly settings: Settings; readonly key: string};
-type Read = Held & {readonly ticket: PlanTicket};
+const Held = Schema.Struct({ask: PlanAsk, settings: Settings, key: Schema.String});
+type Held = typeof Held.Type;
+const Read = Schema.Struct({...Held.fields, ticket: PlanTicket});
+type Read = typeof Read.Type;
 
-export type PlanState =
-	| {readonly phase: "idle"}
-	| (Held & {readonly phase: "reading"; readonly asked: TicketCmd})
-	| (Read & {readonly phase: "gathering"; readonly asked: FactsCmd})
-	| (Read & {
-			readonly phase: "drafting";
-			readonly refining: Refining<Brief, PlanDraft>;
-			readonly facts: boolean;
-			readonly spend: Spent;
-			/** Times a restart started the planner over. */
-			readonly restarts: number;
-	  })
-	| (Held & {readonly phase: "over"; readonly outcome: PlanOutcome; readonly report: PlanReport});
+/** The plan machine's state, and the schema it is kept and read back through. */
+export const PlanState = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("reading"),
+		asked: keptCmd(readTicket, TicketIn),
+	}),
+	Schema.Struct({
+		...Read.fields,
+		phase: Schema.Literal("gathering"),
+		asked: keptCmd(readFacts, FactsIn),
+	}),
+	Schema.Struct({
+		...Read.fields,
+		phase: Schema.Literal("drafting"),
+		refining: refiningOf(Brief, PlanDraft),
+		facts: Schema.Boolean,
+		spend: Spent,
+		/** Times a restart started the planner over. */
+		restarts: Schema.Finite,
+	}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("over"),
+		outcome: PlanOutcome,
+		report: PlanReport,
+	}),
+]);
+export type PlanState = typeof PlanState.Type;
 
 export type PlanMachineMsg =
 	| {

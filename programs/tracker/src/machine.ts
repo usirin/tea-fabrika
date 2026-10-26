@@ -46,36 +46,36 @@ type SaveCmd = ReturnType<typeof save>;
 export type PollSub = Sub<"poll", {readonly after: number}>;
 
 /** A write asked for and not on the ledger yet, under its message id. */
-export interface Saving {
-	readonly id: string;
-	readonly write: Write;
-}
+export const Saving = Schema.Struct({id: Schema.String, write: Write});
+export type Saving = typeof Saving.Type;
 
 export const Failed = Schema.Struct({write: Write, why: Schema.String});
 export type Failed = typeof Failed.Type;
 
-export interface Tracker {
+/** The machine's state, and its schema. It is kept nowhere today, but it says what it holds. */
+export const Tracker = Schema.Struct({
 	/** A load has come back, so the tickets say what the ledger holds. */
-	readonly ready: boolean;
+	ready: Schema.Boolean,
 	/** `busy`: a load is out. `again`: one is out, and another is owed once it is back. */
-	readonly load: "idle" | "busy" | "again";
+	load: Schema.Literals(["idle", "busy", "again"]),
 	/** The place of the last ledger row read. */
-	readonly seen: number;
+	seen: Schema.Int,
 	/** Oldest first. */
-	readonly tickets: readonly Ticket[];
+	tickets: Schema.Array(Ticket),
 	/** The ticket open in the window. `null`: the list. */
-	readonly open: number | null;
+	open: Schema.NullOr(Schema.Int),
 	/** In the order asked. The first is out now. */
-	readonly saving: readonly Saving[];
+	saving: Schema.Array(Saving),
 	/** The last write that did not land, until the next write is asked for. */
-	readonly failed: Failed | null;
+	failed: Schema.NullOr(Failed),
 	/** Rows and facts that did not fit, in words: the newest few. */
-	readonly problems: readonly string[];
+	problems: Schema.Array(Schema.String),
 	/** Why the last load failed. `null`: it did not. */
-	readonly unreachable: string | null;
+	unreachable: Schema.NullOr(Schema.String),
 	/** Asked to quit: it ends once nothing is left to save. */
-	readonly quitting: boolean;
-}
+	quitting: Schema.Boolean,
+});
+export type Tracker = typeof Tracker.Type;
 
 export type TrackerMsg =
 	| {readonly type: "list"}

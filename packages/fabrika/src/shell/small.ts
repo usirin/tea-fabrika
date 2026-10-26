@@ -85,10 +85,13 @@ export const no = defineProgram({
 	main: () => Effect.fail({_tag: "said_no" as const, message: "false always fails"}),
 });
 
-/** The running total of `tally`, kept in the run's storage. */
+/** The running total of `tally`, kept in the run's storage: its state's schema. A sum of whole numbers. */
+const Total = Schema.Struct({total: Schema.Int});
+type Total = typeof Total.Type;
+
 const count = defineMachine({
 	types: {
-		model: {} as {readonly total: number},
+		model: {} as Total,
 		msg: {} as {readonly type: "add"; readonly n: number},
 		ctx: undefined,
 	},
@@ -108,6 +111,7 @@ export const tally = defineProgram({
 	machines: {
 		count: kind({
 			machine: count,
+			state: Total,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "count", steps: {}}),

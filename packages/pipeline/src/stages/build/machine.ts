@@ -1,10 +1,10 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
-import type {Criterion} from "../review/pack.ts";
+import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
+import {Criterion} from "../review/pack.ts";
 import {Commit, PrBody} from "./body.ts";
-import {type BuildBrief, Built, Ran, type Settings} from "./form.ts";
-import type {BuildOutcome} from "./outcome.ts";
+import {type BuildBrief, Built, Ran, Settings} from "./form.ts";
+import {BuildOutcome} from "./outcome.ts";
 import {Copied, Pushed} from "./services.ts";
 import {branchOf, buildGate, Item, openOf, Ticket} from "./ticket.ts";
 
@@ -41,34 +41,23 @@ export const BuildAsk = Schema.Struct({
 });
 export type BuildAsk = typeof BuildAsk.Type;
 
-export const readTicket = gather("build_ticket", {
-	input: Schema.Struct({ticket: Schema.String, number: Schema.Finite}),
-	ok: Ticket,
-	err: Unknown,
+/** A ticket, by url and number. */
+const TicketIn = Schema.Struct({ticket: Schema.String, number: Schema.Finite});
+const PushIn = Schema.Struct({ticket: Schema.String, copied: Copied, message: Commit});
+const OpenIn = Schema.Struct({
+	ticket: Schema.String,
+	number: Schema.Finite,
+	title: Schema.String,
+	body: PrBody,
 });
 
-export const copyTree = act("build_copy", {
-	input: Schema.Struct({ticket: Schema.String, number: Schema.Finite}),
-	ok: Copied,
-	err: Unknown,
-});
+export const readTicket = gather("build_ticket", {input: TicketIn, ok: Ticket, err: Unknown});
 
-export const pushBranch = act("build_push", {
-	input: Schema.Struct({ticket: Schema.String, copied: Copied, message: Commit}),
-	ok: Pushed,
-	err: Unknown,
-});
+export const copyTree = act("build_copy", {input: TicketIn, ok: Copied, err: Unknown});
 
-export const openPr = act("build_open", {
-	input: Schema.Struct({
-		ticket: Schema.String,
-		number: Schema.Finite,
-		title: Schema.String,
-		body: PrBody,
-	}),
-	ok: Schema.String,
-	err: Unknown,
-});
+export const pushBranch = act("build_push", {input: PushIn, ok: Pushed, err: Unknown});
+
+export const openPr = act("build_open", {input: OpenIn, ok: Schema.String, err: Unknown});
 
 type TicketCmd = ReturnType<typeof readTicket>;
 type CopyCmd = ReturnType<typeof copyTree>;
@@ -110,23 +99,52 @@ export const BuildReport = Schema.Struct({
 export type BuildReport = typeof BuildReport.Type;
 
 /** `session`: the round's conversation with the builder, named by the starter (see `BuildBrief`). */
-type Held = {readonly ask: BuildAsk; readonly settings: Settings; readonly session: string};
-type Read = Held & {
-	readonly ticket: Ticket;
+const Held = Schema.Struct({ask: BuildAsk, settings: Settings, session: Schema.String});
+type Held = typeof Held.Type;
+const Read = Schema.Struct({
+	...Held.fields,
+	ticket: Ticket,
 	/** The ticket's criteria, at least one: the gate let no other ticket through. */
-	readonly criteria: readonly [Criterion, ...Criterion[]];
-};
-type Made = Read & {readonly copied: Copied};
-type Done = Made & {readonly built: Built; readonly ran: Ran; readonly runs: number};
+	criteria: Schema.NonEmptyArray(Criterion),
+});
+const Made = Schema.Struct({...Read.fields, copied: Copied});
+type Made = typeof Made.Type;
+const Done = Schema.Struct({...Made.fields, built: Built, ran: Ran, runs: Schema.Finite});
+type Done = typeof Done.Type;
 
-export type Build =
-	| {readonly phase: "idle"}
-	| (Held & {readonly phase: "reading"; readonly asked: TicketCmd})
-	| (Read & {readonly phase: "copying"; readonly asked: CopyCmd})
-	| (Made & {readonly phase: "building"; readonly run: number})
-	| (Done & {readonly phase: "pushing"; readonly asked: PushCmd})
-	| (Done & {readonly phase: "opening"; readonly pushed: Pushed; readonly asked: OpenCmd})
-	| (Held & {readonly phase: "over"; readonly outcome: BuildOutcome; readonly report: BuildReport});
+/** The build machine's state, and the schema it is kept and read back through. */
+export const Build = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("reading"),
+		asked: keptCmd(readTicket, TicketIn),
+	}),
+	Schema.Struct({
+		...Read.fields,
+		phase: Schema.Literal("copying"),
+		asked: keptAct(copyTree, TicketIn),
+	}),
+	Schema.Struct({...Made.fields, phase: Schema.Literal("building"), run: Schema.Finite}),
+	Schema.Struct({
+		...Done.fields,
+		phase: Schema.Literal("pushing"),
+		asked: keptAct(pushBranch, PushIn),
+	}),
+	Schema.Struct({
+		...Done.fields,
+		phase: Schema.Literal("opening"),
+		pushed: Pushed,
+		asked: keptAct(openPr, OpenIn),
+	}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("over"),
+		outcome: BuildOutcome,
+		report: BuildReport,
+	}),
+]);
+export type Build = typeof Build.Type;
 
 /** Why a run left no form. */
 export type Failed = "broke" | "misfit" | "over_budget";

@@ -133,6 +133,7 @@ export const refsOf = <
 						handle,
 						copy.kind,
 						declared.machine as Machine<any, any, any, any, any>,
+						declared.state,
 						copy.id,
 						// The kind's own options for its own machine; typed apart where it was declared.
 						declared.options(kit) as never,
@@ -193,16 +194,16 @@ export const refsOf = <
 			});
 
 		const machines = Object.fromEntries(
-			Object.keys(kinds).map((name) => [
+			Object.entries(declaredKinds).map(([name, declared]) => [
 				name,
 				{
 					get: (id: string) => ({
 						id,
 						start: start(name, id),
-						read: handle.read(name, id),
+						read: handle.read(name, id, declared.state),
 						clear: clear(name, id),
 					}),
-					list: handle.list(name),
+					list: handle.list(name, declared.state),
 				},
 			]),
 			// One ref table per kind, built from `kinds` itself; the compiler cannot carry each kind's
@@ -211,7 +212,9 @@ export const refsOf = <
 		const kit = {...base, machines};
 
 		// What `main` left unfinished: every run that began, is not over, and is still kept. A run
-		// kept before it began is dropped, quietly: nobody was waiting on it.
+		// kept before it began is dropped, quietly: nobody was waiting on it. A run its schema
+		// refuses is left as it is: older code saved it, no start of this code can take it on, and
+		// the start that tried said so.
 		const check = Effect.gen(function* () {
 			const stranded: string[] = [];
 			for (const [name, declared] of Object.entries(declaredKinds)) {
@@ -220,7 +223,8 @@ export const refsOf = <
 				const {terminal} = declared.options(kit) as {
 					readonly terminal?: (state: unknown) => boolean;
 				};
-				for (const run of yield* handle.list(name)) {
+				for (const run of yield* handle.list(name, declared.state)) {
+					if (run.kind === "refused") continue;
 					if (terminal?.(run.state) === true) continue;
 					if (recovered(run.state) === null) yield* handle.clear(name, run.id);
 					else
