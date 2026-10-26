@@ -1,4 +1,4 @@
-import {hostOf, Ledger} from "@kampus/fabrika";
+import {HOST_GRACE_MS, hostOf, Ledger} from "@kampus/fabrika";
 import {Context, Duration, Effect, FiberMap, Layer} from "effect";
 import {type LaneId, laneId, readLaneId, type TicketId} from "../ids.ts";
 import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from "./ledger.ts";
@@ -83,7 +83,7 @@ export const layerLanes = (o: LanesOptions = {}) =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			const ttlMs = o.ttlMs ?? 30_000;
-			const graceMs = o.graceMs ?? 600_000;
+			const graceMs = o.graceMs ?? HOST_GRACE_MS;
 			const held = new Map<TicketId, {readonly lane: LaneId; readonly fence: number}>();
 			const renewals = yield* FiberMap.make<TicketId>();
 

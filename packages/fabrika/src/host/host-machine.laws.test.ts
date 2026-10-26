@@ -487,22 +487,22 @@ const backKeepsPace = timedLaw(
 	},
 );
 
-const LAWS: readonly Law[] = [unknownKeeps, lostStops, stopsByGrace, backKeepsPace, expiryKeeps];
+const LAWS: readonly Law[] = [
+	unknownKeeps,
+	lostStops,
+	stopsByGrace,
+	backKeepsPace,
+	expiryKeeps,
+	runsOnThroughGrace,
+	awayRenewsEachSecond,
+];
 
 /**
- * Laws today's machine breaks: part 2 is not built yet (lane 18). Each must fail for the rule's
- * reason. The day the fix lands this list turns red: then the law moves to `LAWS`.
+ * Laws the real machine breaks, each run as a known failure for the rule's reason. The day the
+ * fix lands this list turns red: then the law moves to `LAWS`. Lane 18 built part 2, and its
+ * three moved.
  */
-const BUGS: readonly (readonly [Law, RegExp])[] = [
-	[
-		runsOnThroughGrace,
-		/^the program stopped at \d+ on lease_due, 0 ms past its lease's end \d+: before the 10 minute grace ran out$/,
-	],
-	[
-		awayRenewsEachSecond,
-		/^after no answer at \d+, the next renew came at \d+, \d+ ms later: wanted within 1000 ms$/,
-	],
-];
+const BUGS: readonly (readonly [Law, RegExp])[] = [];
 
 /** The law's own words in what fast-check threw: it keeps the law's error as the cause of its own. */
 const messageOf = (e: unknown): string =>

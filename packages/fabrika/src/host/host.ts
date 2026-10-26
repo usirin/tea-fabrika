@@ -55,6 +55,7 @@ import type {Input} from "../program/shape.ts";
 import {
 	createHost,
 	type ExitWord,
+	HOST_GRACE_MS,
 	type Host,
 	type HostMsg,
 	type HostSettings,
@@ -395,7 +396,7 @@ export interface ServeOptions<P> {
 	 */
 	readonly graceMs?: number;
 	/** 151: how often a renew is sent once one had no answer. Default 1 s, or `renewEveryMs` if less. */
-	readonly awayRenewMs?: number;
+	readonly retryRenewMs?: number;
 	/** Hears every event. Default: nobody. */
 	readonly listen?: (e: HostEvent) => void;
 	/** What the tails read, for a caller that measures it. */
@@ -460,8 +461,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const ttlMs = o.ttlMs ?? 1000;
 		const renewEveryMs = o.renewEveryMs ?? 250;
 		const retryMs = o.retryMs ?? 50;
-		const graceMs = o.graceMs ?? 600_000;
-		const awayRenewMs = o.awayRenewMs ?? Math.min(1000, renewEveryMs);
+		const graceMs = o.graceMs ?? HOST_GRACE_MS;
+		const retryRenewMs = o.retryRenewMs ?? Math.min(1000, renewEveryMs);
 		const say = o.listen ?? (() => {});
 		const meters = o.meters ?? {registry: meter(), inbox: meter()};
 		const S = streams(name);
@@ -556,19 +557,21 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			}),
 		);
 
-		/** `lease_due` for the lease's end `until`, sent at `at`: that end plus the grace. */
-		const leaseClock = (fence: number, until: number, at: number): Stream.Stream<HostMsg> =>
+		/** `lease_due` at `at`: the lease's end plus the grace, as the machine's Sub asks. */
+		const leaseClock = (fence: number, at: number): Stream.Stream<HostMsg> =>
 			Stream.fromEffect(
 				Effect.sleep(Duration.millis(Math.max(0, at - Date.now()))).pipe(
-					Effect.andThen(Effect.sync(() => say({ev: "lease_end", fence, until, graceMs}))),
 					Effect.andThen(
-						at > until
+						Effect.sync(() => say({ev: "lease_end", fence, until: at - graceMs, graceMs})),
+					),
+					Effect.andThen(
+						graceMs > 0
 							? Effect.logWarning(
-									`${name}: no word from the ledger for ${Math.round((at - until) / 1000)} s past the lease's end; the program stops`,
+									`${name}: no word from the ledger for ${Math.round(graceMs / 1000)} s past the lease's end; the program stops`,
 								)
 							: Effect.void,
 					),
-					Effect.as<HostMsg>({type: "lease_due", fence, until}),
+					Effect.as<HostMsg>({type: "lease_due", fence, until: at}),
 				),
 			);
 
@@ -829,7 +832,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 
 		// ------------------------------------------------------------ the machine
 
-		const settings: HostSettings = {renewEveryMs, retryMs, graceMs, awayRenewMs};
+		const settings: HostSettings = {renewEveryMs, retryMs, graceMs, retryRenewMs};
 		const handle = yield* run(createHost(settings), {
 			ctx: undefined,
 			interpret: {
@@ -840,7 +843,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			subscribe: {
 				registry_tail: () => registryTail,
 				program: (sub) => program(sub.deps.fence, sub.deps.incarnation),
-				lease_clock: (sub) => leaseClock(sub.deps.fence, sub.deps.until, sub.deps.at),
+				lease_clock: (sub) => leaseClock(sub.deps.fence, sub.deps.until),
 			},
 		});
 		const host = yield* handle.ready;
