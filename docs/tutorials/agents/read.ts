@@ -1,7 +1,7 @@
 // Read the book and the poet's tally. Writes nothing.
 import {NodeRuntime} from "@effect/platform-node";
 import {getState} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {layerAttach} from "@kampus/fabrika/local";
 import {Console, Effect} from "effect";
 import {Book, Poet} from "./programs.ts";
 
@@ -15,5 +15,5 @@ const main = Effect.gen(function* () {
 });
 
 NodeRuntime.runMain(
-	main.pipe(Effect.provide(layerHttp({url: "http://127.0.0.1:8790", ledger: "teahouse"}))),
+	main.pipe(Effect.provide(layerAttach({persist: ".teahouse", ledger: "teahouse", port: 8790}))),
 );

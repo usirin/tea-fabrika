@@ -1,4 +1,4 @@
-import {Ledger} from "@kampus/fabrika";
+import {hostOf, Ledger} from "@kampus/fabrika";
 import {Context, Duration, Effect, FiberMap, Layer} from "effect";
 import {type LaneId, laneId, readLaneId, type TicketId} from "../ids.ts";
 import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from "./ledger.ts";
@@ -25,7 +25,8 @@ export const holderOf = (ticket: TicketId): Effect.Effect<LaneId | null, never, 
 		const ledger = yield* Ledger;
 		const lease = yield* steady("read a lease", ledger.lease(ticketName(ticket)));
 		if (lease === null || lease.expires_at <= Date.now()) return null;
-		return readLaneId(lease.holder) ?? (yield* Effect.die(`not a lane: ${lease.holder}`));
+		// Past a door, the holder is the lane, then who claimed it (`hostOf`).
+		return readLaneId(hostOf(lease.holder)) ?? (yield* Effect.die(`not a lane: ${lease.holder}`));
 	});
 
 /**
@@ -116,7 +117,7 @@ export const layerLanes = (o: LanesOptions = {}) =>
 								rev = e.rev;
 								continue;
 							case "Held": {
-								const holder = readLaneId(e.holder);
+								const holder = readLaneId(hostOf(e.holder));
 								if (holder === null) return yield* Effect.die(`not a lane: ${e.holder}`);
 								if (holder !== lane) return holder;
 								// Its own lease from before a crash: no fence here, so wait it out.

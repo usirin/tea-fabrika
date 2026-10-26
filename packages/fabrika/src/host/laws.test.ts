@@ -2,10 +2,22 @@ import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Duration, Effect, type Layer} from "effect";
+import {TestClock} from "effect/testing";
 import {Miniflare} from "miniflare";
-import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import {layerHttp} from "./http.ts";
-import {type LawResult, law30Wall, layerPlanted, PLANTED, type Planted, runLaws} from "./laws.ts";
+import {afterAll, beforeAll, describe, expect, it, vi} from "vitest";
+import {layerInside} from "./inside.ts";
+import {
+	type LawResult,
+	law3Fencing,
+	law12PrefixFence,
+	law18Reply,
+	law30Wall,
+	layerPlanted,
+	PLANTED,
+	type Planted,
+	runLaws,
+	timeOf,
+} from "./laws.ts";
 import {Ledger} from "./ledger.ts";
 import {layerMemory} from "./memory.ts";
 import {layerSqlite, layerSqliteSync} from "./sqlite.ts";
@@ -14,50 +26,95 @@ import {ledgerOptions} from "./worker-options.ts";
 // One law suite, every implementation: the Durable Object (in Miniflare, over HTTP), node:sqlite
 // (four threads on one file, then one connection in this thread) and plain memory. Then the SQL
 // under each planted mistake, where the same suite must fail.
+//
+// The time (lane 21): the ledgers in this process run on a clock the test owns, a `TestClock`
+// under both the ledger and the suite, so a law jumps past a lease's end with no sleeping. The
+// Durable Object keeps its own real clock, and there a law asks the ledger the time.
 
 const dir = mkdtempSync(join(tmpdir(), "tea-host-laws-"));
 let mf: Miniflare;
-let url = "";
 beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
-	url = (await mf.unsafeGetDirectURL()).origin;
 });
 afterAll(async () => {
 	await mf.dispose();
 	rmSync(dir, {recursive: true, force: true});
 });
 
+/** The clock the test owns. A minute before it warns that nothing moves it, as a law may not. */
+const owned = TestClock.layer({warningDelay: Duration.minutes(1)});
+/** The suite on `layer`, on the ledger's own clock. */
 const lawsOn = (layer: Layer.Layer<Ledger, unknown>) =>
 	Effect.runPromise(
 		runLaws({alarm: true, graceMs: 1000}).pipe(Effect.provide(layer), Effect.scoped),
+	);
+/** The suite on `layer` built under the test's clock, so the ledger and the laws share it. */
+const lawsOnOwnedClock = (layer: Layer.Layer<Ledger, unknown>) =>
+	Effect.runPromise(
+		runLaws({alarm: true, graceMs: 1000}).pipe(
+			Effect.provide(layer),
+			Effect.scoped,
+			Effect.provide(owned),
+		),
 	);
 const broken = (rs: readonly LawResult[]) => rs.filter((r) => !r.pass);
 
 describe("the ledger's laws", () => {
 	it("hold on the Durable Object", async () => {
-		const rs = await lawsOn(layerHttp({url, ledger: "laws"}));
+		const rs = await lawsOn(layerInside(mf, "laws"));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});
 
 	it("hold on node:sqlite, four connections to one file", async () => {
-		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
+		const rs = await lawsOnOwnedClock(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});
 
 	it("hold on node:sqlite, one connection in this thread", async () => {
-		const rs = await lawsOn(layerSqliteSync({path: join(dir, "laws-sync.sqlite")}));
+		const rs = await lawsOnOwnedClock(layerSqliteSync({path: join(dir, "laws-sync.sqlite")}));
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});
 
 	it("hold in memory", async () => {
-		const rs = await lawsOn(layerMemory());
+		const rs = await lawsOnOwnedClock(layerMemory());
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	});
+});
+
+describe("a test machine whose clock is off from the Durable Object's", () => {
+	// Experiment 144: on Cloudflare a busy object's clock read up to 0.1 s behind the test's, and
+	// laws 3, 12 and 18, which waited on the test's clock, flipped. Here the test's own clock is
+	// moved by `skew`; workerd runs in its own process, so the object's is not.
+	for (const skew of [200, -200]) {
+		it(`leaves laws 3, 12 and 18 holding with it ${skew} ms off`, async () => {
+			const real = Date.now;
+			const moved = vi.spyOn(Date, "now").mockImplementation(() => real.call(Date) + skew);
+			try {
+				const {off, rs} = await Effect.runPromise(
+					Effect.gen(function* () {
+						const l = yield* Ledger;
+						const ledgerNow = yield* (yield* timeOf(l)).now;
+						const off = Date.now() - ledgerNow;
+						const rs = yield* Effect.all(
+							[law3Fencing(l, 1000), law12PrefixFence(l, 1000), law18Reply(l, 1000)],
+							{concurrency: "unbounded"},
+						);
+						return {off, rs};
+					}).pipe(Effect.provide(layerInside(mf, `laws-skew${skew}`)), Effect.scoped),
+				);
+				// The skew is there: this machine's clock reads `skew` ahead of the object's.
+				expect(Math.abs(off - skew)).toBeLessThan(100);
+				expect(broken(rs)).toEqual([]);
+			} finally {
+				moved.mockRestore();
+			}
+		});
+	}
 });
 
 describe("a ledger that runs each call late", () => {
@@ -88,6 +145,8 @@ describe("every planted mistake", () => {
 					runLaws().pipe(
 						Effect.provide(layerPlanted(join(dir, `planted-${i}.sqlite`), name)),
 						Effect.scoped,
+						// Each on its own clock: one ledger's jumps must not move another's.
+						Effect.provide(owned),
 						Effect.map((rs) => ({name, by: broken(rs).map((r) => r.law.split(".")[0])})),
 					),
 				{concurrency: "unbounded"},

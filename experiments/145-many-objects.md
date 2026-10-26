@@ -28,6 +28,19 @@ each lane gets its own object too.
 
 **Start with project and person objects, and no lane objects.** How sure: 80%.
 
+*Changed the same day: one Worker per project*
+([the ledger goes to Cloudflare](../docs/direction/the-ledger-goes-to-cloudflare.md)). A server
+holds one project's object, one object per person working on it, and the index.
+
+- **Still holds:** the door, the access rule, the desk, the offline copy, the move, and no lane
+  objects.
+- **Simpler:** the router no longer picks a project, and a project's founder is the server's
+  only founder. A person has one desk per project, as the same note says: each project in its own
+  window, with its own desk.
+- **Costs:** a person's things are kept once per project (their login, their sealed Claude
+  token), and a view across all their projects asks each server.
+- The code below still routes `project/<id>`, as it ran.
+
 ```ts
 // The whole idea. The Worker picks the object by name; the object's door decides who gets in;
 // behind the door is the package's ledger, as it is.

@@ -12,8 +12,14 @@
 // children at every depth, wall time from registration).
 //
 // The laws that need processes (7, 8, 9, 10, 13, 15) live in the experiment that runs them.
-import {Duration, Effect, Layer, PubSub, Stream} from "effect";
+//
+// One clock (lane 21, after experiment 144): a law about time never reads the test machine's clock.
+// A lease's end is a time the ledger wrote, so only the ledger's clock says it is past (`Time`).
+// Under a `TestClock` the test owns that clock and jumps it; otherwise a law asks the ledger.
+import {Clock, Duration, Effect, Layer, PubSub, Stream} from "effect";
+import type {TestClock} from "effect/testing";
 import {
+	type Denied,
 	fromRaw,
 	Ledger,
 	LedgerUnreachable,
@@ -31,11 +37,90 @@ export type LawResult = {readonly law: string; readonly pass: boolean; readonly 
 
 type Service = Ledger["Service"];
 const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
-/** Wait until the clock is past `at`, a time the ledger wrote: a lease's end, a deadline. */
-const past = (at: number) =>
-	Effect.gen(function* () {
-		while (Date.now() <= at) yield* sleep(at + 1 - Date.now());
+
+/**
+ * How a law reads the time and lets it pass: always on the ledger's clock, never the test
+ * machine's. On a Durable Object the two can differ by a tenth of a second or more (experiment
+ * 144: a busy object's `Date.now()` moves only on I/O), and a law that compares them flips.
+ */
+export interface Time {
+	/** The ledger's now. */
+	readonly now: Effect.Effect<number, LedgerError>;
+	/** Until the ledger's now is past `at`, a time it wrote: a lease's end, a deadline. */
+	readonly past: (at: number) => Effect.Effect<void, LedgerError>;
+	/** A poll's pause, `ms` long: on a test's clock, that clock moves on by `ms`. */
+	readonly pause: (ms: number) => Effect.Effect<void>;
+	/** `e` on the live clock, for a law whose waits are about this machine, not the ledger (T). */
+	readonly live: <A, E, R>(e: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+}
+/** What asking the ledger its time can fail with: its `register` and `readLast`. */
+type LedgerError = Denied | LedgerUnreachable;
+
+/** The test owns the ledger's clock: a jump past a time is one step, with no sleeping. */
+const testTime = (clock: TestClock.TestClock): Time => ({
+	now: clock.currentTimeMillis,
+	past: (at) =>
+		Effect.suspend(() =>
+			clock.currentTimeMillisUnsafe() > at ? Effect.void : clock.setTime(at + 1),
+		),
+	pause: (ms) => clock.adjust(Duration.millis(ms)),
+	live: (e) => clock.withLive(e),
+});
+
+/** Probes of the ledger's clock before `past` gives up and lets the law's next step judge. */
+const PROBES = 100;
+/**
+ * The ledger keeps its own clock: a law asks it the time. The ledger stamps each event it writes
+ * with its now (`at`), so one fresh name registered and read back is its clock's answer.
+ */
+const ledgerTime = (l: Service): Time => {
+	const now = Effect.gen(function* () {
+		const name = fresh("now");
+		yield* l.register(name, "clock");
+		const [row] = yield* l.readLast(name, 1);
+		if (row === undefined)
+			return yield* Effect.die(new Error(`${name}: registered, not read back`));
+		return row.at;
 	});
+	return {
+		now,
+		past: (at) =>
+			Effect.gen(function* () {
+				for (let i = 0; i < PROBES; i++) {
+					const n = yield* now;
+					if (n > at) return;
+					// How long to wait comes from the ledger's own numbers; the probe after it decides.
+					yield* sleep(at + 1 - n);
+				}
+			}),
+		pause: sleep,
+		live: (e) => e,
+	};
+};
+
+/** Wait on the ledger's own word: the first `kind` event in `stream`, polled for 5 s. Or null. */
+const factOf = (l: Service, time: Time, stream: string, kind: string) =>
+	Effect.gen(function* () {
+		for (let i = 0; i <= 100; i++) {
+			const fact = (yield* l.readStream(stream)).find((e) => e.kind === kind);
+			if (fact !== undefined) return fact;
+			yield* time.pause(50);
+		}
+		return null;
+	});
+/** The `lease_expired` the alarm writes for a lease, from its `end` (the time it wrote) on. */
+const expired = (l: Service, time: Time, name: string, end: number) =>
+	Effect.andThen(time.past(end), factOf(l, time, name, "lease_expired"));
+
+const isTestClock = (c: Clock.Clock): c is TestClock.TestClock =>
+	"setTime" in c && "adjust" in c && "withLive" in c;
+
+/**
+ * The time a law runs on: the test's, under a `TestClock`; the ledger's own, under any other. Read
+ * from the clock the law runs under, so a suite cannot say one and run on the other.
+ */
+export const timeOf = (l: Service): Effect.Effect<Time> =>
+	Clock.clockWith((c) => Effect.succeed(isTestClock(c) ? testTime(c) : ledgerTime(l)));
 
 /**
  * A short lease's ttl: the steps that need it live run right after the claim, then the law waits
@@ -123,18 +208,24 @@ const steps = () => {
 	const count = (what: string, got: number, want: number) => {
 		list.push({what, got: String(got), want: String(want)});
 	};
+	return {list, step, count};
+};
+/** The steps of a law about time, on `time`, and `inTime`. */
+const timedSteps = (time: Time) => {
+	const s = steps();
 	/**
 	 * After the steps that need a time the ledger wrote not yet passed (a lease's end, the alarm due
-	 * after it, a deadline). Their answers came back after it: if one is WRONG, the verdict says it
-	 * may be this machine's slowness. It fails nothing itself, as an answer that came back late may
-	 * still have been given in time.
+	 * after it, a deadline). Their answers came back after it, on the ledger's clock: if one is
+	 * WRONG, the verdict says it may be this machine's slowness. It fails nothing itself, as an
+	 * answer that came back late may still have been given in time.
 	 */
-	const inTime = (what: string, end: number) => {
-		const late = Date.now() - end;
-		if (late >= 0)
-			list.push({what: `${what}, back ${late} ms after it`, got: "", want: "", late: true});
-	};
-	return {list, step, count, inTime};
+	const inTime = (what: string, end: number) =>
+		Effect.map(time.now, (now) => {
+			const late = now - end;
+			if (late >= 0)
+				s.list.push({what: `${what}, back ${late} ms after it`, got: "", want: "", late: true});
+		});
+	return {...s, inTime};
 };
 
 const tally = (words: readonly string[]) => {
@@ -213,18 +304,19 @@ export const law3Fencing = (l: Service, graceMs = 1000) =>
 		const law = "3. a stale rev and an old fence are refused";
 		const s = fresh("l3");
 		const S = streams(s);
-		const {list, step, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, s);
 		yield* step("append at 0", l.append(S.inbox, 0, note("w")), "ok");
 		yield* step("again at 0", l.append(S.inbox, 0, note("w")), "stale");
 		const c1 = yield* step("claim 1", l.claim(s, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
 		if (c1 === null) return verdict(law, list);
 		yield* step("h1 with its live fence", l.append(S.state, 0, note("h1"), c1.fence), "ok");
-		inTime("the step that needs the lease live", c1.expiresAt);
+		yield* inTime("the step that needs the lease live", c1.expiresAt);
 		// At c1's rev, so before the alarm writes lease_expired, `graceMs` after the lease's end.
-		yield* past(c1.expiresAt);
+		yield* time.past(c1.expiresAt);
 		const c2 = yield* step("claim 2, lease run out", l.claim(s, "h2", c1.rev, 30_000), "ok");
-		inTime("claim 2, before the alarm", c1.expiresAt + graceMs);
+		yield* inTime("claim 2, before the alarm", c1.expiresAt + graceMs);
 		if (c2 === null) return verdict(law, list);
 		yield* step(
 			"old fence after the reclaim",
@@ -236,33 +328,35 @@ export const law3Fencing = (l: Service, graceMs = 1000) =>
 		return verdict(law, list);
 	});
 
-/** Needs the alarm. `graceMs` is the ledger's expiry grace. About 6 s. */
+/**
+ * Needs the alarm. `graceMs` is the ledger's expiry grace. About 6 s on a real clock, none on a
+ * test's: there the law jumps the clock and polls until the alarm has written what it writes.
+ */
 export const law4Expiry = (l: Service, graceMs: number) =>
 	Effect.gen(function* () {
 		const ttl = 2000;
 		const a = fresh("l4a");
 		const b = fresh("l4b");
-		const [ra, rb] = yield* setUp(l, a, b);
+		// c: a lease that ends just after b's, so its lease_expired says the alarm ran past b's.
+		const c = fresh("l4c");
+		const time = yield* timeOf(l);
+		const [ra, rb, rc] = yield* setUp(l, a, b, c);
 		const ca = yield* say(l.claim(a, "h1", ra?.rev ?? 1, ttl));
-		const t0 = Date.now();
-		let expiredAfter = -1;
-		while (Date.now() - t0 < ttl + graceMs + 5000) {
-			yield* sleep(100);
-			if ((yield* l.readStream(a)).some((e) => e.kind === "lease_expired")) {
-				expiredAfter = Date.now() - t0;
-				break;
-			}
-		}
+		// Counted on the ledger's clock: from the claim to the `at` it stamped on lease_expired.
+		const fact = yield* expired(l, time, a, ca.value?.expiresAt ?? 0);
+		const expiredAfter = fact === null ? -1 : fact.at - ((ca.value?.expiresAt ?? 0) - ttl);
 		const leaseGone = (yield* l.lease(a)) === null;
 
 		const cb1 = yield* say(l.claim(b, "h1", rb?.rev ?? 1, ttl));
+		const cc = yield* say(l.claim(c, "h1", rc?.rev ?? 1, ttl));
 		// Right after the end the ledger wrote, so the claim lands before the alarm, `graceMs` later.
 		const end = cb1.value?.expiresAt ?? 0;
-		yield* past(end);
+		yield* time.past(end);
 		const cb2 = yield* say(l.claim(b, "h2", cb1.value?.rev ?? 0, 30_000));
-		const late = Date.now() - (end + graceMs);
+		const late = (yield* time.now) - (end + graceMs);
 		const before = (yield* l.readStream(b)).filter((e) => e.kind === "lease_expired").length;
-		yield* past(end + graceMs + 1500);
+		yield* time.past(end + graceMs + 1500);
+		const swept = (yield* expired(l, time, c, cc.value?.expiresAt ?? 0)) !== null;
 		const after = (yield* l.readStream(b)).filter((e) => e.kind === "lease_expired").length;
 		const holder = (yield* l.lease(b))?.holder;
 		const f1 = cb1.value?.fence ?? -1;
@@ -275,8 +369,9 @@ export const law4Expiry = (l: Service, graceMs: number) =>
 			},
 			{
 				law: "4b. a claim after the lease's end, before the alarm (lazy expiry)",
-				pass: cb2.word === "ok" && f2 > f1 && before === 0 && after === 0 && holder === "h2",
-				numbers: `second claim ${cb2.word}${late < 0 ? "" : ` (back ${late} ms after the alarm was due: too slow to tell)`}, fence ${f1} -> ${f2}; lease_expired before ${before}, after the alarm ${after}; holder ${holder}`,
+				pass:
+					cb2.word === "ok" && f2 > f1 && before === 0 && swept && after === 0 && holder === "h2",
+				numbers: `second claim ${cb2.word}${late < 0 ? "" : ` (back ${late} ms after the alarm was due: too slow to tell)`}, fence ${f1} -> ${f2}; lease_expired before ${before}, after the alarm ${after} (the alarm ran past it ${swept}); holder ${holder}`,
 			},
 		] satisfies LawResult[];
 	});
@@ -357,7 +452,8 @@ export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 		const law = "12. a lease on p guards p/*: an old fence is refused there, and only there";
 		const p = fresh("l12");
 		const state = `${p}/state`;
-		const {list, step, count, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, count, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, p, `${p}0`, `${p}x`);
 		const c1 = yield* step("claim 1", l.claim(p, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
 		if (c1 === null) return verdict(law, list);
@@ -366,18 +462,18 @@ export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 		yield* step("deeper", l.append(`${p}/a/b`, "any", note("h1"), c1.fence), "ok");
 		yield* step("sibling p0/state", l.append(`${p}0/state`, 0, note("h1"), c1.fence), "fenced");
 		yield* step("sibling px", l.append(`${p}x`, "any", note("h1"), c1.fence), "fenced");
-		inTime("the steps that need the lease live", c1.expiresAt);
+		yield* inTime("the steps that need the lease live", c1.expiresAt);
 		// A fence that names no lease is refused at any time: it needs no window.
 		yield* step("no such lease", l.append(state, 1, note("x"), c1.fence + 1000), "fenced");
 		// Run out and not swept yet: right after the end, before the alarm, `graceMs` later.
-		yield* past(c1.expiresAt);
+		yield* time.past(c1.expiresAt);
 		yield* step(
 			"old fence, run out, unclaimed",
 			l.append(state, 1, note("h1"), c1.fence),
 			"fenced",
 		);
 		const c2 = yield* step("claim 2", l.claim(p, "h2", c1.rev, 30_000), "ok");
-		inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
+		yield* inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
 		if (c2 === null) return verdict(law, list);
 		yield* step("old fence after the reclaim", l.append(state, 1, note("h1"), c1.fence), "fenced");
 		yield* step("repeated id, old fence", l.append(state, 0, save1, c1.fence), "fenced");
@@ -439,7 +535,8 @@ export const law16Guard = (l: Service, graceMs = 1000) =>
 		const law =
 			"16. an unfenced write under a registered name is refused, before, during and after a lease";
 		const p = fresh("l16");
-		const {list, step, count, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, count, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, p);
 		// 97's hole 1: before any claim, this landed. Registered, the name is guarded from the start.
 		yield* step("unfenced, never claimed", l.append(`${p}/notes`, "any", note("x")), "denied");
@@ -450,12 +547,12 @@ export const law16Guard = (l: Service, graceMs = 1000) =>
 		yield* step("unfenced to the name itself", l.append(p, "any", note("x")), "denied");
 		yield* step("unfenced deeper", l.append(`${p}/a/b`, "any", note("x")), "denied");
 		yield* step("fenced state", l.append(`${p}/state`, 0, note("h1"), c1.fence), "ok");
-		inTime("the steps that need the lease live", c1.expiresAt);
+		yield* inTime("the steps that need the lease live", c1.expiresAt);
 		// Run out and not swept yet: right after the end, before the alarm, `graceMs` later.
-		yield* past(c1.expiresAt);
+		yield* time.past(c1.expiresAt);
 		yield* step("unfenced, lease run out", l.append(`${p}/state`, 1, note("x")), "denied");
 		const c2 = yield* step("reclaim", l.claim(p, "h2", c1.rev, 30_000), "ok");
-		inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
+		yield* inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
 		if (c2 === null) return verdict(law, list);
 		yield* step("unfenced after a reclaim", l.append(`${p}/state`, 1, note("x")), "denied");
 		yield* step("new fence", l.append(`${p}/state`, 1, note("h2"), c2.fence), "ok");
@@ -476,13 +573,14 @@ export const law17Inbox = (l: Service) =>
 		const law = "17. an inbox append with no lease lands, under a registered name";
 		const p = fresh("l17");
 		const inbox = streams(p).inbox;
-		const {list, step, count, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, count, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, p);
 		const c1 = yield* step("claim", l.claim(p, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
 		if (c1 === null) return verdict(law, list);
 		yield* step("send, lease live", l.append(inbox, "any", note("s", "m1")), "ok");
 		yield* step("the owner, fenced", l.append(inbox, "any", note("h1", "m3"), c1.fence), "ok");
-		inTime("the steps that need the lease live", c1.expiresAt);
+		yield* inTime("the steps that need the lease live", c1.expiresAt);
 		// What follows lands the same with the lease live or run out: it needs no window.
 		yield* step("the same id again", l.append(inbox, "any", note("s", "m1")), "dup");
 		yield* step("send with no id", l.append(inbox, "any", note("s")), "ok");
@@ -492,7 +590,7 @@ export const law17Inbox = (l: Service) =>
 			l.append(`${p}-new/inbox`, "any", note("s", "m1")),
 			"unknown",
 		);
-		yield* past(c1.expiresAt);
+		yield* time.past(c1.expiresAt);
 		yield* step("send, lease run out", l.append(inbox, "any", note("s", "m4")), "ok");
 		count("inbox rows", (yield* l.readStream(inbox)).length, 5);
 		return verdict(law, list);
@@ -505,7 +603,8 @@ export const law18Reply = (l: Service, graceMs = 1000) =>
 			"18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost";
 		const a = fresh("l18-asker");
 		const b = fresh("l18-answerer");
-		const {list, step, count, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, count, inTime} = timedSteps(time);
 		const [ra, rb] = yield* setUp(l, a, b, `${b}x`);
 		const ca = yield* step("claim a", l.claim(a, "ha", ra?.rev ?? 1, 30_000), "ok");
 		const cb = yield* step("claim b", l.claim(b, "hb", rb?.rev ?? 1, LIVE_MS), "ok");
@@ -523,13 +622,13 @@ export const law18Reply = (l: Service, graceMs = 1000) =>
 			l.append(`${b}x`, "any", note("hb"), cb.fence),
 			"fenced",
 		);
-		inTime("the steps that need b's lease live", cb.expiresAt);
+		yield* inTime("the steps that need b's lease live", cb.expiresAt);
 		// Run out and not swept yet: right after the end, before the alarm, `graceMs` later.
-		yield* past(cb.expiresAt);
+		yield* time.past(cb.expiresAt);
 		yield* step("reply, lease run out", reply("r2", cb.fence), "fenced");
 		yield* step("repeat of the landed reply, lease lost", reply("r1", cb.fence), "fenced");
 		const cb2 = yield* step("reclaim b", l.claim(b, "hb2", cb.rev, 30_000), "ok");
-		inTime("the steps after the end, before the alarm", cb.expiresAt + graceMs);
+		yield* inTime("the steps after the end, before the alarm", cb.expiresAt + graceMs);
 		if (cb2 === null) return verdict(law, list);
 		yield* step("old fence after a reclaim", reply("r3", cb.fence), "fenced");
 		yield* step("new fence", reply("r3", cb2.fence), "ok");
@@ -599,37 +698,44 @@ export const law20Register = (l: Service, n = 50) =>
 		return verdict(law, list);
 	});
 
-/** T. The tail: every event of a stream, once each, in order, live, from any rev. */
+/**
+ * T. The tail: every event of a stream, once each, in order, live, from any rev. Its waits are
+ * for this machine's own fibers, not for a time the ledger wrote: they run on the live clock.
+ */
 export const lawTail = (l: Service, n = 100) =>
-	Effect.gen(function* () {
-		const p = fresh("lt");
-		yield* setUp(l, p);
-		const inbox = streams(p).inbox;
-		yield* l.append(inbox, "any", note("w", "before"));
-		const got: Row[] = [];
-		const m = meter();
-		yield* tail(l, {stream: inbox, fromRev: 1, meter: m}).pipe(
-			Stream.runForEach((r) => Effect.sync(() => got.push(r))),
-			Effect.forkScoped,
-		);
-		for (let i = 0; i < n; i++) {
-			yield* l.append(inbox, "any", note("w", `m${i}`));
-			if (i % 10 === 0) yield* sleep(5);
-		}
-		const t0 = Date.now();
-		while (got.length < n && Date.now() - t0 < 10_000) yield* sleep(10);
-		yield* sleep(300);
-		yield* l.append(inbox, "any", note("w", "late"));
-		const lateAt = Date.now();
-		while (got.length < n + 1 && Date.now() - lateAt < 3000) yield* sleep(5);
-		const lateMs = Date.now() - lateAt;
-		const inOrder = got.every((r, i) => r.rev === i + 2);
-		return {
-			law: `T. a live tail hands on ${n + 1} events once each, in order, as they land`,
-			pass: got.length === n + 1 && inOrder && got.at(-1)?.id === "late",
-			numbers: `${got.length} handed on, revs from 2 in order ${inOrder}; the late one after ${lateMs} ms; reads ${m.reads}, rings ${m.rings}`,
-		} satisfies LawResult;
-	}).pipe(Effect.scoped);
+	Effect.flatMap(timeOf(l), (time) =>
+		time.live(
+			Effect.gen(function* () {
+				const p = fresh("lt");
+				yield* setUp(l, p);
+				const inbox = streams(p).inbox;
+				yield* l.append(inbox, "any", note("w", "before"));
+				const got: Row[] = [];
+				const m = meter();
+				yield* tail(l, {stream: inbox, fromRev: 1, meter: m}).pipe(
+					Stream.runForEach((r) => Effect.sync(() => got.push(r))),
+					Effect.forkScoped,
+				);
+				for (let i = 0; i < n; i++) {
+					yield* l.append(inbox, "any", note("w", `m${i}`));
+					if (i % 10 === 0) yield* sleep(5);
+				}
+				const t0 = performance.now();
+				while (got.length < n && performance.now() - t0 < 10_000) yield* sleep(10);
+				yield* sleep(300);
+				yield* l.append(inbox, "any", note("w", "late"));
+				const lateAt = performance.now();
+				while (got.length < n + 1 && performance.now() - lateAt < 3000) yield* sleep(5);
+				const lateMs = Math.round(performance.now() - lateAt);
+				const inOrder = got.every((r, i) => r.rev === i + 2);
+				return {
+					law: `T. a live tail hands on ${n + 1} events once each, in order, as they land`,
+					pass: got.length === n + 1 && inOrder && got.at(-1)?.id === "late",
+					numbers: `${got.length} handed on, revs from 2 in order ${inOrder}; the late one after ${lateMs} ms; reads ${m.reads}, rings ${m.rings}`,
+				} satisfies LawResult;
+			}).pipe(Effect.scoped),
+		),
+	);
 
 // ---------------------------------------------------------------- new in 99: OTP's processes
 
@@ -640,15 +746,6 @@ const dataOf = (l: Service, stream: string, kind: string) =>
 			.filter((r) => r.kind === kind)
 			.map((r) => JSON.parse(r.data) as Record<string, string | number | null>),
 	);
-/** Wait for the alarm to write a lease's `lease_expired`: up to 5 s after the `end` it wrote. */
-const expired = (l: Service, name: string, end: number) =>
-	Effect.gen(function* () {
-		while (Date.now() < end + 5000) {
-			if ((yield* l.readStream(name)).some((e) => e.kind === "lease_expired")) return true;
-			yield* sleep(50);
-		}
-		return false;
-	});
 
 /**
  * 21. A monitor's DOWN comes once per monitor, when the incarnation it watches exits, and never for
@@ -660,7 +757,8 @@ export const law21Monitors = (l: Service) =>
 		const w = fresh("l21-watcher");
 		const t = fresh("l21-target");
 		const inbox = streams(w).inbox;
-		const {list, step, count, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, count, inTime} = timedSteps(time);
 		const [rw, rt] = yield* setUp(l, w, t);
 		const cw = yield* step("claim the watcher", l.claim(w, "hw", rw?.rev ?? 1, 30_000), "ok");
 		const ct = yield* step("claim the target", l.claim(t, "h1", rt?.rev ?? 1, LIVE_MS), "ok");
@@ -672,8 +770,8 @@ export const law21Monitors = (l: Service) =>
 		yield* step("monitor r2", l.monitor(cw.fence, "r2", t), "ok");
 		yield* step("monitor r3", l.monitor(cw.fence, "r3", t), "ok");
 		yield* step("demonitor r3", l.demonitor(cw.fence, "r3"), "ok");
-		inTime("the monitors, set while the target's lease is live", ct.expiresAt);
-		count("lease_expired written", (yield* expired(l, t, ct.expiresAt)) ? 1 : 0, 1);
+		yield* inTime("the monitors, set while the target's lease is live", ct.expiresAt);
+		count("lease_expired written", (yield* expired(l, time, t, ct.expiresAt)) === null ? 0 : 1, 1);
 		count("DOWNs after the lease ran out", (yield* dataOf(l, inbox, "DOWN")).length, 0);
 		const ct2 = yield* step(
 			"take over",
@@ -1042,17 +1140,18 @@ export const law28LateCharge = (l: Service) =>
 	Effect.gen(function* () {
 		const law = "28. a late charge from a lost lease counts, once, and only replaces its own hold";
 		const n = fresh("l28");
-		const {list, step, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, inTime} = timedSteps(time);
 		yield* setUp(l, n);
 		yield* step("limits $1", l.setLimits(n, {usd: 1}, "desk"), "ok");
 		const rev = (yield* l.readLast(n, 1))[0]?.rev ?? 0;
 		const c1 = yield* step("claim, a short ttl", l.claim(n, "h1", rev, LIVE_MS), "ok");
 		if (c1 === null) return verdict(law, list);
 		yield* step("hold $0.5, t1", l.hold(c1.fence, "t1", {usd: 0.5}), "ok");
-		inTime("the hold, which needs the lease live", c1.expiresAt);
+		yield* inTime("the hold, which needs the lease live", c1.expiresAt);
 		list.push({
 			what: "lease_expired",
-			got: String(yield* expired(l, n, c1.expiresAt)),
+			got: String((yield* expired(l, time, n, c1.expiresAt)) !== null),
 			want: "true",
 		});
 		const c2 = yield* step(
@@ -1114,7 +1213,8 @@ export const law30Wall = (l: Service) =>
 		const [c, d] = [`${s}-c`, `${s}-d`];
 		// Two windows of steps in c's wall time: its first run's, then, from the middle, its restart's.
 		const wall = 2 * LIVE_MS;
-		const {list, step, inTime} = steps();
+		const time = yield* timeOf(l);
+		const {list, step, inTime} = timedSteps(time);
 		const [rs] = yield* setUp(l, s);
 		const cs = yield* step("claim", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
 		if (cs === null) return verdict(law, list);
@@ -1132,15 +1232,15 @@ export const law30Wall = (l: Service) =>
 		yield* step("c crashes", l.exit(c, c1.fence, "crash", "boom", null, "hc"), "ok");
 		// Restarted once half its wall time is gone: a deadline counted from the restart would end
 		// half a wall time after `due`, where the hold below finds it.
-		yield* past(due - wall / 2);
+		yield* time.past(due - wall / 2);
 		yield* step("restart c", l.startChild(cs.fence, c, 1), "ok");
 		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
 		const c2 = yield* step("claim c, run 2", l.claim(c, "hc", rev, 30_000), "ok");
-		inTime("c's steps, inside its wall time", due);
+		yield* inTime("c's steps, inside its wall time", due);
 		if (c2 === null) return verdict(law, list);
 		const moved = ((yield* l.usage(c))?.deadline ?? Number.NaN) - due;
 		list.push({what: "ms the restart moved c's deadline", got: String(moved), want: "0"});
-		yield* past(due);
+		yield* time.past(due);
 		// Past its wall time the hold is refused: `limit` if it comes before the alarm, `fenced` after.
 		const h = yield* say(l.hold(c2.fence, "t", {usd: 0}));
 		list.push({
@@ -1149,6 +1249,8 @@ export const law30Wall = (l: Service) =>
 			want: "refused",
 		});
 		list.push({what: "c", got: yield* endOf(l, c), want: "limit:wall"});
+		// Only the alarm ends d: wait for its word, as on a test's clock it may still be on its way.
+		yield* factOf(l, time, d, "exited");
 		list.push({what: "d, never touched", got: yield* endOf(l, d), want: "limit:wall"});
 		return verdict(law, list);
 	});
@@ -1168,41 +1270,53 @@ const guard = (law: string, e: Effect.Effect<LawResult | readonly LawResult[], u
 		Effect.catchCause((c) => Effect.succeed([failed(law, `stopped: ${String(c).slice(0, 300)}`)])),
 	);
 
-/** Every law, all at once, each on its own names. A law that dies is a failed law, not a crash. */
+/**
+ * Every law, each on its own names. A law that dies is a failed law, not a crash.
+ *
+ * On the ledger's own clock, all at once. On a test's clock (a `TestClock` under both the suite
+ * and the ledger), the laws that move the clock run one at a time after the rest, as one law's
+ * jump past its lease's end would end another law's lease too early.
+ */
 export const runLaws = (o: SuiteOptions = {}) =>
 	Effect.gen(function* () {
 		const l = yield* Ledger;
 		const grace = o.graceMs ?? 1000;
-		const out = yield* Effect.all(
-			[
-				guard("1", law1Claims(l)),
-				guard("2", law2Appends(l)),
-				guard("3", law3Fencing(l, grace)),
-				...(o.alarm ? [guard("4", law4Expiry(l, grace))] : []),
-				guard("5", law5Stop(l)),
-				guard("11a", law11AppendAny(l)),
-				guard("11b", law11RepeatedId(l)),
-				guard("12", law12PrefixFence(l, grace)),
-				guard("14", law14Reads(l)),
-				guard("16", law16Guard(l, grace)),
-				guard("17", law17Inbox(l)),
-				guard("18", law18Reply(l, grace)),
-				guard("19", law19Unknown(l)),
-				guard("20", law20Register(l)),
-				guard("21", law21Monitors(l)),
-				guard("22", law22Links(l)),
-				guard("23", law23Start(l)),
-				guard("24", law24DeadLetters(l)),
-				guard("25", law25ExitChild(l)),
-				guard("26", law26Spend(l)),
-				guard("27", law27Admission(l)),
-				guard("28", law28LateCharge(l)),
-				guard("29", law29Children(l)),
-				guard("30", law30Wall(l)),
-				guard("T", lawTail(l)),
-			],
-			{concurrency: "unbounded"},
-		);
+		const still = [
+			guard("1", law1Claims(l)),
+			guard("2", law2Appends(l)),
+			guard("5", law5Stop(l)),
+			guard("11a", law11AppendAny(l)),
+			guard("11b", law11RepeatedId(l)),
+			guard("14", law14Reads(l)),
+			guard("19", law19Unknown(l)),
+			guard("20", law20Register(l)),
+			guard("22", law22Links(l)),
+			guard("23", law23Start(l)),
+			guard("24", law24DeadLetters(l)),
+			guard("25", law25ExitChild(l)),
+			guard("26", law26Spend(l)),
+			guard("27", law27Admission(l)),
+			guard("29", law29Children(l)),
+			guard("T", lawTail(l)),
+		];
+		const moving = [
+			guard("3", law3Fencing(l, grace)),
+			...(o.alarm ? [guard("4", law4Expiry(l, grace))] : []),
+			guard("12", law12PrefixFence(l, grace)),
+			guard("16", law16Guard(l, grace)),
+			guard("17", law17Inbox(l)),
+			guard("18", law18Reply(l, grace)),
+			guard("21", law21Monitors(l)),
+			guard("28", law28LateCharge(l)),
+			guard("30", law30Wall(l)),
+		];
+		const owned = Clock.clockWith((c) => Effect.succeed(isTestClock(c)));
+		const out = (yield* owned)
+			? [
+					...(yield* Effect.all(still, {concurrency: "unbounded"})),
+					...(yield* Effect.all(moving, {concurrency: 1})),
+				]
+			: yield* Effect.all([...still, ...moving], {concurrency: "unbounded"});
 		return out.flat();
 	});
 
@@ -1218,6 +1332,7 @@ export const layerPlanted = (path: string, planted: L.Planted, graceMs = 1000) =
 	Layer.effect(
 		Ledger,
 		Effect.gen(function* () {
+			const clock = yield* Clock.Clock;
 			const {db} = yield* Effect.acquireRelease(
 				Effect.sync(() => openDb(path)),
 				(d) => Effect.sync(() => d.close()),
@@ -1227,7 +1342,8 @@ export const layerPlanted = (path: string, planted: L.Planted, graceMs = 1000) =
 			const call = (method: string, args: readonly unknown[]) =>
 				(isMethod(method)
 					? Effect.try({
-							try: () => dispatch(db, rules, graceMs, method, args),
+							try: () =>
+								dispatch(db, rules, graceMs, clock.currentTimeMillisUnsafe(), method, args),
 							catch: (e) => new LedgerUnreachable({method, message: String(e)}),
 						})
 					: Effect.fail(new LedgerUnreachable({method, message: "no such method"}))

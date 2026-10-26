@@ -1,0 +1,12 @@
+diff -ruN a/ghostty-web/dist/ghostty-web.js b/ghostty-web/dist/ghostty-web.js
+--- a/ghostty-web/dist/ghostty-web.js
++++ b/ghostty-web/dist/ghostty-web.js
+@@ -1335,7 +1335,7 @@
+ class $ {
+   constructor(A, B = {}) {
+     this.cursorVisible = !0, this.lastCursorPosition = { x: 0, y: 0 }, this.lastViewportY = 0, this.currentBuffer = null, this.currentSelectionCoords = null, this.hoveredHyperlinkId = 0, this.previousHoveredHyperlinkId = 0, this.hoveredLinkRange = null, this.previousHoveredLinkRange = null, this.canvas = A;
+-    const g = A.getContext("2d", { alpha: !0 });
++    const g = A.getContext("2d", { alpha: !0, desynchronized: !0 });
+     if (!g)
+       throw new Error("Failed to get 2D rendering context");
+     this.ctx = g, this.fontSize = B.fontSize ?? 15, this.fontFamily = B.fontFamily ?? "monospace", this.cursorStyle = B.cursorStyle ?? "block", this.cursorBlink = B.cursorBlink ?? !1, this.theme = { ...f, ...B.theme }, this.devicePixelRatio = B.devicePixelRatio ?? window.devicePixelRatio ?? 1, this.palette = [

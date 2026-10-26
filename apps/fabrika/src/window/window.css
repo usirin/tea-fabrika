@@ -196,6 +196,19 @@ kbd {
 	color: var(--faint);
 }
 
+/* The app is not attached to the host: why, said plainly. */
+.down {
+	max-width: 60ch;
+	margin: 48px auto;
+	padding: 0 24px;
+	line-height: 1.5;
+}
+
+.down h1 {
+	font-size: 16px;
+	font-weight: 600;
+}
+
 .counter {
 	flex: 1;
 	display: flex;

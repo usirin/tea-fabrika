@@ -1,6 +1,7 @@
 // The ledger as a Cloudflare Durable Object: one SQLite database, every rule in `rules.ts`. It runs
 // in workerd (Cloudflare, or Miniflare on a laptop: `local.ts`), not in Node. workerd gets this file
-// and `rules.ts` with their types stripped by Node's own stripper, so both stay erasable TypeScript.
+// bundled with what it imports, `effect` too (worker-options.ts), as Cloudflare's own tools bundle
+// a Worker.
 //
 // Lifted from experiment 97 (experiments/97-one-ledger/ledger.ts). What changed: `register` is new;
 // the experiment-only calls (`tryExec`, `openCriteria`) are gone. 99 adds OTP's process calls.
@@ -9,7 +10,18 @@
 // (`ctx.acceptWebSocket`), so a ledger with no traffic sleeps and keeps its watchers. After every
 // write it sends each matching socket one small notice, `{stream, rev, pos}`, with no event in it:
 // the watcher reads from its own cursor, so a lost or doubled notice costs a read, never an event.
+//
+// Two ways in. The object's methods (`register`, `append`, ...) take a writer and a holder as
+// arguments: only code holding the `LEDGER` binding can call them, the Worker on Cloudflare, or a
+// test through Miniflare (`inside.ts`). The network's way in is `fetch`, and it goes through the
+// door (`door.ts`): no credential, no read and no write; the writer and the holder come from the
+// credential, never from the request.
 import {DurableObject} from "cloudflare:workers";
+import {Layer, ManagedRuntime, Redacted} from "effect";
+import {FetchHttpClient} from "effect/http";
+import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
+import {type Keys, layerNobody} from "./keys.ts";
+import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
 import * as L from "./rules.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
@@ -21,11 +33,52 @@ type Storage = {
 	deleteAlarm(): Promise<void>;
 };
 type Ctx = {
+	/** `name`: what `idFromName` was given, when workerd knows it. */
+	id?: {name?: string};
 	storage: Storage;
 	acceptWebSocket(ws: WorkerSocket, tags: string[]): void;
 	getWebSockets(tag?: string): WorkerSocket[];
 };
-type Env = {LEDGER: Namespace; EXPIRY_GRACE_MS?: string; MAX_DELIVERIES?: string};
+type Env = {
+	LEDGER: Namespace;
+	EXPIRY_GRACE_MS?: string;
+	MAX_DELIVERIES?: string;
+	/**
+	 * The door, by config (`configOf`): DOOR, LOCAL_PERSON, LOCAL_SECRET_HASH, FOUNDER, ORIGIN,
+	 * SESSION_MS. Where a shared door's keys come from (`keysOf`): KEYS, KEYS_CACHE_MS,
+	 * KEYS_FAIL_MS, and the optional secret GITHUB_TOKEN.
+	 */
+	[door: string]: unknown;
+};
+
+/**
+ * The `Keys` Layer the env names, or null when it names none this file knows, or says it wrong.
+ *
+ *   KEYS=github   GitHub's keys and ids (`keys-github.ts`), kept KEYS_CACHE_MS (default 5 min),
+ *                 a failure kept KEYS_FAIL_MS (default 30 s), asked with the GITHUB_TOKEN secret
+ *                 when it is set (none: GitHub's shared limit)
+ *
+ * The one place a Layer is picked: a new answer to `Keys` is one more line here.
+ */
+const keysOf = (env: Env): Layer.Layer<Keys> | null => {
+	/** A length of time in ms from the env: the default when left out, null when it does not read. */
+	const ms = (k: string, fallback: number): number | null => {
+		const s = typeof env[k] === "string" ? env[k] : "";
+		return s === "" ? fallback : /^[0-9]{1,12}$/.test(s) ? Number(s) : null;
+	};
+	const cacheMs = ms("KEYS_CACHE_MS", KEYS_CACHE_MS);
+	const failMs = ms("KEYS_FAIL_MS", KEYS_FAIL_MS);
+	if (env.KEYS !== "github" || cacheMs === null || failMs === null) return null;
+	const token =
+		typeof env.GITHUB_TOKEN === "string" && env.GITHUB_TOKEN !== ""
+			? {token: Redacted.make(env.GITHUB_TOKEN)}
+			: {};
+	return layerGitHub({cacheMs, failMs, ...token}).pipe(Layer.provide(FetchHttpClient.layer));
+};
+
+/** A shared door with no keys to ask is closed: nobody could prove who they are. */
+const closedWithout = (config: DoorConfig, keys: Layer.Layer<Keys> | null): DoorConfig =>
+	config.kind === "shared" && keys === null ? {kind: "closed" as const} : config;
 type Stub = {fetch(req: Request): Promise<Response>} & Record<
 	string,
 	((...args: unknown[]) => Promise<unknown>) | undefined
@@ -42,6 +95,7 @@ export class Ledger extends DurableObject {
 	private readonly db: L.Db;
 	private readonly graceMs: number;
 	private readonly maxDeliveries: number | null;
+	private readonly door: Door;
 
 	constructor(ctx: Ctx, env: Env) {
 		super(ctx, env);
@@ -55,6 +109,15 @@ export class Ledger extends DurableObject {
 			tx: (fn) => ctx.storage.transactionSync(fn),
 		};
 		L.migrate(this.db);
+		const keys = keysOf(env);
+		// One runtime for the object's life: the Layer is built once, so what it keeps (GitHub's
+		// answers, for their cache time) is kept across logins. A local or closed door asks nobody.
+		this.door = new Door(
+			this.db,
+			closedWithout(configOf(env), keys),
+			ManagedRuntime.make(keys ?? layerNobody),
+			{wrote: (w) => this.wake(w.stream, w.rev, w.pos)},
+		);
 	}
 
 	async register(name: string, writer: string) {
@@ -216,9 +279,99 @@ export class Ledger extends DurableObject {
 		return this.ctx.getWebSockets().length;
 	}
 
-	/** A watcher: upgrade to a WebSocket the runtime holds while the object sleeps. */
+	/**
+	 * One of the methods above, by name, its answer as JSON text: for a caller that holds the
+	 * binding (`inside.ts`). Trusted like the methods themselves: it takes the writer and the holder
+	 * as given, and no request from the network reaches it. Text, because an object answer comes to
+	 * Miniflare's caller as a proxy that costs a round trip for each field read.
+	 */
+	async call(method: string, args: unknown[]): Promise<string> {
+		if (!isWireMethod(method)) throw new Error(`no method ${method}`);
+		const fn: unknown = Reflect.get(this, method);
+		if (typeof fn !== "function") throw new Error(`no method ${method}`);
+		return JSON.stringify((await Reflect.apply(fn, this, args)) ?? null);
+	}
+
+	/**
+	 * The network's way in, through the door:
+	 *
+	 *   POST /<ledger>/door/challenge | login | agent-login     no credential: the login's own steps
+	 *   GET  /<ledger>/door/who | members                       any credential
+	 *   POST /<ledger>/door/invite | remove | agent             a person's credential
+	 *   POST /<ledger>/<method>  [args, no writer]              any credential; the door stamps
+	 *   GET  /<ledger>/tail?stream=..  Upgrade: websocket       any credential
+	 *
+	 * A credential is `Authorization: Bearer <token>`, or for a WebSocket, which cannot send that
+	 * header from a browser, the subprotocol `bearer.<token>` beside `fabrika` (Kubernetes carries
+	 * its bearer token the same way).
+	 *
+	 * Whatever the answer, the request's body is read to its end first (`drained`).
+	 */
 	async fetch(req: Request) {
+		return drained(req, await this.through(req));
+	}
+
+	private async through(req: Request) {
 		const url = new URL(req.url);
+		const [, ledger = "", method = "", step = ""] = url.pathname.split("/");
+		// The Worker picked this object by the name in the path (`objectOf`). When workerd says
+		// which name made this object, they must agree, or a grant for one would open another.
+		const named = this.ctx.id?.name;
+		if (named !== undefined && named !== ledger)
+			return new Response("not this ledger", {status: 404});
+		const address = this.door.address(url.origin, ledger);
+		const offered = (req.headers.get("sec-websocket-protocol") ?? "")
+			.split(",")
+			.map((p) => p.trim());
+		const bearer =
+			/^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "")?.[1] ??
+			offered.find((p) => p.startsWith("bearer."))?.slice("bearer.".length) ??
+			null;
+		if (method === "door") return this.doorStep(req, step, address, bearer);
+		const who = await this.door.who(bearer);
+		if (!who.ok) return refused(who);
+		if (method === "tail") return this.tail(req, url, offered);
+		if (req.method !== "POST") return new Response("POST [args]", {status: 405});
+		const body: unknown = await req.json().catch(() => null);
+		const args = trustedArgs(method, body, who.value);
+		if (!args.ok) return refused(args);
+		// `trustedArgs` let through only a method in its table, each one a method of this class.
+		const call: unknown = Reflect.get(this, method);
+		if (typeof call !== "function") return new Response("no such method", {status: 404});
+		try {
+			return Response.json(await Reflect.apply(call, this, args.value));
+		} catch (e) {
+			return Response.json({error: e instanceof Error ? e.message : String(e)}, {status: 500});
+		}
+	}
+
+	private async doorStep(req: Request, step: string, address: string, bearer: string | null) {
+		const body = (req.method === "POST" ? await req.json().catch(() => ({})) : {}) as Record<
+			string,
+			unknown
+		>;
+		if (step === "challenge") return answer(this.door.challenge(address));
+		if (step === "login") return answer(await this.door.login(body));
+		if (step === "agent-login") return answer(await this.door.agentLogin(address, body));
+		const who = await this.door.who(bearer);
+		if (!who.ok) return refused(who);
+		const me: Stamp = who.value;
+		if (step === "who") return Response.json({who: me});
+		if (step === "members") {
+			const m = this.door.members();
+			return Response.json({
+				members: [...m.members].map(([id, name]) => ({id, name})),
+				invited: [...m.invited].map(([id, name]) => ({id, name})),
+			});
+		}
+		if (step === "invite") return answer(await this.door.invite(me, body.name));
+		if (step === "remove") return answer(this.door.remove(me, body.id));
+		if (step === "agent") return answer(await this.door.addAgent(me, body.name));
+		return new Response("not found", {status: 404});
+	}
+
+	/** A watcher: upgrade to a WebSocket the runtime holds while the object sleeps. */
+	private async tail(req: Request, url: URL, offered: readonly string[]) {
 		const tags = [
 			...url.searchParams.getAll("stream").map((s) => `s:${s}`),
 			...url.searchParams.getAll("prefix").map((p) => `p:${p}`),
@@ -227,7 +380,11 @@ export class Ledger extends DurableObject {
 			return new Response("a watcher names 1 to 10 streams or prefixes", {status: 400});
 		const pair = new WebSocketPair();
 		this.ctx.acceptWebSocket(pair[1], tags);
-		return new Response(null, {status: 101, webSocket: pair[0]});
+		// Name the subprotocol the client offered, or it closes the socket; never echo the token.
+		const headers: Record<string, string> = offered.includes("fabrika")
+			? {"sec-websocket-protocol": "fabrika"}
+			: {};
+		return new Response(null, {status: 101, webSocket: pair[0], headers});
 	}
 
 	/** A watcher says nothing the ledger needs; it only listens. */
@@ -277,49 +434,40 @@ export class Ledger extends DurableObject {
 	}
 }
 
-const METHODS = new Set([
-	"register",
-	"append",
-	"claim",
-	"renew",
-	"cancel",
-	"exit",
-	"monitor",
-	"demonitor",
-	"link",
-	"unlink",
-	"trapExit",
-	"startChild",
-	"exitChild",
-	"processInfo",
-	"hold",
-	"charge",
-	"setLimits",
-	"usage",
-	"read",
-	"readStream",
-	"readLast",
-	"lease",
-	"alarmAt",
-	"watchers",
-]);
+const refused = (r: {status: number; why: string}) =>
+	Response.json({error: r.why}, {status: r.status});
+const answer = (r: {ok: true; value: unknown} | {ok: false; status: number; why: string}) =>
+	r.ok ? Response.json(r.value) : refused(r);
 
 /**
- * Plain HTTP for processes that cannot hold an RPC stub: POST /<ledger>/<method> [args]. And
- * GET /<ledger>/tail?stream=..&prefix=.. with `Upgrade: websocket`: the live tail's notices.
+ * `res`, once the rest of `req`'s body has been read and thrown away. workerd drops a kept-alive
+ * connection when an answer leaves the body unread, and the client's next call on it fails
+ * (experiment 145). An early refusal reads nothing, so this reads it, without keeping it: a body
+ * nobody is let in for is never held in memory.
+ */
+const drained = async (req: Request, res: Response): Promise<Response> => {
+	if (req.body !== null && !req.bodyUsed)
+		await req.body.pipeTo(new WritableStream()).catch(() => {
+			// The client went away mid-body: there is no connection left to keep.
+		});
+	return res;
+};
+
+/**
+ * Which object a request is for: the name it is picked by, `idFromName`. One server holds many
+ * objects (one per project, one per person); today the name is the path's first part. A router
+ * goes here (experiment 145), and every object keeps its own door and its own members.
+ */
+export const objectOf = (url: URL): string | null => url.pathname.split("/")[1] || null;
+
+/**
+ * Plain HTTP for processes that cannot hold an RPC stub: every request goes to its object, whose
+ * `fetch` is the door. The Worker itself reads nothing and calls no method.
  */
 export default {
 	async fetch(req: Request, env: Env): Promise<Response> {
-		const [, name, method] = new URL(req.url).pathname.split("/");
-		if (name && method === "tail") return env.LEDGER.get(env.LEDGER.idFromName(name)).fetch(req);
-		if (!name || !method || !METHODS.has(method)) return new Response("not found", {status: 404});
-		const body: unknown = req.method === "POST" ? await req.json() : [];
-		const args = Array.isArray(body) ? body : [];
-		const stub = env.LEDGER.get(env.LEDGER.idFromName(name));
-		try {
-			return Response.json(await stub[method]?.(...args));
-		} catch (e) {
-			return Response.json({error: e instanceof Error ? e.message : String(e)}, {status: 500});
-		}
+		const name = objectOf(new URL(req.url));
+		if (name === null) return drained(req, new Response("not found", {status: 404}));
+		return env.LEDGER.get(env.LEDGER.idFromName(name)).fetch(req);
 	},
 };

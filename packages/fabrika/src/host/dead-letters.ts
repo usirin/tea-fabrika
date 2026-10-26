@@ -19,6 +19,7 @@
 //
 // A limit end has no message to send back: the fix is a raise (`setLimits`), not a redrive.
 import {Effect, Exit, Schema} from "effect";
+import {REDRIVE} from "./door.ts";
 import {DeadLetter, type Inbox, Ledger, LimitRecord, type Row, streams} from "./ledger.ts";
 
 export type DeadLetterEntry = DeadLetter & {
@@ -50,7 +51,8 @@ export const limitEnds = (name: string) =>
 			return Exit.isSuccess(d) ? [d.value] : [];
 		});
 	});
-const redriveId = (rev: number) => `redrive:${rev}`;
+/** Under `REDRIVE`, so the door lets only a person send one (an agent's credential is refused). */
+const redriveId = (rev: number) => `${REDRIVE}${rev}`;
 
 /** The rows of `<name>/dead`, decoded; a row that does not decode is no dead letter. */
 const deadOf = (name: string) =>
