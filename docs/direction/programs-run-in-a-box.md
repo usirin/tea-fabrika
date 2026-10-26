@@ -212,6 +212,12 @@ The doubt is the edges nobody has run yet, listed below.
     person holds can be read by whoever holds that account's Cloudflare
     token, their agents included. The two people trust each other, so this
     is accepted for now and written here.
+    *Wrong, found later the same day:* trust between the two does not settle
+    it. Anthropic's [Consumer Terms](https://www.anthropic.com/legal/consumer-terms)
+    say "You may not share your … Account credentials with anyone else." The
+    host on Cloudflare is parked for now ([tea-host](./tea-host.md)). On a
+    laptop, the token stays on its own person's machine, so this rule's
+    laptop part is unchanged.
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is

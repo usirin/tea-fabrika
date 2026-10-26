@@ -44,6 +44,42 @@ opt-in restart backoff, and resending a dead letter.
   Claude Code to use unchanged, since that is the way Anthropic allows. No
   relay adds it ([programs run in a box](./programs-run-in-a-box.md)).
 
+  *Parked 2026-10-25, later still: no host on Cloudflare for now.* Jobs run
+  on the laptop's host. The ledger still goes to Cloudflare.
+
+  ```ts
+  // Where a job runs, from 2026-10-25 on. A sketch.
+  //   ship 42 &     the laptop's host only; its box gets the starter's own token there
+  //   cloud host    parked: no Durable Object host, no job box on Cloudflare
+  //   the ledger    still on Cloudflare, so two people share tickets and jobs
+  ```
+
+  - **Why.**
+    - Cloudflare cannot keep a box to api.anthropic.com without ending TLS,
+      which puts our code between a person and their token
+      ([experiment 148](../../experiments/148-remote-programs.md), Q7).
+    - Anthropic's [Claude Code legal page](https://code.claude.com/docs/en/legal-and-compliance)
+      says developers "may not collect, store, or intermediate Claude.ai
+      credentials or session tokens". Its
+      [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) (section
+      2) say "You may not share your Account login information, Anthropic API
+      key, or Account credentials with anyone else." So one person's token in
+      a box on an account another person holds is not clearly allowed. A
+      shared account has the same problem.
+    - A Cloudflare box starts every run with a fresh disk
+      ([Containers FAQ](https://developers.cloudflare.com/containers/faq)), so
+      a login made inside the box would have to be saved by our code.
+    - There is enough other work first.
+  - **What is kept.** Experiment 148's findings, and its code as a map.
+  - **What would bring it back.**
+    - A lock that leaves TLS alone. One way is a network namespace in the box
+      with a proxy that checks the site name. Another is a byte tunnel through
+      a relay outside Cloudflare. Neither is tested.
+    - And each person's token kept only on their own account, the way
+      Anthropic's [GitHub Action](https://github.com/anthropics/claude-code-action)
+      keeps a setup-token as that person's secret. Or a written answer from
+      Anthropic on a shared account.
+
   ```ts
   // A sketch. The same job on two hosts. Only where the host runs changes.
   // tsh on a laptop, attached to the project's host:
