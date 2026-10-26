@@ -10,7 +10,7 @@
 // New in 102: limits, `hold`, `charge`, `setLimits` and `usage`, as in `rules.ts`.
 // New in 110: `memoryService`, the same service with no alarm fiber: each call runs the due jobs
 // first. For a ledger made outside an Effect scope (the pipeline's `memoryLedger`).
-import {Duration, Effect, Layer, PubSub, Stream} from "effect";
+import {Clock, Duration, Effect, Layer, PubSub, Stream} from "effect";
 import {fromRaw, type Lease, Ledger, type Raw, type Row} from "./ledger.ts";
 import {
 	type AppendResult,
@@ -804,11 +804,12 @@ const serviceOf = (
 	m: ReturnType<typeof memoryLedger>,
 	bell: PubSub.PubSub<string>,
 	due: boolean,
+	clock: Clock.Clock,
 ): Ledger["Service"] => {
 	const ring = Effect.suspend(() => PubSub.publishAll(bell, m.drain()));
 	const step = <A>(f: (now: number) => A) =>
 		Effect.sync(() => {
-			const now = Date.now();
+			const now = clock.currentTimeMillisUnsafe();
 			if (due) m.runDue(now);
 			return f(now);
 		}).pipe(Effect.tap(() => ring));
@@ -852,20 +853,24 @@ const serviceOf = (
 const ledgerOf = (o: MemoryOptions) =>
 	memoryLedger(o.graceMs ?? 1000, o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries);
 
-/** The in-memory `Ledger`, with its alarm fiber and doorbell; both end with the layer's scope. */
+/**
+ * The in-memory `Ledger`, with its alarm fiber and doorbell; both end with the layer's scope. Its
+ * time is Effect's `Clock` where the layer is built: under a `TestClock`, the test owns it.
+ */
 export const layerMemory = (o: MemoryOptions = {}) =>
 	Layer.effect(
 		Ledger,
 		Effect.gen(function* () {
+			const clock = yield* Clock.Clock;
 			const m = ledgerOf(o);
 			const bell = yield* PubSub.unbounded<string>();
-			const alarm = Effect.sync(() => m.runDue(Date.now())).pipe(
+			const alarm = Effect.sync(() => m.runDue(clock.currentTimeMillisUnsafe())).pipe(
 				Effect.andThen(Effect.suspend(() => PubSub.publishAll(bell, m.drain()))),
 				Effect.andThen(Effect.sleep(Duration.millis(o.tickMs ?? 25))),
 				Effect.forever,
 			);
 			yield* Effect.forkScoped(alarm);
-			return serviceOf(m, bell, false);
+			return serviceOf(m, bell, false, clock);
 		}),
 	);
 
@@ -873,7 +878,13 @@ export const layerMemory = (o: MemoryOptions = {}) =>
  * The in-memory `Ledger` with no alarm: no fiber and no scope, so one value can be provided to
  * many layers that share it (`Layer.succeed(Ledger, memoryService())`), as many processes share one
  * ledger. The due jobs (a lease's `lease_expired`, a wall limit's end) run at the start of the next
- * call instead of on a timer. A lease still ends on time: every call reads the clock.
+ * call instead of on a timer. A lease still ends on time: every call reads the clock, Effect's own
+ * live one, as it is made outside any Effect.
  */
 export const memoryService = (o: MemoryOptions = {}): Ledger["Service"] =>
-	serviceOf(ledgerOf(o), Effect.runSync(PubSub.unbounded<string>()), true);
+	serviceOf(
+		ledgerOf(o),
+		Effect.runSync(PubSub.unbounded<string>()),
+		true,
+		Clock.Clock.defaultValue(),
+	);
