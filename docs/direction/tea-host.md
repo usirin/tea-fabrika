@@ -39,6 +39,10 @@ opt-in restart backoff, and resending a dead letter.
   people want jobs to keep running with their laptops closed. How it is
   built is open. Experiment 148 starts from the Durable Object and container
   in [PR 61](https://github.com/usirin/tea-fabrika/pull/61).
+  *Changed 2026-10-25:* the key is the person's own Claude subscription
+  token, never a Console API key, and it goes into their own job's box for
+  Claude Code to use unchanged, since that is the way Anthropic allows. No
+  relay adds it ([programs run in a box](./programs-run-in-a-box.md)).
 
   ```ts
   // A sketch. The same job on two hosts. Only where the host runs changes.

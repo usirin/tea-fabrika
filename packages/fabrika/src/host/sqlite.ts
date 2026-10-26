@@ -10,9 +10,13 @@
 // worker: for a host bundled into one file, which has no `./sqlite-worker.ts` beside it (the
 // fabrika app). Each call blocks that thread while SQLite runs it.
 //
+// The time: Effect's `Clock`, the one the layer is built under, read once per call in this thread
+// and handed to the thread that runs it. A test that builds the layer under a `TestClock` owns the
+// ledger's time (`./laws`).
+//
 // Node at the edge: worker threads (`./sqlite-worker.ts`) and their message ports.
 import {Worker} from "node:worker_threads";
-import {Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream} from "effect";
+import {Clock, Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream} from "effect";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf, type WireCall} from "./ledger.ts";
 import {MAX_DELIVERIES, RULES} from "./rules.ts";
 import {dispatch, isMethod, openDb} from "./sqlite-driver.ts";
@@ -53,6 +57,7 @@ export const layerSqlite = (o: SqliteOptions) =>
 	Layer.effect(
 		Ledger,
 		Effect.gen(function* () {
+			const clock = yield* Clock.Clock;
 			// One connection first, so the threads do not race to run the migrations.
 			yield* Effect.sync(() => openDb(o.path).close());
 			const workers = yield* Effect.acquireRelease(
@@ -108,7 +113,8 @@ export const layerSqlite = (o: SqliteOptions) =>
 					const id = next++;
 					const d = yield* Deferred.make<unknown, LedgerUnreachable>();
 					waiting.set(id, d);
-					workers[id % workers.length]?.postMessage({id, method, args});
+					const now = clock.currentTimeMillisUnsafe();
+					workers[id % workers.length]?.postMessage({id, method, args, now});
 					return yield* Deferred.await(d);
 				}),
 			);
@@ -120,6 +126,7 @@ export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
 	Layer.effect(
 		Ledger,
 		Effect.gen(function* () {
+			const clock = yield* Clock.Clock;
 			const {db} = yield* Effect.acquireRelease(
 				Effect.sync(() => openDb(o.path)),
 				(opened) => Effect.sync(() => opened.close()),
@@ -129,7 +136,16 @@ export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
 			return yield* served(o, (method, args) =>
 				isMethod(method)
 					? Effect.try({
-							try: () => dispatch(db, RULES, graceMs, method, args, maxDeliveries),
+							try: () =>
+								dispatch(
+									db,
+									RULES,
+									graceMs,
+									clock.currentTimeMillisUnsafe(),
+									method,
+									args,
+									maxDeliveries,
+								),
 							catch: (e) =>
 								new LedgerUnreachable({
 									method: "sqlite",

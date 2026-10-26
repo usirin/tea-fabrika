@@ -101,18 +101,19 @@ const asLimits = (v: unknown): L.Limits => numbersOf(v, ["usd", "tokens", "wallM
 const asCost = (v: unknown): L.Cost => numbersOf(v, ["usd", "tokens"]);
 
 /**
- * One call on one connection, under `rules`: what the Durable Object's methods do. `maxDeliveries`:
- * crashes in a row on one message before it is set aside; null: never.
+ * One call on one connection, under `rules`, at the time `now`: what the Durable Object's methods
+ * do. The caller reads the clock, so one ledger has one clock however many threads it runs on.
+ * `maxDeliveries`: crashes in a row on one message before it is set aside; null: never.
  */
 export const dispatch = (
 	db: L.Db,
 	rules: L.Rules,
 	graceMs: number,
+	now: number,
 	method: Method,
 	a: readonly unknown[],
 	maxDeliveries: number | null = L.MAX_DELIVERIES,
 ): unknown => {
-	const now = Date.now();
 	switch (method) {
 		case "register":
 			return L.registerWith(rules)(db, now, str(a[0]), str(a[1]));

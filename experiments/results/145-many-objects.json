@@ -1,0 +1,1969 @@
+{
+	"experiment": 145,
+	"date": "2026-10-25",
+	"machine": "one laptop, Miniflare in this process, workerd on 127.0.0.1",
+	"cost": "$0: no model, no Jev, no Cloudflare account, no deploy",
+	"access": {
+		"laws": [
+			{
+				"law": "1. a person opens their own object",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "2. a person never opens another person's object, nor sees its rows",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "3. no agent opens a person's object, its own person's included",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "4. a project opens to its members and their agents, and so do its lanes",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "5. a project stays shut to everyone else, its lanes too",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "6. each project has its own founder, and one founder never spreads to another",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "7. only the founder invites or removes",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "8. nobody writes the door's own facts through the ledger's calls",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "9. no session, a forged one or an old one opens nothing",
+				"pass": true,
+				"saw": []
+			},
+			{
+				"law": "10. a path that names no object reaches none",
+				"pass": true,
+				"saw": []
+			}
+		],
+		"plants": [
+			{
+				"plant": "route-by-prefix",
+				"broke": [
+					"1. a person opens their own object",
+					"2. a person never opens another person's object, nor sees its rows",
+					"3. no agent opens a person's object, its own person's included",
+					"9. no session, a forged one or an old one opens nothing"
+				]
+			},
+			{
+				"plant": "name-check-off",
+				"broke": []
+			},
+			{
+				"plant": "person-any-user",
+				"broke": [
+					"2. a person never opens another person's object, nor sees its rows"
+				]
+			},
+			{
+				"plant": "person-agents",
+				"broke": [
+					"3. no agent opens a person's object, its own person's included"
+				]
+			},
+			{
+				"plant": "project-any-session",
+				"broke": [
+					"5. a project stays shut to everyone else, its lanes too",
+					"8. nobody writes the door's own facts through the ledger's calls"
+				]
+			},
+			{
+				"plant": "founder-from-config",
+				"broke": [
+					"4. a project opens to its members and their agents, and so do its lanes",
+					"5. a project stays shut to everyone else, its lanes too",
+					"6. each project has its own founder, and one founder never spreads to another",
+					"7. only the founder invites or removes"
+				]
+			},
+			{
+				"plant": "removed-stays",
+				"broke": [
+					"5. a project stays shut to everyone else, its lanes too"
+				]
+			},
+			{
+				"plant": "door-open",
+				"broke": [
+					"8. nobody writes the door's own facts through the ledger's calls"
+				]
+			},
+			{
+				"plant": "route-by-prefix,name-check-off",
+				"broke": [
+					"2. a person never opens another person's object, nor sees its rows"
+				]
+			}
+		],
+		"cleanBroken": []
+	},
+	"routerAndDesk": {
+		"counters": {
+			"project": {
+				"count": 20,
+				"ms": 60.284208000000035
+			},
+			"lane": {
+				"count": 20,
+				"ms": 47.728415999999925
+			},
+			"person": {
+				"count": 20,
+				"ms": 48.62716599999999
+			}
+		},
+		"readMs": {
+			"project": 0.52,
+			"lane": 0.48,
+			"person": 0.44,
+			"package": 0.44
+		},
+		"desk": [
+			{
+				"name": "3 workspaces, 6 tiles each",
+				"bytes": 2132,
+				"saveMs": 0.67,
+				"restoreMs": 0.44,
+				"same": true
+			},
+			{
+				"name": "8 workspaces, 12 tiles each",
+				"bytes": 10101,
+				"saveMs": 0.69,
+				"restoreMs": 0.47,
+				"same": true
+			}
+		]
+	},
+	"offline": {
+		"url": {
+			"before": "http://127.0.0.1:64840",
+			"after": "http://127.0.0.1:64840"
+		},
+		"desks": {
+			"v1": {
+				"workspaces": [
+					{
+						"id": "w1",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s0",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t1",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t2",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t3",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t4",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-3",
+												"program": "lane"
+											}
+										}
+									}
+								],
+								"sizes": {
+									"t1": 25,
+									"t2": 25,
+									"t3": 25,
+									"t4": 25
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t1"
+					},
+					{
+						"id": "w2",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s1",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t5",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t6",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t7",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t8",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-3",
+												"program": "lane"
+											}
+										}
+									}
+								],
+								"sizes": {
+									"t5": 25,
+									"t6": 25,
+									"t7": 25,
+									"t8": 25
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t5"
+					}
+				],
+				"active": "w1",
+				"next": 9
+			},
+			"v2": {
+				"workspaces": [
+					{
+						"id": "w1",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s0",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t1",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t2",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t3",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t4",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t5",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t6",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									}
+								],
+								"sizes": {
+									"t1": 16.666666666666668,
+									"t2": 16.666666666666668,
+									"t3": 16.666666666666668,
+									"t4": 16.666666666666668,
+									"t5": 16.666666666666668,
+									"t6": 16.666666666666668
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t1"
+					},
+					{
+						"id": "w2",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s1",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t7",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t8",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t9",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t10",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t11",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t12",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									}
+								],
+								"sizes": {
+									"t7": 16.666666666666668,
+									"t8": 16.666666666666668,
+									"t9": 16.666666666666668,
+									"t10": 16.666666666666668,
+									"t11": 16.666666666666668,
+									"t12": 16.666666666666668
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t7"
+					},
+					{
+						"id": "w3",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s2",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t13",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-2-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t14",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t15",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t16",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-2-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t17",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t18",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									}
+								],
+								"sizes": {
+									"t13": 16.666666666666668,
+									"t14": 16.666666666666668,
+									"t15": 16.666666666666668,
+									"t16": 16.666666666666668,
+									"t17": 16.666666666666668,
+									"t18": 16.666666666666668
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t13"
+					}
+				],
+				"active": "w1",
+				"next": 19
+			},
+			"v3": {
+				"workspaces": [
+					{
+						"id": "w1",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s0",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t1",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t2",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t3",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t4",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t5",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t6",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t7",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-0-6",
+												"program": "lane"
+											}
+										}
+									}
+								],
+								"sizes": {
+									"t1": 14.285714285714286,
+									"t2": 14.285714285714286,
+									"t3": 14.285714285714286,
+									"t4": 14.285714285714286,
+									"t5": 14.285714285714286,
+									"t6": 14.285714285714286,
+									"t7": 14.285714285714286
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t1"
+					},
+					{
+						"id": "w2",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s1",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t8",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t9",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t10",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t11",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t12",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t13",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t14",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-1-6",
+												"program": "lane"
+											}
+										}
+									}
+								],
+								"sizes": {
+									"t8": 14.285714285714286,
+									"t9": 14.285714285714286,
+									"t10": 14.285714285714286,
+									"t11": 14.285714285714286,
+									"t12": 14.285714285714286,
+									"t13": 14.285714285714286,
+									"t14": 14.285714285714286
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t8"
+					},
+					{
+						"id": "w3",
+						"layout": {
+							"root": {
+								"tag": "stack",
+								"id": "s2",
+								"orientation": "horizontal",
+								"children": [
+									{
+										"tag": "tile",
+										"id": "t15",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-2-0",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t16",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t17",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t18",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-2-3",
+												"program": "lane"
+											}
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t19",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t20",
+										"shows": {
+											"kind": "tsh",
+											"run": null
+										}
+									},
+									{
+										"tag": "tile",
+										"id": "t21",
+										"shows": {
+											"kind": "tsh",
+											"run": {
+												"id": "run-2-6",
+												"program": "lane"
+											}
+										}
+									}
+								],
+								"sizes": {
+									"t15": 14.285714285714286,
+									"t16": 14.285714285714286,
+									"t17": 14.285714285714286,
+									"t18": 14.285714285714286,
+									"t19": 14.285714285714286,
+									"t20": 14.285714285714286,
+									"t21": 14.285714285714286
+								}
+							},
+							"zoomed": null
+						},
+						"focused": "t15"
+					}
+				],
+				"active": "w1",
+				"next": 22
+			}
+		},
+		"online": {
+			"caught": {
+				"rows": 4,
+				"pos": 4
+			},
+			"fromServer": {
+				"from": "server",
+				"desk": {
+					"workspaces": [
+						{
+							"id": "w1",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s0",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t1",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t2",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t3",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t4",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t5",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t6",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t1": 16.666666666666668,
+										"t2": 16.666666666666668,
+										"t3": 16.666666666666668,
+										"t4": 16.666666666666668,
+										"t5": 16.666666666666668,
+										"t6": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t1"
+						},
+						{
+							"id": "w2",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s1",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t7",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t8",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t9",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t10",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t11",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t12",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t7": 16.666666666666668,
+										"t8": 16.666666666666668,
+										"t9": 16.666666666666668,
+										"t10": 16.666666666666668,
+										"t11": 16.666666666666668,
+										"t12": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t7"
+						},
+						{
+							"id": "w3",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s2",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t13",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t14",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t15",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t16",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t17",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t18",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t13": 16.666666666666668,
+										"t14": 16.666666666666668,
+										"t15": 16.666666666666668,
+										"t16": 16.666666666666668,
+										"t17": 16.666666666666668,
+										"t18": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t13"
+						}
+					],
+					"active": "w1",
+					"next": 19
+				}
+			},
+			"serverMs": 0.49
+		},
+		"offline": {
+			"fromCopy": {
+				"from": "copy",
+				"desk": {
+					"workspaces": [
+						{
+							"id": "w1",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s0",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t1",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t2",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t3",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t4",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t5",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t6",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t1": 16.666666666666668,
+										"t2": 16.666666666666668,
+										"t3": 16.666666666666668,
+										"t4": 16.666666666666668,
+										"t5": 16.666666666666668,
+										"t6": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t1"
+						},
+						{
+							"id": "w2",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s1",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t7",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t8",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t9",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t10",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t11",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t12",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t7": 16.666666666666668,
+										"t8": 16.666666666666668,
+										"t9": 16.666666666666668,
+										"t10": 16.666666666666668,
+										"t11": 16.666666666666668,
+										"t12": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t7"
+						},
+						{
+							"id": "w3",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s2",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t13",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t14",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t15",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t16",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t17",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t18",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										}
+									],
+									"sizes": {
+										"t13": 16.666666666666668,
+										"t14": 16.666666666666668,
+										"t15": 16.666666666666668,
+										"t16": 16.666666666666668,
+										"t17": 16.666666666666668,
+										"t18": 16.666666666666668
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t13"
+						}
+					],
+					"active": "w1",
+					"next": 19
+				},
+				"stale": true,
+				"asOf": 1792961537144
+			},
+			"copyMs": 0.29,
+			"held": 1,
+			"bytes": 4433,
+			"otherRows": 0
+		},
+		"back": {
+			"flushed": {
+				"sent": 1,
+				"dup": 0
+			},
+			"again": {
+				"sent": 1,
+				"dup": 1
+			},
+			"caught": {
+				"rows": 3,
+				"pos": 7
+			},
+			"saves": 3,
+			"fromServer": {
+				"from": "server",
+				"desk": {
+					"workspaces": [
+						{
+							"id": "w1",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s0",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t1",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t2",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t3",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t4",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t5",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t6",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t7",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-0-6",
+													"program": "lane"
+												}
+											}
+										}
+									],
+									"sizes": {
+										"t1": 14.285714285714286,
+										"t2": 14.285714285714286,
+										"t3": 14.285714285714286,
+										"t4": 14.285714285714286,
+										"t5": 14.285714285714286,
+										"t6": 14.285714285714286,
+										"t7": 14.285714285714286
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t1"
+						},
+						{
+							"id": "w2",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s1",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t8",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t9",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t10",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t11",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t12",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t13",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t14",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-1-6",
+													"program": "lane"
+												}
+											}
+										}
+									],
+									"sizes": {
+										"t8": 14.285714285714286,
+										"t9": 14.285714285714286,
+										"t10": 14.285714285714286,
+										"t11": 14.285714285714286,
+										"t12": 14.285714285714286,
+										"t13": 14.285714285714286,
+										"t14": 14.285714285714286
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t8"
+						},
+						{
+							"id": "w3",
+							"layout": {
+								"root": {
+									"tag": "stack",
+									"id": "s2",
+									"orientation": "horizontal",
+									"children": [
+										{
+											"tag": "tile",
+											"id": "t15",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-0",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t16",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t17",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t18",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-3",
+													"program": "lane"
+												}
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t19",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t20",
+											"shows": {
+												"kind": "tsh",
+												"run": null
+											}
+										},
+										{
+											"tag": "tile",
+											"id": "t21",
+											"shows": {
+												"kind": "tsh",
+												"run": {
+													"id": "run-2-6",
+													"program": "lane"
+												}
+											}
+										}
+									],
+									"sizes": {
+										"t15": 14.285714285714286,
+										"t16": 14.285714285714286,
+										"t17": 14.285714285714286,
+										"t18": 14.285714285714286,
+										"t19": 14.285714285714286,
+										"t20": 14.285714285714286,
+										"t21": 14.285714285714286
+									}
+								},
+								"zoomed": null
+							},
+							"focused": "t15"
+						}
+					],
+					"active": "w1",
+					"next": 22
+				}
+			},
+			"lastCopiedId": "save-3"
+		}
+	},
+	"move": {
+		"shape": {
+			"projects": 6,
+			"people": 20,
+			"saves": 50,
+			"messages": 10,
+			"leaseMs": 60000
+		},
+		"fillMs": 721,
+		"objects": 27,
+		"runs": [
+			{
+				"page": 500,
+				"objects": 27,
+				"rows": 1561,
+				"ms": 239,
+				"allSame": true,
+				"sameIndex": true,
+				"slowest": [
+					{
+						"object": "person/2003",
+						"rows": 60,
+						"ms": 47
+					},
+					{
+						"object": "person/2008",
+						"rows": 60,
+						"ms": 43
+					},
+					{
+						"object": "person/2002",
+						"rows": 60,
+						"ms": 43
+					}
+				]
+			},
+			{
+				"page": 100,
+				"objects": 27,
+				"rows": 1561,
+				"ms": 266,
+				"allSame": true,
+				"sameIndex": true,
+				"slowest": [
+					{
+						"object": "person/2016",
+						"rows": 60,
+						"ms": 65
+					},
+					{
+						"object": "person/2014",
+						"rows": 60,
+						"ms": 61
+					},
+					{
+						"object": "person/2013",
+						"rows": 60,
+						"ms": 57
+					}
+				]
+			}
+		]
+	},
+	"moveBig": {
+		"saves": 10000,
+		"runs": [
+			{
+				"page": 500,
+				"rows": 10010,
+				"ms": 394,
+				"same": true,
+				"rowsPerSecond": 25431
+			},
+			{
+				"page": 2000,
+				"rows": 10010,
+				"ms": 357,
+				"same": true,
+				"rowsPerSecond": 28072
+			}
+		]
+	},
+	"lanes": {
+		"one": {
+			"pass": 27,
+			"of": 27,
+			"broken": []
+		},
+		"table": [
+			{
+				"pass": 15,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 90 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG same fence into the asker's state: ok, wanted fenced; reply, lease run out: ok, wanted fenced; repeat of the landed reply, lease lost: dup, wanted fenced; old fence after a reclaim: ok, wanted fenced; new fence: fenced, wanted ok; inbox rows: 4, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG DOWNs after the exit: 0, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 0, wanted 2; DOWNs in the end: 0, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob0kn2-52-c"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG start it again: ok, wanted existing; another name starts it: ok, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "28. a late charge from a lost lease counts, once, and only replaces its own hold",
+						"numbers": "WRONG hold, the old fence: ok, wanted fenced; used: 0.5, wanted 0.7; crossed: undefined, wanted usd; the name: up, wanted limit:usd"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			},
+			{
+				"pass": 16,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 117 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG same fence into the asker's state: ok, wanted fenced; reply, lease run out: ok, wanted fenced; repeat of the landed reply, lease lost: dup, wanted fenced; old fence after a reclaim: ok, wanted fenced; new fence: fenced, wanted ok; inbox rows: 4, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG DOWNs after the exit: 0, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 0, wanted 2; DOWNs in the end: 0, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob0wty-118-c"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG start it again: ok, wanted existing; another name starts it: existing, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			},
+			{
+				"pass": 16,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 84 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG same fence into the asker's state: ok, wanted fenced; reply, lease run out: ok, wanted fenced; repeat of the landed reply, lease lost: dup, wanted fenced; old fence after a reclaim: ok, wanted fenced; new fence: fenced, wanted ok; inbox rows: 4, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG DOWNs after the exit: 0, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 0, wanted 2; DOWNs in the end: 0, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob192w-184-c"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG start it again: ok, wanted existing; another name starts it: existing, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			}
+		],
+		"home": [
+			{
+				"pass": 16,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 113 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG reply, lease live: fenced, wanted ok; new fence: fenced, wanted ok; inbox rows: 1, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG r1 watches incarnation: -1, wanted 1; DOWNs after the lease ran out: 3, wanted 0; DOWNs after the takeover: 3, wanted 0; DOWNs after the exit: 3, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 5, wanted 2; DOWNs in the end: 5, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob0qq0-85-c; link e-f: noproc, wanted ok"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG another name starts it: ok, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			},
+			{
+				"pass": 16,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 92 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG reply, lease live: fenced, wanted ok; new fence: fenced, wanted ok; inbox rows: 1, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG r1 watches incarnation: -1, wanted 1; DOWNs after the lease ran out: 3, wanted 0; DOWNs after the takeover: 3, wanted 0; DOWNs after the exit: 3, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 5, wanted 2; DOWNs in the end: 5, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob130w-151-c; link e-f: noproc, wanted ok"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG another name starts it: ok, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			},
+			{
+				"pass": 16,
+				"of": 27,
+				"broken": [
+					{
+						"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+						"numbers": "ok 50; distinct pos 1; 101 ms"
+					},
+					{
+						"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+						"numbers": "WRONG reply, lease live: fenced, wanted ok; new fence: fenced, wanted ok; inbox rows: 1, wanted 3"
+					},
+					{
+						"law": "21. DOWN once per monitor, on an exit only: a takeover is no DOWN",
+						"numbers": "WRONG r1 watches incarnation: -1, wanted 1; DOWNs after the lease ran out: 3, wanted 0; DOWNs after the takeover: 3, wanted 0; DOWNs after the exit: 3, wanted 2; of them crash, incarnation 1: 0, wanted 2; DOWN noproc at once: 5, wanted 2; DOWNs in the end: 5, wanted 4"
+					},
+					{
+						"law": "22. linked names exit together; trap_exit turns it into an EXIT message",
+						"numbers": "WRONG link a-b: noproc, wanted ok; link a-c: noproc, wanted ok; link c-d: noproc, wanted ok; EXITs in b's inbox: 0, wanted 1; of them from a, crash: 0, wanted 1; c: up, wanted down; d, linked to c only: up, wanted down; d taken down by: undefined, wanted l22-mvob1f7y-217-c; link e-f: noproc, wanted ok"
+					},
+					{
+						"law": "23. start_child: the parent alone restarts a child, once per incarnation",
+						"numbers": "WRONG another name starts it: ok, wanted denied; claim the child: unknown, wanted ok"
+					},
+					{
+						"law": "24",
+						"numbers": "stopped: Cause([Fail(UnknownName)])"
+					},
+					{
+						"law": "25. exit_child: the parent alone, one run, shutdown trappable, kill not",
+						"numbers": "WRONG claim a: unknown, wanted ok; claim b: unknown, wanted ok"
+					},
+					{
+						"law": "26. spend counts up the tree, once per id, and a restart keeps it",
+						"numbers": "WRONG claim the builder: unknown, wanted ok"
+					},
+					{
+						"law": "27. a hold over a limit up the tree is refused and ends that run, once, for good",
+						"numbers": "WRONG claim the ticket: unknown, wanted ok"
+					},
+					{
+						"law": "29. children count at every depth; one too many is a refusal, not an exit",
+						"numbers": "WRONG claim a: unknown, wanted ok"
+					},
+					{
+						"law": "30. wall time runs from registration, across restarts",
+						"numbers": "c has no deadline after its start"
+					}
+				]
+			}
+		]
+	}
+}

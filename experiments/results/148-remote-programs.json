@@ -1,0 +1,886 @@
+{
+	"date": "2026-10-25",
+	"bundle": {
+		"bytes": 1257015,
+		"nodeImports": []
+	},
+	"keyAtRest": {
+		"fields": [
+			"who",
+			"iv",
+			"sealed"
+		],
+		"holdsKeyText": false
+	},
+	"noSession": 401,
+	"firstOpen": {
+		"attachMs": 15,
+		"opened": {
+			"type": "opened",
+			"ms": 11,
+			"attached": [],
+			"born": 1792969333244,
+			"fresh": true
+		}
+	},
+	"counterBg": {
+		"line": "counter &",
+		"printed": [
+			"[1] counter:a6afb660"
+		],
+		"ms": 11
+	},
+	"jobs": {
+		"line": "jobs",
+		"printed": [
+			"[1] running   counter",
+			"      0 so far"
+		],
+		"ms": 3
+	},
+	"jobsAfterPresses": {
+		"line": "jobs",
+		"printed": [
+			"[1] running   counter",
+			"      3 so far"
+		],
+		"ms": 3
+	},
+	"timersIdle": 0,
+	"askA": {
+		"line": "box --run 'node /app/ask.mjs hello'",
+		"printed": "standin answered github:1 (exit 0)",
+		"ms": 2510
+	},
+	"askB": {
+		"line": "box --run 'node /app/ask.mjs hi'",
+		"printed": "standin answered github:2 (exit 0)",
+		"ms": 2520
+	},
+	"askNoKey": {
+		"line": "box --run 'node /app/ask.mjs hi'",
+		"printed": "ask failed: 403 github:3 has no key yet (exit 1)",
+		"ms": 2586
+	},
+	"standinLog": [
+		{
+			"who": "github:1",
+			"headers": [
+				"anthropic-version",
+				"cf-worker",
+				"content-length",
+				"content-type",
+				"host",
+				"x-api-key"
+			],
+			"authorization": false
+		},
+		{
+			"who": "github:2",
+			"headers": [
+				"anthropic-version",
+				"cf-worker",
+				"content-length",
+				"content-type",
+				"host",
+				"x-api-key"
+			],
+			"authorization": false
+		}
+	],
+	"probe": {
+		"job": "51763862-16c5-44a7-a16e-6f19ca340055",
+		"sleeper": {
+			"line": "box --run 'sleep 40; echo slept' &",
+			"printed": [
+				"[2] box:c89bcd5a"
+			],
+			"ms": 14
+		},
+		"probeMs": 9875,
+		"found": {
+			"root": {
+				"found": {
+					"key": [],
+					"seal": [],
+					"session": []
+				},
+				"looked": {
+					"user": 0,
+					"env": 0,
+					"cmdline": 0,
+					"memBytes": 0,
+					"procRefused": [
+						"1(node-MainThread): EACCES",
+						"17(sh): EACCES",
+						"20(sleep): EACCES"
+					],
+					"memRefused": [],
+					"files": 6691,
+					"fileBytes": 216863576
+				},
+				"processes": 3
+			},
+			"job": {
+				"found": {
+					"key": [],
+					"seal": [],
+					"session": []
+				},
+				"looked": {
+					"user": 1000,
+					"env": 3,
+					"cmdline": 3,
+					"memBytes": 1191743488,
+					"procRefused": [],
+					"memRefused": [],
+					"files": 6676,
+					"fileBytes": 216836923
+				},
+				"processes": 3
+			}
+		}
+	},
+	"sleeperJob": {
+		"row": {
+			"project": "p1",
+			"who": "github:1",
+			"job": "51763862-16c5-44a7-a16e-6f19ca340055",
+			"cmd": "sleep 40; echo slept",
+			"state": "done",
+			"startMs": 673,
+			"at": 1792969340956,
+			"calls": 0,
+			"until": 1792969940956,
+			"beats": 8,
+			"ended": {
+				"said": "slept\n",
+				"code": 0
+			},
+			"took": 42156
+		},
+		"running": true
+	},
+	"afterEviction": {
+		"wake": {
+			"attachMs": 13,
+			"opened": {
+				"type": "opened",
+				"ms": 3,
+				"attached": [
+					1
+				],
+				"born": 1792969383146,
+				"fresh": true
+			}
+		},
+		"jobs": {
+			"line": "jobs",
+			"printed": [
+				"[1] attached counter:a6afb660"
+			],
+			"ms": 2
+		},
+		"press": {
+			"line": "tell %1 press plus",
+			"printed": [
+				"[1] running   counter",
+				"      3 so far"
+			],
+			"ms": 1
+		}
+	},
+	"counterDone": {
+		"line": "tell %1 press done",
+		"printed": "[1] 4",
+		"ms": 5
+	},
+	"jobEndWokeHost": {
+		"woke": {
+			"afterMs": 5044,
+			"status": {
+				"wake": {
+					"born": 1792969385191,
+					"opened": [
+						{
+							"who": "github:1",
+							"ms": 8,
+							"attached": [
+								1
+							]
+						}
+					]
+				},
+				"timers": 0,
+				"alarm": null,
+				"facts": {
+					"ok": 34,
+					"refused": 0
+				},
+				"inMemory": [
+					"github:1"
+				],
+				"boxes": {
+					"box:4959ff45-9400-40e3-96f4-7f62a660479e": {
+						"who": "github:1",
+						"state": "done",
+						"code": 0
+					},
+					"box:51763862-16c5-44a7-a16e-6f19ca340055": {
+						"who": "github:1",
+						"state": "done",
+						"code": 0
+					},
+					"box:79ac3664-8e6f-423c-bc7f-495350703cc2": {
+						"who": "github:3",
+						"state": "done",
+						"code": 1
+					},
+					"box:b7582cec-bdd5-4411-b708-62224a912fd6": {
+						"who": "github:1",
+						"state": "done",
+						"code": 0
+					},
+					"box:fb3998b4-2970-42e1-ad88-b55fa1ae2ae0": {
+						"who": "github:2",
+						"state": "done",
+						"code": 0
+					}
+				}
+			}
+		},
+		"reopened": {
+			"type": "opened",
+			"ms": 8,
+			"attached": [
+				1
+			],
+			"born": 1792969385191,
+			"fresh": false
+		},
+		"jobs": {
+			"line": "jobs",
+			"printed": [],
+			"ms": 4
+		}
+	},
+	"wakes": [
+		{
+			"attachMs": 13,
+			"opened": {
+				"type": "opened",
+				"ms": 3,
+				"attached": [
+					1
+				],
+				"born": 1792969383146,
+				"fresh": true
+			}
+		},
+		{
+			"attachMs": 7,
+			"opened": {
+				"type": "opened",
+				"ms": 5,
+				"attached": [
+					1
+				],
+				"born": 1792969389766,
+				"fresh": true
+			}
+		},
+		{
+			"attachMs": 5,
+			"opened": {
+				"type": "opened",
+				"ms": 2,
+				"attached": [
+					1
+				],
+				"born": 1792969389780,
+				"fresh": true
+			}
+		},
+		{
+			"attachMs": 15,
+			"opened": {
+				"type": "opened",
+				"ms": 9,
+				"attached": [
+					1
+				],
+				"born": 1792969389793,
+				"fresh": true
+			}
+		},
+		{
+			"attachMs": 7,
+			"opened": {
+				"type": "opened",
+				"ms": 5,
+				"attached": [
+					1
+				],
+				"born": 1792969389810,
+				"fresh": true
+			}
+		},
+		{
+			"attachMs": 7,
+			"opened": {
+				"type": "opened",
+				"ms": 3,
+				"attached": [
+					1
+				],
+				"born": 1792969389824,
+				"fresh": true
+			}
+		}
+	],
+	"timersAfter": 0,
+	"ledger": [
+		{
+			"pos": 1,
+			"stream": "jobs/github:1",
+			"rev": 1,
+			"writer": "agent:host for:github:1",
+			"kind": "registered",
+			"at": 1792969333265,
+			"data": "{}",
+			"id": null
+		},
+		{
+			"pos": 2,
+			"stream": "jobs/github:1/inbox",
+			"rev": 1,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969333266,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 3,
+			"stream": "jobs/github:1/inbox",
+			"rev": 2,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969333291,
+			"data": "{\"n\":2,\"text\":\"box --run 'node /app/ask.mjs hello'\",\"state\":\"running\",\"background\":false,\"runs\":[\"box:514bd292\"]}",
+			"id": null
+		},
+		{
+			"pos": 4,
+			"stream": "jobs/github:1/inbox",
+			"rev": 3,
+			"writer": "agent:host for:github:1",
+			"kind": "box_began",
+			"at": 1792969333744,
+			"data": "{\"job\":\"b7582cec-bdd5-4411-b708-62224a912fd6\",\"cmd\":\"node /app/ask.mjs hello\",\"startMs\":438}",
+			"id": null
+		},
+		{
+			"pos": 5,
+			"stream": "jobs/github:1/inbox",
+			"rev": 4,
+			"writer": "agent:host for:github:1",
+			"kind": "box_ended",
+			"at": 1792969335798,
+			"data": "{\"job\":\"b7582cec-bdd5-4411-b708-62224a912fd6\",\"code\":0,\"said\":\"standin answered github:1\\n\"}",
+			"id": null
+		},
+		{
+			"pos": 6,
+			"stream": "jobs/github:1/inbox",
+			"rev": 5,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969335798,
+			"data": "{\"n\":2}",
+			"id": null
+		},
+		{
+			"pos": 7,
+			"stream": "jobs/github:2",
+			"rev": 1,
+			"writer": "agent:host for:github:2",
+			"kind": "registered",
+			"at": 1792969335805,
+			"data": "{}",
+			"id": null
+		},
+		{
+			"pos": 8,
+			"stream": "jobs/github:2/inbox",
+			"rev": 1,
+			"writer": "agent:host for:github:2",
+			"kind": "job_began",
+			"at": 1792969335805,
+			"data": "{\"n\":1,\"text\":\"box --run 'node /app/ask.mjs hi'\",\"state\":\"running\",\"background\":false,\"runs\":[\"box:e04fa3b2\"]}",
+			"id": null
+		},
+		{
+			"pos": 9,
+			"stream": "jobs/github:2/inbox",
+			"rev": 2,
+			"writer": "agent:host for:github:2",
+			"kind": "box_began",
+			"at": 1792969336241,
+			"data": "{\"job\":\"fb3998b4-2970-42e1-ad88-b55fa1ae2ae0\",\"cmd\":\"node /app/ask.mjs hi\",\"startMs\":425}",
+			"id": null
+		},
+		{
+			"pos": 10,
+			"stream": "jobs/github:2/inbox",
+			"rev": 3,
+			"writer": "agent:host for:github:2",
+			"kind": "box_ended",
+			"at": 1792969338322,
+			"data": "{\"job\":\"fb3998b4-2970-42e1-ad88-b55fa1ae2ae0\",\"code\":0,\"said\":\"standin answered github:2\\n\"}",
+			"id": null
+		},
+		{
+			"pos": 11,
+			"stream": "jobs/github:2/inbox",
+			"rev": 4,
+			"writer": "agent:host for:github:2",
+			"kind": "job_left",
+			"at": 1792969338322,
+			"data": "{\"n\":1}",
+			"id": null
+		},
+		{
+			"pos": 12,
+			"stream": "jobs/github:3",
+			"rev": 1,
+			"writer": "agent:host for:github:3",
+			"kind": "registered",
+			"at": 1792969338330,
+			"data": "{}",
+			"id": null
+		},
+		{
+			"pos": 13,
+			"stream": "jobs/github:3/inbox",
+			"rev": 1,
+			"writer": "agent:host for:github:3",
+			"kind": "job_began",
+			"at": 1792969338330,
+			"data": "{\"n\":1,\"text\":\"box --run 'node /app/ask.mjs hi'\",\"state\":\"running\",\"background\":false,\"runs\":[\"box:c766a415\"]}",
+			"id": null
+		},
+		{
+			"pos": 14,
+			"stream": "jobs/github:3/inbox",
+			"rev": 2,
+			"writer": "agent:host for:github:3",
+			"kind": "box_began",
+			"at": 1792969338722,
+			"data": "{\"job\":\"79ac3664-8e6f-423c-bc7f-495350703cc2\",\"cmd\":\"node /app/ask.mjs hi\",\"startMs\":386}",
+			"id": null
+		},
+		{
+			"pos": 15,
+			"stream": "jobs/github:3/inbox",
+			"rev": 3,
+			"writer": "agent:host for:github:3",
+			"kind": "box_ended",
+			"at": 1792969340885,
+			"data": "{\"job\":\"79ac3664-8e6f-423c-bc7f-495350703cc2\",\"code\":1,\"said\":\"ask failed: 403 github:3 has no key yet\\n\"}",
+			"id": null
+		},
+		{
+			"pos": 16,
+			"stream": "jobs/github:3/inbox",
+			"rev": 4,
+			"writer": "agent:host for:github:3",
+			"kind": "job_left",
+			"at": 1792969340889,
+			"data": "{\"n\":1}",
+			"id": null
+		},
+		{
+			"pos": 17,
+			"stream": "jobs/github:1/inbox",
+			"rev": 6,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969340932,
+			"data": "{\"n\":2,\"text\":\"box --run 'sleep 40; echo slept'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:c89bcd5a\"]}",
+			"id": null
+		},
+		{
+			"pos": 18,
+			"stream": "jobs/github:1/inbox",
+			"rev": 7,
+			"writer": "agent:host for:github:1",
+			"kind": "box_began",
+			"at": 1792969341630,
+			"data": "{\"job\":\"51763862-16c5-44a7-a16e-6f19ca340055\",\"cmd\":\"sleep 40; echo slept\",\"startMs\":673}",
+			"id": null
+		},
+		{
+			"pos": 19,
+			"stream": "jobs/github:1/inbox",
+			"rev": 8,
+			"writer": "agent:host for:github:1",
+			"kind": "box_ended",
+			"at": 1792969383117,
+			"data": "{\"job\":\"51763862-16c5-44a7-a16e-6f19ca340055\",\"code\":0,\"said\":\"slept\\n\"}",
+			"id": null
+		},
+		{
+			"pos": 20,
+			"stream": "jobs/github:1/inbox",
+			"rev": 9,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969383121,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 21,
+			"stream": "jobs/github:1/inbox",
+			"rev": 10,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969383122,
+			"data": "{\"n\":2,\"text\":\"box --run 'sleep 40; echo slept'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:c89bcd5a\"]}",
+			"id": null
+		},
+		{
+			"pos": 22,
+			"stream": "jobs/github:1/inbox",
+			"rev": 11,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383122,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 23,
+			"stream": "jobs/github:1/inbox",
+			"rev": 12,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383123,
+			"data": "{\"n\":2,\"text\":\"box --run 'sleep 40; echo slept'\",\"state\":\"detached\",\"background\":true,\"runs\":[\"box:c89bcd5a\"]}",
+			"id": null
+		},
+		{
+			"pos": 24,
+			"stream": "jobs/github:1/inbox",
+			"rev": 13,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383127,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 25,
+			"stream": "jobs/github:1/inbox",
+			"rev": 14,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383128,
+			"data": "{\"n\":2,\"text\":\"box --run 'sleep 40; echo slept'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:c89bcd5a\"]}",
+			"id": null
+		},
+		{
+			"pos": 26,
+			"stream": "jobs/github:1/inbox",
+			"rev": 15,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969383135,
+			"data": "{\"n\":2}",
+			"id": null
+		},
+		{
+			"pos": 27,
+			"stream": "jobs/github:1/inbox",
+			"rev": 16,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969383149,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 28,
+			"stream": "jobs/github:1/inbox",
+			"rev": 17,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383149,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 29,
+			"stream": "jobs/github:1/inbox",
+			"rev": 18,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969383156,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:a6afb660\"]}",
+			"id": null
+		},
+		{
+			"pos": 30,
+			"stream": "jobs/github:1/inbox",
+			"rev": 19,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969383165,
+			"data": "{\"n\":1}",
+			"id": null
+		},
+		{
+			"pos": 31,
+			"stream": "jobs/github:1/inbox",
+			"rev": 20,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969383175,
+			"data": "{\"n\":1,\"text\":\"box --run 'sleep 4; echo woke-me'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:11dccd57\"]}",
+			"id": null
+		},
+		{
+			"pos": 32,
+			"stream": "jobs/github:1/inbox",
+			"rev": 21,
+			"writer": "agent:host for:github:1",
+			"kind": "box_began",
+			"at": 1792969384067,
+			"data": "{\"job\":\"4959ff45-9400-40e3-96f4-7f62a660479e\",\"cmd\":\"sleep 4; echo woke-me\",\"startMs\":880}",
+			"id": null
+		},
+		{
+			"pos": 33,
+			"stream": "jobs/github:1/inbox",
+			"rev": 22,
+			"writer": "agent:host for:github:1",
+			"kind": "box_ended",
+			"at": 1792969389431,
+			"data": "{\"job\":\"4959ff45-9400-40e3-96f4-7f62a660479e\",\"code\":0,\"said\":\"woke-me\\n\"}",
+			"id": null
+		},
+		{
+			"pos": 34,
+			"stream": "jobs/github:1/inbox",
+			"rev": 23,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389435,
+			"data": "{\"n\":1,\"text\":\"box --run 'sleep 4; echo woke-me'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:11dccd57\"]}",
+			"id": null
+		},
+		{
+			"pos": 35,
+			"stream": "jobs/github:1/inbox",
+			"rev": 24,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389435,
+			"data": "{\"n\":1,\"text\":\"box --run 'sleep 4; echo woke-me'\",\"state\":\"detached\",\"background\":true,\"runs\":[\"box:11dccd57\"]}",
+			"id": null
+		},
+		{
+			"pos": 36,
+			"stream": "jobs/github:1/inbox",
+			"rev": 25,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389439,
+			"data": "{\"n\":1,\"text\":\"box --run 'sleep 4; echo woke-me'\",\"state\":\"running\",\"background\":true,\"runs\":[\"box:11dccd57\"]}",
+			"id": null
+		},
+		{
+			"pos": 37,
+			"stream": "jobs/github:1/inbox",
+			"rev": 26,
+			"writer": "agent:host for:github:1",
+			"kind": "job_left",
+			"at": 1792969389442,
+			"data": "{\"n\":1}",
+			"id": null
+		},
+		{
+			"pos": 38,
+			"stream": "jobs/github:1/inbox",
+			"rev": 27,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389745,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 39,
+			"stream": "jobs/github:1/inbox",
+			"rev": 28,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389769,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 40,
+			"stream": "jobs/github:1/inbox",
+			"rev": 29,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389770,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 41,
+			"stream": "jobs/github:1/inbox",
+			"rev": 30,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389772,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 42,
+			"stream": "jobs/github:1/inbox",
+			"rev": 31,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389782,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 43,
+			"stream": "jobs/github:1/inbox",
+			"rev": 32,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389782,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 44,
+			"stream": "jobs/github:1/inbox",
+			"rev": 33,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389784,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 45,
+			"stream": "jobs/github:1/inbox",
+			"rev": 34,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389797,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 46,
+			"stream": "jobs/github:1/inbox",
+			"rev": 35,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389798,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 47,
+			"stream": "jobs/github:1/inbox",
+			"rev": 36,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389804,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 48,
+			"stream": "jobs/github:1/inbox",
+			"rev": 37,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389813,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 49,
+			"stream": "jobs/github:1/inbox",
+			"rev": 38,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389814,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 50,
+			"stream": "jobs/github:1/inbox",
+			"rev": 39,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389816,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 51,
+			"stream": "jobs/github:1/inbox",
+			"rev": 40,
+			"writer": "agent:host for:github:1",
+			"kind": "job_began",
+			"at": 1792969389827,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 52,
+			"stream": "jobs/github:1/inbox",
+			"rev": 41,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389827,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"detached\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		},
+		{
+			"pos": 53,
+			"stream": "jobs/github:1/inbox",
+			"rev": 42,
+			"writer": "agent:host for:github:1",
+			"kind": "job_moved",
+			"at": 1792969389830,
+			"data": "{\"n\":1,\"text\":\"counter\",\"state\":\"running\",\"background\":true,\"runs\":[\"counter:75f71f18\"]}",
+			"id": null
+		}
+	],
+	"facts": {
+		"ok": 50,
+		"refused": 0
+	},
+	"boxesLeft": [
+		"workerd-tf-exp-148-tf-exp-148-local-5hvlxxx7f22duhz5-JobBox-21f1682f5b7e93f79bee40e54866c06a680b5cb0f06738a06ee3e6b808fc74d8-proxy Up 8 seconds",
+		"workerd-tf-exp-148-tf-exp-148-local-5hvlxxx7f22duhz5-JobBox-80a619143cdbd930514e1995a9fc26fa22b6526a5093245f1d79517c72ae3454-proxy Up 50 seconds"
+	],
+	"cleanup": {
+		"containers": 0,
+		"images": 0
+	}
+}

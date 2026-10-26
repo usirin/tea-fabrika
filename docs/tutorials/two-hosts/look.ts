@@ -1,7 +1,7 @@
 // Look without touching: who holds each name, and its last saved state. Writes nothing.
 import {NodeRuntime} from "@effect/platform-node";
 import {getState, whereis} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {layerAttach} from "@kampus/fabrika/local";
 import {Console, Effect, type Schema} from "effect";
 import {Glass, Kettle} from "./programs.ts";
 
@@ -16,6 +16,6 @@ const show = <S>(name: string, schema: Schema.Codec<S, unknown>) =>
 NodeRuntime.runMain(
 	// One after the other, so the kettle always prints first.
 	Effect.all([show("kettle", Kettle), show("glass", Glass)], {concurrency: 1}).pipe(
-		Effect.provide(layerHttp({url: "http://127.0.0.1:8790", ledger: "teahouse"})),
+		Effect.provide(layerAttach({persist: ".teahouse", ledger: "teahouse", port: 8790})),
 	),
 );

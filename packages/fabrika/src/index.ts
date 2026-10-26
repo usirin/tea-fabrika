@@ -18,7 +18,32 @@
 // host: programs under registered names on one ledger.
 export * as Call from "./host/call.ts";
 export * from "./host/dead-letters.ts";
+// The door: who a request is. It runs inside the ledger (`durable-object.ts`); these are the
+// names a host needs to build what gets signed, and to read what the door says. A program's facts
+// say who writes each (`Writes`), held to the kinds only a person writes (`PERSON_KINDS`).
+export {
+	challengeText,
+	DOOR,
+	type Grant,
+	grantOf,
+	grantText,
+	holderOf,
+	hostOf,
+	isAgentName,
+	isName,
+	isPersonId,
+	isPersonKind,
+	MEMBERS,
+	NAMESPACE,
+	PERSON_KINDS,
+	type PersonKind,
+	type Stamp,
+	stampText,
+	type Writes,
+} from "./host/door.ts";
 export * from "./host/host.ts";
+// Where the door gets a person's keys: the service it asks, for a Layer written elsewhere.
+export * from "./host/keys.ts";
 export * from "./host/ledger.ts";
 // Names in two places. The ledger's records win over the host's and the
 // rules' plain types of the same name, which they encode.
@@ -26,6 +51,8 @@ export {DeadLetter, EndReason, Fenced, LimitKind, Over, Stale} from "./host/ledg
 export * as Monitor from "./host/monitor.ts";
 export * from "./host/observer.ts";
 export * from "./host/rules.ts";
+export * from "./host/signer.ts";
+export {keyLineOf, keyOnly} from "./host/sshsig.ts";
 export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
 export * from "./host/writer.ts";

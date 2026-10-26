@@ -11,8 +11,10 @@ import {
 	cells,
 	columns,
 	draw,
+	fitsRow,
 	NEWLINE,
 	PROMPT,
+	redrawRow,
 	shown,
 } from "./screen.ts";
 
@@ -72,6 +74,11 @@ export interface Editor {
 	readonly last: Command | null;
 	/** The terminal's width, in cells. */
 	readonly cols: number;
+	/**
+	 * The width changed since the prompt line was last redrawn. The terminal may have moved the
+	 * line onto other rows, so the next redraw clears to the end of the screen, not of one row.
+	 */
+	readonly resized: boolean;
 	/** tsh's job table, for `%1` on Tab. */
 	readonly jobs: Shell.Jobs;
 	/**
@@ -156,6 +163,7 @@ export const fresh = (ctx: EditorCtx): Editor => ({
 	killed: "",
 	last: null,
 	cols: 80,
+	resized: false,
 	jobs: Shell.EMPTY,
 	programs: ctx.programs,
 });
@@ -209,11 +217,25 @@ const say = (acc: Acc, ...parts: readonly Part[]): Acc => ({
 	parts: [...acc.parts, ...parts],
 });
 
-/** Move to `next`, drawing the prompt line again. */
-const redraw = (acc: Acc, next: Editor): Acc => ({
-	s: next,
-	parts: [...acc.parts, backFrom(acc.s) + drawn(next)],
-});
+/** The prompt line of `s`, if it is on one row of the screen, and stays there when drawn again. */
+const inRow = (s: Editor): {readonly text: string; readonly at: number} | null => {
+	const now = shownLine(s);
+	return now !== null && !s.resized && fitsRow(now.text, s.cols) ? now : null;
+};
+
+/**
+ * Move to `next`, drawing the prompt line again. A line on one row, before and after, is cleared
+ * to the end of that row only, not of the screen: the terminal then draws one row, not every row
+ * under the prompt (experiment 143). Any other line is drawn whole, below the prompt cleared.
+ */
+const redraw = (acc: Acc, next: Editor): Acc => {
+	const after = inRow(next);
+	const part =
+		inRow(acc.s) !== null && after !== null
+			? redrawRow(after.text, after.at)
+			: backFrom(acc.s) + drawn(next);
+	return {s: {...next, resized: false}, parts: [...acc.parts, part]};
+};
 
 const withMode = (s: Editor, mode: Mode): Editor => ({...s, mode});
 
@@ -478,7 +500,10 @@ export const editor = defineMachine({
 	},
 	update: {
 		keys: (s, m) => done(keys(start(s), keysIn(m.data))),
-		size: (s, m) => [{...s, cols: Math.max(1, m.cols)}, []],
+		size: (s, m) => {
+			const cols = Math.max(1, m.cols);
+			return [{...s, cols, resized: s.resized || cols !== s.cols}, []];
+		},
 		printed: (s, m) => {
 			const text = shown(m.text) + NEWLINE;
 			if (shownLine(s) === null) return done(say(start(s), text));

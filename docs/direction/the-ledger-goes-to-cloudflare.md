@@ -102,6 +102,30 @@ come too. This replaces section 9's lean of one object first. Experiments 144,
 real Cloudflare measured from a laptop, and 145, the many-objects shape in
 Miniflare, are running to settle the details.
 
+**Decided 2026-10-25: one Worker per project.** Each project's server is its
+own Worker with its own deploy. In it sit the project's object and one object
+per person. The Worker's name is the project's pick, a key in its
+[fabrika.toml](./one-fabrika-toml-per-repo.md):
+
+```toml
+[ledger]
+name = "acme-ledger"   # the project's Worker. A new name is a new, empty server.
+```
+
+- **Why:** a deploy is easy; experiment 147 runs one from code. A careless
+  rename or a bad deploy then hits one project, not all of them, and one
+  project can try a new server version first.
+- **Cost:** a new project needs a deploy, and a person logs in to each
+  project's server.
+- **A rename is kept safe by what Alchemy and the file already give,** with no
+  check of our own. `RemovalPolicy.retain()` stays on the Worker, so a rename
+  leaves the old Worker and its data in place, and putting the old name back
+  takes it back (experiment 147). tsh reads `fabrika.toml` only from the
+  default branch, so a rename comes only through a reviewed pull request.
+- The account's own part of the Worker's address stays out of the file.
+- The other choice was one Worker in front of every project, an object each.
+  Its connect example, `…/acme`, is further down and is to be redrawn.
+
 **Decided 2026-10-25: the server is declared and deployed with Alchemy,** the
 same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
 Alchemy's latest version rather than phoenix's pinned one. Experiment 144

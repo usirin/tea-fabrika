@@ -1,9 +1,8 @@
 import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {layerHttp} from "@kampus/fabrika/http";
 import {type LawResult, layerPlanted} from "@kampus/fabrika/laws";
-import {ledgerOptions} from "@kampus/fabrika/local";
+import {layerInside, ledgerOptions} from "@kampus/fabrika/local";
 import {layerMemory, memoryService} from "@kampus/fabrika/memory";
 import {layerSqlite} from "@kampus/fabrika/sqlite";
 import {Effect, Layer} from "effect";
@@ -18,11 +17,9 @@ import {Ledger} from "./ledger.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "pipeline-laws-"));
 let mf: Miniflare;
-let url = "";
 beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
-	url = (await mf.unsafeGetDirectURL()).origin;
 });
 afterAll(async () => {
 	await mf.dispose();
@@ -35,7 +32,7 @@ const brokenLaws = (rs: readonly LawResult[]) => broken(rs).map((r) => r.law.spl
 
 describe("the pipeline's laws", () => {
 	it("hold on the Durable Object", async () => {
-		const rs = await lawsOn(layerHttp({url, ledger: "pipeline-laws"}));
+		const rs = await lawsOn(layerInside(mf, "pipeline-laws"));
 		expect(broken(rs)).toEqual([]);
 		expect(rs).toHaveLength(5);
 	});

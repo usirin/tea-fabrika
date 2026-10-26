@@ -5,7 +5,8 @@ import {parentPort, workerData} from "node:worker_threads";
 import * as L from "./rules.ts";
 import {dispatch, type Method, openDb} from "./sqlite-driver.ts";
 
-type Call = {id: number; method: Method; args: unknown[]};
+/** `now`: the time the layer's clock gave the call, so every thread runs on that one clock. */
+type Call = {id: number; method: Method; args: unknown[]; now: number};
 
 const port = parentPort;
 if (port !== null) {
@@ -15,7 +16,7 @@ if (port !== null) {
 	const maxDeliveries = max === null ? null : Number(max ?? L.MAX_DELIVERIES);
 	port.on("message", (c: Call) => {
 		try {
-			const ok = dispatch(db, L.RULES, graceMs, c.method, c.args, maxDeliveries);
+			const ok = dispatch(db, L.RULES, graceMs, c.now, c.method, c.args, maxDeliveries);
 			port.postMessage({id: c.id, ok});
 		} catch (e) {
 			port.postMessage({id: c.id, error: e instanceof Error ? e.message : String(e)});

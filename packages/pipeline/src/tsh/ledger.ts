@@ -13,7 +13,8 @@
 // printed at start (../setup.ts); never tsh.toml's, so two machines on one repository pick alike.
 
 import {Ledger} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+// A ledger answers on a port: its door answers even a request with no credential.
+import {answers} from "@kampus/fabrika/http";
 import {layerLocal} from "@kampus/fabrika/local";
 import {layerSqlite} from "@kampus/fabrika/sqlite";
 import {Duration, Effect, Layer, Schedule, Schema} from "effect";
@@ -38,17 +39,6 @@ export const ledgerNameOf = (text: string) =>
 export class NoLocalLedger extends Schema.TaggedError<NoLocalLedger>()("NoLocalLedger", {
 	message: Schema.String,
 }) {}
-
-/** A ledger answers on `url`: one read, with a short wait. */
-const answers = (url: string) =>
-	Effect.gen(function* () {
-		return yield* (yield* Ledger).lease("tsh/probe");
-	}).pipe(
-		Effect.provide(layerHttp({url, ledger: "probe"})),
-		Effect.timeout(Duration.seconds(1)),
-		Effect.as(true),
-		Effect.orElseSucceed(() => false),
-	);
 
 /**
  * The `Ledger` for one repository's name, on a ledger this tsh starts and stops. A ledger left

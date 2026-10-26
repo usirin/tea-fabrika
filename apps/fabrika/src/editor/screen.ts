@@ -6,10 +6,14 @@
 //   back(85, 80)                 "\r\x1b[1A": a row up as well, the line wrapped once
 //   shown("a\x1b]0;x\x07b")      "a^[]0;x^Gb": a program's text cannot move the cursor or retitle the window
 //
+//   redrawRow("tsh$ seq", 5)     "\r\x1b[K", write it, and leave the cursor 5 cells in: one row only
+//
 // The editor redraws the whole prompt line on each change, as linenoise does: back to its first
 // cell, clear to the end of the screen, write it again. A line longer than the terminal is wide
-// wraps onto more rows, and `back` counts them. Every character is one cell for now: a wide one
-// (CJK, most emoji) puts the cursor off by one cell per character.
+// wraps onto more rows, and `back` counts them. A line that fits its one row, before and after a
+// change, is cleared to the end of that row only (`redrawRow`): a terminal then has one changed
+// row to draw, not every row under the prompt (experiment 143). Every character is one cell for
+// now: a wide one (CJK, most emoji) puts the cursor off by one cell per character.
 
 export const PROMPT = "tsh$ ";
 
@@ -35,6 +39,22 @@ export const draw = (text: string, at: number, cols: number): string => {
 	const rows = Math.floor(end / cols) - Math.floor(at / cols);
 	return `${CSI}J${text}${wrap}${up(rows)}\r${right(at % cols)}`;
 };
+
+/**
+ * Whether `text` surely fits one row `cols` wide, with room for the cursor after it. Only when no
+ * character could be wide: `cells` counts a wide one as one cell, and a terminal gives it two, so
+ * a line with one might wrap on the screen where `cells` says it fits. Wide characters start at
+ * U+1100 (Unicode's East Asian Width), so a line with none below that is never wider than `cells`.
+ */
+export const fitsRow = (text: string, cols: number): boolean =>
+	cells(text) < cols && [...text].every((c) => (c.codePointAt(0) ?? 0) < 0x1100);
+
+/**
+ * Write `text` over the row the cursor is on, from its first cell, clearing the rest of the row,
+ * and leave the cursor `at` cells in. For a line that fits its row (`fitsRow`), drawn over a line
+ * that fit it too: nothing else of the line is on another row.
+ */
+export const redrawRow = (text: string, at: number): string => `\r${CSI}K${text}\r${right(at)}`;
 
 /** Clear the screen, as Ctrl-L does: the cursor goes to the top row, and the rows above stay in the scrollback. */
 export const CLEAR = `${CSI}H${CSI}2J`;

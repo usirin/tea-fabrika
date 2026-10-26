@@ -1,4 +1,4 @@
-import {type Appended, type Fenced, Ledger, type Row, streams} from "@kampus/fabrika";
+import {type Appended, type Fenced, Ledger, type Row, streams, type Writes} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 import {Row as BookRow} from "../criteria/book.ts";
@@ -19,7 +19,9 @@ import {Answer, Attachment} from "./ask.ts";
 //   ruling_needed  sort sent a ticket to the owner to rule on
 //   folded         sort found a ticket part of an open plan: the plan covers it from now on, and
 //                  its next version is planned with it
-//   answered       the owner answered an ask, and the core took the answer
+//   answered       the owner answered an ask, and the core took the answer. A person's fact:
+//                  behind a door, the core writes it on its person's session, and the door
+//                  refuses it from an agent's (`WRITTEN_BY`)
 //   built          a build of one task finished, with the files it changed
 //   cleared        a listener that holds builds let this one go
 //   check_raised   a listener that holds builds asked the owner to look at it
@@ -122,20 +124,28 @@ export const Fact = Schema.Union([
 ]);
 export type Fact = typeof Fact.Type;
 
-const FACT_TYPES: ReadonlySet<string> = new Set([
-	"planned",
-	"judged",
-	"reviewed",
-	"ruling_needed",
-	"folded",
-	"answered",
-	"built",
-	"cleared",
-	"check_raised",
-	"shipped",
-	"lane",
-	"released",
-] satisfies Fact["type"][]);
+/**
+ * Who may write each fact. `person`: only from a person's session, as the ledger's door refuses
+ * that kind from an agent's (`PERSON_KINDS`, fabrika's door). The type holds each row to the
+ * door's list, so a new fact gets a row here, and `person` does not compile until the door
+ * refuses it too. Today only the owner's answer is a person's.
+ */
+const WRITTEN_BY = {
+	planned: "anyone",
+	judged: "anyone",
+	reviewed: "anyone",
+	ruling_needed: "anyone",
+	folded: "anyone",
+	answered: "person",
+	built: "anyone",
+	cleared: "anyone",
+	check_raised: "anyone",
+	shipped: "anyone",
+	lane: "anyone",
+	released: "anyone",
+} as const satisfies Writes<Fact["type"]>;
+
+const FACT_TYPES: ReadonlySet<string> = new Set(Object.keys(WRITTEN_BY));
 
 /** A fact with its place among the pipeline's facts, from 1. */
 export interface Entry {
