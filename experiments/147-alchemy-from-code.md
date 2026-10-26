@@ -19,6 +19,9 @@ started empty. Our code can read the plan before it applies, so a guard refused 
 8 to 11 ms. One gap: a rename in workerd plans as an update, not a replace, so the guard has to be
 tested against the cloud plan. Confidence 80%.**
 
+*Decided the same day: no guard of our own. One Worker per project, its name in the project's
+`fabrika.toml`, with `retain()` on. See the recommendation.*
+
 ```ts
 // The whole idea (147-alchemy-from-code/parts.ts, cut down). One running program, no CLI.
 import {deploy} from "alchemy/Deploy";
@@ -270,13 +273,19 @@ for a standing host. Drop the CLI from that path.
 
 - **Why:** a deploy with nothing to do is 2 to 56 ms, so a host can run it at every start, and
   local and cloud are one argument apart. Credentials, state and the plan are all in our hands, so
-  the guard and our own secrets fit without patching Alchemy.
-- **For the ledger, always:** `RemovalPolicy.retain()` on the Worker, and a guard that refuses a
-  plan where the ledger's Worker is replaced, deleted or renamed. Cleanup by listing.
+  our own secrets fit without patching Alchemy.
+- **For the ledger, always:** `RemovalPolicy.retain()` on the Worker. The Worker's name is a key in
+  the project's `fabrika.toml`, one Worker per project, so a rename comes only through a reviewed
+  pull request to the default branch. Cleanup by listing.
+  *Changed the same day:* this bullet first also asked for our own guard that refuses a plan where
+  the ledger's Worker is replaced, deleted or renamed. Dropped. Pinning the name where it lives is
+  how teams keep names fixed with tools like this, and retain already makes a rename undoable:
+  put the old name back and Alchemy takes the old Worker back. The guard's timing above stays as
+  a measurement.
 - **Still not for per-run things.** Experiment 146's reasons stand apart from speed: a state row
   per box, and nothing watches.
-- **Cost:** our own small glue over Alchemy's internals (`evalStack`, `Plan`, `Apply`), which a beta
-  can change. Pin it exactly.
+- **Cost:** our own small glue over a beta's modules (`deploy` and the engine Layer it asks for),
+  which a beta can change. Pin it exactly.
 - **How sure:** 80%. The doubt is churn: these are internal-looking modules of a beta with about
   three releases a week. One run on the next beta would settle it.
 
