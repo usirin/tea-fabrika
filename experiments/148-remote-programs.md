@@ -184,6 +184,10 @@ the person's id. Only `ModelRelay` opens it, per call.
   store, or intermediate Claude.ai credentials". A Console API key fits this design. A
   subscription token (`claude setup-token`) probably does not. What would settle it: ask
   Anthropic, or use only Console API keys on the cloud host and subscriptions only on laptops.
+  *Decided the same day: no Console API keys, on the cloud host either. A job runs on its
+  starter's own subscription token, so the second way out is closed. How that token reaches
+  Claude Code within Anthropic's rules is open, in
+  [programs run in a box](../docs/direction/programs-run-in-a-box.md#still-open).*
 
 ## Q4. Sleep and wake
 
