@@ -444,12 +444,18 @@ export const law11RepeatedId = (l: Service, n = 50) =>
 	});
 
 /**
- * 12. A lease on `p` guards `p` and every stream under `p/`, and nothing else. An old fence is
- * refused under the name both after a reclaim and in the window before anyone reclaims.
+ * 12. A lease on `p` guards `p` and every stream under `p/`, and nothing else. Its newest fence
+ * writes there until a newer claim exists, whatever the time: past the lease's end, and after the
+ * alarm wrote `lease_expired` (lane 18's rule B, Kafka's epoch). An older fence is refused there
+ * once a newer claim exists.
+ *
+ * Before lane 18 this law said the opposite of its first half: the fence was refused from the
+ * lease's end on, before anyone claimed again ("old fence, run out, unclaimed: fenced").
  */
 export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 	Effect.gen(function* () {
-		const law = "12. a lease on p guards p/*: an old fence is refused there, and only there";
+		const law =
+			"12. a lease on p guards p/*: its newest fence writes there until a newer claim, and only there";
 		const p = fresh("l12");
 		const state = `${p}/state`;
 		const time = yield* timeOf(l);
@@ -465,17 +471,32 @@ export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 		yield* inTime("the steps that need the lease live", c1.expiresAt);
 		// A fence that names no lease is refused at any time: it needs no window.
 		yield* step("no such lease", l.append(state, 1, note("x"), c1.fence + 1000), "fenced");
-		// Run out and not swept yet: right after the end, before the alarm, `graceMs` later.
+		// Run out, and nobody claimed: the fence is still the newest one. Deeper, so the state's
+		// revs below stay as they were.
 		yield* time.past(c1.expiresAt);
 		yield* step(
-			"old fence, run out, unclaimed",
-			l.append(state, 1, note("h1"), c1.fence),
-			"fenced",
+			"newest fence past the lease's end, nobody claimed",
+			l.append(`${p}/a/b`, "any", note("h1", "late-1"), c1.fence),
+			"ok",
 		);
-		const c2 = yield* step("claim 2", l.claim(p, "h2", c1.rev, 30_000), "ok");
-		yield* inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
+		yield* inTime("the write past the end, before the alarm", c1.expiresAt + graceMs);
+		// The alarm ran: it wrote lease_expired, `graceMs` after the end, and still nobody claimed.
+		const swept = yield* expired(l, time, p, c1.expiresAt);
+		count("lease_expired written", swept === null ? 0 : 1, 1);
+		yield* step(
+			"newest fence after the alarm, nobody claimed",
+			l.append(`${p}/a/b`, "any", note("h1", "late-2"), c1.fence),
+			"ok",
+		);
+		const rev = (yield* l.readLast(p, 1))[0]?.rev ?? c1.rev;
+		const c2 = yield* step("claim 2", l.claim(p, "h2", rev, 30_000), "ok");
 		if (c2 === null) return verdict(law, list);
 		yield* step("old fence after the reclaim", l.append(state, 1, note("h1"), c1.fence), "fenced");
+		yield* step(
+			"old fence deeper, after the reclaim",
+			l.append(`${p}/a/b`, "any", note("h1"), c1.fence),
+			"fenced",
+		);
 		yield* step("repeated id, old fence", l.append(state, 0, save1, c1.fence), "fenced");
 		yield* step("new fence", l.append(state, 1, note("h2"), c2.fence), "ok");
 		yield* step(
@@ -596,11 +617,17 @@ export const law17Inbox = (l: Service) =>
 		return verdict(law, list);
 	});
 
-/** 18. A fence reaches another program's inbox while its lease is live, and never after. */
+/**
+ * 18. A fence reaches another program's inbox until a newer claim on its own name exists, and
+ * never after: past its lease's end, a reply by the newest fence still lands (lane 18's rule B).
+ *
+ * Before lane 18 this law said a reply was refused from the replier's lease's end on, before
+ * anyone claimed again ("reply, lease run out: fenced", and its repeat too).
+ */
 export const law18Reply = (l: Service, graceMs = 1000) =>
 	Effect.gen(function* () {
 		const law =
-			"18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost";
+			"18. a reply into another program's inbox, fenced on the replier's lease, lands until a newer claim, and is refused after";
 		const a = fresh("l18-asker");
 		const b = fresh("l18-answerer");
 		const time = yield* timeOf(l);
@@ -625,15 +652,20 @@ export const law18Reply = (l: Service, graceMs = 1000) =>
 		yield* inTime("the steps that need b's lease live", cb.expiresAt);
 		// Run out and not swept yet: right after the end, before the alarm, `graceMs` later.
 		yield* time.past(cb.expiresAt);
-		yield* step("reply, lease run out", reply("r2", cb.fence), "fenced");
-		yield* step("repeat of the landed reply, lease lost", reply("r1", cb.fence), "fenced");
+		yield* step("reply, b's lease run out, nobody claimed", reply("r2", cb.fence), "ok");
+		yield* step("repeat of the landed reply, lease run out", reply("r1", cb.fence), "dup");
 		const cb2 = yield* step("reclaim b", l.claim(b, "hb2", cb.rev, 30_000), "ok");
 		yield* inTime("the steps after the end, before the alarm", cb.expiresAt + graceMs);
 		if (cb2 === null) return verdict(law, list);
 		yield* step("old fence after a reclaim", reply("r3", cb.fence), "fenced");
+		yield* step(
+			"repeat of a landed reply, old fence, after a reclaim",
+			reply("r1", cb.fence),
+			"fenced",
+		);
 		yield* step("new fence", reply("r3", cb2.fence), "ok");
 		yield* step("a sender with no lease", l.append(streams(a).inbox, "any", note("s", "q1")), "ok");
-		count("inbox rows", (yield* l.readStream(streams(a).inbox)).length, 3);
+		count("inbox rows", (yield* l.readStream(streams(a).inbox)).length, 4);
 		return verdict(law, list);
 	});
 
