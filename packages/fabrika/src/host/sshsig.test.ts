@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {keyLineOf, keyOnly, parse, sign, verify} from "./sshsig.ts";
+import {keyFileOf, keyFileText, keyLineOf, keyOnly, parse, sign, verify} from "./sshsig.ts";
 
 // A signature `ssh-keygen -Y sign -n fabrika-ledger` made, with a key made for this test and thrown
 // away. Only its public half is here. `ssh-keygen -Y verify` said: Good "fabrika-ledger" signature.
@@ -101,5 +101,42 @@ describe("an SSH signature", () => {
 		expect(keyOnly("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ")).toBeNull();
 		expect(keyOnly("ssh-ed25519 not-base64!")).toBeNull();
 		expect(keyOnly("")).toBeNull();
+	});
+});
+
+// A private key file as `ssh-keygen -t ed25519 -N ""` writes one. Checked by hand once, on
+// 2026-10-26: a file ssh-keygen made read here and its signature passed `ssh-keygen -Y verify`;
+// a file written here, `ssh-keygen -y` read back to the same public key. No private key is kept
+// in this repo, so the tests below make their own.
+describe("an OpenSSH key file", () => {
+	const armored = (blob: Uint8Array) =>
+		`-----BEGIN OPENSSH PRIVATE KEY-----\n${btoa(String.fromCharCode(...blob))}\n-----END OPENSSH PRIVATE KEY-----\n`;
+
+	it("written here reads back as the same key, and signs for its key line", async () => {
+		const pair = (await crypto.subtle.generateKey({name: "Ed25519"}, true, [
+			"sign",
+			"verify",
+		])) as CryptoKeyPair;
+		const raw = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+		const read = await keyFileOf(await keyFileText(pair, "alice@laptop"));
+		if (!read.ok) throw new Error(read.why);
+		const back = new Uint8Array(await crypto.subtle.exportKey("raw", read.pair.publicKey));
+		expect(keyLineOf(back)).toBe(keyLineOf(raw));
+		const sig = await sign("hello", NS, read.pair.privateKey, back);
+		expect(await verify(sig, "hello", NS, [keyLineOf(raw)])).toBe(keyLineOf(raw));
+	});
+
+	it("with a passphrase, or that is no key file, is refused with why", async () => {
+		const magic = new TextEncoder().encode("openssh-key-v1\0");
+		const locked = new Uint8Array([...magic, ...str("aes256-ctr"), ...str("bcrypt"), ...str("")]);
+		expect(await keyFileOf(armored(locked))).toEqual({
+			ok: false,
+			why: "the key has a passphrase, and fabrika cannot ask for one yet",
+		});
+		expect(await keyFileOf(OPENSSH_KEY)).toEqual({ok: false, why: "not an OpenSSH private key"});
+		expect(await keyFileOf(armored(new Uint8Array([1, 2, 3])))).toEqual({
+			ok: false,
+			why: "not an OpenSSH private key",
+		});
 	});
 });

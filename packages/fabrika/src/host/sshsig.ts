@@ -189,6 +189,121 @@ export const verify = async (
 	return ok ? line : null;
 };
 
+// ---------------------------------------------------------------- a key file
+
+// OpenSSH's own private key file, `-----BEGIN OPENSSH PRIVATE KEY-----`, what `ssh-keygen -t
+// ed25519` writes (PROTOCOL.key in openssh-portable):
+//
+//   "openssh-key-v1\0" string(cipher) string(kdf) string(kdf options) u32(keys: 1)
+//   string(public key blob) string(private part)
+//   private part = u32(check) u32(check) string("ssh-ed25519") string(public 32)
+//                  string(seed 32 + public 32) string(comment) padding 1, 2, 3, ...
+//
+// Only a key with no passphrase (cipher and kdf "none") reads here. A key with one is refused,
+// with that reason: the app has no prompt for it yet.
+
+const KEY_BEGIN = "-----BEGIN OPENSSH PRIVATE KEY-----";
+const KEY_END = "-----END OPENSSH PRIVATE KEY-----";
+const KEY_MAGIC = "openssh-key-v1\0";
+/** PKCS #8's wrapping of an Ed25519 seed (RFC 8410): this, then the 32 bytes. */
+const PKCS8_ED25519 = Uint8Array.of(
+	0x30,
+	0x2e,
+	0x02,
+	0x01,
+	0x00,
+	0x30,
+	0x05,
+	0x06,
+	0x03,
+	0x2b,
+	0x65,
+	0x70,
+	0x04,
+	0x22,
+	0x04,
+	0x20,
+);
+
+/** An OpenSSH key file, read: its Ed25519 pair, or why it does not read. */
+export type KeyFile =
+	| {readonly ok: true; readonly pair: CryptoKeyPair}
+	| {readonly ok: false; readonly why: string};
+
+/** Read an OpenSSH private key file's text. The private key is not extractable. */
+export const keyFileOf = async (text: string): Promise<KeyFile> => {
+	const no = (why: string): KeyFile => ({ok: false, why});
+	const t = text.trim();
+	if (!t.startsWith(KEY_BEGIN) || !t.endsWith(KEY_END)) return no("not an OpenSSH private key");
+	const blob = fromBase64(t.slice(KEY_BEGIN.length, -KEY_END.length).replace(/\s+/g, ""));
+	if (blob === null) return no("not an OpenSSH private key");
+	const r = reader(blob);
+	const magic = r.take(KEY_MAGIC.length);
+	if (magic === null || dec.decode(magic) !== KEY_MAGIC) return no("not an OpenSSH private key");
+	const cipher = r.string();
+	const kdf = r.string();
+	r.string();
+	if (cipher === null || kdf === null) return no("not an OpenSSH private key");
+	if (dec.decode(cipher) !== "none" || dec.decode(kdf) !== "none")
+		return no("the key has a passphrase, and fabrika cannot ask for one yet");
+	if (r.u32() !== 1) return no("a key file with more than one key");
+	r.string();
+	const part = r.string();
+	if (part === null) return no("not an OpenSSH private key");
+	const p = reader(part);
+	const c1 = p.u32();
+	const c2 = p.u32();
+	const type = p.string();
+	const pub = p.string();
+	const secret = p.string();
+	if (c1 === null || c1 !== c2) return no("the key file is damaged");
+	if (type === null || dec.decode(type) !== ED25519) return no("only an Ed25519 key reads yet");
+	if (pub === null || pub.length !== 32 || secret === null || secret.length !== 64)
+		return no("the key file is damaged");
+	if (!same(secret.slice(32), pub)) return no("the key file is damaged");
+	const privateKey = await crypto.subtle.importKey(
+		"pkcs8",
+		concat([PKCS8_ED25519, secret.slice(0, 32)]),
+		{name: "Ed25519"},
+		false,
+		["sign"],
+	);
+	const publicKey = await crypto.subtle.importKey("raw", pub, {name: "Ed25519"}, true, ["verify"]);
+	return {ok: true, pair: {privateKey, publicKey}};
+};
+
+/**
+ * An Ed25519 pair as an OpenSSH private key file with no passphrase, as `ssh-keygen -t ed25519 -N
+ * ""` writes one. Its private key must be extractable. For tests, and a host making its own key.
+ */
+export const keyFileText = async (pair: CryptoKeyPair, comment = ""): Promise<string> => {
+	const pub = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+	const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+	const seed = pkcs8.slice(pkcs8.length - 32);
+	const check = u32(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0);
+	const body = concat([
+		check,
+		check,
+		str(ED25519),
+		str(pub),
+		str(concat([seed, pub])),
+		str(comment),
+	]);
+	const pad = (8 - (body.length % 8)) % 8;
+	const padding = Uint8Array.from({length: pad}, (_, i) => i + 1);
+	const blob = concat([
+		enc.encode(KEY_MAGIC),
+		str("none"),
+		str("none"),
+		str(""),
+		u32(1),
+		str(concat([str(ED25519), str(pub)])),
+		str(concat([body, padding])),
+	]);
+	const lines = toBase64(blob).match(/.{1,70}/g) ?? [];
+	return `${[KEY_BEGIN, ...lines, KEY_END].join("\n")}\n`;
+};
+
 /**
  * Sign `message` under `namespace` with an Ed25519 key, as `ssh-keygen -Y sign` does (sha512).
  * `publicRaw`: the key's 32 public bytes. For a host that holds its key in WebCrypto, and for tests.

@@ -30,6 +30,8 @@ export const OpenAsk = Schema.Struct({
 	what: Title,
 	picks: Schema.NonEmptyArray(Title),
 	by: Writer,
+	/** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
+	whose: Schema.optional(Schema.String),
 	at: Schema.Finite,
 });
 export type OpenAsk = typeof OpenAsk.Type;
@@ -57,7 +59,16 @@ export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
 	const answered = new Set(factsOf(timeline, "answered").map((a) => a.ask));
 	return timeline.flatMap((e) =>
 		e.fact.type === "asked" && !answered.has(e.fact.ask)
-			? [{ask: e.fact.ask, what: e.fact.what, picks: e.fact.picks, by: e.by, at: e.at}]
+			? [
+					{
+						ask: e.fact.ask,
+						what: e.fact.what,
+						picks: e.fact.picks,
+						by: e.by,
+						...(e.whose === undefined ? {} : {whose: e.whose}),
+						at: e.at,
+					},
+				]
 			: [],
 	);
 };

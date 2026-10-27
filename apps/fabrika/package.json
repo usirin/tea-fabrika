@@ -10,6 +10,7 @@
 		"start": "node build.ts && electron .",
 		"e2e": "node build.ts && node e2e.ts",
 		"table": "node table.ts",
+		"cli": "node src/cli.ts",
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
@@ -28,6 +29,7 @@
 		"@types/node": "catalog:",
 		"@types/react": "catalog:",
 		"@types/react-dom": "catalog:",
+		"@kampus/ledger-server": "workspace:*",
 		"electron": "catalog:",
 		"esbuild": "catalog:",
 		"fast-check": "catalog:",
