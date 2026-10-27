@@ -1,9 +1,23 @@
-import {defineConfig} from "vitest/config";
+import {configDefaults, defineConfig} from "vitest/config";
 
 // One run over every package. `fixtures/` holds toy repos with their own
 // `node --test` files. They are the lane's subject, not this repo's tests.
 export default defineConfig({
 	test: {
+		// A pull request's check runs only the tests that import what it changed (`--changed`,
+		// .github/workflows/check.yaml). A change to one of these files runs every test instead:
+		// tests read them without importing them, so an import walk cannot see who depends on them.
+		forceRerunTriggers: [
+			...configDefaults.forceRerunTriggers,
+			"**/pnpm-lock.yaml",
+			"**/pnpm-workspace.yaml",
+			"**/tsconfig*.json",
+			"**/biome.jsonc",
+			"**/biome-plugins/**",
+			"**/layer-rules.json",
+			"**/fixtures/**",
+			"**/.github/**",
+		],
 		include: [
 			"apps/*/src/**/*.test.ts",
 			"packages/*/src/**/*.test.ts",
