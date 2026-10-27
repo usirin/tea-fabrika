@@ -56,6 +56,7 @@ const drafted = yield* Agents.run({
 | build | The Agent SDK directly (`stages/build/builder.ts`). ACP is there too, picked by `build --harness acp` (experiment 77). |
 | plan, review, sort | The Agent SDK directly (`planner.ts`, `reviewer.ts`, `sorter.ts`). |
 | tsh's `acp` program | ACP, Claude or the fake (experiment 76). Not listed in the app's tsh. |
+| The interface itself | `Agents` in `packages/fabrika/src/agents/agent/`, with adapters for Claude (its SDK), Codex (`codex exec`), ACP (Claude or Codex) and a fake, and `agentRunner` for a Draft (experiment 156). No stage uses it yet. |
 
 - **Codex could not join the table until now.** Experiment 152
   (https://github.com/usirin/tea-fabrika/pull/119) found how to keep the
