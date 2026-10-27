@@ -15,7 +15,7 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
-import {Author, tracker} from "@tea-fabrika/tracker";
+import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
@@ -27,7 +27,7 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // one per tile, in the host process (host/main.ts).
 //
 //   const tsh = yield* startTsh({jobs: memoryStorage(), history, runs});
-//   const stop = tsh.terminal.show((m) => send(m));   // the screen so far, then each write
+//   const stop = tsh.terminal.show((m) => send(m));   // a reset, the screen, then each write
 //   tsh.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
 //   tsh.terminal.heard({type: "keys", data: "\r"});
@@ -66,7 +66,9 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //
 // The ledger: it is handed one, as the `Ledger` service, and gives it to the tracker. The host
 // process hands it a node:sqlite file in the app's home; a test hands it memory. The tracker
-// writes as the owner, the one person at the app for now.
+// writes as the owner, the one person at the app for now. It is handed the tracker's
+// `PullRequests` the same way: the host's reads GitHub on the person's own `gh` login; a test's is
+// a fixed list.
 //
 // A screen shows on any number of pages at once, as a tmux pane shows in every client attached:
 // `show` adds one, and the function it answers takes it away again.
@@ -129,14 +131,24 @@ export const TSH = "tsh:p1";
 /** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
 export const SCREEN_KEPT = 256 * 1024;
 
+/**
+ * A terminal's full reset (ESC c, "RIS"): the screen and its scrollback cleared, the cursor home.
+ * A page shown the screen again may still hold it, as after the app reconnects to the host: the
+ * page's terminal stays, and without this the screen would be drawn twice. After a host that was
+ * killed, the page holds the old host's screen, and the new tsh's screen goes in its place. tmux
+ * redraws an attaching client's whole screen the same way. On a fresh terminal it changes nothing.
+ */
+export const RESET = "\x1bc";
+
 /** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
 const COUNTER = listed(counter, Layer.empty);
-const trackerOn = (ledger: Ledger["Service"]) =>
+const trackerOn = (ledger: Ledger["Service"], pullRequests: PullRequests["Service"]) =>
 	listed(
 		tracker,
 		Layer.mergeAll(
 			Layer.succeed(Ledger, ledger),
 			Layer.succeed(Author, {kind: "user", id: "owner"}),
+			Layer.succeed(PullRequests, pullRequests),
 		),
 	);
 
@@ -179,7 +191,7 @@ const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
 const runningIn = (table: Shell.Jobs | null): number =>
 	table?.jobs.filter((job) => job.state === "running").length ?? 0;
 
-/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
+/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `PullRequests`. */
 export const startTsh = (options: {
 	readonly jobs: Storage;
 	readonly history: SharedHistory;
@@ -189,6 +201,7 @@ export const startTsh = (options: {
 		const {jobs, history, runs} = options;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
+		const pullRequests = yield* PullRequests;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
 		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
@@ -287,7 +300,9 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...Shell.SMALL, COUNTER, trackerOn(ledger)].map((entry) => seenBy(entry, seen)),
+			[...Shell.SMALL, COUNTER, trackerOn(ledger, pullRequests)].map((entry) =>
+				seenBy(entry, seen),
+			),
 		);
 		const started = yield* start(
 			Shell.tsh,
@@ -378,7 +393,8 @@ export const startTsh = (options: {
 				show: (next) => {
 					const one = (m: ToTerminal) => next(m);
 					pages.add(one);
-					if (screen !== "") one({type: "write", data: screen});
+					// Even with nothing on the screen yet: the page may hold a screen of a host that is gone.
+					one({type: "write", data: RESET + screen});
 					return () => pages.delete(one);
 				},
 				heard: (raw) => {

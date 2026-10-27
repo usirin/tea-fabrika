@@ -1,5 +1,5 @@
 import {execFile, spawn} from "node:child_process";
-import {mkdir, mkdtemp, readdir, readFile, stat} from "node:fs/promises";
+import {mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -52,6 +52,19 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // socket that says hello with version 0. The app does not attach, and says so:
 //
 //   11 mismatch      "Not attached to the host", with both versions; that host still runs
+//
+// Then the link to the host drops while the app runs, on a home of its own, with seq's 60 lines
+// in t1 and counter in t2. Main's dialogs, dock bounce and focus are swapped for a list first,
+// and read back empty after each drop:
+//
+//   socket cut       main's socket to the host is cut, the host alive: the window says it is
+//                    reconnecting, then the desk is back on the same host, t1 drawn once
+//   host killed      SIGKILL, as a crash: the app starts a new host, and the kept desk comes
+//                    back with fresh screens
+//   12 reconnecting  no host to be had (the home's host folder is a file): the desk stays,
+//                    dimmed and out of reach, with a calm note in its corner
+//   13 stopped       main's clock moved five minutes on: it stops, and offers Try again, which
+//                    takes no focus. The folder back, Try again starts a host, and the desk is back
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -669,6 +682,266 @@ const mismatch = async () => {
 	);
 };
 
+/** Is `pid` a host of this build: its command line names this folder. Asked before any signal. */
+const ours = (pid: number) =>
+	promisify(execFile)("ps", ["-o", "command=", "-p", String(pid)]).then(
+		(r) => r.stdout.includes(here),
+		() => false,
+	);
+/** Kill a host this run started, as a crash does: SIGKILL, so it cleans nothing up. */
+const crash = async (pid: number) => {
+	check(`pid ${pid} is a host of this build, started by this run`, await ours(pid), pid);
+	process.kill(pid, "SIGKILL");
+	await until(
+		`pid ${pid} to be gone`,
+		async () => alive(pid),
+		(up) => !up,
+	);
+};
+
+/**
+ * Cut main's socket to the host, as a link that breaks: the host runs on. It is main's one Unix
+ * socket that is no stdio. Answers how many were cut.
+ */
+const cutLink = (app: ElectronApplication) =>
+	app.evaluate(() => {
+		interface Handle {
+			readonly constructor: {readonly name: string};
+			readonly _handle?: {readonly constructor: {readonly name: string}; readonly fd?: number};
+			readonly destroy?: () => void;
+		}
+		const all = Reflect.get(process, "_getActiveHandles") as () => Handle[];
+		const links = all
+			.call(process)
+			.filter(
+				(h) =>
+					h.constructor.name === "Socket" &&
+					h._handle?.constructor.name === "Pipe" &&
+					(h._handle.fd ?? -1) > 2,
+			);
+		for (const link of links) link.destroy?.();
+		return links.length;
+	});
+
+/**
+ * Main's ways to interrupt a person, swapped for a list: a dialog, a bounce of the dock icon, the
+ * app or its window brought forward. Read back, as the browser's swap is.
+ */
+const noInterrupts = (app: ElectronApplication) =>
+	app.evaluate(({app, dialog, BrowserWindow}) => {
+		const asked: string[] = [];
+		Object.assign(globalThis, {asked});
+		const noted = (what: string) => () => {
+			asked.push(what);
+		};
+		const box = noted("dialog");
+		Object.assign(dialog, {showMessageBox: box, showMessageBoxSync: box, showErrorBox: box});
+		if (app.dock !== undefined) Object.assign(app.dock, {bounce: noted("bounce")});
+		Object.assign(app, {focus: noted("app focus")});
+		for (const w of BrowserWindow.getAllWindows())
+			Object.assign(w, {
+				focus: noted("focus"),
+				show: noted("show"),
+				moveTop: noted("moveTop"),
+				flashFrame: noted("flashFrame"),
+			});
+		const now: unknown = dialog.showMessageBox;
+		return now === box;
+	});
+/** What main was asked that would interrupt a person, in order. */
+const interruptions = (app: ElectronApplication) =>
+	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
+
+/**
+ * From now on, note each change in what the window says of the link: a note may be up for a
+ * moment only. "" is no note.
+ */
+const watchNotes = (page: Page) =>
+	page.evaluate(() => {
+		const said: string[] = [""];
+		Object.assign(globalThis, {said});
+		new MutationObserver(() => {
+			const text = document.querySelector(".lost-note")?.textContent ?? "";
+			if (said.at(-1) !== text) said.push(text);
+		}).observe(document.body, {childList: true, subtree: true, characterData: true});
+	});
+/** The notes the window showed since `watchNotes`, in order, with no "". */
+const notesSaid = (page: Page) =>
+	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
+/** The note the window shows now, or "". */
+const noteNow = (page: Page) =>
+	page
+		.locator(".lost-note")
+		.textContent({timeout: 500})
+		.then(
+			(t) => t ?? "",
+			() => "",
+		);
+/** The tile that holds the page's focus, or none. */
+const focusedIn = (page: Page) =>
+	page.evaluate(
+		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
+	);
+/** The desk is back: no note, and nothing dimmed. */
+const deskBack = (page: Page) =>
+	until(
+		"the desk back, with no note",
+		() => page.locator(".lost-note, .desk.lost").count(),
+		(n) => n === 0,
+	);
+
+/**
+ * The link to the host drops while the app runs, on a home of its own: the socket cut with the
+ * host alive, the host killed, and no host to be had at all until a person presses Try again.
+ */
+const reconnect = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fabrika-link-"));
+	const started = new Set<number>();
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		// Longer than the tile, so the screen has scrollback a second copy would show in.
+		await run(page, "t1", "seq --to 60");
+		const long = await shows(page, "t1", "seq's last line", (t) => t.endsWith("\n60\ntsh$"));
+		await prefixed(page, "|");
+		await tilesAre(page, ["t1", "t2"]);
+		await prompted(page, "t2");
+		await run(page, "t2", "counter");
+		await countIn(page, "t2").waitFor();
+		await tile(page, "t2").getByRole("button", {name: "+1"}).click();
+		await countIn(page, "t2").filter({hasText: /^1$/}).waitFor();
+		const host = await hostPid(own);
+		check("a host started on this stage's own home", host !== null && (await ours(host)), host);
+		if (host === null) return;
+		started.add(host);
+		await watchNotes(page);
+		check("main's dialogs, dock bounce and focus are swapped for a list", await noInterrupts(app));
+
+		check("main has one socket to the host, and it is cut", (await cutLink(app)) === 1);
+		const said = await until(
+			"the window to say it reconnects",
+			() => notesSaid(page),
+			(n) => n.length > 0,
+		);
+		await deskBack(page);
+		check(
+			"the socket cut: the window says calmly it is reconnecting, and the desk comes back",
+			said[0]?.startsWith("Reconnecting to the host") === true,
+			said,
+		);
+		check("on the same host: it was alive all along", (await hostPid(own)) === host);
+		await countIn(page, "t2").filter({hasText: /^1$/}).waitFor();
+		check(
+			"counter in t2 is still at 1, and focus is back on it",
+			(await focusedIn(page)) === "t2",
+			await focusedIn(page),
+		);
+		await tile(page, "t2").getByRole("button", {name: "+1"}).click();
+		await countIn(page, "t2").filter({hasText: /^2$/}).waitFor();
+		// Counter answered on its new port, sent after t1's: t1's screen came again before it.
+		const again = await screen(page, "t1");
+		check("t1's screen is drawn once, scrollback and all, as it was", again === long, again);
+		await tile(page, "t1").click();
+		await focusIs(page, "t1");
+		await run(page, "t1", "seq --to 2");
+		await shows(page, "t1", "seq's 2", (t) => t.endsWith("\n1\n2\ntsh$"));
+		check("the view and the terminal reach the host again", true);
+
+		await crash(host);
+		const next = await until(
+			"a new host",
+			() => hostPid(own),
+			(p) => p !== null && p !== host,
+		);
+		if (next === null) return;
+		started.add(next);
+		await deskBack(page);
+		await tilesAre(page, ["t1", "t2"]);
+		// The old host's screen is still on the page until the new one's comes, in its place.
+		await shows(page, "t1", "only a fresh prompt", (t) => t === "tsh$");
+		check(
+			"the host killed: the app starts one, and the kept desk comes back with fresh screens",
+			await ours(next),
+			next,
+		);
+		const kept = await shows(page, "t2", "the earlier job", (t) => t.includes("tsh: 1 job from"));
+		check("t2's counter is a job of the earlier tsh, not running", true, kept);
+		check("no dialog, no dock bounce, no focus taken", (await interruptions(app)).length === 0);
+
+		// No host to be had: the home's host folder is a file, so no socket can be reached there.
+		const folder = join(own, "host");
+		await rename(folder, join(own, "host-killed"));
+		await writeFile(folder, "");
+		await crash(next);
+		await until(
+			"the window to say it reconnects",
+			() => noteNow(page),
+			(t) => t.startsWith("Reconnecting to the host"),
+		);
+		await page.waitForTimeout(1500);
+		const dimmed = {
+			lost: await page.locator(".desk.lost").count(),
+			inert: await page.locator(".workspace[inert]").count(),
+			status: await page.getByRole("status", {name: "the link to the host"}).count(),
+			focused: await page.evaluate(
+				() => document.activeElement?.closest(".lost-note, [data-tile]") !== null,
+			),
+		};
+		check(
+			"no host: the desk stays, dimmed and out of reach, with a note in its corner, and focus is nowhere in it",
+			dimmed.lost === 1 && dimmed.inert === 1 && dimmed.status === 1 && !dimmed.focused,
+			dimmed,
+		);
+		await shot(page, "12-reconnecting");
+
+		// Five minutes on, by main's clock: the next try that fails is the last.
+		await app.evaluate(() => {
+			const real = Date.now;
+			Object.assign(globalThis, {realNow: real});
+			Date.now = () => real() + 6 * 60_000;
+		});
+		const stopped = await until(
+			"the app to stop trying",
+			() => noteNow(page),
+			(t) => t.startsWith("Could not reconnect to the host"),
+		);
+		const button = page.getByRole("button", {name: "Try again"});
+		check(
+			"five minutes on, it stops and offers Try again, which takes no focus",
+			(await button.count()) === 1 &&
+				!(await button.evaluate((b) => b === document.activeElement)) &&
+				stopped.includes("five minutes"),
+			stopped,
+		);
+		check("no dialog, no dock bounce, no focus taken", (await interruptions(app)).length === 0);
+		await shot(page, "13-stopped");
+
+		await app.evaluate(() => {
+			Date.now = (globalThis as {realNow?: () => number}).realNow ?? Date.now;
+		});
+		await rm(folder);
+		await button.click();
+		const last = await until(
+			"a host started by Try again",
+			() => hostPid(own),
+			(p) => p !== null && p !== next,
+		);
+		if (last !== null) started.add(last);
+		await deskBack(page);
+		await tilesAre(page, ["t1", "t2"]);
+		await prompted(page, "t1");
+		check(
+			"the folder back, Try again starts a host, and the desk is back",
+			last !== null && (await ours(last)),
+			last,
+		);
+	} finally {
+		await app.close().catch(() => {});
+		for (const pid of started) if (alive(pid) && (await ours(pid))) await stop(pid);
+	}
+};
+
 const first = await launch(home);
 let left = "";
 try {
@@ -704,6 +977,7 @@ try {
 	);
 
 	await mismatch();
+	await reconnect();
 } finally {
 	// No person stops the host: there is no command for it. The run stops its own, by its pid.
 	const pid = await hostPid(home);

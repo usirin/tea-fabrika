@@ -1,0 +1,957 @@
+{
+ "loop:codex": {
+  "why": "a bug in the job loop ran these before it was stopped; not the parity set",
+  "runs": 37,
+  "ok": 34,
+  "typed": 37,
+  "leaks": 0,
+  "linked": 37,
+  "seconds": [
+   8.862,
+   9.38,
+   9.415,
+   9.581,
+   9.733,
+   9.89,
+   9.905,
+   10.095,
+   10.151,
+   10.227,
+   10.336,
+   10.448,
+   10.472,
+   10.551,
+   10.592,
+   10.593,
+   10.768,
+   10.826,
+   10.89,
+   10.895,
+   10.921,
+   10.957,
+   11.001,
+   11.48,
+   11.58,
+   11.604,
+   11.66,
+   11.849,
+   12.029,
+   12.096,
+   12.226,
+   12.237,
+   12.404,
+   12.56,
+   12.592,
+   13.176,
+   14.851
+  ]
+ },
+ "job:claude": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 47.146,
+   "tools": 10,
+   "tokens": {
+    "input": 137596,
+    "cached": 120184,
+    "output": 6403
+   },
+   "counted": "turn",
+   "usd": 0.07893000000000001,
+   "requests": 11,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 126.921,
+   "tools": 6,
+   "tokens": {
+    "input": 101256,
+    "cached": 77853,
+    "output": 19708
+   },
+   "counted": "turn",
+   "usd": 0.1532359,
+   "requests": 7,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 17.686,
+   "tools": 5,
+   "tokens": {
+    "input": 54521,
+    "cached": 48943,
+    "output": 1970
+   },
+   "counted": "turn",
+   "usd": 0.0263979,
+   "requests": 6,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 39.018,
+   "tools": 10,
+   "tokens": {
+    "input": 130047,
+    "cached": 120442,
+    "output": 4992
+   },
+   "counted": "turn",
+   "usd": 0.056286300000000004,
+   "requests": 11,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 78.356,
+   "tools": 12,
+   "tokens": {
+    "input": 193214,
+    "cached": 178032,
+    "output": 10222
+   },
+   "counted": "turn",
+   "usd": 0.09933330000000001,
+   "requests": 13,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "skills": 19,
+    "commands": 55
+   }
+  }
+ ],
+ "job:acp-claude": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 19.69,
+   "tools": 5,
+   "tokens": {
+    "input": 102307,
+    "cached": 83914,
+    "output": 2018
+   },
+   "counted": "turn",
+   "usd": 0.0565104,
+   "requests": 6,
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 18.587,
+   "tools": 4,
+   "tokens": {
+    "input": 83778,
+    "cached": 74195,
+    "output": 1940
+   },
+   "counted": "turn",
+   "usd": 0.0375365,
+   "requests": 5,
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 19.615,
+   "tools": 4,
+   "tokens": {
+    "input": 84091,
+    "cached": 74340,
+    "output": 2108
+   },
+   "counted": "turn",
+   "usd": 0.038731999999999996,
+   "requests": 5,
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 20.754,
+   "tools": 5,
+   "tokens": {
+    "input": 102140,
+    "cached": 92030,
+    "output": 2302
+   },
+   "counted": "turn",
+   "usd": 0.04218100000000001,
+   "requests": 6,
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 22.902,
+   "tools": 5,
+   "tokens": {
+    "input": 102163,
+    "cached": 91815,
+    "output": 2311
+   },
+   "counted": "turn",
+   "usd": 0.042680499999999996,
+   "requests": 6,
+   "error": null
+  }
+ ],
+ "job:acp-codex": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 12.689,
+   "tools": 4,
+   "tokens": {
+    "input": 15110,
+    "cached": 14848,
+    "output": 72
+   },
+   "counted": "last",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 9.377,
+   "tools": 4,
+   "tokens": {
+    "input": 15085,
+    "cached": 14848,
+    "output": 68
+   },
+   "counted": "last",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 13.663,
+   "tools": 4,
+   "tokens": {
+    "input": 15325,
+    "cached": 14976,
+    "output": 68
+   },
+   "counted": "last",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 9.432,
+   "tools": 4,
+   "tokens": {
+    "input": 15068,
+    "cached": 14720,
+    "output": 68
+   },
+   "counted": "last",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 9.776,
+   "tools": 4,
+   "tokens": {
+    "input": 15065,
+    "cached": 14720,
+    "output": 74
+   },
+   "counted": "last",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  }
+ ],
+ "job:codex": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 11.438,
+   "tools": 4,
+   "tokens": {
+    "input": 52637,
+    "cached": 46592,
+    "output": 515
+   },
+   "counted": "turn",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 10.119,
+   "tools": 4,
+   "tokens": {
+    "input": 52408,
+    "cached": 48640,
+    "output": 496
+   },
+   "counted": "turn",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 10.473,
+   "tools": 4,
+   "tokens": {
+    "input": 52763,
+    "cached": 46592,
+    "output": 476
+   },
+   "counted": "turn",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 10.718,
+   "tools": 4,
+   "tokens": {
+    "input": 52410,
+    "cached": 46336,
+    "output": 500
+   },
+   "counted": "turn",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 11.755,
+   "tools": 4,
+   "tokens": {
+    "input": 52343,
+    "cached": 45952,
+    "output": 496
+   },
+   "counted": "turn",
+   "usd": null,
+   "requests": null,
+   "error": null,
+   "loginStillLinked": true,
+   "ownerSessionsSame": true,
+   "leaks": {
+    "saved": true,
+    "mcp": 0,
+    "plugins": 0,
+    "agentsLines": 0,
+    "skills": 0,
+    "of": {
+     "mcp": 5,
+     "plugins": 10,
+     "agentsLines": 26,
+     "skills": 4
+    }
+   }
+  }
+ ],
+ "stop:codex": {
+  "sawCommand": true,
+  "secondsToCommand": 6.823,
+  "tools": [
+   "in_progress: /bin/zsh -c 'sh wait.sh'"
+  ],
+  "commandRunningAtLeave": 1,
+  "msLeaveToTreeGone": 224,
+  "underAtStop": 3,
+  "killedByReaper": 0,
+  "sleepLeftAfterStop": 0,
+  "sleepLeftAfter3s": 0,
+  "ended": null,
+  "error": null,
+  "left": true,
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "stop:acp-codex": {
+  "sawCommand": true,
+  "secondsToCommand": 3.696,
+  "tools": [
+   "said: I’ll run `sh wait.sh` in the foreground and wait for it to finish.",
+   "in_progress: wait.sh"
+  ],
+  "commandRunningAtLeave": 1,
+  "msLeaveToTreeGone": 360,
+  "underAtStop": 5,
+  "killedByReaper": 0,
+  "sleepLeftAfterStop": 0,
+  "sleepLeftAfter3s": 0,
+  "ended": null,
+  "error": null,
+  "left": true,
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "stop:claude": {
+  "sawCommand": true,
+  "secondsToCommand": 2.475,
+  "tools": [
+   "pending: Bash"
+  ],
+  "commandRunningAtLeave": 1,
+  "msLeaveToTreeGone": 736,
+  "underAtStop": 3,
+  "killedByReaper": 0,
+  "sleepLeftAfterStop": 0,
+  "sleepLeftAfter3s": 0,
+  "ended": null,
+  "error": null,
+  "left": true
+ },
+ "stop:acp-claude": {
+  "sawCommand": true,
+  "secondsToCommand": 3.359,
+  "tools": [
+   "said: I'll run the shell command for you.",
+   "pending: Terminal"
+  ],
+  "commandRunningAtLeave": 1,
+  "msLeaveToTreeGone": 1114,
+  "underAtStop": 4,
+  "killedByReaper": 0,
+  "sleepLeftAfterStop": 0,
+  "sleepLeftAfter3s": 0,
+  "ended": null,
+  "error": null,
+  "left": true
+ },
+ "resume:codex": {
+  "firstStop": "end_turn",
+  "firstError": null,
+  "mapped": true,
+  "ownIsOurs": false,
+  "remembered": true,
+  "secondSeconds": 3.145,
+  "secondError": null,
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "resume:acp-codex": {
+  "firstStop": "end_turn",
+  "firstError": null,
+  "mapped": true,
+  "ownIsOurs": false,
+  "remembered": true,
+  "secondSeconds": 3.618,
+  "secondError": null,
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "resume:claude": {
+  "firstStop": "end_turn",
+  "firstError": null,
+  "mapped": true,
+  "ownIsOurs": false,
+  "remembered": true,
+  "secondSeconds": 6.321,
+  "secondError": null
+ },
+ "resume:acp-claude": {
+  "firstStop": "end_turn",
+  "firstError": null,
+  "mapped": true,
+  "ownIsOurs": false,
+  "remembered": true,
+  "secondSeconds": 3.913,
+  "secondError": null
+ },
+ "budget:claude": {
+  "usdCap": {
+   "stop": "over_budget",
+   "usd": 0.008512200000000001,
+   "error": null,
+   "seconds": 2.891
+  }
+ },
+ "budget:acp-claude": {
+  "usdCap": {
+   "stop": "over_budget",
+   "usd": 0.0182093,
+   "error": null,
+   "seconds": 5.049
+  }
+ },
+ "budget:acp-codex": {
+  "usdCap": {
+   "error": "Cause([Fail(AgentFailed: acp-codex holds no dollar cap; run it with usd: null)])",
+   "ms": 2
+  },
+  "toolLimit": {
+   "stop": "max_turn_requests",
+   "toolsPassed": 1,
+   "error": null,
+   "seconds": 5.751
+  },
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "budget:codex": {
+  "usdCap": {
+   "error": "Cause([Fail(AgentFailed: codex holds no dollar cap; run it with usd: null)])",
+   "ms": 1
+  },
+  "toolLimit": {
+   "stop": "max_turn_requests",
+   "toolsPassed": 1,
+   "error": null,
+   "seconds": 4.607
+  },
+  "loginStillLinked": true,
+  "ownerSessionsSame": true,
+  "leaks": {
+   "saved": true,
+   "mcp": 0,
+   "plugins": 0,
+   "agentsLines": 0,
+   "skills": 0,
+   "of": {
+    "mcp": 5,
+    "plugins": 10,
+    "agentsLines": 26,
+    "skills": 4
+   }
+  }
+ },
+ "control": {
+  "markerFound": true,
+  "answered": true,
+  "error": null,
+  "loginStillLinked": true,
+  "ownerSessionsSame": true
+ },
+ "loc": {
+  "packages/fabrika/src/agents/agent/turn.ts": 136,
+  "packages/fabrika/src/agents/agent/core.ts": 197,
+  "packages/fabrika/src/agents/agent/sessions.ts": 35,
+  "packages/fabrika/src/agents/agent/reap.ts": 45,
+  "packages/fabrika/src/agents/agent/draft.ts": 69,
+  "packages/fabrika/src/agents/agent/fake.ts": 50,
+  "packages/fabrika/src/agents/claude/adapter.ts": 134,
+  "packages/fabrika/src/agents/codex/adapter.ts": 212,
+  "packages/fabrika/src/agents/acp/adapter.ts": 191,
+  "packages/fabrika/src/agents/acp/client.ts": 249,
+  "packages/fabrika/src/agents/acp/harness.ts": 157
+ },
+ "job:claude:no-effort": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 18.411,
+   "tools": 5,
+   "tokens": {
+    "input": 54091,
+    "cached": 48539,
+    "output": 2071
+   },
+   "counted": "turn",
+   "usd": 0.026425,
+   "requests": 6,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "pluginsFromOwner": 0,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 18.01,
+   "tools": 5,
+   "tokens": {
+    "input": 55902,
+    "cached": 49937,
+    "output": 2313
+   },
+   "counted": "turn",
+   "usd": 0.028601299999999996,
+   "requests": 6,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "pluginsFromOwner": 0,
+    "skills": 19,
+    "commands": 55
+   }
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "claimedDone": true,
+   "stop": "end_turn",
+   "seconds": 46.812,
+   "tools": 11,
+   "tokens": {
+    "input": 151759,
+    "cached": 140795,
+    "output": 6189
+   },
+   "counted": "turn",
+   "usd": 0.06701710000000001,
+   "requests": 12,
+   "error": null,
+   "init": {
+    "tools": 7,
+    "mcp": 0,
+    "plugins": 3,
+    "pluginsFromOwner": 0,
+    "skills": 19,
+    "commands": 55
+   }
+  }
+ ]
+}

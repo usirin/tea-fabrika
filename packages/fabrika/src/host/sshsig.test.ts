@@ -24,6 +24,31 @@ const newKey = async () => {
 	return {key: pair.privateKey, raw, line: keyLineOf(raw)};
 };
 
+/** RFC 4251's `string`: its length, then its bytes. */
+const str = (b: Uint8Array | string): Uint8Array => {
+	const raw = typeof b === "string" ? new TextEncoder().encode(b) : b;
+	const out = new Uint8Array(4 + raw.length);
+	new DataView(out.buffer).setUint32(0, raw.length);
+	out.set(raw, 4);
+	return out;
+};
+
+/** An armored SSHSIG by the key `raw` that names `hash` as its hash. Its 64 signature bytes are zeros. */
+const signedWith = (hash: string, raw: Uint8Array): string => {
+	const parts = [
+		new TextEncoder().encode("SSHSIG"),
+		new Uint8Array([0, 0, 0, 1]),
+		str(new Uint8Array([...str("ssh-ed25519"), ...str(raw)])),
+		str(NS),
+		str(""),
+		str(hash),
+		str(new Uint8Array([...str("ssh-ed25519"), ...str(new Uint8Array(64))])),
+	];
+	const blob = new Uint8Array(parts.flatMap((p) => [...p]));
+	const body = btoa(String.fromCharCode(...blob));
+	return `-----BEGIN SSH SIGNATURE-----\n${body}\n-----END SSH SIGNATURE-----`;
+};
+
 describe("an SSH signature", () => {
 	it("made by ssh-keygen is checked against the key that made it", async () => {
 		expect(await verify(OPENSSH_SIGNATURE, OPENSSH_MESSAGE, NS, [OPENSSH_KEY])).toBe(OPENSSH_KEY);
@@ -61,6 +86,16 @@ describe("an SSH signature", () => {
 		expect(parse([lines[0], body.slice(0, 60), lines.at(-1)].join("\n"))).toBeNull();
 		expect(parse("")).toBeNull();
 	});
+
+	it.each(["sha384", "constructor", "toString", "__proto__"])(
+		"names a hash it does not know, %s: no signature, never a throw",
+		async (hash) => {
+			const k = await newKey();
+			const sig = signedWith(hash, k.raw);
+			expect(parse(sig)?.hash).toBe(hash);
+			expect(await verify(sig, "hello", NS, [k.line])).toBeNull();
+		},
+	);
 
 	it("reads no key line but Ed25519's", () => {
 		expect(keyOnly("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ")).toBeNull();

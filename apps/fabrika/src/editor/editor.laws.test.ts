@@ -24,7 +24,7 @@ import * as screen from "./screen.ts";
 
 // The line editor's redraw, as laws: property tests on fast-check, over two terminals.
 //
-//   the test grid (grid.ts)   counts one cell per code point, as the editor does
+//   the test grid (grid.ts)   lays text out as the editor counts it (cells.ts), at one width
 //   ghostty                   ghostty-web's own terminal, the one the app draws with, run here
 //                             without a window: it knows real widths and reflows on a resize
 //
@@ -78,6 +78,7 @@ const editorWith = async (patch: Partial<Screen>): Promise<Machine> => {
 };
 
 const CSI = "\x1b[";
+const up = (n: number) => (n > 0 ? `${CSI}${n}A` : "");
 const right = (n: number) => (n > 0 ? `${CSI}${n}C` : "");
 const narrow = (text: string) => [...text].every((c) => (c.codePointAt(0) ?? 0) < 0x1100);
 
@@ -88,6 +89,8 @@ const N = {
 	rowPath: "the row path runs when the line fits, and only then",
 	leftoversGrid: "no leftovers, on the test grid",
 	leftoversGhostty: "no leftovers, on ghostty",
+	leftoversOdd: "the line alone on ghostty, with wide characters and combining marks",
+	leftoversResized: "the line alone after a width change, on ghostty",
 	resize: "the first redraw after a width change is a full one",
 	fits: "what fitsRow lets through fits its row on ghostty",
 	sequences: "every sequence the editor writes is one the test grid knows",
@@ -103,6 +106,10 @@ const PLANTS = {
 		patch: {redrawRow: (text: string, _at: number) => `\r${CSI}K${text}`},
 		by: [N.sameGrid, N.sameGhostty, N.leftoversGhostty],
 	},
+	"the row redraw writes no blank after the line": {
+		patch: {redrawRow: (text: string, at: number) => `\r${CSI}K${text}\r${right(at)}`},
+		by: [N.leftoversResized],
+	},
 	"the row redraw erases with CSI 2K, which the test grid does not know": {
 		patch: {redrawRow: (text: string, at: number) => `\r${CSI}2K${text}\r${right(at)}`},
 		by: [N.sequences],
@@ -115,7 +122,7 @@ const PLANTS = {
 		patch: {
 			fitsRow: (text: string, cols: number) => screen.cells(text) <= cols && narrow(text),
 		},
-		by: [N.sameGhostty, N.leftoversGrid, N.leftoversGhostty],
+		by: [N.leftoversGrid, N.leftoversGhostty, N.fits],
 	},
 	"every line fits": {
 		patch: {fitsRow: () => true},
@@ -123,7 +130,22 @@ const PLANTS = {
 	},
 	"no guard for wide characters": {
 		patch: {fitsRow: (text: string, cols: number) => screen.cells(text) < cols},
-		by: [N.rowPath, N.fits],
+		by: [N.rowPath],
+	},
+	"the cursor's place counted one cell a code point, as before": {
+		patch: {spot: (text: string) => [...text].length},
+		by: [N.leftoversOdd],
+	},
+	"the draw from before: no blank after the line, and a new row after a full one": {
+		patch: {
+			draw: (text: string, at: number, cols: number) => {
+				const end = screen.spot(text, cols);
+				const wrap = end > 0 && end % cols === 0 ? "\r\n" : "";
+				const rows = Math.floor(end / cols) - Math.floor(at / cols);
+				return `${CSI}J${text}${wrap}${up(rows)}\r${right(at % cols)}`;
+			},
+		},
+		by: [N.leftoversResized],
 	},
 } as const satisfies Record<string, {patch: Partial<Screen>; by: readonly string[]}>;
 
@@ -422,33 +444,33 @@ const screenAfter = (v: Variant, c: Case): Seen => {
 	return seen;
 };
 
-/** What the prompt line shows, and where the cursor is in it, worked out apart from the editor. */
-const lineOf = (s: Editor): {readonly text: string; readonly at: number} | null => {
+/** What the prompt line shows, and the part of it before the cursor, worked out apart from the editor. */
+const lineOf = (s: Editor): {readonly text: string; readonly before: string} | null => {
 	const {mode} = s;
 	if (mode.kind === "prompt") {
-		const left = screen.PROMPT + mode.line.left;
-		return {text: left + mode.line.right, at: screen.cells(left)};
+		const before = screen.PROMPT + mode.line.left;
+		return {text: before + mode.line.right, before};
 	}
 	if (mode.kind === "search") {
 		const text = Shell.Search.shown([...s.history].reverse(), mode.search);
-		return {text, at: screen.cells(text)};
+		return {text, before: text};
 	}
 	return null;
 };
 
 /**
  * What a terminal of `kind` should show with only this line on it: the rows the text takes, and
- * the cursor just after the first `at` characters, as this terminal lays them out, not as `cells`
- * counts them. A line that fills its row to the end puts the cursor on the next row, as the editor
- * does (screen.ts): found by writing one more letter and seeing it go there.
+ * the cursor just after `before`, as this terminal lays it out, not as the editor counts it. A
+ * line that fills its row to the end puts the cursor on the next row, as the editor does
+ * (screen.ts): found by writing one more letter and seeing it go there.
  */
-const freshly = (kind: Kind, cols: number, text: string, at: number): Seen => {
+const freshly = (kind: Kind, cols: number, text: string, before: string): Seen => {
 	const t = termOf(kind, cols);
 	t.write(text);
 	const {rows} = t.seen();
 	t.free();
 	const u = termOf(kind, cols);
-	u.write([...text].slice(0, at).join(""));
+	u.write(before);
 	const {cursor} = u.seen();
 	u.write("x");
 	const next = u.seen().cursor;
@@ -465,7 +487,9 @@ const oldRedraw = (m: Moment): {readonly out: string; readonly pure: boolean} =>
 		m.msg.type === "keys" &&
 		was !== null &&
 		now !== null &&
-		out === screen.back(was.at, m.before.cols) + screen.draw(now.text, now.at, m.after.cols);
+		out ===
+			screen.back(screen.spot(was.before, m.before.cols), m.before.cols) +
+				screen.draw(now.text, screen.spot(now.before, m.after.cols), m.after.cols);
 	return {out, pure};
 };
 
@@ -559,7 +583,7 @@ const rowPathWhenSafe = lawOf(N.rowPath, everything([...NARROW, ...WIDE], true),
 /**
  * After any keys that edit the line, the screen holds the line and nothing else: what a fresh
  * terminal shows with only this line drawn on it. With width changes, only on ghostty, which
- * reflows the line (see the known bug).
+ * reflows the line.
  */
 const noLeftovers = (name: string, kind: Kind, cases: fc.Arbitrary<Case>) =>
 	lawOf(name, cases, (v, c) => {
@@ -573,7 +597,7 @@ const noLeftovers = (name: string, kind: Kind, cases: fc.Arbitrary<Case>) =>
 			const now = lineOf(m.after);
 			if (now === null) return null;
 			const seen = t.seen();
-			const want = freshly(kind, cols, now.text, now.at);
+			const want = freshly(kind, cols, now.text, now.before);
 			return same(seen, want)
 				? null
 				: `after ${shown(m)} at ${cols} cells: ${showSeen(seen)}, the line alone: ${showSeen(want)}`;
@@ -669,6 +693,8 @@ const LAWS: readonly Law[] = [
 	rowPathWhenSafe,
 	noLeftovers(N.leftoversGrid, "grid", editsOnly([...NARROW, ...WIDE])),
 	noLeftovers(N.leftoversGhostty, "ghostty", editsOnly(NARROW)),
+	noLeftovers(N.leftoversOdd, "ghostty", editsOnly([...NARROW, ...WIDE, ...ODD])),
+	noLeftovers(N.leftoversResized, "ghostty", editsAndResizes(NARROW)),
 	afterResize,
 	fitsOnGhostty,
 	knownSequences,
@@ -690,68 +716,36 @@ describe("characters that are not one cell", () => {
 			widths.set(w, (widths.get(w) ?? 0) + 1);
 		}
 		expect(widths.get(2) ?? 0).toBe(0);
-		// Combining marks and the like: no cell at all. `cells` counts each as one.
+		// Combining marks and the like: no cell at all, and `cells` counts none.
 		expect(widths.get(0)).toBeGreaterThan(0);
-	});
-
-	// KNOWN BUG, from before this change and on the old path too: `cells` counts a code point as one
-	// cell, so a combining mark (no cell) or a wide character (two) puts the cursor, and a redraw's
-	// way back to the prompt, off on a real terminal. This test holds the bug in place: when it is
-	// fixed, it fails, and the law moves up with the others.
-	const oddWidths = noLeftovers(
-		"known bug: the line alone on ghostty, with wide characters and combining marks",
-		"ghostty",
-		editsOnly([...NARROW, ...WIDE, ...ODD]),
-	);
-
-	it("known bug: a line with a combining mark or a wide character is drawn wrong on ghostty, on both paths", () => {
-		expect(oddWidths.broken(real, false)).not.toBeNull();
-		expect(oddWidths.broken(old, false)).not.toBeNull();
 	});
 });
 
 describe("a width change", () => {
-	// KNOWN BUG, from before this change and on the old path too: after a width change the editor
-	// and ghostty stop agreeing on the cursor's row. The first redraw after it is the full one (the
-	// law above), and goes back to the prompt with `back`, which counts rows at the new width. That
-	// is right only where ghostty moved the cursor with the text, and it does not always:
-	//
-	//   a line that fills its row      the editor ends it with a hard "\r\n" (screen.ts), which
-	//                                  no terminal reflows: the cursor stays a row below
-	//   the cursor after the line's    ghostty-web 0.4.0 reflows the text, but does not put the
-	//   end, as when typing            cursor where the line now ends
-	//
-	// One row too few draws the line again under the old one. One too many goes up into the row
-	// above the prompt and clears from there: a program's last line of output is gone.
-	const resized = noLeftovers(
-		"known bug: the line alone after a width change, on ghostty",
-		"ghostty",
-		editsAndResizes(NARROW),
-	);
+	// Three cases the editor drew wrong before it wrote a blank after the line and left the reflow
+	// to the terminal (screen.ts): `twice` showed the line twice, and `gone` and `typed` cleared
+	// the output above the prompt. A line that filled its row ended with a hard new row, which no
+	// terminal reflows, and a cursor after the line's end sat on a cell never written, which
+	// ghostty-web 0.4.0 does not carry with the text.
 	const caseOfMsgs = (cols: number, msgs: readonly EditorMsg[]): Case => ({
 		cols,
 		history: [],
 		msgs,
 	});
 
-	it("known bug: the screen is wrong after a width change, on both paths", () => {
-		expect(resized.broken(real, false)).not.toBeNull();
-		expect(resized.broken(old, false)).not.toBeNull();
-		// A line that filled its row at 8 cells, then 9 cells and Backspace: drawn twice.
+	it("shows the line alone, under what was above it, on both paths", () => {
+		// A line that filled its row at 8 cells, then 9 cells and Backspace.
 		const twice = caseOfMsgs(8, [keysOf("aaa"), {type: "size", cols: 9}, keysOf("\x7f")]);
-		expect(screenAfter(real, twice)).toEqual({
-			rows: ["tsh$ aaa", "tsh$ aa"],
-			cursor: {row: 1, col: 7},
-		});
+		expect(screenAfter(real, twice)).toEqual({rows: ["tsh$ aa"], cursor: {row: 0, col: 7}});
 		expect(screenAfter(old, twice)).toEqual(screenAfter(real, twice));
-		// Output, then a line that fills the row once the width is 8, then Backspace: the output is gone.
+		// Output, then a line that fills the row once the width is 8, then Backspace.
 		const gone = caseOfMsgs(32, [
 			{type: "printed", text: "out"},
 			keysOf("aaa"),
 			{type: "size", cols: 8},
 			keysOf("\x7f"),
 		]);
-		expect(screenAfter(real, gone)).toEqual({rows: ["tsh$ aa"], cursor: {row: 0, col: 7}});
+		expect(screenAfter(real, gone)).toEqual({rows: ["out", "tsh$ aa"], cursor: {row: 1, col: 7}});
 		expect(screenAfter(old, gone)).toEqual(screenAfter(real, gone));
 		// Output, a line typed at 32 cells, then 8 cells, where it wraps, and Backspace.
 		const typed = caseOfMsgs(32, [
@@ -761,8 +755,8 @@ describe("a width change", () => {
 			keysOf("\x7f"),
 		]);
 		expect(screenAfter(real, typed)).toEqual({
-			rows: ["tsh$ hel", "lo worl"],
-			cursor: {row: 1, col: 7},
+			rows: ["out", "tsh$ hel", "lo worl"],
+			cursor: {row: 2, col: 7},
 		});
 		expect(screenAfter(old, typed)).toEqual(screenAfter(real, typed));
 	});

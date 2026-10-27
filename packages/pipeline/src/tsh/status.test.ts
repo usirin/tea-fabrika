@@ -93,6 +93,7 @@ const recordedGitHub = () => {
 					Object.assign(check, {status: "IN_PROGRESS", conclusion: null});
 		});
 	const host = Layer.succeed(CodeHost, {
+		pullRequests: () => Effect.succeed([]),
 		prFacts: () => Effect.succeed(clear),
 		change: (pr, head) => {
 			const {gh} = recordedGh("final", {

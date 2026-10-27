@@ -4,6 +4,7 @@ import {
 	readFromPage,
 	readFromTerminal,
 	readFromWindow,
+	readToApp,
 	readToPage,
 	readToTerminal,
 	readToWindow,
@@ -75,5 +76,22 @@ describe("the desk's port", () => {
 		expect(readFromPage({type: "open", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "stop", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");
+	});
+
+	it("tells the page the link is down, with what the app does now", () => {
+		const down = {type: "down", why: "The link to the host ended: the other side closed."};
+		expect(readToPage({...down, now: "reconnecting"}).kind).toBe("read");
+		expect(readToPage({...down, now: "stopped"}).kind).toBe("read");
+		expect(readToPage({...down, now: "refused"}).kind).toBe("read");
+		expect(readToPage(down).kind).toBe("refused");
+		expect(readToPage({...down, now: "gone"}).kind).toBe("refused");
+	});
+
+	it("takes Try again from the page for the app itself, and nothing more", () => {
+		expect(readToApp({type: "again"})).toEqual({kind: "read", msg: {type: "again"}});
+		expect(readToApp({type: "again", now: true}).kind).toBe("refused");
+		expect(readToApp({type: "click", tile: "t2"}).kind).toBe("refused");
+		// The host does not read it: Try again never reaches it as a message of its own.
+		expect(readFromPage({type: "again"}).kind).toBe("refused");
 	});
 });

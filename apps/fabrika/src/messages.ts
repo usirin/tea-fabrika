@@ -5,7 +5,8 @@ import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
 // each has its own two message types, on a port of its own. They are the protocol: the page's
 // MessagePort and the host's socket (link.ts) are only what carries them, and the app's main
-// process relays them unread. No platform here: the window imports this file too.
+// process relays them unread. Only Try again (`ToApp`) is main's own, and goes no further. No
+// platform here: the window imports this file too.
 //
 // A tile's terminal is a terminal and nothing more, as a terminal emulator is to a pty: it
 // sends the keys pressed and its size, and draws the bytes it is sent. The line editor and tsh
@@ -73,12 +74,14 @@ const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
  * as the page loads. `desk` is the whole desk, after every change, with the keys the desk takes
  * now (`takes`): the page sends those keys to the host and no further. `answer` says whether the
  * host took the key sent with that id; a key it did not take goes on to the tile, in order.
- * `down` is the app's own, not the host's: the link to the host is down, or was refused.
+ * `down` is the app's own, not the host's: the link to the host is down, why, and what the app
+ * does `now` (reconnect.ts): it is reconnecting, it stopped trying and waits for Try again, or
+ * the host speaks another version and it does not attach.
  *
  *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false}, ...]}
  *   {type: "desk", desk: {at: "open", ...}, takes: {all: false, keys: ["<c-b>"]}}
  *   {type: "answer", id: 3, took: true}
- *   {type: "down", why: "the host speaks version 0, this app 1"}
+ *   {type: "down", why: "The link to the host ended: the other side closed.", now: "reconnecting"}
  */
 export const ToPage = Schema.Union([
 	Schema.Struct({
@@ -92,9 +95,22 @@ export const ToPage = Schema.Union([
 		takes: Schema.Struct({all: Schema.Boolean, keys: Schema.Array(KeyName)}),
 	}),
 	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
-	Schema.Struct({type: Schema.Literal("down"), why: Schema.String}),
+	Schema.Struct({
+		type: Schema.Literal("down"),
+		why: Schema.String,
+		now: Schema.Literals(["reconnecting", "stopped", "refused"]),
+	}),
 ]);
 export type ToPage = typeof ToPage.Type;
+
+/**
+ * What the page tells the app itself, on the desk's port: the person pressed Try again, after the
+ * app stopped trying to reconnect. Main reads it and does not pass it on; the host never sees it.
+ *
+ *   {type: "again"}
+ */
+export const ToApp = Schema.Struct({type: Schema.Literal("again")});
+export type ToApp = typeof ToApp.Type;
 
 /**
  * What the page tells the host, on the desk's port: a key the desk takes, a click on a tile, a
@@ -144,3 +160,5 @@ export const readToWindow = reader(ToWindow);
 export const readFromPage = reader(FromPage);
 /** What the page reads from the host, on the desk's port. */
 export const readToPage = reader(ToPage);
+/** What main reads from the page, on the desk's port, before it passes the rest on to the host. */
+export const readToApp = reader(ToApp);

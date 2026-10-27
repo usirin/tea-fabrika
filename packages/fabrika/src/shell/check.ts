@@ -64,6 +64,17 @@ export type Checked =
 	  }
 	| Refusal;
 
+/**
+ * The part a program declared under `name`, or `undefined`. Only the table's
+ * own keys count, so a name typed on a line is only ever a name: `constructor`
+ * is no flag unless the program declares one.
+ *
+ *   own(seq.flags, "to")            seq's --to
+ *   own(seq.flags, "constructor")   undefined
+ */
+export const own = <T>(table: Readonly<Record<string, T>>, name: string): T | undefined =>
+	Object.hasOwn(table, name) ? table[name] : undefined;
+
 /** One declared flag, input or output of a program. */
 export interface Part {
 	readonly kind: "flag" | "input" | "output";
@@ -273,7 +284,7 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 	const declared = Object.keys(program.flags);
 	const seen = new Set<string>();
 	const flags = command.flags.map((given) => {
-		const flag: Flag<unknown> | undefined = program.flags[given.name];
+		const flag: Flag<unknown> | undefined = own(program.flags, given.name);
 		if (flag === undefined)
 			return stop(
 				no(
@@ -309,7 +320,7 @@ function toldOf(
 	const {program} = entry;
 	const declared = Object.keys(program.inputs);
 	return command.told.map((given) => {
-		const into: Declared<"input", unknown> | undefined = program.inputs[given.name];
+		const into: Declared<"input", unknown> | undefined = own(program.inputs, given.name);
 		if (into === undefined) {
 			const asFlag = Object.hasOwn(program.flags, given.name) ? ` (--${given.name} is a flag)` : "";
 			return stop(

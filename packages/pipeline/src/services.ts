@@ -8,6 +8,15 @@ import type {OnMain, ReadyToMerge} from "./stages/ship/ready.ts";
 // its writes) and Jev. The first-generation factory's services (Facts,
 // Builder, Workspace, ...) are in the legacy package (factory-services.ts).
 
+/** An open pull request, as a list of them shows it. `at`: when it last changed, in ms. */
+export interface PullRequest {
+	readonly number: number;
+	readonly title: string;
+	readonly url: string;
+	readonly draft: boolean;
+	readonly at: number;
+}
+
 /**
  * Where the code lives: pull requests, checks, whether a branch can merge,
  * the merge queue. GitHub is the first Layer behind it, not the thing itself
@@ -48,6 +57,14 @@ export class CodeHost extends Context.Service<
 			head: string,
 			after: readonly Rerun[],
 		) => Stream.Stream<void>;
+		/**
+		 * The open pull requests of one repository, newest first, as a list shows
+		 * them. `repo`: its URL, `https://github.com/<owner>/<name>`. The titles
+		 * are anyone's words: on a public repository a stranger can open one.
+		 */
+		readonly pullRequests: (
+			repo: string,
+		) => Effect.Effect<readonly PullRequest[], {readonly _tag: "unknown"}>;
 		/** Says once how the pull request left the merge queue. `commit`: the commit on the base branch, which is not the head. */
 		readonly leftQueue: (
 			pr: string,

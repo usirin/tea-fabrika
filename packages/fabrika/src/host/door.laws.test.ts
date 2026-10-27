@@ -2829,87 +2829,78 @@ describe("the door's laws", () => {
 		},
 	);
 
-	it("each law is seen to fail on a planted mistake", async () => {
-		const caught: Record<string, readonly string[]> = {};
-		for (const [plantName, make] of Object.entries(PLANTS)) {
-			caught[plantName] = await broken(await make());
-		}
-		expect(caught).toEqual({
-			fixedWriter: [writerIsStamp.name, agentNeverUser.name],
-			agentCancels: [personOnly.name],
-			writesUnderDoor: [personOnly.name],
-			agentInvites: [personOnly.name],
-			longAgent: [agentSessionBound.name],
-			challengeReused: [challengeOnce.name],
-			bindsToLogin: [
-				bindToId.name,
-				onlyInviteAsksByName.name,
-				otherIdIs502.name,
-				provenAsModel.name,
-			],
-			removesLast: [removeEndsSessions.name],
-			closedIs401: [noCredential.name],
-			noCredIs403: [noCredential.name],
-			pinsFirstKey: [listedKeys.name],
-			cacheNeverExpires: [githubCache.name, keptExactly.name],
-			grantAnyObject: [grantOneObject.name],
-			noOldAgent: [writerReads.name],
-			emptyPersonReads: [writerReads.name],
-			agentAnswers: [personKinds.name],
-			anyIdTaken: [idChecked.name],
-			unreachableIsNobody: [keysUnreachable.name, provenAsModel.name],
-			asksEveryone: [strangersAskNothing.name],
-			saysNobody: [oneRefusal.name],
-			refreshesByName: [onlyInviteAsksByName.name],
-			asksFounderAlways: [byIdOnlyKnown.name],
-			goesByNewName: [renameKeepsResult.name, provenAsModel.name],
-			takesOtherId: [otherIdIs502.name, provenAsModel.name],
-			noRetry: [tokenRetry.name],
-			retriesWithoutToken: [tokenRetry.name],
-			unavailableSaysWho: [
-				idChecked.name,
-				keysUnreachable.name,
-				otherIdIs502.name,
-				refusalsNameNobody.name,
-				provenAsModel.name,
-			],
-			notProvenSaysIds: [oneRefusal.name, refusalsNameNobody.name, provenAsModel.name],
-			failStopsOthers: [provenAsModel.name],
-			failIsNotProven: [keysUnreachable.name, otherIdIs502.name, provenAsModel.name],
-			firstIdOnly: [provenAsModel.name],
-			limitIgnored: [limitSilence.name, waitEndsForAll.name],
-			limitByIdOnly: [limitSilence.name, waitEndsForAll.name],
-			limitUncapped: [
-				limitCapped.name,
-				digitsWait.name,
-				datesWait.name,
-				twoDigitYear.name,
-				lineYear.name,
-			],
-			failKeptAsAnswer: [keptExactly.name],
-			keptOneMsLong: [githubCache.name, keptExactly.name],
-			failZeroKept: [limitSilence.name, keptExactly.name, junkIsNoHeader.name, pastNoWait.name],
-			waitKeptFailMs: [waitEndsForAll.name],
-			looseDate: [
-				junkIsNoHeader.name,
-				digitsWait.name,
-				datesWait.name,
-				pastNoWait.name,
-				twoDigitYear.name,
-				lineYear.name,
-			],
-			looseReset: [junkIsNoHeader.name],
-			spacesDropped: [junkIsNoHeader.name, digitsWait.name],
-			tenDigitsOnly: [digitsWait.name],
-			secondsAsMs: [limitSilence.name, waitEndsForAll.name, digitsWait.name],
-			centuryYear: [datesWait.name, twoDigitYear.name, lineYear.name],
-			sixtyYears: [twoDigitYear.name, lineYear.name],
-			asctimeLocal: [datesWait.name, pastNoWait.name],
-			noAsctime: [datesWait.name, pastNoWait.name],
-			pastWaits: [pastNoWait.name, twoDigitYear.name, lineYear.name],
-		});
-		// Every law is caught by at least one plant.
-		const all = new Set(Object.values(caught).flat());
+	// The exact laws each plant breaks, in the order of `LAWS`.
+	const CAUGHT: Record<string, readonly Law[]> = {
+		fixedWriter: [writerIsStamp, agentNeverUser],
+		agentCancels: [personOnly],
+		writesUnderDoor: [personOnly],
+		agentInvites: [personOnly],
+		longAgent: [agentSessionBound],
+		challengeReused: [challengeOnce],
+		bindsToLogin: [bindToId, onlyInviteAsksByName, otherIdIs502, provenAsModel],
+		removesLast: [removeEndsSessions],
+		closedIs401: [noCredential],
+		noCredIs403: [noCredential],
+		pinsFirstKey: [listedKeys],
+		cacheNeverExpires: [githubCache, keptExactly],
+		grantAnyObject: [grantOneObject],
+		noOldAgent: [writerReads],
+		emptyPersonReads: [writerReads],
+		agentAnswers: [personKinds],
+		anyIdTaken: [idChecked],
+		unreachableIsNobody: [keysUnreachable, provenAsModel],
+		asksEveryone: [strangersAskNothing],
+		saysNobody: [oneRefusal],
+		refreshesByName: [onlyInviteAsksByName],
+		asksFounderAlways: [byIdOnlyKnown],
+		goesByNewName: [renameKeepsResult, provenAsModel],
+		takesOtherId: [otherIdIs502, provenAsModel],
+		noRetry: [tokenRetry],
+		retriesWithoutToken: [tokenRetry],
+		unavailableSaysWho: [
+			idChecked,
+			keysUnreachable,
+			otherIdIs502,
+			refusalsNameNobody,
+			provenAsModel,
+		],
+		notProvenSaysIds: [oneRefusal, refusalsNameNobody, provenAsModel],
+		failStopsOthers: [provenAsModel],
+		failIsNotProven: [keysUnreachable, otherIdIs502, provenAsModel],
+		firstIdOnly: [provenAsModel],
+		limitIgnored: [limitSilence, waitEndsForAll],
+		limitByIdOnly: [limitSilence, waitEndsForAll],
+		limitUncapped: [limitCapped, digitsWait, datesWait, twoDigitYear, lineYear],
+		failKeptAsAnswer: [keptExactly],
+		keptOneMsLong: [githubCache, keptExactly],
+		failZeroKept: [limitSilence, keptExactly, junkIsNoHeader, pastNoWait],
+		waitKeptFailMs: [waitEndsForAll],
+		looseDate: [junkIsNoHeader, digitsWait, datesWait, pastNoWait, twoDigitYear, lineYear],
+		looseReset: [junkIsNoHeader],
+		spacesDropped: [junkIsNoHeader, digitsWait],
+		tenDigitsOnly: [digitsWait],
+		secondsAsMs: [limitSilence, waitEndsForAll, digitsWait],
+		centuryYear: [datesWait, twoDigitYear, lineYear],
+		sixtyYears: [twoDigitYear, lineYear],
+		asctimeLocal: [datesWait, pastNoWait],
+		noAsctime: [datesWait, pastNoWait],
+		pastWaits: [pastNoWait, twoDigitYear, lineYear],
+	};
+
+	// One test per plant, so each has the normal time limit and a failure names its plant. All the
+	// plants in one test took 163 s on CI and needed a 240 s limit of their own.
+	it.each(Object.entries(PLANTS))(
+		"the planted mistake %s fails only the laws it should",
+		async (name, make) => {
+			expect(await broken(await make())).toEqual((CAUGHT[name] ?? []).map((law) => law.name));
+		},
+	);
+
+	// Every plant has its list, and every law is caught by at least one plant: each plant's test
+	// above checks that it breaks exactly its list, so the lists are what the plants break.
+	it("each law is seen to fail on a planted mistake", () => {
+		expect(Object.keys(CAUGHT).sort()).toEqual(Object.keys(PLANTS).sort());
+		const all = new Set(Object.values(CAUGHT).flatMap((laws) => laws.map((law) => law.name)));
 		expect(LAWS.filter((law) => !all.has(law.name)).map((law) => law.name)).toEqual([]);
-	}, 240_000);
+	});
 });
