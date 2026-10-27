@@ -62,7 +62,7 @@ Two lint rules, both blocking (`biome-plugins/README.md` has their counts):
 | Rule | Refuses | Left out |
 |---|---|---|
 | `no-secret-env.grit` | `process.env.NAME`, `process.env["NAME"]` and `const {NAME} = process.env`, where NAME has TOKEN, SECRET, PASSWORD, AUTH, CREDENTIAL or an API, PRIVATE, SECRET, ACCESS or SIGNING KEY in it | a check that it is set, a `delete`, a name ending in `_HASH` or `_SOCK`; `experiments/` |
-| `no-redacted-value.grit` | `Redacted.value`, called or handed on | six edge files, each with its reason in `biome.jsonc`; tests; `experiments/` |
+| `no-redacted-value.grit` | `Redacted.value`, called or handed on | seven edge files, each with its reason in `biome.jsonc`; tests; `experiments/` |
 
 And a test, `packages/fabrika/src/redacted.test.ts`, that a secret shows
 `<redacted>` through `String`, a template, `JSON.stringify`, Node's inspect,

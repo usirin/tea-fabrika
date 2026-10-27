@@ -108,6 +108,9 @@
 				"!packages/fabrika/src/host/door.ts",
 				// a login's answer on the wire: the token goes to the one who logged in
 				"!packages/fabrika/src/host/durable-object.ts",
+				// an SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
+				// takes a string) and kept from then on as a WebCrypto key that cannot be exported
+				"!packages/fabrika/src/host/signer.ts",
 				// Jev's authorization header (the old factory)
 				"!legacy/src/local.ts",
 				// tests hold made-up secrets and read them back to check them

@@ -3,7 +3,18 @@
 // and its cause, a span attribute, and a schema's encoding. Never its text.
 // docs/direction/secrets-are-redacted.md.
 import {inspect} from "node:util";
-import {Cause, Effect, Exit, Layer, Logger, Redacted, Schema} from "effect";
+import {
+	Cause,
+	Config,
+	ConfigProvider,
+	Effect,
+	Exit,
+	Layer,
+	Logger,
+	Option,
+	Redacted,
+	Schema,
+} from "effect";
 import {describe, expect, it} from "vitest";
 import {Session} from "./host/http.ts";
 import {memoryTracing} from "./shell/trace/otel.ts";
@@ -88,5 +99,17 @@ describe("a secret held as a Redacted", () => {
 		expect(String(session.token)).toBe("<redacted>");
 		expect(Redacted.value(session.token)).toBe(TEXT);
 		expect(() => Schema.encodeSync(Session)(session)).toThrow();
+	});
+
+	it("is read from the env as none when it is empty or missing, so no code checks for an empty one", () => {
+		const read = (env: Record<string, string>) =>
+			Effect.runSync(
+				Config.option(Config.Redacted("A_TOKEN")).pipe(
+					Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({env}))),
+				),
+			);
+		expect(Option.isNone(read({A_TOKEN: ""}))).toBe(true);
+		expect(Option.isNone(read({}))).toBe(true);
+		expect(Option.map(read({A_TOKEN: TEXT}), Redacted.value)).toEqual(Option.some(TEXT));
 	});
 });
