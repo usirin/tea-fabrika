@@ -32,7 +32,18 @@ import {
 	type Shown,
 	tracker,
 } from "@tea-fabrika/tracker";
-import {Effect, Exit, FileSystem, Layer, Option, type Path, Schema, Scope, Stream} from "effect";
+import {
+	Context,
+	Effect,
+	Exit,
+	FileSystem,
+	Layer,
+	Option,
+	type Path,
+	Schema,
+	Scope,
+	Stream,
+} from "effect";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {CONNECTION_FILE, connect, hostLedger, invite, loginWith, members} from "./connection.ts";
 import {move, readLaptop} from "./move.ts";
@@ -48,8 +59,11 @@ import {move, readLaptop} from "./move.ts";
 //   carol, who nobody invited, is refused, and her home is left as it was
 
 const users = new Map<string, {id: number; keys: string[]}>();
+/** The path of every call the Worker made to the fake GitHub: a login asks `/user/<id>` once. */
+const calls: string[] = [];
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
+	calls.push(url.pathname);
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
 	if (byId !== null) {
@@ -88,10 +102,12 @@ const keyFor = async (login: string, id: number) => {
 
 beforeAll(async () => {
 	root = mkdtempSync(join(tmpdir(), "fabrika-two-"));
-	for (const name of ["alice", "bob", "carol"]) mkdirSync(join(root, name), {recursive: true});
+	for (const name of ["alice", "bob", "carol", "dave"])
+		mkdirSync(join(root, name), {recursive: true});
 	await keyFor("alice", 7);
 	await keyFor("bob", 8);
 	await keyFor("carol", 9);
+	await keyFor("dave", 10);
 	const twin = await Effect.runPromise(
 		startTwin({
 			config: {name: "acme-ledger", founder: "github:7"},
@@ -407,5 +423,84 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 		expect(answers.wrong).toMatchObject({status: 409});
 		expect(answers.still.state).toEqual({kind: "importing"});
 		expect(answers.right.state).toMatchObject({kind: "open", by: "seal"});
+	});
+});
+
+// ---------------------------------------------------------------- a host's session
+//
+//   dave's host runs on a ledger alice made; alice takes him off, which ends his sessions as
+//   their end would (the door answers both with the same 401), and invites him again
+//   his host's doorbell, then a call, each meet the 401 and log in once; the host goes on
+//   alice takes him off for good: every call fails with the door's 401, and nothing loops
+//
+// The timer that renews before the end is in packages/fabrika/src/host/http.test.ts, under a
+// TestClock: the twin's door keeps time by its own clock, and a session there is a minute at least.
+
+describe("a host's session on the server", () => {
+	const ledger = "sessions";
+	const daveHome = () => join(root, "dave", ledger);
+	const logins = () => calls.filter((p) => p === "/user/10").length;
+	/** Alice takes dave off her ledger: his sessions end at once. */
+	const takeOff = Effect.gen(function* () {
+		const a = yield* doorAs(ledger, "alice");
+		yield* a.door.remove(a.token, "github:10");
+		return a;
+	});
+	/** The `Ledger` of dave's host, as it runs: built once, for the whole test. */
+	const davesLedger = Effect.suspend(() =>
+		Effect.map(Layer.build(hostLedger(daveHome())), (c) => Context.get(c, Ledger)),
+	);
+
+	it("a session the door ended is renewed by one login, for the doorbell and for a call", async () => {
+		const aliceHome = join(root, "alice", ledger);
+		const at = `${base}/${ledger}`;
+		await run(connect(aliceHome, {address: at, login: "alice", key: person("alice").key}));
+		await run(invite(aliceHome, "dave"));
+		await run(connect(daveHome(), {address: at, login: "dave", key: person("dave").key}));
+		const seen = await run(
+			Effect.gen(function* () {
+				const l = yield* davesLedger;
+				yield* l.register("notes/1", "");
+
+				const a = yield* takeOff;
+				yield* a.door.invite(a.token, "dave");
+				const before = logins();
+				// The doorbell's socket is refused; the door's `who` says 401; one login, then it rings.
+				yield* l.watch("notes/1").pipe(
+					Stream.runHead,
+					Effect.timeoutOrElse({
+						duration: "10 seconds",
+						orElse: () => Effect.die("the doorbell never rang"),
+					}),
+				);
+				const bell = logins() - before;
+
+				const b = yield* takeOff;
+				yield* b.door.invite(b.token, "dave");
+				const again = logins();
+				const wrote = yield* l.register("notes/2", "");
+				return {bell, call: logins() - again, created: wrote.created};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({bell: 1, call: 1, created: true});
+	});
+
+	it("a person taken off for good: every call fails with the door's why", async () => {
+		const seen = await run(
+			Effect.gen(function* () {
+				const l = yield* davesLedger;
+				yield* l.read(0, 1, "notes/");
+				yield* takeOff;
+				return [
+					yield* Effect.flip(l.read(0, 100, "notes/")),
+					yield* Effect.flip(l.read(0, 100, "notes/")),
+				];
+			}).pipe(Effect.scoped),
+		);
+		// The refusal is kept, so the second call fails the same and logs in no more (http.test.ts).
+		for (const e of seen) {
+			expect(e).toMatchObject({_tag: "LedgerUnreachable", method: "read"});
+			expect(e.message).toContain("the door gave no new session (401)");
+		}
 	});
 });

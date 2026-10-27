@@ -3,6 +3,7 @@ import {ATTR, type Drawing, type Tags} from "@kampus/fabrika";
 import type {build} from "./build/machine.ts";
 import type {loop} from "./operate/machine.ts";
 import {nameOf} from "./outcome.ts";
+import {refOf} from "./ref.ts";
 import {problemsOf, type review} from "./review/machine.ts";
 import type {ship} from "./ship/machine.ts";
 
@@ -22,11 +23,7 @@ import type {ship} from "./ship/machine.ts";
 type DrawingOf<T> =
 	T extends Machine<infer S, infer _M, infer C, infer U, infer _Ctx> ? Drawing<S, C, U> : never;
 
-/** A GitHub issue's or pull request's url, as `#123`. Anything else: `null`. */
-export const refOf = (url: string): string | null => {
-	const found = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:pull|issues)\/(\d+)/.exec(url);
-	return found === null ? null : `#${found[1]}`;
-};
+export {refOf};
 
 /** How a run alone on one pull request is named: `pr #597`. */
 export const prName = (pr: string): string => `pr ${refOf(pr) ?? ""}`.trim();

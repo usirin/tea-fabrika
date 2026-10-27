@@ -1,5 +1,6 @@
-// `fabrika connect`, `fabrika invite`, `fabrika members` and `fabrika move`: a home's ledger
-// server, from the command line. The steps are host/connection.ts's; this file only reads the words.
+// `fabrika connect`, `invite`, `members`, `move` and `post`: a home's ledger server, from the
+// command line. The steps are host/connection.ts's, move.ts's and post.ts's; this file only reads
+// the words.
 //
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli connect https://ledger.example.com/acme \
 //     --login alice --key ~/.ssh/id_ed25519
@@ -12,15 +13,20 @@
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli move --from <home>/ledger.sqlite \
 //     --to https://ledger.example.com/acme --login alice --key ~/.ssh/id_ed25519
 //   // the tickets moved and sealed (host/move.ts); the home now uses the server
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli post comment 9 --as triage \
+//     --body-file note.md
+//   // as agent:triage, for the home's person (host/post.ts); then the tickets, one line each
 //
 // FABRIKA_HOME is always given, as for the host (host/main.ts): this never guesses a home, so a
 // test's home is never the owner's. The owner names theirs.
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
 import {writerText} from "@kampus/fabrika";
+import type {Do} from "@tea-fabrika/tracker";
 import {Config, Effect, Option} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connect, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
+import {post} from "./host/post.ts";
 
 const home = Flag.String("home").pipe(
 	Flag.withDescription("the app's home: FABRIKA_HOME"),
@@ -74,7 +80,9 @@ const moveCmd = Command.make(
 		key: Flag.optional(Flag.String("key")).pipe(
 			Flag.withDescription("your SSH key file, Ed25519, no passphrase"),
 		),
+		// Left out, it is a real move: a boolean flag without a default is a required one.
 		dryRun: Flag.Boolean("dry-run").pipe(
+			Flag.withDefault(false),
 			Flag.withDescription("print the counts and the hash, and write nothing anywhere"),
 		),
 		founder: Flag.optional(Flag.String("founder")).pipe(
@@ -111,8 +119,37 @@ const moveCmd = Command.make(
 		}),
 );
 
+const as = Flag.String("as").pipe(
+	Flag.withDescription("the agent's name: it writes as agent:<name>, for you"),
+);
+const body = Flag.FileText("body-file").pipe(Flag.withDescription("the text, in a file"));
+const ticket = Argument.Int("ticket").pipe(Argument.withDescription("the ticket's number"));
+
+/** One post, then the tickets after it. */
+const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Do>) =>
+	Effect.gen(function* () {
+		for (const line of yield* post(a.home, a.as, writes)) yield* Effect.logInfo(line);
+	});
+
+const postCmd = Command.make("post").pipe(
+	Command.withSubcommands([
+		Command.make(
+			"file",
+			{home, as, body, title: Argument.String("title").pipe(Argument.withDescription("its title"))},
+			(a) => posting(a, [{kind: "file", title: a.title, body: a.body.trim()}]),
+		),
+		Command.make("comment", {home, as, body, ticket}, (a) =>
+			posting(a, [{kind: "comment", ticket: a.ticket, body: a.body.trim()}]),
+		),
+		Command.make("close", {home, as, ticket}, (a) =>
+			posting(a, [{kind: "close", ticket: a.ticket}]),
+		),
+		Command.make("list", {home, as}, (a) => posting(a, [])),
+	]),
+);
+
 const fabrika = Command.make("fabrika").pipe(
-	Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd]),
+	Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd, postCmd]),
 );
 
 NodeRuntime.runMain(
