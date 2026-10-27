@@ -11,6 +11,7 @@ import {Effect, Path, Predicate} from "effect";
 //   <home>/host/        mode 0700: only the user can open anything in it, as tmux's socket folder
 //   <home>/host/sock    the Unix socket, mode 0600
 //   <home>/host/pid     the host's pid, for a test to stop its own host
+//   <home>/host/lock    held by a host only while it starts, with its pid (host/lock.ts)
 //   <home>/host/log     the host's log
 //
 // macOS lets a socket's path be at most 104 bytes long. A home deep in a temporary folder can
@@ -21,6 +22,7 @@ export interface HostPaths {
 	readonly dir: string;
 	readonly sock: string;
 	readonly pid: string;
+	readonly lock: string;
 	readonly log: string;
 }
 
@@ -35,6 +37,7 @@ export const pathsOf = (home: string) =>
 			dir,
 			sock: path.join(dir, "sock"),
 			pid: path.join(dir, "pid"),
+			lock: path.join(dir, "lock"),
 			log: path.join(dir, "log"),
 		};
 		if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH)
