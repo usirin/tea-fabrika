@@ -22,8 +22,9 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 - **The reviewer is also handed main's copy of the rules.** A pull request can
   change an `AGENTS.md`, so the rules it is judged by come from the base
   branch. GitHub reads `CODEOWNERS` from the base branch for the same reason.
-- **Claude moved over in experiment 155.** The builder, the reviewer and the
-  planner now pass `ownRules` (`packages/fabrika/src/agents/claude/rules.ts`):
+- **Claude moved over in experiment 155.** The builder, the reviewer, the
+  planner and the Claude adapter of the agent interface (experiment 156) now
+  pass `ownRules` (`packages/fabrika/src/agents/claude/rules.ts`):
   `settingSources: ["project"]` for the rule files, `projectConfigRoot` on an
   empty folder so the repository's settings, hooks, env and `.claude/` stay out,
   and a built-in plugin option so `AGENTS.md` loads too. Claude does not read
@@ -35,14 +36,45 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
   //    settings: {disableClaudeAiConnectors: true, pluginConfigs: AGENTS_MD}}
   ```
 
-  The sorter and the ACP builder stay on `settingSources: []`: the sorter has
-  no rules to read, and the ACP adapter's older SDK was not tested.
+  The sorter, the ACP builder and the interface's `acp-claude` row stay on
+  `settingSources: []`: the sorter has no rules to read, and the ACP
+  adapter's older SDK (0.3.286) was not tested. The ACP paths keep pasting
+  the rules into the prompt.
   - **Wrong guess, kept:** this note first said `["project"]` brings in the
     repository's `.claude/settings.json` with the rules and that the two might
     not come apart. The first half was right: hooks, env and the
     `apiKeyHelper` came in. The second half was wrong: `projectConfigRoot`
     keeps them apart. The worry about plugins was also wrong: the project's
     plugin never loaded in a headless run.
+- **The repository's own settings stay out, even where only trusted people
+  work in it.** The owner kept this on 2026-10-26, for two reasons:
+  - Agents write the repository too. A hook added by mistake, or by text
+    injected into an agent, would run on the next agent's run, outside the
+    sandbox.
+  - A repository's `.claude/` is set up for people's own sessions, not for
+    agents a machine starts.
+- **Only `ownRules` says where a Claude run's settings come from.**
+  - `pnpm lint` refuses `settingSources` with a source in it, and any
+    `projectConfigRoot`, anywhere but `rules.ts`
+    (`biome-plugins/no-project-settings.grit`).
+  - A stage's options for the Claude adapter cannot name them: its type
+    refuses it.
+  - A live run checks its options again, and the empty folder, before Claude
+    Code starts. A refusal names the fix.
+  - A run that loads the project's settings on purpose (an experiment that
+    measures them, the old operator in `legacy/`) says why in a
+    `biome-ignore`.
+
+  ```ts
+  const options = {...rest, settingSources: ["project"]};
+  //                        ^ pnpm lint: `settingSources` with a source in it can load the
+  //                          project's hooks, env and apiKeyHelper (experiment 155). Load a
+  //                          folder's rule files with `...ownRules(...)` ...
+  ```
+- **The repository's skills and subagents do not load this way.**
+  `projectConfigRoot` moves all of `.claude/` to the empty folder, skills and
+  agents too. Copying only `.claude/skills` and `.claude/agents` into an empty
+  root of the run's own is a later option. It is untested.
 
 ## Why
 
@@ -57,8 +89,9 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 **Confidence: 85%.** The doubt was Claude: whether a repository's hooks and
 plugins can be kept out while its rules come in. Experiment 155 measured it:
 they can, with `projectConfigRoot`. What is left: one run per variant on one
-small model, the AGENTS.md option rides on a built-in plugin that a later
-Claude Code could rename, and a box with no `/var/empty` refuses to start.
+small model, and the AGENTS.md option rides on a built-in plugin that a later
+Claude Code could rename. A box with no `/var/empty` refused to start; the
+box images now make it, and a live run checks it first and names the fix.
 
 ## What this cannot tell us
 

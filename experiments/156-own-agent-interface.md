@@ -268,9 +268,13 @@ Steps, one at a time, each its own pull request:
 2. **plan, review, sort:** the same move. They are smaller: no lock, no guard
    hook of their own.
 3. **Drop `builder-acp.ts`:** ACP is now the `acp-claude` row.
-4. **The Claude adapter moves from `settingSources: []` to `ownRules`** from
-   experiment 155 (https://github.com/usirin/tea-fabrika/pull/124), as the
-   stages do, when that lands.
+4. **Done: the Claude adapter moved from `settingSources: []` to `ownRules`**
+   from experiment 155 (https://github.com/usirin/tea-fabrika/pull/124), as
+   the stages do. A stage's `more` cannot name where settings come from (its
+   type), and the adapter refuses options that would load more before
+   anything starts (`adapters.test.ts`). The runs above were made before
+   that, on `settingSources: []`. The `acp-claude` row stays on pasted rules:
+   its adapter pins SDK 0.3.286, which 155 did not test.
 
 ## 8. Leans on the open points
 

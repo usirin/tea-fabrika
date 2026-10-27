@@ -156,6 +156,8 @@ One run per variant. "seen" means the code word reached the model.
 | planner | `[]`, rules pasted | `ownRules` | same options as the builder |
 | sorter | `[]` | `[]` | runs in an empty folder with no tools; no rules to read |
 | ACP builder | `[]`, rules pasted | `[]`, rules pasted | its adapter pins SDK 0.3.286, not tested |
+| interface's Claude adapter (156) | `[]` | `ownRules` | the same options as the stages |
+| interface's `acp-claude` row (156) | `[]`, rules pasted | `[]`, rules pasted | the same older SDK |
 
 - The builder's prompt now says the rule files "are loaded for you as you work", with the nearest
   one winning. The ACP builder keeps the pasted text (`promptOf(brief, [], "pasted")`).
@@ -168,8 +170,49 @@ One run per variant. "seen" means the code word reached the model.
   options plain data, with no temp folder to make and remove.
 
 **Recommendation: keep the switch. Confidence 85%.** It brings nested files and imports to every
-Claude run, which pasting never did. It costs one more setting on three runs, and a box with no
-`/var/empty` (see below) will not start.
+Claude run, which pasting never did. It costs one more setting on each run, and a box image must
+make `/var/empty` (below).
+
+## Keeping it that way
+
+The owner kept the repository's settings out on 2026-10-26, even where only trusted people work
+in it: agents write the repository too, and its `.claude/` is set up for people's own sessions
+([direction note](../docs/direction/agents-read-rules-the-normal-way.md)). So the mistake this
+experiment found is made hard to write again, in three layers.
+
+```ts
+// 1. pnpm lint, anywhere but rules.ts and tests (biome-plugins/no-project-settings.grit):
+const options = {...rest, settingSources: ["project"]}; // refused: use ...ownRules(...)
+const other = {...ownRules({}), projectConfigRoot: "/srv/repo"}; // refused
+// 2. The Claude adapter's type: a stage's `more` cannot name where settings come from.
+claudeAdapter({more: () => ({settingSources: ["user"]})}); // tsc error
+// 3. Before Claude Code starts (openLive, and the adapter's own check):
+startRefusal({settingSources: ["project"]});
+// "settingSources names project, and projectConfigRoot is not set, so the project's hooks, env
+//  and apiKeyHelper would load with its rules (experiment 155). Load them with ownRules ..."
+emptyFolderRefusal(); // on a Debian box with no /var/empty:
+// "/var/empty is not on this machine ... In a box image, as root before USER:
+//  RUN mkdir -p -m 0555 /var/empty."
+```
+
+- **The lint rule blocks, so its false alarms were counted first.** On the tree it fired 17
+  times. 12 were runs that load the project's settings on purpose (this experiment's variants,
+  experiment 43's spike, the old operator in `legacy/`); each now says why in a `biome-ignore`.
+  4 were tests that write the options' shape; tests are left out. 1 was a real slip: experiment
+  127 set `settingSources: ["project"]` to measure a copy's own hook, but since the switch the
+  builder's options beside it carried the empty folder, so 127 no longer loaded that hook. 127
+  now drops the folder on purpose.
+- **What the rule cannot see:** options that leave `settingSources` out, which loads every
+  settings file. The start check refuses those.
+- **The box images make the folder:** 127's and 137's Docker boxes and 148's Cloudflare box run
+  `mkdir -p -m 0555 /var/empty` as root before `USER`. On the Debian Node image the folder is
+  not there without it (checked with `docker run`).
+- **Tests:** `rules.test.ts` plants each bad form in a file and runs the repository's own biome
+  on it, checks the start refusals and the folder checks, and that a refused run starts nothing.
+  `adapters.test.ts` checks the adapter's options, its type and its refusal.
+- **Re-checked live after the change** (`run builder safe`, 2026-10-26): the same code words,
+  hooks, env and listings as the table above, for $0.0505. The saved answers were kept as they
+  were.
 
 ## Cost
 
@@ -190,8 +233,12 @@ node experiments/155-claude-reads-rules.ts report     # no model
   did not. Loading is done by Claude Code, not the model, so this doubt is small.
 - **Why the default AGENTS.md mode loaded nothing.** We set the mode by hand, so it does not
   matter today, but a later Claude Code could change the plugin's name or option.
-- **Boxes without `/var/empty`.** Debian and Ubuntu do not ship it. There a run fails at start,
-  loudly. The box image needs the folder, or the path must come from the box.
+- **Boxes without `/var/empty`.** Debian and Ubuntu do not ship it. The box images here now make
+  it, and a live run checks it first and names the fix. A box image made elsewhere still needs
+  the one line; no run has started Claude in such a box yet.
+- **Skills and subagents of the repository** do not load this way: `projectConfigRoot` moves all
+  of `.claude/` away. Copying only `.claude/skills` and `.claude/agents` into an empty root of
+  the run's own is a later option, untested.
 - **Plugins a person already installed.** Our runs load no user settings, so a project's
   `enabledPlugins` had nothing to turn on. Not tested with a user plugin present.
 - **`@~/` imports** (from the home folder) were not tried.

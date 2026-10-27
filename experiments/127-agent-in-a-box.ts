@@ -47,7 +47,7 @@ import {
 	type SpawnedProcess,
 	type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import {toolchain} from "@kampus/fabrika/agents/sandbox";
+import {MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika/agents/sandbox";
 import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -319,7 +319,10 @@ const optionsFor = (name: BoxName, job: Job, box: Box): Options => {
 		() => undefined,
 		claudeIn(box),
 	);
-	const {hooks: _codeChecks, ...rest} = base;
+	// Since experiment 155 the builder reads a copy's settings from an empty folder
+	// (`projectConfigRoot`). This one measures the copy's own hook in a box, so it drops that
+	// folder and loads the copy's settings, as it did when it ran.
+	const {hooks: _codeChecks, projectConfigRoot: _emptyFolder, ...rest} = base;
 	const ownConfig = name === "srt" || name === "srt-nested";
 	if (ownConfig) mkdirSync(join(job.dir, "config"), {recursive: true});
 	return {
@@ -332,6 +335,7 @@ const optionsFor = (name: BoxName, job: Job, box: Box): Options => {
 			CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
 			...(ownConfig ? {CLAUDE_CONFIG_DIR: join(job.dir, "config")} : {}),
 		},
+		// biome-ignore lint/plugin/no-project-settings: this experiment measures whether the copy's own hook runs inside the box, so it loads the copy's settings on purpose
 		settingSources: ["project"],
 		persistSession: false,
 		...(name === "none" || name === "srt-nested" ? {} : {sandbox: {enabled: false}}),
@@ -472,6 +476,8 @@ const dockerfile = `FROM node:26.12.0-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm install --global @anthropic-ai/claude-agent-sdk-linux-${process.arch}@${SDK_VERSION} && npm cache clean --force \\
  && ln -s /usr/local/lib/node_modules/@anthropic-ai/claude-agent-sdk-linux-${process.arch}/claude /usr/local/bin/claude
+# The empty folder a run reads project settings from (ownRules, experiment 155). Debian ships none; made by root, read-only.
+RUN ${MAKE_EMPTY_FOLDER}
 USER node
 WORKDIR /home/node
 `;

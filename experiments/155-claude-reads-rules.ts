@@ -163,6 +163,7 @@ interface Variant {
 	/** The builder's options as this repository ships them now, nothing taken back. */
 	readonly shipped?: boolean;
 }
+// biome-ignore-start lint/plugin/no-project-settings: these variants measure what each way of loading a project's settings brings in, so they load them on purpose
 /** The candidate: the project's rule files, its settings from a folder that holds none. */
 const safeOf = (root: string): Partial<Options> => ({
 	settingSources: ["project"],
@@ -222,6 +223,7 @@ const VARIANTS: Record<string, Variant> = {
 		drops: ["CLAUDE.md", "packages/x/CLAUDE.md"],
 	},
 };
+// biome-ignore-end lint/plugin/no-project-settings: the variants end here
 
 // ---------------------------------------------------------------- the copy
 
