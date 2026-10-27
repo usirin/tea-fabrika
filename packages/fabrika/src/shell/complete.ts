@@ -1,3 +1,5 @@
+import type {Flag, Input} from "../program/shape.ts";
+import {own} from "./check.ts";
 import {choices} from "./decode.ts";
 import {BUILTINS} from "./grammar.ts";
 import {type Jobs, jobNamed} from "./jobs.ts";
@@ -78,7 +80,7 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 		return {candidates: matching(typed, parts), word: raw};
 	}
 	if (prior?.startsWith("--") && !prior.includes("=") && prior !== "--describe") {
-		const flag = program.flags[prior.slice(2)];
+		const flag: Flag<unknown> | undefined = own(program.flags, prior.slice(2));
 		return {candidates: matching(typed, valuesOf(flag?.shape.json)), word: raw};
 	}
 	const given = new Set(
@@ -86,7 +88,7 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	);
 	if (typed.startsWith("--") && typed.includes("=")) {
 		const name = typed.slice(2, typed.indexOf("="));
-		const flag = program.flags[name];
+		const flag: Flag<unknown> | undefined = own(program.flags, name);
 		const values = valuesOf(flag?.shape.json).map((v) => `--${name}=${v}`);
 		return {candidates: matching(typed, values), word: raw};
 	}
@@ -108,7 +110,7 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 		};
 	if (!typed.startsWith("-") && typed.includes("=")) {
 		const name = typed.slice(0, typed.indexOf("="));
-		const into = program.inputs[name];
+		const into: Input<unknown> | undefined = own(program.inputs, name);
 		const values = valuesOf(into?.shape.json).map((v) => `${name}=${v}`);
 		return {candidates: matching(typed, values), word: raw};
 	}
@@ -147,6 +149,6 @@ function builtinWord(
 	if (inputWord === undefined)
 		return {candidates: matching(typed, Object.keys(program.inputs)), word: typed};
 	if (name === "close") return none(typed);
-	const into = program.inputs[inputWord];
+	const into: Input<unknown> | undefined = own(program.inputs, inputWord);
 	return {candidates: matching(typed, choices(into?.shape.json).map(String)), word: typed};
 }
