@@ -27,7 +27,7 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // one per tile, in the host process (host/main.ts).
 //
 //   const tsh = yield* startTsh({jobs: memoryStorage(), history, runs});
-//   const stop = tsh.terminal.show((m) => send(m));   // the screen so far, then each write
+//   const stop = tsh.terminal.show((m) => send(m));   // a reset, the screen, then each write
 //   tsh.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
 //   tsh.terminal.heard({type: "keys", data: "\r"});
@@ -129,6 +129,15 @@ export const TSH = "tsh:p1";
 
 /** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
 export const SCREEN_KEPT = 256 * 1024;
+
+/**
+ * A terminal's full reset (ESC c, "RIS"): the screen and its scrollback cleared, the cursor home.
+ * A page shown the screen again may still hold it, as after the app reconnects to the host: the
+ * page's terminal stays, and without this the screen would be drawn twice. After a host that was
+ * killed, the page holds the old host's screen, and the new tsh's screen goes in its place. tmux
+ * redraws an attaching client's whole screen the same way. On a fresh terminal it changes nothing.
+ */
+export const RESET = "\x1bc";
 
 /** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
 const COUNTER = listed(counter, Layer.empty);
@@ -381,7 +390,8 @@ export const startTsh = (options: {
 				show: (next) => {
 					const one = (m: ToTerminal) => next(m);
 					pages.add(one);
-					if (screen !== "") one({type: "write", data: screen});
+					// Even with nothing on the screen yet: the page may hold a screen of a host that is gone.
+					one({type: "write", data: RESET + screen});
 					return () => pages.delete(one);
 				},
 				heard: (raw) => {

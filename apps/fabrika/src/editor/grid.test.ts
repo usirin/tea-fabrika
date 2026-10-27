@@ -19,6 +19,13 @@ describe("the test grid", () => {
 		expect(gridOf("one\r\ntwo\r\nthree\x1b[1A\r\x1b[J", 80).rows).toEqual(["one", ""]);
 	});
 
+	it("clears every row, scrollback too, and homes the cursor on ESC c", () => {
+		expect(gridOf("one\r\ntwo\r\n\x1bctsh$ ", 80, 1)).toEqual({
+			rows: ["tsh$"],
+			cursor: {row: 0, col: 5},
+		});
+	});
+
 	it("gives a wide character two cells, and puts one that does not fit on the next row", () => {
 		expect(gridOf("漢字", 3)).toEqual({rows: ["漢", "字"], cursor: {row: 1, col: 2}});
 	});

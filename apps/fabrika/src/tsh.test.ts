@@ -122,6 +122,27 @@ describe("the terminal", () => {
 		expect(rows).toEqual(["tsh$ seq --to 3 | double", "double 2", "double 4", "double 6", "tsh$"]);
 	});
 
+	it("draws the screen once on a terminal that still holds it, as after the app reconnects", async () => {
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("seq --to 3 | double\r");
+				yield* s.prompts(2);
+				// One page's terminal, shown the screen on its first port, then again on the next.
+				let page = "";
+				const first = s.host.terminal.show((m) => {
+					page += m.data;
+				});
+				first();
+				s.host.terminal.show((m) => {
+					page += m.data;
+				});
+				return gridOf(page, 80, 1000).rows;
+			}).pipe(Effect.scoped),
+		);
+		expect(rows).toEqual(["tsh$ seq --to 3 | double", "double 2", "double 4", "double 6", "tsh$"]);
+	});
+
 	it("completes a program's name on Tab", async () => {
 		const rows = await go(
 			Effect.gen(function* () {

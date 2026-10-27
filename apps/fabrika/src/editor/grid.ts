@@ -3,11 +3,13 @@ import {type Cell, type Pen, print} from "./cells.ts";
 // A terminal's grid, for tests: what a run of bytes leaves on the screen, and where the cursor is.
 // It knows only what the line editor writes (./screen.ts): text with a VT100's wrap at the last
 // column, CR, LF, cursor up and right, clear to the end of the row, clear below, home and clear
-// screen. Anything else is drawn as the character it is, so a test sees it: a CSI sequence it does
-// not know is written out as `^[[` and the rest.
+// screen, and the full reset a screen shown again starts with (tsh.ts). Anything else is drawn as
+// the character it is, so a test sees it: a CSI sequence it does not know is written out as `^[[`
+// and the rest.
 //
 //   gridOf("tsh$ seq\r\x1b[5C", 80)    {rows: ["tsh$ seq"], cursor: {row: 0, col: 5}}
 //   gridOf("tsh$ seq\r\x1b[K", 80)     {rows: [""], cursor: {row: 0, col: 0}}
+//   gridOf("old\n\x1bcnew", 80)        {rows: ["new"], cursor: {row: 0, col: 3}}
 //   gridOf("漢字", 3)                  {rows: ["漢", "字"], cursor: {row: 1, col: 2}}
 //
 // Text takes cells as ghostty-web gives them (./cells.ts, `print`): a wide character two, and an
@@ -58,6 +60,11 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 		else if (c === "\n") moveTo(y + 1, pen.x);
 		else if (c === "\x07") {
 			// The bell: nothing on the screen.
+		} else if (c === "\x1b" && chars[i + 1] === "c") {
+			// A full reset: every row gone, scrollback too, the cursor home.
+			rows.length = 0;
+			moveTo(0, 0);
+			i += 1;
 		} else if (c === "\x1b" && chars[i + 1] === "[") {
 			let end = i + 2;
 			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) end += 1;
