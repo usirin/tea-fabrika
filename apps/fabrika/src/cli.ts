@@ -4,7 +4,7 @@
 //
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli connect https://ledger.example.com/acme \
 //     --login alice --key ~/.ssh/id_ed25519
-//   // connected as user:github:7; start the app again to use it
+//   // connected as user:github:7; the host restarts on it (host/connection.ts, `connectAndRestart`)
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli invite bob
 //   // invited bob (github:8): they get in at their first login
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli move --from <home>/ledger.sqlite \
@@ -24,7 +24,7 @@ import {writerText} from "@kampus/fabrika";
 import type {Do} from "@tea-fabrika/tracker";
 import {Config, Effect, Option} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
-import {addressOf, connect, invite, members} from "./host/connection.ts";
+import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
 import {post} from "./host/post.ts";
 
@@ -45,8 +45,21 @@ const connectCmd = Command.make(
 	},
 	(a) =>
 		Effect.gen(function* () {
-			const who = yield* connect(a.home, {address: a.address, login: a.login, key: a.key});
-			yield* Effect.logInfo(`connected as ${writerText(who)}; start the app again to use it`);
+			const {who, host} = yield* connectAndRestart(a.home, {
+				address: a.address,
+				login: a.login,
+				key: a.key,
+			});
+			const as = `connected as ${writerText(who)}`;
+			if (host === "stopped")
+				yield* Effect.logInfo(
+					`${as}; the host stopped, and an open app starts it again on this ledger. Running jobs stopped too: attach %n brings each back`,
+				);
+			else if (host === "none") yield* Effect.logInfo(`${as}; the app uses it when it starts`);
+			else
+				yield* Effect.logWarning(
+					`${as}, but the running host did not stop (${host.why}): quit the app and stop its host to use it`,
+				);
 		}),
 );
 

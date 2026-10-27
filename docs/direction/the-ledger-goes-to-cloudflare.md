@@ -147,6 +147,8 @@ things.** No deploy was run.
 - **connect:** `fabrika connect <address> --login <github login> --key <ssh key file>`
   (`apps/fabrika/src/cli.ts`). It logs in once to check, then keeps the address,
   the login and the key's path in the home's `ledger.json`. It keeps no session.
+  Then it stops the home's running host, so an open app starts a new one on that
+  ledger, with no restart by hand (2026-10-27).
 - **log in:** the host reads an OpenSSH Ed25519 key file with no passphrase
   (`keyFileOf`, checked once against `ssh-keygen`), signs the door's challenge
   with it, and the door checks it against GitHub's keys for that login.
