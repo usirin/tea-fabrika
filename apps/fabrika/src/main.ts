@@ -4,7 +4,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream} from "effect";
-import {ChildProcess, type ChildProcessSpawner} from "effect/process";
+import type {ChildProcessSpawner} from "effect/process";
 import {
 	app,
 	BrowserWindow,
@@ -19,12 +19,14 @@ import {
 import {attach, NoHello, NoHost, restart} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+import {pathsOf} from "./host/socket.ts";
 import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
 import {type LinkNow, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
+import {startHost} from "./start-host.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -94,7 +96,8 @@ import {Unattached, type Wire} from "./wire.ts";
 // tile's terminal still takes keys sent over the DevTools protocol.
 //
 // The host is the app's own Electron binary run as Node (`ELECTRON_RUN_AS_NODE=1`, host/main.ts
-// says why), with no stdin, stdout or stderr, and let go (`unref`): quitting the app leaves it.
+// says why), with no stdin or stdout, its stderr appended to its log, and let go (`unref`):
+// quitting the app leaves it (start-host.ts).
 
 /** The bundle's folder: main.mjs, host.mjs, preload.cjs and the page's own files, side by side. */
 const DIST = import.meta.dirname;
@@ -314,19 +317,15 @@ const main = Effect.gen(function* () {
 				return current?.close();
 		}
 	};
-	/** Start the host on this home: the app's own binary as Node, detached, and let go. */
-	const startHost = Effect.gen(function* () {
-		const handle = yield* ChildProcess.make(process.execPath, [path.join(DIST, "host.mjs")], {
-			env: {ELECTRON_RUN_AS_NODE: "1", FABRIKA_HOME: home},
-			extendEnv: true,
-			detached: true,
-			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "ignore",
+	/** Start the host on this home: the app's own binary as Node, detached, let go (start-host.ts). */
+	const startOne = Effect.gen(function* () {
+		const paths = yield* pathsOf(home);
+		return yield* startHost({
+			binary: process.execPath,
+			entry: path.join(DIST, "host.mjs"),
+			home,
+			paths,
 		});
-		// Let go for good: the app never takes it back, so its way to take it back is dropped.
-		yield* handle.unref.pipe(Effect.asVoid);
-		return handle.exitCode;
 	});
 	/**
 	 * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
@@ -338,7 +337,7 @@ const main = Effect.gen(function* () {
 	const tryWith = (how: typeof attach | typeof restart) =>
 		Effect.gen(function* () {
 			const link = yield* Scope.fork(scope);
-			const exit = yield* how({home, deliver: fromHost, start: startHost}).pipe(
+			const exit = yield* how({home, deliver: fromHost, start: startOne}).pipe(
 				Scope.provide(link),
 				Effect.provideContext(starting),
 				Effect.exit,
