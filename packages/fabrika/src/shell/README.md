@@ -40,6 +40,18 @@ open, since its window tells them, as a terminal feeds a foreground program's st
 for its end or Ctrl-C, as for any foreground line (`execute.ts`, `window.test.ts`). The fabrika
 app ([`apps/fabrika`](../../../../apps/fabrika/README.md)) is where such a window is drawn.
 
+A job whose kept state was saved by older code cannot be opened: its machine's state schema does
+not take it. `attach` says so, and the job stays in the table, detached, with its state as it
+was. Every other job still opens. A job table saved by older code is left as it was too: tsh says
+so once, and runs on without keeping its jobs (`execute.test.ts`, `shell.test.ts`).
+
+```text
+tsh$ attach %1 &
+[1] attached tally:7f3a...
+[1] this job was saved by older code, can't open it  tally
+[1] it stays in the table, detached; stop %1 drops it
+```
+
 `Shell.Printed` and `Shell.Ready` are the schemas of tsh's two outputs, for an app that builds
 its own schemas on them.
 

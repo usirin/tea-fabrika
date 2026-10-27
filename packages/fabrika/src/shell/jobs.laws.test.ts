@@ -1,15 +1,19 @@
 import {
 	arbMsg,
 	arbRecordMsg,
+	foldEvents,
 	type MsgArbitraryTable,
 	propertyInvariant,
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
+import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import type {MsgOf} from "../program/program.ts";
-import {type Job, type Jobs, jobsMachine, type StageRecord} from "./jobs.ts";
+import {memoryStorage} from "../program/storage.ts";
+import {type Job, Jobs, jobsMachine, type StageRecord} from "./jobs.ts";
+import {TABLE} from "./shell.ts";
 
 // The laws of tsh's job table, on tea's pbt: after every step of any list of Msgs, from the real
 // init. A job begins as tsh says it does: every program in it running. The rest comes in any
@@ -367,5 +371,65 @@ describe("the job table's laws", () => {
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------- law: every reachable table is kept
+
+/** A stage as tsh writes it: flags are values a program took, so any JSON value, and wired or not. */
+const flagged: fc.Arbitrary<StageRecord> = fc.record({
+	program: fc.constantFrom("counter", "seq", "say"),
+	flags: fc.dictionary(fc.constantFrom("to", "text", "ms", "pr"), fc.jsonValue({maxDepth: 2}), {
+		maxKeys: 3,
+	}),
+	run,
+	wire: fc.option(fc.record({output: fc.constantFrom("n", "text"), input: fc.constant("n")}), {
+		nil: null,
+	}),
+	ended: fc.boolean(),
+});
+const keptTable: MsgArbitraryTable<Msg> = {
+	...table,
+	began: arbRecordMsg("began", {
+		text: fc.constantFrom("counter", "seq --to 3 | say", "counter &"),
+		stages: fc
+			.tuple(flagged, fc.array(flagged, {maxLength: 2}))
+			.map(([first, rest]) => [first, ...rest] as const),
+		background: fc.boolean(),
+	}),
+};
+const keptLists = fc.array(arbMsg(keptTable, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
+	maxLength: 40,
+	size: "max",
+});
+
+/** Every table `machine` reaches from `loaded`, saved where tsh keeps it, through `Jobs`, and loaded back. */
+const keepsEvery = (machine: Machine, loaded: Jobs | null, runs = 150) =>
+	fc.assert(
+		fc.asyncProperty(keptLists, async (list) => {
+			const handle = await Effect.runPromise(memoryStorage().open(TABLE.run, null));
+			const store = handle.store(TABLE.machine, TABLE.key, Jobs);
+			for (const jobs of foldEvents(machine, ctx, loaded, list).states) {
+				await store.save(jobs);
+				expect(store.migrate(await store.load())).toEqual(jobs);
+			}
+		}),
+		{numRuns: runs, seed: 1},
+	);
+
+describe("the job table is kept", () => {
+	it("every table it reaches, from a fresh start and from a kept one, saves and loads back equal", async () => {
+		await keepsEvery(jobsMachine, null);
+		await keepsEvery(jobsMachine, KEPT);
+	});
+
+	it("the law is seen to fail on a planted mistake: a job that keeps tsh's own handle on it dies at its first save", async () => {
+		const withHandle = plant({
+			began: (s, m) => {
+				const [next] = real.began(s, m);
+				return [{jobs: next.jobs.map((job) => ({...job, handle: {pid: 1}}))}, []];
+			},
+		});
+		await expect(keepsEvery(withHandle, null, 20)).rejects.toThrow(/Counterexample/);
 	});
 });

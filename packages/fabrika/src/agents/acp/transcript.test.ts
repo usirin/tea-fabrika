@@ -211,6 +211,20 @@ describe("the transcript fold", () => {
 		expect(s.other).toEqual({available_commands_update: 1});
 	});
 
+	it("an update kind named as a name every object inherits is counted from 0, like any other", () => {
+		const other = (what: string): Seen => ({kind: "other", what});
+		const s = fold([
+			...OPEN,
+			{type: "seen", events: [other("constructor"), other("__proto__"), other("__proto__")]},
+		]);
+		// Each is an own key with its count, and the record is still a plain one.
+		expect(Object.entries(s.other)).toEqual([
+			["constructor", 1],
+			["__proto__", 2],
+		]);
+		expect(Object.getPrototypeOf(s.other)).toBe(Object.prototype);
+	});
+
 	it("counts and the status line carry no words: only numbers, phases and ids", () => {
 		const s = fold([...OPEN, turn(1, "a secret prompt"), seen(chunk("a secret answer", "m1"))]);
 		const said = JSON.stringify(countsOf(s)) + statusLine(s);

@@ -5,7 +5,7 @@ import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
-import {memoryStorage, type Storage} from "./storage.ts";
+import {memoryStorage, StateRefused, type Storage} from "./storage.ts";
 
 // A ref's `start` (./refs.ts, ./kept.ts) against the restart race of
 // experiment 69, on a toy with the build machine's shape: a Listen that
@@ -24,18 +24,27 @@ import {memoryStorage, type Storage} from "./storage.ts";
 // its parent left unfinished fails the program, by name, when `main` returns.
 
 // An Act, in tea's own words: a Cmd that carries the name of its one write.
+const WriteIn = Schema.Struct({n: Schema.Finite, intent: Schema.String});
 const write = Cmd.define("job_write", {
-	input: Schema.toStandardSchemaV1(Schema.Struct({n: Schema.Finite, intent: Schema.String})),
+	input: Schema.toStandardSchemaV1(WriteIn),
 	ok: Schema.toStandardSchemaV1(Schema.String),
 	err: ["unknown"] as const,
 });
 type WriteCmd = ReturnType<typeof write>;
 
-type Job =
-	| {readonly phase: "idle"}
-	| {readonly phase: "working"; readonly run: number}
-	| {readonly phase: "writing"; readonly asked: WriteCmd}
-	| {readonly phase: "over"};
+/** The toy's state, and the schema it is kept and read back through. */
+const Job = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({phase: Schema.Literal("working"), run: Schema.Finite}),
+	Schema.Struct({
+		phase: Schema.Literal("writing"),
+		asked: Schema.Struct({...WriteIn.fields, type: Schema.Literal("job_write")}),
+	}),
+	Schema.Struct({phase: Schema.Literal("over")}),
+]);
+type Job = typeof Job.Type;
+/** The toy's state as older code kept it: its work counted in `try`, not `run`. */
+const OlderJob = Schema.Struct({phase: Schema.Literal("working"), try: Schema.Finite});
 type JobMsg =
 	| {readonly type: "start"; readonly by: string}
 	| {readonly type: "resume"}
@@ -107,6 +116,7 @@ type World = ReturnType<typeof world>;
 const jobKind = (w: World, asked: string[] = []) =>
 	kind({
 		machine: job,
+		state: Job,
 		parent: "main",
 		options: () => ({
 			ctx: undefined,
@@ -126,7 +136,7 @@ const jobKind = (w: World, asked: string[] = []) =>
 const keptIn = async (state: Job): Promise<Storage> => {
 	const storage = memoryStorage();
 	const handle = await Effect.runPromise(storage.open("job:r1", {}));
-	await handle.store("job", ID).save(state);
+	await handle.store("job", ID, Job).save(state);
 	return storage;
 };
 
@@ -168,7 +178,7 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 					ctx: undefined,
 					interpret: w.interpret,
 					subscribe: w.subscribe,
-					store: handle.store("job", ID),
+					store: handle.store("job", ID, Job),
 					terminal: isOver,
 				})).ready;
 				// The starter's resume lands after the boot, as the build and operate starters sent it before 69
@@ -277,7 +287,7 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 			kind({
 				...jobKind(w),
 				// @ts-expect-error nor handed a store of the caller's own, which would skip the read
-				options: () => ({...options, store: handle.store("job", ID)}),
+				options: () => ({...options, store: handle.store("job", ID, Job)}),
 			}),
 			defineProgram({
 				...base,
@@ -310,6 +320,46 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 		).toThrow(
 			"never's job names nobody as its parent, which is not another of its machines or main",
 		);
+	});
+});
+
+describe("a run saved by older code: its state is checked before it starts", () => {
+	it("its start fails StateRefused, nothing in it runs or is written, and another run of the same machine starts all the same", async () => {
+		const storage = memoryStorage();
+		const handle = await Effect.runPromise(storage.open("job:r1", {}));
+		await handle.store("job", "old", OlderJob).save({phase: "working", try: 1});
+		const w = world();
+		const asked: string[] = [];
+		const seen: string[] = [];
+		const program = defineProgram({
+			name: "job",
+			description: "Starts a run older code kept, then a new one.",
+			inputs: {},
+			outputs: {},
+			machines: {job: jobKind(w, asked)},
+			main: ({machines}) =>
+				Effect.gen(function* () {
+					const old = yield* machines.job.get("old").start(START).pipe(Effect.exit);
+					const failure = Exit.isFailure(old) ? Cause.squash(old.cause) : null;
+					seen.push(failure instanceof StateRefused ? failure.message : "started");
+					const runtime = yield* machines.job.get(ID).start(START);
+					yield* runtime.done();
+				}).pipe(Effect.scoped),
+		});
+		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
+		// The refused run is not a run its parent left unfinished: it never started.
+		expect(endOf(called)).toEqual({kind: "ended", why: ""});
+		expect(seen).toEqual([expect.stringContaining("job run old was saved by older code")]);
+		// Only the new run's kind was asked about, and only the new run worked and wrote.
+		expect(asked).toEqual([]);
+		expect(w.started).toEqual([1]);
+		expect(w.writes).toEqual([1]);
+		// Its bytes are as older code left them.
+		const after = await Effect.runPromise(storage.open("job:r1", null));
+		expect(await Effect.runPromise(after.read("job", "old", OlderJob))).toEqual({
+			phase: "working",
+			try: 1,
+		});
 	});
 });
 
@@ -414,8 +464,8 @@ describe("a run its parent left unfinished", () => {
 	it("one kept before it began is dropped quietly, and one kept over is left to its parent", async () => {
 		const storage = memoryStorage();
 		const handle = await Effect.runPromise(storage.open("job:r1", {}));
-		await handle.store("job", "never").save({phase: "idle"});
-		await handle.store("job", "over").save({phase: "over"});
+		await handle.store("job", "never", Job).save({phase: "idle"});
+		await handle.store("job", "over", Job).save({phase: "over"});
 		const program = defineProgram({
 			name: "job",
 			description: "Returns at once.",

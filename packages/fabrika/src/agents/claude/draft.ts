@@ -1,6 +1,6 @@
 import {type Options, type Query, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {DepKeyedSub, Sub} from "@demlik/tea";
-import {Effect, Option, Queue, Stream} from "effect";
+import {Effect, Option, Queue, Schema, Stream} from "effect";
 import {agentEnv} from "./env.ts";
 import {jsonSchema, type Reads, reader} from "./schema.ts";
 
@@ -13,20 +13,24 @@ import {jsonSchema, type Reads, reader} from "./schema.ts";
 // interrupts the agent. The answer is typed by a schema, and an answer that
 // does not fit it comes back as `null`, never as text the machine reads.
 
-/** One agent run, as the parent asks for it. Plain data: it is the Sub's deps. */
-export interface DraftRun {
+/**
+ * One agent run, as the parent asks for it. Plain data: it is the Sub's deps,
+ * and a parent that keeps it keeps it through this schema.
+ */
+export const DraftRun = Schema.Struct({
 	/** The child of the parent this run belongs to. Every Msg carries it back. */
-	readonly key: string;
+	key: Schema.String,
 	/** This run, so a late Msg from an earlier one is told apart. */
-	readonly id: string;
-	readonly prompt: string;
+	id: Schema.String,
+	prompt: Schema.String,
 	/** The conversation, named before the run starts. `continues`: one the agent already had. */
-	readonly session: {readonly id: string; readonly continues: boolean};
+	session: Schema.Struct({id: Schema.String, continues: Schema.Boolean}),
 	/** A named agent to run as (its prompt, tools and model), or `null` for a plain session. */
-	readonly agent: string | null;
+	agent: Schema.NullOr(Schema.String),
 	/** The folder it works in, by the name the host gave it; the runner turns it into a path. `null`: the host's own. */
-	readonly folder: string | null;
-}
+	folder: Schema.NullOr(Schema.String),
+});
+export type DraftRun = typeof DraftRun.Type;
 
 /** What a run cost, from the SDK's result. */
 export interface Spend {

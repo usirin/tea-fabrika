@@ -11,12 +11,12 @@ import {
 	sdkRunner,
 } from "@kampus/fabrika/agents/claude";
 import {agentEnv, guardHook} from "@kampus/fabrika/agents/sandbox";
-import {Effect, Layer, Stream} from "effect";
+import {Effect, Layer, Schema, Stream} from "effect";
 import {sh} from "../../sh.ts";
 import {removeLinks} from "../review/reviewer.ts";
 import {identifiersIn} from "./check.ts";
 import {PlanDraft} from "./plan.ts";
-import {type PlanMsg, Planner, type PlanTicket, type Settings} from "./services.ts";
+import {type PlanMsg, Planner, PlanTicket, type Settings} from "./services.ts";
 
 // The planner: the one agent job of the plan stage. A ticket and what code
 // found about it go in; a plan, as data, comes out. It only reads: Read, Grep
@@ -28,13 +28,14 @@ import {type PlanMsg, Planner, type PlanTicket, type Settings} from "./services.
 export const planDraft = createDraft({name: "plan", output: PlanDraft});
 
 /** What the planner is handed. */
-export interface Brief {
-	readonly ticket: PlanTicket;
+export const Brief = Schema.Struct({
+	ticket: PlanTicket,
 	/** What code found about the names and paths the ticket mentions. `null`: nothing was gathered. */
-	readonly facts: string | null;
+	facts: Schema.NullOr(Schema.String),
 	/** The names a user of the published packages meets: a criterion may name them. Empty: none were gathered. */
-	readonly names: readonly string[];
-}
+	names: Schema.Array(Schema.String),
+});
+export type Brief = typeof Brief.Type;
 
 /** A text in a code fence longer than any run of backticks inside it. */
 function fenced(text: string, word = ""): string {

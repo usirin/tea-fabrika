@@ -117,6 +117,26 @@ export function act(
 export const intentOf = (...parts: readonly (string | number)[]): string => parts.join("/");
 
 /**
+ * The schema of a Cmd as a model keeps it (`asked`): its `type`, and the
+ * input the move was given. A model that holds a Cmd is kept and read back
+ * through its state schema, and this is that Cmd's part of it.
+ *
+ *   const At = Schema.Struct({ticket: Schema.String});
+ *   const readTicket = gather("ticket_read", {input: At, ok: Ticket, err: ["unknown"]});
+ *   keptCmd(readTicket, At)   // {type: "ticket_read", ticket: string}
+ */
+export const keptCmd = <const N extends string, F extends Schema.Struct.Fields>(
+	def: {readonly cmdType: N},
+	input: Schema.Struct<F>,
+) => Schema.Struct({...input.fields, type: Schema.Literal(def.cmdType)});
+
+/** `keptCmd` for an Act: its input as given, with the `intent` the move adds. */
+export const keptAct = <const N extends string, F extends Schema.Struct.Fields>(
+	def: {readonly cmdType: N},
+	input: Schema.Struct<F>,
+) => Schema.Struct({...input.fields, intent: Schema.String, type: Schema.Literal(def.cmdType)});
+
+/**
  * Listen: things that arrive on their own (a CI result, a reply, the clock).
  * The machine names what it is listening for as data, and listens for as long
  * as `deps` is not null; leaving the phase stops it. The runner turns what

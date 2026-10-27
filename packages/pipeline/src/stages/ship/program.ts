@@ -15,7 +15,7 @@ import {shipLine} from "../status.ts";
 import {prName, shipDrawing} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
 import {Look, look} from "./look.ts";
-import {type Ship, ship} from "./machine.ts";
+import {Ship, ship} from "./machine.ts";
 import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 
 // The ship program: the thing you start to ship pull requests. It is started
@@ -145,6 +145,7 @@ const prOf = (s: Ship): string | null => (s.phase === "idle" ? null : s.pr);
 export const shipKind = (machine = ship) =>
 	kind({
 		machine,
+		state: Ship,
 		parent: "main",
 		options: () => ({
 			ctx: undefined,

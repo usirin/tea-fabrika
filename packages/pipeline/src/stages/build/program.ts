@@ -10,7 +10,7 @@ import {buildDrawing} from "../traced.ts";
 import {HARNESSES, viaAcp} from "./builder-acp.ts";
 import {Builder} from "./form.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
-import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
+import {Build, type BuildAsk, BuildReport, build} from "./machine.ts";
 import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
 import {numberOf, TicketUrl} from "./ticket.ts";
 
@@ -49,6 +49,7 @@ export type Built = typeof Built.Type;
  */
 export const buildKind = kind({
 	machine: build,
+	state: Build,
 	parent: "main",
 	options: () => ({
 		ctx: undefined,

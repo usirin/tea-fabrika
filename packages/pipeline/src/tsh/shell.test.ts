@@ -37,7 +37,8 @@ type Show = Shell.Show;
 
 const SMALL_LIST = programList(SMALL);
 
-type Waiting = {readonly phase: "waiting" | "over"};
+const Waiting = Schema.Struct({phase: Schema.Literals(["waiting", "over"])});
+type Waiting = typeof Waiting.Type;
 const waiting = defineMachine({
 	types: {
 		model: {} as Waiting,
@@ -60,6 +61,7 @@ const feed = defineProgram({
 	machines: {
 		wait: kind({
 			machine: waiting,
+			state: Waiting,
 			parent: "main",
 			options: () => ({
 				ctx: undefined,
@@ -151,7 +153,7 @@ describe("tsh: the user's job, one session", () => {
 				const job = yield* line("tally &");
 				expect(job.err[0]).toMatch(/^\[1\] tally:[0-9a-f]{8}$/);
 				for (const n of [2, 3, 4]) expect((yield* line(`tell %1 add ${n}`)).status).toBe(0);
-				yield* heard("[1] 9");
+				yield* heard("[1] total 9");
 				// Under the job, its one copy's status line.
 				expect((yield* line("jobs")).out).toEqual(["[1] running   tally", "      total 9"]);
 				expect((yield* line("ps")).out[1]).toMatch(/^tally:[0-9a-f]{8} +tally +%1 +running$/);
@@ -258,7 +260,7 @@ describe("tsh: kept jobs", () => {
 				const id = (yield* line("tally &")).err[0]?.split(" ")[1] ?? "";
 				yield* line("tell %1 add 2");
 				yield* line("tell %1 add 3");
-				yield* heard("[1] 5");
+				yield* heard("[1] total 5");
 				// Killed: stopped from outside, with no word to its jobs.
 				yield* started.stop;
 				return id;
@@ -273,7 +275,7 @@ describe("tsh: kept jobs", () => {
 				expect((yield* line("tell %1 add 1")).err[0]).toContain("%1 is detached");
 				expect((yield* line(`attach ${run} &`)).err).toEqual([`[1] attached ${run}`]);
 				yield* line("tell %1 add 1");
-				yield* heard("[1] 6");
+				yield* heard("[1] total 6");
 			}).pipe(Effect.scoped),
 		);
 	});

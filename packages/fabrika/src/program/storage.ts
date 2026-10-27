@@ -1,4 +1,4 @@
-import type {Store} from "@demlik/tea";
+import {refuse, type Store} from "@demlik/tea";
 import {
 	Cause,
 	Context,
@@ -23,7 +23,8 @@ import {KeyValueStore} from "effect/persistence";
 //   const storage = fileStorage(dir);                          // or memoryStorage(), or storageOf(anyKeyValueLayer)
 //   const handle = yield* storage.open("ship:r1", {mode: "write"});   // this handle now holds the run
 //   handle.found.closed;                                        // what the run's record said when it was opened
-//   const store = handle.store("ship", "r1/1/ship");           // a tea Store: kept until it is cleared
+//   const store = handle.store("ship", "r1/1/ship", Ship);     // a tea Store, through ship's state schema: kept until it is cleared
+//   yield* handle.read("ship", "r1/1/ship", Ship);             // the state, null, or it fails StateRefused
 //   yield* handle.clear("ship", "r1/1/ship");                   // its parent is done with it: drop it
 //   yield* handle.close("pr");                                  // kept before it returns
 //   yield* handle.end("ended");
@@ -65,6 +66,16 @@ import {KeyValueStore} from "effect/persistence";
 // steps. In one process they are one step: every write of one storage value
 // goes through one lock. Across processes there is a window between them; see
 // experiments/68a-storage.md.
+//
+// A machine's state goes in and out through its own schema, the way the
+// journal's does (../host/journal.ts), and Elm reads saved data through a
+// `Decoder`. Each save is encoded by it, and refuses a state with a key the
+// schema does not name, so a schema that forgot a field fails at the first
+// save, not at a later start. Each read is decoded by it. A state it does not
+// take was saved by older code: `store`'s `migrate` answers tea's `refuse`,
+// `read` fails `StateRefused`, `list` shows it as refused beside the others,
+// and nothing is written over it.
+// See docs/direction/an-old-host-is-named-then-restarted.md.
 
 /** How a run last ended. `running`: it has not said, so it is running now, or it crashed. */
 export const RunStatus = Schema.Literals(["running", "ended", "stopped", "failed"]);
@@ -141,12 +152,30 @@ export class StorageBroken extends Schema.TaggedError<StorageBroken>()("StorageB
 
 export type StorageFailed = Stale | StorageBroken;
 
-/** One machine run kept, as the index lists it. */
-export interface Listed {
-	readonly id: string;
-	/** As last saved. */
-	readonly state: unknown;
-}
+/** A machine's state schema: every state it keeps is written and read through it. */
+export type StateSchema<S> = Schema.Codec<S, unknown>;
+
+/** A machine run's kept state that its schema does not take: older code saved it. It is left as it was. */
+export class StateRefused extends Schema.TaggedError<StateRefused>()("StateRefused", {
+	machine: Schema.String,
+	id: Schema.String,
+	/** What the schema said of it. */
+	why: Schema.String,
+	message: Schema.String,
+}) {}
+
+const refusedOf = (machine: string, id: string, why: string) =>
+	new StateRefused({
+		machine,
+		id,
+		why,
+		message: `${machine} run ${id} was saved by older code, and its schema refuses it: ${why}`,
+	});
+
+/** One machine run kept, as the index lists it: its state as last saved, or why its schema refused it. */
+export type Listed<S> =
+	| {readonly kind: "kept"; readonly id: string; readonly state: S}
+	| {readonly kind: "refused"; readonly id: string; readonly why: string};
 
 /** One open of one run: the only way to write to it. */
 export interface Handle {
@@ -157,12 +186,24 @@ export interface Handle {
 	 * so it crashed, or this is its first start).
 	 */
 	readonly found: RunRecord;
-	/** Where one machine run keeps its state. Hand it to tea's `run` as its `store`. Each save is fenced. */
-	store<S>(machine: string, id: string): Store<S>;
-	/** Every machine run of one machine the index lists, with its state. */
-	list(machine: string): Effect.Effect<readonly Listed[], StorageFailed>;
-	/** One machine run's state, read by its id alone. `null`: none is kept. */
-	read(machine: string, id: string): Effect.Effect<unknown, StorageFailed>;
+	/**
+	 * Where one machine run keeps its state, through the machine's state schema.
+	 * Hand it to tea's `run` as its `store`. Each save is fenced, and encoded by
+	 * the schema; a kept state the schema refuses is tea's `refuse`, so tea's
+	 * `run` fails with `StoreRefusedError` and writes nothing.
+	 */
+	store<S>(machine: string, id: string, state: StateSchema<S>): Store<S>;
+	/** Every machine run of one machine the index lists, each with its state or why its schema refused it. */
+	list<S>(
+		machine: string,
+		state: StateSchema<S>,
+	): Effect.Effect<readonly Listed<S>[], StorageFailed>;
+	/** One machine run's state, read by its id alone. `null`: none is kept. One its schema refuses fails `StateRefused`. */
+	read<S>(
+		machine: string,
+		id: string,
+		state: StateSchema<S>,
+	): Effect.Effect<S | null, StorageFailed | StateRefused>;
 	/** Drop one machine run: its parent is done with it. Clearing one that is not kept changes nothing. */
 	clear(machine: string, id: string): Effect.Effect<void, StorageFailed>;
 	/** Mark an input closed. Kept before it returns. */
@@ -224,6 +265,43 @@ const machineKey = (run: string, machine: string, id: string) =>
 	`run/${part(run)}/machine/${part(machine)}/${part(id)}`;
 
 const decodeRecord = Schema.decodeUnknownExit(Schema.fromJsonString(Kept));
+
+/** A schema's failure in its own words. */
+const wordsOf = (cause: Cause.Cause<unknown>): string => {
+	const failure = Cause.squash(cause);
+	return failure instanceof Error ? failure.message : String(failure);
+};
+
+/**
+ * A state schema's two ways. `encode`: a state as it is kept, with no key the
+ * schema does not name, so a schema that left a field out fails the first save
+ * rather than drop it. `decode`: a kept state read back, as the journal reads
+ * one (../host/journal.ts): a key the schema does not name is dropped.
+ */
+const through = <S>(state: StateSchema<S>, machine: string, id: string) => {
+	const encode = Schema.encodeUnknownExit(state, {onExcessProperty: "error"});
+	const decode = Schema.decodeUnknownExit(state);
+	return {
+		encode: (value: S) => {
+			const exit = encode(value);
+			return Exit.isSuccess(exit)
+				? Effect.succeed(exit.value)
+				: Effect.die(
+						new Error(
+							`${machine} run ${id}: its state does not fit its own schema, so it was not saved: ${wordsOf(exit.cause)}`,
+						),
+					);
+		},
+		decode: (
+			raw: unknown,
+		): {readonly fits: true; readonly state: S} | {readonly fits: false; readonly why: string} => {
+			const exit = decode(raw);
+			return Exit.isSuccess(exit)
+				? {fits: true, state: exit.value}
+				: {fits: false, why: wordsOf(exit.cause)};
+		},
+	};
+};
 
 /** What tea's `Store` expects from a failed Effect: a rejected Promise, with the failure itself as the reason. */
 const promised = <A>(effect: Effect.Effect<A, StorageFailed>): Promise<A> =>
@@ -338,7 +416,8 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					yield* rewrite(found, unlisted(found.record, machine, id));
 			});
 
-		const save = <S>(machine: string, id: string, state: S) =>
+		/** Keep `kept`, a state as its schema encoded it. */
+		const save = (machine: string, id: string, kept: unknown) =>
 			Effect.gen(function* () {
 				const found = yield* fence;
 				// The index first: a crash after it leaves a line with no state, which the next open drops.
@@ -348,10 +427,11 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 						machines: [...found.record.machines, {machine, id}],
 					});
 				const at = machineKey(run, machine, id);
-				yield* write(at, JSON.stringify(state), opened, yield* read(at));
+				yield* write(at, JSON.stringify(kept), opened, yield* read(at));
 			}).pipe(one);
 
-		const readRun = (machine: string, id: string) =>
+		/** One machine run's kept state, as it was written: not yet read through its schema. */
+		const readRaw = (machine: string, id: string) =>
 			read(machineKey(run, machine, id)).pipe(
 				Effect.flatMap((now) => (now === null ? Effect.succeed(null) : parse(now.body))),
 			);
@@ -359,24 +439,44 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 		return {
 			run,
 			found: {...publicOf(first), status: last},
-			store: <S>(machine: string, id: string): Store<S> => ({
-				load: () => promised(readRun(machine, id)),
-				save: (state) => promised(save(machine, id, state)),
-				// Kept by this program's own machine under this name: its own state.
-				migrate: (raw) => raw as S | null,
-			}),
-			list: (machine) =>
+			store: <S>(machine: string, id: string, state: StateSchema<S>): Store<S> => {
+				const schema = through(state, machine, id);
+				return {
+					load: () => promised(readRaw(machine, id)),
+					save: (s) =>
+						promised(Effect.flatMap(schema.encode(s), (kept) => save(machine, id, kept))),
+					migrate: (raw) => {
+						if (raw === null || raw === undefined) return null;
+						const read = schema.decode(raw);
+						return read.fits ? read.state : refuse(refusedOf(machine, id, read.why).message);
+					},
+				};
+			},
+			list: <S>(machine: string, state: StateSchema<S>) =>
 				Effect.gen(function* () {
 					const found = yield* readRecord(run);
-					const out: Listed[] = [];
+					const out: Listed<S>[] = [];
 					for (const m of found?.record.machines ?? []) {
 						if (m.machine !== machine) continue;
-						const state = yield* readRun(machine, m.id);
-						if (state !== null) out.push({id: m.id, state});
+						const raw = yield* readRaw(machine, m.id);
+						if (raw === null) continue;
+						// One run that does not fit is shown as refused; the others are read all the same.
+						const read = through(state, machine, m.id).decode(raw);
+						out.push(
+							read.fits
+								? {kind: "kept", id: m.id, state: read.state}
+								: {kind: "refused", id: m.id, why: read.why},
+						);
 					}
 					return out;
 				}),
-			read: readRun,
+			read: <S>(machine: string, id: string, state: StateSchema<S>) =>
+				Effect.gen(function* () {
+					const raw = yield* readRaw(machine, id);
+					if (raw === null) return null;
+					const read = through(state, machine, id).decode(raw);
+					return read.fits ? read.state : yield* refusedOf(machine, id, read.why);
+				}),
 			clear: (machine, id) => dropRun(machine, id).pipe(one),
 			close: (input) =>
 				Effect.gen(function* () {

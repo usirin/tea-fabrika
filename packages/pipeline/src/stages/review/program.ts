@@ -8,7 +8,7 @@ import {Passed} from "../ship/program.ts";
 import {reviewLine} from "../status.ts";
 import {prName, reviewDrawing} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
-import {type fileNote, Report, type Review, review} from "./machine.ts";
+import {type fileNote, Report, Review, review} from "./machine.ts";
 import {REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
 import type {Ask} from "./pack.ts";
 import {EFFORTS, type Settings} from "./reviewer.ts";
@@ -92,6 +92,7 @@ export type Filed = typeof Filed.Type;
 const reviewKind = (machine = review) =>
 	kind({
 		machine,
+		state: Review,
 		parent: "main",
 		options: ({send}: {readonly send: Send<Outputs>}) => ({
 			ctx: undefined,

@@ -7,7 +7,7 @@ import {nameOf} from "../outcome.ts";
 import type {Reviewed} from "../review/program.ts";
 import type {Place} from "../review/sheet.ts";
 import {ShipOutcome} from "../ship/outcome.ts";
-import type {LoopOutcome} from "./outcome.ts";
+import {LoopOutcome} from "./outcome.ts";
 
 // The loop's decisions, as pure functions: what each stage handed back, and
 // what the loop does next. The machine (./machine.ts) only carries them out.
@@ -91,11 +91,17 @@ export type Round = typeof Round.Type;
  * round built, which the review passed. `end`'s `said`: why, in words, where
  * the stage outcome the loop read does not say it.
  */
-export type Next =
-	| {readonly go: "review"}
-	| {readonly go: "ship"; readonly head: string}
-	| {readonly go: "build"; readonly items: readonly Item[]}
-	| {readonly go: "end"; readonly outcome: LoopOutcome; readonly said?: string};
+export const Next = Schema.Union([
+	Schema.Struct({go: Schema.Literal("review")}),
+	Schema.Struct({go: Schema.Literal("ship"), head: Schema.String}),
+	Schema.Struct({go: Schema.Literal("build"), items: Schema.Array(Item)}),
+	Schema.Struct({
+		go: Schema.Literal("end"),
+		outcome: LoopOutcome,
+		said: Schema.optionalKey(Schema.String),
+	}),
+]);
+export type Next = typeof Next.Type;
 
 const end = (outcome: LoopOutcome, said?: string): Next =>
 	said === undefined ? {go: "end", outcome} : {go: "end", outcome, said};

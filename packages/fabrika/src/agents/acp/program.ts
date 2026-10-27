@@ -10,7 +10,7 @@ import {runTraced} from "../../program/trace.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {connect, type Heard, type Opened, type PendingAsk} from "./client.ts";
 import {AGENTS, CODEX_MODES, harnessOf} from "./harness.ts";
-import {session, type Waiting} from "./session.ts";
+import {Session, session, type Waiting} from "./session.ts";
 import {type AcpEvents, acpEvents} from "./spans.ts";
 import {
 	type Answer,
@@ -22,6 +22,7 @@ import {
 	saidIn,
 	seenOf,
 	statusLine,
+	Transcript,
 	transcript,
 	type Usage,
 } from "./transcript.ts";
@@ -200,6 +201,7 @@ export const acpProgram = defineProgram({
 		// and sends it again itself, once the session is open.
 		session: kind({
 			machine: session,
+			state: Session,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: ({kept}) => ({
@@ -214,6 +216,7 @@ export const acpProgram = defineProgram({
 		// Not kept: folded again from the harness at every start, and only shown.
 		transcript: kind({
 			machine: transcript,
+			state: Transcript,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "acp transcript", steps: {}, tags: countsOf}),

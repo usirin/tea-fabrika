@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {type Delivery, kind, type RefsOf} from "@kampus/fabrika";
-import {Effect, Queue, Stream} from "effect";
+import {Effect, Queue, Schema, Stream} from "effect";
 import {queueLine} from "./status.ts";
 
 // The values a stage is told and has not finished, kept: the rule that what
@@ -29,12 +29,17 @@ import {queueLine} from "./status.ts";
 // Elm's answer: the work waiting is part of the model, and `init` gets it
 // back. The input is only where values come from.
 
-/** The values told and not finished, in the order told. The first is the one being worked. */
-export interface Waiting {
-	readonly items: readonly string[];
+/**
+ * The values told and not finished, in the order told. The first is the one
+ * being worked. The queue's state, and the schema it is kept and read back
+ * through. A queue kept before `clearing` was there reads with none owed.
+ */
+export const Waiting = Schema.Struct({
+	items: Schema.Array(Schema.String),
 	/** Worked, and still to be tidied after (`after`). */
-	readonly clearing: readonly string[];
-}
+	clearing: Schema.Array(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+});
+export type Waiting = typeof Waiting.Type;
 
 type QueueMsg =
 	| {readonly type: "told"; readonly item: string}
@@ -71,6 +76,7 @@ export const queue = defineMachine({
  */
 export const queueKind = kind({
 	machine: queue,
+	state: Waiting,
 	parent: "main",
 	options: () => ({ctx: undefined}),
 	drawing: () => ({name: "queue", steps: {}, tags: (s) => ({waiting: s.items.length})}),

@@ -12,7 +12,8 @@ import {flag, input, output} from "../program/shape.ts";
 //   seq --to 3 | double        2, 4, 6
 //   say --text hi | upper      HI
 //   sleep --ms 60000           until Ctrl-C
-//   tally &                    a kept running total: tell it add=2, add=3, it says 5
+//   tally &                    a kept running total: tell it add=2, add=3, it says total 5.
+//                              An add that would leave the safe whole numbers: refused, the total stays
 //
 // `seq | upper` is refused before it runs: seq sends integers, and upper
 // takes text.
@@ -85,29 +86,60 @@ export const no = defineProgram({
 	main: () => Effect.fail({_tag: "said_no" as const, message: "false always fails"}),
 });
 
-/** The running total of `tally`, kept in the run's storage. */
+/** The running total of `tally`, kept in the run's storage: its state's schema. A sum of whole numbers. */
+const Total = Schema.Struct({total: Schema.Int});
+type Total = typeof Total.Type;
+
+/** An add tally did not take, and why: its total would have left the safe whole numbers. */
+const Refused = Schema.Struct({n: Schema.Int, why: Schema.Literal("out_of_range")});
+
+/**
+ * One add, by tally's rule: the total it makes, or why it is refused. Past
+ * the safe whole numbers a sum is no longer exact, and the total's schema does
+ * not take it, so such a total is never made.
+ *
+ *   addTo(2, 3)                                   {kind: "ok", total: 5}
+ *   addTo(-4220048110695276, -4787151144045716)   {kind: "err", why: "out_of_range"}
+ */
+const addTo = (total: number, n: number) => {
+	const sum = total + n;
+	return Number.isSafeInteger(sum)
+		? ({kind: "ok", total: sum} as const)
+		: ({kind: "err", why: "out_of_range"} as const);
+};
+
 const count = defineMachine({
 	types: {
-		model: {} as {readonly total: number},
+		model: {} as Total,
 		msg: {} as {readonly type: "add"; readonly n: number},
 		ctx: undefined,
 	},
 	cmds: [],
 	init: (loaded) => [loaded ?? {total: 0}, []],
-	update: {add: (s, m) => [{total: s.total + m.n}, []]},
+	update: {
+		// An add the rule refuses leaves the total as it was, whoever told it.
+		add: (s, m) => {
+			const added = addTo(s.total, m.n);
+			return [added.kind === "ok" ? {total: added.total} : s, []];
+		},
+	},
 });
 
 export const tally = defineProgram({
 	name: "tally",
 	description:
-		"Keeps a running total of the numbers it is told, and says it after each one. The total is kept: started again under the same run id, it goes on from it.",
+		"Keeps a running total of the numbers it is told, and says it after each one. A number that would carry the total past the safe whole numbers is refused, and the total stays. The total is kept: started again under the same run id, it goes on from it.",
 	inputs: {add: input(Schema.Int, "A number to add.")},
-	outputs: {total: output(Schema.Int, "The total, after each number.")},
+	outputs: {
+		total: output(Schema.Int, "The total, after each number it took."),
+		refused: output(Refused, "A number it did not take, and why. The total stays as it was."),
+	},
 	// The one total is never over, and has no unfinished work: main starts it again under its id,
 	// first thing, at every start.
 	machines: {
 		count: kind({
 			machine: count,
+			state: Total,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "count", steps: {}}),
@@ -120,12 +152,16 @@ export const tally = defineProgram({
 			// first: the total stands as it was kept, or at 0.
 			const counter = yield* machines.count.get("total").start();
 			yield* inputs.add.pipe(
-				Stream.runForEach((n) =>
-					counter.dispatch({type: "add", n}).pipe(
+				Stream.runForEach((n) => {
+					// The machine's own rule, asked first: a refused add is said to the caller and never
+					// told to the machine, so nothing is saved for it.
+					const added = addTo(counter.getState().total, n);
+					if (added.kind === "err") return send("refused", {n, why: added.why});
+					return counter.dispatch({type: "add", n}).pipe(
 						Effect.orDie,
 						Effect.andThen(() => send("total", counter.getState().total)),
-					),
-				),
+					);
+				}),
 			);
 		}).pipe(Effect.scoped),
 });

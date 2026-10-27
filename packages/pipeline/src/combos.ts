@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import type {Cmd, DepKeyedSub, Sub} from "@demlik/tea";
-import type {Draft, DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
-import {Context, type Effect, type Stream} from "effect";
+import {type Draft, type DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import {Context, type Effect, Schema, type Stream} from "effect";
 import {z} from "zod";
 import {act, type Check, type createJudge, listen, type Ruled} from "./primitives.ts";
 import {sentBack} from "./refine.ts";
@@ -116,6 +116,38 @@ export type Refining<B, O> =
 	  }
 	/** The agent broke, or answered with something that does not fit the schema. */
 	| {readonly phase: "failed"; readonly error: string; readonly tries: number};
+
+/**
+ * The schema of a refine loop's state, from its brief's and its output's. A
+ * parent that keeps the loop in its own state is kept and read back through it.
+ */
+export const refiningOf = <B, O>(
+	brief: Schema.Codec<B, unknown>,
+	output: Schema.Codec<O, unknown>,
+): Schema.Codec<Refining<B, O>, unknown> =>
+	Schema.Union([
+		Schema.Struct({
+			phase: Schema.Literal("drafting"),
+			brief,
+			run: DraftRun,
+			tries: Schema.Finite,
+			limit: Schema.Finite,
+		}),
+		Schema.Struct({
+			phase: Schema.Literal("done"),
+			output,
+			tries: Schema.Finite,
+			session: Schema.String,
+		}),
+		Schema.Struct({
+			phase: Schema.Literal("out_of_tries"),
+			output,
+			problems: Schema.Array(Schema.String),
+			tries: Schema.Finite,
+			session: Schema.String,
+		}),
+		Schema.Struct({phase: Schema.Literal("failed"), error: Schema.String, tries: Schema.Finite}),
+	]);
 
 /**
  * Refine: Draft and Check in a loop. The agent drafts; a pure Check reads the
@@ -426,7 +458,16 @@ export interface Child<S> {
 	readonly state: S;
 }
 
+/**
+ * The children by their item's key. Each read goes through {@link childOf}, so
+ * a key is only ever a key: `constructor` is no child unless one was spawned
+ * under it.
+ */
 export type Children<S> = Readonly<Record<string, Child<S>>>;
+
+/** The child under `key`, or `undefined`: never a name every object inherits. */
+const childOf = <S>(children: Children<S>, key: string): Child<S> | undefined =>
+	Object.hasOwn(children, key) ? children[key] : undefined;
 
 /**
  * Spawn: a child per item. Each child is a nested model the parent steps;
@@ -441,7 +482,7 @@ export function spawn<S>(
 	state: S,
 	slots: number,
 ): Children<S> | null {
-	if (key in children) return children;
+	if (childOf(children, key) !== undefined) return children;
 	const taken = new Set(Object.values(children).map((c) => c.slot));
 	const slot = Array.from({length: slots}, (_, i) => i).find((i) => !taken.has(i));
 	return slot === undefined ? null : {...children, [key]: {slot, state}};
@@ -453,7 +494,7 @@ export function stepChild<S, C>(
 	key: string,
 	step: (state: S) => readonly [S, readonly C[]],
 ): readonly [Children<S>, readonly C[]] {
-	const child = children[key];
+	const child = childOf(children, key);
 	if (child === undefined) return [children, []];
 	const [state, cmds] = step(child.state);
 	return [{...children, [key]: {slot: child.slot, state}}, cmds];

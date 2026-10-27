@@ -17,17 +17,17 @@ import {numberOf, TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
-import {problemsOf, type Review, review} from "../review/machine.ts";
+import {problemsOf, Review, review} from "../review/machine.ts";
 import {keepRows, type Reviewed} from "../review/program.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
 import {look} from "../ship/look.ts";
-import {type Ship, ship} from "../ship/machine.ts";
+import {Ship, ship} from "../ship/machine.ts";
 import {loopLine, reviewLine, shipLine} from "../status.ts";
 import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
 	type claimTicket,
-	type Loop,
+	Loop,
 	LoopSettings,
 	loop,
 	type postVerdicts,
@@ -143,6 +143,7 @@ const buildKind = {...buildStage, parent: "loop" as const};
 /** A round's review. Its notes are kept in its report; none is posted. */
 const reviewKind = kind({
 	machine: review,
+	state: Review,
 	parent: "loop",
 	options: () => ({
 		ctx: undefined,
@@ -166,6 +167,7 @@ const reviewKind = kind({
 /** A round's ship, with the writes. */
 const shipKind = kind({
 	machine: ship,
+	state: Ship,
 	parent: "loop",
 	options: () => ({
 		ctx: undefined,
@@ -361,6 +363,7 @@ const FLAGS = {
 /** The loop over one ticket. Found mid-way, it sends its Act again, which finds its stage where it stood. */
 const loopKind = kind({
 	machine: loop,
+	state: Loop,
 	parent: "main",
 	options: (stages: Stages) => ({
 		ctx: undefined,

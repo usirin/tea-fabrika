@@ -7,7 +7,7 @@ import {describe, runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
-import {type Jobs, jobsMachine, tableLine} from "./jobs.ts";
+import {Jobs, jobsMachine, tableLine} from "./jobs.ts";
 import {JobStorage, Programs} from "./programs.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a job
@@ -52,6 +52,10 @@ export type Ready = typeof Ready.Type;
  * next table write fail `Stale`: two tsh never both write the table.
  */
 export const TABLE = {run: "tsh", machine: "jobs", key: "table"} as const;
+
+/** What tsh says when the job table it finds was saved by older code. */
+export const TABLE_REFUSED =
+	"tsh: the job table was saved by older code, can't open it. Jobs started now are not kept.";
 
 /** What tsh says, in the order it says it: a line, or that a line is done. */
 type Spoken =
@@ -98,6 +102,7 @@ export const tsh = defineProgram({
 	machines: {
 		jobs: kind({
 			machine: jobsMachine,
+			state: Jobs,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "jobs", steps: {}}),
@@ -113,10 +118,19 @@ export const tsh = defineProgram({
 			// tsh on it finds. Not through a ref, which keeps by run id: each tsh is a new run, because
 			// storage keeps a closed input closed, and Ctrl-D closed the last one's `line` for good.
 			const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
+			// Read first through its schema: a table saved by older code is never opened, and never
+			// written over. tsh runs on with a table it does not keep, as tea says a host does when a
+			// store refuses (its `StoreRefusedError`), and says so.
+			const kept = yield* home.read(TABLE.machine, TABLE.key, Jobs).pipe(
+				Effect.as(true),
+				Effect.catchTag("StateRefused", () => Effect.succeed(false)),
+				Effect.orDie,
+			);
 			const table = yield* (yield* runMachine(jobsMachine, {
 				ctx: undefined,
-				store: home.store<Jobs>(TABLE.machine, TABLE.key),
+				...(kept ? {store: home.store(TABLE.machine, TABLE.key, Jobs)} : {}),
 			})).ready;
+			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
 			yield* watch("jobs", TABLE.key, table);
 			// Whatever ran in an earlier tsh does not run in this one: it waits to be attached.
 			yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);

@@ -1,10 +1,10 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
+import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
 import {nameOf} from "../outcome.ts";
 import {Merged, Rerun, ShipFacts} from "./facts.ts";
 import {shipGate} from "./gate.ts";
-import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
+import {Landing, landed, ShipOutcome} from "./outcome.ts";
 import {Ready, ReadyToMerge} from "./ready.ts";
 
 // The ship machine: one pull request in, one typed outcome out, no agent in
@@ -97,12 +97,13 @@ export type ChecksSub = Sub<"ship_checks", AtHead & {readonly after: readonly Re
 export type QueueSub = Sub<"ship_queue", AtHead>;
 
 /** How long each wait may last, in ms. */
-export interface Waits {
+export const Waits = Schema.Struct({
 	/** Checks still running, or running again. */
-	readonly checksMs: number;
+	checksMs: Schema.Finite,
 	/** The pull request in the merge queue. */
-	readonly queueMs: number;
-}
+	queueMs: Schema.Finite,
+});
+export type Waits = typeof Waits.Type;
 
 /** The machine's own limits, for a setting left out. Starting numbers, not measured ones. */
 export const DEFAULT_WAITS: Waits = {checksMs: 15 * 60_000, queueMs: 60 * 60_000};
@@ -124,47 +125,81 @@ export const MAX_MOVES = 3;
 export const MAX_WAITS = 5;
 
 /** `waits`: the limits this run started with, kept in the state so a restart goes by the same numbers. */
-type Held = {readonly pr: string; readonly waits: Waits};
+const Held = Schema.Struct({pr: Schema.String, waits: Waits});
+type Held = typeof Held.Type;
 /**
  * What a run remembers from one read to the next. `moves`: how many times the
  * head has moved under an enqueue. `rerunFor`: the head whose red checks were
  * already run again, so a new head gets a re-run of its own. `waited`: how
  * many times it has waited on the checks, which numbers each wait's clock.
  */
-type Sofar = Held & {
-	readonly moves: number;
-	readonly rerunFor: string | null;
-	readonly waited: number;
-};
+const Sofar = Schema.Struct({
+	...Held.fields,
+	moves: Schema.Finite,
+	rerunFor: Schema.NullOr(Schema.String),
+	waited: Schema.Finite,
+});
+type Sofar = typeof Sofar.Type;
 /**
  * What the gate said go with. Kept from the gate's answer, never worked out
  * again: the proof it may merge (its head is `ready.head`), and how it lands.
+ * The proof is read back through `Ready`, so a kept one that no longer
+ * proves every criterion does not load.
  */
-type Going = {readonly ready: ReadyToMerge; readonly landing: Landing};
+const Going = Schema.Struct({ready: Ready, landing: Landing});
+type Going = typeof Going.Type;
 
 /**
+ * The ship machine's state, and the schema it is kept and read back through.
  * Each phase that has a Cmd in flight keeps it as `asked`: an Act's intent is
  * in the state before the Cmd goes out, and `resume` sends the same Cmd again.
  * The two phases that wait (`waiting`, `queued`) have none: their Listens open
  * again by themselves.
  */
-export type Ship =
-	| {readonly phase: "idle"}
-	| (Sofar & {readonly phase: "reading"; readonly asked: ReadCmd})
-	| (Sofar & {readonly phase: "rerunning"; readonly head: string; readonly asked: RerunCmd})
+export const Ship = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({
+		...Sofar.fields,
+		phase: Schema.Literal("reading"),
+		asked: keptCmd(readShipFacts, At),
+	}),
+	Schema.Struct({
+		...Sofar.fields,
+		phase: Schema.Literal("rerunning"),
+		head: Schema.String,
+		asked: keptAct(rerunChecks, AtHead),
+	}),
 	/** The checks of `head` are running, for the first time or again. */
-	| (Sofar & {readonly phase: "waiting"; readonly head: string; readonly after: readonly Rerun[]})
-	| (Sofar & Going & {readonly phase: "enqueueing"; readonly asked: EnqueueCmd})
+	Schema.Struct({
+		...Sofar.fields,
+		phase: Schema.Literal("waiting"),
+		head: Schema.String,
+		after: Schema.Array(Rerun),
+	}),
+	Schema.Struct({
+		...Sofar.fields,
+		...Going.fields,
+		phase: Schema.Literal("enqueueing"),
+		asked: keptAct(enqueue, Proven),
+	}),
 	/** No merge queue: the head is merged straight in. */
-	| (Sofar & Going & {readonly phase: "merging"; readonly asked: MergeCmd})
-	| (Held & Going & {readonly phase: "queued"})
-	| (Held & {
-			readonly phase: "finishing";
-			readonly commit: string;
-			readonly landing: Landing;
-			readonly asked: FinishCmd;
-	  })
-	| (Held & {readonly phase: "over"; readonly outcome: ShipOutcome});
+	Schema.Struct({
+		...Sofar.fields,
+		...Going.fields,
+		phase: Schema.Literal("merging"),
+		asked: keptAct(merge, Proven),
+	}),
+	Schema.Struct({...Held.fields, ...Going.fields, phase: Schema.Literal("queued")}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("finishing"),
+		commit: Schema.String,
+		landing: Landing,
+		asked: keptAct(finish, At),
+	}),
+	Schema.Struct({...Held.fields, phase: Schema.Literal("over"), outcome: ShipOutcome}),
+]);
+export type Ship = typeof Ship.Type;
 
 export type ShipMsg =
 	| {readonly type: "start"; readonly pr: string}

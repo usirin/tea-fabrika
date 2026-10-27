@@ -1,6 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {kind} from "@kampus/fabrika";
-import type {AnswerBody, Ask} from "@kampus/pipeline/asks/ask";
+import {type AnswerBody, Ask} from "@kampus/pipeline/asks/ask";
+import {Effect, Schema} from "effect";
 import {askPage, inboxPage, type Page, saidOf} from "./pages.ts";
 
 // The owner's desk as one small machine: what waits on the owner, oldest
@@ -10,18 +11,26 @@ import {askPage, inboxPage, type Page, saidOf} from "./pages.ts";
 // ones that changed (./program.ts).
 
 /** An ask that no longer waits, and what closed it. */
-export interface Closed {
-	readonly ask: Ask;
-	readonly said: string;
-}
+export const Closed = Schema.Struct({ask: Ask, said: Schema.String});
+export type Closed = typeof Closed.Type;
 
-export interface Desk {
-	readonly open: readonly Ask[];
+/**
+ * The desk's state, and the schema it is kept and read back through. A desk
+ * kept before it held refusals or closed asks reads with none, as `init`
+ * always took it.
+ */
+export const Desk = Schema.Struct({
+	open: Schema.Array(Ask),
 	/** For an open ask, why the core refused the owner's last answer to it. */
-	readonly refused: Readonly<Record<string, string>>;
+	refused: Schema.Record(Schema.String, Schema.String).pipe(
+		Schema.withDecodingDefaultKey(Effect.succeed({})),
+	),
 	/** Every ask that stopped waiting while the desk ran, by id. An ask's id is never used again. */
-	readonly closed: Readonly<Record<string, Closed>>;
-}
+	closed: Schema.Record(Schema.String, Closed).pipe(
+		Schema.withDecodingDefaultKey(Effect.succeed({})),
+	),
+});
+export type Desk = typeof Desk.Type;
 
 export type DeskMsg =
 	/**
@@ -99,6 +108,7 @@ export function pagesOf(s: Desk): ReadonlyMap<string, Page> {
 
 export const deskKind = kind({
 	machine: desk,
+	state: Desk,
 	parent: "main",
 	options: () => ({ctx: undefined}),
 	drawing: () => ({name: "desk", steps: {}, tags: (s) => ({waiting: s.open.length})}),
