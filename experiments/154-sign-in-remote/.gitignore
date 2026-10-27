@@ -1,0 +1,5 @@
+# Made by build.ts and by wrangler, never committed.
+node_modules/
+dist/
+box/box.mjs
+.wrangler/
