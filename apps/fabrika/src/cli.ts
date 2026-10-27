@@ -74,7 +74,9 @@ const moveCmd = Command.make(
 		key: Flag.optional(Flag.String("key")).pipe(
 			Flag.withDescription("your SSH key file, Ed25519, no passphrase"),
 		),
+		// Left out, it is a real move: a boolean flag without a default is a required one.
 		dryRun: Flag.Boolean("dry-run").pipe(
+			Flag.withDefault(false),
 			Flag.withDescription("print the counts and the hash, and write nothing anywhere"),
 		),
 		founder: Flag.optional(Flag.String("founder")).pipe(

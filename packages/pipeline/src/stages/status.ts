@@ -2,9 +2,9 @@ import type {Build} from "./build/machine.ts";
 import type {Loop} from "./operate/machine.ts";
 import type {AnyOutcome} from "./outcome.ts";
 import type {Waiting} from "./queue.ts";
+import {refOf} from "./ref.ts";
 import type {Review} from "./review/machine.ts";
 import type {Ship} from "./ship/machine.ts";
-import {refOf} from "./traced.ts";
 
 // Each stage machine's status line: where one copy stands, in a few plain
 // words a person reads in `jobs`, read from its state alone. A program

@@ -5,5 +5,5 @@
 		"lib": ["ES2023", "DOM", "DOM.Iterable"],
 		"jsx": "react-jsx"
 	},
-	"include": ["src", "build.ts", "e2e.ts", "table.ts"]
+	"include": ["src", "build.ts", "bundles.ts", "e2e.ts", "table.ts"]
 }
