@@ -4,9 +4,14 @@ import type {BuildOptions} from "esbuild";
 // file, so build.ts builds them and src/bundles.test.ts builds them the same way, without writing:
 // a page that reaches Node's own modules fails the test, not the app's start.
 
-/** Some of what the bundles hold is CommonJS and calls `require`; ESM has none of its own. */
+/**
+ * Some of what the bundles hold is CommonJS and calls `require`; ESM has none of its own. The
+ * import takes a name of its own: esbuild does not read a banner, so a bundled file that imports
+ * `createRequire` itself (@effect/platform-node's http client does) would declare it twice, and
+ * the bundle would not load.
+ */
 const REQUIRE =
-	'import {createRequire} from "node:module"; const require = createRequire(import.meta.url);';
+	'import {createRequire as bannerRequire} from "node:module"; const require = bannerRequire(import.meta.url);';
 
 /** The bundles. `at`: a path inside the app's folder, made whole. */
 export const bundlesOf = (at: (...parts: string[]) => string): readonly BuildOptions[] => [
