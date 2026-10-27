@@ -224,17 +224,18 @@ export const acpProgram = defineProgram({
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const folder = yield* scratchFolder(flags.folder);
-			const harness = harnessOf(flags.agent, folder, flags.budget ?? null);
-			if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
-				return yield* refused(
-					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
-				);
+			// A mode codex may not run in is refused first, whether or not the adapter is installed.
 			if (
 				flags.agent === "codex" &&
 				flags.mode !== undefined &&
 				!(CODEX_MODES as readonly string[]).includes(flags.mode)
 			)
 				return yield* refused(`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode}`);
+			const harness = harnessOf(flags.agent, folder, flags.budget ?? null);
+			if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
+				return yield* refused(
+					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
+				);
 			if (harness.prepare !== undefined) yield* harness.prepare.pipe(Effect.catch(refused));
 
 			// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
