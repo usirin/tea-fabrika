@@ -55,12 +55,13 @@ import type {Input} from "../program/shape.ts";
 import {
 	createHost,
 	type ExitWord,
+	HOST_GRACE_MS,
 	type Host,
 	type HostMsg,
 	type HostSettings,
 	type ProgramEnd,
 } from "./host-machine.ts";
-import {journalStore, lastStateOf, type WriteNote} from "./journal.ts";
+import {backoff, journalStore, lastStateOf, type WriteNote} from "./journal.ts";
 import {
 	type Inbox,
 	Ledger,
@@ -106,23 +107,29 @@ export type Delivered =
 	| {readonly how: "unknown"}
 	| {readonly how: "unreachable"};
 
+/**
+ * One send, again under the same id while the ledger does not answer: 20 tries 50 ms apart, or,
+ * `patient` (151: a program's own fenced send), with no limit, a second apart at most, until it
+ * lands, is refused, or the program stops. The ledger fences only on a newer claim, so waiting
+ * out a wifi drop costs nothing.
+ */
 const deliver = (
 	ledger: Ledger["Service"],
 	inbox: Inbox,
 	id: string,
 	event: Omit<NewEvent, "id">,
 	fence: number | undefined,
-	tries = 20,
+	patient = false,
 ): Effect.Effect<Delivered> =>
 	Effect.gen(function* () {
-		for (let lost = 0; lost < tries; lost++) {
+		for (let lost = 1; patient || lost <= 20; lost++) {
 			const r = yield* ledger.send(inbox, id, event, fence).pipe(Effect.result);
 			if (r._tag === "Success") return {how: "sent", rev: r.success.rev, dup: r.success.dup};
 			const e = r.failure;
 			if (e._tag === "Fenced") return {how: "fenced"};
 			if (e._tag === "Denied") return {how: "denied"};
 			if (e._tag === "UnknownName") return {how: "unknown"};
-			yield* Effect.sleep(Duration.millis(50));
+			yield* Effect.sleep(patient ? backoff(lost) : Duration.millis(50));
 		}
 		return {how: "unreachable"};
 	});
@@ -249,7 +256,8 @@ export class Self extends Context.Service<
 		>;
 		/**
 		 * One message into `to`, fenced on this program's own lease, under the message id `id`. With
-		 * no answer it is sent again under the same id; the ledger answers a landed one `dup`.
+		 * no answer it is sent again under the same id, with no limit on tries (151), until the
+		 * program stops; the ledger answers a landed one `dup`.
 		 */
 		readonly send: (to: Inbox, id: string, body: unknown) => Effect.Effect<Delivered>;
 		readonly run: RunUnder;
@@ -338,7 +346,16 @@ export type HostEvent =
 			readonly answer: "exited" | "dup" | "refused" | "unreachable";
 			readonly pos: number | null;
 	  } & ExitWord)
-	| {readonly ev: "lease_end"; readonly fence: number; readonly until: number}
+	/**
+	 * The lease clock ran out: no renew came back for `graceMs` past the lease's end `until`, and
+	 * the program stops. 151: a person should see this one; a short drop never comes this far.
+	 */
+	| {
+			readonly ev: "lease_end";
+			readonly fence: number;
+			readonly until: number;
+			readonly graceMs: number;
+	  }
 	| WriteNote
 	| {readonly ev: "bad_shape"; readonly fence: number; readonly rev: number}
 	| {
@@ -372,6 +389,14 @@ export interface ServeOptions<P> {
 	readonly renewEveryMs?: number;
 	/** Default 50 ms. */
 	readonly retryMs?: number;
+	/**
+	 * 151: how long past its lease's end the program runs while no renew comes back. The ledger
+	 * fences the program's writes once a newer claim takes the name, so a wifi drop is waited
+	 * out, not treated as a lost lease. Default 10 minutes.
+	 */
+	readonly graceMs?: number;
+	/** 151: how often a renew is sent once one had no answer. Default 1 s, or `renewEveryMs` if less. */
+	readonly retryRenewMs?: number;
 	/** Hears every event. Default: nobody. */
 	readonly listen?: (e: HostEvent) => void;
 	/** What the tails read, for a caller that measures it. */
@@ -436,6 +461,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const ttlMs = o.ttlMs ?? 1000;
 		const renewEveryMs = o.renewEveryMs ?? 250;
 		const retryMs = o.retryMs ?? 50;
+		const graceMs = o.graceMs ?? HOST_GRACE_MS;
+		const retryRenewMs = o.retryRenewMs ?? Math.min(1000, renewEveryMs);
 		const say = o.listen ?? (() => {});
 		const meters = o.meters ?? {registry: meter(), inbox: meter()};
 		const S = streams(name);
@@ -530,11 +557,21 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			}),
 		);
 
-		const leaseClock = (fence: number, until: number): Stream.Stream<HostMsg> =>
+		/** `lease_due` at `at`: the lease's end plus the grace, as the machine's Sub asks. */
+		const leaseClock = (fence: number, at: number): Stream.Stream<HostMsg> =>
 			Stream.fromEffect(
-				Effect.sleep(Duration.millis(Math.max(0, until - Date.now()))).pipe(
-					Effect.andThen(Effect.sync(() => say({ev: "lease_end", fence, until}))),
-					Effect.as<HostMsg>({type: "lease_due", fence, until}),
+				Effect.sleep(Duration.millis(Math.max(0, at - Date.now()))).pipe(
+					Effect.andThen(
+						Effect.sync(() => say({ev: "lease_end", fence, until: at - graceMs, graceMs})),
+					),
+					Effect.andThen(
+						graceMs > 0
+							? Effect.logWarning(
+									`${name}: no word from the ledger for ${Math.round(graceMs / 1000)} s past the lease's end; the program stops`,
+								)
+							: Effect.void,
+					),
+					Effect.as<HostMsg>({type: "lease_due", fence, until: at}),
 				),
 			);
 
@@ -645,6 +682,9 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					const cursorNow = yield* Ref.make<Effect.Effect<number | null> | null>(null);
 					/** A save under this fence was refused: the lease is gone, whatever the cause says. */
 					let refused = false;
+					// 151: a save or a send still waiting on the ledger stops with the program.
+					const stop = new AbortController();
+					yield* Effect.addFinalizer(() => Effect.sync(() => stop.abort()));
 					// Where the run's failures with no caller go: said, and the host goes on.
 					const sink = (error: unknown, context: {readonly phase: string}) =>
 						say({
@@ -663,9 +703,11 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 								fence,
 								holder,
 								note: (n) => {
-									if (!n.ok) refused = true;
+									// A save that waits on the ledger is not refused: it goes on.
+									if (!n.ok && n.why !== "unreachable") refused = true;
 									say(n);
 								},
+								signal: stop.signal,
 							});
 							const last = lastStateOf(journal.schema);
 							yield* Ref.set(
@@ -700,7 +742,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 							processInfo: ledger.processInfo,
 						},
 						send: (to, id, body) =>
-							deliver(ledger, to, id, {kind: "message", writer: holder, data: body}, fence),
+							deliver(ledger, to, id, {kind: "message", writer: holder, data: body}, fence, true),
 						run: runUnder,
 						...calls(fence),
 					});
@@ -790,7 +832,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 
 		// ------------------------------------------------------------ the machine
 
-		const settings: HostSettings = {renewEveryMs, retryMs};
+		const settings: HostSettings = {renewEveryMs, retryMs, graceMs, retryRenewMs};
 		const handle = yield* run(createHost(settings), {
 			ctx: undefined,
 			interpret: {

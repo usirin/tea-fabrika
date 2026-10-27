@@ -15,7 +15,11 @@
 //   neither  nothing was ever sent: the intent row first, then the send.
 //
 // Just before the send, the lease is read again: a host frozen past its lease and woken finds
-// another fence there, and sends nothing. A write cannot be made without this gate, by type and
+// another fence there, and sends nothing. New in 151: the gate waits out a ledger that does not
+// answer, with no limit on tries: its rows go again under their ids, and the lease check waits
+// until the lease is this fence's and live again (the host renews it when it is back), or another
+// fence holds it. Experiment 149: after two seconds the check gave up and the program hung for
+// good, the host renewing on. A write cannot be made without this gate, by type and
 // at run time: every outside call takes a `Key`, a key is made only here (its constructor is
 // private), and an adapter takes one only through `useKey`, which refuses a key this gate did
 // not hand out, or one whose send is over.
@@ -26,7 +30,8 @@
 // an enqueue of a queued head changes nothing). A comment has no such rule and can be posted twice.
 
 import {Ledger} from "@kampus/fabrika";
-import {Context, Duration, Effect, Exit, Layer, Option, Schedule, Schema} from "effect";
+import {Context, Duration, Effect, Exit, Layer, Option, Schema} from "effect";
+import {steady} from "../asks/ledger.ts";
 
 type Failed = {readonly _tag: "unknown"};
 
@@ -168,25 +173,25 @@ export const gate = (o: GateOptions) =>
 				Effect.andThen(Effect.never),
 			);
 
-		/** Retried while the ledger does not answer: the id makes a resend safe. */
+		/** Sent again while the ledger does not answer, with no limit: the id makes a resend safe. */
 		const append = (id: string, kind: string, data: unknown) =>
-			ledger.append(stream, "any", {kind, writer: o.holder, data, id}, o.fence).pipe(
-				Effect.retry({
-					while: (e) => e._tag === "LedgerUnreachable",
-					times: 40,
-					schedule: SPACED,
-				}),
+			steady(
+				`write ${kind} row`,
+				ledger.append(stream, "any", {kind, writer: o.holder, data, id}, o.fence),
 			);
 
-		/** The lease is this fence's, with time to send in. Waits out a renew that is due. */
+		/**
+		 * The lease is this fence's, with time to send in. Waits out a renew that is due, a ledger
+		 * that does not answer, and a lease past its end with no newer claim (151: the fence still
+		 * holds, and the host renews it when it is back). Another fence there: false.
+		 */
 		const leaseHeld = Effect.gen(function* () {
-			for (let tries = 0; tries < 40; tries++) {
-				const lease = yield* ledger.lease(o.name).pipe(Effect.orElseSucceed(() => null));
+			for (;;) {
+				const lease = yield* steady("read the lease", ledger.lease(o.name));
 				if (lease !== null && lease.fence !== o.fence) return false;
 				if (lease !== null && lease.expires_at - Date.now() > marginMs) return true;
 				yield* Effect.sleep(SPACING);
 			}
-			return false;
 		});
 
 		const once = <A>(write: Write<A>): Effect.Effect<A, Failed> =>
@@ -195,9 +200,7 @@ export const gate = (o: GateOptions) =>
 				const note = (step: WriteNote["step"]) =>
 					Effect.sync(() => say({ev: "write", op: write.op, key, fence: o.fence, step}));
 				const decodeAnswer = Schema.decodeUnknownExit(write.answer);
-				const rows = yield* ledger
-					.readStream(stream)
-					.pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
+				const rows = yield* steady("read the write rows", ledger.readStream(stream));
 				const done = rows.find((r) => r.id === `done:${key}`);
 				if (done !== undefined) {
 					const row = decodeDone(done.data);
@@ -257,4 +260,3 @@ export const gate = (o: GateOptions) =>
 	});
 
 const SPACING = Duration.millis(50);
-const SPACED = Schedule.spaced(SPACING);

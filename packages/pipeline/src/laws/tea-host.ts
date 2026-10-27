@@ -67,7 +67,17 @@ type Monitors = Monitor.Monitors;
 
 // ---------------------------------------------------------------- the host
 
-const SETTINGS: HostSettings = {renewEveryMs: 300, retryMs: 50};
+/**
+ * Lane 18, part 2: the grace past the lease's end before the host stops its program, 10 minutes.
+ * No word from the ledger is not a lost lease.
+ */
+export const GRACE_MS = 600_000;
+/** Was "at its own lease's end the program stops" (experiment 98), until lane 18's part 2. */
+export const LEASE_LAW =
+	"no word from the ledger is not a lost lease: the program stops at its lease's end plus 10 minutes, or at once on a newer claim or a lost renew";
+/** `graceMs` is the name experiment 149 gave the grace; today's host has no such setting yet. */
+const TUNING = {renewEveryMs: 300, retryMs: 50, graceMs: GRACE_MS};
+const SETTINGS: HostSettings = TUNING;
 const host = createHost(SETTINGS);
 
 /** How the laws see a host's Subs: the same functions the machine's `subs` call. */
@@ -107,6 +117,8 @@ export function hostWorld(): World<Host, HostMsg, HostCmd> {
 						{type: "renew_due" as const, fence: s.fence, tick: s.ticks},
 						{type: "lease_due" as const, fence: s.fence, until: s.until},
 						{type: "lease_due" as const, fence: s.fence, until: 500},
+						// Lane 18: the clock at the lease's end plus the grace.
+						{type: "lease_due" as const, fence: s.fence, until: s.until + GRACE_MS},
 					]
 				: []),
 			...FENCES.flatMap((fence): HostMsg[] => [
@@ -172,12 +184,28 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 				? null
 				: `after ${msg.type} ${fenceOf(msg)} the program still runs under fence ${prev.fence}`;
 		}),
-		law<Host, HostMsg, HostCmd>("at its own lease's end the program stops", ({prev, msg, next}) => {
-			if (prev.phase !== "owning" || msg.type !== "lease_due") return null;
-			if (msg.fence !== prev.fence || msg.until !== prev.until) return null;
-			return view.program(next) === null
-				? null
-				: `the lease clock ran out at ${msg.until} and the program still runs`;
+		// Lane 18, part 2. A `lease_due` says the lease clock read its `until`. Before the lease's
+		// end plus the grace, no word (a renew with no answer, the ledger's own `lease_expired`, the
+		// clock at the bare end) does not stop the program. At the end plus the grace, it stops.
+		law<Host, HostMsg, HostCmd>(LEASE_LAW, ({prev, msg, next}) => {
+			if (prev.phase !== "owning" || view.program(prev) === null) return null;
+			const own = fenceOf(msg) === prev.fence;
+			const end = prev.until + GRACE_MS;
+			const runs = view.program(next)?.fence === prev.fence;
+			const stops =
+				(own && msg.type === "renew_lost") ||
+				(msg.type === "seen_claim" && msg.fence > prev.fence) ||
+				(own && msg.type === "lease_due" && msg.until >= end);
+			const keeps =
+				own &&
+				(msg.type === "renew_unknown" ||
+					msg.type === "seen_expiry" ||
+					(msg.type === "lease_due" && msg.until < end));
+			if (stops && runs)
+				return `after ${showHostMsg(msg)} the program still runs under fence ${prev.fence}`;
+			if (keeps && !runs)
+				return `${showHostMsg(msg)} stopped the program under fence ${prev.fence}, before its lease's end plus the grace (${end})`;
+			return null;
 		}),
 		law<Host, HostMsg, HostCmd>("the lease clock never runs backwards", ({prev, next}) => {
 			const a = view.leaseClock(prev);
@@ -377,7 +405,7 @@ export const HOST_PLANTED: readonly {
 	},
 	{
 		name: "ignores its lease clock (98)",
-		law: "at its own lease's end the program stops",
+		law: LEASE_LAW,
 		update: (s, m) => (m.type === "lease_due" ? [s, []] : real(s, m)),
 	},
 	{

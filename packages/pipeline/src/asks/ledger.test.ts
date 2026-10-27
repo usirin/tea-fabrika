@@ -19,6 +19,7 @@ import {
 	ROOT,
 	readFacts,
 	sendFact,
+	steadyCall,
 	ticketName,
 } from "./ledger.ts";
 import {foldLedger, openAsks, planAskId, rulingId} from "./rules.ts";
@@ -371,5 +372,31 @@ describe("what the ledger can hold under pipeline/", () => {
 		);
 		expect(sent.filter((s) => !s.dup)).toHaveLength(1);
 		expect(memory.read()).toEqual([{seq: 1, fact: lane(1)}]);
+	});
+});
+
+describe("a call on `Self` while the ledger does not answer (151)", () => {
+	/** A call that answers each word in turn, then the last one again. */
+	const scripted = <W>(words: readonly W[]) => {
+		let tries = 0;
+		const call = Effect.sync(() => words[Math.min(tries++, words.length - 1)] as W);
+		return {call, tries: () => tries};
+	};
+
+	it("is asked again until the ledger answers, and the answer comes back as it came: a word or a record, `fenced` at once", async () => {
+		const trap = scripted<"ok" | "fenced" | "unreachable">(["unreachable", "unreachable", "ok"]);
+		expect(await Effect.runPromise(steadyCall("trap exits", trap.call))).toBe("ok");
+		expect(trap.tries()).toBe(3);
+
+		type Start = {readonly how: "ok"; readonly started: boolean} | {readonly how: "unreachable"};
+		const start = scripted<Start>([{how: "unreachable"}, {how: "ok", started: false}]);
+		expect(await Effect.runPromise(steadyCall("start a child", start.call))).toEqual({
+			how: "ok",
+			started: false,
+		});
+
+		const lost = scripted<"ok" | "fenced" | "unreachable">(["fenced", "ok"]);
+		expect(await Effect.runPromise(steadyCall("trap exits", lost.call))).toBe("fenced");
+		expect(lost.tries()).toBe(1);
 	});
 });

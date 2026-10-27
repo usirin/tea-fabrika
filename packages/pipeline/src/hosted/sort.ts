@@ -17,7 +17,7 @@
 import {Ledger, type Self} from "@kampus/fabrika";
 import type {DraftRun} from "@kampus/fabrika/agents/claude";
 import {Effect, Exit, Option, Schema, Stream} from "effect";
-import {type Fact, sendFact} from "../asks/ledger.ts";
+import {type Fact, type Hold, sendFact} from "../asks/ledger.ts";
 import {planOf, readTicketId} from "../ids.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {saidOf} from "../stages/sort/answer.ts";
@@ -120,7 +120,7 @@ const found = (there: boolean) => (there ? Option.some(null) : Option.none());
 export const sortWritesOf = (
 	gate: Idempotency["Service"],
 	issues: Issues["Service"],
-	context: {readonly ledger: Ledger["Service"]; readonly by: string},
+	context: {readonly ledger: Ledger["Service"]; readonly by: string; readonly hold: Hold},
 ): SortWrites["Service"] => {
 	const once = (write: SortWrite) => {
 		switch (write.op) {
@@ -180,7 +180,10 @@ export const sortWritesOf = (
 			}
 		}
 	};
-	/** A fact on the ledger, once: its message id is the key, so a second send is answered, not written. */
+	/**
+	 * A fact on the ledger, once: its message id is the key, so a second send is answered, not
+	 * written. Fenced on the stage's lease (151): a stage whose name another host claimed sends nothing.
+	 */
 	const fact = (op: string, subject: string, f: Fact) =>
 		gate.once({
 			op,
@@ -189,7 +192,7 @@ export const sortWritesOf = (
 			look: () => Effect.succeed(Option.none()),
 			send: (key) =>
 				useKey(key).pipe(
-					Effect.flatMap((text) => sendFact(f, {id: text, by: context.by})),
+					Effect.flatMap((text) => sendFact(f, {id: text, by: context.by, hold: context.hold})),
 					Effect.provideService(Ledger, context.ledger),
 					Effect.mapError(() => ({_tag: "unknown" as const})),
 					Effect.as(null),
@@ -212,6 +215,7 @@ export const hostedSort: Stage<
 			const writes = sortWritesOf(yield* Idempotency, yield* Issues, {
 				ledger: yield* Ledger,
 				by: self.name,
+				hold: {name: self.name, fence: self.fence},
 			});
 			return yield* self
 				.run(
