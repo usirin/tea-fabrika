@@ -69,6 +69,7 @@ const table: MsgArbitraryTable<Msg> = {
 	}),
 	find: arbRecordMsg("find", {text: fc.constantFrom("", "login")}),
 	refresh: arbConstantMsg("refresh"),
+	tick: arbRecordMsg("tick", {now: fc.nat({max: 10_000_000})}),
 	pull_requests_ok: fc.constant(pullRequests.ok(pullRequests({}), {pullRequests: []}, 0)),
 	pull_requests_err: fc.constant(pullRequests.err(pullRequests({}), {_tag: "unreachable"}, 0)),
 	load_ok: fc

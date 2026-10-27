@@ -11,6 +11,7 @@ import {
 import type {MsgOf} from "@kampus/fabrika";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {headOf} from "./head.ts";
 import {load, pullRequests, type Show, save, shownOf, type Tracker, tracker} from "./machine.ts";
 import type {PullRequest} from "./pull-requests.ts";
 import {type Entry, type Fact, summaryOf, type Ticket, type Write} from "./ticket.ts";
@@ -105,6 +106,7 @@ const table: MsgArbitraryTable<Msg> = {
 	show: arbRecordMsg("show", {show}),
 	find: arbRecordMsg("find", {text: find}),
 	refresh: arbConstantMsg("refresh"),
+	tick: arbRecordMsg("tick", {now: fc.nat({max: 10_000_000})}),
 	load_ok: fc
 		.record({
 			after,
@@ -269,7 +271,7 @@ const ticketsAll = every(
 		if (page === null) return true;
 		const wanted = next.tickets
 			.filter((t) => fits(next, t))
-			.map(summaryOf)
+			.map((t) => ({...summaryOf(t), head: headOf(t.timeline, next.now)}))
 			.sort((a, b) => b.number - a.number);
 		return same(page.tickets, wanted);
 	},

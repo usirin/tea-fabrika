@@ -30,7 +30,8 @@ describe("the tracker's machine", () => {
 		const first = steps();
 		expect(first.cmds).toEqual([load({after: 0}), pullRequests({})]);
 		expect(first.state.ready).toBe(false);
-		expect(first.subs).toEqual([]);
+		// Only the clock: no poll while the first read is out.
+		expect(first.subs.map((s) => s.type)).toEqual(["clock"]);
 		expect(statusOf(first.state)).toBe("reading the ledger");
 
 		const read = steps(loaded(0, [filed(1, 1, "Login fails"), filed(4, 2, "Docs typo")]));
@@ -39,7 +40,17 @@ describe("the tracker's machine", () => {
 		expect(read.state.tickets.map((t) => t.title)).toEqual(["Login fails", "Docs typo"]);
 		expect(statusOf(read.state)).toBe("2 open, 0 closed");
 		// Idle now: the poll is on, from where the read ended.
-		expect(read.subs.map((s) => [s.type, s.deps])).toEqual([["poll", {after: 4}]]);
+		expect(read.subs.map((s) => [s.type, s.deps])).toEqual([
+			["poll", {after: 4}],
+			["clock", {}],
+		]);
+	});
+
+	it("keeps the time a tick brings, and nothing else changes", () => {
+		const before = steps(loaded(0, []));
+		const after = steps(loaded(0, []), {type: "tick", now: 5_000});
+		expect(after.state).toEqual({...before.state, now: 5_000});
+		expect(after.cmds).toEqual(before.cmds);
 	});
 
 	it("writes one at a time, in the order asked, and reads the ledger after each", () => {
@@ -119,9 +130,9 @@ describe("the tracker's machine", () => {
 		const list = shownOf(steps(loaded(0, entries)).state);
 		expect(list.page.kind === "list" && list.page.tickets.map((t) => t.number)).toEqual([2, 1]);
 		const open = shownOf(steps(loaded(0, entries), {type: "open", ticket: 1}).state);
-		expect(open.page.kind === "ticket" && open.page.ticket?.title).toBe("Login fails");
+		expect(open.page.kind === "ticket" && open.page.opened?.ticket.title).toBe("Login fails");
 		const none = shownOf(steps(loaded(0, entries), {type: "open", ticket: 9}).state);
-		expect(none.page).toEqual({kind: "ticket", number: 9, ticket: null});
+		expect(none.page).toEqual({kind: "ticket", number: 9, opened: null});
 		const back = shownOf(
 			steps(loaded(0, entries), {type: "open", ticket: 1}, {type: "list"}).state,
 		);

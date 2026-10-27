@@ -1,7 +1,17 @@
 import type {Row} from "@kampus/fabrika";
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Entry, type Fact, fold, readRow, Said, summaryOf, Title} from "./ticket.ts";
+import {
+	type Entry,
+	type Fact,
+	fold,
+	mayWrite,
+	readRow,
+	Said,
+	summaryOf,
+	Title,
+	WRITTEN_BY,
+} from "./ticket.ts";
 
 // A ticket from its rows: what reads, what is broken, and what the fold makes of the facts.
 
@@ -123,6 +133,87 @@ describe("the fold", () => {
 			comments: 2,
 			at: 4000,
 		});
+	});
+});
+
+describe("a lane's facts", () => {
+	const build = {kind: "agent", id: "build", for: "owner"} as const;
+	const by = (pos: number, who: Entry["by"], fact: Fact): Entry => ({
+		...entry(pos, 1, fact),
+		by: who,
+	});
+	const filed = entry(1, 1, {type: "filed", title: "Login fails", body: ""});
+	const asked = by(2, build, {
+		type: "asked",
+		ask: "a-1",
+		what: "approve plan v2",
+		picks: ["approve", "no"],
+	});
+
+	it("read from a row like the tracker's own four, each by its type", () => {
+		const fact: Fact = {type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve"]};
+		const read = readRow(row({fact, writer: "agent:plan for:owner"}));
+		expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		const empty = readRow(row({data: JSON.stringify({...fact, picks: []}), kind: "asked"}));
+		expect(empty.kind).toBe("broken");
+	});
+
+	it("keep an agent's answer out of every ticket: only a person answers an ask", () => {
+		const {tickets, problems} = fold(
+			[],
+			[filed, asked, by(3, build, {type: "answered", ask: "a-1", pick: "approve", note: ""})],
+		);
+		expect(tickets[0]?.timeline.map((e) => e.fact.type)).toEqual(["filed", "asked"]);
+		expect(problems).toEqual([
+			"row 3 on #1: answered written by an agent, but only a person writes it",
+		]);
+		expect(WRITTEN_BY.answered).toBe("person");
+		expect(mayWrite(build, "answered")).toBe(false);
+		expect(mayWrite(owner, "answered")).toBe(true);
+	});
+
+	const misfits: readonly (readonly [string, readonly Entry[], string])[] = [
+		[
+			"an answer to an ask never asked",
+			[filed, entry(2, 1, {type: "answered", ask: "a-9", pick: "approve", note: ""})],
+			"an answer to ask a-9, which was never asked",
+		],
+		[
+			"a second answer",
+			[
+				filed,
+				asked,
+				entry(3, 1, {type: "answered", ask: "a-1", pick: "approve", note: ""}),
+				entry(4, 1, {type: "answered", ask: "a-1", pick: "no", note: ""}),
+			],
+			"ask a-1 answered a second time",
+		],
+		[
+			"an answer that is not one of the picks",
+			[filed, asked, entry(3, 1, {type: "answered", ask: "a-1", pick: "maybe", note: ""})],
+			`"maybe" is not one of ask a-1's picks`,
+		],
+		[
+			"a run that ends without a start",
+			[
+				filed,
+				by(2, build, {
+					type: "ended",
+					run: "r-1",
+					stage: "build",
+					outcome: {kind: "done", part: false},
+					usd: 0,
+					input: 0,
+					output: 0,
+					turns: 1,
+				}),
+			],
+			"run r-1 ended, but it never started",
+		],
+	];
+	it.each(misfits)("keep %s out, and say why", (_, entries, why) => {
+		const {problems} = fold([], entries);
+		expect(problems.at(-1)).toMatch(why);
 	});
 });
 

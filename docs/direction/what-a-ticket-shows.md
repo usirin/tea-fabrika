@@ -1,7 +1,9 @@
 # What a ticket's view shows
 
 **Decided 2026-10-25: sections 1, 2, 3 and 5, as written. Section 4, the
-bridge, is dropped.** Nothing here is built. It extends
+bridge, is dropped.** *Built 2026-10-26: sections 1, 2 and 5, and the ask box,
+in the tracker ("Built so far", below). Section 3, the live row, is the next
+pull request.* It extends
 [the ticket is the lane's one view](./the-ticket-is-the-lane-view.md).
 *Read by the owner the same day. Two changes: beats and logs are on the shared
 record (section 3), and no bridge for today's agents (section 4).*
@@ -382,6 +384,62 @@ const write = (writer: Writer, fact: unknown) =>
   `LaneView.tickets` in `packages/pipeline/src/stages/lane/view.ts`, but no
   lane has run that way yet.
 
+## Built so far (2026-10-26)
+
+The first slice is in `programs/tracker`. Nothing runs lanes yet, so every
+lane fact on a ticket today comes from a test.
+
+```ts
+// programs/tracker/src/head.ts. The top line, pure, at the clock's last tick.
+headOf(timeline, now); // {_tag: "asks", asks: [{ask: "a-1", what: "approve plan v2", picks: [...], ...}]}
+lineOf(head, when); // "waits on you: approve plan v2"
+
+// What the window sends when the owner clicks a pick in the ask's box.
+{kind: "answer", ticket: 3, ask: "a-1", pick: "approve", note: ""}
+// tracker/ticket/3/inbox gets {type: "answered", ask: "a-1", pick: "approve", note: ""} by user:owner
+```
+
+- **Section 2: the nine fact kinds** are in the ticket's `Fact` union
+  (`src/ticket.ts`), with the fields above.
+  - They keep the tracker's `type` key, not Effect's `_tag`, so the rows
+    already on a ledger still read. `Head` is not stored, so it uses `_tag`.
+  - `asked` is flattened to `{ask, what, picks}`; `answered` is
+    `{ask, pick, note}`. The pipeline's own `Ask` is richer; mapping it to
+    these is for the pipeline lane that writes them.
+  - The fold refuses a fact that does not fit: an answer to an ask never asked,
+    a second answer, a pick the ask did not offer, a run ended twice or never
+    started.
+- **Only a person writes `answered`,** held three times. The `WRITTEN_BY`
+  table marks it `person`, which compiles only because the door refuses that
+  kind from an agent (`PERSON_KINDS`). The tracker's save refuses it when its
+  `Author` is an agent, for a ledger with no door. The fold keeps an agent's
+  `answered` out of every ticket.
+- **Section 1: the top line** is `headOf` in `src/head.ts`, in the decided
+  order. Its laws (`src/head.laws.test.ts`, fast-check over random fact lists
+  folded by the real fold) hold: an open ask always wins on an unfinished
+  ticket; done only from a merge or a person's close; a comment never closes
+  an ask; a run wins over idle; time moves the line only from next to idle.
+  A planted swap of asks and running is caught.
+  - The clock is a Sub, as Elm's `Time.every`: `tick` once a minute puts the
+    time in the machine's state, so the view stays a pure function of it.
+  - The list shows each ticket's line too. It does not yet sort the tickets
+    that wait on the owner first.
+- **The ask box.** While an `asked` has no `answered`, the ticket's page shows
+  it with one button per pick and a note. A click sends `answer`. A comment is
+  never an answer, and a test checks a comment that says "approve" leaves the
+  box open.
+- **Section 5: done** is read off a `pr` fact that says merged after the last
+  reopen, or a person's close once every ask was answered (the no-code case).
+  Any other close reads "closed by owner", or "closed by agent triage": the
+  line names who closed, because the door still lets an agent write `closed`.
+- **Rows** are made on the host (`src/rows.ts`), with the pipeline's
+  `endedAs` for an outcome, so the window draws words and never imports the
+  pipeline.
+
+Left for the next pull request: section 3, the live row from beats, beats on
+the ledger, the log in `Blobs`, and "never ended" for a run whose process is
+gone.
+
 ## Still open
 
 - How the window groups rows once a lane has many rounds: by task, by round,
@@ -393,7 +451,18 @@ const write = (writer: Writer, fact: unknown) =>
 
 ## What it cannot tell us
 
-- Nothing is built. No ticket has shown a lane's facts.
+- Sections 1, 2 and 5 are built, but no real lane has written a fact yet.
+  Every lane fact the tracker has shown came from a test. Whether the rows read
+  well on a long lane is unknown.
+- The hour for "idle" is still a guess, now in code (`HOUR` in
+  `programs/tracker/src/head.ts`).
+- Done for a ticket with no code (a person's close once its asks are answered)
+  is a reading of section 5, not a tested one. A duplicate closed after a
+  "yes, it is one" also reads "done". A week of real tickets would show
+  whether that is wrong.
+- `closed` and `rated` are still "anyone" at the door. Section 5 says a close
+  is a person's; the line names who closed until the door knows that kind.
+- The window's ask box was typechecked, not clicked: no test draws it.
 - No product's behaviour was tried by hand. Each claim above is what its
   public docs say. Unknown from the docs: how Linear draws activities inside
   an issue, how Cursor, Factory and Amp fold tool calls, and the exact draft

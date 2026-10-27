@@ -1,7 +1,7 @@
 import {run} from "@demlik/tea/effect";
 import {defineProgram, input, kind} from "@kampus/fabrika";
 import {Effect, Schema, Stream} from "effect";
-import {loadCell, pollRunner, saveCell} from "./ledger.ts";
+import {clockRunner, loadCell, pollRunner, saveCell} from "./ledger.ts";
 import {
 	Find,
 	over,
@@ -27,6 +27,11 @@ import {TicketNumber, Write} from "./ticket.ts";
 //
 //   {kind: "show", show: "all"}                                the list shows closed tickets too
 //   {kind: "find", text: "login"}                              and only titles with "login" in them
+//   {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""}
+//   // a click on an open ask's box: tracker/ticket/1/inbox gets {type: "answered", ...} by user:owner
+//
+// A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a box for each
+// open ask. Only a person answers: a tracker whose `Author` is an agent refuses the write.
 //
 // It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and
 // `PullRequests` (./pull-requests.ts), the open pull requests shown beside the tickets: GitHub's,
@@ -35,12 +40,14 @@ import {TicketNumber, Write} from "./ticket.ts";
 //
 // Left for later, with a place for each: an agent writing to a ticket is another `Author` on the
 // same ledger, and the poll already shows its facts; linking a pull request to a ticket and the
-// PR watcher are programs that read and write the same streams; asks and approvals are new facts
-// in `Fact`.
+// PR watcher are programs that read and write the same streams, and write the lane's facts in
+// `Fact`. Nothing writes those yet but tests.
 
+export type {Head, OpenAsk} from "./head.ts";
 export {Author} from "./ledger.ts";
-export type {Show, Shown} from "./machine.ts";
+export type {Listed, Opened, Show, Shown} from "./machine.ts";
 export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
+export type {Row} from "./rows.ts";
 export type {Fact, Summary, Ticket, Write} from "./ticket.ts";
 
 /**
@@ -76,18 +83,18 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 const options = {
 	ctx: undefined,
 	interpret: {load: loadCell, save: saveCell, pull_requests: pullRequestsCell},
-	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner},
+	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner},
 	terminal: over,
 };
 
 export const tracker = defineProgram({
 	name: "tracker",
 	description:
-		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline, comments, closes and reopens. It has a window.",
+		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. It has a window.",
 	inputs: {
 		do: input(
 			Do,
-			"What the window does: list, open a ticket, show open, closed or all, find by title, file, comment, close, reopen, or quit.",
+			"What the window does: list, open a ticket, show open, closed or all, find by title, file, comment, answer an ask, close, reopen, or quit.",
 		),
 	},
 	outputs: {},
@@ -107,6 +114,7 @@ export const tracker = defineProgram({
 					poll: "wait for news",
 					pull_requests: "read the open pull requests",
 					pull_requests_wait: "wait to read them again",
+					clock: "keep the time",
 				},
 			}),
 			status: statusOf,

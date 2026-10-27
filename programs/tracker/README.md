@@ -37,7 +37,9 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 | Import | File | What it gives |
 |---|---|---|
 | `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
-| | `src/ticket.ts` | The ticket, pure: `Fact`, `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
+| | `src/ticket.ts` | The ticket, pure: `Fact` (the tracker's four and a lane's nine), `WRITTEN_BY` (only a person writes `answered`), `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
+| | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
+| | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
 | | `src/pull-requests.ts` | `PullRequest`, and the `PullRequests` service the program reads open pull requests through: `pull_requests`, and the wait between reads. `pullRequestsOf(list)` for a test. |
@@ -56,6 +58,16 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   as an agent's.
 - **A bad row is shown, not hidden.** A row that does not read, or a fact that does not fit (a
   comment before `filed`), is kept out of every ticket and listed under "rows did not read".
+- **A ticket shows one top line,** folded from its facts
+  ([What a ticket shows](../../docs/direction/what-a-ticket-shows.md)): "done: PR #12 merged",
+  "closed by owner", "waits on you: approve plan v2", "build running, task t-2", "stuck: read
+  failed", "idle since 14:02", "next: review". An open ask always wins on an open ticket. Nobody
+  writes "done": it is a merged pull request, or a person's close once the asks are answered.
+  "Idle" needs the time, so a `clock` Sub ticks once a minute into the state.
+- **An open ask has a box.** While an `asked` has no `answered`, the ticket's page shows it with
+  one button per pick and a note. A click sends `{kind: "answer", ...}`. A comment never answers.
+  Only a person answers: a tracker whose `Author` is an agent refuses it, and the fold keeps an
+  agent's `answered` out.
 - **Quit waits for writes.** `{kind: "quit"}` ends the program once every write asked for is on
   the ledger.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
@@ -96,7 +108,7 @@ The common path needs no mouse. The focus goes where the next step is.
 | The list | ↑ ↓ or j k pick a ticket or a pull request, Enter opens it, o x a show open, closed or all tickets, / goes to the search, c goes to the new ticket's title, q quits |
 | The search | typing narrows tickets and pull requests by title; Esc, ↓ or Enter goes back to the list |
 | New ticket | Enter in the title goes to the body, Ctrl+Enter (or ⌘+Enter) files it, Esc goes to the list |
-| A ticket | the comment box has the focus, Ctrl+Enter comments, Esc goes back to the list |
+| A ticket | the comment box has the focus, Ctrl+Enter comments, an open ask's buttons answer it, Esc goes back to the list |
 
 - With no tickets, the title has the focus, and the list says what to do.
 - After filing, the composer is empty and its title still has the focus, for the next one.
@@ -115,10 +127,11 @@ The common path needs no mouse. The focus goes where the next step is.
   tickets yet.
 - Going back to the page you were on after a restart. The list is one key away.
 - Retrying a failed write. Its text is shown in full, to copy back.
-- Asks, approvals, agents writing to tickets, ticket sync with GitHub and the pull request watcher. Each has
-  a place: asks are new facts in `Fact`; an agent is another `Author` on the same ledger, and the
-  poll already shows what it writes; sync and the watcher are programs that read and write the
-  same streams.
+- Anything that writes a lane's facts for real: the pipeline's lanes, ticket sync with GitHub and
+  the pull request watcher. The facts are in `Fact` and only tests write them today; each writer
+  is another `Author` on the same ledger, and the poll already shows what it writes.
+- A running agent's live row, its beats and its log (section 3 of the note). It is next.
+- Sorting the tickets that wait on the owner first on the list.
 - Markdown in bodies, for now. Agents write Markdown, so it is next: `[text](url)` shows as
   written today, with its URL a link. A Markdown link whose text is not its URL will need the
   person to see where it goes before the click.
