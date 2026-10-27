@@ -48,13 +48,17 @@ How we got here, one line each:
   `auth.json` in before the job, the refreshed copy out after. The page says
   "Do not use this workflow for public or open-source repositories."
 
-**This is the proposed change to a decided note.**
-[Logins never leave a person's machine](../docs/direction/agents-behind-one-service.md#logins-never-leave-a-persons-machine)
-(decided 2026-10-26) says "The shared fabrika stores no provider login, no
-key, no token, for anyone." The same section now carries a proposed change:
-each person's login in their own locker on the shared Cloudflare account,
-tested here. This write-up does not rewrite the note; the recommendation
-below says what the rewrite should hold.
+**This was the proposed change to a decided note.** "Logins never leave a
+person's machine" (decided 2026-10-26) said "The shared fabrika stores no
+provider login, no key, no token, for anyone." This write-up tested each
+person's login in their own locker on the shared Cloudflare account.
+
+**Ruled the same day, after this run:** the lockers stay on one shared
+account, and a job's box holds the login itself, the GitHub Actions way. Our
+Worker never sees a real token, so experiment 148's rule stays. Recommendations
+3 and 4 below were not taken, and the token swap and the refresh catch built
+here are not the shape that ships. See
+[where a person's login lives](../docs/direction/agents-behind-one-service.md#where-a-persons-login-lives).
 
 ## Who did what
 
@@ -389,6 +393,10 @@ token, and the live-run steps settle it.
    end TLS in our Worker with a real token, which 148 said not to do again.
    Write the change down, and send Anthropic and OpenAI one short question
    each before the live run. Their answers settle more than any run here.
+
+*Ruled the same day by the owner:* 3 not taken, the lockers share one
+account. 4 not taken, 148's rule stays and the box holds the login. With no
+Worker on the refresh path, 1's catch goes too; the queue and 2 stay.
 
 ## What it cannot tell us
 
