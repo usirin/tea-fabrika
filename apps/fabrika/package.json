@@ -16,6 +16,7 @@
 		"@demlik/tea": "catalog:",
 		"@effect/platform-node": "catalog:",
 		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",
 		"@tea-fabrika/tracker": "workspace:*",
 		"effect": "catalog:",
