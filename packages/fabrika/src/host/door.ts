@@ -273,6 +273,20 @@ export const membersOf = (rows: readonly SqlRow[]): Members => {
 };
 
 /**
+ * Every person `door/members` ever named, by id: the name they last came by. A person taken off
+ * keeps their name here, so the rows they and their agents wrote still say who. For showing a
+ * writer only; who may call is `membersOf`'s answer.
+ */
+export const namesOf = (rows: readonly {readonly kind: unknown; readonly data: unknown}[]) => {
+	const names = new Map<string, string>();
+	for (const r of rows) {
+		const f = factOf(String(r.kind), String(r.data));
+		if (f !== null && f.kind !== "removed") names.set(f.id, f.name);
+	}
+	return names as ReadonlyMap<string, string>;
+};
+
+/**
  * Who this ledger knows by `name`: its members and open invites who went by it when they came,
  * in any case (on GitHub a login is one name in any case). Only these are asked about at a login.
  * The name only finds them; the signature proves which, if any, is the one signing.

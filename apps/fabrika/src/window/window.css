@@ -250,6 +250,30 @@ kbd {
 	color: var(--faint);
 }
 
+/* The host runs older code: the desk stays in reach, and this sits in the same corner. */
+.older-note {
+	position: fixed;
+	right: 16px;
+	bottom: 36px;
+	max-width: 48ch;
+	padding: 12px 16px;
+	background: var(--ground);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	line-height: 1.5;
+}
+
+.older-note h1 {
+	margin: 0 0 4px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.older-note p {
+	margin: 0 0 8px;
+	color: var(--faint);
+}
+
 .counter {
 	flex: 1;
 	display: flex;
@@ -806,6 +830,39 @@ main.program:has(> .tracker) {
 .tracker-reply {
 	padding-top: 12px;
 	border-top: 1px solid var(--line);
+}
+
+/* A ticket's top line: quiet, and in the key color when it waits on the owner. */
+.tracker-head-line {
+	color: var(--faint);
+	font-size: 12px;
+}
+
+.tracker-head-line[data-waits] {
+	color: var(--key);
+	font-weight: 600;
+}
+
+.tracker-fact-asked,
+.tracker-fact-answered {
+	border-left-color: var(--key);
+}
+
+/* An open ask's box: what it asks, a note, and its buttons. */
+.tracker-ask {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--key);
+	border-radius: 8px;
+	background: var(--raised);
+}
+
+.tracker-ask-what {
+	color: var(--ink);
+	font-size: 14px;
+	font-weight: 600;
 }
 
 @media (prefers-reduced-motion: no-preference) {

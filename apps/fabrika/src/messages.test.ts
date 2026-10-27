@@ -78,20 +78,34 @@ describe("the desk's port", () => {
 		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");
 	});
 
-	it("tells the page the link is down, with what the app does now", () => {
-		const down = {type: "down", why: "The link to the host ended: the other side closed."};
-		expect(readToPage({...down, now: "reconnecting"}).kind).toBe("read");
-		expect(readToPage({...down, now: "stopped"}).kind).toBe("read");
-		expect(readToPage({...down, now: "refused"}).kind).toBe("read");
-		expect(readToPage(down).kind).toBe("refused");
-		expect(readToPage({...down, now: "gone"}).kind).toBe("refused");
+	it("tells the page what it shows of the link: what the app found, or how it is lost", () => {
+		const why = "The link to the host ended: the other side closed.";
+		const link = (now: unknown) => readToPage({type: "link", now}).kind;
+		expect(link({kind: "up"})).toBe("read");
+		expect(link({kind: "version", theirs: 1, ours: 2})).toBe("read");
+		expect(link({kind: "build", theirs: "0ld0ld0ld0ld", ours: "n3wn3wn3wn3w"})).toBe("read");
+		expect(link({kind: "build", theirs: null, ours: "n3wn3wn3wn3w"})).toBe("read");
+		expect(link({kind: "reconnecting", why})).toBe("read");
+		expect(link({kind: "stopped", why})).toBe("read");
+		expect(link({kind: "restarting"})).toBe("read");
+		// Each kind has what it names, and no more.
+		expect(link({kind: "version", theirs: 1})).toBe("refused");
+		expect(link({kind: "build", ours: "n3wn3wn3wn3w"})).toBe("refused");
+		expect(link({kind: "reconnecting"})).toBe("refused");
+		expect(link({kind: "up", why})).toBe("refused");
+		expect(link({kind: "gone"})).toBe("refused");
+		// The old shape is not read.
+		expect(readToPage({type: "down", why, now: "reconnecting"}).kind).toBe("refused");
 	});
 
-	it("takes Try again from the page for the app itself, and nothing more", () => {
+	it("takes Try again and the restart from the page for the app itself, and nothing more", () => {
 		expect(readToApp({type: "again"})).toEqual({kind: "read", msg: {type: "again"}});
+		expect(readToApp({type: "restart"})).toEqual({kind: "read", msg: {type: "restart"}});
 		expect(readToApp({type: "again", now: true}).kind).toBe("refused");
+		expect(readToApp({type: "restart", pid: 42}).kind).toBe("refused");
 		expect(readToApp({type: "click", tile: "t2"}).kind).toBe("refused");
-		// The host does not read it: Try again never reaches it as a message of its own.
+		// The host does not read them: neither reaches it as a message of its own.
 		expect(readFromPage({type: "again"}).kind).toBe("refused");
+		expect(readFromPage({type: "restart"}).kind).toBe("refused");
 	});
 });

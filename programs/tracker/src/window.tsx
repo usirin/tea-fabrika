@@ -7,7 +7,20 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type {Do, PullRequest, Show, Shown, Summary, Ticket, tracker, Write} from "./index.ts";
+import {lineOf, waits} from "./head.ts";
+import type {
+	Do,
+	Head,
+	OpenAsk,
+	Opened,
+	PullRequest,
+	Row,
+	Show,
+	Shown,
+	Summary,
+	tracker,
+	Write,
+} from "./index.ts";
 import {piecesOf} from "./links.ts";
 
 // The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
@@ -38,6 +51,8 @@ const said = (w: Write): string => {
 			return `close #${w.ticket}`;
 		case "reopen":
 			return `reopen #${w.ticket}`;
+		case "answer":
+			return `answer "${w.pick}" on #${w.ticket}`;
 	}
 };
 
@@ -97,7 +112,7 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 				) : (
 					<TicketPage
 						number={page.number}
-						ticket={page.ticket}
+						opened={page.opened}
 						saving={view.saving}
 						draft={comments[page.number] ?? ""}
 						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
@@ -368,6 +383,7 @@ function ListPage(props: {
 										<span className="tracker-number">{t.number}</span>
 										<span className="tracker-title">{t.title}</span>
 										<span className="tracker-sub">
+											<HeadLine head={t.head} />
 											{t.comments === 0 ? null : (
 												<span title={`${t.comments} comment${t.comments === 1 ? "" : "s"}`}>
 													<CommentGlyph /> {t.comments}
@@ -536,15 +552,26 @@ const StateBadge = ({state}: {readonly state: Summary["state"]}) => (
 	</span>
 );
 
+/** A ticket's top line, from its facts. A line that waits on the owner is marked so. */
+const HeadLine = ({head}: {readonly head: Head}) => (
+	<span
+		className={`tracker-head-line tracker-head-${head._tag}`}
+		data-waits={waits(head) ? "" : undefined}
+	>
+		{lineOf(head, (at) => whenOf(at, Date.now()))}
+	</span>
+);
+
 function TicketPage(props: {
 	readonly number: number;
-	readonly ticket: Ticket | null;
+	readonly opened: Opened | null;
 	readonly saving: readonly Write[];
 	readonly draft: string;
 	readonly setDraft: (text: string) => void;
 	readonly act: Send;
 }) {
-	const {number, ticket, saving, draft, setDraft, act} = props;
+	const {number, opened, saving, draft, setDraft, act} = props;
+	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: only on opening a ticket.
@@ -581,7 +608,7 @@ function TicketPage(props: {
 				</button>
 				<kbd>Esc</kbd>
 			</div>
-			{ticket === null ? (
+			{opened === null || ticket === null ? (
 				<p className="tracker-empty">No ticket #{number} on the ledger.</p>
 			) : (
 				<>
@@ -590,19 +617,12 @@ function TicketPage(props: {
 						<p>
 							<StateBadge state={ticket.state} />
 							<span className="tracker-quiet">#{ticket.number}</span>
+							<HeadLine head={opened.head} />
 						</p>
 					</header>
 					<ol className="tracker-timeline" aria-label="timeline">
-						{ticket.timeline.map((e) => (
-							<li key={e.pos} className={`tracker-entry tracker-fact-${e.fact.type}`}>
-								<p className="tracker-meta">
-									<Who by={e.by} /> {verbOf(e.fact.type)}{" "}
-									<time className="tracker-quiet">{whenOf(e.at, Date.now())}</time>
-								</p>
-								{"body" in e.fact && e.fact.body !== "" ? (
-									<Body text={e.fact.body} onKey={onPageKey} />
-								) : null}
-							</li>
+						{opened.rows.map((row) => (
+							<TimelineRow key={row.pos} row={row} onKey={onPageKey} />
 						))}
 						{pending.map((w, i) => (
 							// biome-ignore lint/suspicious/noArrayIndexKey: two pending comments may say the same thing; their order is all that tells them apart.
@@ -612,6 +632,18 @@ function TicketPage(props: {
 							</li>
 						))}
 					</ol>
+					{opened.asks.map((ask) => (
+						<AskBox
+							key={ask.ask}
+							number={number}
+							ask={ask}
+							saving={saving.some(
+								(w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask,
+							)}
+							act={act}
+							onKey={onPageKey}
+						/>
+					))}
 					<form className="tracker-composer tracker-reply" onSubmit={comment} aria-label="comment">
 						<textarea
 							ref={boxRef}
@@ -681,22 +713,96 @@ const Body = ({
 	</div>
 );
 
-const verbOf = (type: Ticket["timeline"][number]["fact"]["type"]): ReactNode => {
-	switch (type) {
-		case "filed":
-			return "filed it";
-		case "commented":
-			return "commented";
-		case "closed":
-			return <strong>closed it</strong>;
-		case "reopened":
-			return <strong>reopened it</strong>;
-	}
+/** A state change reads strong: it moves the ticket, a comment does not. */
+const STRONG: ReadonlySet<string> = new Set(["closed", "reopened", "answered"]);
+
+/** One fact's row: who, what, the quieter part, when, and the text written with it. */
+const TimelineRow = ({
+	row,
+	onKey,
+}: {
+	readonly row: Row;
+	readonly onKey: (e: KeyboardEvent) => void;
+}): ReactNode => (
+	<li className={`tracker-entry tracker-fact-${row.type}`}>
+		<p className="tracker-meta">
+			<Who of={row} /> {STRONG.has(row.type) ? <strong>{row.text}</strong> : row.text}{" "}
+			{row.more === "" ? null : <span className="tracker-quiet">{row.more}</span>}{" "}
+			<time className="tracker-quiet">{whenOf(row.at, Date.now())}</time>
+		</p>
+		{row.body === null ? null : <Body text={row.body} onKey={onKey} />}
+	</li>
+);
+
+/**
+ * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
+ * writes `answered`; a comment never does. While the answer is saving, the buttons wait.
+ */
+function AskBox(props: {
+	readonly number: number;
+	readonly ask: OpenAsk;
+	readonly saving: boolean;
+	readonly act: Send;
+	readonly onKey: (e: KeyboardEvent) => void;
+}) {
+	const {number, ask, saving, act, onKey} = props;
+	const [note, setNote] = useState("");
+	return (
+		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
+			<p className="tracker-meta">
+				<Who of={ask} /> asks you{" "}
+				<time className="tracker-quiet">{whenOf(ask.at, Date.now())}</time>
+			</p>
+			<p className="tracker-ask-what">{ask.what}</p>
+			<textarea
+				aria-label="note with the answer"
+				placeholder="A note with your answer, if it needs one"
+				rows={2}
+				value={note}
+				onChange={(e) => setNote(e.target.value)}
+				onKeyDown={onKey}
+			/>
+			<div className="tracker-row">
+				{ask.picks.map((pick, i) => (
+					<button
+						key={pick}
+						type="button"
+						className={i === 0 ? "tracker-primary" : undefined}
+						disabled={saving}
+						onKeyDown={onKey}
+						onClick={() =>
+							act({kind: "answer", ticket: number, ask: ask.ask, pick, note: note.trimEnd()})
+						}
+					>
+						{pick}
+					</button>
+				))}
+				{saving ? <small>saving…</small> : null}
+			</div>
+		</section>
+	);
+}
+
+/** A writer, and the name its person goes by on this ledger if it is someone's agent. */
+type Whose = {readonly by: Row["by"]; readonly whose?: string | undefined};
+
+/**
+ * What a row says after its writer's id: nothing for a person; whose agent it is, by its person's
+ * name on this ledger (their id when the members do not name them); only "agent" for a row from
+ * before the door, which does not say whose.
+ */
+export const agentOf = ({by, whose}: Whose): string | null => {
+	if (by.kind === "user") return null;
+	return "for" in by ? `${whose ?? by.for}'s agent` : "agent";
 };
 
-const Who = ({by}: {readonly by: Ticket["timeline"][number]["by"]}) => (
-	<span className={`tracker-who tracker-by-${by.kind}`}>
-		{by.id}
-		{by.kind === "agent" ? <small>agent</small> : null}
-	</span>
-);
+const Who = ({of}: {readonly of: Whose}) => {
+	const tail = agentOf(of);
+	return (
+		<span className={`tracker-who tracker-by-${of.by.kind}`}>
+			{of.by.id}
+			{"for" in of.by ? "," : null}
+			{tail === null ? null : <small>{tail}</small>}
+		</span>
+	);
+};

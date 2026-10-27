@@ -1,7 +1,7 @@
-import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika";
-import {Context, Duration, Effect, Stream} from "effect";
-import type {load, PollSub, save} from "./machine.ts";
-import {type Entry, factOf, nameOf, ROOT, readRow} from "./ticket.ts";
+import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
+import {Clock, Context, Duration, Effect, Stream} from "effect";
+import type {ClockSub, load, PollSub, save} from "./machine.ts";
+import {type Entry, factOf, mayWrite, nameOf, ROOT, readRow} from "./ticket.ts";
 
 // The tracker's cells and its poll: the only code that talks to the ledger. Through the `Ledger`
 // service, never the file under it, so the same tracker runs on memory in a test and on
@@ -33,6 +33,15 @@ const refused = (stream: string) => ({
 	why: `the ledger refused ${stream}`,
 });
 
+/**
+ * An agent's entry with its person's name, when this ledger's members name them. A ledger with no
+ * door has no members, and its entries stay as they are.
+ */
+const named = (entry: Entry, names: ReadonlyMap<string, string>): Entry => {
+	const whose = "for" in entry.by ? names.get(entry.by.for) : undefined;
+	return whose === undefined ? entry : {...entry, whose};
+};
+
 /** Every row after `after` under the tickets' prefix, read in pages. */
 export const loadCell = (cmd: ReturnType<typeof load>) =>
 	Effect.gen(function* () {
@@ -40,11 +49,12 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 		const entries: Entry[] = [];
 		const broken: string[] = [];
 		let last = cmd.after;
+		const names = namesOf(yield* ledger.readStream(MEMBERS));
 		for (;;) {
 			const page = yield* ledger.read(last, PAGE, ROOT);
 			for (const row of page) {
 				const read = readRow(row);
-				if (read.kind === "entry") entries.push(read.entry);
+				if (read.kind === "entry") entries.push(named(read.entry, names));
 				if (read.kind === "broken") broken.push(read.why);
 			}
 			last = page.at(-1)?.pos ?? last;
@@ -65,10 +75,17 @@ const claim = (next: number, writer: string) =>
 export const saveCell = (cmd: ReturnType<typeof save>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
-		const writer = writerText(yield* Author);
+		const author = yield* Author;
+		const writer = writerText(author);
 		const {write} = cmd;
-		const ticket = write.kind === "file" ? yield* claim(cmd.next, writer) : write.ticket;
 		const fact = factOf(write);
+		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
+		if (!mayWrite(author, fact.type))
+			return yield* Effect.fail({
+				_tag: "refused" as const,
+				why: `only a person writes ${fact.type}, and this tracker writes as agent ${author.id}`,
+			});
+		const ticket = write.kind === "file" ? yield* claim(cmd.next, writer) : write.ticket;
 		yield* ledger.send(streams(nameOf(ticket)).inbox, cmd.id, {
 			kind: fact.type,
 			writer,
@@ -98,4 +115,14 @@ export const pollRunner = (sub: PollSub) =>
 		Stream.filter((rows) => rows.length > 0),
 		Stream.take(1),
 		Stream.map(() => ({type: "moved" as const})),
+	);
+
+/** How often the clock ticks: a ticket's line turns "idle" within a minute of its hour. */
+export const CLOCK = Duration.minutes(1);
+
+/** `tick` with the time, at once and then once a minute. */
+export const clockRunner = (_sub: ClockSub) =>
+	Stream.tick(CLOCK).pipe(
+		Stream.mapEffect(() => Clock.currentTimeMillis),
+		Stream.map((now) => ({type: "tick" as const, now})),
 	);

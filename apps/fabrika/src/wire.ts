@@ -2,6 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {type Cause, Deferred, Effect, Queue, Schema, Stream} from "effect";
 import {Ndjson} from "effect/encoding";
 import {Socket} from "effect/socket";
+import {BUILD} from "./build-id.ts";
 import {
 	type Down,
 	type Link,
@@ -48,8 +49,11 @@ export class Unattached extends Schema.TaggedError<Unattached>()("Unattached", {
 export interface Wire<Out> {
 	/** Send a line. Sent in order; after the link ended it goes nowhere. */
 	readonly send: (m: Out) => void;
-	/** Done once the other side said hello with our version. */
-	readonly up: Effect.Effect<void, Unattached>;
+	/**
+	 * Done once the other side said hello with our version: answers the build its hello named, or
+	 * `null` for none. Only a host names one (link.ts).
+	 */
+	readonly up: Effect.Effect<string | null, Unattached>;
 	/** Done once the link ended, with why. */
 	readonly ended: Effect.Effect<string>;
 	/** Where the handshake is now. */
@@ -63,20 +67,29 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 		readonly ctx: LinkCtx;
 		readonly read: (raw: unknown) => Read<In>;
 		readonly deliver: (m: In) => void;
+		/** The build our hello names, or `null`: it names none. */
+		readonly build: string | null;
 	},
 ) =>
 	Effect.gen(function* () {
-		const {ctx, read, deliver} = options;
+		const {ctx, read, deliver, build} = options;
 		const out = yield* Queue.make<Out | Up | Down, Cause.Done>();
-		const up = yield* Deferred.make<void, Unattached>();
+		const up = yield* Deferred.make<string | null, Unattached>();
 		const ended = yield* Deferred.make<string>();
 		let state: Link = {...ctx, at: "hello"};
+		/** The build the other side's hello named. */
+		let theirs: string | null = null;
 
 		const perform = (cmds: readonly LinkCmd[], line: In | null) => {
 			for (const c of cmds) {
 				switch (c.type) {
 					case "greet":
-						Queue.offerUnsafe(out, {type: "hello", version: c.version});
+						Queue.offerUnsafe(
+							out,
+							build === null
+								? {type: "hello", version: c.version}
+								: {type: "hello", version: c.version, build},
+						);
 						break;
 					case "deliver":
 						if (line !== null) deliver(line);
@@ -99,7 +112,7 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 			const [next, cmds] = applyCell<Link, LinkMsg, LinkCmd>(linkMachine, state, msg);
 			state = next;
 			perform(cmds, line);
-			if (next.at === "up") Deferred.doneUnsafe(up, Effect.void);
+			if (next.at === "up") Deferred.doneUnsafe(up, Effect.succeed(theirs));
 			if (next.at === "closed") {
 				Deferred.doneUnsafe(
 					up,
@@ -110,6 +123,8 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 		};
 		const heard = (raw: unknown) => {
 			const got = read(raw);
+			if (got.kind === "read" && got.msg.type === "hello" && "build" in got.msg)
+				theirs = got.msg.build ?? null;
 			step(linkMsgOf(got), got.kind === "read" ? got.msg : null);
 		};
 
@@ -141,10 +156,22 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 		return wire;
 	});
 
-/** The host's end of a link: it reads `Up`, sends `Down`, and answers the app's hello. */
-export const hostWire = (socket: Socket.Socket, deliver: (m: Up) => void, ours = PROTOCOL) =>
-	openWire<Up, Down>(socket, {ctx: {side: "host", ours}, read: readUp, deliver});
+/**
+ * The host's end of a link: it reads `Up`, sends `Down`, and answers the app's hello, naming
+ * `build` in it. `null` names none, as a host built before builds were named: for a test of one.
+ */
+export const hostWire = (
+	socket: Socket.Socket,
+	deliver: (m: Up) => void,
+	ours = PROTOCOL,
+	build: string | null = BUILD,
+) => openWire<Up, Down>(socket, {ctx: {side: "host", ours}, read: readUp, deliver, build});
 
-/** The app's end of a link: it reads `Down`, sends `Up`, and says hello first. */
+/** The app's end of a link: it reads `Down`, sends `Up`, and says hello first, naming no build. */
 export const appWire = (socket: Socket.Socket, deliver: (m: Down) => void, ours = PROTOCOL) =>
-	openWire<Down, Up>(socket, {ctx: {side: "app", ours}, read: readDown, deliver});
+	openWire<Down, Up>(socket, {
+		ctx: {side: "app", ours},
+		read: readDown,
+		deliver,
+		build: null,
+	});

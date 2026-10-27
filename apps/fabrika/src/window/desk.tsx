@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {Effect} from "effect";
+import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
 import {
 	type ReactNode,
@@ -30,11 +30,12 @@ import {
 	type TileNode,
 } from "../desk/layout/index.ts";
 import {
+	type Attached,
 	type FromPage,
+	type LinkNow,
 	readToPage,
 	readToWindow,
 	type ToApp,
-	type ToPage,
 	type ToWindow,
 } from "../messages.ts";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
@@ -63,10 +64,18 @@ import {WINDOWS} from "./windows.tsx";
 //
 // When the link to the host drops, the app reconnects (reconnect.ts) and says so here: the desk
 // stays drawn, dimmed and out of reach, with a calm note in its corner. Nothing takes focus, and
-// no dialog opens. The next desk the host sends draws it again, and focus goes back to the tile.
-
-/** The link to the host is down: why, and what the app does now. */
-type Lost = Extract<ToPage, {readonly type: "down"}>;
+// no dialog opens. Once the app says the link is up again, the desk is in reach, and focus goes
+// back to the tile.
+//
+// What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
+// one branch for each of its kinds, so a kind left out fails the typecheck:
+//
+//   up            the desk, nothing more
+//   build         the desk, with a banner: "the host runs older code", and the restart
+//   version       no desk: both versions named, and the restart
+//   reconnecting  the desk dimmed, with a note in its corner
+//   stopped       the same, with Try again
+//   restarting    the desk dimmed: "Stopping the old host..."
 
 /** The desk, the newest view of each run, and who to tell of a change. */
 const store: {
@@ -74,12 +83,19 @@ const store: {
 	desk: Desk | null;
 	/** The desk's Ctrl-B key, as the host's table says. */
 	prefix: string;
-	/** Why the app is not attached to the host, said plainly, or `null`. */
-	down: Lost | null;
+	/** What the window shows of the link, as the app said last. */
+	link: LinkNow;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
 	version: number;
-} = {desk: null, prefix: "", down: null, views: new Map(), listeners: new Set(), version: 0};
+} = {
+	desk: null,
+	prefix: "",
+	link: {kind: "up"},
+	views: new Map(),
+	listeners: new Set(),
+	version: 0,
+};
 
 const changed = () => {
 	store.version += 1;
@@ -200,7 +216,6 @@ const heard = (raw: unknown) => {
 			return changed();
 		case "desk":
 			store.desk = m.desk;
-			store.down = null;
 			follows(m.desk);
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(changed);
@@ -209,9 +224,10 @@ const heard = (raw: unknown) => {
 		case "answer":
 			holdStep({type: "answer", id: m.id, took: m.took});
 			return;
-		case "down":
-			store.down = m;
-			holdStep({type: "down"});
+		case "link":
+			store.link = m.now;
+			// Off a host, a key held for its answer gets none: the hold lets them go.
+			if (!attached(m.now)) holdStep({type: "down"});
 			return changed();
 	}
 };
@@ -425,9 +441,12 @@ function Status({desk}: {readonly desk: Open}): ReactNode {
  * Stopped, it offers Try again, which takes no focus until the person moves to it. Before the
  * first desk came, the app was never attached: it is connecting, not reconnecting.
  */
-function LostNote(props: {readonly lost: Lost; readonly first: boolean}): ReactNode {
+function LostNote(props: {
+	readonly lost: Extract<LinkNow, {readonly kind: "reconnecting" | "stopped"}>;
+	readonly first: boolean;
+}): ReactNode {
 	const {lost, first} = props;
-	const stopped = lost.now === "stopped";
+	const stopped = lost.kind === "stopped";
 	const verb = first ? "connect" : "reconnect";
 	return (
 		<section className="lost-note" role="status" aria-label="the link to the host">
@@ -449,10 +468,94 @@ function LostNote(props: {readonly lost: Lost; readonly first: boolean}): ReactN
 	);
 }
 
+/** What a restart does to the jobs, said before the person says yes. */
+const JOBS_STOP =
+	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
+
+/** The one way out of a host that runs older code: the person's yes, never the app's own. */
+function Restart(): ReactNode {
+	return (
+		<button type="button" onClick={() => toApp({type: "restart"})}>
+			Stop the old host and start this one
+		</button>
+	);
+}
+
+/** Is the app on a host now: the desk is in reach. */
+const attached = (now: LinkNow): now is Attached => now.kind === "up" || now.kind === "build";
+
+/** What the window shows for the link: a page in place of the desk, or the desk with a note. */
+type Shown =
+	| {readonly kind: "instead"; readonly page: ReactNode}
+	/** `dim`: the desk is out of reach, as the link is down. */
+	| {readonly kind: "over"; readonly dim: boolean; readonly note: ReactNode};
+
+/**
+ * One branch for each kind of `LinkNow`: one left out does not compile. `first`: no desk came
+ * yet, so the app was never attached.
+ */
+const linkView = (now: LinkNow, first: boolean): Shown => {
+	switch (now.kind) {
+		case "up":
+			return {kind: "over", dim: false, note: null};
+		case "build":
+			// Attached, and the desk is in reach: a banner, not an alert.
+			return {
+				kind: "over",
+				dim: false,
+				note: (
+					<section className="older-note" role="status" aria-label="the host's build">
+						<h1>The host runs older code</h1>
+						<p>
+							{now.theirs === null
+								? `It names no build. This app is build ${now.ours}.`
+								: `It is build ${now.theirs}. This app is build ${now.ours}.`}{" "}
+							{JOBS_STOP}
+						</p>
+						<Restart />
+					</section>
+				),
+			};
+		case "version":
+			// Another version of the link: the app does not attach, so there is no desk to keep.
+			return {
+				kind: "instead",
+				page: (
+					<div className="down" role="alert">
+						<h1>Not attached to the host</h1>
+						<p>
+							The host speaks link version {now.theirs}. This app speaks {now.ours}.
+						</p>
+						<p>That host runs on, with its jobs. {JOBS_STOP}</p>
+						<Restart />
+					</div>
+				),
+			};
+		case "reconnecting":
+		case "stopped":
+			return {kind: "over", dim: true, note: <LostNote lost={now} first={first} />};
+		case "restarting":
+			return {
+				kind: "over",
+				dim: true,
+				note: (
+					<section className="lost-note" role="status" aria-label="the link to the host">
+						<h1>Stopping the old host…</h1>
+						<p>Once it has stopped, this app starts its own and attaches.</p>
+					</section>
+				),
+			};
+		default:
+			return absurd(now);
+	}
+};
+
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
 	const desk = store.desk;
-	const lost = store.down;
+	const view = linkView(store.link, desk === null);
+	/** The desk is out of reach: the link is down, or there is no desk to reach. */
+	const away = view.kind === "instead" || view.dim;
 	const ws = desk?.at === "open" ? activeOf(desk) : null;
 	const focused = desk?.at === "open" ? focusedOf(desk) : null;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
@@ -461,32 +564,25 @@ function App(): ReactNode {
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
 	// desk is out of reach while the link is down, so focus goes back to it once the link is up.
 	useLayoutEffect(() => {
-		if (focused === null || lost !== null) return;
+		if (focused === null || away) return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
-	}, [shown, lost === null]);
-	// Another version of the link: the app does not attach, so there is no desk to keep.
-	if (lost?.now === "refused")
-		return (
-			<div className="down" role="alert">
-				<h1>Not attached to the host</h1>
-				<p>{lost.why}</p>
-			</div>
-		);
-	const note = lost === null ? null : <LostNote lost={lost} first={desk === null} />;
+	}, [shown, away]);
+	if (view.kind === "instead") return view.page;
+	const note = view.note;
 	if (desk === null) return note ?? <p className="starting">starting</p>;
 	if (desk.at === "over" || ws === null) return note ?? <p className="starting">closing</p>;
 	const zoomed = ws.layout.zoomed;
 	return (
-		<div className={`desk${lost === null ? "" : " lost"}`}>
+		<div className={`desk${view.dim ? " lost" : ""}`}>
 			<div
 				className="workspace"
 				data-workspace={ws.id}
 				data-zoomed={zoomed ?? undefined}
-				inert={lost !== null}
+				inert={view.dim}
 			>
 				{zoomed !== null ? (
 					<ZoomedTile ws={ws} id={zoomed} desk={desk} />

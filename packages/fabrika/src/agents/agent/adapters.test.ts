@@ -77,6 +77,42 @@ describe("claude: SDK messages", () => {
 		);
 		expect(of("error_during_execution")).toEqual({broke: "error_during_execution (error)"});
 	});
+
+	it("opens Claude Code's own system prompt, auto memory off (experiment 158)", async () => {
+		const opened: Options[] = [];
+		const open: Open = ({options}) => {
+			opened.push(options);
+			return {
+				[Symbol.asyncIterator]: () => ({
+					next: async (): Promise<IteratorResult<SDKMessage>> => ({done: true, value: undefined}),
+				}),
+				interrupt: async () => undefined,
+				close: () => {},
+			};
+		};
+		await Effect.runPromise(
+			Effect.scoped(
+				claudeAdapter({open}).start({
+					folder: "/work/copy",
+					prompt: "p",
+					schema: {},
+					resume: null,
+					session: "s",
+					model: null,
+					effort: null,
+					usd: null,
+				}),
+			),
+		);
+		// With no system prompt named, the SDK sends an empty one: the agent gets no instructions.
+		expect(opened[0]?.systemPrompt).toEqual({type: "preset", preset: "claude_code"});
+		// The preset asks for a memory folder under ~/.claude, outside any copy a run is given.
+		expect(opened[0]?.settings).toEqual({
+			disableClaudeAiConnectors: true,
+			autoMemoryEnabled: false,
+			pluginConfigs: AGENTS_MD,
+		});
+	});
 });
 
 describe("claude: where its settings come from", () => {

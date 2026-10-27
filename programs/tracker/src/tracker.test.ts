@@ -1,4 +1,13 @@
-import {Ledger, memoryStorage, offer, readInput, start, streams, type Word} from "@kampus/fabrika";
+import {
+	Ledger,
+	memoryStorage,
+	offer,
+	readInput,
+	start,
+	streams,
+	type Word,
+	type Writer,
+} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
@@ -18,15 +27,17 @@ const PR: PullRequest = {
 	at: 0,
 };
 
-const services = (ledger: Ledger["Service"]) =>
+const OWNER: Writer = {kind: "user", id: "owner"};
+
+const services = (ledger: Ledger["Service"], author: Writer) =>
 	Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
-		Layer.succeed(Author, {kind: "user", id: "owner"}),
+		Layer.succeed(Author, author),
 		pullRequestsOf([PR]),
 	);
 
-/** One run of the tracker on `ledger`, with a way to tell it and to wait for a view. */
-const session = (ledger: Ledger["Service"], id = "tracker:test") =>
+/** One run of the tracker on `ledger`, as `author`, with a way to tell it and to wait for a view. */
+const session = (ledger: Ledger["Service"], id = "tracker:test", author: Writer = OWNER) =>
 	Effect.gen(function* () {
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()});
 		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
@@ -42,7 +53,7 @@ const session = (ledger: Ledger["Service"], id = "tracker:test") =>
 				Effect.map(Option.getOrThrow),
 			);
 		return {run, say, until};
-	}).pipe(Effect.provide(services(ledger)));
+	}).pipe(Effect.provide(services(ledger, author)));
 
 const listed = (shown: Shown) =>
 	shown.page.kind === "list" ? shown.page.tickets.map((t) => [t.number, t.title, t.state]) : [];
@@ -91,7 +102,7 @@ describe("the tracker", () => {
 			ended: "ended",
 		});
 		expect(seen.again.list).toEqual(seen.first.list);
-		const ticket = seen.again.page.kind === "ticket" ? seen.again.page.ticket : null;
+		const ticket = seen.again.page.kind === "ticket" ? seen.again.page.opened?.ticket : null;
 		expect(ticket?.timeline.map((e) => [e.by, e.fact])).toEqual([
 			[
 				{kind: "user", id: "owner"},
@@ -124,12 +135,73 @@ describe("the tracker", () => {
 				});
 				yield* say({kind: "open", ticket: 1});
 				const page = (yield* until(
-					(s) => s.page.kind === "ticket" && (s.page.ticket?.timeline.length ?? 0) === 2,
+					(s) => s.page.kind === "ticket" && (s.page.opened?.ticket.timeline.length ?? 0) === 2,
 				)).page;
-				return page.kind === "ticket" ? page.ticket?.timeline.at(-1)?.by : null;
+				return page.kind === "ticket" ? page.opened?.ticket.timeline.at(-1)?.by : null;
 			}).pipe(Effect.scoped),
 		);
 		expect(by).toEqual({kind: "agent", id: "review"});
+	});
+
+	/** A stage's ask on ticket 1, written to the ledger as a lane would. */
+	const ask = (ledger: Ledger["Service"]) =>
+		ledger.send(streams("tracker/ticket/1").inbox, "ask-a-1", {
+			kind: "asked",
+			writer: "agent:plan for:owner",
+			data: {type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve", "no"]},
+		});
+	const opened = (s: Shown) => (s.page.kind === "ticket" ? s.page.opened : null);
+
+	it("shows an open ask with its box; a comment leaves it open, and a click answers it", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session(ledger);
+				yield* until((s) => s.ready);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* until((s) => listed(s).length === 1);
+				yield* ask(ledger);
+				yield* say({kind: "open", ticket: 1});
+				const asking = yield* until((s) => (opened(s)?.asks.length ?? 0) === 1);
+				yield* say({kind: "comment", ticket: 1, body: "approve"});
+				const commented = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 3);
+				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "Go."});
+				const answered = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 4);
+				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
+				return {
+					asking: [opened(asking)?.head._tag, opened(asking)?.asks.map((a) => a.picks)],
+					commented: [opened(commented)?.head._tag, opened(commented)?.asks.length],
+					answered: [opened(answered)?.head._tag, opened(answered)?.asks.length],
+					last: [rows.at(-1)?.kind, rows.at(-1)?.writer],
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({
+			asking: ["asks", [["approve", "no"]]],
+			commented: ["asks", 1],
+			answered: ["next", 0],
+			last: ["answered", "user:owner"],
+		});
+	});
+
+	it("refuses an answer from a tracker that writes as an agent, and writes nothing", async () => {
+		const ledger = memoryService();
+		const agent: Writer = {kind: "agent", id: "plan", for: "owner"};
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session(ledger, "tracker:agent", agent);
+				yield* until((s) => s.ready);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* until((s) => listed(s).length === 1);
+				yield* ask(ledger);
+				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""});
+				const failed = (yield* until((s) => s.failed !== null)).failed;
+				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
+				return {why: failed?.why, kinds: rows.map((r) => r.kind)};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.why).toMatch(/only a person writes answered/);
+		expect(seen.kinds).toEqual(["filed", "asked"]);
 	});
 
 	it("files the next number past one taken already", async () => {
@@ -194,5 +266,8 @@ describe("the tracker", () => {
 		expect(
 			readInput(tracker, {type: "do", value: {kind: "find", text: "x".repeat(257)}}).kind,
 		).toBe("refused");
+		const answer = {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""};
+		expect(readInput(tracker, {type: "do", value: answer}).kind).toBe("read");
+		expect(readInput(tracker, {type: "do", value: {...answer, pick: " "}}).kind).toBe("refused");
 	});
 });
