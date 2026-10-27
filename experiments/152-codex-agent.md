@@ -21,8 +21,10 @@ the seven parts of that question one at a time, then runs one small job five tim
 - **Counts:** tokens in, cached and out on every run. No dollars on a plan. The plan's weekly
   limit is only in the saved session file, not in the stream.
 - **Sign-in:** a plan login works headless with device login or a moved login file, and OpenAI
-  documents both. But OpenAI says API keys are the default for automation, and its own guide says
-  not to use a plan login on public repositories.
+  documents both. A person's own scripted runs on their own plan, on a machine only they use, are
+  documented uses. One login is never shared between people. (Corrected 2026-10-26: this line
+  first said a plan login was not for public repositories. That rule is about CI on a public
+  repository, see section 6.)
 - **Same job, 5 and 5:** both agents right 5 of 5, both typed answers fit 5 of 5. Codex took a
   median 11 s and Claude 41 s. Codex wrote about 470 output tokens a run, Claude about 4,900.
 
@@ -257,10 +259,36 @@ Nothing remote was run. This is from OpenAI's own pages.
     ([CI/CD auth](https://learn.chatgpt.com/docs/auth/ci-cd-auth))
   - The Terms of Use forbid sharing "your account credentials" or making "your account available
     to anyone else" ([terms](https://openai.com/policies/terms-of-use/)).
-- **Said plainly:** a plan login is allowed for one person's own runs on a private machine they
-  trust. It is **not** allowed for a service that runs Codex for other people on one login, and
-  not for public repositories, by OpenAI's own guide. This repo is public. For anything shared, an
-  API key (`CODEX_API_KEY`) is the documented way. No Codex-specific plan terms were found.
+- **Said plainly (corrected 2026-10-26):** a plan login is for one person's own runs: on their
+  laptop, or on a remote box only they control. Each person signs in with their own plan, and one
+  login is never shared between people. An API key (`CODEX_API_KEY`) is for a shared service, or
+  for a public repository's own CI.
+- **Wrong, kept for the record:** the first version of this line said a plan login was "not for
+  public repositories" and that "this repo is public". The CI guide's rule is about putting a login
+  file on a CI runner of a public repository, where a stranger's pull request could reach it. A
+  person using their own plan to work on a public repository is not that case.
+- **Checked again on 2026-10-26,** by a Codex run with live web search, read-only, then by hand
+  where marked:
+  - Scripted runs: "`codex exec` reuses saved CLI authentication by default", and the page covers
+    scripts and scheduled jobs ([non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode)).
+  - A remote box: "If you can complete the login flow on a machine with a browser, you can copy
+    your cached credentials to the headless machine", and `codex login --device-auth`
+    ([auth](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)).
+  - Sign in with ChatGPT, OpenAI's route for an app to run on a person's plan: "ChatGPT plan usage
+    is available to all open-source partners and selected private clients" (checked by hand,
+    [quickstart](https://developers.openai.com/siwc/quickstart)). Its terms say requests "must
+    originate from the user's local runtime or a remote runtime only that user controls", and
+    forbid pooling usage ([terms](https://openai.com/policies/sign-in-with-chatgpt-terms/); the
+    page refused our fetch, so this one is from the Codex run only).
+  - A plain API key never draws on the plan: "API usage is billed separately from your ChatGPT
+    subscription" ([billing](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform)).
+  - Sharing: "If someone else needs to use OpenAI's products, they should sign up for their own
+    account" ([account sharing](https://help.openai.com/en/articles/10471989-openai-account-sharing-policy)).
+  - Codex's app-server takes a login a host app hands it (`chatgptAuthTokens`, experimental), and
+    its page says it "has never been permitted for commercial or hosted services"
+    ([app-server](https://learn.chatgpt.com/docs/app-server#auth-endpoints)).
+  - Not settled: the Sign in with ChatGPT terms forbid keeping tokens in a remote environment,
+    while its own VM guide moves a login file there. The two pages do not agree.
 - **For a box of ours:** the temp home above already works. A remote box would get a login file of
   its own (device login there), never the laptop's, and one box at a time per login file.
 
@@ -336,6 +364,13 @@ What in our Draft contract has no Codex match:
 first on a read-only stage (triage or the review judge), with a plan login only on the owner's own
 machine. Confidence 70%.**
 
+**Changed 2026-10-26** by the owner's ruling in
+[Agents sit behind one service](../docs/direction/agents-behind-one-service.md): every stage
+reaches an agent through one Effect service whose default layer is our ACP client, so Codex
+becomes one provider row there, not a runner of its own. Experiment 153 tries Codex through ACP.
+What this experiment found a Codex row needs still holds: the temp home, a read rule that closes
+the home folder, a SIGINT stop, the `jsonSchema` fix, and our own clock.
+
 - **Why:** the stream folds into our Msgs with no new idea. The typed answer works from the same
   Effect schema. It ran the job right every time, about four times faster than our haiku builder.
   A temp home keeps the owner's settings out, which experiment 76 thought could not be done
@@ -346,11 +381,10 @@ machine. Confidence 70%.**
 - **The doubt, under 80%:**
   - one tiny job, five runs: a real stage brief may show gaps this one did not;
   - the code Checks (`PreToolUse`) have no tested Codex match, so the builder cannot move yet;
-  - the plan login is fine for one person's own runs, but not for a shared or public setup;
+  - the plan login is for one person's own runs, never one login shared between people;
   - permission profiles are beta.
 - **What would settle it:** the same runner on a stage's saved cases (the replay set of triage or
-  review), 20 or more, both agents; a hooks experiment for the Checks; and, for anything shared,
-  an API key instead of the plan.
+  review), 20 or more, both agents; and a hooks experiment for the Checks.
 
 ## What it cannot tell us
 
