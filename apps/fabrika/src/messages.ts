@@ -69,19 +69,58 @@ const KeyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /**
+ * What the app found of the host on its home, once a try to attach answered: the window's
+ * branches (docs/direction/an-old-host-is-named-then-restarted.md).
+ *
+ *   {kind: "up"}                                               attached, to a host of this build
+ *   {kind: "version", theirs: 1, ours: 2}                       refused: both named, and the restart offered
+ *   {kind: "build", theirs: "3f9a0c21b7d4", ours: "77e1..."}    attached, with the banner and the restart
+ *
+ * `theirs: null` in `build`: the host named no build, as one built before builds were named.
+ */
+export const Found = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("up")}),
+	Schema.Struct({kind: Schema.Literal("version"), theirs: Schema.Int, ours: Schema.Int}),
+	Schema.Struct({
+		kind: Schema.Literal("build"),
+		theirs: Schema.NullOr(Schema.String),
+		ours: Schema.String,
+	}),
+]);
+export type Found = typeof Found.Type;
+
+/** What the app found when it is attached: this build, or another. */
+export type Attached = Extract<Found, {readonly kind: "up" | "build"}>;
+
+/**
+ * The link while the app is not on a host: it is reconnecting, it stopped trying and waits for
+ * Try again, or it is stopping the old host to start its own (the restart).
+ */
+export const Lost = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("reconnecting"), why: Schema.String}),
+	Schema.Struct({kind: Schema.Literal("stopped"), why: Schema.String}),
+	Schema.Struct({kind: Schema.Literal("restarting")}),
+]);
+export type Lost = typeof Lost.Type;
+
+/** What the window shows of the link now: what the app found, or how it is lost. */
+export const LinkNow = Schema.Union([Found, Lost]);
+export type LinkNow = typeof LinkNow.Type;
+
+/**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
  * the page draws what it is sent and nothing else. `keys` is the desk's Ctrl-B table, sent once
  * as the page loads. `desk` is the whole desk, after every change, with the keys the desk takes
  * now (`takes`): the page sends those keys to the host and no further. `answer` says whether the
  * host took the key sent with that id; a key it did not take goes on to the tile, in order.
- * `down` is the app's own, not the host's: the link to the host is down, why, and what the app
- * does `now` (reconnect.ts): it is reconnecting, it stopped trying and waits for Try again, or
- * the host speaks another version and it does not attach.
+ * `link` is the app's own, not the host's: what the window shows of the link `now`
+ * (reconnect.ts), sent each time that changes, and again as a page loads.
  *
  *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false}, ...]}
  *   {type: "desk", desk: {at: "open", ...}, takes: {all: false, keys: ["<c-b>"]}}
  *   {type: "answer", id: 3, took: true}
- *   {type: "down", why: "The link to the host ended: the other side closed.", now: "reconnecting"}
+ *   {type: "link", now: {kind: "reconnecting", why: "The link to the host ended: the other side closed."}}
+ *   {type: "link", now: {kind: "version", theirs: 1, ours: 2}}
  */
 export const ToPage = Schema.Union([
 	Schema.Struct({
@@ -95,21 +134,22 @@ export const ToPage = Schema.Union([
 		takes: Schema.Struct({all: Schema.Boolean, keys: Schema.Array(KeyName)}),
 	}),
 	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
-	Schema.Struct({
-		type: Schema.Literal("down"),
-		why: Schema.String,
-		now: Schema.Literals(["reconnecting", "stopped", "refused"]),
-	}),
+	Schema.Struct({type: Schema.Literal("link"), now: LinkNow}),
 ]);
 export type ToPage = typeof ToPage.Type;
 
 /**
  * What the page tells the app itself, on the desk's port: the person pressed Try again, after the
- * app stopped trying to reconnect. Main reads it and does not pass it on; the host never sees it.
+ * app stopped trying to reconnect, or "Stop the old host and start this one". Main reads it and
+ * does not pass it on; the host never sees it.
  *
  *   {type: "again"}
+ *   {type: "restart"}
  */
-export const ToApp = Schema.Struct({type: Schema.Literal("again")});
+export const ToApp = Schema.Union([
+	Schema.Struct({type: Schema.Literal("again")}),
+	Schema.Struct({type: Schema.Literal("restart")}),
+]);
 export type ToApp = typeof ToApp.Type;
 
 /**

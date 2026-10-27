@@ -31,7 +31,8 @@ app. The next start attaches to the same host.
 // Between the app and the host (src/link.ts): NDJSON on a Unix socket, `<home>/host/sock`.
 type Up = {type: "hello"; version: number} | {type: "page"} | {type: "away"}
 	| {type: "on"; port: string; m: unknown};
-type Down = {type: "hello"; version: number} | {type: "port" | "gone"; port: string}
+// The host's hello names its build too; one built before builds names none.
+type Down = {type: "hello"; version: number; build?: string} | {type: "port" | "gone"; port: string}
 	| {type: "to"; port: string; m: unknown} | {type: "close"};
 
 // Between the page and the host, each on its own port (src/messages.ts); main relays them.
@@ -41,10 +42,13 @@ type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile:
 type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
 	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
 	| {type: "answer"; id: number; took: boolean}
-	// Main's own, while the link is down (src/reconnect.ts).
-	| {type: "down"; why: string; now: "reconnecting" | "stopped" | "refused"};
-// Main's own too: Try again, after it stopped trying. The host never sees it.
-type ToApp = {type: "again"};
+	// Main's own: what it found on attach, or how the link is lost (src/reconnect.ts).
+	| {type: "link"; now: LinkNow};
+type LinkNow = {kind: "up"} | {kind: "version"; theirs: number; ours: number}
+	| {kind: "build"; theirs: string | null; ours: string}
+	| {kind: "reconnecting" | "stopped"; why: string} | {kind: "restarting"};
+// Main's own too: Try again, and "Stop the old host and start this one". The host never sees them.
+type ToApp = {type: "again"} | {type: "restart"};
 // "tile:t1": t1's terminal, as a terminal is to a pty.
 type ToTerminal = {type: "write"; data: string};
 type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
@@ -59,7 +63,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
   `programs/counter` and `programs/tracker`, and nothing imports it.
 - Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
   `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
-  `src/host/main.ts`, `src/host/run.ts`, `src/host/socket.ts` and `src/host/lock.ts`. Everything else is plain
+  `src/host/main.ts`, `src/host/run.ts`, `src/host/socket.ts`, `src/host/lock.ts` and
+  `src/host/stop.ts`. Everything else is plain
   Effect, tested with no Electron. The page is React, with each terminal made outside it.
 - **The host is a process of its own.** It is the app's own binary run as Node
   (`ELECTRON_RUN_AS_NODE=1`, on `dist/host.mjs`), started detached by the first app that finds
@@ -90,7 +95,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. A host that says no hello within 10 s fails the try (`NoHello`), and the try closes its socket. A host it started that steps aside for another is no failure: it attaches to the one that answers. |
-| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again. `noteOf` is what the window says meanwhile. |
+| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; on the person's yes, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
 | `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
@@ -159,8 +164,9 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 - **The host outlives the app.** Quit and open again: the app attaches to the same host, and the
   desk is as it was, with every run still up. A second start while the app runs brings the first
   copy's window forward.
-- **No person stops the host;** there is no command for it yet. Tests stop their own by its pid,
-  in their own home. A host that stopped leaves `desk.json`: the next host starts the layout from
+- **A person stops the host only from the window,** when it runs another version or build: "Stop
+  the old host and start this one" (`src/host/stop.ts`). Tests stop their own by its pid, in their
+  own home. A host that stopped leaves `desk.json`: the next host starts the layout from
   it, and each tile's tsh opens on its own folder, so `attach %n` finds the earlier jobs.
 - **Closing the last tile closes the window, not the app,** and removes `desk.json`, so the next
   window opens on one fresh tile.
@@ -326,7 +332,12 @@ Left for later, from Tuval's keys and the build:
   the same moment can both get through, as with Chromium's and proper-lockfile's own locks. A
   lock whose pid was given to another live process is waited on for 10 s, then the host stops
   and names the lock.
-- **A host of another version is left as it is.** Nothing offers to stop it or to move its jobs.
+- **A host of another version or build is stopped only on the person's yes,** and its running
+  jobs stop with it. They come back with `attach %n`. A job whose kind's `recovered` sends a
+  call that was out sends it again
+  ([an old host is named, then restarted](../../docs/direction/an-old-host-is-named-then-restarted.md)).
+- **An old app that meets a newer host** reads the build in its hello as a bad line, and closes
+  the link.
 - **The link's version counts the message shapes, not what they mean.** A change in behaviour
   with the same shapes is not caught.
 - **Two windows on one host share each tile's size:** the last one to resize wins, as tmux's

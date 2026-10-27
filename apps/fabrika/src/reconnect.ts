@@ -9,7 +9,7 @@ import {
 	type TimedRetryState,
 } from "@demlik/tea/retry-backoff";
 import {Schema} from "effect";
-import type {ToPage} from "./messages.ts";
+import {type Attached, Found, type LinkNow} from "./messages.ts";
 
 // When the app attaches to the host again: a tea machine, pure, run by main.ts. The link
 // (link.ts) is one socket's handshake, and a link that closed stays closed. This machine sits
@@ -17,7 +17,7 @@ import type {ToPage} from "./messages.ts";
 // attach.ts: reach the socket, or start a host and wait for it, then the handshake).
 //
 //   [s] = init(null)                                {at: "attaching", ...}, attach
-//   update(s, attach_ok {kind: "up"})               {at: "up"}: the link sub watches its end
+//   update(s, attach_ok {kind: "up"})               {at: "up", found: {kind: "up"}}: the link sub watches its end
 //   update(s, {type: "ended", why, at: 0})          {at: "waiting", wait: null, ...}, jitter {attempt: 1}
 //   update(s, jitter_ok 312)                        {at: "waiting", wait: 312}: the timer is set
 //   update(s, {type: "due", attempt: 1})            {at: "attaching", ...}, attach
@@ -31,7 +31,17 @@ import type {ToPage} from "./messages.ts";
 // and keeps the clock and the random number out of this machine: the clock comes in on each
 // Msg's `at`, and the random wait comes back from the `jitter` Cmd, as Elm's `Random.generate`.
 //
-// A host of another version is never tried again (`refused`): what to offer then is ticket 12.
+// A host that runs older code (docs/direction/an-old-host-is-named-then-restarted.md):
+//
+//   update(s, attach_ok {kind: "version", theirs: 1, ours: 2})   {at: "refused", ...}: never tried again
+//   update(s, attach_ok {kind: "build", theirs: null, ours})     {at: "up", found: {kind: "build", ...}}:
+//                                                                attached, and the window shows a banner
+//   update(s, {type: "restart"})                    {at: "restarting"}, restart: the person said yes to
+//                                                   "Stop the old host and start this one"
+//   update(s, restart_ok {kind: "up"})              {at: "up", found: {kind: "up"}}
+//
+// Only a person's restart leads out of `refused`; it is asked for only there, and on a host of
+// another build. A restart that fails is a failed try like any other: it waits and tries again.
 
 /**
  * How the app tries again. The first wait after the link ends is at most half a second, as the
@@ -55,8 +65,8 @@ export type Reconnect =
 	 * counts the tries since the link was last up.
 	 */
 	| {readonly at: "attaching"; readonly retry: RetryState; readonly why: string | null}
-	/** Attached: the host answers. */
-	| {readonly at: "up"}
+	/** Attached: the host answers, and runs this build, or another (`found`). */
+	| {readonly at: "up"; readonly found: Attached}
 	/** Not attached: the next try waits `wait` ms, once `jitter` has picked it. */
 	| {
 			readonly at: "waiting";
@@ -66,8 +76,10 @@ export type Reconnect =
 	  }
 	/** Five minutes of tries failed: none more, until a person asks (`again`). */
 	| {readonly at: "stopped"; readonly why: string}
-	/** The host speaks another version of the link: never tried again. */
-	| {readonly at: "refused"; readonly theirs: number; readonly ours: number};
+	/** The host speaks another version of the link: never tried again, until a person restarts it. */
+	| {readonly at: "refused"; readonly theirs: number; readonly ours: number}
+	/** The person asked: the old host is stopped, and one of this build started and attached. */
+	| {readonly at: "restarting"};
 
 export type ReconnectMsg =
 	/** The link that was up ended, at `at`. */
@@ -75,18 +87,21 @@ export type ReconnectMsg =
 	/** The wait before try `attempt` is over: the timer's. */
 	| {readonly type: "due"; readonly attempt: number}
 	/** A person pressed Try again. */
-	| {readonly type: "again"};
+	| {readonly type: "again"}
+	/** A person pressed "Stop the old host and start this one". */
+	| {readonly type: "restart"};
 
-/** What one try came to: attached, refused for another version, or not attached, and why. */
+/** What one try came to: what the app found of the host (messages.ts), or not attached, and why. */
 export const Tried = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("up")}),
-	Schema.Struct({kind: Schema.Literal("refused"), theirs: Schema.Int, ours: Schema.Int}),
+	Found,
 	Schema.Struct({kind: Schema.Literal("lost"), why: Schema.String}),
 ]);
 export type Tried = typeof Tried.Type;
 
 /** One try: reach the host on its socket, or start one and wait for it, then the handshake. */
 export const attach = Cmd.define("attach", {input: Schema.Struct({}), ok: Tried, err: []});
+/** Stop the host by its pid and wait for it to exit, then one try, which starts this build's. */
+export const restart = Cmd.define("restart", {input: Schema.Struct({}), ok: Tried, err: []});
 /** Pick the wait before try `attempt`: full jitter, between 0 and the policy's bound for it. */
 export const jitter = Cmd.define("jitter", {
 	input: Schema.Struct({attempt: Schema.Int}),
@@ -94,7 +109,10 @@ export const jitter = Cmd.define("jitter", {
 	err: [],
 });
 
-export type ReconnectCmd = ReturnType<typeof attach> | ReturnType<typeof jitter>;
+export type ReconnectCmd =
+	| ReturnType<typeof attach>
+	| ReturnType<typeof restart>
+	| ReturnType<typeof jitter>;
 
 /** Watch the link while it is up: its end comes back as `ended`. */
 export type LinkSub = Sub<"link", {readonly up: true}>;
@@ -113,6 +131,23 @@ const failed = (retry: RetryState, why: string, at: number): Step => {
 	return [{at: "waiting", retry: next, why, wait: null}, [jitter({attempt: next.attempt})]];
 };
 
+/** What a try's answer leads to, with `retry` the count it was made under. */
+const answered = (retry: RetryState, tried: Tried, at: number): Step => {
+	switch (tried.kind) {
+		case "up":
+		case "build":
+			return [{at: "up", found: tried}, []];
+		case "version":
+			return [{at: "refused", theirs: tried.theirs, ours: tried.ours}, []];
+		case "lost":
+			return failed(retry, tried.why, at);
+	}
+};
+
+/** May the person restart the host now? On a host of another version, or of another build. */
+const restartable = (s: Reconnect): boolean =>
+	s.at === "refused" || (s.at === "up" && s.found.kind === "build");
+
 type Waiting = Extract<Reconnect, {readonly at: "waiting"}>;
 
 /** Is this the pick asked for now? Any other is an old wait's, and changes nothing. */
@@ -125,7 +160,7 @@ export const reconnectMachine = defineMachine({
 		msg: {} as ReconnectMsg,
 		sub: {} as LinkSub | TimerSub<ReconnectMsg>,
 	},
-	cmds: [attach, jitter],
+	cmds: [attach, restart, jitter],
 	init: (loaded) => (loaded === null ? trying(initRetry(), null) : [loaded, []]),
 	update: {
 		ended: (s, m): Step => (s.at === "up" ? failed(initRetry(), m.why, m.at) : [s, []]),
@@ -134,16 +169,17 @@ export const reconnectMachine = defineMachine({
 				? trying(s.retry, s.why)
 				: [s, []],
 		again: (s): Step => (s.at === "stopped" ? trying(initRetry(), s.why) : [s, []]),
-		attach_ok: (s, m): Step => {
-			if (s.at !== "attaching") return [s, []];
-			const tried = m.value;
-			if (tried.kind === "up") return [{at: "up"}, []];
-			if (tried.kind === "refused")
-				return [{at: "refused", theirs: tried.theirs, ours: tried.ours}, []];
-			return failed(s.retry, tried.why, m.at);
-		},
+		restart: (s): Step => (restartable(s) ? [{at: "restarting"}, [restart({})]] : [s, []]),
+		attach_ok: (s, m): Step => (s.at === "attaching" ? answered(s.retry, m.value, m.at) : [s, []]),
 		attach_err: (s, m): Step =>
 			s.at === "attaching" ? failed(s.retry, "the try's answer did not read", m.at) : [s, []],
+		// A restart is a fresh start: what it comes to counts from nothing.
+		restart_ok: (s, m): Step =>
+			s.at === "restarting" ? answered(initRetry(), m.value, m.at) : [s, []],
+		restart_err: (s, m): Step =>
+			s.at === "restarting"
+				? failed(initRetry(), "the restart's answer did not read", m.at)
+				: [s, []],
 		jitter_ok: (s, m): Step => (picking(s, m.cmd.attempt) ? [{...s, wait: m.value}, []] : [s, []]),
 		// A pick that did not read waits the longest, so a broken pick never makes the tries faster.
 		jitter_err: (s, m): Step =>
@@ -161,25 +197,23 @@ export const reconnectMachine = defineMachine({
 	],
 });
 
-/** What the window is told of the link, while it is down. */
-export type Note = Extract<ToPage, {readonly type: "down"}>;
-
-/** What the window says of the link now: nothing while it is up, or on the app's first try. */
-export const noteOf = (s: Reconnect): Note | null => {
+/**
+ * What the window shows of the link now (messages.ts): what the app found, or how it is lost.
+ * `null` on the app's first try, which says nothing: the window shows that it is starting.
+ */
+export const noteOf = (s: Reconnect): LinkNow | null => {
 	switch (s.at) {
 		case "up":
-			return null;
+			return s.found;
 		case "attaching":
-			return s.why === null ? null : {type: "down", why: s.why, now: "reconnecting"};
+			return s.why === null ? null : {kind: "reconnecting", why: s.why};
 		case "waiting":
-			return {type: "down", why: s.why, now: "reconnecting"};
+			return {kind: "reconnecting", why: s.why};
 		case "stopped":
-			return {type: "down", why: s.why, now: "stopped"};
+			return {kind: "stopped", why: s.why};
 		case "refused":
-			return {
-				type: "down",
-				why: `The host that runs speaks version ${s.theirs} of the link, and this app speaks ${s.ours}. The app did not attach. That host runs on, with its jobs.`,
-				now: "refused",
-			};
+			return {kind: "version", theirs: s.theirs, ours: s.ours};
+		case "restarting":
+			return {kind: "restarting"};
 	}
 };

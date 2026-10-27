@@ -159,7 +159,7 @@ const appsAtOnce = Effect.gen(function* () {
 		Array.from({length: N}, () => attach({home, deliver: () => {}, start}).pipe(Effect.exit)),
 		{concurrency: "unbounded"},
 	);
-	const up = tries.filter((t) => Exit.isSuccess(t) && t.value.state().at === "up").length;
+	const up = tries.filter((t) => Exit.isSuccess(t) && t.value.wire.state().at === "up").length;
 	const settled = yield* settle(paths.sock, paths.pid, started);
 	return {up, started: started.length, ...settled};
 }).pipe(Effect.scoped);
@@ -226,8 +226,8 @@ describe("one host per home", () => {
 						exited: exited.every((e) => e),
 						firstRuns: yield* running(first),
 						sock: yield* reach(paths.sock),
-						app: app.state().at,
-						next: Exit.isSuccess(next) ? next.value.state().at : "failed",
+						app: app.wire.state().at,
+						next: Exit.isSuccess(next) ? next.value.wire.state().at : "failed",
 						pid: (yield* pidIn(paths.pid)) === pid,
 					});
 				}
@@ -254,7 +254,7 @@ describe("one host per home", () => {
 				const {home, paths} = yield* freshHome;
 				const before = yield* staleSocket(home, paths.sock);
 				const started: ChildProcessHandle[] = [];
-				const wire = yield* attach({
+				const {wire} = yield* attach({
 					home,
 					deliver: () => {},
 					start: Effect.gen(function* () {

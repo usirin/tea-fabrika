@@ -1,6 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
+import {BUILD} from "../build-id.ts";
 import {
 	claims,
 	type Desk,
@@ -27,7 +28,8 @@ import {hostWire} from "../wire.ts";
 // the desk (desk/desk.ts), stepped here, in one place, whoever sends the key. An app is only a
 // client: it shows the desk on its page and relays the page's ports.
 //
-//   app   hello {version: 1}               link.ts: the handshake; another version is refused
+//   app   hello {version: 1}               link.ts: the handshake; another version is refused. The
+//                                          host's hello back names its build, for the app to compare
 //   app   page                             a page loaded: it is sent the Ctrl-B table, the desk,
 //                                          then a port for each tile's terminal and each run shown
 //   app   on {port: "desk", m: {type: "press", id: 0, key: "<c-b>"}}
@@ -74,9 +76,14 @@ export const serve = (options: {
 	readonly desk: DeskHome;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
+	/**
+	 * The build this host's hello names: `BUILD` (build-id.ts), but in a test of an older host.
+	 * `null` names none, as a host built before builds were named.
+	 */
+	readonly build?: string | null | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, place, desk: home, ours = PROTOCOL} = options;
+		const {history, place, desk: home, ours = PROTOCOL, build = BUILD} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -243,7 +250,7 @@ export const serve = (options: {
 		const attach = (socket: Socket.Socket) =>
 			Effect.gen(function* () {
 				const client: Client = {send: () => {}, page: false, shown: new Map()};
-				const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours);
+				const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build);
 				client.send = wire.send;
 				clients.add(client);
 				const why = yield* wire.ended;
