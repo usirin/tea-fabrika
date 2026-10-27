@@ -1,14 +1,19 @@
 name: check
 
 on:
-  # `**`, not `*`: a branch filter's `*` matches one path segment, so it never
-  # matches `umut/some-branch`.
+  # A pull request runs once, on its own event. A push runs only on main, for
+  # what lands there without one. Both on every branch ran each pull request
+  # twice, the same check side by side.
   push:
     branches:
-      - "**"
+      - main
   pull_request:
-    branches:
-      - "**"
+
+# A newer push to the same pull request stops the run it replaces. Main's runs
+# all finish, one per commit.
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
