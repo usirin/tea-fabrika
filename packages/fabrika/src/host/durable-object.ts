@@ -19,7 +19,15 @@
 import {DurableObject} from "cloudflare:workers";
 import {Layer, ManagedRuntime, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
-import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
+import {
+	configOf,
+	Door,
+	type DoorConfig,
+	isWireMethod,
+	type LoginAnswer,
+	type Stamp,
+	trustedArgs,
+} from "./door.ts";
 import {type Keys, layerNobody} from "./keys.ts";
 import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
 import * as L from "./rules.ts";
@@ -327,10 +335,11 @@ export class Ledger extends DurableObject {
 		const offered = (req.headers.get("sec-websocket-protocol") ?? "")
 			.split(",")
 			.map((p) => p.trim());
-		const bearer =
+		const said =
 			/^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "")?.[1] ??
 			offered.find((p) => p.startsWith("bearer."))?.slice("bearer.".length) ??
 			null;
+		const bearer = said === null ? null : Redacted.make(said);
 		if (method === "door") return this.doorStep(req, step, address, bearer);
 		const who = await this.door.who(bearer);
 		if (!who.ok) return refused(who);
@@ -349,14 +358,19 @@ export class Ledger extends DurableObject {
 		}
 	}
 
-	private async doorStep(req: Request, step: string, address: string, bearer: string | null) {
+	private async doorStep(
+		req: Request,
+		step: string,
+		address: string,
+		bearer: Redacted.Redacted<string> | null,
+	) {
 		const body = (req.method === "POST" ? await req.json().catch(() => ({})) : {}) as Record<
 			string,
 			unknown
 		>;
 		if (step === "challenge") return answer(this.door.challenge(address));
-		if (step === "login") return answer(await this.door.login(body));
-		if (step === "agent-login") return answer(await this.door.agentLogin(address, body));
+		if (step === "login") return session(await this.door.login(body));
+		if (step === "agent-login") return session(await this.door.agentLogin(address, body));
 		const who = await this.door.who(bearer);
 		if (!who.ok) return refused(who);
 		const me: Stamp = who.value;
@@ -370,7 +384,7 @@ export class Ledger extends DurableObject {
 		}
 		if (step === "invite") return answer(await this.door.invite(me, body.name));
 		if (step === "remove") return answer(this.door.remove(me, body.id));
-		if (step === "agent") return answer(await this.door.addAgent(me, body.name));
+		if (step === "agent") return session(await this.door.addAgent(me, body.name));
 		return new Response("not found", {status: 404});
 	}
 
@@ -442,6 +456,12 @@ const refused = (r: {status: number; why: string}) =>
 	Response.json({error: r.why}, {status: r.status});
 const answer = (r: {ok: true; value: unknown} | {ok: false; status: number; why: string}) =>
 	r.ok ? Response.json(r.value) : refused(r);
+/**
+ * A session's answer, to the one who logged in: the one line where its token leaves its
+ * `Redacted`. Through `answer` it would go out as `"<redacted>"`.
+ */
+const session = (r: {ok: true; value: LoginAnswer} | {ok: false; status: number; why: string}) =>
+	r.ok ? Response.json({...r.value, token: Redacted.value(r.value.token)}) : refused(r);
 
 /**
  * `res`, once the rest of `req`'s body has been read and thrown away. workerd drops a kept-alive

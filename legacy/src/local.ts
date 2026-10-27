@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {runEnv} from "@kampus/fabrika/agents/sandbox";
 import {Jev} from "@kampus/pipeline/services";
-import {Effect, Layer} from "effect";
+import {Config, Effect, Layer, Option, Redacted} from "effect";
 import {z} from "zod";
 import {compareSurfaces, type Surface, surfaceOf} from "./declarations.ts";
 import {PublishedApi, Repo, Tracker, Workspace} from "./factory-services.ts";
@@ -773,8 +773,12 @@ export async function isClean(dir: string): Promise<boolean> {
 	return (await git(dir, "status", "--porcelain")) === "";
 }
 
+/** Jev's key, from `TYPESAFE_API_KEY`: `undefined` when it is not set or empty. */
+export const jevKey = (): Redacted.Redacted<string> | undefined =>
+	Option.getOrUndefined(Effect.runSync(Config.option(Config.Redacted("TYPESAFE_API_KEY"))));
+
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */
-export function liveJev(key: string, endpoint: string) {
+export function liveJev(key: Redacted.Redacted<string>, endpoint: string) {
 	return Layer.succeed(Jev, {
 		call: (request) =>
 			Effect.tryPromise({
@@ -782,7 +786,7 @@ export function liveJev(key: string, endpoint: string) {
 					const response = await fetch(endpoint, {
 						method: "POST",
 						headers: {
-							authorization: `Bearer ${key}`,
+							authorization: `Bearer ${Redacted.value(key)}`,
 							"content-type": "application/json",
 						},
 						body: JSON.stringify(request),

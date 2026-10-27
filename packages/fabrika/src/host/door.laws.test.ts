@@ -443,7 +443,7 @@ const agentNeverUser: Law = {
 			OPTS_PURE,
 		);
 		// A stored agent session reads back as an agent, never a person.
-		const door = localDoor(mod, "owner", await realDoor.hashOf("fabrika_l_secret"));
+		const door = localDoor(mod, "owner", await realDoor.hashOf(Redacted.make("fabrika_l_secret")));
 		const a = mustOk(await door.addAgent({kind: "user", id: "owner"}, "triage"));
 		const who = mustOk(await door.who(a.token));
 		ensure(who.kind === "agent", "a stored agent session read back as a person");
@@ -674,18 +674,18 @@ const noCredential: Law = {
 			fc.asyncProperty(fc.string(), async (garbage) => {
 				const W = sharedWorld(mod);
 				const g1 = await W.door.who(null);
-				const g2 = await W.door.who("");
+				const g2 = await W.door.who(Redacted.make(""));
 				ensure(!g1.ok && g1.status === 401, "a shared door did not answer 401 to no credential");
 				ensure(
 					!g2.ok && g2.status === 401,
 					"a shared door did not answer 401 to an empty credential",
 				);
-				const local = localDoor(mod, "owner", await realDoor.hashOf("secret"));
+				const local = localDoor(mod, "owner", await realDoor.hashOf(Redacted.make("secret")));
 				const l1 = await local.who(null);
 				ensure(!l1.ok && l1.status === 401, "a local door did not answer 401 to no credential");
 				const closed = closedDoor(mod);
 				const c1 = await closed.who(null);
-				const c2 = await closed.who(garbage);
+				const c2 = await closed.who(Redacted.make(garbage));
 				ensure(!c1.ok && c1.status === 403, "a closed door did not answer 403 to no credential");
 				ensure(!c2.ok && c2.status === 403, "a closed door did not answer 403 to a credential");
 			}),
@@ -2583,8 +2583,8 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	noCredIs403: () =>
 		plant(
 			"door",
-			'if (token === null || token === "") return refuse(401, "no credential");',
-			'if (token === null || token === "") return refuse(403, "no credential");',
+			'if (token === null || Redacted.value(token) === "") return refuse(401, "no credential");',
+			'if (token === null || Redacted.value(token) === "") return refuse(403, "no credential");',
 		),
 	// The door checks a login against the first listed key only.
 	pinsFirstKey: () =>

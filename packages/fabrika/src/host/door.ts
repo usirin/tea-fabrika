@@ -44,7 +44,7 @@
 //
 // workerd runs this file in the ledger's Worker, bundled with the rest of it (worker-options.ts).
 // Node runs the same file in the tests, on node:sqlite.
-import {Effect, type ManagedRuntime, Option, Schema} from "effect";
+import {Effect, type ManagedRuntime, Option, Redacted, Schema} from "effect";
 import {Keys, type KeysUnreachable, type Signers} from "./keys.ts";
 import type {Db, Event, SqlRow, Written} from "./rules.ts";
 import {readStream, writeUnguarded} from "./rules.ts";
@@ -342,17 +342,24 @@ export const grantOf = (text: string): Grant | null => {
 const hex = (b: ArrayBuffer) =>
 	[...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 
-/** SHA-256 of a token, as hex: what the ledger keeps. A token itself is never stored. */
-export const hashOf = async (token: string): Promise<string> =>
-	hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
+/**
+ * SHA-256 of a token, as hex: what the ledger keeps. A token itself is never stored. The one place
+ * the door takes a token out of its `Redacted`: a one-way hash may be plain text.
+ */
+export const hashOf = async (token: Redacted.Redacted<string>): Promise<string> =>
+	hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(Redacted.value(token))));
 
-/** 32 random bytes, base64url, after a prefix a person can read (and a secret scanner can find). */
-export const newToken = (prefix: string): string => {
+/** 32 random bytes, base64url, after a prefix. Not a secret by itself: a challenge's nonce is one. */
+const randomText = (prefix: string): string => {
 	const b = crypto.getRandomValues(new Uint8Array(32));
 	let bin = "";
 	for (const x of b) bin += String.fromCharCode(x);
 	return `${prefix}${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
 };
+
+/** A new token: random text after a prefix a person can read (and a secret scanner can find). */
+export const newToken = (prefix: string): Redacted.Redacted<string> =>
+	Redacted.make(randomText(prefix));
 
 const MIGRATION = [
 	// `kind` says what the session opens, and only `person` sessions have no agent: an agent's
@@ -375,7 +382,12 @@ const MIGRATION = [
 
 // ---------------------------------------------------------------- the door
 
-export type LoginAnswer = {readonly token: string; readonly who: Stamp; readonly expires: number};
+/** A session the door gives. Its token prints as `<redacted>`: the wire takes it out on purpose. */
+export type LoginAnswer = {
+	readonly token: Redacted.Redacted<string>;
+	readonly who: Stamp;
+	readonly expires: number;
+};
 
 /**
  * The door. `keys` runs the one question the door asks about a person (`Keys`): the caller builds
@@ -424,10 +436,10 @@ export class Door {
 	}
 
 	/** Who a credential is. Every request but the login's own steps goes through here first. */
-	async who(token: string | null): Promise<Let<Stamp>> {
+	async who(token: Redacted.Redacted<string> | null): Promise<Let<Stamp>> {
 		const c = this.#config;
 		if (c.kind === "closed") return refuse(403, "this ledger has no door");
-		if (token === null || token === "") return refuse(401, "no credential");
+		if (token === null || Redacted.value(token) === "") return refuse(401, "no credential");
 		const hash = await hashOf(token);
 		if (c.kind === "local" && hash === c.secretHash) return letIn({kind: "user", id: c.person});
 		const now = this.#now();
@@ -448,7 +460,7 @@ export class Door {
 	challenge(address: string): Let<{readonly text: string}> {
 		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
 		const now = this.#now();
-		const nonce = newToken("");
+		const nonce = randomText("");
 		const text = challengeText({address, nonce, expires: now + CHALLENGE_MS});
 		this.#db.tx(() => {
 			this.#db.all("DELETE FROM door_challenges WHERE expires_at <= ?", now);

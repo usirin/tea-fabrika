@@ -72,14 +72,14 @@ const SECRET_FILE = "door-secret";
 /** The local door's secret: kept in the data folder (made once, this user only), or in memory. */
 const secretOf = (persist: string | false) =>
 	Effect.gen(function* () {
-		if (persist === false) return Redacted.make(newToken("fabrika_l_"));
+		if (persist === false) return newToken("fabrika_l_");
 		const fs = yield* FileSystem.FileSystem;
 		const path = (yield* Path.Path).join(persist, SECRET_FILE);
 		if (!(yield* fs.exists(path))) {
 			yield* fs.makeDirectory(persist, {recursive: true});
 			// `wx`: two starters at once, and one of them writes it; the other reads what it wrote.
 			yield* fs
-				.writeFileString(path, newToken("fabrika_l_"), {flag: "wx", mode: 0o600})
+				.writeFileString(path, Redacted.value(newToken("fabrika_l_")), {flag: "wx", mode: 0o600})
 				.pipe(Effect.ignore);
 		}
 		return Redacted.make((yield* fs.readFileString(path)).trim());

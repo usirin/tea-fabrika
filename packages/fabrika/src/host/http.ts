@@ -137,9 +137,12 @@ export class DoorRefused extends Schema.TaggedError<DoorRefused>()("DoorRefused"
 	why: Schema.String,
 }) {}
 
-/** A session the door gave: its token, who it is, and when it ends. */
+/**
+ * A session the door gave: its token, who it is, and when it ends. Read from the wire only: its
+ * encoding is refused, so no save or log through this schema writes the token's text.
+ */
 export const Session = Schema.Struct({
-	token: Schema.RedactedFromValue(Schema.String),
+	token: Schema.RedactedFromValue(Schema.String, {disallowEncode: true}),
 	who: Schema.Union([User, Agent]),
 	expires: Schema.Number,
 });

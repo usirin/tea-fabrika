@@ -1,7 +1,7 @@
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Effect, Layer, Logger, ManagedRuntime} from "effect";
+import {Effect, Layer, Logger, ManagedRuntime, Redacted} from "effect";
 import {afterAll, beforeEach, describe, expect, it} from "vitest";
 import {
 	CHALLENGE_MS,
@@ -307,13 +307,13 @@ describe("the door's config", () => {
 
 	it("is closed to every credential when closed", async () => {
 		const {door} = setup({kind: "closed"});
-		expect(await door.who("anything")).toMatchObject({ok: false, status: 403});
+		expect(await door.who(Redacted.make("anything"))).toMatchObject({ok: false, status: 403});
 		expect(await door.who(null)).toMatchObject({ok: false, status: 403});
 	});
 });
 
 describe("a local door", () => {
-	const SECRET = "fabrika_l_secret";
+	const SECRET = Redacted.make("fabrika_l_secret");
 	let t: ReturnType<typeof setup>;
 	beforeEach(async () => {
 		t = setup({kind: "local", person: "owner", secretHash: await hashOf(SECRET)});
@@ -322,14 +322,18 @@ describe("a local door", () => {
 	it("knows its one person by the secret, and nobody without it", async () => {
 		expect(await t.door.who(SECRET)).toEqual({ok: true, value: {kind: "user", id: "owner"}});
 		expect(await t.door.who(null)).toMatchObject({ok: false, status: 401});
-		expect(await t.door.who("")).toMatchObject({ok: false, status: 401});
-		expect(await t.door.who("fabrika_l_guess")).toMatchObject({ok: false, status: 401});
+		expect(await t.door.who(Redacted.make(""))).toMatchObject({ok: false, status: 401});
+		expect(await t.door.who(Redacted.make("fabrika_l_guess"))).toMatchObject({
+			ok: false,
+			status: 401,
+		});
 	});
 
 	it("gives its person agent tokens, which are agents for that person and never the person", async () => {
 		const a = await t.door.addAgent({kind: "user", id: "owner"}, "triage");
 		if (!a.ok) throw new Error(a.why);
-		expect(a.value.token.startsWith("fabrika_a_")).toBe(true);
+		expect(Redacted.value(a.value.token).startsWith("fabrika_a_")).toBe(true);
+		expect(String(a.value.token)).toBe("<redacted>");
 		expect(await t.door.who(a.value.token)).toEqual({
 			ok: true,
 			value: {kind: "agent", id: "triage", for: "owner"},
@@ -343,7 +347,7 @@ describe("a local door", () => {
 		const a = await t.door.addAgent({kind: "user", id: "owner"}, "triage");
 		if (!a.ok) throw new Error(a.why);
 		const rows = t.db.all("SELECT * FROM door_sessions");
-		expect(JSON.stringify(rows)).not.toContain(a.value.token);
+		expect(JSON.stringify(rows)).not.toContain(Redacted.value(a.value.token));
 		expect(rows[0]?.hash).toBe(await hashOf(a.value.token));
 	});
 

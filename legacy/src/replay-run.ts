@@ -11,7 +11,7 @@ import {saveEnrichment} from "./enrichment.ts";
 import type {Factory} from "./factory.ts";
 import {realLayers, testingFor} from "./host.ts";
 import {Issue} from "./issue.ts";
-import {seedTicket} from "./local.ts";
+import {jevKey, seedTicket} from "./local.ts";
 import {
 	type Filing,
 	packageOf,
@@ -209,7 +209,7 @@ async function replayOne(n: number): Promise<void> {
 	);
 	const row = index.issues.find((r) => r.number === n);
 	if (row === undefined) throw new Error(`#${n} is not in replay/index.json`);
-	const key = process.env.TYPESAFE_API_KEY || undefined;
+	const key = jevKey();
 	if (key === undefined)
 		throw new Error("TYPESAFE_API_KEY is needed: triage sorts with the real Jev");
 
