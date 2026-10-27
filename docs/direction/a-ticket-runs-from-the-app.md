@@ -9,8 +9,8 @@ the app's host, with every step written onto the ticket.
 ```ts
 // A sketch. The whole idea, from one filed ticket to a merge.
 //
-//   the window   [ file ]                  -> {type: "filed"} by user:owner          (a person's fact)
-//   a host       `lanes` sees it, claims lane/ticket/3 on the ledger, starts `lane 3`
+//   the window   [ file ]                  -> {type: "filed", to: "github:7"} by user:owner   (to: the assignee)
+//   github:7's host   `lanes` sees a ticket assigned to its person, claims lane/ticket/3, starts `lane 3`
 //   lane 3       triage: accept, to plan   (in its box, on opus)
 //                plan: planned v1 · asked "approve plan v1"
 //   the window   [ approve ] [ no ]        -> {type: "answered"} by user:owner
@@ -33,9 +33,10 @@ The answer in nine lines:
 - **A filed ticket starts it.** There is no start button. Triage is the entry
   point. Its accept starts plan at once; build waits for the owner's yes on the
   plan.
-- **One lane a ticket.** A small `lanes` program on each host claims the
-  ticket on the ledger first, so two hosts never both run it. Which hosts may
-  claim it is the one open question.
+- **A ticket has an assignee, and the assignee's host runs it** (the owner's
+  ruling, 2026-10-27). A small `lanes` program on each host takes only the
+  tickets assigned to its person, and claims each on the ledger first, so two
+  hosts of one person never both run it.
 - **The first slice is a walking skeleton with fakes:** every child a fake,
   the local code host, $0. It proves the wiring before any money is spent.
 - **Facts:** the lane writes its facts onto the ticket's own stream through a
@@ -399,12 +400,21 @@ interface Turn<A> { /* ...provider, session, folder, prompt, answer, model, effo
 **Elm's answer:** a filed ticket is a fact on the ledger, and `lanes` hears it
 on a Sub. On the host side it is OTP's: an application starts its supervisor's
 children at boot ([tea-host](./tea-host.md)). The `lanes` program is that
-child. For each new `filed` or `reopened`, it tries the ticket's claim, and the
-host that wins starts `lane <n>` in the background.
+child. For each new `filed`, `reopened` or `assigned` whose assignee is its
+own person, it tries the ticket's claim, and the host that wins starts
+`lane <n>` in the background.
 
 ```ts
-// A sketch. `lanes`: one per host, started by the host at boot.
-const starts = Stream.filter(Tickets.tail, (e) => e.fact.type === "filed" || e.fact.type === "reopened");
+// A sketch. The assignee is part of the ticket from the start: a ticket with nobody on it cannot exist.
+Schema.Struct({type: Schema.Literal("filed"), title: Schema.String, body: Schema.String, to: PersonId});
+Schema.Struct({type: Schema.Literal("assigned"), to: PersonId}); // a person's fact only, like `answered`
+
+// A sketch. `lanes`: one per host, started by the host at boot. It hears only its own person's tickets.
+const mine = (e: Entry) => assigneeOf(e.ticket) === me.person; // the fold of `filed` and `assigned`
+const starts = Stream.filter(
+	Tickets.tail,
+	(e) => ["filed", "reopened", "assigned"].includes(e.fact.type) && mine(e),
+);
 const lanes = starts.pipe(
 	Stream.runForEach((e) =>
 		claim(`lane/ticket/${e.ticket}`, {who: me, can: myProviders}).pipe( // one lane a ticket
@@ -433,28 +443,34 @@ const lanes = starts.pipe(
   The fence rule is from
   [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md): a fenced
   write is good until someone newer claims. A host that goes away loses the
-  ticket after about 30 s; another host may claim it, read fresh and go on.
+  ticket after about 30 s; another host of the same person may claim it, read
+  fresh and go on.
   Each child's state is kept under its intent, so the new holder starts no
   child twice. Experiment 151 landed nothing twice in 1,090 runs. It has not
   been tried with two app hosts on one ticket.
-- **Whose host and login runs it: the one open point.** Lean: any host that
-  can run the lane may claim it, the self-hosted runner way
-  ([agents behind one service](./agents-behind-one-service.md): each person's
-  app claims jobs and runs them on its own login, and only answers go back).
-  GitHub Actions self-hosted runners and Buildkite agents take any job whose
-  labels they match. Here "can" means: it has the provider the step needs, a
-  copy of the repository, and a login that can push there. Each row shows
-  whose agent ran it (PR 130's label).
-  - Why: a ticket filed while its filer's machine is off still runs. It is the
-    shape the owner picked on 2026-10-26.
-  - Cost: one person's plan pays for the other's tickets, without asking. A
-    lane may move to another host when one goes away, so one ticket may run on
-    two logins.
-  - The other way: only the filer's host claims. Each person pays for what
-    they filed, but a ticket waits while its filer's machine is off.
-  - How sure: 60%. The doubt: whether two people want their quota shared this
-    way. Slice 14's two-person week would settle it, counting whose login ran
-    whose tickets.
+- **Whose host runs it: the assignee's** (the owner's ruling, 2026-10-27).
+  Every ticket has one assignee, a person. Their host claims the lane and runs
+  it on their own login, as
+  [agents behind one service](./agents-behind-one-service.md) says: each
+  person runs their own agents and asks another person's agents for work
+  through the ledger. Assigning a ticket to the other person is that ask.
+  - The known way: Linear has an assignee on every issue and lets you delegate
+    one to an agent; GitHub lets you assign tasks to Copilot, which then works
+    them ([Linear](https://linear.app/developers/agent-interaction),
+    [GitHub](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent)).
+  - **Who is assigned when a ticket is filed:** the form picks the filer, and
+    the filer may pick the other person instead. A ticket a scheduled job files
+    goes to the person whose agent the job is (`agent:x for:github:<id>`).
+  - **Reassigning:** an `assigned` fact, written by a person. The running lane
+    reads fresh before each child, sees it is no longer its person's, and ends
+    `skip:reassigned`; the new assignee's host claims the ticket and goes on.
+    Each child's state is kept under its intent, so nothing runs twice.
+  - Why: each person pays for and sees only their own agents' work, and a row
+    always shows whose agent ran it (PR 130's label).
+  - Cost: one field on `filed`, one fact kind, one door line (only a person
+    writes `assigned`), and a picker in the form. A ticket waits while its
+    assignee's machines are all off; the cloud host is the later answer
+    ([the cloud is one more host](./the-cloud-is-one-more-host.md)).
 - **Stop in v1 is close.** The lane reads fresh before each child; a closed
   ticket ends it as `skip:closed`. A child already running is stopped by the
   `Agents` stop. No note asks for a stop button; one waits for a run that
@@ -472,12 +488,12 @@ const lanes = starts.pipe(
   [what a ticket shows](./what-a-ticket-shows.md)). This plan gives it real
   runs to show. It does not build it.
 - **Why a fact, not a call:** the filed ticket is on the shared ledger, so
-  every host sees it and the claim picks one. The tracker never needs to know
+  the assignee's hosts see it and the claim picks one. The tracker never needs to know
   the pipeline exists. It matches the host rule that a send is a ledger
   append.
 - **Cost:** one small program, the claim per ticket, and a host that starts
   one program at boot. That last part is new in `apps/fabrika/src/host/run.ts`.
-  No new fact kind, no door line, no button.
+  The assignee adds one field, one fact kind, one door line and a picker.
 - **How sure: 75%** for the shape. The doubt is the claim across two hosts on a
   slow link, which slice 4 tests on the laptop twin and slice 14 for real.
 
@@ -556,10 +572,13 @@ Each line is one pull request. The money starts at slice 8.
    Clear*, 2004) for a thin build that runs end to end through the main parts;
    the page was not read for this note. If it grows too big, it splits: triage
    to the yes first, then the rest.
-4. **A filed ticket starts a lane.** `lanes`, the claim, and the host starting
-   `lanes` at boot. Proves: one filed ticket starts exactly one lane over two
-   hosts on the laptop twin, a reopen starts a new one, and a lost lease hands
-   the lane over with no child run twice. $0.
+4. **A filed ticket starts a lane on its assignee's host.** The `to` field on
+   `filed`, the `assigned` fact and its door line, the picker in the form,
+   `lanes`, the claim, and the host starting `lanes` at boot. Proves: on the
+   laptop twin, a ticket assigned to one person starts exactly one lane over
+   that person's two hosts and none on the other person's; a reassign ends it
+   `skip:reassigned` and the new assignee's host goes on with no child run
+   twice; an agent cannot write `assigned`. $0.
 5. **The mutation step.** A new machine, code only: StrykerJS over the lines
    the build changed and the lines each kept Property covers, the repo's own
    tests first, typecheck-refused mutants not counted, the skip list, and
@@ -601,9 +620,9 @@ Each line is one pull request. The money starts at slice 8.
 13. **demlik.** One small real ticket, filed in the tracker, merged through
     demlik's own merge rules. Logged in `field/` the same day. Proves: the v1
     goal for one person.
-14. **Two people.** On PR 130's shared ledger: one person files, the other
-    comments, and a host claims and runs the lane under section 4's rule.
-    Proves: the v1 goal.
+14. **Two people.** On PR 130's shared ledger: one person files a ticket and
+    assigns it to the other, who comments; the assignee's host runs the lane
+    on the assignee's login. Proves: the v1 goal.
 
 After v1: a research stage for `accept` to research, a lasting ruling's
 decision record, the live row (the tracker's own), and the cloud host
@@ -623,18 +642,8 @@ decision record, the live row (the tracker's own), and the cloud host
 
 ## Open questions for the owner
 
-- **Any host that can run a lane may claim a filed ticket, not only its
-  filer's: yes?** Section 4 has the lean and the other way. Searched:
-  [agents behind one service](./agents-behind-one-service.md) (the runner
-  sketch and "where a person's login lives"),
-  [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md) (claims
-  are shared; "any runner may claim a job" is said of CI jobs only),
-  [programs run in a box](./programs-run-in-a-box.md) ("each person runs their
-  own agents"; a box gets "its starter's" login),
-  [tickets start in our tracker](./tickets-start-in-our-tracker.md),
-  [the cloud is one more host](./the-cloud-is-one-more-host.md), and the
-  owner's rulings so far. Each says a host claims work and runs it on its own
-  login. None says whose tickets a host may take.
+None. The last one, whose host runs a ticket, was ruled on 2026-10-27: the
+assignee's (section 4).
 
 ## What it cannot tell us
 
