@@ -37,6 +37,7 @@ export {
 	isPersonKind,
 	MEMBERS,
 	NAMESPACE,
+	namesOf,
 	PERSON_KINDS,
 	type PersonKind,
 	type Stamp,
@@ -54,7 +55,7 @@ export * as Monitor from "./host/monitor.ts";
 export * from "./host/observer.ts";
 export * from "./host/rules.ts";
 export * from "./host/signer.ts";
-export {keyLineOf, keyOnly} from "./host/sshsig.ts";
+export {type KeyFile, keyFileOf, keyFileText, keyLineOf, keyOnly} from "./host/sshsig.ts";
 export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
 export * from "./host/writer.ts";

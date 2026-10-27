@@ -18,12 +18,22 @@ import type * as Esbuild from "esbuild";
 import {beside} from "./beside.ts";
 
 /**
+ * The ledger server's entry: the Worker and its `Ledger` Durable Object class. A deploy names this
+ * file as the Worker's `main` (packages/ledger-server), and Miniflare runs it bundled (below), so
+ * the server on Cloudflare and its twin on the laptop are the same code.
+ */
+export const LEDGER_ENTRY = beside(import.meta.url, "durable-object");
+
+/** The Workers runtime date the ledger runs on, in Miniflare and on Cloudflare. */
+export const COMPATIBILITY_DATE = "2026-07-01";
+
+/**
  * The Worker as one module: the Durable Object, its rules, the door, the SSH signatures it checks
  * and the `Keys` Layers. `cloudflare:*` is workerd's own, so it stays an import.
  */
 const modules = () => {
 	const {buildSync}: typeof Esbuild = createRequire(import.meta.url)("esbuild");
-	const entry = beside(import.meta.url, "durable-object");
+	const entry = LEDGER_ENTRY;
 	const out = buildSync({
 		entryPoints: [entry],
 		bundle: true,
@@ -107,6 +117,21 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
 				};
 
 /**
+ * The Worker's text bindings for these options: the expiry grace, the poison limit and the door.
+ * The one place they are made: Miniflare gets them here (`ledgerOptions`), and a deploy hands the
+ * same ones to Cloudflare (packages/ledger-server), so the twin and the server are set up alike.
+ */
+export const ledgerBindings = (
+	o: Pick<LedgerOptions, "graceMs" | "maxDeliveries" | "door">,
+): Record<string, string> => ({
+	EXPIRY_GRACE_MS: String(o.graceMs ?? 1000),
+	...(o.maxDeliveries === undefined
+		? {}
+		: {MAX_DELIVERIES: o.maxDeliveries === null ? "off" : String(o.maxDeliveries)}),
+	...doorBindings(o.door),
+});
+
+/**
  * The options `new Miniflare(...)` takes, typed by what is in them. Miniflare is an optional peer,
  * and its declarations do not pass `skipLibCheck: false`, so this package's declarations never name
  * them (experiment 108). `daemon.ts` hands these to `new Miniflare`, which checks them.
@@ -114,16 +139,10 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
 export const ledgerOptions = (o: LedgerOptions) => ({
 	modules: modules(),
 	modulesRoot: fileURLToPath(new URL(".", import.meta.url)),
-	compatibilityDate: "2026-07-01",
+	compatibilityDate: COMPATIBILITY_DATE,
 	durableObjects: {LEDGER: {className: "Ledger", useSQLite: true}},
 	durableObjectsPersist: o.persist,
-	bindings: {
-		EXPIRY_GRACE_MS: String(o.graceMs ?? 1000),
-		...(o.maxDeliveries === undefined
-			? {}
-			: {MAX_DELIVERIES: o.maxDeliveries === null ? "off" : String(o.maxDeliveries)}),
-		...doorBindings(o.door),
-	},
+	bindings: ledgerBindings(o),
 	// Miniflare sends the Worker's own outgoing `fetch` here, so a test's GitHub is a fake.
 	...(o.door?.kind === "shared" && o.door.keys.api !== undefined
 		? {outboundService: o.door.keys.api}

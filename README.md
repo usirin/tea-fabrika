@@ -240,6 +240,9 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
   as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
   code changes and the record does not (experiment 117).
+- [`packages/ledger-server`](./packages/ledger-server/README.md), `@kampus/ledger-server`: one
+  shared ledger on Cloudflare for a team, declared with Alchemy, and its twin on the laptop from
+  the same Worker.
 - [`programs/`](./programs/README.md): one package per program that runs on its own.
   - [`programs/counter`](./programs/counter/README.md), `@tea-fabrika/counter`: the smallest
     program with a window. It counts presses of +1 until done.
