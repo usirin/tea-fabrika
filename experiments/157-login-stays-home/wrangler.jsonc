@@ -1,0 +1,26 @@
+// Experiment 157, run locally with `wrangler dev` and Docker; never deployed from here. The
+// driver passes the secret in an env file and the fakes' addresses with --var.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "exp-157-locker",
+	"main": "worker.ts",
+	"compatibility_date": "2026-10-26",
+	"compatibility_flags": ["nodejs_compat"],
+	"containers": [
+		{
+			"class_name": "Box",
+			"scheduling_policy": "durable_object",
+			"images": { "box": { "dockerfile": "./Dockerfile" } }
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "class_name": "Box", "name": "BOX" },
+			{ "class_name": "Locker", "name": "LOCKER" }
+		]
+	},
+	"exports": {
+		"Box": { "type": "durable-object", "storage": "sqlite" },
+		"Locker": { "type": "durable-object", "storage": "sqlite" }
+	}
+}

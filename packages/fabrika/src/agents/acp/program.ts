@@ -9,7 +9,7 @@ import {flag, input, output} from "../../program/shape.ts";
 import {runTraced} from "../../program/trace.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {connect, type Heard, type Opened, type PendingAsk} from "./client.ts";
-import {AGENTS, harnessOf} from "./harness.ts";
+import {AGENTS, CODEX_MODES, harnessOf} from "./harness.ts";
 import {Session, session, type Waiting} from "./session.ts";
 import {type AcpEvents, acpEvents} from "./spans.ts";
 import {
@@ -151,7 +151,10 @@ export const acpProgram = defineProgram({
 	description:
 		"An ACP client: starts one agent harness over the Agent Client Protocol, opens one session in a scratch folder, and runs each prompt it is told as a turn. Started again under the same run, it opens the same session and sends the prompt a kill cut off.",
 	flags: {
-		agent: flag(Schema.Literals(AGENTS), "The harness: claude, or fake (scripted, no model)."),
+		agent: flag(
+			Schema.Literals(AGENTS),
+			"The harness: claude, codex, or fake (scripted, no model).",
+		),
 		folder: flag(
 			Schema.String,
 			"The scratch folder the harness works in: an absolute path, in no git repository.",
@@ -224,11 +227,19 @@ export const acpProgram = defineProgram({
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const folder = yield* scratchFolder(flags.folder);
+			// A mode codex may not run in is refused first, whether or not the adapter is installed.
+			if (
+				flags.agent === "codex" &&
+				flags.mode !== undefined &&
+				!(CODEX_MODES as readonly string[]).includes(flags.mode)
+			)
+				return yield* refused(`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode}`);
 			const harness = harnessOf(flags.agent, folder, flags.budget ?? null);
 			if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
 				return yield* refused(
 					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
 				);
+			if (harness.prepare !== undefined) yield* harness.prepare.pipe(Effect.catch(refused));
 
 			// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
 			const kept = yield* machines.session.get("session").start();

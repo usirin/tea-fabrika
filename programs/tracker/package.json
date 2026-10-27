@@ -3,10 +3,11 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "A program with a window: the tracker. Tickets live on the ledger, one stream of facts each; its window lists them, files new ones, and shows one's timeline.",
+	"description": "A program with a window: the tracker. Tickets live on the ledger, one stream of facts each; its window lists them, files new ones, and shows one's timeline, with the open pull requests of the connected repositories beside them.",
 	"exports": {
 		".": "./src/index.ts",
-		"./window": "./src/window.tsx"
+		"./window": "./src/window.tsx",
+		"./github": "./src/github.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit -p ."
@@ -14,6 +15,7 @@
 	"dependencies": {
 		"@demlik/tea": "catalog:",
 		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
 		"effect": "catalog:"
 	},
 	"peerDependencies": {

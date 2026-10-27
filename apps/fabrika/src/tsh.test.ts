@@ -2,7 +2,7 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {Ledger, memoryStorage, type Storage} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {tracker} from "@tea-fabrika/tracker";
+import {PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
@@ -55,7 +55,11 @@ const session = (
 			jobs: opts.jobs ?? memoryStorage(),
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
-		}).pipe(Effect.provideService(Ledger, opts.ledger ?? memoryService()));
+		}).pipe(
+			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
+			// No pull requests: no test reads GitHub.
+			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
+		);
 		let bytes = "";
 		host.terminal.show((m) => {
 			bytes += m.data;
@@ -113,6 +117,27 @@ describe("the terminal", () => {
 				const s = yield* session();
 				expect(s.type("seq --to 3 | double\r")).toEqual({kind: "read"});
 				return yield* s.prompts(2);
+			}).pipe(Effect.scoped),
+		);
+		expect(rows).toEqual(["tsh$ seq --to 3 | double", "double 2", "double 4", "double 6", "tsh$"]);
+	});
+
+	it("draws the screen once on a terminal that still holds it, as after the app reconnects", async () => {
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("seq --to 3 | double\r");
+				yield* s.prompts(2);
+				// One page's terminal, shown the screen on its first port, then again on the next.
+				let page = "";
+				const first = s.host.terminal.show((m) => {
+					page += m.data;
+				});
+				first();
+				s.host.terminal.show((m) => {
+					page += m.data;
+				});
+				return gridOf(page, 80, 1000).rows;
 			}).pipe(Effect.scoped),
 		);
 		expect(rows).toEqual(["tsh$ seq --to 3 | double", "double 2", "double 4", "double 6", "tsh$"]);

@@ -40,7 +40,11 @@ type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile:
 	| {type: "resize"; stack: string; sizes: Record<string, number>};
 type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
 	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
-	| {type: "answer"; id: number; took: boolean} | {type: "down"; why: string};
+	| {type: "answer"; id: number; took: boolean}
+	// Main's own, while the link is down (src/reconnect.ts).
+	| {type: "down"; why: string; now: "reconnecting" | "stopped" | "refused"};
+// Main's own too: Try again, after it stopped trying. The host never sees it.
+type ToApp = {type: "again"};
 // "tile:t1": t1's terminal, as a terminal is to a pty.
 type ToTerminal = {type: "write"; data: string};
 type FromTerminal = {type: "keys"; data: string} | {type: "size"; cols: number; rows: number};
@@ -55,19 +59,24 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
   `programs/counter` and `programs/tracker`, and nothing imports it.
 - Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
   `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
-  `src/host/main.ts`, `src/host/run.ts` and `src/host/socket.ts`. Everything else is plain
+  `src/host/main.ts`, `src/host/run.ts`, `src/host/socket.ts` and `src/host/lock.ts`. Everything else is plain
   Effect, tested with no Electron. The page is React, with each terminal made outside it.
 - **The host is a process of its own.** It is the app's own binary run as Node
   (`ELECTRON_RUN_AS_NODE=1`, on `dist/host.mjs`), started detached by the first app that finds
   none, and let go. No second runtime ships, and Electron's Node is the one the app was built and
   tested on. It holds the tiles (tsh and the line editor, one of each per tile), the ledger, the
   history and the desk.
+- **One host per home.** Apps that find no host at the same moment each start one. The hosts
+  take turns under `<home>/host/lock`, from the look at the socket until they listen, as tmux's
+  `<socket>.lock` does: one listens, the rest find it answering and step aside, and every app
+  attaches to it. No host removes a socket another one listens on.
 - **The link is a Unix socket,** `<home>/host/sock`, mode 0600 in a 0700 folder. No TCP and no
   secret: the file's mode is the lock, as tmux's is. One JSON line a message (NDJSON), each read
   with an Effect Schema at both ends. A version handshake first (`link.ts`): an app of another
   version is not attached, says so, and leaves that host running.
 - **Main is a thin relay.** It checks a page's hello, keeps a port per tile and run for the
-  window's own page, and passes lines on. It holds no desk and no tiles.
+  window's own page, and passes lines on. It holds no desk and no tiles. When the link drops,
+  it attaches again (`reconnect.ts`), and the window keeps the desk drawn, dimmed, meanwhile.
 - A tile's terminal only draws bytes and sends keys, as a terminal does with a pty. There is no
   pty and no `node-pty`: tsh is not a process, so there is nothing to give a pty to.
 - **The desk (the layout, the focus, the prefix, the question) is a tea machine in the host.**
@@ -80,22 +89,23 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
 | `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
-| `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. |
+| `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. A host that says no hello within 10 s fails the try (`NoHello`), and the try closes its socket. A host it started that steps aside for another is no failure: it attaches to the one that answers. |
+| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again. `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
-| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder and socket, cleans a stale socket, writes the pid, and opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
-| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
+| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
-| `src/messages.ts` | The six message types as Effect Schemas, and their strict readers. |
+| `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, and a host of another version. It stops its own host by its pid and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
 
@@ -188,7 +198,8 @@ openOutside({url: "file:///etc/hosts", from: DESK})      // {kind: "refused", wh
 - **Only the desk page may ask.** A window open from any other page is refused.
 - **The window never navigates.** A link with no `target="_blank"` does nothing: main refuses the
   navigation, and nothing opens outside.
-- The tracker links URLs in a ticket's and a comment's body (`programs/tracker/src/links.ts`).
+- The tracker links URLs in a ticket's and a comment's body (`programs/tracker/src/links.ts`),
+  and each open pull request on its list.
 
 ## The line editor
 
@@ -272,7 +283,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
   `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
-  host's `host/sock`, `host/pid` and `host/log`. A test on its own home can never reach another
+  host's `host/sock`, `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows
@@ -308,10 +319,13 @@ Left for later, from Tuval's keys and the build:
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.
-- **A link that drops while the app runs** is not tried again: the page says "Not attached to
-  the host" until the app starts again. tmux's client exits here; Tuval tried again.
-- **Two apps starting at the same moment** on a home with no host can both start one. One wins
-  the socket; tmux takes a lock file first, and so should this.
+- **Keys typed while the link is down go nowhere.** The desk is out of reach until it is back;
+  nothing is kept to send later.
+- **A host that dies while it holds the start lock,** in the few ms it takes to start, leaves the
+  lock with its pid. The next host takes it over. Two hosts that take over the same dead lock at
+  the same moment can both get through, as with Chromium's and proper-lockfile's own locks. A
+  lock whose pid was given to another live process is waited on for 10 s, then the host stops
+  and names the lock.
 - **A host of another version is left as it is.** Nothing offers to stop it or to move its jobs.
 - **The link's version counts the message shapes, not what they mean.** A change in behaviour
   with the same shapes is not caught.

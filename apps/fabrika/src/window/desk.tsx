@@ -29,7 +29,14 @@ import {
 	type TileId,
 	type TileNode,
 } from "../desk/layout/index.ts";
-import {type FromPage, readToPage, readToWindow, type ToWindow} from "../messages.ts";
+import {
+	type FromPage,
+	readToPage,
+	readToWindow,
+	type ToApp,
+	type ToPage,
+	type ToWindow,
+} from "../messages.ts";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -53,6 +60,13 @@ import {WINDOWS} from "./windows.tsx";
 //
 // Each tile's terminal is made once and moved into its slot as the layout changes (terminal.ts).
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
+//
+// When the link to the host drops, the app reconnects (reconnect.ts) and says so here: the desk
+// stays drawn, dimmed and out of reach, with a calm note in its corner. Nothing takes focus, and
+// no dialog opens. The next desk the host sends draws it again, and focus goes back to the tile.
+
+/** The link to the host is down: why, and what the app does now. */
+type Lost = Extract<ToPage, {readonly type: "down"}>;
 
 /** The desk, the newest view of each run, and who to tell of a change. */
 const store: {
@@ -61,7 +75,7 @@ const store: {
 	/** The desk's Ctrl-B key, as the host's table says. */
 	prefix: string;
 	/** Why the app is not attached to the host, said plainly, or `null`. */
-	down: string | null;
+	down: Lost | null;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
 	version: number;
@@ -85,6 +99,8 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+/** What the page tells the app itself: on the desk's port, read by main and not passed on. */
+const toApp = (m: ToApp) => window.fabrika.send("desk", m);
 
 /** Hear a run's view on its port, from now on. */
 const follow = (run: string) =>
@@ -194,7 +210,7 @@ const heard = (raw: unknown) => {
 			holdStep({type: "answer", id: m.id, took: m.took});
 			return;
 		case "down":
-			store.down = m.why;
+			store.down = m;
 			holdStep({type: "down"});
 			return changed();
 	}
@@ -404,36 +420,74 @@ function Status({desk}: {readonly desk: Open}): ReactNode {
 	);
 }
 
+/**
+ * The link is down and the app is on it: said in a corner of the desk, as a status, not an alert.
+ * Stopped, it offers Try again, which takes no focus until the person moves to it. Before the
+ * first desk came, the app was never attached: it is connecting, not reconnecting.
+ */
+function LostNote(props: {readonly lost: Lost; readonly first: boolean}): ReactNode {
+	const {lost, first} = props;
+	const stopped = lost.now === "stopped";
+	const verb = first ? "connect" : "reconnect";
+	return (
+		<section className="lost-note" role="status" aria-label="the link to the host">
+			<h1>
+				{stopped
+					? `Could not ${verb} to the host`
+					: `${first ? "Connecting" : "Reconnecting"} to the host…`}
+			</h1>
+			<p>{lost.why}</p>
+			{stopped ? (
+				<>
+					<p>It stopped trying after five minutes.</p>
+					<button type="button" onClick={() => toApp({type: "again"})}>
+						Try again
+					</button>
+				</>
+			) : null}
+		</section>
+	);
+}
+
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
 	const desk = store.desk;
+	const lost = store.down;
 	const ws = desk?.at === "open" ? activeOf(desk) : null;
 	const focused = desk?.at === "open" ? focusedOf(desk) : null;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
-	// effect, so focus has moved before a key held for the host's answer is pressed again.
+	// effect, so focus has moved before a key held for the host's answer is pressed again. The
+	// desk is out of reach while the link is down, so focus goes back to it once the link is up.
 	useLayoutEffect(() => {
-		if (focused === null) return;
+		if (focused === null || lost !== null) return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
-	}, [shown]);
-	if (store.down !== null)
+	}, [shown, lost === null]);
+	// Another version of the link: the app does not attach, so there is no desk to keep.
+	if (lost?.now === "refused")
 		return (
 			<div className="down" role="alert">
 				<h1>Not attached to the host</h1>
-				<p>{store.down}</p>
+				<p>{lost.why}</p>
 			</div>
 		);
-	if (desk === null) return <p className="starting">starting</p>;
-	if (desk.at === "over" || ws === null) return <p className="starting">closing</p>;
+	const note = lost === null ? null : <LostNote lost={lost} first={desk === null} />;
+	if (desk === null) return note ?? <p className="starting">starting</p>;
+	if (desk.at === "over" || ws === null) return note ?? <p className="starting">closing</p>;
 	const zoomed = ws.layout.zoomed;
 	return (
-		<div className="desk">
-			<div className="workspace" data-workspace={ws.id} data-zoomed={zoomed ?? undefined}>
+		<div className={`desk${lost === null ? "" : " lost"}`}>
+			<div
+				className="workspace"
+				data-workspace={ws.id}
+				data-zoomed={zoomed ?? undefined}
+				inert={lost !== null}
+			>
 				{zoomed !== null ? (
 					<ZoomedTile ws={ws} id={zoomed} desk={desk} />
 				) : (
@@ -441,6 +495,7 @@ function App(): ReactNode {
 				)}
 			</div>
 			<Status desk={desk} />
+			{note}
 		</div>
 	);
 }

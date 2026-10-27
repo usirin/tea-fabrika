@@ -269,6 +269,7 @@ function fourWorlds() {
 	};
 	const shipReads: string[] = [];
 	const host = Layer.succeed(CodeHost, {
+		pullRequests: () => Effect.succeed([]),
 		prFacts: (pr) =>
 			Effect.sync(() => {
 				shipReads.push(pr);
@@ -836,6 +837,7 @@ const worldOf = (log: string[], alive: () => boolean, world: World) => {
 		if (alive()) log.push(line);
 	};
 	const host = Layer.succeed(CodeHost, {
+		pullRequests: () => Effect.succeed([]),
 		prFacts: (pr) => Effect.sync(() => note(`facts ${pr}`)).pipe(Effect.as(clear)),
 		change: (pr, head) => {
 			const {gh} = recordedGh("final", {now: HEADS.final, change: opened("final")});

@@ -15,6 +15,8 @@
 // The other names in two places are picked below; the one not picked is used
 // by no import outside its own part today (experiment 103).
 
+// agents: our own interface to a coding agent (experiment 156). Its adapters are on subpaths.
+export * as Agent from "./agents/agent.ts";
 // host: programs under registered names on one ledger.
 export * as Call from "./host/call.ts";
 export * from "./host/dead-letters.ts";

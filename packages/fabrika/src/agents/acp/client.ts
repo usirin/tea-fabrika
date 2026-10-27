@@ -70,6 +70,8 @@ export interface Opened {
 
 export interface Connection {
 	readonly init: acp.InitializeResponse;
+	/** The harness's process, for a stop that ends what it started (the agent interface's reaper). */
+	readonly pid: number;
 	/** Whether the harness says it can open a session again this way. */
 	readonly can: (how: Exclude<OpenHow, "new">) => boolean;
 	readonly open: (
@@ -305,6 +307,7 @@ export const connect = (
 
 		return {
 			init,
+			pid: Number(handle.pid),
 			can,
 			open,
 			configure,
