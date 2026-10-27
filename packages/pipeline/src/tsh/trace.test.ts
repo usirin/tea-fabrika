@@ -95,6 +95,7 @@ const opened = (draft: boolean) =>
  */
 const recordedGitHub = () => {
 	const host = Layer.succeed(CodeHost, {
+		openPulls: () => Effect.succeed([]),
 		prFacts: (pr: string) =>
 			Effect.succeed(pr === url(3) ? {...clear, checks: "stuck" as const} : clear),
 		change: (pr, head) => {

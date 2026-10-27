@@ -2,6 +2,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import {pullsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, FileSystem, Layer, Schedule, Scope} from "effect";
 import {ChildProcess} from "effect/process";
 import {describe, expect, it} from "vitest";
@@ -20,8 +21,9 @@ import {pathsOf, reach} from "./socket.ts";
 // of the socket and its folder. Each host stops with its test's scope, and a test checks it left
 // no socket behind.
 
+// The tracker's pull requests: none. No test reads GitHub.
 const platform = NodeChildProcessSpawner.layer.pipe(
-	Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+	Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullsOf([]))),
 );
 
 const go = <A, E>(test: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof platform>>) =>

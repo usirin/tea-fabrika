@@ -64,6 +64,36 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
   stay on demlik, through `CodeHost`, as
   [the ledger note](./ledger-behind-a-service.md) says.
 
+## Decided 2026-10-26: GitHub is an integration
+
+- **The tracker works like Linear.** It is tied to no repository. Tickets live
+  on the ledger, and GitHub is one integration of the tracker's own.
+- **The integration reads through `CodeHost`,** the pipeline's one GitHub
+  client, on the person's own `gh` login. No second GitHub client, and no new
+  token: the tracker never holds one, and its window never sees one.
+- **Connected repositories are a list** in the integration's settings. It
+  starts with this repository. Adding one is one line.
+
+```ts
+// programs/tracker/src/github.ts
+export const GITHUB: GitHubSettings = {repos: ["https://github.com/usirin/tea-fabrika"]};
+
+// apps/fabrika/src/host/main.ts: the tracker's `Pulls`, on CodeHost, on the gh login
+const pulls = Layer.provide(gitHubPulls(GITHUB), gitHubCodeHost({own: [], reviewers: []}));
+```
+
+- **What it does first:** the list shows the connected repositories' open pull
+  requests beside the tickets. It is a view: it writes no fact.
+- **Next, not yet:** linking a pull request to a ticket. That link is what lets
+  a merge make the ticket done
+  ([What a ticket shows](./what-a-ticket-shows.md), section 5), so it is a
+  fact on the ticket's stream, not window state.
+- **Why:** one GitHub client means one place for auth, limits and the shapes
+  GitHub answers in. The person's `gh` login is already there and already
+  scoped to them.
+- **Cost:** the app needs `gh` on its path and logged in. Without it the list
+  says it could not read pull requests, and tickets work as before.
+
 ## Why
 
 - **Who can write the ticket is the guard that holds.**

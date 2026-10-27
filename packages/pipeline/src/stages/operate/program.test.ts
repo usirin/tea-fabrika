@@ -172,6 +172,7 @@ function world(
 	let reviewed = 0;
 	const held = Deferred.makeUnsafe<void>();
 	const host = Layer.succeed(CodeHost, {
+		openPulls: () => Effect.succeed([]),
 		prFacts: () => Effect.succeed(clear),
 		change: (pr, head) => {
 			const {gh} = recordedGh("final", {now: HEADS.final, change: opened});
@@ -618,6 +619,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		const reviewing = Deferred.makeUnsafe<void>();
 		let current = "";
 		const host = Layer.succeed(CodeHost, {
+			openPulls: () => Effect.succeed([]),
 			prFacts: () => Effect.succeed(clear),
 			change: (pr, head) => {
 				const {gh} = recordedGh("final", {now: HEADS.final, change: opened});

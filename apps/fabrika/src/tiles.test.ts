@@ -1,5 +1,6 @@
 import {Ledger, memoryStorage} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
+import {Pulls} from "@tea-fabrika/tracker";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
@@ -43,7 +44,10 @@ const desk = (folders = new Map<string, Place>()) =>
 				view: (run) => views.push(run),
 				gone: (name) => gone.push(name),
 			},
-		}).pipe(Effect.provideService(Ledger, memoryService()));
+		}).pipe(
+			Effect.provideService(Ledger, memoryService()),
+			Effect.provideService(Pulls, {open: Effect.succeed([])}),
+		);
 		const rows = (tile: string) => gridOf(bytes.get(tile) ?? "", 80, 1000).rows;
 		const type = (tile: string, data: string) => screens.get(tile)?.heard({type: "keys", data});
 		const until = <T>(what: string, check: () => T | undefined) =>

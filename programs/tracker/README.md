@@ -1,8 +1,10 @@
 # tracker: `@tea-fabrika/tracker`
 
-Tickets on the ledger, and a window to work them. A ticket is one stream of facts: who wrote
-each one (a user or an agent), when, and what happened. Nothing else holds a ticket: no copy in
-the program, none on GitHub. The fabrika app ([`apps/fabrika`](../../apps/fabrika/README.md))
+Tickets on the ledger, and a window to work them, with the open pull requests of the connected
+repositories beside them. A ticket is one stream of facts: who wrote each one (a user or an
+agent), when, and what happened. Nothing else holds a ticket: no copy in the program, none on
+GitHub. The tracker works like Linear, tied to no repository: GitHub comes in through an
+integration of its own. The fabrika app ([`apps/fabrika`](../../apps/fabrika/README.md))
 lists it, so `tracker` typed in the app's tsh opens its window. The design is
 [Tickets start in our tracker](../../docs/direction/tickets-start-in-our-tracker.md).
 
@@ -14,6 +16,8 @@ import {Author, tracker} from "@tea-fabrika/tracker";
 yield* tell(run, "do", {kind: "file", title: "Login fails", body: "On main."});
 yield* tell(run, "do", {kind: "comment", ticket: 1, body: "Seen it too."});
 yield* tell(run, "do", {kind: "close", ticket: 1});
+yield* tell(run, "do", {kind: "show", show: "all"});      // open (the start), closed or all
+yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login", any case
 
 // What lands on the ledger, as the user the `Author` service names:
 //   tracker/ticket/1            registered: the number is taken
@@ -23,7 +27,9 @@ yield* tell(run, "do", {kind: "close", ticket: 1});
 
 // What its window is shown (`Shown`), once the facts are read back:
 // {ready: true, page: {kind: "list", tickets: [{number: 1, title: "Login fails", state: "closed",
-//   comments: 1, at: ...}]}, saving: [], failed: null, problems: [], unreachable: null, quitting: false}
+//   comments: 1, at: ...}], pulls: [...], counts: {open: 0, closed: 1, pulls: 0}},
+//   filter: {show: "all", find: "login"}, github: {read: true, why: null},
+//   saving: [], failed: null, problems: [], unreachable: null, quitting: false}
 ```
 
 ## What's in it
@@ -34,7 +40,9 @@ yield* tell(run, "do", {kind: "close", ticket: 1});
 | | `src/ticket.ts` | The ticket, pure: `Fact`, `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
-| `@tea-fabrika/tracker/window` | `src/window.tsx` | `TrackerWindow`: the list, the composer, a ticket's timeline. Plain React. |
+| | `src/pulls.ts` | `Pull`, and the `Pulls` service the program reads open pull requests through: `pulls`, and the wait between reads. `pullsOf(list)` for a test. |
+| `@tea-fabrika/tracker/github` | `src/github.ts` | The GitHub integration: `gitHubPulls(settings)`, `Pulls` on the pipeline's `CodeHost`, and `GITHUB`, the connected repositories. |
+| `@tea-fabrika/tracker/window` | `src/window.tsx` | `TrackerWindow`: the filter and search, the list, the pull requests, the composer, a ticket's timeline. Plain React. |
 | | `src/links.ts` | `piecesOf`: a body cut into text and links, by GitHub's autolink rule, for http and https. Pure. |
 
 - **The ledger is the only copy.** The machine is not kept. Started again, it reads the ledger
@@ -63,6 +71,20 @@ yield* tell(run, "do", {kind: "close", ticket: 1});
   A link shows its own URL and is `target="_blank"`: the app hands it to the person's own
   browser, and its window stays where it is
   ([`apps/fabrika`, "Links"](../../apps/fabrika/README.md#links)).
+- **Closed tickets are hidden at the start.** What the list shows (`show`: open, closed or all)
+  and the search (`find`) are the machine's state, as Elm keeps a filter in the Model: the view
+  is a pure function of them (`shownOf`), the laws in `src/filter.laws.test.ts` hold it, and a
+  second window on the same run sees the same list. Which row is picked stays the window's: it
+  is focus, not data.
+- **Open pull requests sit beside the tickets.** They come through the `Pulls` service, read at
+  the start and then two minutes after each answer. In the app it is `gitHubPulls(GITHUB)`: the
+  pipeline's `CodeHost`, on the person's own `gh` login, so the tracker holds no token and the
+  window never sees one. A pull request shows its repository's short name, number, title, a
+  draft mark and when it last moved, never who opened it. Enter on one opens it in the browser.
+  A read that fails says so under "Pull requests" and keeps the last list. The connected
+  repositories are one list, `GITHUB.repos` in `src/github.ts`.
+- **A pull request's title is anyone's words.** On a public repository anyone can open one. The
+  window only draws it; nothing reads it as an instruction.
 
 ## Keys
 
@@ -70,22 +92,29 @@ The common path needs no mouse. The focus goes where the next step is.
 
 | Where | Keys |
 |---|---|
-| The list | ↑ ↓ or j k pick a ticket, Enter opens it, c goes to the new ticket's title, q quits |
+| The list | ↑ ↓ or j k pick a ticket or a pull request, Enter opens it, o x a show open, closed or all tickets, / goes to the search, c goes to the new ticket's title, q quits |
+| The search | typing narrows tickets and pull requests by title; Esc, ↓ or Enter goes back to the list |
 | New ticket | Enter in the title goes to the body, Ctrl+Enter (or ⌘+Enter) files it, Esc goes to the list |
 | A ticket | the comment box has the focus, Ctrl+Enter comments, Esc goes back to the list |
 
 - With no tickets, the title has the focus, and the list says what to do.
 - After filing, the composer is empty and its title still has the focus, for the next one.
 - A half-written ticket or comment stays while you look at another page.
+- The window has no colours of its own: it draws with the app's tokens
+  (`apps/fabrika/src/window/window.css`), as every program's view does.
 
 ## Left out, on purpose
 
+- Linking a pull request to a ticket. It is next: a link is a fact on the ticket's stream, as
+  [What a ticket shows](../../docs/direction/what-a-ticket-shows.md) section 5 says.
+- More than the first 100 open pull requests of a repository, and pull requests that are not
+  open.
 - Editing a title, a body or a comment. A fact is never changed; an edit would be a new fact.
-- Labels, assignees, milestones, search, and a ticket key per project. Not needed to file and
-  follow tickets yet.
+- Labels, assignees, milestones, and a ticket key per project. Not needed to file and follow
+  tickets yet.
 - Going back to the page you were on after a restart. The list is one key away.
 - Retrying a failed write. Its text is shown in full, to copy back.
-- Asks, approvals, agents writing to tickets, GitHub sync and the pull request watcher. Each has
+- Asks, approvals, agents writing to tickets, ticket sync with GitHub and the pull request watcher. Each has
   a place: asks are new facts in `Fact`; an agent is another `Author` on the same ledger, and the
   poll already shows what it writes; sync and the watcher are programs that read and write the
   same streams.

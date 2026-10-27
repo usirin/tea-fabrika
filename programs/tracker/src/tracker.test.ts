@@ -2,15 +2,28 @@ import {Ledger, memoryStorage, offer, readInput, start, streams, type Word} from
 import {memoryService} from "@kampus/fabrika/memory";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {Author, type Do, tracker} from "./index.ts";
+import {Author, type Do, type Pull, pullsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
 
 // The tracker with no window, on a ledger in memory: told what a window would send, it writes
 // facts, and shows them back. A second run on the same ledger finds them all, as the app does
-// after a restart.
+// after a restart. Its pull requests are a fixed list.
+
+const PULL: Pull = {
+	repo: "https://github.com/example/app",
+	number: 7,
+	title: "Fix the login loop",
+	url: "https://github.com/example/app/pull/7",
+	draft: false,
+	at: 0,
+};
 
 const services = (ledger: Ledger["Service"]) =>
-	Layer.mergeAll(Layer.succeed(Ledger, ledger), Layer.succeed(Author, {kind: "user", id: "owner"}));
+	Layer.mergeAll(
+		Layer.succeed(Ledger, ledger),
+		Layer.succeed(Author, {kind: "user", id: "owner"}),
+		pullsOf([PULL]),
+	);
 
 /** One run of the tracker on `ledger`, with a way to tell it and to wait for a view. */
 const session = (ledger: Ledger["Service"], id = "tracker:test") =>
@@ -42,6 +55,8 @@ describe("the tracker", () => {
 				const first = yield* Effect.gen(function* () {
 					const {run, say, until} = yield* session(ledger);
 					yield* until((s) => s.ready);
+					// The list hides closed tickets until it is asked to show them.
+					yield* say({kind: "show", show: "all"});
 					yield* say({kind: "file", title: "Login fails", body: "On main."});
 					yield* say({kind: "file", title: "Docs typo", body: ""});
 					yield* say({kind: "comment", ticket: 1, body: "Seen it too."});
@@ -57,7 +72,8 @@ describe("the tracker", () => {
 				// Started again: nothing was kept but the ledger.
 				const again = yield* Effect.gen(function* () {
 					const {say, until} = yield* session(ledger, "tracker:again");
-					const list = listed(yield* until((s) => s.ready));
+					yield* say({kind: "show", show: "all"});
+					const list = listed(yield* until((s) => s.ready && s.filter.show === "all"));
 					yield* say({kind: "open", ticket: 1});
 					const page = (yield* until((s) => s.page.kind === "ticket")).page;
 					return {list, page};
@@ -131,6 +147,37 @@ describe("the tracker", () => {
 		expect(list).toEqual([[2, "Login fails", "open"]]);
 	});
 
+	it("hides closed tickets at first, finds by title, and lists the open pull requests beside them", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session(ledger);
+				yield* until((s) => s.ready);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say({kind: "file", title: "Docs typo", body: ""});
+				yield* say({kind: "close", ticket: 2});
+				const open = yield* until(
+					(s) => s.page.kind === "list" && s.page.counts.closed === 1 && s.github.read,
+				);
+				yield* say({kind: "find", text: "  LOGIN "});
+				const found = yield* until((s) => s.filter.find === "  LOGIN ");
+				yield* say({kind: "show", show: "closed"});
+				const closed = yield* until((s) => s.filter.show === "closed");
+				const pullsOn = (s: Shown) => (s.page.kind === "list" ? s.page.pulls : []);
+				return {
+					open: [listed(open), pullsOn(open).map((p) => p.number)],
+					found: [listed(found), pullsOn(found).map((p) => p.number)],
+					closed: [listed(closed), pullsOn(closed).map((p) => p.number)],
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({
+			open: [[[1, "Login fails", "open"]], [7]],
+			found: [[[1, "Login fails", "open"]], [7]],
+			closed: [[], []],
+		});
+	});
+
 	it("reads what its window sends, and refuses a blank title or an empty comment", () => {
 		expect(readInput(tracker, {type: "do", value: {kind: "close", ticket: 3}}).kind).toBe("read");
 		expect(readInput(tracker, {type: "do", value: {kind: "file", title: " ", body: ""}}).kind).toBe(
@@ -140,5 +187,12 @@ describe("the tracker", () => {
 			readInput(tracker, {type: "do", value: {kind: "comment", ticket: 1, body: "\n"}}).kind,
 		).toBe("refused");
 		expect(readInput(tracker, {type: "do", value: {kind: "open", ticket: 0}}).kind).toBe("refused");
+		expect(readInput(tracker, {type: "do", value: {kind: "show", show: "all"}}).kind).toBe("read");
+		expect(readInput(tracker, {type: "do", value: {kind: "show", show: "done"}}).kind).toBe(
+			"refused",
+		);
+		expect(
+			readInput(tracker, {type: "do", value: {kind: "find", text: "x".repeat(257)}}).kind,
+		).toBe("refused");
 	});
 });

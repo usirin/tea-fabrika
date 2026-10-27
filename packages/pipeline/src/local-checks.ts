@@ -212,6 +212,8 @@ export const withLocalChecks = (
 			Effect.map(Ref.get(ref), (runs) => checksAt(runs, head, names));
 
 		const host: CodeHost["Service"] = {
+			// Local checks change nothing in the list of open pull requests.
+			openPulls: inner.openPulls,
 			prFacts: (pr) =>
 				Effect.gen(function* () {
 					const facts = yield* inner.prFacts(pr);

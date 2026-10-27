@@ -9,6 +9,7 @@ import {
 	kindsNeeded,
 	parseJsonc,
 	prOf,
+	readOpenPulls,
 	readPrFacts,
 	rulesOf,
 	textKindOf,
@@ -106,6 +107,7 @@ const hostOf = (
 ) =>
 	Layer.mergeAll(
 		Layer.succeed(CodeHost, {
+			openPulls: () => Effect.succeed([]),
 			prFacts,
 			change: () => Effect.fail({_tag: "unknown" as const}),
 			checksSettled: () => Stream.never,
@@ -1017,5 +1019,71 @@ describe("the other facts, one at a time", () => {
 		expect(
 			(await factsOn(recorded("open-clean"), {own: ["repo-owner"], reviewers: OWNERS})).ours,
 		).toBe(false);
+	});
+});
+
+describe("a repository's open pull requests", () => {
+	const listed = [
+		{
+			number: 9,
+			title: "Draw the list calmer",
+			html_url: "https://github.com/example/repo/pull/9",
+			draft: true,
+			updated_at: "2026-10-20T10:00:00Z",
+			user: {login: "someone"},
+		},
+		{
+			number: 7,
+			title: "Fix the login loop",
+			html_url: "https://github.com/example/repo/pull/7",
+			updated_at: "not a time",
+		},
+	];
+	const on = (answer: string | "breaks") => {
+		const calls: (readonly string[])[] = [];
+		const gh: Gh = (args) => {
+			calls.push(args);
+			return answer === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(answer);
+		};
+		return {gh, calls};
+	};
+
+	it("are one REST call, read to number, title, link, draft and time, and nothing else", async () => {
+		const {gh, calls} = on(JSON.stringify(listed));
+		const pulls = await Effect.runPromise(readOpenPulls(gh)("https://github.com/example/repo"));
+
+		expect(calls).toEqual([["api", "repos/example/repo/pulls?state=open&per_page=100"]]);
+		expect(pulls).toEqual([
+			{
+				number: 9,
+				title: "Draw the list calmer",
+				url: "https://github.com/example/repo/pull/9",
+				draft: true,
+				at: Date.parse("2026-10-20T10:00:00Z"),
+			},
+			{
+				number: 7,
+				title: "Fix the login loop",
+				url: "https://github.com/example/repo/pull/7",
+				draft: false,
+				at: 0,
+			},
+		]);
+	});
+
+	it.each([
+		["a repository that is not a GitHub link", "https://example.com/a/b", "[]"],
+		["gh failing", "https://github.com/example/repo", "breaks"],
+		["an answer that is not JSON", "https://github.com/example/repo", "nope"],
+		[
+			"a link that is not GitHub's",
+			"https://github.com/example/repo",
+			JSON.stringify([{...listed[1], html_url: "https://elsewhere.example/pull/7"}]),
+		],
+	])("fail as unknown on %s, never a throw", async (_, repo, answer) => {
+		const {gh} = on(answer);
+		const failed = await Effect.runPromise(Effect.flip(readOpenPulls(gh)(repo)));
+
+		expect(failed).toEqual({_tag: "unknown"});
 	});
 });

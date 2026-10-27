@@ -15,7 +15,7 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
-import {Author, tracker} from "@tea-fabrika/tracker";
+import {Author, Pulls, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
@@ -66,7 +66,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //
 // The ledger: it is handed one, as the `Ledger` service, and gives it to the tracker. The host
 // process hands it a node:sqlite file in the app's home; a test hands it memory. The tracker
-// writes as the owner, the one person at the app for now.
+// writes as the owner, the one person at the app for now. It is handed the tracker's `Pulls` the
+// same way: the host's reads GitHub on the person's own `gh` login; a test's is a fixed list.
 //
 // A screen shows on any number of pages at once, as a tmux pane shows in every client attached:
 // `show` adds one, and the function it answers takes it away again.
@@ -131,12 +132,13 @@ export const SCREEN_KEPT = 256 * 1024;
 
 /** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
 const COUNTER = listed(counter, Layer.empty);
-const trackerOn = (ledger: Ledger["Service"]) =>
+const trackerOn = (ledger: Ledger["Service"], pulls: Pulls["Service"]) =>
 	listed(
 		tracker,
 		Layer.mergeAll(
 			Layer.succeed(Ledger, ledger),
 			Layer.succeed(Author, {kind: "user", id: "owner"}),
+			Layer.succeed(Pulls, pulls),
 		),
 	);
 
@@ -179,7 +181,7 @@ const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
 const runningIn = (table: Shell.Jobs | null): number =>
 	table?.jobs.filter((job) => job.state === "running").length ?? 0;
 
-/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given. */
+/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `Pulls`. */
 export const startTsh = (options: {
 	readonly jobs: Storage;
 	readonly history: SharedHistory;
@@ -189,6 +191,7 @@ export const startTsh = (options: {
 		const {jobs, history, runs} = options;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
+		const pulls = yield* Pulls;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
 		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
@@ -287,7 +290,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...Shell.SMALL, COUNTER, trackerOn(ledger)].map((entry) => seenBy(entry, seen)),
+			[...Shell.SMALL, COUNTER, trackerOn(ledger, pulls)].map((entry) => seenBy(entry, seen)),
 		);
 		const started = yield* start(
 			Shell.tsh,

@@ -337,6 +337,7 @@ const opened = changed(recorded("change-final.json"), (repo) => {
 function recordedGitHub() {
 	const reads: string[] = [];
 	const host = Layer.succeed(CodeHost, {
+		openPulls: () => Effect.succeed([]),
 		prFacts: (pr) =>
 			Effect.sync(() => {
 				reads.push(pr);
