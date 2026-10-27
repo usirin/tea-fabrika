@@ -627,6 +627,56 @@ export const registerWith =
 
 export const register = registerWith(RULES);
 
+/** One event as it was on the ledger it moves from (`move.ts`): its own stream, rev and time. */
+export type Moving = {
+	readonly stream: string;
+	readonly rev: number;
+	readonly writer: string;
+	readonly kind: string;
+	readonly at: number;
+	/** The data as the old ledger kept it: JSON text, byte for byte. */
+	readonly data: string;
+	readonly id: string | null;
+};
+
+export type ImportResult = {ok: true; pos: number} | {ok: false; why: string};
+
+/**
+ * The move's write (`move.ts`): one event kept as it was, at its own rev and time, never at the
+ * end with a rev of its own. Only the door's import calls it, inside its own transaction, by a
+ * founder, on a ledger nobody else has written. A `registered` event registers its name, as
+ * `register` would; any other event sits under a name the move registered first, at the rev
+ * right after its stream's last. The ledger's other words are never moved: a moved `DOWN` or
+ * `claimed` would tell this ledger about a process it never ran.
+ */
+export const importEvent = (db: Db, e: Moving): ImportResult => {
+	if (e.kind !== "registered" && LEDGER_KINDS.includes(e.kind))
+		return {ok: false, why: `${e.kind} is the ledger's own word, and never moves`};
+	if (e.rev !== revOf(db, e.stream) + 1)
+		return {ok: false, why: `${e.stream} rev ${e.rev} does not follow rev ${revOf(db, e.stream)}`};
+	if (e.kind === "registered") {
+		if (e.rev !== 1 || !isNameShape(e.stream) || nested(db, e.stream))
+			return {ok: false, why: `${e.stream} is not a name this ledger can register`};
+	} else if (ownerOf(db, e.stream) === null)
+		return {ok: false, why: `${e.stream} sits under no name the move registered`};
+	if (seen(db, e.stream, e.id) !== null)
+		return {ok: false, why: `${e.stream} has a message ${e.id} already`};
+	const row = db.all(
+		"INSERT INTO events (stream, rev, writer, kind, at, data, id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING pos",
+		e.stream,
+		e.rev,
+		e.writer,
+		e.kind,
+		e.at,
+		e.data,
+		e.id,
+	)[0];
+	const pos = num(row?.pos);
+	if (e.kind === "registered")
+		db.all("INSERT INTO names (name, pos, at) VALUES (?, ?, ?)", e.stream, pos, e.at);
+	return {ok: true, pos};
+};
+
 export const appendWith =
 	(rules: Rules) =>
 	(
