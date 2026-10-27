@@ -1,7 +1,9 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
+import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
+import {Row, rowsOf} from "./rows.ts";
 import {Entry, fold, Summary, summaryOf, Ticket, TicketNumber, Write} from "./ticket.ts";
 
 // The tracker's machine: the tickets as last read from the ledger, the ticket open in the window,
@@ -16,6 +18,9 @@ import {Entry, fold, Summary, summaryOf, Ticket, TicketNumber, Write} from "./ti
 //   pull_requests  read the open pull requests of the connected repositories (./pull-requests.ts);
 //          `pull_requests_wait`, a Sub on while none is out, says `refresh` when it is time to read
 //          them again
+//   clock  a Sub, always on until it quits: `tick` with the time, once a minute, as Elm's
+//          `Time.every`. A ticket's top line says "idle" from the clock alone (./head.ts), so the
+//          time is in the state and the view stays a pure function of it
 //
 // What the list shows is part of the state too, as in Elm's Model: `show` (open, closed or all)
 // and `find` (the title search). `shownOf`, the view, picks the tickets and pull requests by them.
@@ -62,6 +67,8 @@ type PullRequestsCmd = ReturnType<typeof pullRequests>;
 export type PollSub = Sub<"poll", {readonly after: number}>;
 /** The wait before the pull requests are read again. */
 export type PullRequestsSub = Sub<"pull_requests_wait", Record<string, never>>;
+/** The clock: the time, once a minute. */
+export type ClockSub = Sub<"clock", Record<string, never>>;
 
 /** Which tickets the list shows: open ones (the start), closed ones, or all. */
 export const Show = Schema.Literals(["open", "closed", "all"]);
@@ -115,6 +122,8 @@ export const Tracker = Schema.Struct({
 	/** The title search. "" finds every title. */
 	find: Find,
 	pullRequests: PullRequestsRead,
+	/** The time at the clock's last tick. 0: no tick yet, so no ticket is idle yet. */
+	now: Schema.Finite,
 });
 export type Tracker = typeof Tracker.Type;
 
@@ -126,7 +135,8 @@ export type TrackerMsg =
 	| {readonly type: "moved"}
 	| {readonly type: "show"; readonly show: Show}
 	| {readonly type: "find"; readonly text: string}
-	| {readonly type: "refresh"};
+	| {readonly type: "refresh"}
+	| {readonly type: "tick"; readonly now: number};
 
 type Step = readonly [Tracker, readonly (LoadCmd | SaveCmd | PullRequestsCmd)[]];
 
@@ -147,6 +157,7 @@ const start: Tracker = {
 	show: "open",
 	find: "",
 	pullRequests: {ask: "busy", list: null, why: null},
+	now: 0,
 };
 
 /** The number a new ticket tries first: one past the newest known. */
@@ -175,7 +186,7 @@ export const tracker = defineMachine({
 	types: {
 		model: {} as Tracker,
 		msg: {} as TrackerMsg,
-		sub: {} as PollSub | PullRequestsSub,
+		sub: {} as PollSub | PullRequestsSub | ClockSub,
 		ctx: undefined,
 	},
 	cmds: [load, save, pullRequests],
@@ -184,6 +195,7 @@ export const tracker = defineMachine({
 		list: (s): Step => [{...s, open: null}, []],
 		show: (s, m): Step => [{...s, show: m.show}, []],
 		find: (s, m): Step => [{...s, find: m.text}, []],
+		tick: (s, m): Step => [{...s, now: m.now}, []],
 		refresh: (s): Step =>
 			s.pullRequests.ask === "idle" && !s.quitting
 				? [{...s, pullRequests: {...s.pullRequests, ask: "busy"}}, [pullRequests({})]]
@@ -242,6 +254,10 @@ export const tracker = defineMachine({
 			type: "pull_requests_wait",
 			deps: (s) => (s.pullRequests.ask === "idle" && !s.quitting ? {} : null),
 		} satisfies DepKeyedSub<Tracker, PullRequestsSub>,
+		{
+			type: "clock",
+			deps: (s) => (s.quitting ? null : {}),
+		} satisfies DepKeyedSub<Tracker, ClockSub>,
 	],
 });
 
@@ -264,17 +280,34 @@ export const statusOf = (s: Tracker): string => {
  * picks, in the order read (none when it shows closed tickets). `counts`: how many tickets of each
  * state and how many pull requests `find` picks, so a person sees what the filter hides.
  */
+/** A ticket on the list: its summary and its top line, so the owner scans one column. */
+export const Listed = Schema.Struct({...Summary.fields, head: Head});
+export type Listed = typeof Listed.Type;
+
+/**
+ * One ticket's page. `head`: its top line (./head.ts). `rows`: one per fact, oldest first
+ * (./rows.ts). `asks`: the asks with no answer yet, each drawn with its box, even on a closed
+ * ticket. The page's `opened` is `null` when no ticket has that number yet.
+ */
+export const Opened = Schema.Struct({
+	ticket: Ticket,
+	head: Head,
+	rows: Schema.Array(Row),
+	asks: Schema.Array(OpenAsk),
+});
+export type Opened = typeof Opened.Type;
+
 export const Page = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("list"),
-		tickets: Schema.Array(Summary),
+		tickets: Schema.Array(Listed),
 		pullRequests: Schema.Array(PullRequest),
 		counts: Schema.Struct({open: Schema.Int, closed: Schema.Int, pullRequests: Schema.Int}),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("ticket"),
 		number: TicketNumber,
-		ticket: Schema.NullOr(Ticket),
+		opened: Schema.NullOr(Opened),
 	}),
 ]);
 
@@ -308,7 +341,7 @@ const listOf = (s: Tracker): Shown["page"] => {
 		kind: "list",
 		tickets: found
 			.filter((t) => fits(s.show, t.state))
-			.map(summaryOf)
+			.map((t) => ({...summaryOf(t), head: headOf(t.timeline, s.now)}))
 			.reverse(),
 		pullRequests: s.show === "closed" ? [] : prsFound,
 		counts: {
@@ -319,16 +352,22 @@ const listOf = (s: Tracker): Shown["page"] => {
 	};
 };
 
+/** One ticket as its page shows it, at `now`. */
+export const openedOf = (ticket: Ticket, now: number): Opened => ({
+	ticket,
+	head: headOf(ticket.timeline, now),
+	rows: rowsOf(ticket.timeline),
+	asks: openAsksOf(ticket.timeline),
+});
+
+const ticketOf = (s: Tracker, number: number): Shown["page"] => {
+	const ticket = s.tickets.find((t) => t.number === number);
+	return {kind: "ticket", number, opened: ticket === undefined ? null : openedOf(ticket, s.now)};
+};
+
 export const shownOf = (s: Tracker): Shown => ({
 	ready: s.ready,
-	page:
-		s.open === null
-			? listOf(s)
-			: {
-					kind: "ticket",
-					number: s.open,
-					ticket: s.tickets.find((t) => t.number === s.open) ?? null,
-				},
+	page: s.open === null ? listOf(s) : ticketOf(s, s.open),
 	saving: s.saving.map((w) => w.write),
 	failed: s.failed,
 	problems: s.problems,

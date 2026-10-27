@@ -111,7 +111,7 @@ const trackerAt = (home: string, id: string) =>
 
 const timelineOf = (shown: Shown) =>
 	shown.page.kind === "ticket"
-		? (shown.page.ticket?.timeline.map((e) => [e.by, e.fact.type]) ?? [])
+		? (shown.page.opened?.ticket.timeline.map((e) => [e.by, e.fact.type]) ?? [])
 		: [];
 
 describe("two people on one ledger server", () => {

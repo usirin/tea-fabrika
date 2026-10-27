@@ -4,6 +4,7 @@ import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {loadCell} from "./ledger.ts";
 import type {load} from "./machine.ts";
+import {rowsOf} from "./rows.ts";
 
 // The tracker's read names an agent's person from the ledger's members (`door/members`), the
 // facts the door writes as people come. Here they are written by hand, on a ledger in memory.
@@ -48,5 +49,7 @@ describe("loading the tickets", () => {
 			["old-host", "alice"],
 			["review", undefined],
 		]);
+		// The rows the window draws carry the name on.
+		expect(rowsOf(entries).map((r) => r.whose)).toEqual([undefined, "alice", undefined]);
 	});
 });
