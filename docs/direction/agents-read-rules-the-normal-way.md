@@ -22,12 +22,27 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 - **The reviewer is also handed main's copy of the rules.** A pull request can
   change an `AGENTS.md`, so the rules it is judged by come from the base
   branch. GitHub reads `CODEOWNERS` from the base branch for the same reason.
-- **Claude moves over in a small follow-up.** Today every Claude run passes
-  `settingSources: []` and gets `CLAUDE.md` and `AGENTS.md` pasted in by code
-  (`packages/pipeline/src/stages/rules.ts`). Claude's own loading of a project's
-  rules (`settingSources: ["project"]`) also loads the repository's
-  `.claude/settings.json`, which can turn on hooks and plugins. The follow-up
-  first tests what that brings into our box.
+- **Claude moved over in experiment 155.** The builder, the reviewer and the
+  planner now pass `ownRules` (`packages/fabrika/src/agents/claude/rules.ts`):
+  `settingSources: ["project"]` for the rule files, `projectConfigRoot` on an
+  empty folder so the repository's settings, hooks, env and `.claude/` stay out,
+  and a built-in plugin option so `AGENTS.md` loads too. Claude does not read
+  `AGENTS.md` by default.
+
+  ```ts
+  const options = {...rest, ...ownRules({disableClaudeAiConnectors: true})};
+  // = {settingSources: ["project"], projectConfigRoot: "/var/empty",
+  //    settings: {disableClaudeAiConnectors: true, pluginConfigs: AGENTS_MD}}
+  ```
+
+  The sorter and the ACP builder stay on `settingSources: []`: the sorter has
+  no rules to read, and the ACP adapter's older SDK was not tested.
+  - **Wrong guess, kept:** this note first said `["project"]` brings in the
+    repository's `.claude/settings.json` with the rules and that the two might
+    not come apart. The first half was right: hooks, env and the
+    `apiKeyHelper` came in. The second half was wrong: `projectConfigRoot`
+    keeps them apart. The worry about plugins was also wrong: the project's
+    plugin never loaded in a headless run.
 
 ## Why
 
@@ -39,10 +54,11 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 - Runs since 2026-10-24 happen in a box ([programs run in a box](./programs-run-in-a-box.md)),
   so a hook a repository turns on is fenced by the box, not by turning loading off.
 
-**Confidence: 80%.** The doubt is Claude: whether a repository's hooks and
-plugins can be kept out while its rules come in. The follow-up's test settles
-it. If they cannot be kept apart, Claude keeps today's pasted rules until they
-can.
+**Confidence: 85%.** The doubt was Claude: whether a repository's hooks and
+plugins can be kept out while its rules come in. Experiment 155 measured it:
+they can, with `projectConfigRoot`. What is left: one run per variant on one
+small model, the AGENTS.md option rides on a built-in plugin that a later
+Claude Code could rename, and a box with no `/var/empty` refuses to start.
 
 ## What this cannot tell us
 

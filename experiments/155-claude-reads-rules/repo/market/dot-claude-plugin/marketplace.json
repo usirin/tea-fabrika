@@ -1,0 +1,5 @@
+{
+	"name": "m155",
+	"owner": { "name": "exp155" },
+	"plugins": [{ "name": "p155", "source": "./p155", "description": "A test plugin." }]
+}

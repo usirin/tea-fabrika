@@ -10,7 +10,7 @@ import {
 	type Open,
 	sdkRunner,
 } from "@kampus/fabrika/agents/claude";
-import {agentEnv, guardHook} from "@kampus/fabrika/agents/sandbox";
+import {agentEnv, guardHook, ownRules} from "@kampus/fabrika/agents/sandbox";
 import {Effect, Layer, Stream} from "effect";
 import {sh} from "../../sh.ts";
 import {removeLinks} from "../review/reviewer.ts";
@@ -133,8 +133,9 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
 
 /**
  * The Agent SDK options of one run. `tools` is the whole list of built-in
- * tools it has. No settings are loaded from the machine or from the code, so
- * neither can add a tool, a hook or an instruction; no server of tools, and
+ * tools it has. The code's rule files are read by Claude Code, the way it
+ * ships it; no settings are loaded from the machine or from the code
+ * (`ownRules`), so neither can add a tool or a hook; no server of tools, and
  * no connector of the signed-in account. The Check reads every call first.
  */
 export const plannerOptions = (
@@ -146,10 +147,9 @@ export const plannerOptions = (
 	env: agentEnv(),
 	model: settings.model,
 	effort: settings.effort,
-	settingSources: [],
+	...ownRules({disableClaudeAiConnectors: true}),
 	strictMcpConfig: true,
 	mcpServers: {},
-	settings: {disableClaudeAiConnectors: true},
 	permissionMode: "dontAsk",
 	tools: [...READ_TOOLS],
 	allowedTools: [...READ_TOOLS],

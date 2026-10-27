@@ -72,7 +72,7 @@ describe("the builder's prompt", () => {
 	};
 
 	it("a later round is told what the last review left open, in the review's words", () => {
-		const text = promptOf(brief);
+		const text = promptOf(brief, [], "loaded");
 		expect(text).toContain("no test proves it");
 		expect(text).toContain("a test that fails at the base");
 		expect(text).toContain("src/a.ts:3");
@@ -82,18 +82,36 @@ describe("the builder's prompt", () => {
 	});
 
 	it("a first round is told nothing is open", () => {
-		expect(promptOf({...brief, round: 1, open: []})).not.toContain("no test proves it");
+		expect(promptOf({...brief, round: 1, open: []}, [], "loaded")).not.toContain(
+			"no test proves it",
+		);
 	});
 
-	it("is told the repository's own rules, each file as written, as rules to follow", () => {
-		const rule = "A change that touches a package's published surface also needs a changeset.";
-		const text = promptOf({
-			...brief,
-			rules: [
-				{file: "CLAUDE.md", text: `# repo\n\n${rule}\n`},
-				{file: "AGENTS.md", text: "Run the checks before you finish."},
-			],
-		});
+	const RULE = "A change that touches a package's published surface also needs a changeset.";
+	const withRules: BuildBrief = {
+		...brief,
+		rules: [
+			{file: "CLAUDE.md", text: `# repo\n\n${RULE}\n`},
+			{file: "AGENTS.md", text: "Run the checks before you finish."},
+		],
+	};
+
+	it("with the rule files loaded by Claude Code, is told they are there and which to follow, and none is pasted", () => {
+		const text = promptOf(withRules, [], "loaded");
+		expect(text).toContain("# The repository's own rules");
+		expect(text).toContain("are loaded for you as you work");
+		expect(text).toContain("where the nearest one wins");
+		expect(text).toContain("Follow each rule that is about the change itself");
+		expect(text).not.toContain(RULE);
+		expect(text).not.toContain("## CLAUDE.md");
+		expect(text.indexOf("# The repository's own rules")).toBeLessThan(
+			text.indexOf("# The ticket's acceptance criteria"),
+		);
+	});
+
+	it("pasted, is told the repository's own rules, each file as written, as rules to follow", () => {
+		const rule = RULE;
+		const text = promptOf(withRules, [], "pasted");
 		expect(text).toContain("# The repository's own rules");
 		expect(text).toContain("## CLAUDE.md");
 		expect(text).toContain(rule);
@@ -105,8 +123,8 @@ describe("the builder's prompt", () => {
 		);
 	});
 
-	it("a repository with no rules files is said to have none, never left unsaid", () => {
-		const text = promptOf(brief);
+	it("pasted, a repository with no rules files is said to have none, never left unsaid", () => {
+		const text = promptOf(brief, [], "pasted");
 		expect(text).toContain("# The repository's own rules");
 		expect(text).toContain("None: the repository keeps no CLAUDE.md or AGENTS.md");
 		expect(text).not.toContain("## CLAUDE.md");
@@ -114,12 +132,16 @@ describe("the builder's prompt", () => {
 
 	it("checks the repository names are the ones the builder is told to run; none named, it finds them", () => {
 		expect(
-			promptOf(brief, [
-				["npm", "test"],
-				["npm", "run", "lint"],
-			]),
+			promptOf(
+				brief,
+				[
+					["npm", "test"],
+					["npm", "run", "lint"],
+				],
+				"loaded",
+			),
 		).toContain("run the repository's checks, as it names them: `npm test`, `npm run lint`");
-		expect(promptOf(brief)).toContain("look in package.json for the commands");
+		expect(promptOf(brief, [], "loaded")).toContain("look in package.json for the commands");
 	});
 });
 
@@ -163,7 +185,20 @@ describe("the builder started again", () => {
 		expect(options?.sessionId).toBe(brief.session);
 		expect(options?.resume).toBeUndefined();
 		expect(options?.persistSession).toBe(true);
-		expect(prompt).toBe(promptOf(brief));
+		expect(prompt).toBe(promptOf(brief, [], "loaded"));
+	});
+
+	it("Claude Code reads the copy's rule files and none of its settings (experiment 155)", async () => {
+		const {options} = await runWith(false);
+		expect(options?.settingSources).toEqual(["project"]);
+		expect(options?.projectConfigRoot).toBe("/var/empty");
+		expect(options?.settings).toEqual({
+			disableClaudeAiConnectors: true,
+			pluginConfigs: {
+				"cc-plugin-agents-md@builtin": {options: {instructionFiles: "claude-md-and-agents-md"}},
+			},
+		});
+		expect(options?.strictMcpConfig).toBe(true);
 	});
 
 	it("a run started again carries the kept conversation on, and is told to look before it goes on", async () => {

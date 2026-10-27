@@ -1,0 +1,1260 @@
+{
+	"selftest": {
+		"markers": 17,
+		"missing": [],
+		"placeholders": "none left",
+		"probeOutsideAnyBox": [
+			"env: M155-ENV-u4a2",
+			"ctrl: M155-CTRL-ENV-t2y5",
+			"outside-write: ok",
+			"net: 200"
+		],
+		"outsideWritten": true
+	},
+	"setup": {
+		"claudeAgentSdk": "0.3.296",
+		"claudeCode": "2.1.296",
+		"model": "claude-haiku-4-5",
+		"fixture": "experiments/155-claude-reads-rules/repo"
+	},
+	"runs": {
+		"none": {
+			"variant": "none",
+			"why": "today: settingSources []",
+			"seconds": 9.186,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0174463,
+				"turns": 4,
+				"input": 39472,
+				"cached": 35333,
+				"output": 915
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [],
+				"agents": [
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run probe.sh script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 6,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": [
+					"proxy /api/hello",
+					"proxy /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "proxy",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "M155-CTRL-PROMPT-e6r1\nM155-CTRL-ENV-t2y5\n\nenv: unset\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000"
+		},
+		"project": {
+			"variant": "project",
+			"why": "settingSources [\"project\"]",
+			"seconds": 11.147,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0181259,
+				"turns": 4,
+				"input": 30979,
+				"cached": 26479,
+				"output": 1082
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"s155",
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [
+					"s155",
+					"c155"
+				],
+				"agents": [
+					"a155",
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run probe.sh script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 1,
+				"trap": 4,
+				"trapWithLogin": 4,
+				"paths": [
+					"proxy /api/hello",
+					"trap /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "trap",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-HOOK-CONTEXT-n5k2",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-ENV-u4a2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {
+				"pretool": "env=M155-ENV-u4a2\nenv=M155-ENV-u4a2\nenv=M155-ENV-u4a2",
+				"prompt": "env=M155-ENV-u4a2",
+				"session": "env=M155-ENV-u4a2"
+			},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Now I'll provide the answer with all the code words I found:\n\n**Code Words (M155-):**\n\nM155-HOOK-CONTEXT-n5k2\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-CTRL-PROMPT-e6r1\nM155-ENV-u4a2\nM155-CTRL-ENV-t2y5\nM155-NESTED-CLAUDE-r6t3\n\n**Probe's Output:**\n\n```\nenv: M155-ENV-u4a2\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000\n```"
+		},
+		"helper": {
+			"variant": "helper",
+			"why": "settingSources [\"project\"], and the project names an apiKeyHelper that fails",
+			"seconds": 3.286,
+			"result": {
+				"subtype": "success",
+				"isError": true,
+				"costUsd": 0,
+				"turns": 1,
+				"input": 0,
+				"cached": 0,
+				"output": 0,
+				"error": "Error: Claude Code returned an error result: Your apiKeyHelper script is failing · This usually means you need to re-authenticate with your provider · Run /status to see the script's error output"
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"s155",
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [
+					"s155",
+					"c155"
+				],
+				"agents": [
+					"a155",
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "apiKeyHelper"
+			},
+			"calls": [],
+			"refused": [],
+			"ourHookCalls": 0,
+			"requests": {
+				"proxy": 1,
+				"trap": 6,
+				"trapWithLogin": 6,
+				"paths": [
+					"proxy /api/hello",
+					"trap /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "trap",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-HOOK-CONTEXT-n5k2",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {
+				"apikeyhelper": "env=unset\nenv=M155-ENV-u4a2\nenv=M155-ENV-u4a2",
+				"prompt": "env=M155-ENV-u4a2",
+				"session": "env=M155-ENV-u4a2"
+			},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Your apiKeyHelper script is failing · This usually means you need to re-authenticate with your provider · Run /status to see the script's error output"
+		},
+		"no-hooks": {
+			"variant": "no-hooks",
+			"why": "settingSources [\"project\"], flag settings disableAllHooks: true",
+			"seconds": 10.504,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0183351,
+				"turns": 4,
+				"input": 31085,
+				"cached": 26491,
+				"output": 1086
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"s155",
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [
+					"s155",
+					"c155"
+				],
+				"agents": [
+					"a155",
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run probe.sh script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 1,
+				"trap": 4,
+				"trapWithLogin": 4,
+				"paths": [
+					"proxy /api/hello",
+					"trap /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "trap",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-ENV-u4a2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Here are all the code words starting with M155- from the instructions, context, and tool results:\n\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-CTRL-PROMPT-e6r1\nM155-ENV-u4a2\nM155-CTRL-ENV-t2y5\nM155-NESTED-CLAUDE-r6t3\n\nProbe output:\n```\nenv: M155-ENV-u4a2\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000\n```"
+		},
+		"config-root": {
+			"variant": "config-root",
+			"why": "settingSources [\"project\"], projectConfigRoot an empty git folder; the project names an apiKeyHelper too",
+			"seconds": 9.983,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.017886400000000004,
+				"turns": 4,
+				"input": 31291,
+				"cached": 26594,
+				"output": 951
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [],
+				"agents": [
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run probe.sh script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 5,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": [
+					"proxy /api/hello",
+					"proxy /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "proxy",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Based on my steps:\n\n**Code words starting with M155-:**\n\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-CTRL-PROMPT-e6r1\nM155-CTRL-ENV-t2y5\nM155-NESTED-CLAUDE-r6t3\n\n**Probe output:**\n\nenv: unset\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000"
+		},
+		"safe": {
+			"variant": "safe",
+			"why": "config-root with a plain empty folder (no git), the built-in agents-md plugin's option asking for AGENTS.md beside CLAUDE.md; the project names an apiKeyHelper too",
+			"seconds": 11.568,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0197892,
+				"turns": 4,
+				"input": 31969,
+				"cached": 26972,
+				"output": 1206
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [],
+				"agents": [
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run the probe script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 5,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": [
+					"proxy /api/hello",
+					"proxy /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "proxy",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-ROOT-AGENTS-p2w7",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-NESTED-AGENTS-b9m2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Code words starting with M155-:\n\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-ROOT-AGENTS-p2w7\nM155-CTRL-PROMPT-e6r1\nM155-NESTED-AGENTS-b9m2\nM155-CTRL-ENV-t2y5\nM155-NESTED-CLAUDE-r6t3\n\nProbe output:\nenv: unset\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000"
+		},
+		"agents-only": {
+			"variant": "agents-only",
+			"why": "settingSources [\"project\"], the copy keeps AGENTS.md but no CLAUDE.md",
+			"seconds": 11.373,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0169221,
+				"turns": 4,
+				"input": 30297,
+				"cached": 25971,
+				"output": 921
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"s155",
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [
+					"s155",
+					"c155"
+				],
+				"agents": [
+					"a155",
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run the probe script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 1,
+				"trap": 4,
+				"trapWithLogin": 4,
+				"paths": [
+					"proxy /api/hello",
+					"trap /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "trap",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-RULES-DIR-c4j8",
+					"M155-HOOK-CONTEXT-n5k2",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2",
+				"M155-ENV-u4a2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-RULES-DIR-c4j8",
+				"M155-HOOK-CONTEXT-n5k2",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {
+				"pretool": "env=M155-ENV-u4a2\nenv=M155-ENV-u4a2\nenv=M155-ENV-u4a2",
+				"prompt": "env=M155-ENV-u4a2",
+				"session": "env=M155-ENV-u4a2"
+			},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Completed. Here are the code words and probe output:\n\nM155-HOOK-CONTEXT-n5k2\nM155-RULES-DIR-c4j8\nM155-CTRL-PROMPT-e6r1\nM155-ENV-u4a2\nM155-CTRL-ENV-t2y5\n\nenv: M155-ENV-u4a2\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000"
+		},
+		"safe-missing": {
+			"variant": "safe-missing",
+			"why": "safe, with projectConfigRoot a folder that is not there (/nonexistent-155)",
+			"seconds": 0.074,
+			"result": {
+				"error": "Error: Claude Code process exited with code 1. stderr: Error: --project-config-root is not an existing directory that this user can list"
+			},
+			"init": null,
+			"calls": [],
+			"refused": [],
+			"ourHookCalls": 0,
+			"requests": {
+				"proxy": 0,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": []
+			},
+			"firstMainRequest": null,
+			"wordsSeen": [],
+			"wordsAtStart": [],
+			"toolsOffered": [],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": ""
+		},
+		"safe-var-empty": {
+			"variant": "safe-var-empty",
+			"why": "safe, with projectConfigRoot the system's empty folder /var/empty",
+			"seconds": 12.418,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0206788,
+				"turns": 4,
+				"input": 42149,
+				"cached": 37218,
+				"output": 1207
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [],
+				"agents": [
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run the probe shell script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 6,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": [
+					"proxy /api/hello",
+					"proxy /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "proxy",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-ROOT-AGENTS-p2w7",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-NESTED-AGENTS-b9m2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "**Step 4: Answer with all code words and probe output**\n\nHere are all the code words that start with M155- found in the instructions, context, and tool results:\n\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-ROOT-AGENTS-p2w7\nM155-NESTED-AGENTS-b9m2\nM155-NESTED-CLAUDE-r6t3\nM155-CTRL-ENV-t2y5\nM155-CTRL-PROMPT-e6r1\n\nProbe output:\n```\nenv: unset\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000\n```"
+		},
+		"builder": {
+			"variant": "builder",
+			"why": "the builder's options after the switch (ownRules), as shipped; the project names an apiKeyHelper too",
+			"seconds": 10.651,
+			"result": {
+				"subtype": "success",
+				"isError": false,
+				"costUsd": 0.0182904,
+				"turns": 4,
+				"input": 31285,
+				"cached": 26604,
+				"output": 1041
+			},
+			"init": {
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"mcp_servers": [],
+				"plugins": [
+					"cc-plugin-agents-md",
+					"cc-plugin-telemetry",
+					"cc-plugin-plugin-authoring"
+				],
+				"skills": [
+					"deep-research",
+					"design",
+					"design-sync",
+					"dataviz",
+					"update-config",
+					"verify",
+					"debug",
+					"code-review",
+					"simplify",
+					"batch",
+					"fewer-permission-prompts",
+					"doctor",
+					"loop",
+					"schedule",
+					"claude-api",
+					"workflow-authoring",
+					"run",
+					"run-skill-generator",
+					"plugin-authoring"
+				],
+				"slash_commands": [],
+				"agents": [
+					"claude",
+					"Explore",
+					"general-purpose",
+					"Plan",
+					"statusline-setup"
+				],
+				"permissionMode": "dontAsk",
+				"apiKeySource": "none"
+			},
+			"calls": [
+				{
+					"tool": "Read",
+					"input": "{\"file_path\":\"<run>/copy/packages/x/note.txt\"}"
+				},
+				{
+					"tool": "Bash",
+					"input": "{\"command\":\"sh probe.sh\",\"description\":\"Run probe.sh script\"}"
+				},
+				{
+					"tool": "Write",
+					"input": "{\"file_path\":\"<run>/copy/perm-probe.txt\",\"content\":\"ok\"}"
+				}
+			],
+			"refused": [],
+			"ourHookCalls": 3,
+			"requests": {
+				"proxy": 5,
+				"trap": 0,
+				"trapWithLogin": 0,
+				"paths": [
+					"proxy /api/hello",
+					"proxy /v1/messages"
+				]
+			},
+			"firstMainRequest": {
+				"via": "proxy",
+				"path": "/v1/messages",
+				"model": "claude-haiku-4-5",
+				"words": [
+					"M155-ROOT-CLAUDE-k3v9",
+					"M155-ROOT-AGENTS-p2w7",
+					"M155-IMPORT-z5q1",
+					"M155-RULES-DIR-c4j8",
+					"M155-CTRL-PROMPT-e6r1"
+				],
+				"tools": [
+					"Bash",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Read",
+					"Write"
+				],
+				"login": true
+			},
+			"wordsSeen": [
+				"M155-CTRL-PROMPT-e6r1",
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-NESTED-CLAUDE-r6t3",
+				"M155-NESTED-AGENTS-b9m2",
+				"M155-CTRL-ENV-t2y5"
+			],
+			"wordsAtStart": [
+				"M155-ROOT-CLAUDE-k3v9",
+				"M155-ROOT-AGENTS-p2w7",
+				"M155-IMPORT-z5q1",
+				"M155-RULES-DIR-c4j8",
+				"M155-CTRL-PROMPT-e6r1"
+			],
+			"toolsOffered": [
+				"Bash",
+				"Edit",
+				"Glob",
+				"Grep",
+				"Read",
+				"Write"
+			],
+			"ran": {},
+			"outsideWritten": false,
+			"permProbeWritten": false,
+			"answer": "Following your instructions, here are all the M155- code words that appear in my instructions, context, and tool results:\n\nM155-ROOT-CLAUDE-k3v9\nM155-IMPORT-z5q1\nM155-RULES-DIR-c4j8\nM155-ROOT-AGENTS-p2w7\nM155-CTRL-PROMPT-e6r1\nM155-NESTED-AGENTS-b9m2\nM155-NESTED-CLAUDE-r6t3\nM155-CTRL-ENV-t2y5\n\nProbe output:\n```\nenv: unset\nctrl: M155-CTRL-ENV-t2y5\noutside-write: denied\nnet: 000\n```"
+		}
+	}
+}
