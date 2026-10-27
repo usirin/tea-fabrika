@@ -56,6 +56,7 @@ const drafted = yield* Agents.run({
 | build | The Agent SDK directly (`stages/build/builder.ts`). ACP is there too, picked by `build --harness acp` (experiment 77). |
 | plan, review, sort | The Agent SDK directly (`planner.ts`, `reviewer.ts`, `sorter.ts`). |
 | tsh's `acp` program | ACP, Claude or the fake (experiment 76). Not listed in the app's tsh. |
+| The interface itself | `Agents` in `packages/fabrika/src/agents/agent/`, with adapters for Claude (its SDK), Codex (`codex exec`), ACP (Claude or Codex) and a fake, and `agentRunner` for a Draft (experiment 156). No stage uses it yet. |
 
 - **Codex could not join the table until now.** Experiment 152
   (https://github.com/usirin/tea-fabrika/pull/119) found how to keep the
@@ -74,10 +75,51 @@ const drafted = yield* Agents.run({
   Experiment 156 builds the interface with a Claude and a Codex adapter and
   runs the same job through it and through ACP.
 
+## What a chat window will need
+
+Decided 2026-10-26 by the owner. No chat is built yet. The interface must allow
+one, so a chat later is one more caller, not a rewrite.
+
+```ts
+// A sketch. A chat pane calls the same service a stage does.
+// In Elm terms the pane is a tea program, and the agent run is its Sub.
+const run = Agents.run({ provider, session: chat.session, folder, prompt: typed });
+// said_part { text }                     streamed text, a bit at a time
+// asked { id, options }  ->  Agents.answer(run, id, "allow")   a person answers in the pane
+// the next prompt goes to the same session while it is still warm
+// Agents.history(chat.session)           the turns so far, when the pane opens again
+```
+
+- **Streamed text.** Experiment 156 gives whole messages. A chat shows text as
+  it comes, so the updates need a part kind. [T3 Code](https://github.com/pingdotgg/t3code)
+  merges small text bits before it sends them to its window
+  (`ProviderTextDeltaCoalescer`).
+- **Many short turns on one warm session.** Experiment 156 picked `codex exec`,
+  one process per turn. A chat wants Codex's `app-server`, which T3 Code uses.
+  Both can be rows in the provider table.
+- **A person answers an ask.** The `asked` update is there. The chat needs the
+  way back: a person's answer goes to the run.
+- **History when a pane opens again.** The turns are kept, so the pane can show
+  them. The ledger keeps events already; T3 Code keeps them in its own store.
+- **T3 Code is the evidence for the shape.** It has its own adapters behind one
+  registry: Claude on the Claude Agent SDK, Codex on `app-server`.
+- **Cost:** four small additions to the interface, each built when the chat is.
+  **Confidence: 85%.** The doubt is a warm session next to our hard stop: the
+  stop ends the agent's processes, and a warm session keeps one alive between
+  turns. The first chat build settles it.
+
 ## Logins never leave a person's machine
 
 Decided 2026-10-26 by the owner. The shared fabrika stores no provider login,
 no key, no token, for anyone.
+
+- **Proposed change, 2026-10-26:** each person's login is kept in their own
+  locker on the shared Cloudflare account, the way others already run Claude
+  Code and Codex in the cloud. Claude's box holds a fake token and the Worker
+  swaps in the real one (Cloudflare's own Claude Code tutorial). Codex's box
+  borrows the login and hands back the refreshed copy, one job per person at a
+  time (OpenAI's Codex CI page). Experiment 157 tests it. This section is
+  rewritten when 157 lands.
 
 ```ts
 // A sketch. The shared ledger holds work. Each person's own machine runs it.

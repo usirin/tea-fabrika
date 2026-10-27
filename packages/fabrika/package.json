@@ -25,6 +25,7 @@
 		"./agents/sandbox": "./src/agents/sandbox.ts",
 		"./agents/trace": "./src/agents/trace.ts",
 		"./agents/acp": "./src/agents/acp.ts",
+		"./agents/codex": "./src/agents/codex.ts",
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -80,6 +81,10 @@
 			"./agents/acp": {
 				"types": "./dist/agents/acp.d.ts",
 				"default": "./dist/agents/acp.js"
+			},
+			"./agents/codex": {
+				"types": "./dist/agents/codex.d.ts",
+				"default": "./dist/agents/codex.js"
 			},
 			"./package.json": "./package.json"
 		}
