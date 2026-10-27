@@ -40,6 +40,9 @@ Decided 2026-10-12, written down 2026-10-18. The supervisor part was replaced
   Client Protocol: a standard comes before one of our own. The job on top of
   it stays ours: start with a prompt, tools and a folder; get a typed answer,
   the cost, a way to resume, and the one "ask" tool.
+  Changed 2026-10-26: the contract is our own interface, its shapes taken
+  from ACP, and ACP is one adapter behind it
+  ([agents sit behind one service](./agents-behind-one-service.md)).
 - **Each harness's ACP adapter comes from, in this order** (2026-10-19):
   - the official adapter, pinned and at least two weeks old, if it can be
     contained (its real tools and folder, nothing from the user's own setup);

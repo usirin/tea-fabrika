@@ -11,8 +11,10 @@ const drafted = yield* Agents.run({
 	prompt, folder, schema: BuildAnswer, session,     // what the stage wants
 	provider: settings.build.provider,               // "claude" | "codex" | "fake": config, not code
 });
-// The default layer is our ACP client (packages/fabrika/src/agents/acp/).
-// A provider is one row in its harness table: the adapter, its environment, how it is contained.
+// The interface is ours; its shapes are taken from ACP where they fit.
+// Claude and Codex are adapters of ours on their makers' own SDKs. ACP is one more adapter,
+// for an agent that speaks only ACP.
+// A provider is one row in its table: the adapter, its environment, how it is contained.
 // A test hands the stage the fake provider. Nothing else changes.
 ```
 
@@ -22,11 +24,22 @@ const drafted = yield* Agents.run({
   same rule as GitHub, which is reached only through `CodeHost`
   ([backend as a library](./backend-as-a-library.md)). No stage imports a
   maker's SDK.
-- **The service's default implementation is our ACP client.** This restates
-  the 2026-10-19 ruling in [Helpers, and one supervisor](./helpers-and-the-supervisor.md):
-  our contract with a harness is ACP, the Agent Client Protocol.
+- **The service is our own interface, not ACP.** Changed 2026-10-26 by the
+  owner: one less layer, and one we control. Its shapes are taken from ACP
+  wherever they fit: a session, a prompt, streamed updates, tool calls,
+  permission asks, cancel. Claude and Codex are adapters of ours on their
+  makers' own SDKs. ACP stays as one adapter, for an agent that speaks only
+  ACP. Experiment 153 showed what ACP drops for a pipeline: a typed answer, a
+  stop that ends child commands, turn token totals, our own session id, and
+  for Codex any budget cap or hook. The phoenix agent interface
+  (`TuvalAiAgent`, with `tuval-claude`, `tuval-codex`, `tuval-pi`) is the
+  earlier try at the same shape, and the first map.
+  - Wrong, kept for the record: the first version of this note said "the
+    service's default implementation is our ACP client", restating the
+    2026-10-19 ruling in [Helpers, and one supervisor](./helpers-and-the-supervisor.md)
+    that our contract with a harness is ACP.
 - **A provider is swapped by config.** Claude, Codex, the fake, and later
-  others are rows in the ACP harness table. A stage's provider and model are
+  others are rows in one provider table. A stage's provider and model are
   settings, as [A canvas per piece of work](./a-canvas-per-work.md) asks.
 - **What the protocol lacks, the service adds once, for every provider.** The
   first case is a typed answer: the service reads the last message with the
@@ -56,10 +69,10 @@ const drafted = yield* Agents.run({
 - **Cost:** each stage's agent call moves behind the service. The build stage
   is half way there already through its ACP path. Medium work, done stage by
   stage.
-- **Confidence: 80%** in the direction. The doubt is whether ACP carries
-  everything the direct SDK path gives the builder today: its guard, its
-  dollar cap, stopping a run cleanly. Experiment 77 got the guard across for
-  Claude. Experiment 153 says what Codex lacks.
+- **Confidence: 80%** in the direction. The doubt is how much each maker's
+  SDK makes us build per adapter, next to what ACP's adapters give for free.
+  Experiment 156 builds the interface with a Claude and a Codex adapter and
+  runs the same job through it and through ACP.
 
 ## Logins never leave a person's machine
 
@@ -92,9 +105,9 @@ yield* Ledger.finish(job.id, drafted);                                  // only 
 
 ## Still open
 
-- **Does the direct Agent SDK path stay** as a second layer, or go once ACP
-  matches it? Lean: it goes, after a run of the same cases shows the ACP path
-  gives the same answers. 70%: the dollar cap and a clean stop are the doubt.
+- **Does the direct Agent SDK path stay?** Settled 2026-10-26: it stays, and
+  it is the default. The lean here before was that it goes once ACP matches
+  it (70%). Wrong, kept for the record.
 - **The plan login.** Each person signs in with their own plan, on their own
   laptop or a remote box only they control, and one login is never shared
   between people. OpenAI documents those runs (experiment 152, section 6). An
