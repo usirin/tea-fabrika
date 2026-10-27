@@ -2,7 +2,17 @@ import {run} from "@demlik/tea/effect";
 import {defineProgram, input, kind} from "@kampus/fabrika";
 import {Effect, Schema, Stream} from "effect";
 import {loadCell, pollRunner, saveCell} from "./ledger.ts";
-import {over, Shown, shownOf, statusOf, type TrackerMsg, tracker as tickets} from "./machine.ts";
+import {
+	Find,
+	over,
+	Show,
+	Shown,
+	shownOf,
+	statusOf,
+	type TrackerMsg,
+	tracker as tickets,
+} from "./machine.ts";
+import {pullRequestsCell, pullRequestsWaitRunner} from "./pull-requests.ts";
 import {TicketNumber, Write} from "./ticket.ts";
 
 // The tracker: tickets on the ledger, one stream of facts each (./ticket.ts), and a window to work
@@ -14,21 +24,33 @@ import {TicketNumber, Write} from "./ticket.ts";
 //   // ledger: tracker/ticket/1/inbox gets {type: "filed", ...} by user:owner; the list shows #1
 //   {kind: "quit"}               the tracker ends once its writes are on the ledger; tsh is back
 //
-// It needs two services: `Ledger`, and `Author` (./ledger.ts), who it writes as. Its machine's
-// state is kept nowhere: started again, it reads the ledger again.
+//   {kind: "show", show: "all"}                                the list shows closed tickets too
+//   {kind: "find", text: "login"}                              and only titles with "login" in them
+//
+// It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and
+// `PullRequests` (./pull-requests.ts), the open pull requests shown beside the tickets: GitHub's,
+// through `@tea-fabrika/tracker/github`, or a fixed list. Its machine's state is kept nowhere:
+// started again, it reads the ledger again.
 //
 // Left for later, with a place for each: an agent writing to a ticket is another `Author` on the
-// same ledger, and the poll already shows its facts; GitHub sync and the PR watcher are programs
-// that read and write the same streams; asks and approvals are new facts in `Fact`.
+// same ledger, and the poll already shows its facts; linking a pull request to a ticket and the
+// PR watcher are programs that read and write the same streams; asks and approvals are new facts
+// in `Fact`.
 
 export {Author} from "./ledger.ts";
-export type {Shown} from "./machine.ts";
+export type {Show, Shown} from "./machine.ts";
+export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
 export type {Fact, Summary, Ticket, Write} from "./ticket.ts";
 
-/** What the window does: go to the list or a ticket, change a ticket, or quit. One input, so it all stays in order. */
+/**
+ * What the window does: go to the list or a ticket, pick what the list shows, change a ticket, or
+ * quit. One input, so it all stays in order.
+ */
 export const Do = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("list")}),
 	Schema.Struct({kind: Schema.Literal("open"), ticket: TicketNumber}),
+	Schema.Struct({kind: Schema.Literal("show"), show: Show}),
+	Schema.Struct({kind: Schema.Literal("find"), text: Find}),
 	Schema.Struct({kind: Schema.Literal("quit")}),
 	Write,
 ]);
@@ -41,6 +63,10 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 			return {type: "list"};
 		case "open":
 			return {type: "open", ticket: d.ticket};
+		case "show":
+			return {type: "show", show: d.show};
+		case "find":
+			return {type: "find", text: d.text};
 		default:
 			return {type: "write", id: crypto.randomUUID(), write: d};
 	}
@@ -48,19 +74,19 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 
 const options = {
 	ctx: undefined,
-	interpret: {load: loadCell, save: saveCell},
-	subscribe: {poll: pollRunner},
+	interpret: {load: loadCell, save: saveCell, pull_requests: pullRequestsCell},
+	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner},
 	terminal: over,
 };
 
 export const tracker = defineProgram({
 	name: "tracker",
 	description:
-		"Tickets on the ledger, one stream of facts each: lists them, files one, shows one's timeline, comments, closes and reopens. It has a window.",
+		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline, comments, closes and reopens. It has a window.",
 	inputs: {
 		do: input(
 			Do,
-			"What the window does: list, open a ticket, file, comment, close, reopen, or quit.",
+			"What the window does: list, open a ticket, show open, closed or all, find by title, file, comment, close, reopen, or quit.",
 		),
 	},
 	outputs: {},
@@ -73,7 +99,13 @@ export const tracker = defineProgram({
 			options: () => options,
 			drawing: () => ({
 				name: "tickets",
-				steps: {load: "read the ledger", save: "write a fact", poll: "wait for news"},
+				steps: {
+					load: "read the ledger",
+					save: "write a fact",
+					poll: "wait for news",
+					pull_requests: "read the open pull requests",
+					pull_requests_wait: "wait to read them again",
+				},
 			}),
 			status: statusOf,
 		}),

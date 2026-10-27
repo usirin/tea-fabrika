@@ -2,6 +2,9 @@
 
 Decided 2026-10-26 by the owner.
 
+The goal: people bring their own plan with any provider, and a team of any
+size works in one fabrika project. The team shares the work, never a login.
+
 ```ts
 // A sketch. Every stage asks for an agent the same way, and never names a maker.
 const drafted = yield* Agents.run({
@@ -58,6 +61,35 @@ const drafted = yield* Agents.run({
   dollar cap, stopping a run cleanly. Experiment 77 got the guard across for
   Claude. Experiment 153 says what Codex lacks.
 
+## Logins never leave a person's machine
+
+Decided 2026-10-26 by the owner. The shared fabrika stores no provider login,
+no key, no token, for anyone.
+
+```ts
+// A sketch. The shared ledger holds work. Each person's own machine runs it.
+// On each person's machine, inside their fabrika app:
+const job = yield* Ledger.claim({ who: me, can: ["codex", "claude"] }); // pull one job
+const drafted = yield* Agents.run({ ...job, provider: job.provider });  // runs here, on my login
+yield* Ledger.finish(job.id, drafted);                                  // only the answer goes back
+// The ledger learns a fact like { who: "a", has: ["codex"] }. Never the login itself.
+```
+
+- **This is the self-hosted runner shape.** GitHub Actions self-hosted
+  runners and Buildkite agents work this way: the runner on your own machine
+  calls out, takes a job, runs it with what is on that machine, and sends back
+  the result. The shared service never holds the runner's secrets.
+- **Each provider's plan is used the way it is plainly allowed:** one person,
+  their own plan, on their own machine. This holds for Claude too, not only
+  Codex.
+- **The cost:** a person's jobs run only while their machine is on. An
+  always-on machine of their own at home is the fix, and it is still their own
+  machine.
+- **Confidence: 85%.** The doubt is the ledger's claims across machines on a
+  slow link. The lease fence in
+  [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md) is the
+  answer to test.
+
 ## Still open
 
 - **Does the direct Agent SDK path stay** as a second layer, or go once ACP
@@ -68,7 +100,9 @@ const drafted = yield* Agents.run({
   between people. OpenAI documents those runs (experiment 152, section 6). An
   API key is only for a shared service, or a public repository's own CI.
   Corrected 2026-10-26: the first version said a shared or remote box needs an
-  API key. A remote box one person controls does not.
+  API key. A remote box one person controls does not. Settled the same day by
+  the section above: no login is stored on the shared side, so the shared
+  service needs no key either.
 
 ## What this cannot tell us
 

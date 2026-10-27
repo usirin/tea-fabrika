@@ -93,12 +93,12 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
-| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`. |
+| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
@@ -194,7 +194,8 @@ openOutside({url: "file:///etc/hosts", from: DESK})      // {kind: "refused", wh
 - **Only the desk page may ask.** A window open from any other page is refused.
 - **The window never navigates.** A link with no `target="_blank"` does nothing: main refuses the
   navigation, and nothing opens outside.
-- The tracker links URLs in a ticket's and a comment's body (`programs/tracker/src/links.ts`).
+- The tracker links URLs in a ticket's and a comment's body (`programs/tracker/src/links.ts`),
+  and each open pull request on its list.
 
 ## The line editor
 

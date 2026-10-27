@@ -224,6 +224,9 @@ importers:
       '@kampus/fabrika':
         specifier: workspace:*
         version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
       '@tea-fabrika/counter':
         specifier: workspace:*
         version: link:../../programs/counter
@@ -662,6 +665,9 @@ importers:
       '@kampus/fabrika':
         specifier: workspace:*
         version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
         version: 4.0.6

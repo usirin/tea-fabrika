@@ -257,6 +257,8 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 			checksSettled: (_target, head) => Stream.fromEffect(settle(head)),
 			// No pull request, so no merge queue: nothing is ever said.
 			leftQueue: () => Stream.never,
+			// A local repository has no pull requests open.
+			pullRequests: () => Effect.succeed([]),
 		};
 		return host;
 	});

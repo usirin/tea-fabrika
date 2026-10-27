@@ -1,7 +1,7 @@
 import {Clock, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
 import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 import {isMachines} from "./comments.ts";
-import {CodeHost} from "./services.ts";
+import {CodeHost, type PullRequest} from "./services.ts";
 import {sh} from "./sh.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
@@ -29,6 +29,8 @@ import {verdictsIn} from "./verdict.ts";
 //
 // The review stage reads a pull request another way: `readChange`, further
 // down, with its own list of calls. It reads at a commit the caller may name.
+// A list of a repository's open pull requests, for the tracker, is one REST
+// call: `readPullRequests`.
 //
 // Each fact is read the plainest honest way. Where the reading cannot say, the
 // fact is `unknown`, never a guess. Where a value is less than it looks,
@@ -1164,6 +1166,51 @@ export interface Polling extends Partial<OutLimits> {
 	readonly checks?: Counted;
 }
 
+/** `owner` and `name`, from a repository's URL, `https://github.com/<owner>/<name>`. */
+export function repoOf(url: string): {readonly owner: string; readonly name: string} | null {
+	const m = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/.exec(url);
+	return m === null ? null : {owner: m[1] as string, name: m[2] as string};
+}
+
+/** One open pull request as REST's list answers it: only what a list shows. */
+const Listed = Schema.Struct({
+	number: Schema.Int,
+	title: Schema.String,
+	// A link that is not GitHub's own is not a pull request's page: the answer is not read.
+	html_url: Schema.String.check(Schema.isPattern(/^https:\/\/github\.com\//)),
+	draft: Schema.optional(Schema.Boolean),
+	updated_at: Schema.String,
+});
+
+/** The most open pull requests read: one page. */
+export const MOST_PULL_REQUESTS = 100;
+
+/**
+ * A repository's open pull requests, newest first: one REST call,
+ * `GET /repos/{owner}/{name}/pulls?state=open`. More than one page reads the
+ * first only.
+ */
+export const readPullRequests =
+	(gh: Gh) =>
+	(repo: string): Effect.Effect<readonly PullRequest[], {readonly _tag: "unknown"}> =>
+		Effect.gen(function* () {
+			const at = repoOf(repo);
+			if (at === null) return yield* failed;
+			const listed = yield* answerOf(gh, Schema.Array(Listed), [
+				"api",
+				`repos/${at.owner}/${at.name}/pulls?state=open&per_page=${MOST_PULL_REQUESTS}`,
+			]);
+			return listed.map(
+				(pr): PullRequest => ({
+					number: pr.number,
+					title: pr.title,
+					url: pr.html_url,
+					draft: pr.draft ?? false,
+					at: Date.parse(pr.updated_at) || 0,
+				}),
+			);
+		});
+
 /** The read side over one `gh`. */
 export const codeHostOn = (
 	gh: Gh,
@@ -1178,6 +1225,7 @@ export const codeHostOn = (
 	return {
 		prFacts: readPrFacts(gh, config, declared),
 		change: readChange(gh, config.checks, declared.kinds ?? null),
+		pullRequests: readPullRequests(gh),
 		checksSettled: (pr, head, after) =>
 			until(
 				every,

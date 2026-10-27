@@ -120,6 +120,7 @@ function gitHub(dead: () => boolean = () => false) {
 	const ejected = {reading: "ejected" as const};
 	const layer = Layer.mergeAll(
 		Layer.succeed(CodeHost, {
+			pullRequests: () => Effect.succeed([]),
 			prFacts: () =>
 				Effect.sync(() => {
 					world.reads += 1;
