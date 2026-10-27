@@ -1,0 +1,569 @@
+{
+	"stream": {
+		"exit": {
+			"code": 0,
+			"signal": null
+		},
+		"ms": 12676,
+		"eventTypes": [
+			"thread.started",
+			"turn.started",
+			"item.completed:agent_message",
+			"item.started:command_execution",
+			"item.completed:command_execution",
+			"item.started:command_execution",
+			"item.completed:command_execution",
+			"item.started:file_change",
+			"item.completed:file_change",
+			"item.completed:agent_message",
+			"item.started:command_execution",
+			"item.completed:command_execution",
+			"item.completed:agent_message",
+			"turn.completed"
+		],
+		"items": [
+			{
+				"type": "agent_message",
+				"text": "I’ll check the existing `bytes.js`, make the smallest change, then run one Node command with both requested values."
+			},
+			{
+				"type": "command_execution",
+				"command": "/bin/zsh -lc \"rg --files -g 'bytes.js' -g 'AGENTS.md'\"",
+				"exit": 0
+			},
+			{
+				"type": "command_execution",
+				"command": "/bin/zsh -lc 'cat bytes.js'",
+				"exit": 0
+			},
+			{
+				"type": "file_change",
+				"changes": [
+					{
+						"kind": "update",
+						"path": "<run>/copy/bytes.js"
+					}
+				]
+			},
+			{
+				"type": "agent_message",
+				"text": "The function now scales through TB and stops there. I’m running the requested single Node command to check both examples."
+			},
+			{
+				"type": "command_execution",
+				"command": "/bin/zsh -lc \"node --input-type=module -e 'import { formatBytes } from \\\"./bytes.js\\\"; console.log(formatBytes(1536)); console.log(formatBytes(5 * 1024 ** 3));'\"",
+				"exit": 0
+			},
+			{
+				"type": "agent_message",
+				"text": "{\"done\":true,\"ran\":[{\"call\":\"formatBytes(1536)\",\"printed\":\"1.5 KB\"},{\"call\":\"formatBytes(5 * 1024 ** 3)\",\"printed\":\"5.0 GB\"}],\"summary\":\"Updated formatBytes in bytes.js to display readable byte sizes, scaling through TB and staying in TB above that.\"}"
+			}
+		],
+		"msgs": [
+			{
+				"type": "job_tool",
+				"tool": "shell"
+			},
+			{
+				"type": "job_tool",
+				"tool": "shell"
+			},
+			{
+				"type": "job_tool",
+				"tool": "edit"
+			},
+			{
+				"type": "job_tool",
+				"tool": "edit"
+			},
+			{
+				"type": "job_tool",
+				"tool": "shell"
+			},
+			{
+				"type": "job_finished",
+				"output": {
+					"done": true,
+					"ran": [
+						{
+							"call": "formatBytes(1536)",
+							"printed": "1.5 KB"
+						},
+						{
+							"call": "formatBytes(5 * 1024 ** 3)",
+							"printed": "5.0 GB"
+						}
+					],
+					"summary": "Updated formatBytes in bytes.js to display readable byte sizes, scaling through TB and staying in TB above that."
+				},
+				"session": "01a17ae6-e93c-76e2-b96f-87402c0debb9",
+				"usage": {
+					"input_tokens": 63115,
+					"cached_input_tokens": 36864,
+					"cache_write_input_tokens": 0,
+					"output_tokens": 500,
+					"reasoning_output_tokens": 0
+				}
+			}
+		],
+		"graded": 10,
+		"of": 10,
+		"rollout": {
+			"tokenCountEvents": 5,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		"loginStillLinked": true
+	},
+	"setup": {
+		"codexCli": "0.163.0",
+		"codexSdkRead": "@openai/codex-sdk 0.164.0 (read, not run: it spawns `codex exec --experimental-json`)",
+		"claudeAgentSdk": "0.3.296",
+		"codexModel": "gpt-6-luna",
+		"claudeModel": "claude-haiku-4-5",
+		"effort": "low",
+		"fixture": "fixtures/format-bytes"
+	},
+	"stop": [
+		{
+			"signal": "SIGTERM",
+			"sawCommand": true,
+			"msToExit": 8,
+			"exit": {
+				"code": null,
+				"signal": "SIGTERM"
+			},
+			"lastEvent": "item.started",
+			"sleepLeftAtExit": 1,
+			"sleepLeftAfter3s": 1,
+			"loginStillLinked": true
+		},
+		{
+			"signal": "SIGINT",
+			"sawCommand": true,
+			"msToExit": 198,
+			"exit": {
+				"code": 1,
+				"signal": null
+			},
+			"lastEvent": "item.started",
+			"sleepLeftAtExit": 0,
+			"sleepLeftAfter3s": 0,
+			"loginStillLinked": true
+		}
+	],
+	"schema": [
+		{
+			"name": "fit",
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"text": "{\"done\":true,\"ran\":[],\"summary\":\"nothing to do\"}",
+			"read": {
+				"done": true,
+				"ran": [],
+				"summary": "nothing to do"
+			},
+			"msgs": [
+				{
+					"type": "job_finished",
+					"output": {
+						"done": true,
+						"ran": [],
+						"summary": "nothing to do"
+					}
+				}
+			],
+			"error": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		},
+		{
+			"name": "asked-to-misfit",
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"text": "{\"done\":false,\"ran\":[],\"summary\":\"Unable to return the requested JSON verbatim because the required response format is codex_output_schema.\"}",
+			"read": {
+				"done": false,
+				"ran": [],
+				"summary": "Unable to return the requested JSON verbatim because the required response format is codex_output_schema."
+			},
+			"msgs": [
+				{
+					"type": "job_finished",
+					"output": {
+						"done": false,
+						"ran": [],
+						"summary": "Unable to return the requested JSON verbatim because the required response format is codex_output_schema."
+					}
+				}
+			],
+			"error": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		},
+		{
+			"name": "strict-refuses-optional",
+			"exit": {
+				"code": 1,
+				"signal": null
+			},
+			"text": null,
+			"read": null,
+			"msgs": [
+				{
+					"type": "job_failed",
+					"error": "{\"type\":\"error\",\"error\":{\"message\":\"Invalid schema for response_format 'codex_output_schema': 'schema.required' is required to include every key in properties. Missing 'note'.\",\"type\":\"invalid_request_error\",\"param\":\"text.format.schema\",\"code\":\"invalid_json_schema\"},\"status\":400}"
+				},
+				{
+					"type": "job_failed",
+					"error": "{\"type\":\"error\",\"error\":{\"message\":\"Invalid schema for response_format 'codex_output_schema': 'schema.required' is required to include every key in properties. Missing 'note'.\",\"type\":\"invalid_request_error\",\"param\":\"text.format.schema\",\"code\":\"invalid_json_schema\"},\"status\":400}"
+				}
+			],
+			"error": [
+				"{\"type\":\"error\",\"message\":\"{\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"message\\\":\\\"Invalid schema for response_format 'codex_output_schema': 'schema.required' is required to include every key in properties. Missing 'note'.\\\",\\\"type\\\":\\\"invalid_request_error\\\",\\\"param\\\":\\\"text.format.schema\\\",\\\"code\\\":\\\"invalid_json_schema\\\"},\\\"status\\\":400}\"}",
+				"{\"type\":\"turn.failed\",\"error\":{\"message\":\"{\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"message\\\":\\\"Invalid schema for response_format 'codex_output_schema': 'schema.required' is required to include every key in properties. Missing 'note'.\\\",\\\"type\\\":\\\"invalid_request_error\\\",\\\"param\\\":\\\"text.format.schema\\\",\\\"code\\\":\\\"invalid_json_schema\\\"},\\\"status\\\":400}\"}}"
+			],
+			"stderrTail": "Reading additional input from stdin...\n",
+			"loginStillLinked": true
+		},
+		{
+			"name": "no-schema",
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"text": "ok",
+			"read": null,
+			"msgs": [
+				{
+					"type": "job_finished",
+					"output": null
+				}
+			],
+			"error": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		}
+	],
+	"limits": [
+		{
+			"variant": "workspace-write",
+			"commands": 6,
+			"canaryRead": true,
+			"wroteOutside": true,
+			"wroteInside": true,
+			"networkReached": false,
+			"networkOutput": [
+				"curl: (6) Could not resolve host: example.com\n000"
+			],
+			"envMarkSeen": true,
+			"homeListed": true,
+			"shells": [
+				"/bin/zsh -lc"
+			],
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"failed": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		},
+		{
+			"variant": "workspace-write, core env, no login shell",
+			"commands": 6,
+			"canaryRead": true,
+			"wroteOutside": true,
+			"wroteInside": true,
+			"networkReached": false,
+			"networkOutput": [
+				"000curl: (6) Could not resolve host: example.com\n"
+			],
+			"envMarkSeen": false,
+			"homeListed": true,
+			"shells": [
+				"/bin/zsh -c"
+			],
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"failed": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		},
+		{
+			"variant": "workspace-write, no tmp roots, core env",
+			"commands": 5,
+			"canaryRead": true,
+			"wroteOutside": false,
+			"wroteInside": true,
+			"networkReached": false,
+			"networkOutput": [
+				"curl: (6) Could not resolve host: example.com\n000"
+			],
+			"envMarkSeen": false,
+			"homeListed": true,
+			"shells": [
+				"/bin/zsh -lc"
+			],
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"failed": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		},
+		{
+			"variant": "profile :workspace, home and outside denied",
+			"commands": 4,
+			"canaryRead": false,
+			"wroteOutside": false,
+			"wroteInside": true,
+			"networkReached": false,
+			"networkOutput": [
+				"curl: (6) Could not resolve host: example.com\n000"
+			],
+			"envMarkSeen": false,
+			"homeListed": false,
+			"shells": [
+				"/bin/zsh -lc"
+			],
+			"exit": {
+				"code": 0,
+				"signal": null
+			},
+			"failed": [],
+			"stderrTail": "",
+			"loginStillLinked": true
+		}
+	],
+	"resume": {
+		"firstExit": {
+			"code": 0,
+			"signal": null
+		},
+		"secondExit": {
+			"code": 0,
+			"signal": null
+		},
+		"sameThread": true,
+		"remembered": true,
+		"firstUsage": {
+			"input_tokens": 11584,
+			"cached_input_tokens": 9088,
+			"cache_write_input_tokens": 0,
+			"output_tokens": 5,
+			"reasoning_output_tokens": 0
+		},
+		"secondUsage": {
+			"input_tokens": 25183,
+			"cached_input_tokens": 18176,
+			"cache_write_input_tokens": 0,
+			"output_tokens": 11,
+			"reasoning_output_tokens": 0
+		},
+		"loginStillLinked": true
+	},
+	"job": [
+		{
+			"agent": "codex",
+			"n": 1,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 10.63,
+			"tools": 4,
+			"input": 63238,
+			"cached": 36992,
+			"output": 470,
+			"costUsd": null,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		{
+			"agent": "claude",
+			"n": 1,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 46.667,
+			"tools": 6,
+			"input": 79233,
+			"cached": 62606,
+			"output": 6562,
+			"costUsd": 0.07242870000000001
+		},
+		{
+			"agent": "codex",
+			"n": 2,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 13.823,
+			"tools": 4,
+			"input": 63586,
+			"cached": 37248,
+			"output": 516,
+			"costUsd": null,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		{
+			"agent": "claude",
+			"n": 2,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 26.368,
+			"tools": 9,
+			"input": 105307,
+			"cached": 97875,
+			"output": 3136,
+			"costUsd": 0.04041159999999999
+		},
+		{
+			"agent": "codex",
+			"n": 3,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 9.544,
+			"tools": 4,
+			"input": 63279,
+			"cached": 49664,
+			"output": 471,
+			"costUsd": null,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		{
+			"agent": "claude",
+			"n": 3,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 17.696,
+			"tools": 5,
+			"input": 54856,
+			"cached": 49065,
+			"output": 2122,
+			"costUsd": 0.027211100000000002
+		},
+		{
+			"agent": "codex",
+			"n": 4,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 13.183,
+			"tools": 4,
+			"input": 63276,
+			"cached": 49664,
+			"output": 513,
+			"costUsd": null,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		{
+			"agent": "claude",
+			"n": 4,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 41.115,
+			"tools": 10,
+			"input": 131086,
+			"cached": 121530,
+			"output": 4897,
+			"costUsd": 0.0558221
+		},
+		{
+			"agent": "codex",
+			"n": 5,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 10.135,
+			"tools": 4,
+			"input": 50490,
+			"cached": 36992,
+			"output": 464,
+			"costUsd": null,
+			"planLimit": {
+				"id": "codex",
+				"windowMinutes": 10080,
+				"usedPercent": 0
+			}
+		},
+		{
+			"agent": "claude",
+			"n": 5,
+			"ok": true,
+			"graded": 10,
+			"typed": true,
+			"claimedDone": true,
+			"seconds": 70.162,
+			"tools": 9,
+			"input": 129222,
+			"cached": 115372,
+			"output": 9429,
+			"costUsd": 0.0864623
+		}
+	],
+	"summary": {
+		"codex": {
+			"runs": 5,
+			"right": 5,
+			"typed": 5,
+			"claimedDoneButWrong": 0,
+			"medianSeconds": 10.63,
+			"medianTools": 4,
+			"medianInput": 63276,
+			"medianCached": 37248,
+			"medianOutput": 471,
+			"dollars": 0
+		},
+		"claude": {
+			"runs": 5,
+			"right": 5,
+			"typed": 5,
+			"claimedDoneButWrong": 0,
+			"medianSeconds": 41.115,
+			"medianTools": 9,
+			"medianInput": 105307,
+			"medianCached": 97875,
+			"medianOutput": 4897,
+			"dollars": 0.28233579999999997
+		}
+	}
+}
