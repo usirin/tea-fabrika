@@ -154,13 +154,13 @@ export const dispatch = (
 		case "monitor":
 			return L.monitorWith(rules)(db, now, num(a[0]), str(a[1]), str(a[2]));
 		case "demonitor":
-			return L.demonitor(db, now, num(a[0]), str(a[1]));
+			return L.demonitor(db, num(a[0]), str(a[1]));
 		case "link":
-			return L.link(db, now, num(a[0]), str(a[1]));
+			return L.link(db, num(a[0]), str(a[1]));
 		case "unlink":
-			return L.unlink(db, now, num(a[0]), str(a[1]));
+			return L.unlink(db, num(a[0]), str(a[1]));
 		case "trapExit":
-			return L.trapExit(db, now, num(a[0]), a[1] === true);
+			return L.trapExit(db, num(a[0]), a[1] === true);
 		case "startChild": {
 			const after = orNull(a[2]);
 			const limits = orNull(a[3]);

@@ -98,7 +98,9 @@ export type ClaimResult =
 	/** The name exited (at the `exited` event's `pos`) and waits for its parent to restart it. */
 	| {ok: false; why: "down"; pos: number};
 export type RenewResult =
-	| {ok: true; expiresAt: number}
+	/** `written`: a `lease_resumed`, when the renew came after the lease's `lease_expired`. */
+	| {ok: true; expiresAt: number; written: readonly Written[]}
+	/** A newer claim took the name, or it exited: the fence is not its newest any more. */
 	| {ok: false; why: "lost"}
 	| {ok: false; why: "stop"};
 export type RegisterResult =
@@ -293,6 +295,18 @@ export const migrations: ReadonlyArray<ReadonlyArray<string>> = [
 		"ALTER TABLE names ADD COLUMN used_tokens INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE names ADD COLUMN limited TEXT",
 		"CREATE INDEX names_parent ON names (parent)",
+	],
+	// 151: the newest fence of each name, kept on the name and not on its lease, as Kafka keeps a
+	// producer's epoch per producer id, apart from its transaction's timeout. NULL: no claim since
+	// the name was registered, exited or restarted. Filled from the log: the last claim after the
+	// last exit.
+	[
+		"ALTER TABLE names ADD COLUMN fence INTEGER",
+		`UPDATE names SET fence = (
+			SELECT max(c.pos) FROM events c WHERE c.stream = names.name AND c.kind = 'claimed'
+				AND c.pos > (SELECT coalesce(max(x.pos), 0) FROM events x
+					WHERE x.stream = names.name AND x.kind = 'exited'))`,
+		"CREATE INDEX names_fence ON names (fence)",
 	],
 ];
 
@@ -521,16 +535,22 @@ const nested = (db: Db, name: string): boolean => {
 	return inside || around || isInbox(name);
 };
 
-/** May the lease this fence names write `stream`, now? */
-const fenceHolds = (db: Db, rules: Rules, now: number, stream: string, fence: number): boolean => {
+/**
+ * The name this fence is the newest claim of, or null. 151, Kafka's producer epoch (KIP-98): a
+ * fence holds until a newer claim of its name, an exit or a restart, whatever the time. A lease
+ * past its end lets a claim take the name; until one does, its holder may still write. Every
+ * fenced call goes through here.
+ */
+const fencedName = (db: Db, fence: number): string | null => {
+	const row = db.all("SELECT name FROM names WHERE fence = ?", fence)[0];
+	return row ? str(row.name) : null;
+};
+
+/** May the claim this fence names write `stream`? */
+const fenceHolds = (db: Db, rules: Rules, stream: string, fence: number): boolean => {
 	if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) return true;
-	const lease = db.all(
-		"SELECT stream FROM leases WHERE fence = ? AND expires_at > ?",
-		fence,
-		now,
-	)[0];
-	if (!lease) return false;
-	const name = str(lease.stream);
+	const name = fencedName(db, fence);
+	if (name === null) return false;
 	const own = stream === name || stream.startsWith(`${name}/`);
 	return own || (rules.reach === "name-and-inboxes" && isOpenInbox(db, rules, stream));
 };
@@ -626,10 +646,10 @@ export const appendWith =
 			// Deny by default: nothing lands under a name nobody registered.
 			if (owner === null && rules.registration === "required" && !isOpenInbox(db, rules, stream))
 				return {ok: false, why: "unknown"};
-			// Who may write: a fence that names a live lease allowed here, or, with no fence, a stream
-			// no registered name guards. A writer that lost its lease hears `fenced` even for a repeat
-			// of a write that landed while it held it.
-			if (fence !== null && !fenceHolds(db, rules, now, stream, fence))
+			// Who may write: the newest fence of a name allowed here, or, with no fence, a stream no
+			// registered name guards. A writer whose fence a newer claim replaced hears `fenced` even
+			// for a repeat of a write that landed while it held it.
+			if (fence !== null && !fenceHolds(db, rules, stream, fence))
 				return {ok: false, why: "fenced"};
 			if (fence === null && guarded(db, rules, now, stream, owner))
 				return {ok: false, why: "denied"};
@@ -646,6 +666,8 @@ export const LEDGER_KINDS: readonly string[] = [
 	"registered",
 	"claimed",
 	"lease_expired",
+	// 151: a renew by the newest fence after its `lease_expired`.
+	"lease_resumed",
 	"cancel",
 	"exited",
 	"restarted",
@@ -690,9 +712,10 @@ export const claimWith =
 			)[0];
 			if (live)
 				return {ok: false, why: "held", holder: str(live.holder), expiresAt: num(live.expires_at)};
-			const old = db.all("SELECT fence FROM leases WHERE stream = ?", name)[0];
+			// The fence this claim ends: the newest one, live or past its end.
+			const old = db.all("SELECT fence FROM names WHERE name = ?", name)[0]?.fence ?? null;
 			const expiresAt = now + ttlMs;
-			const data = {holder, ttlMs, expiresAt, replaces: old ? num(old.fence) : null};
+			const data = {holder, ttlMs, expiresAt, replaces: old === null ? null : num(old)};
 			const res = write(db, now, name, expectedRev, {kind: "claimed", writer: holder, data});
 			if (!res.ok) return {ok: false, why: "stale", rev: revOf(db, name)};
 			const fence = res.pos;
@@ -709,12 +732,21 @@ export const claimWith =
 			);
 			if (!registered)
 				db.all("INSERT OR IGNORE INTO names (name, pos, at) VALUES (?, ?, ?)", name, fence, now);
+			// 151: from here on only this fence writes under the name, until the next claim.
+			db.all("UPDATE names SET fence = ? WHERE name = ?", fence, name);
 			scheduleExpiry(db, name, expiresAt + graceMs);
 			return {ok: true, fence, rev: res.rev, expiresAt, incarnation: proc?.incarnation ?? 1};
 		});
 
 export const claim = claimWith(RULES);
 
+/**
+ * Move a lease's end on. 151: any time its fence is the newest one, past the lease's end too, as
+ * Kafka's KIP-588 lets a producer whose transaction timed out carry on when no other producer
+ * took its id. A renew after the expiry job's `lease_expired` puts the lease back and says so with
+ * `lease_resumed`, so a reader of the name's stream sees the gap close. A cancel since the claim
+ * is a `stop`, whether its lease row is still there or not.
+ */
 export function renew(
 	db: Db,
 	now: number,
@@ -724,22 +756,45 @@ export function renew(
 	graceMs: number,
 ): RenewResult {
 	return db.tx(() => {
-		const lease = db.all(
-			"SELECT expires_at, stop FROM leases WHERE stream = ? AND fence = ?",
-			name,
-			fence,
-		)[0];
-		if (!lease || num(lease.expires_at) <= now) return {ok: false, why: "lost"};
-		if (num(lease.stop) === 1) return {ok: false, why: "stop"};
+		if (fencedName(db, fence) !== name) return {ok: false, why: "lost"};
 		const expiresAt = now + ttlMs;
-		db.all(
-			"UPDATE leases SET expires_at = ? WHERE stream = ? AND fence = ?",
-			expiresAt,
-			name,
-			fence,
-		);
+		const lease = db.all("SELECT stop FROM leases WHERE stream = ? AND fence = ?", name, fence)[0];
+		const written: Written[] = [];
+		if (lease) {
+			if (num(lease.stop) === 1) return {ok: false, why: "stop"};
+			db.all(
+				"UPDATE leases SET expires_at = ? WHERE stream = ? AND fence = ?",
+				expiresAt,
+				name,
+				fence,
+			);
+		} else {
+			// The expiry job wrote `lease_expired` and took the row away; no claim came since.
+			const cancelled = db.all(
+				"SELECT 1 FROM events WHERE stream = ? AND kind = 'cancel' AND pos > ?",
+				name,
+				fence,
+			)[0];
+			if (cancelled) return {ok: false, why: "stop"};
+			// An end now or before (a release) has nothing to put back.
+			if (ttlMs <= 0) return {ok: true, expiresAt, written};
+			const holder = str(db.all("SELECT writer FROM events WHERE pos = ?", fence)[0]?.writer);
+			db.all(
+				"INSERT INTO leases (stream, holder, expires_at, fence, stop) VALUES (?, ?, ?, ?, 0)",
+				name,
+				holder,
+				expiresAt,
+				fence,
+			);
+			const data = {fence, holder, expiresAt};
+			pushed(
+				written,
+				name,
+				write(db, now, name, "any", {kind: "lease_resumed", writer: "ledger", data}),
+			);
+		}
 		scheduleExpiry(db, name, expiresAt + graceMs);
-		return {ok: true, expiresAt};
+		return {ok: true, expiresAt, written};
 	});
 }
 
@@ -770,12 +825,6 @@ export const processOf = (db: Db, name: string): ProcessInfo | null => {
 				trapExit: num(row.trap_exit) === 1,
 			}
 		: null;
-};
-
-/** The name whose live lease this fence is, or null. Every call below is fenced this way. */
-const fencedName = (db: Db, now: number, fence: number): string | null => {
-	const row = db.all("SELECT stream FROM leases WHERE fence = ? AND expires_at > ?", fence, now)[0];
-	return row ? str(row.stream) : null;
 };
 
 const pushed = (written: Written[], stream: string, r: AppendResult): void => {
@@ -820,9 +869,9 @@ const takeDown = (
 		const {name, ending: e} = next;
 		const proc = processOf(db, name);
 		if (proc === null || proc.down !== 0) continue;
-		const lease = db.all("SELECT fence FROM leases WHERE stream = ?", name)[0];
+		const newest = db.all("SELECT fence FROM names WHERE name = ?", name)[0]?.fence ?? null;
 		const data = {
-			fence: lease ? num(lease.fence) : null,
+			fence: newest === null ? null : num(newest),
 			incarnation: proc.incarnation,
 			reason: e.reason,
 			why: e.why,
@@ -840,7 +889,8 @@ const takeDown = (
 		if (firstPos === 0) firstPos = res.pos;
 		db.all("DELETE FROM leases WHERE stream = ?", name);
 		db.all("DELETE FROM jobs WHERE id = ?", `lease:${name}`);
-		db.all("UPDATE names SET down = ? WHERE name = ?", res.pos, name);
+		// 151: an exit ends the fence too: the name waits for its parent, and no claim holds it.
+		db.all("UPDATE names SET down = ?, fence = NULL WHERE name = ?", res.pos, name);
 		strike(db, rules, now, name, e, maxDeliveries, written);
 
 		// Monitors of this incarnation: one DOWN each, then they are gone (OTP: a monitor fires once).
@@ -978,8 +1028,7 @@ export const exitWith =
 					return {ok: true, pos: proc.down, incarnation: proc.incarnation, dup: true, written: []};
 			}
 			if (proc === null) return {ok: false, why: "fenced"};
-			if (rules.exitNeedsLease && fencedName(db, now, fence) !== name)
-				return {ok: false, why: "fenced"};
+			if (rules.exitNeedsLease && fencedName(db, fence) !== name) return {ok: false, why: "fenced"};
 			const written: Written[] = [];
 			const ending: Ending = {reason, why, suspect, by: null, writer};
 			const pos = takeDown(db, rules, now, name, ending, maxDeliveries, written);
@@ -994,7 +1043,7 @@ export const monitorWith =
 	(rules: Rules) =>
 	(db: Db, now: number, fence: number, ref: string, target: string): MonitorResult =>
 		db.tx(() => {
-			const watcher = fencedName(db, now, fence);
+			const watcher = fencedName(db, fence);
 			if (watcher === null) return {ok: false, why: "fenced"};
 			const held = db.all(
 				"SELECT incarnation FROM monitors WHERE watcher = ? AND ref = ?",
@@ -1043,9 +1092,9 @@ export const monitorWith =
 export const monitor = monitorWith(RULES);
 
 /** OTP's `erlang:demonitor/1`. Idempotent. */
-export function demonitor(db: Db, now: number, fence: number, ref: string): FlagResult {
+export function demonitor(db: Db, fence: number, ref: string): FlagResult {
 	return db.tx(() => {
-		const watcher = fencedName(db, now, fence);
+		const watcher = fencedName(db, fence);
 		if (watcher === null) return {ok: false, why: "fenced"};
 		db.all("DELETE FROM monitors WHERE watcher = ? AND ref = ?", watcher, ref);
 		return {ok: true};
@@ -1053,9 +1102,9 @@ export function demonitor(db: Db, now: number, fence: number, ref: string): Flag
 }
 
 /** OTP's `link/1`: both ways. A name that is not running answers `noproc`. */
-export function link(db: Db, now: number, fence: number, other: string): LinkResult {
+export function link(db: Db, fence: number, other: string): LinkResult {
 	return db.tx(() => {
-		const me = fencedName(db, now, fence);
+		const me = fencedName(db, fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		if (other === me) return {ok: true};
 		const o = processOf(db, other);
@@ -1066,9 +1115,9 @@ export function link(db: Db, now: number, fence: number, other: string): LinkRes
 }
 
 /** OTP's `unlink/1`. Idempotent. */
-export function unlink(db: Db, now: number, fence: number, other: string): FlagResult {
+export function unlink(db: Db, fence: number, other: string): FlagResult {
 	return db.tx(() => {
-		const me = fencedName(db, now, fence);
+		const me = fencedName(db, fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		db.all("DELETE FROM links WHERE (a = ?1 AND b = ?2) OR (a = ?2 AND b = ?1)", me, other);
 		return {ok: true};
@@ -1076,9 +1125,9 @@ export function unlink(db: Db, now: number, fence: number, other: string): FlagR
 }
 
 /** OTP's `process_flag(trap_exit, on)`. It lasts this incarnation: a restart clears it. */
-export function trapExit(db: Db, now: number, fence: number, on: boolean): FlagResult {
+export function trapExit(db: Db, fence: number, on: boolean): FlagResult {
 	return db.tx(() => {
-		const me = fencedName(db, now, fence);
+		const me = fencedName(db, fence);
 		if (me === null) return {ok: false, why: "fenced"};
 		db.all("UPDATE names SET trap_exit = ? WHERE name = ?", on ? 1 : 0, me);
 		return {ok: true};
@@ -1102,7 +1151,7 @@ export const startChildWith =
 		limits: Limits | null = null,
 	): StartResult =>
 		db.tx(() => {
-			const me = fencedName(db, now, fence);
+			const me = fencedName(db, fence);
 			if (me === null) return {ok: false, why: "fenced"};
 			if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
 			const written: Written[] = [];
@@ -1190,7 +1239,7 @@ export const exitChildWith =
 		maxDeliveries: number | null = MAX_DELIVERIES,
 	): ExitChildResult =>
 		db.tx(() => {
-			const me = fencedName(db, now, fence);
+			const me = fencedName(db, fence);
 			if (me === null) return {ok: false, why: "fenced"};
 			const c = processOf(db, child);
 			if (c === null) return {ok: false, why: "denied"};
@@ -1458,7 +1507,7 @@ export const holdWith =
 	(rules: Rules) =>
 	(db: Db, now: number, fence: number, id: string, cost: Cost): HoldResult =>
 		db.tx(() => {
-			const me = fencedName(db, now, fence);
+			const me = fencedName(db, fence);
 			if (me === null) return {ok: false, why: "fenced"};
 			if (!costOk(cost)) return {ok: false, why: "denied"};
 			const spend = `${me}/spend`;
@@ -1495,7 +1544,7 @@ export const chargeWith =
 	(rules: Rules) =>
 	(db: Db, now: number, fence: number, id: string, cost: Cost): ChargeResult =>
 		db.tx(() => {
-			const me = rules.lateChargeCounts ? claimedBy(db, fence) : fencedName(db, now, fence);
+			const me = rules.lateChargeCounts ? claimedBy(db, fence) : fencedName(db, fence);
 			if (me === null) return {ok: false, why: "fenced"};
 			if (!costOk(cost)) return {ok: false, why: "denied"};
 			const spend = `${me}/spend`;

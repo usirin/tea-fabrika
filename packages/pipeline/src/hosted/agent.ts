@@ -26,6 +26,7 @@
 import {defineMachine} from "@demlik/tea";
 import {type Cost, defineProgram, envelope, input, Ledger, Self, streams} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
+import {steady} from "../asks/ledger.ts";
 import {Faults} from "./idempotency.ts";
 
 /** One ask: its id (the same on every resend) and what the agent is handed. */
@@ -110,9 +111,7 @@ export const agentProgram = <R>(o: {
 				const handle = yield* self.run(quiet, {schema: Quiet, cursor: () => 0}, {ctx: undefined});
 				yield* handle.ready;
 				const answered = (id: string) =>
-					ledger.readStream(answers).pipe(
-						Effect.retry({times: 40, schedule: EVERY_100_MS}),
-						Effect.orDie,
+					steady("read the answers", ledger.readStream(answers)).pipe(
 						Effect.map((rows) => rows.some((r) => r.id === id)),
 					);
 				const stage = stageOf(name);
@@ -194,21 +193,17 @@ export const agentProgram = <R>(o: {
 							yield* say("limit", ask.id);
 							return yield* Effect.never;
 						}
-						const wrote = yield* ledger
-							.append(
+						// 151: sent again with no limit while the ledger does not answer; the ask's id makes
+						// that safe.
+						const wrote = yield* steady(
+							"write an answer",
+							ledger.append(
 								answers,
 								"any",
 								{kind: "answer", writer: self.holder, id: ask.id, data: {answer: turn.answer}},
 								fence,
-							)
-							.pipe(
-								Effect.retry({
-									while: (e) => e._tag === "LedgerUnreachable",
-									times: 40,
-									schedule: EVERY_100_MS,
-								}),
-								Effect.result,
-							);
+							),
+						).pipe(Effect.result);
 						// A lost lease: the next holder answers it.
 						if (wrote._tag === "Failure") return yield* Effect.never;
 						yield* say("answered", ask.id, {agent: turn.agent});
@@ -258,23 +253,18 @@ export const askAgent = <A>(
 	Effect.gen(function* () {
 		const self = yield* Self;
 		const ledger = yield* Ledger;
-		// No row id: the same ask may be asked, taken back and asked again under one fence.
+		// No row id: the same ask may be asked, taken back and asked again under one fence. A row
+		// sent twice after a lost answer says the same word twice; only the last word counts.
 		const say = (on: boolean) =>
-			ledger
-				.append(
+			steady(
+				"say an ask",
+				ledger.append(
 					askingOf(self.name),
 					"any",
 					{kind: "asking", writer: self.holder, data: {id, fence: self.fence, on}},
 					self.fence,
-				)
-				.pipe(
-					Effect.retry({
-						while: (e) => e._tag === "LedgerUnreachable",
-						times: 40,
-						schedule: EVERY_100_MS,
-					}),
-					Effect.result,
-				);
+				),
+			).pipe(Effect.result);
 		// Recorded before it is sent, so a child that reads the ask finds it wanted.
 		const noted = yield* say(true);
 		if (noted._tag === "Failure") {

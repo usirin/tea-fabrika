@@ -1,4 +1,5 @@
-import {Effect, Layer} from "effect";
+import {LedgerUnreachable} from "@kampus/fabrika";
+import {Duration, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {type LaneId, laneId, planOf, taskId, ticketId} from "../ids.ts";
 import {claim, holderOf, holding, Lanes, layerLanes, newLane, release} from "./claims.ts";
@@ -247,5 +248,123 @@ describe("a lease that is lost", () => {
 		expect(seen).toEqual({mine: true, other: false});
 		// Held by L1 in a process that is gone, another lane's door, in a new process, stays shut too.
 		expect(await proc(memory.layer, holding(T, L2))).toBe(false);
+	});
+});
+
+/** `memory`'s ledger behind a link that can drop: while `link.down`, every call goes unanswered. */
+const behind = (memory: Memory, link: {down: boolean}) => {
+	const wrapped: Record<string, unknown> = {};
+	for (const [key, call] of Object.entries(memory.service))
+		wrapped[key] =
+			key === "watch"
+				? call
+				: (...args: unknown[]) =>
+						Effect.suspend(() =>
+							link.down
+								? Effect.fail(new LedgerUnreachable({method: key, message: "the link is down"}))
+								: (call as (...a: unknown[]) => Effect.Effect<unknown>)(...args),
+						);
+	return Layer.succeed(Ledger, wrapped as Ledger["Service"]);
+};
+
+/** One process behind `link`, with a 300 ms lease and `graceMs` of patience. */
+const cutOff = <A, E>(
+	memory: Memory,
+	link: {down: boolean},
+	graceMs: number,
+	effect: Effect.Effect<A, E, Lanes | Ledger>,
+) =>
+	Effect.runPromise(
+		effect.pipe(
+			Effect.provide(
+				layerLanes({ttlMs: 300, graceMs}).pipe(Layer.provideMerge(behind(memory, link))),
+			),
+		),
+	);
+
+/** The lease's own events on a ticket's name, in order. */
+const leaseEvents = (memory: Memory, ticket = T) =>
+	memory
+		.rows()
+		.filter((r) => r.stream === ticketName(ticket))
+		.map((r) => r.kind)
+		.filter((k) => k === "claimed" || k.startsWith("lease_"));
+
+// Experiment 151: a fence is good until someone newer claims (Kafka's producer epoch). A lane cut
+// off from the ledger keeps its ticket while nobody claims it, and lets it go only past its lease's
+// end plus a grace.
+describe("a ledger that does not answer", () => {
+	it("a holder cut off past its lease's end keeps the ticket while nobody claims it: back, it renews under the same fence", async () => {
+		const memory = memoryLedger();
+		const link = {down: false};
+		const out = await cutOff(
+			memory,
+			link,
+			60_000,
+			Effect.gen(function* () {
+				yield* claim(T, L1);
+				const before = yield* Lanes.use((l) => l.hold(T));
+				link.down = true;
+				// Five lease times with no answer: the expiry job is due in the middle.
+				yield* Effect.sleep(Duration.millis(1_500));
+				link.down = false;
+				yield* Effect.sleep(Duration.millis(400));
+				return {before, after: yield* Lanes.use((l) => l.hold(T))};
+			}),
+		);
+		expect(out.after).toEqual(out.before);
+		expect(holderNow(memory)).toBe(L1);
+		expect(leaseEvents(memory)).toEqual(["claimed", "lease_expired", "lease_resumed"]);
+	});
+
+	it("past its lease's end plus the grace with no answer, a holder lets the ticket go", async () => {
+		const memory = memoryLedger();
+		const link = {down: false};
+		const held = await cutOff(
+			memory,
+			link,
+			300,
+			Effect.gen(function* () {
+				yield* claim(T, L1);
+				link.down = true;
+				yield* Effect.sleep(Duration.millis(1_200));
+				const held = yield* Lanes.use((l) => l.hold(T));
+				link.down = false;
+				return held;
+			}),
+		);
+		expect(held).toBeNull();
+	});
+
+	it("a holder cut off while another lane claims the ticket is refused when it is back: it lets go, and its old fence writes nothing", async () => {
+		const memory = memoryLedger();
+		const link = {down: false};
+		const old = await cutOff(
+			memory,
+			link,
+			60_000,
+			Effect.gen(function* () {
+				yield* claim(T, L1);
+				const old = yield* Lanes.use((l) => l.hold(T));
+				link.down = true;
+				yield* Effect.sleep(Duration.millis(500));
+				// Its lease ran out: another lane, in another process, takes the ticket.
+				const other = layerLanes().pipe(Layer.provideMerge(memory.layer));
+				expect(yield* claim(T, L2).pipe(Effect.provide(other))).toBe(L2);
+				link.down = false;
+				yield* Effect.sleep(Duration.millis(400));
+				expect(yield* Lanes.use((l) => l.hold(T))).toBeNull();
+				return old;
+			}),
+		);
+		if (old === null) throw new Error("the claim gave no lease");
+		expect(holderNow(memory)).toBe(L2);
+		const late = await Effect.runPromise(
+			Effect.flip(sendFact({type: "released", ticket: T, lane: L1}, {hold: old})).pipe(
+				Effect.provide(memory.layer),
+			),
+		);
+		expect(late._tag).toBe("Fenced");
+		expect(memory.read()).toEqual([]);
 	});
 });

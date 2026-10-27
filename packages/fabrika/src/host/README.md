@@ -79,10 +79,15 @@ The rules, in short:
 
 - A name is registered before anything is written under it. A write under a name nobody
   registered answers `UnknownName`.
-- Only the lease's fence writes a registered name's streams. Anyone may send to its
-  `<name>/inbox`, once per message id.
-- A host stops its program when its lease is lost or its own lease clock runs out, whichever
-  comes first.
+- Only the newest fence of a name writes its streams. Anyone may send to its `<name>/inbox`,
+  once per message id.
+- A fence is good until someone newer claims, at any time (Kafka's producer epoch, experiment
+  151). A claim takes a lease past its end at once, with a bigger fence. A renew by the newest
+  fence works past the end too; after the expiry job wrote `lease_expired`, it writes
+  `lease_resumed`.
+- A host stops its program when the ledger says its lease is lost (a renew answers `lost`, or a
+  newer claim shows), or at its lease's end plus the grace (10 minutes) with no word from the
+  ledger. While it hears nothing it renews every second.
 
 ## Monitors, links and the supervisor
 

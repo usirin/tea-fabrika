@@ -29,6 +29,7 @@ import {
 	type PackRefused,
 	type Platform,
 	readerOf,
+	settingsOf,
 	startWithPacks,
 	type Wired,
 } from "../asks/packs.ts";
@@ -182,7 +183,7 @@ export function deskSession(
 			const pages =
 				reader === null
 					? null
-					: reader.pack.shell.pages(own[reader.name] ?? {}, placesOf(reader.name));
+					: reader.pack.shell.pages(settingsOf(own, reader.name), placesOf(reader.name));
 			// Under the user's home it is shown from `~`, short enough for one line.
 			const shown =
 				pages !== null && places.user !== undefined && pages.startsWith(`${places.user}/`)

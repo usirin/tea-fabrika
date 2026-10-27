@@ -4,13 +4,17 @@
 // program never holds a fenced journal without the sink (demlik issue 728).
 //
 // Every save is one append at the rev it last saw, under the fence of the host's claim. Three
-// guards, all in the ledger: the rev, the fence (only while this claim's lease is live), and the
-// name (a save with no fence is `denied`). A refusal is tea's `StoreConflictError`; tea saves a
+// guards, all in the ledger: the rev, the fence (only while this claim is the name's newest), and
+// the name (a save with no fence is `denied`). A refusal is tea's `StoreConflictError`; tea saves a
 // step before it runs that step's Cmds, so a refused save also stops the Cmds.
 //
 // A save whose answer was lost is sent again under the same id, `<fence>:<expected rev>`; the
 // ledger answers `dup` if the first landed. One id per (fence, rev) is enough: two saves at the
 // same rev cannot both land, and tea sends the same state again when it retries.
+//
+// New in 151: a save the ledger does not answer is sent again with no limit on tries, a second
+// apart at most, until it lands, is refused, or the program stops (`signal`). Experiment 149: a
+// save that gave up after 20 tries ended the program on a two second wifi drop.
 import {type FencedStore, refuse, StoreConflictError} from "@demlik/tea";
 import {Cause, Duration, Effect, Exit, Schema} from "effect";
 import type {Ledger, Row} from "./ledger.ts";
@@ -43,11 +47,15 @@ export const lastStateOf =
 		};
 	};
 
-// tea's store is Promise-shaped: the Effect is run here, at its edge.
-const promised = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
-	Effect.runPromiseExit(effect).then((exit) =>
+// tea's store is Promise-shaped: the Effect is run here, at its edge, until `signal` says stop.
+const promised = <A, E>(effect: Effect.Effect<A, E>, signal: AbortSignal): Promise<A> =>
+	Effect.runPromiseExit(effect, {signal}).then((exit) =>
 		Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
 	);
+
+/** The wait before try `tries + 1` of a write with no answer: 100 ms, doubling, then a second. */
+export const backoff = (tries: number) =>
+	Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5)));
 
 export const journalStore = <S>(
 	ledger: Ledger["Service"],
@@ -58,6 +66,8 @@ export const journalStore = <S>(
 		readonly fence: number;
 		readonly holder: string;
 		readonly note: (n: WriteNote) => void;
+		/** Aborted when the program stops: a save still waiting on the ledger stops with it. */
+		readonly signal: AbortSignal;
 	},
 ): FencedStore<S> => {
 	const lastState = lastStateOf(o.schema);
@@ -93,21 +103,27 @@ export const journalStore = <S>(
 					);
 					return yield* Effect.fail(new StoreConflictError(expected, expected));
 				}
-				// No answer: the append may have landed. Its id makes sending it again safe.
-				if (tries >= 20) {
-					note(false, "unreachable", null);
-					return yield* Effect.fail(new StoreConflictError(expected, -1));
-				}
-				yield* Effect.sleep(Duration.millis(50));
+				// No answer: the append may have landed. Its id makes sending it again safe. Said once,
+				// so the host knows the save waits.
+				if (tries === 1) note(false, "unreachable", null);
+				yield* Effect.sleep(backoff(tries));
 			}
 		});
 
 	const decode = Schema.decodeUnknownExit(o.schema);
 	return {
 		fenced: true,
-		load: () => promised(Effect.map(load, (l) => l.state)),
-		loadFenced: () => promised(Effect.map(load, (l) => ({raw: l.state, version: l.version}))),
-		saveFenced: (state, expected) => promised(save(state, expected)),
+		load: () =>
+			promised(
+				Effect.map(load, (l) => l.state),
+				o.signal,
+			),
+		loadFenced: () =>
+			promised(
+				Effect.map(load, (l) => ({raw: l.state, version: l.version})),
+				o.signal,
+			),
+		saveFenced: (state, expected) => promised(save(state, expected), o.signal),
 		save: () => Promise.reject(new Error("the journal saves only through saveFenced")),
 		migrate: (raw) => {
 			if (raw === null || raw === undefined) return null;

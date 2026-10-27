@@ -12,6 +12,8 @@ import {appWire} from "./wire.ts";
 //   const wire = yield* attach({home, deliver: relay, start});
 //   // no host: `start`, then the socket is tried every 50 ms until it answers, or the host exits
 //   // a socket left by a crash: the same; the new host removes it before it listens (host/run.ts)
+//   // two apps at once on one home: each starts a host; the hosts take turns under a lock, one
+//   // listens and the other steps aside, and both apps attach to the one that listens
 //   // the host speaks another version: Unattached {kind: "version"}, and that host is left running
 //   // a host that answers on its socket but says no hello within 10 s: NoHello
 //   wire.send({type: "page"});
@@ -60,10 +62,15 @@ export const attach = <E, R>(options: {
 							Effect.fail(new NoHost({why: `the host did not listen within ${LISTEN_WITHIN}`})),
 					}),
 				),
+				// The host it started stopped. It may have stepped aside for a host another app started
+				// at the same moment (host/run.ts): then that one answers, and the app attaches to it.
 				exited.pipe(
 					Effect.ignore,
-					Effect.andThen(
-						Effect.fail(new NoHost({why: `the host stopped as it started: see ${paths.log}`})),
+					Effect.andThen(reach(paths.sock)),
+					Effect.flatMap((r) =>
+						r === "live"
+							? Effect.void
+							: Effect.fail(new NoHost({why: `the host stopped as it started: see ${paths.log}`})),
 					),
 				),
 			);

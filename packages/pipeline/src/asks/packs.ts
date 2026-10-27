@@ -4,8 +4,10 @@ import {
 	type AnyProgram,
 	type AnyRun,
 	fit,
+	type Input,
 	input,
 	type Listeners,
+	type Output,
 	output,
 	type Program,
 	type Running,
@@ -184,28 +186,40 @@ const TYPED = output(Typed, "The owner's reply as typed in a shell.");
 /** A refusal, as a shell hears it: what a pack's `shell.unread` output must send. */
 const UNREAD = input(Refused, "A typed reply the pack could not read, and why.");
 
+/**
+ * What `table` holds under `name`, or `undefined`. Only an own key counts: a
+ * pack's wire named `constructor` names no output unless the program declares
+ * one, and a pack named `constructor` has no table unless one is written.
+ */
+const own = <T>(table: Readonly<Record<string, T>>, name: string): T | undefined =>
+	Object.hasOwn(table, name) ? table[name] : undefined;
+
+/** A pack's own settings: its `[pack."<name>"]` table of fabrika.toml, or `{}` when there is none. */
+export const settingsOf = (settings: Readonly<Record<string, unknown>>, name: string): unknown =>
+	own(settings, name) ?? {};
+
 /** Why a pack does not fit the core, or `null`: every wire it asks for fits by shape. */
 export function misfit(core: AnyProgram, pack: Pack): string | null {
 	if (pack.holds === true && core.flags[HOLDS] === undefined)
 		return `it holds what it hears, and the core has no ${HOLDS} flag to wait on it`;
 	for (const [from, to] of Object.entries(pack.listens)) {
-		const out = core.outputs[from];
-		const into = pack.program.inputs[to];
+		const out: Output<unknown> | undefined = own(core.outputs, from);
+		const into: Input<unknown> | undefined = own(pack.program.inputs, to);
 		if (out === undefined) return `the core has no output ${from}`;
 		if (into === undefined) return `the pack has no input ${to}`;
 		if (fit(out, into) === "does_not_fit") return `the core's ${from} does not fit its ${to}`;
 	}
 	for (const [from, to] of Object.entries(pack.answers)) {
-		const out = pack.program.outputs[from];
-		const into = core.inputs[to];
+		const out: Output<unknown> | undefined = own(pack.program.outputs, from);
+		const into: Input<unknown> | undefined = own(core.inputs, to);
 		if (out === undefined) return `the pack has no output ${from}`;
 		if (into === undefined) return `the core has no input ${to}`;
 		if (fit(out, into) === "does_not_fit") return `its ${from} does not fit the core's ${to}`;
 	}
 	if (pack.shell !== undefined) {
 		const {typed, unread} = pack.shell;
-		const into = pack.program.inputs[typed];
-		const out = pack.program.outputs[unread];
+		const into: Input<unknown> | undefined = own(pack.program.inputs, typed);
+		const out: Output<unknown> | undefined = own(pack.program.outputs, unread);
 		if (into === undefined) return `the pack has no input ${typed}`;
 		if (out === undefined) return `the pack has no output ${unread}`;
 		if (fit(TYPED, into) === "does_not_fit") return `its ${typed} does not take a typed reply`;
@@ -272,7 +286,7 @@ export const startWithPacks = <R>(
 		const started: StartedPack[] = [];
 		for (const {name, pack} of packs) {
 			const layer = yield* pack
-				.layer(settings[name] ?? {}, hosting.places(name))
+				.layer(settingsOf(settings, name), hosting.places(name))
 				.pipe(Effect.mapError((why) => refused(name, `its settings: ${why}`)));
 			const unread = pack.shell?.unread;
 			const listeners = Object.fromEntries([
