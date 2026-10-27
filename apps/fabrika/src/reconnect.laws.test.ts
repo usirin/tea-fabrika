@@ -22,20 +22,23 @@ import {
 	type ReconnectCmd,
 	type ReconnectMsg,
 	reconnectMachine,
+	restart,
 	type Tried,
 } from "./reconnect.ts";
 
 // The laws of the app's reconnect (reconnect.ts), on tea's pbt, judged from the ticket and not
 // from the code: when the link to the host drops, the app waits, tries again, and gives up five
-// minutes after the link ended. A host of another version is never tried again.
+// minutes after the link ended. A host of another version is never tried again, and a host that
+// runs older code is stopped only when the person asks (tracker ticket 12).
 //
 // Two kinds of runs feed the laws:
 //
 //   lists   any Msgs in any order, as a broken world might send them: answers nobody asked for,
-//           old timers, Try again at any time. The clock only moves on.
+//           old timers, Try again and the restart at any time. The clock only moves on.
 //   runs    the world as it is: the runtime answers each try and each pick once, fires each
 //           timer it runs once, ends the link only while it is watched, and a timer it stops may
-//           still have fired just before. The person presses Try again when they like.
+//           still have fired just before. The person presses Try again, and the restart, when
+//           they like.
 //
 // The ticket's numbers are written out below, not read from POLICY, so a wrong POLICY fails here.
 
@@ -72,7 +75,13 @@ const why = fc.constantFrom("the socket closed", "EPIPE");
 const tried: fc.Arbitrary<Tried> = fc.oneof(
 	{arbitrary: why.map((w) => ({kind: "lost", why: w}) as const), weight: 24},
 	{arbitrary: fc.constant({kind: "up"} as const), weight: 2},
-	{arbitrary: fc.constant({kind: "refused", theirs: 2, ours: 1} as const), weight: 1},
+	{arbitrary: fc.constant({kind: "version", theirs: 2, ours: 1} as const), weight: 1},
+	{
+		arbitrary: fc
+			.constantFrom("0ld0ld0ld0ld", null)
+			.map((theirs) => ({kind: "build", theirs, ours: "n3wn3wn3wn3w"}) as const),
+		weight: 1,
+	},
 );
 const attempt = fc.integer({min: 0, max: 5});
 /** A pick the jitter Cmd's answer lets through: 0 to 30 s. Any other comes back as jitter_err. */
@@ -86,8 +95,11 @@ const table: MsgArbitraryTable<Msg> = {
 	ended: arbRecordMsg("ended", {why, at: fc.constant(0)}),
 	due: arbRecordMsg("due", {attempt}),
 	again: arbConstantMsg("again"),
+	restart: arbConstantMsg("restart"),
 	attach_ok: tried.map((t) => attach.ok(attach({}), t, 0)),
 	attach_err: fc.constant({type: attach.errType, cmd: attach({}), error: malformed, at: 0}),
+	restart_ok: tried.map((t) => restart.ok(restart({}), t, 0)),
+	restart_err: fc.constant({type: restart.errType, cmd: restart({}), error: malformed, at: 0}),
 	jitter_ok: fc.tuple(attempt, pick).map(([n, ms]) => jitter.ok(jitter({attempt: n}), ms, 0)),
 	jitter_err: attempt.map((n) => ({
 		type: jitter.errType,
@@ -109,7 +121,17 @@ const timed = (pairs: readonly (readonly [Msg, number])[]): readonly Msg[] => {
 		return "at" in msg ? {...msg, at: now} : msg;
 	});
 };
-const weights = {attach_ok: 6, jitter_ok: 4, due: 4, ended: 2, again: 1, attach_err: 1};
+const weights = {
+	attach_ok: 6,
+	jitter_ok: 4,
+	due: 4,
+	ended: 2,
+	again: 1,
+	attach_err: 1,
+	restart: 1,
+	restart_ok: 2,
+	restart_err: 1,
+};
 const lists = fc
 	.array(fc.tuple(arbMsg(table, {weights}), gap), {maxLength: 40, size: "max"})
 	.map(timed);
@@ -129,13 +151,18 @@ type Choice =
 	| {readonly do: "late"}
 	/** The link that is watched ends. */
 	| {readonly do: "end"; readonly why: string}
-	| {readonly do: "again"};
+	| {readonly do: "again"}
+	/** The person presses "Stop the old host and start this one". */
+	| {readonly do: "restart"};
+
+/** A try out: an attach, or a restart, which stops the old host and then attaches. */
+type Out = "attach" | "restart";
 
 interface World {
 	/** The clock, from the app's start. */
 	readonly now: number;
-	/** Tries asked and not answered yet. */
-	readonly tries: number;
+	/** Tries asked and not answered yet, the oldest first. */
+	readonly tries: readonly Out[];
 	/** Picks asked and not answered yet, the oldest first. */
 	readonly picks: readonly JitterCmd[];
 	/** The timer tea runs now, and whether it has fired. */
@@ -145,12 +172,12 @@ interface World {
 	/** The link: not watched, watched, or watched and its one end already told. */
 	readonly link: "off" | "on" | "ended";
 }
-const EMPTY: World = {now: 0, tries: 0, picks: [], timer: null, late: [], link: "off"};
+const EMPTY: World = {now: 0, tries: [], picks: [], timer: null, late: [], link: "off"};
 
 /** The world once `cmds` are asked for: each try and each pick is out until it is answered. */
 const asked = (w: World, cmds: readonly ReconnectCmd[]): World => ({
 	...w,
-	tries: w.tries + cmds.filter((c) => c.type === "attach").length,
+	tries: [...w.tries, ...cmds.flatMap((c) => (c.type === "jitter" ? [] : [c.type]))],
 	picks: [...w.picks, ...cmds.flatMap((c) => (c.type === "jitter" ? [c] : []))],
 });
 
@@ -175,11 +202,16 @@ const subscribed = (machine: Machine, w: World, s: Reconnect): World => {
 const sent = (w: World, c: Exclude<Choice, {do: "wait"}>): readonly [Msg, World] | null => {
 	switch (c.do) {
 		case "answer": {
-			if (w.tries === 0) return null;
-			const after = {...w, tries: w.tries - 1};
-			if (c.tried === null)
-				return [{type: attach.errType, cmd: attach({}), error: malformed, at: w.now}, after];
-			return [attach.ok(attach({}), c.tried, w.now), after];
+			const [out, ...rest] = w.tries;
+			if (out === undefined) return null;
+			const after = {...w, tries: rest};
+			if (out === "attach")
+				return c.tried === null
+					? [{type: attach.errType, cmd: attach({}), error: malformed, at: w.now}, after]
+					: [attach.ok(attach({}), c.tried, w.now), after];
+			return c.tried === null
+				? [{type: restart.errType, cmd: restart({}), error: malformed, at: w.now}, after]
+				: [restart.ok(restart({}), c.tried, w.now), after];
 		}
 		case "pick": {
 			const [out, ...rest] = w.picks;
@@ -214,6 +246,8 @@ const sent = (w: World, c: Exclude<Choice, {do: "wait"}>): readonly [Msg, World]
 				: null;
 		case "again":
 			return [{type: "again"}, w];
+		case "restart":
+			return [{type: "restart"}, w];
 	}
 };
 
@@ -270,6 +304,7 @@ const choice: fc.Arbitrary<Choice> = fc.oneof(
 	{arbitrary: fc.constant({do: "late"} as const), weight: 1},
 	{arbitrary: why.map((w) => ({do: "end", why: w}) as const), weight: 2},
 	{arbitrary: fc.constant({do: "again"} as const), weight: 1},
+	{arbitrary: fc.constant({do: "restart"} as const), weight: 1},
 );
 const choices = fc.array(choice, {maxLength: 100, size: "max"});
 /** The Msgs the world sends `machine`, for tea's pbt to fold again. */
@@ -327,7 +362,14 @@ const states = (run: Run) => [
 const isFailure = ({prev, msg}: ReStep) =>
 	(prev.at === "up" && msg.type === "ended") ||
 	(prev.at === "attaching" &&
-		(msg.type === "attach_err" || (msg.type === "attach_ok" && msg.value.kind === "lost")));
+		(msg.type === "attach_err" || (msg.type === "attach_ok" && msg.value.kind === "lost"))) ||
+	(prev.at === "restarting" &&
+		(msg.type === "restart_err" || (msg.type === "restart_ok" && msg.value.kind === "lost")));
+/** May the person restart the host in `s`? On a host of another version, or of another build. */
+const restartable = (s: Reconnect) =>
+	s.at === "refused" || (s.at === "up" && s.found.kind === "build");
+/** The person's restart, where one is offered. */
+const isRestart = ({prev, msg}: ReStep) => msg.type === "restart" && restartable(prev);
 /** The attempts the step's picks are asked for. */
 const picksOf = (cmds: readonly ReconnectCmd[]) =>
 	cmds.flatMap((c) => (c.type === "jitter" ? [c.attempt] : []));
@@ -340,19 +382,21 @@ const isAgain = ({prev, msg}: ReStep) => prev.at === "stopped" && msg.type === "
 // ---------------------------------------------------------------- never wrong
 
 const oneTryOut = inTheWorld(
-	"at most one try is out at a time: the world never holds two tries unanswered",
-	(run) => states(run).every(({w}) => w.tries <= 1),
+	"at most one try is out at a time: the world never holds two tries unanswered, a restart counted as one",
+	(run) => states(run).every(({w}) => w.tries.length <= 1),
 );
 
 const tryOnlyWhenNoneOut = everyStep(
-	"a try is asked only on the way into attaching, one at a time, and attaching is left only on the try's answer",
-	({prev, msg, next, cmds}) => {
-		const tries = cmds.filter((c) => c.type === "attach").length;
-		const entering = prev.at !== "attaching" && next.at === "attaching";
-		const leaving = prev.at === "attaching" && next.at !== "attaching";
-		const answer = msg.type === "attach_ok" || msg.type === "attach_err";
-		return tries === (entering ? 1 : 0) && (!leaving || answer);
-	},
+	"a try is asked only on the way into attaching, a restart only on the way into restarting, one at a time, and each is left only on its own answer",
+	({prev, msg, next, cmds}) =>
+		(["attaching", "restarting"] as const).every((at) => {
+			const cmd = at === "attaching" ? "attach" : "restart";
+			const tries = cmds.filter((c) => c.type === cmd).length;
+			const entering = prev.at !== at && next.at === at;
+			const leaving = prev.at === at && next.at !== at;
+			const answer = msg.type === `${cmd}_ok` || msg.type === `${cmd}_err`;
+			return tries === (entering ? 1 : 0) && (!leaving || answer);
+		}),
 );
 
 const waitsAtMost30 = everyStep(
@@ -377,7 +421,7 @@ const outagesOf = (run: Run) => {
 	return run.moments.map((m) => {
 		const {msg} = m.step;
 		if (msg.type === "ended" && m.step.prev.at === "up") [from, ended] = [msg.at, msg.at];
-		if (isAgain(m.step)) [from, ended] = [m.world.now, null];
+		if (isAgain(m.step) || isRestart(m.step)) [from, ended] = [m.world.now, null];
 		if (isUp(m.step)) ended = null;
 		return {m, from, ended};
 	});
@@ -408,8 +452,19 @@ const stopsOnTime = inTheWorld(
 );
 
 const refusedFinal = everyStep(
-	"refused is final: no Msg leads out of it, and nothing is asked",
-	({prev, next, cmds}) => prev.at !== "refused" || (same(next, prev) && cmds.length === 0),
+	"refused is left only by the person's restart: no other Msg leads out of it, or asks anything",
+	({prev, msg, next, cmds}) =>
+		prev.at !== "refused" || msg.type === "restart" || (same(next, prev) && cmds.length === 0),
+);
+
+const restartOnlyAsked = everyStep(
+	"a restart is asked only by the person, on a host of another version or build, and that always restarts it",
+	({prev, msg, next, cmds}) => {
+		const restarts = cmds.filter((c) => c.type === "restart").length;
+		if (msg.type === "restart" && restartable(prev))
+			return next.at === "restarting" && same(cmds, [restart({})]);
+		return restarts === 0 && (next.at !== "restarting" || prev.at === "restarting");
+	},
 );
 
 const againOnlyStopped = everyStep(
@@ -450,10 +505,14 @@ const subsOnlyWhen = everyStep(
 );
 
 const refusedOnlyByHost = everyStep(
-	"it is refused only when the try out was refused for another version, with both versions kept, and such a try always ends there",
+	"it is refused only when the try or restart out met another version, with both versions kept, and such a try always ends there",
 	({prev, msg, next}) => {
-		const answer = prev.at === "attaching" && msg.type === "attach_ok" ? msg.value : null;
-		if (answer?.kind === "refused")
+		const answer =
+			(prev.at === "attaching" && msg.type === "attach_ok") ||
+			(prev.at === "restarting" && msg.type === "restart_ok")
+				? msg.value
+				: null;
+		if (answer?.kind === "version")
 			return next.at === "refused" && next.theirs === answer.theirs && next.ours === answer.ours;
 		return next.at !== "refused" || prev.at === "refused";
 	},
@@ -471,7 +530,8 @@ const stoppedStays = everyStep(
 const movesOn = (s: Reconnect, w: World): boolean => {
 	switch (s.at) {
 		case "attaching":
-			return w.tries >= 1;
+		case "restarting":
+			return w.tries.length >= 1;
 		case "waiting":
 			return s.wait === null ? w.picks.length >= 1 : w.timer !== null && !w.timer.fired;
 		case "up":
@@ -483,16 +543,16 @@ const movesOn = (s: Reconnect, w: World): boolean => {
 };
 
 const neverStalls = inTheWorld(
-	"it never stalls: trying, a try is out; waiting for a pick, a pick is out; waiting, its timer runs and has not fired; up, the link is watched",
+	"it never stalls: trying or restarting, a try is out; waiting for a pick, a pick is out; waiting, its timer runs and has not fired; up, the link is watched",
 	(run) => states(run).every(({s, w}) => movesOn(s, w)),
 );
 
 const successResets = everyTrace(
-	"a success resets the count: the first failure after the app's start or a success waits the shortest (attempt 1)",
+	"a success resets the count: the first failure after the app's start, a success or a restart waits the shortest (attempt 1)",
 	(steps) => {
 		let fresh = true;
 		for (const step of steps) {
-			if (isUp(step)) fresh = true;
+			if (isUp(step) || isRestart(step)) fresh = true;
 			if (isAgain(step)) fresh = false;
 			if (!isFailure(step)) continue;
 			if (fresh && !picksFor(step, 1)) return false;
@@ -507,7 +567,7 @@ const againStartsOver = everyTrace(
 	(steps) => {
 		let fresh = false;
 		for (const step of steps) {
-			if (isUp(step)) fresh = false;
+			if (isUp(step) || isRestart(step)) fresh = false;
 			if (isAgain(step)) {
 				if (step.next.at !== "attaching" || !same(step.cmds, [attach({})])) return false;
 				fresh = true;
@@ -525,7 +585,7 @@ const ladder = everyTrace(
 	(steps) => {
 		let last: number | null = null;
 		for (const step of steps) {
-			if (isUp(step) || isAgain(step)) last = null;
+			if (isUp(step) || isAgain(step) || isRestart(step)) last = null;
 			if (!isFailure(step)) continue;
 			const [asked] = picksOf(step.cmds);
 			if (last !== null && step.next.at !== "stopped" && asked !== last + 1) return false;
@@ -536,26 +596,24 @@ const ladder = everyTrace(
 );
 
 const noteSays = everyTrace(
-	"the window's note: nothing while up or on the app's first try, reconnecting while it still tries, stopped once stopped, and both versions when refused",
+	"the window's note: what was found while up, nothing on the app's first try, reconnecting while it still tries, stopped once stopped, both versions when refused, and restarting while it restarts",
 	(steps) => {
 		let first = true;
 		const says = (s: Reconnect) => {
 			const note = noteOf(s);
 			switch (s.at) {
 				case "up":
-					return note === null;
+					return same(note, s.found);
 				case "attaching":
-					return first ? note === null : note?.now === "reconnecting";
+					return first ? note === null : note?.kind === "reconnecting" && note.why === s.why;
 				case "waiting":
-					return note?.now === "reconnecting";
+					return note?.kind === "reconnecting" && note.why === s.why;
 				case "stopped":
-					return note?.now === "stopped";
+					return note?.kind === "stopped" && note.why === s.why;
 				case "refused":
-					return (
-						note?.now === "refused" &&
-						note.why.includes(String(s.theirs)) &&
-						note.why.includes(String(s.ours))
-					);
+					return same(note, {kind: "version", theirs: s.theirs, ours: s.ours});
+				case "restarting":
+					return same(note, {kind: "restarting"});
 			}
 		};
 		const start = steps[0]?.prev;
@@ -576,6 +634,7 @@ const LAWS = [
 	neverStopsEarly,
 	stopsOnTime,
 	refusedFinal,
+	restartOnlyAsked,
 	againOnlyStopped,
 	staleChangesNothing,
 	subsOnlyWhen,
@@ -641,7 +700,27 @@ const PLANTS = {
 		attach_err: (s, m) => real.attach_err(s, {...m, at: originOf(s) ?? m.at}),
 	}),
 	/** A link end while refused starts the tries again. */
-	refusedRetries: plant({ended: (s, m) => real.ended(s.at === "refused" ? {at: "up"} : s, m)}),
+	refusedRetries: plant({
+		ended: (s, m) => real.ended(s.at === "refused" ? {at: "up", found: {kind: "up"}} : s, m),
+	}),
+	/** A host of another version is restarted at once, unasked. */
+	restartsUnasked: plant({
+		attach_ok: (s, m) =>
+			s.at === "attaching" && m.value.kind === "version"
+				? [{at: "restarting"}, [restart({})]]
+				: real.attach_ok(s, m),
+	}),
+	/** The restart is offered on a host of this build too. */
+	restartsSameBuild: plant({
+		restart: (s, m) => (s.at === "up" ? [{at: "restarting"}, [restart({})]] : real.restart(s, m)),
+	}),
+	/** A restart that failed keeps the count it had before the host was found. */
+	restartKeepsCount: plant({
+		restart_ok: (s, m) =>
+			s.at === "restarting" && m.value.kind === "lost"
+				? lostFrom({at: "attaching", retry: {attempt: 3}, why: null}, m.value.why, m.at)
+				: real.restart_ok(s, m),
+	}),
 	/** Try again while waiting cuts the wait short. */
 	againWhileWaiting: plant({
 		again: (s, m) =>
@@ -732,7 +811,14 @@ describe("the reconnect machine's laws", () => {
 		const sentTypes = new Set(runs.flatMap((run) => run.moments.map((m) => m.step.msg.type)));
 		const stopped = runs.filter((run) => states(run).some(({s}) => s.at === "stopped"));
 		const restarted = runs.filter((run) => run.moments.some((m) => isAgain(m.step)));
-		expect([...reached].sort()).toEqual(["attaching", "refused", "stopped", "up", "waiting"]);
+		expect([...reached].sort()).toEqual([
+			"attaching",
+			"refused",
+			"restarting",
+			"stopped",
+			"up",
+			"waiting",
+		]);
 		expect([...sentTypes].sort()).toEqual(Object.keys(table).sort());
 		expect(stopped.length).toBeGreaterThan(OPTS.numRuns / 10);
 		expect(restarted.length).toBeGreaterThan(OPTS.numRuns / 20);
@@ -747,7 +833,8 @@ describe("the reconnect machine's laws", () => {
 			waitsAMinute: [waitsAtMost30.name],
 			stopsEarly: [neverStopsEarly.name],
 			neverStops: [stopsOnTime.name],
-			refusedRetries: [refusedFinal.name],
+			// Waiting where it should be refused, a later failure counts on from that wait.
+			refusedRetries: [refusedFinal.name, successResets.name],
 			// Cutting a wait short also starts the five minutes and the count over, unasked.
 			againWhileWaiting: [stopsOnTime.name, againOnlyStopped.name, ladder.name],
 			staleDue: [staleChangesNothing.name],
@@ -755,11 +842,13 @@ describe("the reconnect machine's laws", () => {
 			keepsCount: [successResets.name],
 			flatLadder: [ladder.name],
 			watchesWhileWaiting: [subsOnlyWhen.name],
-			timerBeforePick: [subsOnlyWhen.name],
+			// A pick of 0 ms then keeps the timer of 0 ms that already fired: nothing moves it on.
+			timerBeforePick: [subsOnlyWhen.name, neverStalls.name],
 			// With no pick asked, a pick nobody asked for is the only way on, and the machine takes it.
 			forgetsToPick: [staleChangesNothing.name, neverStalls.name, successResets.name],
 			// A try that did not read is a failure: it must wait and try again, not give up.
 			refusesOnError: [
+				stopsOnTime.name,
 				refusedOnlyByHost.name,
 				successResets.name,
 				againStartsOver.name,
@@ -769,6 +858,16 @@ describe("the reconnect machine's laws", () => {
 			againKeepsCount: [againStartsOver.name],
 			stoppedRetriesAlone: [staleChangesNothing.name, stoppedStays.name],
 			forgetsWhy: [noteSays.name],
+			// Stopping a host the person was never asked about: the restart's own law, and what it
+			// takes from the failures that should have waited on the refusal instead.
+			restartsUnasked: [
+				stopsOnTime.name,
+				restartOnlyAsked.name,
+				refusedOnlyByHost.name,
+				ladder.name,
+			],
+			restartsSameBuild: [restartOnlyAsked.name],
+			restartKeepsCount: [successResets.name],
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);

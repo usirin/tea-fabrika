@@ -13,7 +13,7 @@ import {pathsOf, reach} from "./socket.ts";
 // its own (host.test.ts). Node is named only through Effect's platform: `NodeSocketServer`, and
 // the ledger's node:sqlite and the storage's files from @kampus/fabrika.
 //
-//   yield* runHost({home, pid: 4242})
+//   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
 //   // removed; <home>/host/sock listened on, mode 0600; the pid written; the lock let go of; the
 //   // desk read back from desk.json; until the scope closes
@@ -41,9 +41,11 @@ export const runHost = (options: {
 	readonly pid: number;
 	/** The link's version this host speaks, for a test of an old host. */
 	readonly ours?: number | undefined;
+	/** The build this host's hello names, for a test of an older host; `null` names none. */
+	readonly build?: string | null | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {home, pid, ours} = options;
+		const {home, pid, ours, build} = options;
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const paths = yield* pathsOf(home);
@@ -82,6 +84,7 @@ export const runHost = (options: {
 		return yield* serve({
 			history,
 			ours,
+			build,
 			place: (tile) => ({
 				jobs: fileStorage(at("storage", "tiles", tile)),
 				drop: fs.remove(at("storage", "tiles", tile), {recursive: true}).pipe(Effect.ignore),

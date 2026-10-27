@@ -1,7 +1,7 @@
 # An old host is named, then restarted
 
-**Decided 2026-10-25 by the owner.** Tracker ticket 12. Section 1 is built;
-sections 2 and 3 are not.
+**Decided 2026-10-25 by the owner.** Tracker ticket 12. Sections 1, 2 and 3
+are built.
 
 ```ts
 // A sketch. What the app does when it finds a host already running on its home.
@@ -113,6 +113,36 @@ const restart = Effect.gen(function* () {
 - **How sure: 75%.** The doubt: attaching a job back may send a half-finished
   paid call, or a real comment, a second time. One test on one real job, in
   this lane, would settle it.
+- **Built 2026-10-26.**
+  - `Found` is a type in `apps/fabrika/src/messages.ts`, with `Lost`
+    (reconnecting, stopped, restarting) beside it. The window draws them in one
+    `switch` that ends in `absurd`, so a new case fails the typecheck.
+  - The refused page says "The host speaks link version 1. This app speaks 2."
+    and has the button. A yes sends `{type: "restart"}` to the app.
+  - `stopHost` (`apps/fabrika/src/host/stop.ts`) sends a stop only while a host
+    answers on the socket, and never to the app's own pid. It waits up to
+    10 seconds for the pid to be gone. `restart` in `attach.ts` is `stopHost`,
+    then `attach`.
+  - The reconnect machine has a `restarting` state. A restart is taken only
+    from `refused`, or from `up` on another build. A restart that fails waits
+    and tries again, from a fresh count.
+- **The doubt, tested on a fake job** (`packages/fabrika/src/shell/attach-again.test.ts`).
+  A kept machine makes one call, which never answers in the first life. The
+  host stops, and the next tsh runs `attach %1`.
+  - Nothing sends a call again by itself. `main` runs again, and the kept
+    machine gets one Msg first: its kind's `recovered` Msg, or, with none, the
+    caller's start Msg again.
+  - With no `recovered`: the start Msg finds the call out and sends nothing.
+    The call was made once, and the job waits on an answer that never comes.
+  - With a `recovered` that sends the call: it goes again, once. 2 calls.
+  - A call answered before the stop is not sent again, either way.
+  - **So the answer is in each kind's `recovered`, not in the restart.** The
+    pipeline's build stage has one: on `resume` it sends a write that was out
+    (pushing, opening a pull request) again, and starts a cut-off agent run
+    again, once. Today the app lists only tsh's small programs, the counter and
+    the tracker, and none of them has a `recovered`. So today a restart sends
+    nothing twice. When a pipeline stage runs in the host, a restart can send a
+    write or a paid run a second time, by its own design.
 
 ## 3. Same link, another build
 
@@ -132,6 +162,17 @@ const restart = Effect.gen(function* () {
 - **Cost:** small. A define in the build, a field in the hello, a banner.
 - **How sure: 85%.** The banner turns a silent failure into a visible one, at
   little cost.
+- **Built 2026-10-26.**
+  - `build.ts` hashes every file both bundles read, and writes the first 12
+    hex digits into both as `FABRIKA_BUILD` (`apps/fabrika/src/build-id.ts`).
+    Run from source, the build is `"source"`.
+  - Only the host's hello names the build. The host reads strictly and refuses
+    a key it does not know, so an app hello with `build` would be refused by
+    every host built before this.
+  - `attach` answers `{kind: "up"}` on the same build, else
+    `{kind: "build", theirs, ours}`, with `theirs: null` for a hello that names
+    none. The window shows the banner "The host runs older code" with the
+    same button, and the desk stays usable under it.
 
 ## The order of work
 
@@ -142,12 +183,23 @@ const restart = Effect.gen(function* () {
 
 ## What it cannot tell us
 
-- Only section 1 is built.
 - The tmux and zellij lines were read in their source and docs. VS Code's one
   server per build comes from a research pass and was not read again. None of
   the three was tried by hand.
-- Whether a restart sends a paid call twice is open until the test in
-  section 2 runs.
+- The restart was tested on a fake job, not a real one. It shows that a call
+  goes again only when a kind's `recovered` sends it. It does not show whether
+  the build stage's second push or second pull request is harmless. That is a
+  test for when a stage first runs in the host.
+- A tracker write queued in the old host's memory, and not yet in the ledger,
+  is lost on a restart, not sent twice.
+- An old app that meets a new host reads the host's hello as a bad line, since
+  it does not know `build`, and closes the link. Only an app newer than its
+  host is covered.
+- `stopHost` reads the pid file, then sends the stop. A host that exits in
+  between, and an unrelated process that gets its pid, would get the stop. The
+  window is a few milliseconds, and the socket check before it narrows it.
+- The window was not opened by hand. The end-to-end script (`e2e.ts`) opens a
+  window and was not run; its checked words are kept.
 - Whether each new schema takes every state its machine can reach is not
   tested yet. A law that saves and loads every reachable state would settle
   it; until then, a schema too strict shows up as a run that dies on save.

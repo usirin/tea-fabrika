@@ -16,14 +16,15 @@ import {
 	session,
 	shell,
 } from "electron";
-import {attach, NoHello, NoHost} from "./attach.ts";
+import {attach, NoHello, NoHost, restart} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
-import {readToApp, type ToPage} from "./messages.ts";
+import {type LinkNow, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
-import {type Note, noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
+import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -36,8 +37,13 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   detached, wait for its socket, then connect. A socket left by a crash: the
 //                   same, and the new host removes it
 //   hello           both sides say which version of the link they speak (link.ts). Another
-//                   version: the app does not attach, says so plainly in its window, and leaves
-//                   that host running with its jobs
+//                   version: the app does not attach, names both versions in its window, and
+//                   leaves that host running with its jobs. The host's hello names its build too:
+//                   another build, and the app attaches, with a banner, "the host runs older code"
+//   restart         either way, the window offers "Stop the old host and start this one". A yes
+//                   stops that host by its pid, waits for it to exit, and attaches, which starts
+//                   one of this build (attach.ts, `restart`). Its running jobs stop; their saved
+//                   lists stay, and each comes back with `attach %n`
 //   the page        it loads and says hello: the host is told `page`, and sends the desk, its
 //                   Ctrl-B table, and a port for every tile's terminal and every run shown
 //   a port          what the page sends on one goes to the host as {type: "on", port, m}; what
@@ -245,18 +251,18 @@ const triedOf = (e: unknown): Tried => {
 	if (e instanceof NoHost) return {kind: "lost", why: `The host did not start: ${e.why}.`};
 	if (e instanceof NoHello)
 		return {kind: "lost", why: `The host did not answer: it said no hello within ${e.within}.`};
+	if (e instanceof NotStopped) return {kind: "lost", why: `The old host did not stop: ${e.why}.`};
 	if (!(e instanceof Unattached))
 		return {kind: "lost", why: `The host could not be started: ${String(e)}.`};
-	if (e.why.kind === "version") return {kind: "refused", theirs: e.why.theirs, ours: e.why.ours};
+	if (e.why.kind === "version") return {kind: "version", theirs: e.why.theirs, ours: e.why.ours};
 	return {kind: "lost", why: `The host did not answer: ${e.why.what}.`};
 };
 
 /** The link that is up now, and the scope it lives in: closed once the link ends. */
 type Held = {readonly wire: Wire<Up>; readonly scope: Scope.Closeable};
 
-/** Is what the window says now the same as what it was told last? */
-const same = (a: Note | null, b: Note | null) =>
-	a === null || b === null ? a === b : a.now === b.now && a.why === b.why;
+/** Is what the window shows now the same as what it was told last? Each is plain data. */
+const same = (a: LinkNow | null, b: LinkNow | null) => JSON.stringify(a) === JSON.stringify(b);
 
 const main = Effect.gen(function* () {
 	yield* Effect.tryPromise({
@@ -279,8 +285,8 @@ const main = Effect.gen(function* () {
 	let paged = false;
 	/** The link while it is up. Down, the reconnect machine (reconnect.ts) says what is done. */
 	let held: Held | null = null;
-	/** What the window was told of the link last, while it is down. */
-	let said: Note | null = null;
+	/** What the window was told of the link last. */
+	let said: LinkNow | null = null;
 	const ports = portsFor(() => current);
 
 	const toHost = (m: Up) => held?.wire.send(m);
@@ -326,21 +332,32 @@ const main = Effect.gen(function* () {
 	 * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
 	 * start one the same way the app's start does, so the kept desk comes back.
 	 */
-	const starting = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner | Path.Path>();
-	const tryAttach = Effect.gen(function* () {
-		const link = yield* Scope.fork(scope);
-		const exit = yield* attach({home, deliver: fromHost, start: startHost}).pipe(
-			Scope.provide(link),
-			Effect.provideContext(starting),
-			Effect.exit,
-		);
-		if (Exit.isFailure(exit)) {
-			yield* Scope.close(link, exit);
-			return triedOf(Cause.squash(exit.cause));
-		}
-		held = {wire: exit.value, scope: link};
-		if (paged) exit.value.send({type: "page"});
-		return {kind: "up"} as const;
+	const starting = yield* Effect.context<
+		ChildProcessSpawner.ChildProcessSpawner | Path.Path | FileSystem.FileSystem
+	>();
+	const tryWith = (how: typeof attach | typeof restart) =>
+		Effect.gen(function* () {
+			const link = yield* Scope.fork(scope);
+			const exit = yield* how({home, deliver: fromHost, start: startHost}).pipe(
+				Scope.provide(link),
+				Effect.provideContext(starting),
+				Effect.exit,
+			);
+			if (Exit.isFailure(exit)) {
+				yield* Scope.close(link, exit);
+				return triedOf(Cause.squash(exit.cause));
+			}
+			held = {wire: exit.value.wire, scope: link};
+			if (paged) exit.value.wire.send({type: "page"});
+			return exit.value.found satisfies Tried;
+		});
+	const tryAttach = tryWith(attach);
+	/** The person said yes to the restart: this app lets go of the old host's link first. */
+	const tryRestart = Effect.gen(function* () {
+		const link = held;
+		held = null;
+		if (link !== null) yield* Scope.close(link.scope, Exit.void);
+		return yield* tryWith(restart);
 	});
 	/** The link that is up, until it ends: then its scope closes, and the machine is told why. */
 	const watch = Effect.gen(function* () {
@@ -357,6 +374,7 @@ const main = Effect.gen(function* () {
 	const reconnect = yield* run(reconnectMachine, {
 		interpret: {
 			attach: () => tryAttach,
+			restart: () => tryRestart,
 			jitter: (c) => Effect.sync(() => backoffDelay(c.attempt, POLICY, defaultRng)),
 		},
 		subscribe: {link: () => Stream.fromEffect(watch)},
@@ -367,14 +385,15 @@ const main = Effect.gen(function* () {
 		const note = noteOf(s);
 		if (same(note, said)) return;
 		said = note;
-		if (note !== null) toPage(note);
+		if (note !== null) toPage({type: "link", now: note});
 	});
-	/** The desk's port: Try again is the app's own, and the rest goes on to the host. */
+	/** The desk's port: Try again and the restart are the app's own, and the rest goes on to the host. */
 	const deskPort = () => {
 		const toDesk = onTo("desk");
 		ports.push("desk", (raw) => {
-			if (readToApp(raw).kind === "read")
-				Effect.runFork(reconnect.dispatch({type: "again"}).pipe(Effect.ignore));
+			const own = readToApp(raw);
+			if (own.kind === "read")
+				Effect.runFork(reconnect.dispatch({type: own.msg.type}).pipe(Effect.ignore));
 			else toDesk(raw);
 		});
 	};
@@ -413,8 +432,9 @@ const main = Effect.gen(function* () {
 		ports.reset();
 		paged = true;
 		deskPort();
+		// What the window shows of the link first, so a banner is there before the desk comes.
+		if (said !== null) toPage({type: "link", now: said});
 		if (held !== null) held.wire.send({type: "page"});
-		else if (said !== null) toPage(said);
 	});
 	app.on("second-instance", showWindow);
 	// The dock icon, on macOS: the window there is, or a new one on the same desk.
