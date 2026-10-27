@@ -62,7 +62,7 @@ beside our adapter, this is what is left:
 // ACP's adapter, on its Claude:
 { systemPrompt: {type: "preset", preset: "claude_code"},  // 27,212 characters on its CLI
   permissionMode: "acceptEdits", canUseTool,               // our ACP client refuses every ask
-  hooks: {},                                               // only UI hooks of its own
+  hooks: {PostToolUse: [/* its UI updates */]},            // no guard
   /* no outputFormat: the schema goes in the prompt */
   /* effort: none for Haiku 4.5 */
   includePartialMessages: true, extraArgs: {"replay-user-messages": ""},
@@ -198,7 +198,7 @@ the same runs gives the first pool a mean as high as it had.
   took 25 s). With the hook off, no-guard was as slow as ours. ACP's runs had
   no ask at all.
 - **The effort.** 156 set `low`. Haiku 4.5 takes no effort: the CLI's model
-  list says so, and every transcript has no effort on its turns.
+  list gives it no effort levels, and no turn in any transcript has one.
 - **The model.** Every main request in all 82 runs went to
   `claude-haiku-4-5-20251001`. But the alias moves: CLI 2.1.296 reads `haiku`
   as `claude-haiku-5-5` (effort low to max), and CLI 2.1.286, inside ACP's
@@ -229,13 +229,14 @@ the same runs gives the first pool a mean as high as it had.
   made. Cost: none seen. How sure: 80%. The doubt: the memory-off rows were a
   little slower (p = 0.13) and all ran later. What would settle it: 20 runs of
   preset and after in turn, about $1.
-- **Do not chase the slow mode in the adapter.** It is the model's first
-  draft, on every path. 81 of 82 runs still ended right. If a stage needs less
-  spread in time, measure a stronger model on the same job; Haiku 4.5 is the
-  smallest. How sure: 85%.
-- **Name models by full id.** `haiku` means a different model on the next CLI.
-  The job here named `claude-haiku-4-5` on our SDK for that reason. How sure:
-  90%.
+- **Do not chase the slow mode in the adapter.** Why: it is the model's first
+  draft, on every path, and 81 of 82 runs still ended right. Cost: the spread
+  stays, about 1 run in 2 over 30 s on this job. If a stage needs less spread,
+  measure a stronger model on the same job; Haiku 4.5 is the smallest. How
+  sure: 85%.
+- **Name models by full id.** Why: `haiku` means a different model on the
+  next CLI. The job here named `claude-haiku-4-5` on our SDK for that reason.
+  Cost: an id to change by hand when a model is retired. How sure: 90%.
 - **Follow-up, not done here:** the pipeline's own Claude stages
   (`builder.ts`, `reviewer.ts`, `planner.ts`, `sorter.ts` under
   `packages/pipeline/src/stages/`) name no system prompt either, so they run
@@ -249,7 +250,8 @@ the same runs gives the first pool a mean as high as it had.
   transcripts stay on the laptop. This script saves only counts and scrubbed
   error text from them.
 - 156's row said "the Claude speed gap is not explained". This is the
-  explanation: mostly chance on few runs, plus the missing system prompt.
+  explanation: mostly chance on few runs, and perhaps the missing system
+  prompt in the far tail.
 
 ## 8. What it cannot tell us
 
