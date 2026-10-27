@@ -13,9 +13,9 @@ expect {
 }
 want "tsh\$ "
 send "tell %1 add 2\r"
-want "\[1\] 2"
+want "\[1\] total 2"
 send "tell %1 add 3\r"
-want "\[1\] 5"
+want "\[1\] total 5"
 sleep 0.3
 exec kill -9 [exp_pid]
 ended
@@ -30,7 +30,7 @@ send "attach $run &\r"
 want "\[1\] attached $run"
 want "tsh\$ "
 send "tell %1 add 1\r"
-want "\[1\] 6"
+want "\[1\] total 6"
 want "tsh\$ "
 send "close %1 add\r"
 want "\[1\] ended  tally"

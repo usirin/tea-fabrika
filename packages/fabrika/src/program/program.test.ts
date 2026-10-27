@@ -64,6 +64,7 @@ const greeter = defineProgram({
 	machines: {
 		tally: kind({
 			machine: tally,
+			state: Schema.Struct({greeted: Schema.Int}),
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "tally", steps: {}}),

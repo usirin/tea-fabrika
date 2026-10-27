@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {describe, expect, it} from "@effect/vitest";
-import {Cause, Duration, Effect, Fiber, Option, References, Stream} from "effect";
+import {Cause, Duration, Effect, Fiber, Option, References, Schema, Stream} from "effect";
 import {type Copy, defineProgram, kind, listing, start} from "./program.ts";
 import {memoryStorage} from "./storage.ts";
 
@@ -26,7 +26,8 @@ const step = defineMachine({
 		finish: (s) => [{...s, done: true}, []],
 	},
 });
-type Toy = {readonly n: number; readonly done: boolean};
+const Toy = Schema.Struct({n: Schema.Int, done: Schema.Boolean});
+type Toy = typeof Toy.Type;
 
 /** What the test holds of one copy: the way to tell it a Msg. */
 interface Handle {
@@ -53,6 +54,7 @@ const pair = (
 		machines: {
 			step: kind({
 				machine: step,
+				state: Toy,
 				parent: "main",
 				options: () => ({ctx: undefined, terminal: (s: Toy) => s.done}),
 				drawing: ({id}) => ({name: id, steps: {}}),
@@ -263,6 +265,7 @@ describe("status lines: declared, and typed", () => {
 	it("cannot be forgotten: a kind with no line does not compile, and is refused past the types; a line sits on its kind, so none names a machine the program does not run", () => {
 		const declared = {
 			machine: step,
+			state: Toy,
 			parent: "main",
 			options: () => ({ctx: undefined}),
 			drawing: () => ({name: "step", steps: {}}),

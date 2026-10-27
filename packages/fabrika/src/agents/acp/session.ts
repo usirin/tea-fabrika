@@ -1,4 +1,5 @@
 import {defineMachine} from "@demlik/tea";
+import {Schema} from "effect";
 
 // What one `acp` run keeps across a restart: which harness, the ACP session
 // id it opened, and the prompts told and not answered yet. The first prompt
@@ -13,22 +14,25 @@ import {defineMachine} from "@demlik/tea";
 // Kept as small as it can be: the transcript is not here. It comes back from
 // the harness's replay, or not at all (./transcript.ts).
 
-export interface Waiting {
-	readonly n: number;
-	readonly prompt: string;
-}
+/** A whole number, 0 or more. */
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export interface Session {
+export const Waiting = Schema.Struct({n: Count, prompt: Schema.String});
+export type Waiting = typeof Waiting.Type;
+
+/** What a run keeps: the machine's state, and the schema it is kept and read back through. */
+export const Session = Schema.Struct({
 	/** The harness it was opened on: a session cannot move to another harness. */
-	readonly agent: string | null;
+	agent: Schema.NullOr(Schema.String),
 	/** The ACP session id. `null`: none opened yet. */
-	readonly id: string | null;
+	id: Schema.NullOr(Schema.String),
 	/** Turns ended. */
-	readonly turns: number;
+	turns: Count,
 	/** Prompts told so far: the next one is `told + 1`. */
-	readonly told: number;
-	readonly waiting: readonly Waiting[];
-}
+	told: Count,
+	waiting: Schema.Array(Waiting),
+});
+export type Session = typeof Session.Type;
 
 export type SessionMsg =
 	| {readonly type: "opened"; readonly agent: string; readonly id: string}

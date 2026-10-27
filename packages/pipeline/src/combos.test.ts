@@ -360,6 +360,25 @@ describe("spawn: a child per item", () => {
 		expect(stepChild(children, "zz", (s) => [s, ["cmd"]])).toEqual([children, []]);
 	});
 
+	it("takes a key named as a plain object's own names as any other key", () => {
+		const none: Children<Child> = {};
+		expect(stepChild(none, "constructor", (s) => [s, ["cmd"]])).toEqual([none, []]);
+		let children = none;
+		for (const key of ["constructor", "__proto__"])
+			children = spawn(children, key, {n: 0, wants: key}, 2) ?? children;
+
+		expect(Object.entries(children)).toEqual([
+			["constructor", {slot: 0, state: {n: 0, wants: "constructor"}}],
+			["__proto__", {slot: 1, state: {n: 0, wants: "__proto__"}}],
+		]);
+		const [next, cmds] = stepChild(children, "__proto__", (s) => [{...s, n: s.n + 1}, ["cmd"]]);
+		expect(Object.entries(next)[1]).toEqual([
+			"__proto__",
+			{slot: 1, state: {n: 1, wants: "__proto__"}},
+		]);
+		expect(cmds).toEqual(["cmd"]);
+	});
+
 	it("lifts a kind of child Sub into one entry per slot, so a sibling ending never moves another's Sub", () => {
 		const entries = slotSubs(
 			2,

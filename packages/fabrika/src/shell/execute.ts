@@ -1,7 +1,7 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
-import type {Storage} from "../program/storage.ts";
+import {StateRefused, type Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
@@ -64,6 +64,32 @@ export type Mode =
 const show = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 const note = (shell: Shell, msg: JobsMsg) => shell.table.dispatch(msg).pipe(Effect.ignore);
+
+/** What tsh says of a job whose kept state its machine's schema refuses. */
+export const SAVED_BY_OLDER_CODE = "this job was saved by older code, can't open it";
+
+/** A failure, or one it was caused by, is a kept state its schema refused. */
+const isRefusal = (failure: unknown): boolean => {
+	let at = failure;
+	for (let depth = 0; depth < 8 && typeof at === "object" && at !== null; depth++) {
+		if (at instanceof StateRefused) return true;
+		at = "cause" in at ? at.cause : undefined;
+	}
+	return false;
+};
+
+/**
+ * A run that ended because one of its machines kept a state its schema
+ * refuses: older code saved it. Its program declared the failure or died of
+ * it; either way the run never booted that machine, and wrote nothing over it.
+ */
+export const refusedEnd = (ended: Ended<unknown>): boolean =>
+	ended.kind === "failed" &&
+	ended.cause.reasons.some((reason) =>
+		Cause.isFailReason(reason)
+			? isRefusal(reason.error)
+			: Cause.isDieReason(reason) && isRefusal(reason.defect),
+	);
 
 /** One line of why a run failed: its declared failure as the program sent it, or a defect's first line. */
 const whyOf = (ended: Ended<unknown>): string => {
@@ -248,6 +274,12 @@ const waitFor = (shell: Shell, runs: readonly AnyRunning[], watcher: Watcher) =>
  * Tell the table each run's end, as it comes, and close the job's scope after
  * the last. Its fiber answers every end once the table has heard them all, so
  * whoever waits on it never sees a job end that the table does not show.
+ *
+ * A run whose kept state its schema refuses (`refusedEnd`) is not an end the
+ * job leaves the table by: the rest of the job stops, since it cannot go on
+ * without that run, and the job stays in the table, detached, as it was. So a
+ * job saved by older code is never dropped by tsh, and a person drops it with
+ * `stop %n`.
  */
 const watchEnds = (
 	shell: Shell,
@@ -260,18 +292,26 @@ const watchEnds = (
 		const watcher: Watcher = yield* Deferred.make<readonly Ended<unknown>[]>();
 		// In the map before the fiber starts, so the fiber's own leaving always finds it there.
 		if (first !== undefined) shell.watched.set(first.run.id, watcher);
+		const stopAll = Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded", discard: true});
 		yield* Effect.forEach(
 			runs,
 			(r) =>
 				r.run.ended.pipe(
-					Effect.tap(() =>
+					Effect.tap((ended) =>
 						Effect.sync(() => shell.live.delete(r.run.id)).pipe(
-							Effect.andThen(note(shell, {type: "stage_ended", run: r.run.id})),
+							Effect.andThen(
+								refusedEnd(ended) ? stopAll : note(shell, {type: "stage_ended", run: r.run.id}),
+							),
 						),
 					),
 				),
 			{concurrency: "unbounded"},
 		).pipe(
+			Effect.tap((ends) =>
+				first !== undefined && ends.some(refusedEnd)
+					? note(shell, {type: "detached", n: numberOf(shell, first.run.id)})
+					: Effect.void,
+			),
 			Effect.tap(after),
 			Effect.tap(() => Scope.close(jobScope, Exit.void)),
 			Effect.flatMap((ends) => Deferred.succeed(watcher, ends)),
@@ -305,6 +345,11 @@ const sayJobEnd = (
 	ends: readonly Ended<unknown>[],
 ) =>
 	Effect.gen(function* () {
+		if (ends.some(refusedEnd)) {
+			shell.print("err", `[${n}] ${SAVED_BY_OLDER_CODE}  ${text}`);
+			shell.print("err", `[${n}] it stays in the table, detached; stop %${n} drops it`);
+			return;
+		}
 		const status = statusOfJob(ends);
 		shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${text}`);
 		for (const [i, r] of runs.entries()) {

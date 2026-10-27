@@ -1,17 +1,23 @@
 import {
 	arbMsg,
 	arbRecordMsg,
+	foldEvents,
 	type MsgArbitraryTable,
 	propertyInvariant,
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import type {MsgOf} from "@kampus/fabrika";
-import type {AnswerBody, RulingAsk} from "@kampus/pipeline/asks/ask";
-import {askId, ticketId} from "@kampus/pipeline/ids";
+import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import type {AnswerBody, Ask, RulingAsk} from "@kampus/pipeline/asks/ask";
+import {plans86b} from "@kampus/pipeline/asks/cases";
+import {checkId, planAskId, stuckId} from "@kampus/pipeline/asks/rules";
+import {askId, criterionId, planOf, taskId, ticketId} from "@kampus/pipeline/ids";
+import {numbered} from "@kampus/pipeline/stages/plan/ids";
+import {revisionOfDraft} from "@kampus/pipeline/stages/plan/plan";
+import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Desk, desk, GONE} from "./inbox.ts";
+import {type Desk, desk, deskKind, GONE} from "./inbox.ts";
 import {saidOf} from "./pages.ts";
 
 // The laws of the owner's desk, the inbox machine, on tea's pbt: after every step of any list of
@@ -209,5 +215,119 @@ describe("the owner's desk's laws", () => {
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------- law: every reachable desk is kept
+
+/** Every kind of ask the core raises, not only rulings: the desk is kept through a union of all four. */
+const plans = plans86b().flatMap((p) => {
+	const revision = p.plan === null ? null : revisionOfDraft(p.plan);
+	return revision === null ? [] : [{ticket: ticketId(p.ticket), data: numbered(revision)}];
+});
+const [first, second] = plans;
+if (first === undefined || second === undefined) throw new Error("experiment 86b has no plans");
+const PLAN = planOf(first.ticket);
+const T1 = taskId("t1");
+const KINDS: readonly Ask[] = [
+	...ASKS,
+	{
+		for: "plan",
+		id: planAskId(PLAN, 1),
+		at: 5,
+		plan: PLAN,
+		tickets: [first.ticket],
+		version: 1,
+		data: first.data,
+		since: null,
+		problems: [],
+	},
+	{
+		for: "plan",
+		id: planAskId(PLAN, 2),
+		at: 6,
+		plan: PLAN,
+		tickets: [first.ticket, second.ticket],
+		version: 2,
+		data: second.data,
+		since: {version: 1, data: first.data},
+		problems: ["a task has no criteria"],
+	},
+	{
+		for: "stuck",
+		id: stuckId(PLAN, T1, 1),
+		at: 7,
+		plan: PLAN,
+		task: T1,
+		title: "Sort the list",
+		criteria: [],
+		open: [3, 3],
+		why: "no_progress",
+		time: 1,
+	},
+	{
+		for: "check",
+		id: checkId(PLAN, T1, 2, "a pack"),
+		at: 8,
+		plan: PLAN,
+		task: T1,
+		build: 2,
+		by: "a pack",
+		question: "Does the page look right?",
+		attachments: [{label: "after", ref: "shots/after.png"}],
+	},
+];
+const anyKind = fc.constantFrom(...KINDS);
+const kindsTable: MsgArbitraryTable<Msg> = {
+	waiting: arbRecordMsg("waiting", {asks: fc.shuffledSubarray([...KINDS])}),
+	settled: arbRecordMsg("settled", {
+		ask: anyKind,
+		answer: fc.constantFrom<AnswerBody>(
+			...ANSWERS,
+			{kind: "change", line: "c3", to: "the list stays sorted"},
+			{kind: "remove"},
+			{kind: "reword", criterion: criterionId("c3"), when: "it runs twice", result: "both pass"},
+		),
+	}),
+	refused: arbRecordMsg("refused", {
+		id: anyKind.map((a) => a.id),
+		why: fc.constantFrom("not a version this plan has", "rounds out of range"),
+	}),
+};
+const kindsLists = fc.array(arbMsg(kindsTable), {maxLength: 30, size: "max"});
+
+/** Every desk `machine` reaches from its init, saved through the schema `deskKind` declares, and loaded back. */
+const keepsEvery = (machine: Machine, runs = 150) =>
+	fc.assert(
+		fc.asyncProperty(kindsLists, async (list) => {
+			const handle = await Effect.runPromise(memoryStorage().open("desk:r1", null));
+			const store = handle.store("desk", "desk", deskKind.state);
+			for (const s of foldEvents(machine, ctx, null, list).states) {
+				await store.save(s);
+				expect(store.migrate(await store.load())).toEqual(s);
+			}
+		}),
+		{numRuns: runs, seed: 1},
+	);
+
+describe("the owner's desk is kept", () => {
+	it("every desk it reaches from its init, with every kind of ask, saves and loads back equal", async () => {
+		await keepsEvery(desk);
+	});
+
+	it("the law is seen to fail on a planted mistake: a desk that keeps the answer whole, not what it said, dies at its first save", async () => {
+		const keepsTheAnswer = plant({
+			settled: (s, m) => {
+				const [next] = real.settled(s, m);
+				return [
+					{
+						...next,
+						closed: {...next.closed, [m.ask.id]: {...m, said: saidOf(m.answer)}},
+					},
+					[],
+				];
+			},
+		});
+		await expect(keepsEvery(keepsTheAnswer, 20)).rejects.toThrow(/Counterexample/);
 	});
 });

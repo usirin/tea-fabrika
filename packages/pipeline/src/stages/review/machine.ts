@@ -1,14 +1,14 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
-import {Schema} from "effect";
+import {Schema, Struct} from "effect";
 import {nextTry} from "../../combos.ts";
 import {Row} from "../../criteria/book.ts";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
+import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
 import {sentBack} from "../../refine.ts";
-import {type Brief, reviewGate} from "./gate.ts";
-import type {ReviewOutcome} from "./outcome.ts";
-import {type Ask, Kind, Pack} from "./pack.ts";
+import {Brief, reviewGate} from "./gate.ts";
+import {ReviewOutcome} from "./outcome.ts";
+import {Ask, Kind, Pack} from "./pack.ts";
 import {Comment, render} from "./render.ts";
-import {fenced, Ran, type Settings} from "./reviewer.ts";
+import {fenced, Ran, Settings} from "./reviewer.ts";
 import {type Form, Place, readForm} from "./sheet.ts";
 import {Note, noteIdOf} from "./tools.ts";
 import {criteriaOf, Judged, KindVerdict, outcomeOf, rowsOf, verdictsOf} from "./verdict.ts";
@@ -42,16 +42,15 @@ import {criteriaOf, Judged, KindVerdict, outcomeOf, rowsOf, verdictsOf} from "./
 
 const Unknown = ["unknown"] as const;
 
-/** Read everything the reviewer needs, at the commit asked for. `head: null`: the head now. */
-export const gatherPack = gather("review_pack", {
-	input: Schema.Struct({
-		pr: Schema.String,
-		head: Schema.NullOr(Schema.String),
-		rubrics: Schema.String,
-	}),
-	ok: Pack,
-	err: Unknown,
+const PackIn = Schema.Struct({
+	pr: Schema.String,
+	head: Schema.NullOr(Schema.String),
+	rubrics: Schema.String,
 });
+const NoteIn = Schema.Struct({pr: Schema.String, id: Schema.String, note: Note});
+
+/** Read everything the reviewer needs, at the commit asked for. `head: null`: the head now. */
+export const gatherPack = gather("review_pack", {input: PackIn, ok: Pack, err: Unknown});
 
 /**
  * File one note the reviewer made. `kept`: it went where this run keeps
@@ -59,7 +58,7 @@ export const gatherPack = gather("review_pack", {
  * writes would open an issue here.
  */
 export const fileNote = act("review_file_note", {
-	input: Schema.Struct({pr: Schema.String, id: Schema.String, note: Note}),
+	input: NoteIn,
 	ok: Schema.Literals(["kept"]),
 	err: Unknown,
 });
@@ -89,9 +88,8 @@ export type RunSub = Sub<
 export type ChecksSub = Sub<"review_checks", AtHead>;
 
 /** How long a wait on the checks may last, in ms. */
-export interface Waits {
-	readonly checksMs: number;
-}
+export const Waits = Schema.Struct({checksMs: Schema.Finite});
+export type Waits = typeof Waits.Type;
 export const DEFAULT_WAITS: Waits = {checksMs: 15 * 60_000};
 
 /**
@@ -133,9 +131,16 @@ export const Kept = Schema.Struct({
 export type Kept = typeof Kept.Type;
 
 /** A note in the state: on its way, with the Act that files it, or settled. */
-type Noted =
-	| {readonly id: string; readonly note: Note; readonly state: "asked"; readonly asked: NoteCmd}
-	| {readonly id: string; readonly note: Note; readonly state: "kept" | "failed"};
+const Noted = Schema.Union([
+	Schema.Struct({
+		id: Schema.String,
+		note: Note,
+		state: Schema.Literal("asked"),
+		asked: keptAct(fileNote, NoteIn),
+	}),
+	Schema.Struct({id: Schema.String, note: Note, state: Schema.Literals(["kept", "failed"])}),
+]);
+type Noted = typeof Noted.Type;
 
 /**
  * What a review leaves besides its outcome: everything a reader needs to see
@@ -187,51 +192,63 @@ export function problemsOf(report: Pick<Report, "refusals" | "problems">): reado
 }
 
 /** A report before its notes are all filed. */
-type Judgement = Omit<Report, "notes">;
+const Judgement = Schema.Struct(Struct.omit(Report.fields, ["notes"]));
+type Judgement = typeof Judgement.Type;
 
 /**
  * `waits` and `limit` (how many forms it may ask for): the limits this run
  * started with, kept so a restart goes by the same numbers.
  */
-type Held = {
-	readonly ask: Ask;
-	readonly settings: Settings;
-	readonly waits: Waits;
-	readonly limit: number;
-};
-type Sofar = Held & {readonly waited: number};
+const Held = Schema.Struct({ask: Ask, settings: Settings, waits: Waits, limit: Schema.Finite});
+type Held = typeof Held.Type;
+const Sofar = Schema.Struct({...Held.fields, waited: Schema.Finite});
+type Sofar = typeof Sofar.Type;
 
 /** The forms code refused so far, each by its problems. */
 type Refusals = readonly (readonly [string, ...string[]])[];
 
-export type Review =
-	| {readonly phase: "idle"}
-	| (Sofar & {readonly phase: "gathering"; readonly asked: PackCmd})
-	| (Sofar & {readonly phase: "waiting"; readonly head: string})
-	| (Held & {
-			readonly phase: "reviewing";
-			readonly brief: Brief;
-			readonly replay: boolean;
-			/** The reviewer's runs, the one on included. Each try and each start after a restart is one. */
-			readonly run: number;
-			/** The forms asked for, the one on its way included. */
-			readonly tries: number;
-			/** How many times a run was cut off by a restart. */
-			readonly cuts: number;
-			/** What this try is told about the last one. `null`: the first try. */
-			readonly note: string | null;
-			readonly refusals: Refusals;
-			/** What the runs before this one cost, in dollars. */
-			readonly spent: number;
-			readonly notes: readonly Noted[];
-	  })
-	| (Held & {
-			readonly phase: "judging";
-			readonly outcome: ReviewOutcome;
-			readonly judgement: Judgement;
-			readonly notes: readonly Noted[];
-	  })
-	| (Held & {readonly phase: "over"; readonly outcome: ReviewOutcome; readonly report: Report});
+/** The review machine's state, and the schema it is kept and read back through. */
+export const Review = Schema.Union([
+	Schema.Struct({phase: Schema.Literal("idle")}),
+	Schema.Struct({
+		...Sofar.fields,
+		phase: Schema.Literal("gathering"),
+		asked: keptCmd(gatherPack, PackIn),
+	}),
+	Schema.Struct({...Sofar.fields, phase: Schema.Literal("waiting"), head: Schema.String}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("reviewing"),
+		brief: Brief,
+		replay: Schema.Boolean,
+		/** The reviewer's runs, the one on included. Each try and each start after a restart is one. */
+		run: Schema.Finite,
+		/** The forms asked for, the one on its way included. */
+		tries: Schema.Finite,
+		/** How many times a run was cut off by a restart. */
+		cuts: Schema.Finite,
+		/** What this try is told about the last one. `null`: the first try. */
+		note: Schema.NullOr(Schema.String),
+		refusals: Schema.Array(Schema.NonEmptyArray(Schema.String)),
+		/** What the runs before this one cost, in dollars. */
+		spent: Schema.Finite,
+		notes: Schema.Array(Noted),
+	}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("judging"),
+		outcome: ReviewOutcome,
+		judgement: Judgement,
+		notes: Schema.Array(Noted),
+	}),
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("over"),
+		outcome: ReviewOutcome,
+		report: Report,
+	}),
+]);
+export type Review = typeof Review.Type;
 
 /** Why a run left no form. `misfit`: it ended with an answer that is not a form. */
 export type Failed = "broke" | "misfit" | "over_budget";

@@ -9,6 +9,7 @@ import {
 	Shown,
 	shownOf,
 	statusOf,
+	Tracker,
 	type TrackerMsg,
 	tracker as tickets,
 } from "./machine.ts";
@@ -95,6 +96,7 @@ export const tracker = defineProgram({
 	machines: {
 		tickets: kind({
 			machine: tickets,
+			state: Tracker,
 			parent: "main",
 			options: () => options,
 			drawing: () => ({

@@ -288,12 +288,13 @@ export const readRubric = (folder: string, kind: TextKind): Effect.Effect<Rubric
 	);
 
 /** What one review is asked for. `head: null`: the pull request's head now. */
-export interface Ask {
-	readonly pr: string;
-	readonly head: string | null;
+export const Ask = Schema.Struct({
+	pr: Schema.String,
+	head: Schema.NullOr(Schema.String),
 	/** The folder the rubrics are read from. */
-	readonly rubrics: string;
-}
+	rubrics: Schema.String,
+});
+export type Ask = typeof Ask.Type;
 
 /** Gather the pack: the change from the code host, then one rubric per text review it owes. */
 export const readPack = (ask: Ask): Effect.Effect<Pack, {readonly _tag: "unknown"}, CodeHost> =>

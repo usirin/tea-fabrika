@@ -71,6 +71,16 @@ const again = yield* tell(run, "n", 8).pipe(
 	Effect.catchTag("Full", () => offer(run, "n", 8)),   // wait for room instead
 );
 ```
+- Each machine kind names its state's Effect Schema as `state`. Every save is encoded through it, and a save that does not fit is a bug: the run dies, and the old value stays.
+- A kept state the schema does not take was saved by older code. That machine run's start fails `StateRefused`, before any of its code reads it. Nothing is booted and nothing is written over. `list` shows it as `refused`, beside the runs that are kept.
+
+```ts
+const Total = Schema.Struct({total: Schema.Int});
+machines: {count: kind({machine: count, state: Total, parent: "main", ...})}
+
+yield* machines.count.get("total").start();   // kept {sum: 2}: fails StateRefused, "count run total was saved by older code, ..."
+yield* machines.count.list;                   // [{kind: "refused", id: "total", why: "..."}, {kind: "kept", id: "b", state: {total: 3}}]
+```
 - `pipe` is `from | to`: it starts `from` wired into `to`'s input, and that input closes when the last writer ends.
 - A program may have a window: a pure `view` of one of its machines, with an Effect Schema for what it picks. No React here; the window is a React component on `<package>/window`, and it sends the program its own inputs. A `view` that names no machine of the program is refused.
 

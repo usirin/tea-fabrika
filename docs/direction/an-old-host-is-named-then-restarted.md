@@ -1,6 +1,7 @@
 # An old host is named, then restarted
 
-**Decided 2026-10-25 by the owner.** Tracker ticket 12. Nothing here is built.
+**Decided 2026-10-25 by the owner.** Tracker ticket 12. Section 1 is built;
+sections 2 and 3 are not.
 
 ```ts
 // A sketch. What the app does when it finds a host already running on its home.
@@ -55,6 +56,20 @@ migrate: (raw) => {
   in Effect Schema yet, and writing those is the real work.
 - **How sure: 85%.** The doubt is that cost. A count of machines with no state
   schema would size it.
+- **Built 2026-10-26.** 12 machines kept their state with no schema; each has
+  one now, written to fit what it saves.
+  - Every `kind` names its `state` schema, and `store`, `read` and `list` take
+    it. A save is encoded strictly: a state that does not fit its own schema is
+    a bug, so the run dies and the old value stays.
+  - A refused machine run fails its start with `StateRefused`. `list` shows it
+    as `refused`, and the check for unfinished runs leaves it alone.
+  - In tsh, `attach` of such a job prints "this job was saved by older code,
+    can't open it". The job stays in the table, detached, and `stop %n` drops
+    it. A job table saved by older code is left as it was, and tsh runs on
+    without keeping jobs.
+  - One change of answer: a ship run's kept proof is read through its schema
+    too. A proof edited by hand is now refused at load, where it used to answer
+    `stuck: proof_refused`.
 
 ## 2. The link's version differs
 
@@ -127,10 +142,12 @@ const restart = Effect.gen(function* () {
 
 ## What it cannot tell us
 
-- Nothing is built.
+- Only section 1 is built.
 - The tmux and zellij lines were read in their source and docs. VS Code's one
   server per build comes from a research pass and was not read again. None of
   the three was tried by hand.
 - Whether a restart sends a paid call twice is open until the test in
   section 2 runs.
-- How many machines lack a state schema is not counted yet.
+- Whether each new schema takes every state its machine can reach is not
+  tested yet. A law that saves and loads every reachable state would settle
+  it; until then, a schema too strict shows up as a run that dies on save.
