@@ -49,6 +49,8 @@ export type {Listed, Opened, Show, Shown} from "./machine.ts";
 export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
 export type {Row} from "./rows.ts";
 export type {Fact, Summary, Ticket, Write} from "./ticket.ts";
+/** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
+export {fold, ROOT, readRow} from "./ticket.ts";
 
 /**
  * What the window does: go to the list or a ticket, pick what the list shows, change a ticket, or

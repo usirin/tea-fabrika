@@ -36,7 +36,7 @@ export class Locked extends Schema.TaggedError<Locked>()("Locked", {
 const LOCK_WITHIN_MS = 10_000;
 
 /** Is a process with this pid alive? `EPERM` means it is, and belongs to someone else. */
-const alive = (pid: number) =>
+export const alive = (pid: number) =>
 	Effect.try({
 		try: () => process.kill(pid, 0),
 		catch: (e) => (Predicate.hasProperty(e, "code") ? String(e.code) : "unknown"),

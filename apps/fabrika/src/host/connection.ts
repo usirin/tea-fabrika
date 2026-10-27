@@ -10,15 +10,16 @@
 //   Layer.build(hostLedger(home))         // Ledger over HTTP, Author {kind: "user", id: "github:7"}
 //
 // No session is kept on disk: the file names the key, never a token, and a session is short
-// (the door's `SESSION_MS`, 4 hours). A host logs in again when it starts. A host that runs past
-// its session's end is refused by the door until it starts again: renewing it in place is not
-// built yet.
+// (the door's `SESSION_MS`, 4 hours). A host logs in when it starts, and keeps its session
+// renewed while it runs (`renewing`): again 5 minutes before the end, and on any 401, as after
+// a laptop slept past it. A person the door no longer lets in is a failure of every call, with
+// the door's why, and no more logins.
 //
 // One project, one server: the file picks either the home's own file or a server, never both
 // (docs/direction/the-ledger-goes-to-cloudflare.md).
 
 import {type Ledger, layerSignerFile} from "@kampus/fabrika";
-import {DoorRefused, doorOf, layerHttp} from "@kampus/fabrika/http";
+import {DoorRefused, doorOf, layerHttp, renewing} from "@kampus/fabrika/http";
 import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {Author} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Layer, Option, Path, Schema} from "effect";
@@ -88,7 +89,7 @@ export const connectionOf = (home: string) =>
 	);
 
 /** A fresh session on `c`'s server, signed with its key file. */
-const loginWith = (c: Connection) =>
+export const loginWith = (c: Connection) =>
 	doorOf({url: c.url, ledger: c.ledger})
 		.login(c.login)
 		.pipe(Effect.provide(layerSignerFile(c.key)));
@@ -106,11 +107,17 @@ export const connect = (
 		const {url, ledger} = yield* addressOf(o.address);
 		const c: Connection = {url, ledger, login: o.login, key: o.key};
 		const session = yield* loginWith(c);
+		yield* keepConnection(home, c);
+		return session.who;
+	});
+
+/** Keep `c` in the home: its host uses that server from its next start. */
+export const keepConnection = (home: string, c: Connection) =>
+	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		yield* fs.makeDirectory(home, {recursive: true, mode: 0o700});
 		const file = yield* fileOf(home);
 		yield* fs.writeFileString(file, `${JSON.stringify(c, null, "\t")}\n`, {mode: 0o600});
-		return session.who;
 	}).pipe(
 		Effect.catchTag("PlatformError", (e) =>
 			Effect.fail(new ConnectFailed({why: `the connection could not be kept: ${e.message}`})),
@@ -162,14 +169,22 @@ export const hostLedger = (
 					Layer.succeed(Author, OWNER),
 				);
 			}
-			const session = yield* loginWith(c.value).pipe(
+			const first = yield* loginWith(c.value).pipe(
 				Effect.catchTag("KeyUnreadable", (e) =>
 					Effect.fail(new ConnectFailed({why: `the key ${e.path}: ${e.why}`})),
 				),
 			);
+			// Later logins: a key file that cannot be read for a moment is tried again, as the network.
+			const again = loginWith(c.value).pipe(
+				Effect.catchTag("KeyUnreadable", (e) =>
+					Effect.fail(new DoorRefused({status: 0, why: `the key ${e.path}: ${e.why}`})),
+				),
+				Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
+			);
+			const session = yield* renewing(first, again);
 			return Layer.merge(
-				layerHttp({url: c.value.url, ledger: c.value.ledger, token: session.token}),
-				Layer.succeed(Author, session.who),
+				layerHttp({url: c.value.url, ledger: c.value.ledger, token: session}),
+				Layer.succeed(Author, first.who),
 			);
 		}),
 	);

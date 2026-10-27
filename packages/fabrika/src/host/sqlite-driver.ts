@@ -5,6 +5,7 @@
 // Lifted from experiment 96 (experiments/96-ledger-mailbox/node-ledger.ts), unchanged but for the
 // dispatch table, which now has `register` and the alarm's `runDue`.
 import {DatabaseSync} from "node:sqlite";
+import {pathToFileURL} from "node:url";
 import * as L from "./rules.ts";
 
 export const openDb = (path: string): {db: L.Db; close(): void} => {
@@ -47,6 +48,39 @@ export const openDb = (path: string): {db: L.Db; close(): void} => {
 	};
 	L.migrate(db);
 	return {db, close: () => raw.close()};
+};
+
+/**
+ * A ledger file, read only, and as a file nobody else is changing: SQLite's `immutable` and `ro`,
+ * no migration, no switch to WAL. A write through it fails in SQLite itself, and it makes no
+ * `-wal` or `-shm` beside the file, as a plain read-only open of a WAL file does. For the move
+ * (move.ts), which reads a laptop's file and must never change it: the file stays as the archive.
+ * `immutable` does not read a `-wal`: the caller makes sure there is none with writes in it.
+ */
+export const readOnlyRows = (path: string, sql: string, ...bind: L.Value[]): L.SqlRow[] => {
+	const url = pathToFileURL(path);
+	url.searchParams.set("mode", "ro");
+	url.searchParams.set("immutable", "1");
+	const raw = new DatabaseSync(url, {readOnly: true});
+	try {
+		raw.exec("PRAGMA busy_timeout = 10000");
+		return raw
+			.prepare(sql)
+			.all(...bind)
+			.map((row) => {
+				const r: L.SqlRow = {};
+				for (const [k, v] of Object.entries(row))
+					r[k] =
+						typeof v === "bigint"
+							? Number(v)
+							: typeof v === "number" || typeof v === "string"
+								? v
+								: null;
+				return r;
+			});
+	} finally {
+		raw.close();
+	}
 };
 
 const METHODS = [

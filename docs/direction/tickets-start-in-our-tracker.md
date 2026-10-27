@@ -24,9 +24,12 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
   facts on the ledger, and its window is the form to file one. As
   [the GUI note](./the-gui-is-electron-first.md) says, every window in the app
   is some program's view, so a form cannot exist outside a program.
-  - It is not a whole Linear. No boards, no cycles, no priorities: those wait
+  - ~~It is not a whole Linear. No boards, no cycles, no priorities: those wait
     for a run that needs them, as
-    [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.
+    [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.~~
+    Replaced 2026-10-27: the tracker is built like Linear, as the base the
+    pipeline, milestones and packs build on
+    ([the tracker is like Linear](./the-tracker-is-like-linear.md)).
 - **A ticket's window is its timeline** (decided 2026-10-24). Every fact about
   the ticket shows in one list, oldest first: filed, edited, comments, each
   stage's answer. It is the one place to see what is being done.
