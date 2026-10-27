@@ -25,6 +25,11 @@ import {guardHook} from "./shell-guard.ts";
 // before anything starts (`settingsRefusal`). A live turn also checks the
 // empty folder those settings are read from (`openLive`).
 //
+// The system prompt is Claude Code's own (`claude_code`), as on the ACP row.
+// Left unnamed, the SDK sends an empty one, and the agent gets none of Claude
+// Code's instructions (experiment 158). Its memory section is off: it would
+// have the agent keep notes under ~/.claude, outside the copy it is given.
+//
 // What the SDK holds natively: a dollar cap (`maxBudgetUsd`), a typed answer
 // (`outputFormat`), a session id the client picks (`sessionId`, a UUID), the
 // turn's tokens and dollars in its result.
@@ -91,6 +96,9 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 	return {broke: `${m.subtype}${m.is_error ? " (error)" : ""}`};
 };
 
+/** Claude Code's own system prompt. */
+const CLAUDE_CODE = {type: "preset", preset: "claude_code"} as const;
+
 export interface ClaudeAdapterConfig {
 	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
@@ -115,8 +123,12 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
 			const options: Options = {
 				...base,
-				// The folder's own rule files, none of its settings (./rules.ts, experiment 155).
-				...ownRules(settings),
+				// Claude Code's own system prompt, as the CLI and ACP's adapter give it. Named, because
+				// with none the SDK sends an empty one (experiment 158).
+				systemPrompt: CLAUDE_CODE,
+				// The folder's own rule files, none of its settings (./rules.ts, experiment 155). The
+				// preset asks the agent to keep a memory folder under ~/.claude: a contained run keeps none.
+				...ownRules({...settings, autoMemoryEnabled: false}),
 				cwd: turn.folder,
 				env: fencedEnv(agentEnv()),
 				permissionMode: "dontAsk",

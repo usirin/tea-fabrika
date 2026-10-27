@@ -1,0 +1,5717 @@
+{
+ "models": {
+  "ours": {
+   "version": "2.1.296 (Claude Code)",
+   "models": [
+    {
+     "value": "haiku",
+     "resolved": "claude-haiku-5-5",
+     "effort": true,
+     "levels": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "adaptive": true
+    },
+    {
+     "value": "claude-haiku-4-5-20251001",
+     "resolved": "claude-haiku-4-5-20251001",
+     "effort": null,
+     "levels": null,
+     "adaptive": null
+    }
+   ]
+  },
+  "acp": {
+   "version": "2.1.286 (Claude Code)",
+   "models": [
+    {
+     "value": "haiku",
+     "resolved": "claude-haiku-4-5-20251001",
+     "effort": null,
+     "levels": null,
+     "adaptive": null
+    }
+   ]
+  }
+ },
+ "old": [
+  {
+   "run": "acp-claude-1-342288-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 27330,
+   "first": 15726,
+   "outs": [
+    273,
+    153,
+    1056,
+    160,
+    156,
+    220
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash!",
+    "Bash"
+   ],
+   "errors": [
+    {
+     "tool": "Bash",
+     "kind": "failed",
+     "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)); console.log("
+    }
+   ],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2018
+  },
+  {
+   "run": "acp-claude-2-43e10b-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 27330,
+   "first": 15745,
+   "outs": [
+    272,
+    156,
+    977,
+    200,
+    335
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash"
+   ],
+   "errors": [],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 1940
+  },
+  {
+   "run": "acp-claude-3-c32329-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 27330,
+   "first": 15737,
+   "outs": [
+    280,
+    154,
+    1148,
+    208,
+    318
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash"
+   ],
+   "errors": [],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2108
+  },
+  {
+   "run": "acp-claude-4-e178bb-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 27330,
+   "first": 15738,
+   "outs": [
+    370,
+    81,
+    156,
+    1106,
+    133,
+    456
+   ],
+   "calls": [
+    "Read!",
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash"
+   ],
+   "errors": [
+    {
+     "tool": "Read",
+     "kind": "failed",
+     "text": "EISDIR: illegal operation on a directory, read '<path>'"
+    }
+   ],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2302
+  },
+  {
+   "run": "acp-claude-5-9bf21f-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 27330,
+   "first": 15742,
+   "outs": [
+    221,
+    151,
+    152,
+    1299,
+    273,
+    215
+   ],
+   "calls": [
+    "Read!",
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash"
+   ],
+   "errors": [
+    {
+     "tool": "Read",
+     "kind": "failed",
+     "text": "EISDIR: illegal operation on a directory, read '<path>'"
+    }
+   ],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2311
+  },
+  {
+   "run": "claude-1-032dd6-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9943,
+   "outs": [
+    203,
+    154,
+    981,
+    232,
+    3525,
+    148,
+    210,
+    148,
+    241,
+    561
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash",
+    "Edit!",
+    "Read",
+    "Edit",
+    "Bash",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [
+    {
+     "tool": "Edit",
+     "kind": "failed",
+     "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+    }
+   ],
+   "edits": 3,
+   "firstRight": 3,
+   "out": 6403
+  },
+  {
+   "run": "claude-1-75f147-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9938,
+   "outs": [
+    132,
+    153,
+    972,
+    248,
+    566
+   ],
+   "calls": [
+    "Glob",
+    "Read",
+    "Edit",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2071
+  },
+  {
+   "run": "claude-2-8bf89e-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9947,
+   "outs": [
+    240,
+    906,
+    320,
+    385,
+    462
+   ],
+   "calls": [
+    "Read",
+    "Edit",
+    "Bash",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 2313
+  },
+  {
+   "run": "claude-2-f4db6d-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9953,
+   "outs": [
+    372,
+    73,
+    157,
+    18268,
+    284,
+    554
+   ],
+   "calls": [
+    "Read!",
+    "Glob",
+    "Read",
+    "Edit",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [
+    {
+     "tool": "Read",
+     "kind": "failed",
+     "text": "EISDIR: illegal operation on a directory, read '<path>'"
+    }
+   ],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 19708
+  },
+  {
+   "run": "claude-3-499c50-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9932,
+   "outs": [
+    162,
+    154,
+    858,
+    209,
+    587
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [],
+   "edits": 1,
+   "firstRight": 10,
+   "out": 1970
+  },
+  {
+   "run": "claude-3-be6690-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9937,
+   "outs": [
+    246,
+    154,
+    924,
+    194,
+    2955,
+    157,
+    271,
+    145,
+    462,
+    291,
+    390
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash",
+    "Edit!",
+    "Read",
+    "Edit",
+    "Bash",
+    "Bash",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [
+    {
+     "tool": "Edit",
+     "kind": "failed",
+     "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return `${"
+    }
+   ],
+   "edits": 3,
+   "firstRight": 3,
+   "out": 6189
+  },
+  {
+   "run": "claude-4-52aeb9-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9945,
+   "outs": [
+    292,
+    153,
+    918,
+    257,
+    1797,
+    151,
+    283,
+    224,
+    431,
+    486
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash",
+    "Edit!",
+    "Read",
+    "Edit",
+    "Bash",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [
+    {
+     "tool": "Edit",
+     "kind": "failed",
+     "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+    }
+   ],
+   "edits": 3,
+   "firstRight": 3,
+   "out": 4992
+  },
+  {
+   "run": "claude-5-36c254-copy",
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "prompt": 0,
+   "first": 9931,
+   "outs": [
+    175,
+    151,
+    1276,
+    197,
+    5665,
+    155,
+    470,
+    154,
+    297,
+    996,
+    215,
+    471
+   ],
+   "calls": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Bash",
+    "Edit!",
+    "Read",
+    "Edit",
+    "Bash",
+    "Bash",
+    "Edit",
+    "Bash",
+    "StructuredOutput"
+   ],
+   "errors": [
+    {
+     "tool": "Edit",
+     "kind": "failed",
+     "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+    }
+   ],
+   "edits": 4,
+   "firstRight": 3,
+   "out": 10222
+  }
+ ],
+ "job:ours": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 58.689,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 147454,
+    "cached": 135334,
+    "output": 7639
+   },
+   "usd": 0.0760325,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "first": 9762,
+    "outs": [
+     252,
+     141,
+     1022,
+     146,
+     165,
+     2589,
+     143,
+     193,
+     138,
+     2232,
+     618
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Read",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 39.179,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 128756,
+    "cached": 119347,
+    "output": 4941
+   },
+   "usd": 0.05553029999999999,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "first": 9773,
+    "outs": [
+     282,
+     136,
+     1047,
+     220,
+     1893,
+     142,
+     242,
+     155,
+     390,
+     434
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 51.478,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 137238,
+    "cached": 125982,
+    "output": 6824
+   },
+   "usd": 0.0693023,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9768,
+    "outs": [
+     179,
+     133,
+     1079,
+     294,
+     3604,
+     131,
+     274,
+     225,
+     406,
+     499
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { // Under 1024: just return"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 70.791,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 70180,
+    "cached": 56231,
+    "output": 10484
+   },
+   "usd": 0.08605370000000001,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9775,
+    "outs": [
+     171,
+     136,
+     9260,
+     521,
+     396
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 120.385,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 110974,
+    "cached": 90052,
+    "output": 17428
+   },
+   "usd": 0.13809329999999997,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9777,
+    "outs": [
+     274,
+     136,
+     15879,
+     225,
+     377,
+     537
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": false,
+   "stop": "over_budget",
+   "seconds": 159.879,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 226231,
+    "cached": 197567,
+    "output": 23792
+   },
+   "usd": 0.20379739999999996,
+   "requests": 10,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9745,
+    "outs": [
+     267,
+     133,
+     19066,
+     236,
+     2415,
+     833,
+     139,
+     492,
+     211,
+     699
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 6
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.682,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 53850,
+    "cached": 48264,
+    "output": 2187
+   },
+   "usd": 0.027046,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9768,
+    "outs": [
+     215,
+     135,
+     1108,
+     244,
+     485
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.868,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 54440,
+    "cached": 48646,
+    "output": 2240
+   },
+   "usd": 0.027764700000000003,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9788,
+    "outs": [
+     169,
+     139,
+     1168,
+     293,
+     471
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.174,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 53994,
+    "cached": 48395,
+    "output": 2088
+   },
+   "usd": 0.026589599999999998,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9763,
+    "outs": [
+     282,
+     134,
+     1045,
+     256,
+     371
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 25.149,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 66148,
+    "cached": 60202,
+    "output": 2609
+   },
+   "usd": 0.0310613,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9752,
+    "outs": [
+     286,
+     131,
+     979,
+     244,
+     302,
+     667
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 11,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 46.539,
+   "tools": 8,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 106290,
+    "cached": 96059,
+    "output": 6325
+   },
+   "usd": 0.061780999999999996,
+   "requests": 9,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9772,
+    "outs": [
+     387,
+     852,
+     268,
+     2943,
+     607,
+     209,
+     471,
+     588
+    ],
+    "calls": [
+     "Read",
+     "Edit",
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 12,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 32.295,
+   "tools": 8,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 95719,
+    "cached": 88140,
+    "output": 3655
+   },
+   "usd": 0.0423351,
+   "requests": 9,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9753,
+    "outs": [
+     289,
+     133,
+     1285,
+     510,
+     235,
+     200,
+     353,
+     650
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)), console.log("
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 13,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 46.143,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 136148,
+    "cached": 125409,
+    "output": 6264
+   },
+   "usd": 0.065411,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9760,
+    "outs": [
+     326,
+     131,
+     1162,
+     212,
+     3214,
+     139,
+     243,
+     154,
+     294,
+     389
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 14,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 22.295,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 77881,
+    "cached": 71792,
+    "output": 2297
+   },
+   "usd": 0.030936800000000004,
+   "requests": 8,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9765,
+    "outs": [
+     155,
+     138,
+     812,
+     185,
+     157,
+     479,
+     371
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Read",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 15,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 21.666,
+   "tools": 6,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 66457,
+    "cached": 60409,
+    "output": 2338
+   },
+   "usd": 0.0299315,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9756,
+    "outs": [
+     311,
+     131,
+     924,
+     298,
+     226,
+     448
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)); console.log("
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 16,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 25.461,
+   "tools": 6,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 68592,
+    "cached": 61891,
+    "output": 3096
+   },
+   "usd": 0.035175200000000004,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 1,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9781,
+    "outs": [
+     374,
+     132,
+     1496,
+     331,
+     278,
+     485
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "denied",
+      "text": "PreToolUse:Bash hook error: <path> is outside your working copy. Write only inside <work>/job-ours-16-8d0e3a/copy."
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  }
+ ],
+ "job:no-guard": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 44.924,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 132651,
+    "cached": 122296,
+    "output": 5977
+   },
+   "usd": 0.0628967,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "first": 9774,
+    "outs": [
+     294,
+     136,
+     1234,
+     289,
+     2207,
+     142,
+     434,
+     202,
+     575,
+     464
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 63.954,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 165763,
+    "cached": 152441,
+    "output": 8538
+   },
+   "usd": 0.08464220000000001,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "first": 9781,
+    "outs": [
+     176,
+     140,
+     1008,
+     376,
+     5145,
+     144,
+     250,
+     301,
+     210,
+     369,
+     419
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 4,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 21.679,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 66511,
+    "cached": 60494,
+    "output": 2558
+   },
+   "usd": 0.030978,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9782,
+    "outs": [
+     276,
+     132,
+     1095,
+     197,
+     277,
+     581
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 49.082,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 148379,
+    "cached": 137799,
+    "output": 6199
+   },
+   "usd": 0.065999,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9770,
+    "outs": [
+     181,
+     134,
+     953,
+     201,
+     2464,
+     628,
+     136,
+     428,
+     160,
+     285,
+     629
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 63.817,
+   "tools": 14,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 206793,
+    "cached": 193685,
+    "output": 8232
+   },
+   "usd": 0.0867846,
+   "requests": 15,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9762,
+    "outs": [
+     293,
+     135,
+     979,
+     199,
+     2743,
+     129,
+     430,
+     169,
+     188,
+     468,
+     1459,
+     171,
+     334,
+     535
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Bash",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 4,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 19.356,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 65099,
+    "cached": 59452,
+    "output": 2030
+   },
+   "usd": 0.0274933,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9777,
+    "outs": [
+     181,
+     137,
+     823,
+     194,
+     297,
+     398
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 22.186,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 65185,
+    "cached": 59432,
+    "output": 2317
+   },
+   "usd": 0.029138300000000006,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9766,
+    "outs": [
+     201,
+     140,
+     759,
+     246,
+     401,
+     570
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 64.622,
+   "tools": 11,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 156846,
+    "cached": 143791,
+    "output": 8428
+   },
+   "usd": 0.08269320000000001,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9788,
+    "outs": [
+     305,
+     133,
+     1477,
+     175,
+     144,
+     563,
+     4449,
+     180,
+     479,
+     177,
+     346
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Read",
+     "Bash",
+     "Bash",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 21.988,
+   "tools": 6,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 66836,
+    "cached": 60737,
+    "output": 2532
+   },
+   "usd": 0.031036300000000003,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9774,
+    "outs": [
+     338,
+     134,
+     972,
+     316,
+     158,
+     614
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)); console.log("
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 49.822,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 150594,
+    "cached": 139555,
+    "output": 6389
+   },
+   "usd": 0.0680426,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 0,
+    "memory": false,
+    "first": 9773,
+    "outs": [
+     221,
+     134,
+     1159,
+     260,
+     1429,
+     1820,
+     132,
+     241,
+     204,
+     357,
+     432
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  }
+ ],
+ "job:preset": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 34.632,
+   "tools": 7,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 125187,
+    "cached": 104308,
+    "output": 4517
+   },
+   "usd": 0.07487039999999999,
+   "requests": 8,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "first": 15947,
+    "outs": [
+     237,
+     134,
+     633,
+     298,
+     2581,
+     207,
+     427
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.407,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84725,
+    "cached": 75399,
+    "output": 2010
+   },
+   "usd": 0.0364055,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "first": 15939,
+    "outs": [
+     272,
+     131,
+     1023,
+     216,
+     368
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 31.2,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 89169,
+    "cached": 77469,
+    "output": 4374
+   },
+   "usd": 0.053129,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15945,
+    "outs": [
+     155,
+     131,
+     3507,
+     251,
+     330
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 13.831,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 83029,
+    "cached": 74448,
+    "output": 1280
+   },
+   "usd": 0.0311189,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15940,
+    "outs": [
+     163,
+     134,
+     392,
+     213,
+     378
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 65.464,
+   "tools": 10,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 197931,
+    "cached": 182220,
+    "output": 7631
+   },
+   "usd": 0.0878711,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15951,
+    "outs": [
+     283,
+     134,
+     385,
+     260,
+     3828,
+     197,
+     423,
+     1524,
+     227,
+     370
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.559,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 68942,
+    "cached": 59229,
+    "output": 2455
+   },
+   "usd": 0.0377445,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15952,
+    "outs": [
+     241,
+     1679,
+     217,
+     318
+    ],
+    "calls": [
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 47.559,
+   "tools": 12,
+   "failedTools": 2,
+   "asked": 0,
+   "tokens": {
+    "input": 233753,
+    "cached": 219488,
+    "output": 5550
+   },
+   "usd": 0.0782849,
+   "requests": 13,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15965,
+    "outs": [
+     167,
+     135,
+     1020,
+     217,
+     163,
+     803,
+     1767,
+     142,
+     252,
+     159,
+     273,
+     452
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)); console.log("
+     },
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 21.242,
+   "tools": 6,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 102177,
+    "cached": 92785,
+    "output": 1781
+   },
+   "usd": 0.037071599999999996,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15954,
+    "outs": [
+     331,
+     82,
+     134,
+     639,
+     219,
+     376
+    ],
+    "calls": [
+     "Read!",
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Read",
+      "kind": "failed",
+      "text": "EISDIR: illegal operation on a directory, read '<work>/job-preset-8-8bebd3/copy'"
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.459,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84655,
+    "cached": 75431,
+    "output": 1672
+   },
+   "usd": 0.0344632,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15954,
+    "outs": [
+     173,
+     132,
+     933,
+     168,
+     266
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 15.616,
+   "tools": 5,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 85378,
+    "cached": 76080,
+    "output": 1737
+   },
+   "usd": 0.0350011,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27302,
+    "memory": true,
+    "first": 15955,
+    "outs": [
+     199,
+     821,
+     223,
+     192,
+     302
+    ],
+    "calls": [
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log(m.formatBytes(1536)), console.log(m.formatBytes(5 * 1024"
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  }
+ ],
+ "job:as-acp": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 17.249,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84453,
+    "cached": 66442,
+    "output": 1771
+   },
+   "usd": 0.0516494,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "first": 15943,
+    "outs": [
+     267,
+     135,
+     868,
+     235,
+     266
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 19.358,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84559,
+    "cached": 75088,
+    "output": 1902
+   },
+   "usd": 0.036089500000000004,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "first": 15949,
+    "outs": [
+     186,
+     136,
+     1081,
+     204,
+     295
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 15.813,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84233,
+    "cached": 74941,
+    "output": 1675
+   },
+   "usd": 0.0345813,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15934,
+    "outs": [
+     219,
+     135,
+     809,
+     256,
+     256
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.139,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 85025,
+    "cached": 75390,
+    "output": 2079
+   },
+   "usd": 0.0373322,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15934,
+    "outs": [
+     270,
+     136,
+     1186,
+     193,
+     294
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 19.384,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 85422,
+    "cached": 75557,
+    "output": 2319
+   },
+   "usd": 0.039008900000000006,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15934,
+    "outs": [
+     296,
+     137,
+     1355,
+     260,
+     271
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.31,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84144,
+    "cached": 74780,
+    "output": 1760
+   },
+   "usd": 0.0351347,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15939,
+    "outs": [
+     165,
+     137,
+     944,
+     284,
+     230
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 17.69,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84525,
+    "cached": 75068,
+    "output": 1862
+   },
+   "usd": 0.035859,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15929,
+    "outs": [
+     159,
+     136,
+     1135,
+     160,
+     272
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 37.709,
+   "tools": 8,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 169574,
+    "cached": 156626,
+    "output": 4644
+   },
+   "usd": 0.0648748,
+   "requests": 9,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15930,
+    "outs": [
+     345,
+     138,
+     1271,
+     206,
+     1830,
+     131,
+     240,
+     138,
+     345
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return n +"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 51.981,
+   "tools": 8,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 185748,
+    "cached": 169769,
+    "output": 7707
+   },
+   "usd": 0.0875661,
+   "requests": 9,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27301,
+    "memory": true,
+    "first": 15931,
+    "outs": [
+     290,
+     755,
+     274,
+     4961,
+     146,
+     257,
+     205,
+     384,
+     435
+    ],
+    "calls": [
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return `${"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.875,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 84297,
+    "cached": 74916,
+    "output": 1910
+   },
+   "usd": 0.0359318,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27302,
+    "memory": true,
+    "first": 15931,
+    "outs": [
+     177,
+     135,
+     1006,
+     244,
+     348
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  }
+ ],
+ "job:acp": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.219,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 81747,
+    "cached": 72644,
+    "output": 1853
+   },
+   "usd": 0.03599139999999999,
+   "requests": 5,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "first": 15466,
+    "outs": [
+     253,
+     132,
+     929,
+     259,
+     280
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": false,
+   "graded": 7,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 40.68,
+   "tools": 8,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 165018,
+    "cached": 152026,
+    "output": 5059
+   },
+   "usd": 0.0677056,
+   "requests": 9,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "first": 15461,
+    "outs": [
+     168,
+     131,
+     1188,
+     220,
+     2399,
+     128,
+     353,
+     152,
+     320
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return n +"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 30.388,
+   "tools": 7,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 141741,
+    "cached": 130327,
+    "output": 3588
+   },
+   "usd": 0.055032700000000004,
+   "requests": 8,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15479,
+    "outs": [
+     206,
+     744,
+     260,
+     1411,
+     138,
+     257,
+     201,
+     371
+    ],
+    "calls": [
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return `${"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 19.12,
+   "tools": 5,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 99006,
+    "cached": 89679,
+    "output": 1936
+   },
+   "usd": 0.0385499,
+   "requests": 6,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15481,
+    "outs": [
+     377,
+     89,
+     136,
+     825,
+     198,
+     311
+    ],
+    "calls": [
+     "Read!",
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Read",
+      "kind": "failed",
+      "text": "EISDIR: illegal operation on a directory, read '<work>/job-acp-4-1baf7f/copy'"
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.185,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 81664,
+    "cached": 72575,
+    "output": 1845
+   },
+   "usd": 0.035916500000000004,
+   "requests": 5,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15452,
+    "outs": [
+     225,
+     131,
+     931,
+     264,
+     294
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 70.524,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 98505,
+    "cached": 81000,
+    "output": 10255
+   },
+   "usd": 0.095641,
+   "requests": 5,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15469,
+    "outs": [
+     224,
+     134,
+     9361,
+     258,
+     278
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 20.669,
+   "tools": 5,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 98980,
+    "cached": 89446,
+    "output": 1999
+   },
+   "usd": 0.0392556,
+   "requests": 6,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15460,
+    "outs": [
+     197,
+     87,
+     134,
+     1050,
+     261,
+     270
+    ],
+    "calls": [
+     "Read!",
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Read",
+      "kind": "failed",
+      "text": "EISDIR: illegal operation on a directory, read '<work>/job-acp-7-382ffe/copy'"
+     }
+    ],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 40.635,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 88934,
+    "cached": 76345,
+    "output": 5305
+   },
+   "usd": 0.0605935,
+   "requests": 5,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15474,
+    "outs": [
+     281,
+     132,
+     4435,
+     179,
+     278
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 45.403,
+   "tools": 8,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 168960,
+    "cached": 155244,
+    "output": 5854
+   },
+   "usd": 0.07345040000000001,
+   "requests": 9,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27212,
+    "memory": true,
+    "first": 15479,
+    "outs": [
+     201,
+     133,
+     1512,
+     173,
+     2880,
+     147,
+     245,
+     149,
+     414
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return n +"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 55.399,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 216082,
+    "cached": 201091,
+    "output": 6896
+   },
+   "usd": 0.0857791,
+   "requests": 11,
+   "models": [
+    "claude-haiku-4-5-20251001"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 27213,
+    "memory": true,
+    "first": 15464,
+    "outs": [
+     208,
+     127,
+     1302,
+     228,
+     3026,
+     873,
+     135,
+     183,
+     146,
+     335,
+     333
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return n +"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  }
+ ],
+ "report": {
+  "table": {
+   "ours": {
+    "runs": 16,
+    "right": 16,
+    "typed": 15,
+    "firstRight": 10,
+    "long": 9,
+    "bigThink": 3,
+    "seconds": {
+     "median": 35.737,
+     "spread": [
+      18.174,
+      159.879
+     ]
+    },
+    "tools": {
+     "median": 6,
+     "spread": [
+      5,
+      11
+     ]
+    },
+    "output": {
+     "median": 4298,
+     "spread": [
+      2088,
+      23792
+     ]
+    },
+    "usd": {
+     "median": 0.048932699999999996,
+     "spread": [
+      0.026589599999999998,
+      0.20379739999999996
+     ],
+     "sum": 1.0068416999999998
+    },
+    "denied": 1,
+    "failed": 7,
+    "asked": 0,
+    "prompt": [
+     0
+    ],
+    "firstInput": {
+     "median": 9766.5,
+     "spread": [
+      9745,
+      9788
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   },
+   "no-guard": {
+    "runs": 10,
+    "right": 10,
+    "typed": 10,
+    "firstRight": 4,
+    "long": 6,
+    "bigThink": 2,
+    "seconds": {
+     "median": 47.003,
+     "spread": [
+      19.356,
+      64.622
+     ]
+    },
+    "tools": {
+     "median": 10.5,
+     "spread": [
+      6,
+      14
+     ]
+    },
+    "output": {
+     "median": 6088,
+     "spread": [
+      2030,
+      8538
+     ]
+    },
+    "usd": {
+     "median": 0.06444785,
+     "spread": [
+      0.0274933,
+      0.0867846
+     ],
+     "sum": 0.5697042
+    },
+    "denied": 0,
+    "failed": 6,
+    "asked": 0,
+    "prompt": [
+     0
+    ],
+    "firstInput": {
+     "median": 9774,
+     "spread": [
+      9762,
+      9788
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   },
+   "preset": {
+    "runs": 10,
+    "right": 10,
+    "typed": 10,
+    "firstRight": 7,
+    "long": 4,
+    "bigThink": 0,
+    "seconds": {
+     "median": 19.9005,
+     "spread": [
+      13.831,
+      65.464
+     ]
+    },
+    "tools": {
+     "median": 5,
+     "spread": [
+      4,
+      12
+     ]
+    },
+    "output": {
+     "median": 2232.5,
+     "spread": [
+      1280,
+      7631
+     ]
+    },
+    "usd": {
+     "median": 0.03740805,
+     "spread": [
+      0.0311189,
+      0.0878711
+     ],
+     "sum": 0.5059602
+    },
+    "denied": 0,
+    "failed": 4,
+    "asked": 0,
+    "prompt": [
+     27301,
+     27302
+    ],
+    "firstInput": {
+     "median": 15951.5,
+     "spread": [
+      15939,
+      15965
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   },
+   "as-acp": {
+    "runs": 10,
+    "right": 10,
+    "typed": 10,
+    "firstRight": 8,
+    "long": 2,
+    "bigThink": 1,
+    "seconds": {
+     "median": 18.5925,
+     "spread": [
+      15.813,
+      51.981
+     ]
+    },
+    "tools": {
+     "median": 4,
+     "spread": [
+      4,
+      8
+     ]
+    },
+    "output": {
+     "median": 1906,
+     "spread": [
+      1675,
+      7707
+     ]
+    },
+    "usd": {
+     "median": 0.03671085,
+     "spread": [
+      0.0345813,
+      0.0875661
+     ],
+     "sum": 0.45802770000000004
+    },
+    "denied": 0,
+    "failed": 2,
+    "asked": 0,
+    "prompt": [
+     27301,
+     27302
+    ],
+    "firstInput": {
+     "median": 15934,
+     "spread": [
+      15929,
+      15949
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   },
+   "acp": {
+    "runs": 10,
+    "right": 9,
+    "typed": 10,
+    "firstRight": 6,
+    "long": 6,
+    "bigThink": 2,
+    "seconds": {
+     "median": 35.5115,
+     "spread": [
+      18.185,
+      70.524
+     ]
+    },
+    "tools": {
+     "median": 5,
+     "spread": [
+      4,
+      10
+     ]
+    },
+    "output": {
+     "median": 4323.5,
+     "spread": [
+      1845,
+      10255
+     ]
+    },
+    "usd": {
+     "median": 0.057813100000000006,
+     "spread": [
+      0.035916500000000004,
+      0.095641
+     ],
+     "sum": 0.5879157
+    },
+    "denied": 0,
+    "failed": 6,
+    "asked": 0,
+    "prompt": [
+     27212,
+     27213
+    ],
+    "firstInput": {
+     "median": 15467.5,
+     "spread": [
+      15452,
+      15481
+     ]
+    },
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ]
+   },
+   "after": {
+    "runs": 16,
+    "right": 16,
+    "typed": 16,
+    "firstRight": 8,
+    "long": 10,
+    "bigThink": 3,
+    "seconds": {
+     "median": 38.8065,
+     "spread": [
+      15.832,
+      60.803
+     ]
+    },
+    "tools": {
+     "median": 6,
+     "spread": [
+      5,
+      12
+     ]
+    },
+    "output": {
+     "median": 4952,
+     "spread": [
+      1542,
+      7700
+     ]
+    },
+    "usd": {
+     "median": 0.05448570000000001,
+     "spread": [
+      0.024374399999999997,
+      0.08308220000000001
+     ],
+     "sum": 0.7728953999999999
+    },
+    "denied": 0,
+    "failed": 7,
+    "asked": 0,
+    "prompt": [
+     14411
+    ],
+    "firstInput": {
+     "median": 12963.5,
+     "spread": [
+      12946,
+      12984
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   },
+   "no-format": {
+    "runs": 10,
+    "right": 10,
+    "typed": 10,
+    "firstRight": 6,
+    "long": 5,
+    "bigThink": 1,
+    "seconds": {
+     "median": 27.54,
+     "spread": [
+      16.062,
+      79.453
+     ]
+    },
+    "tools": {
+     "median": 4,
+     "spread": [
+      4,
+      11
+     ]
+    },
+    "output": {
+     "median": 3381.5,
+     "spread": [
+      1650,
+      8771
+     ]
+    },
+    "usd": {
+     "median": 0.0391807,
+     "spread": [
+      0.0264406,
+      0.0913154
+     ],
+     "sum": 0.4716163
+    },
+    "denied": 0,
+    "failed": 3,
+    "asked": 0,
+    "prompt": [
+     14411
+    ],
+    "firstInput": {
+     "median": 12931,
+     "spread": [
+      12914,
+      12943
+     ]
+    },
+    "models": [
+     "claude-haiku-5-5",
+     "claude-haiku-4-5"
+    ]
+   }
+  },
+  "pooled": {
+   "empty vs preset": {
+    "a": {
+     "runs": 26,
+     "firstWrong": {
+      "mean": 0.46153846153846156,
+      "median": 0
+     },
+     "long": 15,
+     "bigThink": {
+      "mean": 0.19230769230769232,
+      "median": 0
+     },
+     "output": {
+      "mean": 6054.115384615385,
+      "median": 5459
+     },
+     "seconds": {
+      "mean": 46.04242307692308,
+      "median": 42.051500000000004
+     },
+     "work": {
+      "mean": 7.076923076923077,
+      "median": 6
+     },
+     "usd": {
+      "mean": 0.060636380769230766,
+      "median": 0.05865564999999999
+     },
+     "hugeThink": {
+      "mean": 0.11538461538461539,
+      "median": 0
+     }
+    },
+    "b": {
+     "runs": 56,
+     "firstWrong": {
+      "mean": 0.375,
+      "median": 0
+     },
+     "long": 27,
+     "bigThink": {
+      "mean": 0.125,
+      "median": 0
+     },
+     "output": {
+      "mean": 3823.7678571428573,
+      "median": 2387
+     },
+     "seconds": {
+      "mean": 31.62485714285713,
+      "median": 20.9555
+     },
+     "work": {
+      "mean": 5.767857142857143,
+      "median": 4
+     },
+     "usd": {
+      "mean": 0.049935987499999994,
+      "median": 0.04096545
+     },
+     "hugeThink": {
+      "mean": 0.017857142857142856,
+      "median": 0
+     }
+    },
+    "p": {
+     "output": 0.005,
+     "seconds": 0.006,
+     "work": 0.019,
+     "usd": 0.065,
+     "firstWrong": 0.308,
+     "bigThink": 0.311,
+     "hugeThink": 0.092
+    }
+   },
+   "ours vs after": {
+    "a": {
+     "runs": 16,
+     "firstWrong": {
+      "mean": 0.375,
+      "median": 0
+     },
+     "long": 9,
+     "bigThink": {
+      "mean": 0.1875,
+      "median": 0
+     },
+     "output": {
+      "mean": 6512.9375,
+      "median": 4298
+     },
+     "seconds": {
+      "mean": 48.4795625,
+      "median": 35.737
+     },
+     "work": {
+      "mean": 6.375,
+      "median": 5
+     },
+     "usd": {
+      "mean": 0.06292760624999999,
+      "median": 0.048932699999999996
+     },
+     "hugeThink": {
+      "mean": 0.1875,
+      "median": 0
+     }
+    },
+    "b": {
+     "runs": 16,
+     "firstWrong": {
+      "mean": 0.5,
+      "median": 0.5
+     },
+     "long": 10,
+     "bigThink": {
+      "mean": 0.1875,
+      "median": 0
+     },
+     "output": {
+      "mean": 4220.4375,
+      "median": 4952
+     },
+     "seconds": {
+      "mean": 34.276624999999996,
+      "median": 38.8065
+     },
+     "work": {
+      "mean": 6.4375,
+      "median": 5
+     },
+     "usd": {
+      "mean": 0.048305962499999994,
+      "median": 0.05448570000000001
+     },
+     "hugeThink": {
+      "mean": 0,
+      "median": 0
+     }
+    },
+    "p": {
+     "output": 0.097,
+     "seconds": 0.11,
+     "work": 0.561,
+     "usd": 0.154,
+     "firstWrong": 0.86,
+     "bigThink": 0.676,
+     "hugeThink": 0.114
+    }
+   },
+   "memory off vs on": {
+    "a": {
+     "runs": 26,
+     "firstWrong": {
+      "mean": 0.46153846153846156,
+      "median": 0
+     },
+     "long": 15,
+     "bigThink": {
+      "mean": 0.15384615384615385,
+      "median": 0
+     },
+     "output": {
+      "mean": 4188.653846153846,
+      "median": 4649.5
+     },
+     "seconds": {
+      "mean": 34.39588461538461,
+      "median": 36.5695
+     },
+     "work": {
+      "mean": 6.230769230769231,
+      "median": 4
+     },
+     "usd": {
+      "mean": 0.04786583461538462,
+      "median": 0.05082855
+     },
+     "hugeThink": {
+      "mean": 0,
+      "median": 0
+     }
+    },
+    "b": {
+     "runs": 30,
+     "firstWrong": {
+      "mean": 0.3,
+      "median": 0
+     },
+     "long": 12,
+     "bigThink": {
+      "mean": 0.1,
+      "median": 0
+     },
+     "output": {
+      "mean": 3507.5333333333333,
+      "median": 2044.5
+     },
+     "seconds": {
+      "mean": 29.2233,
+      "median": 19.371000000000002
+     },
+     "work": {
+      "mean": 5.366666666666666,
+      "median": 4
+     },
+     "usd": {
+      "mean": 0.05173011999999999,
+      "median": 0.038779400000000006
+     },
+     "hugeThink": {
+      "mean": 0.03333333333333333,
+      "median": 0
+     }
+    },
+    "p": {
+     "output": 0.14,
+     "seconds": 0.129,
+     "work": 0.107,
+     "usd": 0.759,
+     "firstWrong": 0.168,
+     "bigThink": 0.424,
+     "hugeThink": 1
+    }
+   },
+   "format vs text": {
+    "a": {
+     "runs": 26,
+     "firstWrong": {
+      "mean": 0.4230769230769231,
+      "median": 0
+     },
+     "long": 14,
+     "bigThink": {
+      "mean": 0.11538461538461539,
+      "median": 0
+     },
+     "output": {
+      "mean": 3866.6923076923076,
+      "median": 3992
+     },
+     "seconds": {
+      "mean": 31.976730769230773,
+      "median": 30.6485
+     },
+     "work": {
+      "mean": 6.038461538461538,
+      "median": 4
+     },
+     "usd": {
+      "mean": 0.04918675384615385,
+      "median": 0.047902150000000004
+     },
+     "hugeThink": {
+      "mean": 0,
+      "median": 0
+     }
+    },
+    "b": {
+     "runs": 20,
+     "firstWrong": {
+      "mean": 0.3,
+      "median": 0
+     },
+     "long": 7,
+     "bigThink": {
+      "mean": 0.1,
+      "median": 0
+     },
+     "output": {
+      "mean": 3450.35,
+      "median": 2059.5
+     },
+     "seconds": {
+      "mean": 29.01875,
+      "median": 19.116500000000002
+     },
+     "work": {
+      "mean": 5.35,
+      "median": 4
+     },
+     "usd": {
+      "mean": 0.046482200000000015,
+      "median": 0.03671085
+     },
+     "hugeThink": {
+      "mean": 0,
+      "median": 0
+     }
+    },
+    "p": {
+     "output": 0.269,
+     "seconds": 0.283,
+     "work": 0.199,
+     "usd": 0.328,
+     "firstWrong": 0.29,
+     "bigThink": 0.633,
+     "hugeThink": 1
+    }
+   }
+  }
+ },
+ "job:after": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 15.832,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 68896,
+    "cached": 62912,
+    "output": 1659
+   },
+   "usd": 0.026666800000000004,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12984,
+    "outs": [
+     183,
+     136,
+     688,
+     270,
+     382
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 37.867,
+   "tools": 9,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 141360,
+    "cached": 132443,
+    "output": 4854
+   },
+   "usd": 0.05542890000000001,
+   "requests": 10,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12974,
+    "outs": [
+     174,
+     134,
+     959,
+     228,
+     2151,
+     154,
+     253,
+     148,
+     653
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return `${"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.129,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 68827,
+    "cached": 63738,
+    "output": 1542
+   },
+   "usd": 0.024374399999999997,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12964,
+    "outs": [
+     167,
+     131,
+     729,
+     187,
+     328
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 18.274,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69474,
+    "cached": 64030,
+    "output": 1985
+   },
+   "usd": 0.0273281,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12962,
+    "outs": [
+     178,
+     135,
+     1070,
+     218,
+     384
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 30.097,
+   "tools": 7,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 103799,
+    "cached": 96352,
+    "output": 3610
+   },
+   "usd": 0.042675300000000006,
+   "requests": 8,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12965,
+    "outs": [
+     254,
+     130,
+     1115,
+     275,
+     1301,
+     198,
+     337
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 17.117,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69486,
+    "cached": 64097,
+    "output": 1817
+   },
+   "usd": 0.0263848,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12967,
+    "outs": [
+     193,
+     132,
+     1011,
+     206,
+     275
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 45.903,
+   "tools": 8,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 126090,
+    "cached": 116245,
+    "output": 5863
+   },
+   "usd": 0.0607181,
+   "requests": 9,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12972,
+    "outs": [
+     226,
+     135,
+     601,
+     188,
+     3882,
+     150,
+     338,
+     343
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 52.562,
+   "tools": 12,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 199445,
+    "cached": 188221,
+    "output": 6656
+   },
+   "usd": 0.0746067,
+   "requests": 13,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12947,
+    "outs": [
+     143,
+     130,
+     987,
+     247,
+     1672,
+     132,
+     429,
+     196,
+     1126,
+     188,
+     873,
+     533
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 4,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 47.503,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 79404,
+    "cached": 68894,
+    "output": 6962
+   },
+   "usd": 0.062832,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12961,
+    "outs": [
+     165,
+     136,
+     5977,
+     389,
+     295
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 39.746,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 76724,
+    "cached": 67654,
+    "output": 5705
+   },
+   "usd": 0.05354250000000001,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12965,
+    "outs": [
+     179,
+     147,
+     4654,
+     240,
+     485
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 11,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.657,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 68961,
+    "cached": 63829,
+    "output": 1628
+   },
+   "usd": 0.024899000000000004,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12963,
+    "outs": [
+     185,
+     132,
+     774,
+     167,
+     370
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 12,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.702,
+   "tools": 5,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69235,
+    "cached": 63917,
+    "output": 1814
+   },
+   "usd": 0.0262103,
+   "requests": 6,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12964,
+    "outs": [
+     148,
+     132,
+     1064,
+     159,
+     311
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 13,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 46.078,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 160520,
+    "cached": 150994,
+    "output": 5125
+   },
+   "usd": 0.059849,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12946,
+    "outs": [
+     245,
+     129,
+     572,
+     283,
+     2608,
+     133,
+     261,
+     139,
+     324,
+     431
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 14,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 60.803,
+   "tools": 12,
+   "failedTools": 2,
+   "asked": 0,
+   "tokens": {
+    "input": 206901,
+    "cached": 194356,
+    "output": 7700
+   },
+   "usd": 0.08308220000000001,
+   "requests": 13,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12958,
+    "outs": [
+     272,
+     133,
+     132,
+     868,
+     178,
+     201,
+     4707,
+     128,
+     239,
+     174,
+     320,
+     348
+    ],
+    "calls": [
+     "Read!",
+     "Bash",
+     "Read",
+     "Edit",
+     "Read",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Read",
+      "kind": "failed",
+      "text": "EISDIR: illegal operation on a directory, read '<work>/job-after-14-be4673/copy'"
+     },
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 15,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 40.815,
+   "tools": 10,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 160364,
+    "cached": 150897,
+    "output": 5050
+   },
+   "usd": 0.059345800000000004,
+   "requests": 11,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12958,
+    "outs": [
+     191,
+     137,
+     891,
+     234,
+     2323,
+     128,
+     194,
+     201,
+     361,
+     390
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return `${"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 16,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 46.341,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 179176,
+    "cached": 169079,
+    "output": 5557
+   },
+   "usd": 0.0649515,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12955,
+    "outs": [
+     179,
+     133,
+     871,
+     145,
+     266,
+     2547,
+     134,
+     243,
+     190,
+     323,
+     526
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Read",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash",
+     "StructuredOutput"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: export function formatBytes(n) { if (n < 1024) { return n +"
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  }
+ ],
+ "job:no-format": [
+  {
+   "n": 1,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.138,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69620,
+    "cached": 63265,
+    "output": 1650
+   },
+   "usd": 0.0274147,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12931,
+    "outs": [
+     278,
+     136,
+     688,
+     287,
+     261
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 17.953,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69906,
+    "cached": 64185,
+    "output": 2040
+   },
+   "usd": 0.0281892,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12941,
+    "outs": [
+     267,
+     138,
+     1037,
+     255,
+     343
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 47.704,
+   "tools": 9,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 164793,
+    "cached": 154373,
+    "output": 5976
+   },
+   "usd": 0.06624599999999999,
+   "requests": 10,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12931,
+    "outs": [
+     222,
+     134,
+     1174,
+     226,
+     2705,
+     143,
+     263,
+     144,
+     414,
+     551
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 19.808,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 70464,
+    "cached": 64421,
+    "output": 2318
+   },
+   "usd": 0.030246799999999997,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12923,
+    "outs": [
+     307,
+     134,
+     1326,
+     281,
+     270
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 16.062,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69244,
+    "cached": 63724,
+    "output": 1780
+   },
+   "usd": 0.0264406,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12924,
+    "outs": [
+     178,
+     135,
+     985,
+     216,
+     266
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 35.272,
+   "tools": 6,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 104672,
+    "cached": 96614,
+    "output": 4445
+   },
+   "usd": 0.0481146,
+   "requests": 7,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12936,
+    "outs": [
+     275,
+     133,
+     1131,
+     270,
+     1756,
+     192,
+     688
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 2,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 43.083,
+   "tools": 9,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 162069,
+    "cached": 152244,
+    "output": 5101
+   },
+   "usd": 0.0604676,
+   "requests": 10,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12943,
+    "outs": [
+     167,
+     134,
+     1147,
+     191,
+     2371,
+     132,
+     254,
+     144,
+     279,
+     282
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash",
+     "Edit!",
+     "Read",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Edit",
+      "kind": "failed",
+      "text": "<tool_use_error>String to replace not found in file. String: // The issue asks for formatBytes(n). This is the starting "
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 17.69,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 69286,
+    "cached": 63702,
+    "output": 1898
+   },
+   "usd": 0.027156899999999998,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12914,
+    "outs": [
+     180,
+     134,
+     1078,
+     223,
+     283
+    ],
+    "calls": [
+     "Glob",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 79.453,
+   "tools": 11,
+   "failedTools": 1,
+   "asked": 0,
+   "tokens": {
+    "input": 211582,
+    "cached": 197777,
+    "output": 8771
+   },
+   "usd": 0.0913154,
+   "requests": 12,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12941,
+    "outs": [
+     267,
+     145,
+     1308,
+     186,
+     179,
+     721,
+     2208,
+     1183,
+     1684,
+     149,
+     324,
+     417
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash!",
+     "Bash",
+     "Read",
+     "Bash",
+     "Edit",
+     "Edit",
+     "Bash",
+     "Bash"
+    ],
+    "errors": [
+     {
+      "tool": "Bash",
+      "kind": "failed",
+      "text": "Exit code 1 [eval]:1 import('./bytes.js').then(m => console.log('formatBytes(1536):', m.formatBytes(1536)), console.log("
+     }
+    ],
+    "edits": 3,
+    "firstRight": 3
+   },
+   "error": null
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "graded": 10,
+   "typed": true,
+   "stop": "end_turn",
+   "seconds": 52.704,
+   "tools": 4,
+   "failedTools": 0,
+   "asked": 0,
+   "tokens": {
+    "input": 80426,
+    "cached": 69448,
+    "output": 7399
+   },
+   "usd": 0.06602450000000001,
+   "requests": 5,
+   "models": [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5"
+   ],
+   "denied": 0,
+   "trace": {
+    "models": [
+     "claude-haiku-4-5-20251001"
+    ],
+    "prompt": 14411,
+    "memory": false,
+    "first": 12926,
+    "outs": [
+     330,
+     135,
+     6262,
+     251,
+     421
+    ],
+    "calls": [
+     "Bash",
+     "Read",
+     "Edit",
+     "Bash"
+    ],
+    "errors": [],
+    "edits": 1,
+    "firstRight": 10
+   },
+   "error": null
+  }
+ ]
+}
