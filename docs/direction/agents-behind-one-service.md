@@ -63,9 +63,12 @@ const drafted = yield* Agents.run({
 - **Does the direct Agent SDK path stay** as a second layer, or go once ACP
   matches it? Lean: it goes, after a run of the same cases shows the ACP path
   gives the same answers. 70%: the dollar cap and a clean stop are the doubt.
-- **The plan login.** OpenAI says a ChatGPT plan login is for one person's own
-  runs, and API keys are for automation (experiment 152). A provider used on a
-  shared or remote box needs its maker's API key.
+- **The plan login.** Each person signs in with their own plan, on their own
+  laptop or a remote box only they control, and one login is never shared
+  between people. OpenAI documents those runs (experiment 152, section 6). An
+  API key is only for a shared service, or a public repository's own CI.
+  Corrected 2026-10-26: the first version said a shared or remote box needs an
+  API key. A remote box one person controls does not.
 
 ## What this cannot tell us
 
