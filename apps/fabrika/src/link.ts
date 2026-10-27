@@ -2,7 +2,7 @@ import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {isPortName} from "./bridge.ts";
-import {type Read, reader} from "./messages.ts";
+import {type Attached, type Read, reader} from "./messages.ts";
 
 // The link between the host and the app, as tmux's socket is between its server and a client:
 // what goes over it, and the handshake that starts it. No platform here: the host's server
@@ -13,7 +13,8 @@ import {type Read, reader} from "./messages.ts";
 // as tmux drops a client that sends it a bad message.
 //
 //   app   {"type":"hello","version":1}
-//   host  {"type":"hello","version":1}                      the same version: the link is up
+//   host  {"type":"hello","version":1,"build":"3f9a0c21b7d4"}   the same version: the link is up;
+//                                                          the app compares the build (`foundOf`)
 //   app   {"type":"page"}                                    a page loaded: show it everything
 //   host  {"type":"port","port":"tile:t1"}                   the page gets a fresh port of that name
 //   host  {"type":"to","port":"tile:t1","m":{"type":"write","data":"tsh$ "}}
@@ -45,6 +46,20 @@ const Port = Schema.String.check(
 
 const Hello = Schema.Struct({type: Schema.Literal("hello"), version: Schema.Int});
 
+/**
+ * The host's hello names its build too (build-id.ts), so the app can tell a host that runs older
+ * code. Optional: a host built before it names none, and reads as "build unknown". Only the host
+ * names one: a host reads every line strictly, so one built before would refuse an app's hello
+ * with a key it does not know.
+ *
+ *   host  {"type":"hello","version":1,"build":"3f9a0c21b7d4"}
+ */
+const HostHello = Schema.Struct({
+	type: Schema.Literal("hello"),
+	version: Schema.Int,
+	build: Schema.optionalKey(Schema.String),
+});
+
 /** What the app tells the host. */
 export const Up = Schema.Union([
 	Hello,
@@ -59,7 +74,7 @@ export type Up = typeof Up.Type;
 
 /** What the host tells the app. */
 export const Down = Schema.Union([
-	Hello,
+	HostHello,
 	/** Give the page a fresh port of this name; one there already closes. */
 	Schema.Struct({type: Schema.Literal("port"), port: Port}),
 	/** Send `m` to the page on the port of this name. */
@@ -193,3 +208,13 @@ export const linkMsgOf = (got: Read<Up | Down>): LinkMsg => {
 	if (msg.type === "hello") return {type: "hello", version: msg.version};
 	return {type: "line", m: msg};
 };
+
+/**
+ * What the app found once the link is up, from the build the host's hello named (`null`: it named
+ * none, as a host built before builds were named) and the app's own: the same build, or another.
+ *
+ *   foundOf("3f9a0c21b7d4", "3f9a0c21b7d4")   {kind: "up"}
+ *   foundOf(null, "3f9a0c21b7d4")             {kind: "build", theirs: null, ours: "3f9a0c21b7d4"}
+ */
+export const foundOf = (theirs: string | null, ours: string): Attached =>
+	theirs === ours ? {kind: "up"} : {kind: "build", theirs, ours};

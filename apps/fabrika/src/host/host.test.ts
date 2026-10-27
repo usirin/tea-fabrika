@@ -58,12 +58,14 @@ const live = (sock: string) =>
 	);
 
 /** A host on `home`, in its own scope: closed, it stops. Answers once it listens. */
-const hostOn = (home: string, ours?: number) =>
+const hostOn = (home: string, ours?: number, build?: string | null) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.make();
 		// Its own scope, inside its fiber: stopping interrupts the server before its socket closes,
 		// as SIGTERM does in host/main.ts, so no app attached holds the close.
-		yield* runHost({home, pid: 4242, ours}).pipe(Effect.scoped, Effect.forkIn(scope));
+		// The pid is this test's own, so `stopHost` on this home refuses it (host/stop.ts): a host
+		// in a test's process is stopped with its scope, never by a signal.
+		yield* runHost({home, pid: process.pid, ours, build}).pipe(Effect.scoped, Effect.forkIn(scope));
 		const {sock} = yield* pathsOf(home);
 		yield* live(sock);
 		return {stop: Scope.close(scope, Exit.void)};
@@ -138,7 +140,7 @@ describe("the host", () => {
 		expect(seen.dir).toBe(0o700);
 		expect(seen.sock).toBe(0o600);
 		expect(seen.type).toBe("Socket");
-		expect(seen.pid).toBe("4242\n");
+		expect(seen.pid).toBe(`${process.pid}\n`);
 		// Stopped, it leaves no socket behind: the next start finds no host.
 		expect(seen.after).toBe(false);
 	});
@@ -299,13 +301,19 @@ describe("attaching", () => {
 			Effect.gen(function* () {
 				const {home} = yield* freshHome;
 				const started: string[] = [];
-				const wire = yield* attach({home, deliver: () => {}, start: startIn(home, started)});
+				const first = yield* attach({home, deliver: () => {}, start: startIn(home, started)});
 				// A second app attaches to the same host, and starts none.
 				const second = yield* attach({home, deliver: () => {}, start: startIn(home, started)});
-				return {state: wire.state().at, second: second.state().at, started: started.length};
+				return {
+					state: first.wire.state().at,
+					found: first.found,
+					second: second.wire.state().at,
+					started: started.length,
+				};
 			}),
 		);
-		expect(seen).toEqual({state: "up", second: "up", started: 1});
+		// The host runs this build: both are this test's code, run from src/.
+		expect(seen).toEqual({state: "up", found: {kind: "up"}, second: "up", started: 1});
 	});
 
 	it("starts a new host over a socket left by a host that crashed", async () => {
@@ -324,7 +332,7 @@ describe("attaching", () => {
 				yield* crashed.kill({killSignal: "SIGKILL"});
 				const before = yield* reach(paths.sock);
 				const started: string[] = [];
-				const wire = yield* attach({home, deliver: () => {}, start: startIn(home, started)});
+				const {wire} = yield* attach({home, deliver: () => {}, start: startIn(home, started)});
 				return {before, state: wire.state().at, started: started.length};
 			}),
 		);
@@ -355,6 +363,54 @@ describe("attaching", () => {
 		});
 		expect(seen.after).toBe("live");
 		expect(seen.started).toBe(0);
+	});
+
+	it("attaches to a host of another build, and names both builds", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const old = yield* hostOn(home, undefined, "0ld0ld0ld0ld");
+				const hello = yield* appOn(paths.sock);
+				const said = yield* hello.wire.up;
+				const started: string[] = [];
+				const {wire, found} = yield* attach({
+					home,
+					deliver: () => {},
+					start: startIn(home, started),
+					build: "n3wn3wn3wn3w",
+				});
+				const state = wire.state().at;
+				yield* old.stop;
+				return {said, state, found, started: started.length};
+			}),
+		);
+		expect(seen.said).toBe("0ld0ld0ld0ld");
+		expect(seen.state).toBe("up");
+		expect(seen.found).toEqual({kind: "build", theirs: "0ld0ld0ld0ld", ours: "n3wn3wn3wn3w"});
+		expect(seen.started).toBe(0);
+	});
+
+	it("reads a host whose hello names no build, as one built before builds, as build unknown", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const old = yield* hostOn(home, undefined, null);
+				const hello = yield* appOn(paths.sock);
+				const said = yield* hello.wire.up;
+				const {wire, found} = yield* attach({
+					home,
+					deliver: () => {},
+					start: Effect.die("a host answers, so none is started"),
+					build: "n3wn3wn3wn3w",
+				});
+				const state = wire.state().at;
+				yield* old.stop;
+				return {said, state, found};
+			}),
+		);
+		expect(seen.said).toBeNull();
+		expect(seen.state).toBe("up");
+		expect(seen.found).toEqual({kind: "build", theirs: null, ours: "n3wn3wn3wn3w"});
 	});
 
 	it("says so when the host it started stops at once", async () => {

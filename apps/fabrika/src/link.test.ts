@@ -1,6 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
 import {
+	foundOf,
 	type Link,
 	type LinkCmd,
 	type LinkCtx,
@@ -85,5 +86,27 @@ describe("the link", () => {
 		expect(linkMsgOf(readUp({type: "on", port: "../t1", m: null})).type).toBe("bad");
 		expect(linkMsgOf(readDown({type: "page"})).type).toBe("bad");
 		expect(linkMsgOf(readDown({type: "gone", port: "run:counter:1a2b"})).type).toBe("line");
+	});
+
+	it("reads the build in the host's hello, or none; a hello to the host that names one is bad", () => {
+		expect(readDown({type: "hello", version: 1, build: "3f9a0c21b7d4"}).kind).toBe("read");
+		expect(readDown({type: "hello", version: 1}).kind).toBe("read");
+		expect(readDown({type: "hello", version: 1, build: 7}).kind).toBe("refused");
+		// A host reads strictly, so the app's hello names no build: one built before would refuse it.
+		expect(linkMsgOf(readUp({type: "hello", version: 1, build: "3f9a0c21b7d4"})).type).toBe("bad");
+	});
+
+	it("compares the host's build with the app's: the same, another, or none named", () => {
+		expect(foundOf("3f9a0c21b7d4", "3f9a0c21b7d4")).toEqual({kind: "up"});
+		expect(foundOf("0ld0ld0ld0ld", "3f9a0c21b7d4")).toEqual({
+			kind: "build",
+			theirs: "0ld0ld0ld0ld",
+			ours: "3f9a0c21b7d4",
+		});
+		expect(foundOf(null, "3f9a0c21b7d4")).toEqual({
+			kind: "build",
+			theirs: null,
+			ours: "3f9a0c21b7d4",
+		});
 	});
 });
