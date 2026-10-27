@@ -2,7 +2,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
-import {GITHUB, gitHubPulls} from "@tea-fabrika/tracker/github";
+import {GITHUB, gitHubPullRequests} from "@tea-fabrika/tracker/github";
 import {Effect, FileSystem, Layer, Logger} from "effect";
 import {runHost} from "./run.ts";
 import {pathsOf} from "./socket.ts";
@@ -37,7 +37,10 @@ const home = process.env.FABRIKA_HOME;
  * person's own `gh` login. The connected repositories are the integration's own list (`GITHUB`).
  * The host holds the login; no page sees it.
  */
-const pulls = Layer.provide(gitHubPulls(GITHUB), gitHubCodeHost({own: [], reviewers: []}));
+const pullRequests = Layer.provide(
+	gitHubPullRequests(GITHUB),
+	gitHubCodeHost({own: [], reviewers: []}),
+);
 
 const main = Effect.gen(function* () {
 	if (home === undefined || home === "")
@@ -49,6 +52,9 @@ const main = Effect.gen(function* () {
 	yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
 	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
 	return yield* runHost({home, pid: process.pid}).pipe(Effect.provide(Logger.layer([toFile])));
-}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pulls)));
+}).pipe(
+	Effect.scoped,
+	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests)),
+);
 
 NodeRuntime.runMain(main);

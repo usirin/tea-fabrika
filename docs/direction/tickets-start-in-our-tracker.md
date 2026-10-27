@@ -78,8 +78,11 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
 // programs/tracker/src/github.ts
 export const GITHUB: GitHubSettings = {repos: ["https://github.com/usirin/tea-fabrika"]};
 
-// apps/fabrika/src/host/main.ts: the tracker's `Pulls`, on CodeHost, on the gh login
-const pulls = Layer.provide(gitHubPulls(GITHUB), gitHubCodeHost({own: [], reviewers: []}));
+// apps/fabrika/src/host/main.ts: the tracker's `PullRequests`, on CodeHost, on the gh login
+const pullRequests = Layer.provide(
+	gitHubPullRequests(GITHUB),
+	gitHubCodeHost({own: [], reviewers: []}),
+);
 ```
 
 - **What it does first:** the list shows the connected repositories' open pull

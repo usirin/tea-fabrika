@@ -107,7 +107,7 @@ function codeHost(world: World) {
 	};
 	const layer = Layer.mergeAll(
 		Layer.succeed(CodeHost, {
-			openPulls: () => Effect.succeed([]),
+			pullRequests: () => Effect.succeed([]),
 			prFacts: () =>
 				Effect.sync(() => {
 					calls.read += 1;

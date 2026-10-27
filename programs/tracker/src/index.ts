@@ -12,7 +12,7 @@ import {
 	type TrackerMsg,
 	tracker as tickets,
 } from "./machine.ts";
-import {pullsCell, pullsWaitRunner} from "./pulls.ts";
+import {pullRequestsCell, pullRequestsWaitRunner} from "./pull-requests.ts";
 import {TicketNumber, Write} from "./ticket.ts";
 
 // The tracker: tickets on the ledger, one stream of facts each (./ticket.ts), and a window to work
@@ -27,10 +27,10 @@ import {TicketNumber, Write} from "./ticket.ts";
 //   {kind: "show", show: "all"}                                the list shows closed tickets too
 //   {kind: "find", text: "login"}                              and only titles with "login" in them
 //
-// It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and `Pulls`
-// (./pulls.ts), the open pull requests shown beside the tickets: GitHub's, through
-// `@tea-fabrika/tracker/github`, or a fixed list. Its machine's state is kept nowhere: started
-// again, it reads the ledger again.
+// It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and
+// `PullRequests` (./pull-requests.ts), the open pull requests shown beside the tickets: GitHub's,
+// through `@tea-fabrika/tracker/github`, or a fixed list. Its machine's state is kept nowhere:
+// started again, it reads the ledger again.
 //
 // Left for later, with a place for each: an agent writing to a ticket is another `Author` on the
 // same ledger, and the poll already shows its facts; linking a pull request to a ticket and the
@@ -39,7 +39,7 @@ import {TicketNumber, Write} from "./ticket.ts";
 
 export {Author} from "./ledger.ts";
 export type {Show, Shown} from "./machine.ts";
-export {type Pull, Pulls, pullsOf} from "./pulls.ts";
+export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
 export type {Fact, Summary, Ticket, Write} from "./ticket.ts";
 
 /**
@@ -74,8 +74,8 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 
 const options = {
 	ctx: undefined,
-	interpret: {load: loadCell, save: saveCell, pulls: pullsCell},
-	subscribe: {poll: pollRunner, pulls_wait: pullsWaitRunner},
+	interpret: {load: loadCell, save: saveCell, pull_requests: pullRequestsCell},
+	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner},
 	terminal: over,
 };
 
@@ -103,8 +103,8 @@ export const tracker = defineProgram({
 					load: "read the ledger",
 					save: "write a fact",
 					poll: "wait for news",
-					pulls: "read the open pull requests",
-					pulls_wait: "wait to read them again",
+					pull_requests: "read the open pull requests",
+					pull_requests_wait: "wait to read them again",
 				},
 			}),
 			status: statusOf,

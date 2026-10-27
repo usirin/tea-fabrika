@@ -27,7 +27,7 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 
 // What its window is shown (`Shown`), once the facts are read back:
 // {ready: true, page: {kind: "list", tickets: [{number: 1, title: "Login fails", state: "closed",
-//   comments: 1, at: ...}], pulls: [...], counts: {open: 0, closed: 1, pulls: 0}},
+//   comments: 1, at: ...}], pullRequests: [...], counts: {open: 0, closed: 1, pullRequests: 0}},
 //   filter: {show: "all", find: "login"}, github: {read: true, why: null},
 //   saving: [], failed: null, problems: [], unreachable: null, quitting: false}
 ```
@@ -40,8 +40,8 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 | | `src/ticket.ts` | The ticket, pure: `Fact`, `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
-| | `src/pulls.ts` | `Pull`, and the `Pulls` service the program reads open pull requests through: `pulls`, and the wait between reads. `pullsOf(list)` for a test. |
-| `@tea-fabrika/tracker/github` | `src/github.ts` | The GitHub integration: `gitHubPulls(settings)`, `Pulls` on the pipeline's `CodeHost`, and `GITHUB`, the connected repositories. |
+| | `src/pull-requests.ts` | `PullRequest`, and the `PullRequests` service the program reads open pull requests through: `pull_requests`, and the wait between reads. `pullRequestsOf(list)` for a test. |
+| `@tea-fabrika/tracker/github` | `src/github.ts` | The GitHub integration: `gitHubPullRequests(settings)`, `PullRequests` on the pipeline's `CodeHost`, and `GITHUB`, the connected repositories. |
 | `@tea-fabrika/tracker/window` | `src/window.tsx` | `TrackerWindow`: the filter and search, the list, the pull requests, the composer, a ticket's timeline. Plain React. |
 | | `src/links.ts` | `piecesOf`: a body cut into text and links, by GitHub's autolink rule, for http and https. Pure. |
 
@@ -76,8 +76,9 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   is a pure function of them (`shownOf`), the laws in `src/filter.laws.test.ts` hold it, and a
   second window on the same run sees the same list. Which row is picked stays the window's: it
   is focus, not data.
-- **Open pull requests sit beside the tickets.** They come through the `Pulls` service, read at
-  the start and then two minutes after each answer. In the app it is `gitHubPulls(GITHUB)`: the
+- **Open pull requests sit beside the tickets.** They come through the `PullRequests` service, read
+  at the start and then two minutes after each answer. In the app it is
+  `gitHubPullRequests(GITHUB)`: the
   pipeline's `CodeHost`, on the person's own `gh` login, so the tracker holds no token and the
   window never sees one. A pull request shows its repository's short name, number, title, a
   draft mark and when it last moved, never who opened it. Enter on one opens it in the browser.

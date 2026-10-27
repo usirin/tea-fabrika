@@ -12,7 +12,7 @@ import {
 import type {MsgOf} from "@kampus/fabrika";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {load, over, PROBLEMS, pulls, save, type Tracker, tracker} from "./machine.ts";
+import {load, over, PROBLEMS, pullRequests, save, type Tracker, tracker} from "./machine.ts";
 import type {Entry, Fact, Write} from "./ticket.ts";
 
 // The tracker's laws, on tea's pbt: after every step of any list of Msgs, from the real init.
@@ -22,7 +22,7 @@ import type {Entry, Fact, Write} from "./ticket.ts";
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
-type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pulls>;
+type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pullRequests>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -67,8 +67,8 @@ const table: MsgArbitraryTable<Msg> = {
 	}),
 	find: arbRecordMsg("find", {text: fc.constantFrom("", "login")}),
 	refresh: arbConstantMsg("refresh"),
-	pulls_ok: fc.constant(pulls.ok(pulls({}), {pulls: []}, 0)),
-	pulls_err: fc.constant(pulls.err(pulls({}), {_tag: "unreachable"}, 0)),
+	pull_requests_ok: fc.constant(pullRequests.ok(pullRequests({}), {pullRequests: []}, 0)),
+	pull_requests_err: fc.constant(pullRequests.err(pullRequests({}), {_tag: "unreachable"}, 0)),
 	load_ok: fc
 		.record({
 			after,

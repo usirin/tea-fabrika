@@ -7,7 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type {Do, Pull, Show, Shown, Summary, Ticket, tracker, Write} from "./index.ts";
+import type {Do, PullRequest, Show, Shown, Summary, Ticket, tracker, Write} from "./index.ts";
 import {piecesOf} from "./links.ts";
 
 // The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
@@ -61,7 +61,7 @@ const isSubmit = (e: KeyboardEvent) => e.key === "Enter" && (e.ctrlKey || e.meta
 
 /** A row on the list, by what it is: a ticket by its number, a pull request by its link. */
 const ticketRow = (n: number) => `ticket:${n}`;
-const pullRow = (p: Pull) => `pull:${p.url}`;
+const prRow = (pr: PullRequest) => `pr:${pr.url}`;
 
 /** A repository's short name: the last part of its link. */
 const shortOf = (repo: string): string => repo.split("/").filter(Boolean).at(-1) ?? repo;
@@ -174,14 +174,14 @@ function ListPage(props: {
 	readonly act: Send;
 }) {
 	const {view, page, pick, draft, act} = props;
-	const {tickets, pulls, counts} = page;
+	const {tickets, pullRequests, counts} = page;
 	const pageRef = useRef<HTMLElement>(null);
 	const titleRef = useRef<HTMLInputElement>(null);
 	const bodyRef = useRef<HTMLTextAreaElement>(null);
 	const findRef = useRef<HTMLInputElement>(null);
 	const rows = useRef(new Map<string, HTMLElement>());
 	// One list for the keys: the tickets, then the pull requests.
-	const order = [...tickets.map((t) => ticketRow(t.number)), ...pulls.map(pullRow)];
+	const order = [...tickets.map((t) => ticketRow(t.number)), ...pullRequests.map(prRow)];
 	const picked = order.find((r) => r === props.picked) ?? order[0];
 	const counted = {open: counts.open, closed: counts.closed, all: counts.open + counts.closed};
 
@@ -382,9 +382,9 @@ function ListPage(props: {
 					</ol>
 				)}
 				{view.filter.show === "closed" ? null : (
-					<section className="tracker-pulls" aria-label="pull requests">
+					<section className="tracker-pull-requests" aria-label="pull requests">
 						<h3>
-							Pull requests <span className="tracker-count">{counts.pulls}</span>
+							Pull requests <span className="tracker-count">{counts.pullRequests}</span>
 						</h3>
 						{view.github.why === null ? null : (
 							<p className="tracker-note">{view.github.why}. It tries again in a few minutes.</p>
@@ -393,19 +393,19 @@ function ListPage(props: {
 							view.github.why === null ? (
 								<p className="tracker-note">Reading pull requests…</p>
 							) : null
-						) : pulls.length === 0 ? (
+						) : pullRequests.length === 0 ? (
 							<p className="tracker-note">
 								{searching ? "No pull request has that in its title." : "No open pull requests."}
 							</p>
 						) : (
 							<ol className="tracker-list" aria-label="open pull requests">
-								{pulls.map((p) => {
-									const row = pullRow(p);
+								{pullRequests.map((pr) => {
+									const row = prRow(pr);
 									return (
 										<li key={row}>
 											<a
-												className="tracker-pull"
-												href={p.url}
+												className="tracker-pull-request"
+												href={pr.url}
 												target="_blank"
 												rel="noreferrer"
 												ref={keep(row)}
@@ -413,15 +413,15 @@ function ListPage(props: {
 												aria-current={row === picked}
 												onFocus={() => pick(row)}
 											>
-												<PullGlyph draft={p.draft} />
-												<span className="tracker-number">{p.number}</span>
+												<PullRequestGlyph draft={pr.draft} />
+												<span className="tracker-number">{pr.number}</span>
 												<span className="tracker-title">
-													{p.title}
-													{p.draft ? <span className="tracker-draft">Draft</span> : null}
+													{pr.title}
+													{pr.draft ? <span className="tracker-draft">Draft</span> : null}
 												</span>
 												<span className="tracker-sub">
-													<span>{shortOf(p.repo)}</span>
-													<time>{whenOf(p.at, Date.now())}</time>
+													<span>{shortOf(pr.repo)}</span>
+													<time>{whenOf(pr.at, Date.now())}</time>
 												</span>
 											</a>
 										</li>
@@ -494,9 +494,9 @@ const StateGlyph = ({state}: {readonly state: Summary["state"]}) => (
 	</svg>
 );
 
-const PullGlyph = ({draft}: {readonly draft: boolean}) => (
+const PullRequestGlyph = ({draft}: {readonly draft: boolean}) => (
 	<svg
-		className={`tracker-glyph ${draft ? "tracker-pull-draft" : "tracker-pull-open"}`}
+		className={`tracker-glyph ${draft ? "tracker-pull-request-draft" : "tracker-pull-request-open"}`}
 		viewBox="0 0 16 16"
 		role="img"
 		aria-label={draft ? "draft pull request" : "pull request"}

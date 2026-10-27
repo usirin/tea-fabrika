@@ -11,18 +11,18 @@ import {
 import type {MsgOf} from "@kampus/fabrika";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {load, pulls, type Show, save, shownOf, type Tracker, tracker} from "./machine.ts";
-import type {Pull} from "./pulls.ts";
+import {load, pullRequests, type Show, save, shownOf, type Tracker, tracker} from "./machine.ts";
+import type {PullRequest} from "./pull-requests.ts";
 import {type Entry, type Fact, summaryOf, type Ticket, type Write} from "./ticket.ts";
 
 // The laws of the tracker's filters and its list of open pull requests, on tea's pbt: after
 // every step of any list of Msgs, from the real init. The tickets come in through load_ok and
-// the pull requests through pulls_ok, and the search is drawn from a few pieces of the titles,
-// in mixed case and with spaces around, so it often hits and often misses.
+// the pull requests through pull_requests_ok, and the search is drawn from a few pieces of the
+// titles, in mixed case and with spaces around, so it often hits and often misses.
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
-type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pulls>;
+type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pullRequests>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -38,7 +38,7 @@ const TITLES = [
 	"Crash on save",
 	"Dark mode for the list",
 ] as const;
-const PULL_TITLES = ["Fix login", "docs: typo", "Save without a crash", "Dark Mode", "Bump effect"];
+const PR_TITLES = ["Fix login", "docs: typo", "Save without a crash", "Dark Mode", "Bump effect"];
 /** Pieces of the titles above, some in other case or with spaces around, and some that hit nothing. */
 const FINDS = [
 	"",
@@ -78,10 +78,10 @@ const entry: fc.Arbitrary<Entry> = fc.record({
 	at: fc.nat({max: 30}),
 	fact,
 });
-const pull: fc.Arbitrary<Pull> = fc
+const pullRequest: fc.Arbitrary<PullRequest> = fc
 	.record({
 		number: fc.integer({min: 1, max: 9}),
-		title: fc.constantFrom(...PULL_TITLES),
+		title: fc.constantFrom(...PR_TITLES),
 		draft: fc.boolean(),
 		at: fc.nat({max: 30}),
 	})
@@ -118,8 +118,10 @@ const table: MsgArbitraryTable<Msg> = {
 	save_err: fc
 		.tuple(id, write, fc.constantFrom("unreachable" as const, "refused" as const))
 		.map(([i, w, tag]) => save.err(saveOf(i, w, 1), {_tag: tag}, 0)),
-	pulls_ok: fc.array(pull, {maxLength: 4}).map((list) => pulls.ok(pulls({}), {pulls: list}, 0)),
-	pulls_err: fc.constant(pulls.err(pulls({}), {_tag: "unreachable"}, 0)),
+	pull_requests_ok: fc
+		.array(pullRequest, {maxLength: 4})
+		.map((list) => pullRequests.ok(pullRequests({}), {pullRequests: list}, 0)),
+	pull_requests_err: fc.constant(pullRequests.err(pullRequests({}), {_tag: "unreachable"}, 0)),
 };
 /** Lists of Msgs, long enough to load tickets, read pull requests, and filter them a few times. */
 const lists = fc.array(arbMsg(table), {maxLength: 40, size: "max"});
@@ -136,8 +138,9 @@ const matches = (text: string, title: string) => {
 const fitsShow = (s: Show, t: {readonly state: Ticket["state"]}) => s === "all" || t.state === s;
 const fits = (s: Tracker, t: Ticket) => fitsShow(s.show, t) && matches(s.find, t.title);
 
-const asked = (step: TrackerStep) => step.cmds.filter((c) => c.type === "pulls");
-const isPullsAnswer = (msg: Msg) => msg.type === "pulls_ok" || msg.type === "pulls_err";
+const asked = (step: TrackerStep) => step.cmds.filter((c) => c.type === "pull_requests");
+const isPullRequestsAnswer = (msg: Msg) =>
+	msg.type === "pull_requests_ok" || msg.type === "pull_requests_err";
 /** Deep equal, or throw with the difference, so a failed law says what it saw. */
 const same = (a: unknown, b: unknown) => {
 	expect(a).toEqual(b);
@@ -174,63 +177,69 @@ const filterOnly = every(
 );
 
 const oneReadOut = every(
-	"one pulls read is out at a time: one goes only when none is out, and the read is busy until it is answered",
+	"one pull requests read is out at a time: one goes only when none is out, and the read is busy until it is answered",
 	(step) => {
 		const {prev, msg, next} = step;
 		const sent = asked(step);
-		if (prev.pulls.ask === "busy" && next.pulls.ask === "idle") return isPullsAnswer(msg);
-		const went = prev.pulls.ask === "idle" && next.pulls.ask === "busy";
+		if (prev.pullRequests.ask === "busy" && next.pullRequests.ask === "idle")
+			return isPullRequestsAnswer(msg);
+		const went = prev.pullRequests.ask === "idle" && next.pullRequests.ask === "busy";
 		return went ? sent.length === 1 : sent.length === 0;
 	},
 );
 
 const refreshReads = every(
-	"a refresh asks for one pulls read when none is out and it is not quitting, and else does nothing",
+	"a refresh asks for one pull requests read when none is out and it is not quitting, and else does nothing",
 	({prev, msg, next, cmds}) => {
 		if (msg.type !== "refresh") return true;
-		if (prev.pulls.ask === "idle" && !prev.quitting)
-			return same(cmds, [pulls({})]) && same(next, {...prev, pulls: {...prev.pulls, ask: "busy"}});
+		if (prev.pullRequests.ask === "idle" && !prev.quitting)
+			return (
+				same(cmds, [pullRequests({})]) &&
+				same(next, {...prev, pullRequests: {...prev.pullRequests, ask: "busy"}})
+			);
 		return cmds.length === 0 && same(next, prev);
 	},
 );
 
 const okIsKept = every(
-	"a pulls list that comes back is kept as read, its why is cleared, and no read is out",
+	"a pull requests list that comes back is kept as read, its why is cleared, and no read is out",
 	({msg, next}) =>
-		msg.type !== "pulls_ok" || same(next.pulls, {ask: "idle", list: msg.value.pulls, why: null}),
+		msg.type !== "pull_requests_ok" ||
+		same(next.pullRequests, {ask: "idle", list: msg.value.pullRequests, why: null}),
 );
 
 const errKeepsList = every(
-	"a pulls read that fails says why, keeps the list it had, and no read is out",
+	"a pull requests read that fails says why, keeps the list it had, and no read is out",
 	({prev, msg, next}) =>
-		msg.type !== "pulls_err" ||
-		(next.pulls.ask === "idle" &&
-			typeof next.pulls.why === "string" &&
-			next.pulls.why.length > 0 &&
-			same(next.pulls.list, prev.pulls.list)),
+		msg.type !== "pull_requests_err" ||
+		(next.pullRequests.ask === "idle" &&
+			typeof next.pullRequests.why === "string" &&
+			next.pullRequests.why.length > 0 &&
+			same(next.pullRequests.list, prev.pullRequests.list)),
 );
 
-const answersTouchPulls = every(
-	"a pulls answer changes only the pulls part, and asks for nothing",
+const answersTouchPullRequests = every(
+	"a pull requests answer changes only the pull requests part, and asks for nothing",
 	({prev, msg, next, cmds}) =>
-		!isPullsAnswer(msg) || (cmds.length === 0 && same(next, {...prev, pulls: next.pulls})),
+		!isPullRequestsAnswer(msg) ||
+		(cmds.length === 0 && same(next, {...prev, pullRequests: next.pullRequests})),
 );
 
 const quitStopsReads = every(
-	"after a quit, no step asks for a new pulls read",
+	"after a quit, no step asks for a new pull requests read",
 	(step) => !step.next.quitting || asked(step).length === 0,
 );
 
 const waitIsOn: Law = {
-	name: "the pulls_wait Sub is on exactly while no pulls read is out and it is not quitting",
+	name: "the pull_requests_wait Sub is on exactly while no pull requests read is out and it is not quitting",
 	check: (machine) => {
 		const on = (s: Tracker) => {
-			const sub = machine.subs?.find((u) => u.type === "pulls_wait");
-			if (sub === undefined) throw new Error("the machine has no pulls_wait Sub");
+			const sub = machine.subs?.find((u) => u.type === "pull_requests_wait");
+			if (sub === undefined) throw new Error("the machine has no pull_requests_wait Sub");
 			const deps = sub.deps(s);
 			return deps !== null && deps !== undefined;
 		};
-		const wanted = (s: Tracker) => s.pulls.ask === "idle" && !s.quitting;
+		const wanted = (s: Tracker) => s.pullRequests.ask === "idle" && !s.quitting;
 		propertyInvariant(
 			machine,
 			ctx,
@@ -266,14 +275,14 @@ const ticketsAll = every(
 	},
 );
 
-const pullsShown = every(
+const pullRequestsShown = every(
 	"the list shows the pull requests read whose title matches, in the order read, and none under closed",
 	({next}) => {
 		const page = listOf(next);
 		if (page === null) return true;
-		const read = next.pulls.list ?? [];
+		const read = next.pullRequests.list ?? [];
 		const wanted = next.show === "closed" ? [] : read.filter((p) => matches(next.find, p.title));
-		return same(page.pulls, wanted);
+		return same(page.pullRequests, wanted);
 	},
 );
 
@@ -286,7 +295,8 @@ const countsMatch = every(
 		return same(page.counts, {
 			open: found.filter((t) => t.state === "open").length,
 			closed: found.filter((t) => t.state === "closed").length,
-			pulls: (next.pulls.list ?? []).filter((p) => matches(next.find, p.title)).length,
+			pullRequests: (next.pullRequests.list ?? []).filter((p) => matches(next.find, p.title))
+				.length,
 		});
 	},
 );
@@ -297,7 +307,7 @@ const filterShown = every(
 		const shown = shownOf(next);
 		return (
 			same(shown.filter, {show: next.show, find: next.find}) &&
-			same(shown.github, {read: next.pulls.list !== null, why: next.pulls.why})
+			same(shown.github, {read: next.pullRequests.list !== null, why: next.pullRequests.why})
 		);
 	},
 );
@@ -308,11 +318,11 @@ const MACHINE_LAWS = [
 	refreshReads,
 	okIsKept,
 	errKeepsList,
-	answersTouchPulls,
+	answersTouchPullRequests,
 	quitStopsReads,
 	waitIsOn,
 ];
-const VIEW_LAWS = [ticketsFit, ticketsAll, pullsShown, countsMatch, filterShown];
+const VIEW_LAWS = [ticketsFit, ticketsAll, pullRequestsShown, countsMatch, filterShown];
 
 // ---------------------------------------------------------------- planted mistakes
 
@@ -335,7 +345,10 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			law: oneReadOut,
 			mistake: "a refresh reads again while a read is out",
 			machine: plant({
-				refresh: (s) => [{...s, pulls: {...s.pulls, ask: "busy"}}, [pulls({})]],
+				refresh: (s) => [
+					{...s, pullRequests: {...s.pullRequests, ask: "busy"}},
+					[pullRequests({})],
+				],
 			}),
 		},
 		{
@@ -347,9 +360,9 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			law: okIsKept,
 			mistake: "a list that comes back keeps the old why",
 			machine: plant({
-				pulls_ok: (s, m) => {
-					const [next, cmds] = real.pulls_ok(s, m);
-					return [{...next, pulls: {...next.pulls, why: s.pulls.why}}, cmds];
+				pull_requests_ok: (s, m) => {
+					const [next, cmds] = real.pull_requests_ok(s, m);
+					return [{...next, pullRequests: {...next.pullRequests, why: s.pullRequests.why}}, cmds];
 				},
 			}),
 		},
@@ -357,18 +370,18 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			law: errKeepsList,
 			mistake: "a failed read empties the list",
 			machine: plant({
-				pulls_err: (s, m) => {
-					const [next, cmds] = real.pulls_err(s, m);
-					return [{...next, pulls: {...next.pulls, list: []}}, cmds];
+				pull_requests_err: (s, m) => {
+					const [next, cmds] = real.pull_requests_err(s, m);
+					return [{...next, pullRequests: {...next.pullRequests, list: []}}, cmds];
 				},
 			}),
 		},
 		{
-			law: answersTouchPulls,
-			mistake: "a failed pulls read is shown as the ledger being unreachable",
+			law: answersTouchPullRequests,
+			mistake: "a failed pull requests read is shown as the ledger being unreachable",
 			machine: plant({
-				pulls_err: (s, m) => {
-					const [next, cmds] = real.pulls_err(s, m);
+				pull_requests_err: (s, m) => {
+					const [next, cmds] = real.pull_requests_err(s, m);
 					return [{...next, unreachable: "GitHub is unreachable"}, cmds];
 				},
 			}),
@@ -378,18 +391,18 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			mistake: "a refresh reads even after a quit",
 			machine: plant({
 				refresh: (s) =>
-					s.pulls.ask === "idle"
-						? [{...s, pulls: {...s.pulls, ask: "busy"}}, [pulls({})]]
+					s.pullRequests.ask === "idle"
+						? [{...s, pullRequests: {...s.pullRequests, ask: "busy"}}, [pullRequests({})]]
 						: [s, []],
 			}),
 		},
 		{
 			law: waitIsOn,
-			mistake: "the pulls_wait Sub stays on after a quit",
+			mistake: "the pull_requests_wait Sub stays on after a quit",
 			machine: {
 				...tracker,
 				subs: (tracker.subs ?? []).map((sub) =>
-					sub.type === "pulls_wait"
+					sub.type === "pull_requests_wait"
 						? {...sub, deps: (s: Tracker) => sub.deps({...s, quitting: false})}
 						: sub,
 				),
@@ -408,7 +421,7 @@ const owned = (pos: number, number: number, f: Fact): Entry => ({
 });
 const filed = (pos: number, number: number, title: string) =>
 	owned(pos, number, {type: "filed", title, body: ""});
-const pr = (number: number, title: string, draft = false): Pull => ({
+const pr = (number: number, title: string, draft = false): PullRequest => ({
 	repo: "https://github.com/owner/repo",
 	number,
 	title,
@@ -422,14 +435,14 @@ describe("the tracker's filters and pull requests", () => {
 	it("starts on open tickets with no search, and asks for the ledger and the pull requests", () => {
 		const first = steps();
 		expect(first.cmds).toHaveLength(2);
-		expect(first.cmds).toEqual(expect.arrayContaining([load({after: 0}), pulls({})]));
+		expect(first.cmds).toEqual(expect.arrayContaining([load({after: 0}), pullRequests({})]));
 		expect(first.state.show).toBe("open");
 		expect(first.state.find).toBe("");
-		expect(first.state.pulls).toEqual({ask: "busy", list: null, why: null});
+		expect(first.state.pullRequests).toEqual({ask: "busy", list: null, why: null});
 		expect(shownOf(first.state).github).toEqual({read: false, why: null});
 	});
 
-	it("filters a worked example: closed hidden first, the search in any case, pulls beside", () => {
+	it("filters a worked example: closed hidden first, the search in any case, pull requests beside", () => {
 		const tickets = load.ok(
 			load({after: 0}),
 			{
@@ -444,35 +457,43 @@ describe("the tracker's filters and pull requests", () => {
 			},
 			0,
 		);
-		const read = pulls.ok(pulls({}), {pulls: [pr(7, "Fix login"), pr(8, "Bump effect", true)]}, 0);
+		const read = pullRequests.ok(
+			pullRequests({}),
+			{pullRequests: [pr(7, "Fix login"), pr(8, "Bump effect", true)]},
+			0,
+		);
 		const search: Msg = {type: "find", text: "  LOGIN "};
 
 		const open = listOf(steps(tickets, read, search).state);
 		expect(open?.tickets.map((t) => t.number)).toEqual([1]);
-		expect(open?.pulls.map((p) => p.number)).toEqual([7]);
-		expect(open?.counts).toEqual({open: 1, closed: 1, pulls: 1});
+		expect(open?.pullRequests.map((p) => p.number)).toEqual([7]);
+		expect(open?.counts).toEqual({open: 1, closed: 1, pullRequests: 1});
 
 		const all = listOf(steps(tickets, read, search, {type: "show", show: "all"}).state);
 		expect(all?.tickets.map((t) => t.number)).toEqual([3, 1]);
 
 		const closed = listOf(steps(tickets, read, search, {type: "show", show: "closed"}).state);
 		expect(closed?.tickets.map((t) => t.number)).toEqual([3]);
-		expect(closed?.pulls).toEqual([]);
-		expect(closed?.counts).toEqual({open: 1, closed: 1, pulls: 1});
+		expect(closed?.pullRequests).toEqual([]);
+		expect(closed?.counts).toEqual({open: 1, closed: 1, pullRequests: 1});
 
 		const none = listOf(steps(tickets, read, {type: "find", text: "nothing like it"}).state);
 		expect(none?.tickets).toEqual([]);
-		expect(none?.pulls).toEqual([]);
-		expect(none?.counts).toEqual({open: 0, closed: 0, pulls: 0});
+		expect(none?.pullRequests).toEqual([]);
+		expect(none?.counts).toEqual({open: 0, closed: 0, pullRequests: 0});
 	});
 
 	it("keeps the list it had when a read fails, and says why", () => {
-		const read = pulls.ok(pulls({}), {pulls: [pr(7, "Fix login")]}, 0);
+		const read = pullRequests.ok(pullRequests({}), {pullRequests: [pr(7, "Fix login")]}, 0);
 		const again = steps(read, {type: "refresh"});
-		expect(again.cmds.filter((c) => c.type === "pulls")).toHaveLength(2);
-		const failed = steps(read, {type: "refresh"}, pulls.err(pulls({}), {_tag: "unreachable"}, 0));
-		expect(failed.state.pulls.list).toEqual([pr(7, "Fix login")]);
-		expect(failed.state.pulls.ask).toBe("idle");
+		expect(again.cmds.filter((c) => c.type === "pull_requests")).toHaveLength(2);
+		const failed = steps(
+			read,
+			{type: "refresh"},
+			pullRequests.err(pullRequests({}), {_tag: "unreachable"}, 0),
+		);
+		expect(failed.state.pullRequests.list).toEqual([pr(7, "Fix login")]);
+		expect(failed.state.pullRequests.ask).toBe("idle");
 		expect(shownOf(failed.state).github.read).toBe(true);
 		expect(shownOf(failed.state).github.why).toEqual(expect.stringMatching(/./));
 	});
@@ -498,8 +519,8 @@ describe("the tracker's filters and pull requests", () => {
 
 // Planted mistakes for the window's laws, to put into `shownOf` by hand, one at a time:
 //
-//   ticketsFit    under show "open", closed tickets are listed too
-//   ticketsAll    the search is case-sensitive ("LOGIN" misses "Login fails")
-//   pullsShown    the pull requests are listed under show "closed" too
-//   countsMatch   counts.open counts every open ticket, ignoring the search
-//   filterShown   github.read is true only when the list read is not empty
+//   ticketsFit         under show "open", closed tickets are listed too
+//   ticketsAll         the search is case-sensitive ("LOGIN" misses "Login fails")
+//   pullRequestsShown  the pull requests are listed under show "closed" too
+//   countsMatch        counts.open counts every open ticket, ignoring the search
+//   filterShown        github.read is true only when the list read is not empty

@@ -2,14 +2,14 @@ import {Ledger, memoryStorage, offer, readInput, start, streams, type Word} from
 import {memoryService} from "@kampus/fabrika/memory";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {Author, type Do, type Pull, pullsOf, tracker} from "./index.ts";
+import {Author, type Do, type PullRequest, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
 
 // The tracker with no window, on a ledger in memory: told what a window would send, it writes
 // facts, and shows them back. A second run on the same ledger finds them all, as the app does
 // after a restart. Its pull requests are a fixed list.
 
-const PULL: Pull = {
+const PR: PullRequest = {
 	repo: "https://github.com/example/app",
 	number: 7,
 	title: "Fix the login loop",
@@ -22,7 +22,7 @@ const services = (ledger: Ledger["Service"]) =>
 	Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
 		Layer.succeed(Author, {kind: "user", id: "owner"}),
-		pullsOf([PULL]),
+		pullRequestsOf([PR]),
 	);
 
 /** One run of the tracker on `ledger`, with a way to tell it and to wait for a view. */
@@ -163,11 +163,11 @@ describe("the tracker", () => {
 				const found = yield* until((s) => s.filter.find === "  LOGIN ");
 				yield* say({kind: "show", show: "closed"});
 				const closed = yield* until((s) => s.filter.show === "closed");
-				const pullsOn = (s: Shown) => (s.page.kind === "list" ? s.page.pulls : []);
+				const prsOn = (s: Shown) => (s.page.kind === "list" ? s.page.pullRequests : []);
 				return {
-					open: [listed(open), pullsOn(open).map((p) => p.number)],
-					found: [listed(found), pullsOn(found).map((p) => p.number)],
-					closed: [listed(closed), pullsOn(closed).map((p) => p.number)],
+					open: [listed(open), prsOn(open).map((pr) => pr.number)],
+					found: [listed(found), prsOn(found).map((pr) => pr.number)],
+					closed: [listed(closed), prsOn(closed).map((pr) => pr.number)],
 				};
 			}).pipe(Effect.scoped),
 		);

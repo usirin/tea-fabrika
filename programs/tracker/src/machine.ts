@@ -1,7 +1,7 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
-import {Pull} from "./pulls.ts";
+import {PullRequest} from "./pull-requests.ts";
 import {Entry, fold, Summary, summaryOf, Ticket, TicketNumber, Write} from "./ticket.ts";
 
 // The tracker's machine: the tickets as last read from the ledger, the ticket open in the window,
@@ -13,8 +13,9 @@ import {Entry, fold, Summary, summaryOf, Ticket, TicketNumber, Write} from "./ti
 //          reopen land in that order
 //   poll   a Sub, on while no load is out: it says `moved` once the ledger has rows after `seen`,
 //          so a fact written from elsewhere shows up (another app on the same home, an agent later)
-//   pulls  read the open pull requests of the connected repositories (./pulls.ts); `pulls_wait`,
-//          a Sub on while none is out, says `refresh` when it is time to read them again
+//   pull_requests  read the open pull requests of the connected repositories (./pull-requests.ts);
+//          `pull_requests_wait`, a Sub on while none is out, says `refresh` when it is time to read
+//          them again
 //
 // What the list shows is part of the state too, as in Elm's Model: `show` (open, closed or all)
 // and `find` (the title search). `shownOf`, the view, picks the tickets and pull requests by them.
@@ -47,20 +48,20 @@ export const save = Cmd.define("save", {
 });
 
 /** Read the open pull requests of every connected repository. */
-export const pulls = Cmd.define("pulls", {
+export const pullRequests = Cmd.define("pull_requests", {
 	input: Schema.Struct({}),
-	ok: Schema.Struct({pulls: Schema.Array(Pull)}),
+	ok: Schema.Struct({pullRequests: Schema.Array(PullRequest)}),
 	err: ["unreachable"],
 });
 
 type LoadCmd = ReturnType<typeof load>;
 type SaveCmd = ReturnType<typeof save>;
-type PullsCmd = ReturnType<typeof pulls>;
+type PullRequestsCmd = ReturnType<typeof pullRequests>;
 
 /** The poll, as its runner sees it: rows after `after` are news. */
 export type PollSub = Sub<"poll", {readonly after: number}>;
 /** The wait before the pull requests are read again. */
-export type PullsSub = Sub<"pulls_wait", Record<string, never>>;
+export type PullRequestsSub = Sub<"pull_requests_wait", Record<string, never>>;
 
 /** Which tickets the list shows: open ones (the start), closed ones, or all. */
 export const Show = Schema.Literals(["open", "closed", "all"]);
@@ -70,11 +71,11 @@ export type Show = typeof Show.Type;
 export const Find = Schema.String.check(Schema.isMaxLength(256));
 
 /** The pull requests as last read. */
-export interface PullsRead {
+export interface PullRequestsRead {
 	/** `busy`: a read is out. */
 	readonly ask: "idle" | "busy";
 	/** `null`: none has come back yet. */
-	readonly list: readonly Pull[] | null;
+	readonly list: readonly PullRequest[] | null;
 	/** Why the last read failed; `null` once one comes back. The list read before stays. */
 	readonly why: string | null;
 }
@@ -113,7 +114,7 @@ export interface Tracker {
 	readonly show: Show;
 	/** The title search. "" finds every title. */
 	readonly find: string;
-	readonly pulls: PullsRead;
+	readonly pullRequests: PullRequestsRead;
 }
 
 export type TrackerMsg =
@@ -126,7 +127,7 @@ export type TrackerMsg =
 	| {readonly type: "find"; readonly text: string}
 	| {readonly type: "refresh"};
 
-type Step = readonly [Tracker, readonly (LoadCmd | SaveCmd | PullsCmd)[]];
+type Step = readonly [Tracker, readonly (LoadCmd | SaveCmd | PullRequestsCmd)[]];
 
 /** The most problems kept. */
 export const PROBLEMS = 20;
@@ -144,7 +145,7 @@ const start: Tracker = {
 	quitting: false,
 	show: "open",
 	find: "",
-	pulls: {ask: "busy", list: null, why: null},
+	pullRequests: {ask: "busy", list: null, why: null},
 };
 
 /** The number a new ticket tries first: one past the newest known. */
@@ -173,21 +174,27 @@ export const tracker = defineMachine({
 	types: {
 		model: {} as Tracker,
 		msg: {} as TrackerMsg,
-		sub: {} as PollSub | PullsSub,
+		sub: {} as PollSub | PullRequestsSub,
 		ctx: undefined,
 	},
-	cmds: [load, save, pulls],
-	init: (): Step => [start, [load({after: 0}), pulls({})]],
+	cmds: [load, save, pullRequests],
+	init: (): Step => [start, [load({after: 0}), pullRequests({})]],
 	update: {
 		list: (s): Step => [{...s, open: null}, []],
 		show: (s, m): Step => [{...s, show: m.show}, []],
 		find: (s, m): Step => [{...s, find: m.text}, []],
 		refresh: (s): Step =>
-			s.pulls.ask === "idle" && !s.quitting
-				? [{...s, pulls: {...s.pulls, ask: "busy"}}, [pulls({})]]
+			s.pullRequests.ask === "idle" && !s.quitting
+				? [{...s, pullRequests: {...s.pullRequests, ask: "busy"}}, [pullRequests({})]]
 				: [s, []],
-		pulls_ok: (s, m): Step => [{...s, pulls: {ask: "idle", list: m.value.pulls, why: null}}, []],
-		pulls_err: (s, m): Step => [{...s, pulls: {...s.pulls, ask: "idle", why: why(m.error)}}, []],
+		pull_requests_ok: (s, m): Step => [
+			{...s, pullRequests: {ask: "idle", list: m.value.pullRequests, why: null}},
+			[],
+		],
+		pull_requests_err: (s, m): Step => [
+			{...s, pullRequests: {...s.pullRequests, ask: "idle", why: why(m.error)}},
+			[],
+		],
 		open: (s, m): Step => [{...s, open: m.ticket}, []],
 		write: (s, m): Step => {
 			if (s.quitting) return [s, []];
@@ -231,9 +238,9 @@ export const tracker = defineMachine({
 			deps: (s) => (s.load === "idle" && !s.quitting ? {after: s.seen} : null),
 		} satisfies DepKeyedSub<Tracker, PollSub>,
 		{
-			type: "pulls_wait",
-			deps: (s) => (s.pulls.ask === "idle" && !s.quitting ? {} : null),
-		} satisfies DepKeyedSub<Tracker, PullsSub>,
+			type: "pull_requests_wait",
+			deps: (s) => (s.pullRequests.ask === "idle" && !s.quitting ? {} : null),
+		} satisfies DepKeyedSub<Tracker, PullRequestsSub>,
 	],
 });
 
@@ -260,8 +267,8 @@ export const Page = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("list"),
 		tickets: Schema.Array(Summary),
-		pulls: Schema.Array(Pull),
-		counts: Schema.Struct({open: Schema.Int, closed: Schema.Int, pulls: Schema.Int}),
+		pullRequests: Schema.Array(PullRequest),
+		counts: Schema.Struct({open: Schema.Int, closed: Schema.Int, pullRequests: Schema.Int}),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("ticket"),
@@ -295,18 +302,18 @@ const fits = (show: Show, state: Ticket["state"]) => show === "all" || show === 
 
 const listOf = (s: Tracker): Shown["page"] => {
 	const found = s.tickets.filter((t) => finds(s.find, t.title));
-	const pullsFound = (s.pulls.list ?? []).filter((p) => finds(s.find, p.title));
+	const prsFound = (s.pullRequests.list ?? []).filter((pr) => finds(s.find, pr.title));
 	return {
 		kind: "list",
 		tickets: found
 			.filter((t) => fits(s.show, t.state))
 			.map(summaryOf)
 			.reverse(),
-		pulls: s.show === "closed" ? [] : pullsFound,
+		pullRequests: s.show === "closed" ? [] : prsFound,
 		counts: {
 			open: found.filter((t) => t.state === "open").length,
 			closed: found.filter((t) => t.state === "closed").length,
-			pulls: pullsFound.length,
+			pullRequests: prsFound.length,
 		},
 	};
 };
@@ -327,5 +334,5 @@ export const shownOf = (s: Tracker): Shown => ({
 	unreachable: s.unreachable,
 	quitting: s.quitting,
 	filter: {show: s.show, find: s.find},
-	github: {read: s.pulls.list !== null, why: s.pulls.why},
+	github: {read: s.pullRequests.list !== null, why: s.pullRequests.why},
 });

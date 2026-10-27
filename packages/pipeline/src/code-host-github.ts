@@ -1,7 +1,7 @@
 import {Clock, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
 import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 import {isMachines} from "./comments.ts";
-import {CodeHost, type OpenPull} from "./services.ts";
+import {CodeHost, type PullRequest} from "./services.ts";
 import {sh} from "./sh.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
@@ -30,7 +30,7 @@ import {verdictsIn} from "./verdict.ts";
 // The review stage reads a pull request another way: `readChange`, further
 // down, with its own list of calls. It reads at a commit the caller may name.
 // A list of a repository's open pull requests, for the tracker, is one REST
-// call: `readOpenPulls`.
+// call: `readPullRequests`.
 //
 // Each fact is read the plainest honest way. Where the reading cannot say, the
 // fact is `unknown`, never a guess. Where a value is less than it looks,
@@ -1183,30 +1183,30 @@ const Listed = Schema.Struct({
 });
 
 /** The most open pull requests read: one page. */
-export const MOST_PULLS = 100;
+export const MOST_PULL_REQUESTS = 100;
 
 /**
  * A repository's open pull requests, newest first: one REST call,
  * `GET /repos/{owner}/{name}/pulls?state=open`. More than one page reads the
  * first only.
  */
-export const readOpenPulls =
+export const readPullRequests =
 	(gh: Gh) =>
-	(repo: string): Effect.Effect<readonly OpenPull[], {readonly _tag: "unknown"}> =>
+	(repo: string): Effect.Effect<readonly PullRequest[], {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = repoOf(repo);
 			if (at === null) return yield* failed;
 			const listed = yield* answerOf(gh, Schema.Array(Listed), [
 				"api",
-				`repos/${at.owner}/${at.name}/pulls?state=open&per_page=${MOST_PULLS}`,
+				`repos/${at.owner}/${at.name}/pulls?state=open&per_page=${MOST_PULL_REQUESTS}`,
 			]);
 			return listed.map(
-				(p): OpenPull => ({
-					number: p.number,
-					title: p.title,
-					url: p.html_url,
-					draft: p.draft ?? false,
-					at: Date.parse(p.updated_at) || 0,
+				(pr): PullRequest => ({
+					number: pr.number,
+					title: pr.title,
+					url: pr.html_url,
+					draft: pr.draft ?? false,
+					at: Date.parse(pr.updated_at) || 0,
 				}),
 			);
 		});
@@ -1225,7 +1225,7 @@ export const codeHostOn = (
 	return {
 		prFacts: readPrFacts(gh, config, declared),
 		change: readChange(gh, config.checks, declared.kinds ?? null),
-		openPulls: readOpenPulls(gh),
+		pullRequests: readPullRequests(gh),
 		checksSettled: (pr, head, after) =>
 			until(
 				every,

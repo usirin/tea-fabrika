@@ -213,7 +213,7 @@ export const withLocalChecks = (
 
 		const host: CodeHost["Service"] = {
 			// Local checks change nothing in the list of open pull requests.
-			openPulls: inner.openPulls,
+			pullRequests: inner.pullRequests,
 			prFacts: (pr) =>
 				Effect.gen(function* () {
 					const facts = yield* inner.prFacts(pr);

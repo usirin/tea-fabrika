@@ -146,7 +146,7 @@ const changeOf = (head: string): Change => ({
 	rules: [],
 });
 const noCi = (head: string): CodeHost["Service"] => ({
-	openPulls: () => Effect.succeed([]),
+	pullRequests: () => Effect.succeed([]),
 	prFacts: () => Effect.succeed(factsOf(head)),
 	change: () => Effect.succeed(changeOf(head)),
 	checksSettled: () => Stream.never,

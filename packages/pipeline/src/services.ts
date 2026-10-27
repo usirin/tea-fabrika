@@ -9,7 +9,7 @@ import type {OnMain, ReadyToMerge} from "./stages/ship/ready.ts";
 // Builder, Workspace, ...) are in the legacy package (factory-services.ts).
 
 /** An open pull request, as a list of them shows it. `at`: when it last changed, in ms. */
-export interface OpenPull {
+export interface PullRequest {
 	readonly number: number;
 	readonly title: string;
 	readonly url: string;
@@ -62,9 +62,9 @@ export class CodeHost extends Context.Service<
 		 * them. `repo`: its URL, `https://github.com/<owner>/<name>`. The titles
 		 * are anyone's words: on a public repository a stranger can open one.
 		 */
-		readonly openPulls: (
+		readonly pullRequests: (
 			repo: string,
-		) => Effect.Effect<readonly OpenPull[], {readonly _tag: "unknown"}>;
+		) => Effect.Effect<readonly PullRequest[], {readonly _tag: "unknown"}>;
 		/** Says once how the pull request left the merge queue. `commit`: the commit on the base branch, which is not the head. */
 		readonly leftQueue: (
 			pr: string,

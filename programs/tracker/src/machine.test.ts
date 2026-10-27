@@ -1,7 +1,7 @@
 import {replay} from "@demlik/tea";
 import type {MsgOf} from "@kampus/fabrika";
 import {describe, expect, it} from "vitest";
-import {load, over, pulls, save, shownOf, statusOf, tracker} from "./machine.ts";
+import {load, over, pullRequests, save, shownOf, statusOf, tracker} from "./machine.ts";
 import type {Entry, Write} from "./ticket.ts";
 
 // The machine alone, with no ledger: Msgs in, then the state, the Cmds and the Subs out.
@@ -28,7 +28,7 @@ const wrote = (id: string, write: Write): Msg => ({type: "write", id, write});
 describe("the tracker's machine", () => {
 	it("reads the whole ledger first, and is not ready until that comes back", () => {
 		const first = steps();
-		expect(first.cmds).toEqual([load({after: 0}), pulls({})]);
+		expect(first.cmds).toEqual([load({after: 0}), pullRequests({})]);
 		expect(first.state.ready).toBe(false);
 		expect(first.subs).toEqual([]);
 		expect(statusOf(first.state)).toBe("reading the ledger");
@@ -46,7 +46,7 @@ describe("the tracker's machine", () => {
 		const asked = steps(loaded(0, []), wrote("w1", file), wrote("w2", close), wrote("w3", reopen));
 		expect(asked.cmds).toEqual([
 			load({after: 0}),
-			pulls({}),
+			pullRequests({}),
 			save({id: "w1", write: file, next: 1}),
 		]);
 		expect(asked.state.saving.map((s) => s.id)).toEqual(["w1", "w2", "w3"]);
@@ -111,7 +111,7 @@ describe("the tracker's machine", () => {
 
 	it("loads again when the poll says the ledger moved, and only when no load is out", () => {
 		expect(steps(loaded(0, []), {type: "moved"}).cmds.at(-1)).toEqual(load({after: 0}));
-		expect(steps({type: "moved"}).cmds).toEqual([load({after: 0}), pulls({})]);
+		expect(steps({type: "moved"}).cmds).toEqual([load({after: 0}), pullRequests({})]);
 	});
 
 	it("shows the list newest first, or the ticket open, and null for a number nobody filed", () => {

@@ -91,7 +91,7 @@ function fake(worlds: ReadonlyMap<string, World>) {
 	};
 	const broke = Effect.fail({_tag: "unknown" as const});
 	const host = Layer.succeed(CodeHost, {
-		openPulls: () => Effect.succeed([]),
+		pullRequests: () => Effect.succeed([]),
 		prFacts: (pr) => {
 			reads.push(pr);
 			const {facts, later} = world(pr);

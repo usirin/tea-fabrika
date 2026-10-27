@@ -9,8 +9,8 @@ import {
 	kindsNeeded,
 	parseJsonc,
 	prOf,
-	readOpenPulls,
 	readPrFacts,
+	readPullRequests,
 	rulesOf,
 	textKindOf,
 	ticketIn,
@@ -107,7 +107,7 @@ const hostOf = (
 ) =>
 	Layer.mergeAll(
 		Layer.succeed(CodeHost, {
-			openPulls: () => Effect.succeed([]),
+			pullRequests: () => Effect.succeed([]),
 			prFacts,
 			change: () => Effect.fail({_tag: "unknown" as const}),
 			checksSettled: () => Stream.never,
@@ -1050,10 +1050,10 @@ describe("a repository's open pull requests", () => {
 
 	it("are one REST call, read to number, title, link, draft and time, and nothing else", async () => {
 		const {gh, calls} = on(JSON.stringify(listed));
-		const pulls = await Effect.runPromise(readOpenPulls(gh)("https://github.com/example/repo"));
+		const prs = await Effect.runPromise(readPullRequests(gh)("https://github.com/example/repo"));
 
 		expect(calls).toEqual([["api", "repos/example/repo/pulls?state=open&per_page=100"]]);
-		expect(pulls).toEqual([
+		expect(prs).toEqual([
 			{
 				number: 9,
 				title: "Draw the list calmer",
@@ -1082,7 +1082,7 @@ describe("a repository's open pull requests", () => {
 		],
 	])("fail as unknown on %s, never a throw", async (_, repo, answer) => {
 		const {gh} = on(answer);
-		const failed = await Effect.runPromise(Effect.flip(readOpenPulls(gh)(repo)));
+		const failed = await Effect.runPromise(Effect.flip(readPullRequests(gh)(repo)));
 
 		expect(failed).toEqual({_tag: "unknown"});
 	});

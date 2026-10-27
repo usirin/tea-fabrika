@@ -2,7 +2,7 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {Ledger, memoryStorage, type Storage} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Pulls, tracker} from "@tea-fabrika/tracker";
+import {PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
@@ -58,7 +58,7 @@ const session = (
 		}).pipe(
 			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
 			// No pull requests: no test reads GitHub.
-			Effect.provideService(Pulls, {open: Effect.succeed([])}),
+			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
 		);
 		let bytes = "";
 		host.terminal.show((m) => {

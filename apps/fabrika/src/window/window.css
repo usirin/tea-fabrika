@@ -548,7 +548,7 @@ main.program:has(> .tracker) {
 
 /* One row: state, number, title, then the quiet facts at the right. */
 .tracker .tracker-list button,
-.tracker-list a.tracker-pull {
+.tracker-list a.tracker-pull-request {
 	display: grid;
 	grid-template-columns: 16px 3.5ch 1fr auto;
 	gap: 10px;
@@ -565,17 +565,17 @@ main.program:has(> .tracker) {
 }
 
 .tracker .tracker-list button:hover,
-.tracker-list a.tracker-pull:hover {
+.tracker-list a.tracker-pull-request:hover {
 	background: var(--hover);
 }
 
 .tracker .tracker-list button[aria-current="true"],
-.tracker-list a.tracker-pull[aria-current="true"] {
+.tracker-list a.tracker-pull-request[aria-current="true"] {
 	background: var(--pick);
 }
 
 .tracker .tracker-list button:focus-visible,
-.tracker-list a.tracker-pull:focus-visible {
+.tracker-list a.tracker-pull-request:focus-visible {
 	outline: none;
 	box-shadow: inset 2px 0 0 var(--key);
 }
@@ -629,11 +629,11 @@ main.program:has(> .tracker) {
 	color: var(--closed);
 }
 
-.tracker-pull-open {
+.tracker-pull-request-open {
 	color: var(--open);
 }
 
-.tracker-pull-draft {
+.tracker-pull-request-draft {
 	color: var(--faint);
 }
 
@@ -647,13 +647,13 @@ main.program:has(> .tracker) {
 	vertical-align: 1px;
 }
 
-.tracker-pulls {
+.tracker-pull-requests {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
 
-.tracker-pulls h3 {
+.tracker-pull-requests h3 {
 	padding: 0 10px;
 	color: var(--soft);
 	font-size: 12px;
@@ -810,7 +810,7 @@ main.program:has(> .tracker) {
 
 @media (prefers-reduced-motion: no-preference) {
 	.tracker .tracker-list button,
-	.tracker-list a.tracker-pull,
+	.tracker-list a.tracker-pull-request,
 	.tracker .tracker-shows button {
 		transition: background-color 80ms ease-out;
 	}
