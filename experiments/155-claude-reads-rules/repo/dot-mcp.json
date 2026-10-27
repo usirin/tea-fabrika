@@ -1,0 +1,1 @@
+{ "mcpServers": { "m155": { "command": "node", "args": ["{{COPY}}/mcp.mjs"] } } }

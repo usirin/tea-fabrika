@@ -218,6 +218,11 @@ The doubt is the edges nobody has run yet, listed below.
     host on Cloudflare is parked for now ([tea-host](./tea-host.md)). On a
     laptop, the token stays on its own person's machine, so this rule's
     laptop part is unchanged.
+    *Ruled 2026-10-26, after experiment 157:* the owner takes the shared
+    Cloudflare account knowing this. Each person's token sits in their own
+    locker there, the box gets it as `CLAUDE_CODE_OAUTH_TOKEN`, and the box
+    has open internet, so our Worker never reads it
+    ([where a person's login lives](./agents-behind-one-service.md#where-a-persons-login-lives)).
 - **The model's network path.** Answered by experiment 137: the relay and
   nothing else. In sandbox-runtime, one host port is the only entry in its
   allow list. In Docker, the box has no network and the relay's socket is

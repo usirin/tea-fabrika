@@ -16,7 +16,10 @@ import {type Settings, Sorter} from "./services.ts";
 // Every try is a new conversation: the prompt is whole (./brief.ts), so a try taken over by another
 // host, which has no conversation to continue, reads the same as one that was not.
 
-/** The Agent SDK options of one run: no tool, nothing loaded from the machine, a dollar cap. */
+/**
+ * The Agent SDK options of one run: no tool, nothing loaded from the machine, a dollar cap. It
+ * works in an empty folder, so it has no rule files to read (`ownRules`, experiment 155).
+ */
 export const sorterOptions = (settings: Settings, cwd: string): Options => ({
 	cwd,
 	env: agentEnv(),

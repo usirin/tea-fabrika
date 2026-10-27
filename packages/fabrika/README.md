@@ -104,7 +104,7 @@ runs TypeScript as it is.
 | `@kampus/fabrika/otel` | Spans out over OTLP/HTTP, and what a trace viewer is shown |
 | `@kampus/fabrika/shell` | `runTsh`, the launcher an app's bin runs with its `Programs`, and `homeOf` |
 | `@kampus/fabrika/agents/claude` | A Draft over the Claude Agent SDK, the schema its answer is read by, and the shell guard its tool calls pass |
-| `@kampus/fabrika/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the guard. No Agent SDK loads |
+| `@kampus/fabrika/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the rule files it reads and the settings it does not (`ownRules`, experiment 155), the guard. No Agent SDK loads |
 | `@kampus/fabrika/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
 | `@kampus/fabrika/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
 | `@kampus/fabrika/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
@@ -120,7 +120,7 @@ root; `pnpm lint` checks it).
   monitors, links, supervision trees and limits.
 - [`src/shell/`](./src/shell/README.md): tsh.
 - `src/agents/`: the agents. `acp/` (any ACP harness, and the `acp` program), `claude/` (the
-  Draft over the Agent SDK, its schema reader, the environment, sandbox and guard) and `trace/`
+  Draft over the Agent SDK, its schema reader, the environment, sandbox, rule loading and guard) and `trace/`
   (an agent's spans).
 - `src/*.ts` and `src/agents/*.ts`: the entry files the exports point at.
 

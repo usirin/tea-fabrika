@@ -2,6 +2,7 @@ import {type Options, type Query, query, type SDKMessage} from "@anthropic-ai/cl
 import type {DepKeyedSub, Sub} from "@demlik/tea";
 import {Effect, Option, Queue, Schema, Stream} from "effect";
 import {agentEnv} from "./env.ts";
+import {startRefusal} from "./rules.ts";
 import {jsonSchema, type Reads, reader} from "./schema.ts";
 
 // Draft: an agent produces something. Run as a Sub over the Agent SDK's
@@ -232,6 +233,30 @@ export type Opened = AsyncIterable<SDKMessage> & Pick<Query, "interrupt" | "clos
 /** Opens the query of one run: the SDK's `query`, or a scripted one in a test. */
 export type Open = (params: {readonly prompt: string; readonly options: Options}) => Opened;
 
+/** A live run that was not started: why, with the fix named (`startRefusal`, ./rules.ts). */
+export class NotStarted extends Error {
+	override readonly name = "NotStarted";
+}
+
+/**
+ * The SDK's `query`, behind the check a live run passes before Claude Code
+ * starts (`startRefusal`, ./rules.ts): its options load no settings but the
+ * folder's rule files, and the empty folder they read settings from is
+ * ready on this machine. A run that fails it starts no process: its first
+ * read fails with {@link NotStarted}. A scripted query starts no Claude Code,
+ * so it needs no folder; a run that loads the project's settings on purpose
+ * opens the SDK's `query` itself, by name.
+ */
+export const openLive: Open = (params) => {
+	const why = startRefusal(params.options);
+	if (why === null) return query(params);
+	return {
+		[Symbol.asyncIterator]: () => ({next: () => Promise.reject(new NotStarted(why))}),
+		interrupt: () => Promise.resolve(undefined),
+		close: () => undefined,
+	};
+};
+
 /**
  * The live runner, on the Effect engine: open a query for the run, feed every
  * SDK message to the machine as Msgs, and interrupt the query when the Sub
@@ -248,8 +273,9 @@ export type Open = (params: {readonly prompt: string; readonly options: Options}
  * before anything the model says. A list that holds a tool the options did
  * not name ({@link extraTools}) ends the run there as failed: the query is
  * closed, which stops the agent's process, and no later message is read.
- * `more.open` is how the query is opened, for a test. `more.opened`: the
- * tools the run serves from its own process, which the list may hold.
+ * `more.open` is how the query is opened: {@link openLive} unless named, a
+ * scripted one in a test. `more.opened`: the tools the run serves from its
+ * own process, which the list may hold.
  */
 export const sdkRunner =
 	<N extends string, O>(
@@ -268,7 +294,7 @@ export const sdkRunner =
 				Effect.sync(() => {
 					const run = sub.deps;
 					const named = options(run);
-					const q = (more.open ?? query)({
+					const q = (more.open ?? openLive)({
 						prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
 						options: {
 							...named,
@@ -317,7 +343,7 @@ export const sdkRunner =
 							if (!live.result) fail("the stream ended with no result");
 						} catch (error) {
 							// The SDK throws after an error result it already sent; only a throw before one is news.
-							if (!live.result) fail(String(error));
+							if (!live.result) fail(error instanceof NotStarted ? error.message : String(error));
 						}
 					})();
 					return {q, live, loop};

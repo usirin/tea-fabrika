@@ -526,7 +526,8 @@ export const draftAcp = (
 			servers: [report.server],
 			model: settings.model,
 			effort: settings.effort,
-			prompt: `${promptOf(brief)}\n${HAND_IN}`,
+			// Pasted: the adapter is handed `settingSources: []` (../../../../fabrika/src/agents/acp/harness.ts).
+			prompt: `${promptOf(brief, [], "pasted")}\n${HAND_IN}`,
 			verdict: verdictOf(builderCheck(brief.tree, temps())),
 			...(config.heard === undefined ? {} : {heard: config.heard}),
 			trace: {events: acpEvents(`${brief.ticket}#${brief.round}#${stamp}`), spans},

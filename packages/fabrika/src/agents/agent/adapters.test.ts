@@ -3,8 +3,9 @@ import type {Sub} from "@demlik/tea";
 import {Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {claudeAdapter, rawOf} from "../claude/adapter.ts";
-import type {DraftRun, Open} from "../claude/draft.ts";
+import {type ClaudeAdapterConfig, claudeAdapter, rawOf} from "../claude/adapter.ts";
+import {type DraftRun, type Open, openLive} from "../claude/draft.ts";
+import {AGENTS_MD} from "../claude/rules.ts";
 import {jsonSchema} from "../claude/schema.ts";
 import {codexEnvOf, flagsOf, rawOfLine, strictOk} from "../codex/adapter.ts";
 import {makeAgents} from "./core.ts";
@@ -12,7 +13,7 @@ import {agentRunner} from "./draft.ts";
 import {fakeAdapter, saying} from "./fake.ts";
 import {under} from "./reap.ts";
 import {memorySessions} from "./sessions.ts";
-import {NO_LIMITS, noReaper} from "./turn.ts";
+import {type AdapterTurn, NO_LIMITS, noReaper} from "./turn.ts";
 
 // Each adapter's pure part: how what its maker says becomes the interface's
 // raw updates, and the containment that can be checked with no agent. No
@@ -109,7 +110,84 @@ describe("claude: SDK messages", () => {
 		expect(opened[0]?.settings).toEqual({
 			disableClaudeAiConnectors: true,
 			autoMemoryEnabled: false,
+			pluginConfigs: AGENTS_MD,
 		});
+	});
+});
+
+describe("claude: where its settings come from", () => {
+	const TURN: AdapterTurn = {
+		folder: "/work/repo",
+		prompt: "p",
+		schema: {},
+		resume: null,
+		session: "s",
+		model: null,
+		effort: null,
+		usd: null,
+	};
+
+	/** An opener that keeps the options it is handed and opens an empty query: no agent starts. */
+	const keeping = () => {
+		const seen: Options[] = [];
+		const open: Open = ({options}) => {
+			seen.push(options);
+			return {
+				[Symbol.asyncIterator]: () => ({
+					next: () => Promise.resolve({done: true as const, value: undefined}),
+				}),
+				interrupt: () => Promise.resolve(undefined),
+				close: () => undefined,
+			};
+		};
+		return {seen, open};
+	};
+
+	it("reads the folder's rule files and none of its settings, as the stages do", async () => {
+		const {seen, open} = keeping();
+		await Effect.runPromise(Effect.scoped(claudeAdapter({open}).start(TURN)));
+		expect(seen).toHaveLength(1);
+		expect(seen[0]).toMatchObject({
+			settingSources: ["project"],
+			projectConfigRoot: "/var/empty",
+			settings: {disableClaudeAiConnectors: true, pluginConfigs: AGENTS_MD},
+			strictMcpConfig: true,
+			mcpServers: {},
+			permissionMode: "dontAsk",
+		});
+	});
+
+	it("lets no stage say where settings come from: its type refuses it, and so does the start", async () => {
+		const {seen, open} = keeping();
+		const configs: readonly ClaudeAdapterConfig[] = [
+			// @ts-expect-error a stage's options cannot name the settings sources
+			{open, more: () => ({settingSources: ["user", "project"]})},
+			// @ts-expect-error nor the folder the project's settings are read from
+			{open, more: () => ({projectConfigRoot: "/work/repo"})},
+		];
+		for (const config of configs) {
+			const error = await Effect.runPromise(
+				Effect.scoped(Effect.flip(claudeAdapter(config).start(TURN))),
+			);
+			expect(error).toMatchObject({_tag: "AgentFailed", why: "contain"});
+		}
+		expect(seen).toHaveLength(0);
+	});
+
+	it("fails as not started when the live opener refuses the turn, with its reason", async () => {
+		// The live opener, handed options that point the settings elsewhere: it starts nothing.
+		const open: Open = (params) =>
+			openLive({...params, options: {...params.options, projectConfigRoot: "/work/repo"}});
+		const error = await Effect.runPromise(
+			Effect.scoped(
+				Effect.flip(
+					Effect.flatMap(claudeAdapter({open}).start(TURN), (running) =>
+						Stream.runDrain(running.updates),
+					),
+				),
+			),
+		);
+		expect(error).toMatchObject({why: "start", message: expect.stringContaining("not /var/empty")});
 	});
 });
 

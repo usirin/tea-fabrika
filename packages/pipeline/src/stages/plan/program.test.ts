@@ -186,7 +186,9 @@ describe("the live planner", () => {
 		expect(scripted.asked[0]).toMatchObject({
 			tools: ["Read", "Grep", "Glob"],
 			allowedTools: ["Read", "Grep", "Glob"],
-			settingSources: [],
+			// The copy's rule files, none of its settings (experiment 155).
+			settingSources: ["project"],
+			projectConfigRoot: "/var/empty",
 			model: "opus",
 			sessionId: run.session.id,
 			outputFormat: {type: "json_schema"},

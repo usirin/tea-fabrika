@@ -108,18 +108,61 @@ const run = Agents.run({ provider, session: chat.session, folder, prompt: typed 
   stop ends the agent's processes, and a warm session keeps one alive between
   turns. The first chat build settles it.
 
-## Logins never leave a person's machine
+## Where a person's login lives
 
-Decided 2026-10-26 by the owner. The shared fabrika stores no provider login,
-no key, no token, for anyone.
+**Ruled 2026-10-26 by the owner, after
+[experiment 157](../../experiments/157-login-stays-home.md).** Each person's
+login is kept in their own locker on one shared Cloudflare account. A job's
+box holds the login itself, the way GitHub Actions and OpenAI's CI page do it.
+Our Worker never sees a real token.
 
-- **Proposed change, 2026-10-26:** each person's login is kept in their own
-  locker on the shared Cloudflare account, the way others already run Claude
-  Code and Codex in the cloud. Claude's box holds a fake token and the Worker
-  swaps in the real one (Cloudflare's own Claude Code tutorial). Codex's box
-  borrows the login and hands back the refreshed copy, one job per person at a
-  time (OpenAI's Codex CI page). Experiment 157 tests it. This section is
-  rewritten when 157 lands.
+```ts
+// A sketch. One job of one person, on the shared account.
+const login = yield* Locker.of(job.who).lend(job.box); // one job per person at a time
+yield* Box.start(job.box, {
+	env: {CLAUDE_CODE_OAUTH_TOKEN: login.claude}, // as claude-code-action takes it
+	files: {"~/.codex/auth.json": login.codex}, // as OpenAI's CI page says
+	internet: "open", // nothing of ours stands in the call
+});
+yield* Locker.of(job.who).back(job.box, yield* Box.read(job.box, "~/.codex/auth.json"));
+```
+
+- **One shared account, not one each.** 157 leaned one account per person
+  (65%): whoever holds an account can open every locker in it, and Anthropic's
+  [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) say "You may
+  not share your … Account credentials with anyone else." The owner took the
+  shared account knowing this. The lean was not taken; it stays here for the
+  record.
+- **Experiment 148's rule stays: our Worker never sees a real token.** 157
+  built the other known way, Cloudflare's
+  [Claude Code tutorial](https://developers.cloudflare.com/sandbox/tutorials/claude-code/):
+  the box holds a fake token and the Worker adds the real one on the way out.
+  That puts our code between a person and their login, which Anthropic's page
+  bars, and on a shared account it would add the other person's token too.
+  Anthropic's page names the kept way as allowed: an end user "signing in to
+  the unmodified Claude Code binary with their own Claude subscription,
+  including where a platform hosts Claude Code". Claude Code takes the token
+  as `CLAUDE_CODE_OAUTH_TOKEN`, as Anthropic's
+  [claude-code-action](https://github.com/anthropics/claude-code-action) does.
+  Not taken from 157: the token swap, and the catch on Codex's refresh path.
+- **Codex:** the locker lends `auth.json` for one job and takes back the copy
+  the box leaves, one job per person at a time
+  ([OpenAI's CI page](https://developers.openai.com/codex/auth/ci-cd-auth)).
+  With no Worker on the refresh path there is no catch, so a box that dies
+  right after a refresh leaves a dead login, and that person signs in again.
+  Codex refreshes about every 8 days, so this is rare.
+- **The cost:** an agent in a box can read its own token and reach the whole
+  internet, as on a person's laptop today. Jobs run on private repositories
+  only; OpenAI's page says "Do not use this workflow for public or open-source
+  repositories."
+- **Confidence: 80%.** The doubt is a leak through the open internet. With
+  private repositories that is no worse than a laptop. A loan end time is
+  still to build before the live run.
+
+**Earlier the same day: logins never leave a person's machine.** Decided
+2026-10-26 by the owner, and changed by the ruling above: "The shared fabrika
+stores no provider login, no key, no token, for anyone." What follows still
+holds for a job a person runs on their own laptop.
 
 ```ts
 // A sketch. The shared ledger holds work. Each person's own machine runs it.
@@ -157,7 +200,10 @@ yield* Ledger.finish(job.id, drafted);                                  // only 
   Corrected 2026-10-26: the first version said a shared or remote box needs an
   API key. A remote box one person controls does not. Settled the same day by
   the section above: no login is stored on the shared side, so the shared
-  service needs no key either.
+  service needs no key either. Changed later the same day: each person's own
+  login is stored in their locker on the shared account
+  ([where a person's login lives](#where-a-persons-login-lives)), and still no
+  API key.
 
 ## What this cannot tell us
 

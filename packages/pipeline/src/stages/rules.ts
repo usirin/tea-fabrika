@@ -1,19 +1,27 @@
 import {Schema} from "effect";
 
-// The repository's own rules for agents: its `CLAUDE.md` and `AGENTS.md`, as
-// they stand on the base branch. Code reads them (a Gather, beside the ticket
-// or the pull request) and hands the text to the builder and the reviewer in
-// their briefs, marked as the repository's rules.
+// The repository's own rules for agents: its top `CLAUDE.md` and `AGENTS.md`,
+// as they stand on the base branch. Code reads them (a Gather, beside the
+// ticket or the pull request) as text.
 //
-// Why not the Agent SDK's own way (`settingSources: ["project"]`): it loads
-// CLAUDE.md only together with the repository's `.claude/settings.json`, and
-// that file can turn on plugins and hooks. In a repository that runs today's
-// fabrika it does: the agents here would get fabrika's skills and hooks. And
-// a pull request's own head could add a hook that runs a command. So no
-// settings are loaded, and the two files are read as text, from the base, so
-// a change cannot rewrite the rules it is held to.
+// Every Claude run on the Agent SDK also reads the rule files of the folder
+// it works in itself, the way Claude Code ships it: subfolder files, the
+// nearest one winning, and `@file` imports (`ownRules` in
+// @kampus/fabrika/agents/sandbox, experiment 155,
+// docs/direction/agents-read-rules-the-normal-way.md). It reads none of that
+// folder's settings: `.claude/settings.json` ran its hooks, handed its env to
+// the agent and ran its `apiKeyHelper` in experiment 155, so settings come
+// from an empty folder.
 //
-// A `@file` line in CLAUDE.md (an import) is not followed: it is text here.
+// What the text here is still for:
+//   - the reviewer is handed it, marked as the rules the pull request is
+//     judged by. A change can rewrite its own rule files, which the reviewer
+//     loads too; the base's copy wins, so a change cannot loosen the rules it
+//     is held to. GitHub reads CODEOWNERS from the base for the same reason.
+//   - the ACP builder (./build/builder-acp.ts) loads no settings at all, so
+//     it is handed the files as text in its prompt.
+//
+// A `@file` line in CLAUDE.md (an import) is not followed here: it is text.
 // AGENTS.md is read on its own because it is where such an import most often
 // points.
 
