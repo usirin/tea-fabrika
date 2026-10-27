@@ -14,8 +14,31 @@
 //
 // `doorOf` is the door's own steps: a challenge, a login signed by the `Signer`, an agent's login
 // with its grant, and a person's invite, remove and (on a local ledger) agent token.
+//
+// A person's session ends (`SESSION_MS`), so a host that runs longer keeps one that renews
+// (`renewing`), as an OAuth client keeps its access token fresh:
+//
+//   const session = yield* renewing(first, login)   // logs in again 5 minutes before the end
+//   layerHttp({url, ledger, token: session})        // a 401 logs in once more and sends again
+//
+// The timer alone is not enough: a laptop that sleeps past the end wakes with an ended session
+// and its timer late. So a 401 to a call, or a refused doorbell, logs in again too, once for
+// every caller holding the same ended token. A door that refuses the login itself (401, 403: the
+// person was removed) is kept as the answer, and every call fails with it from then on.
 import {NodeHttpClient} from "@effect/platform-node";
-import {Duration, Effect, Layer, Queue, Redacted, Schema, Stream} from "effect";
+import {
+	Clock,
+	Duration,
+	Effect,
+	Exit,
+	Layer,
+	Queue,
+	Redacted,
+	Schema,
+	type Scope,
+	Stream,
+	SynchronizedRef,
+} from "effect";
 import {HttpClient, HttpClientRequest} from "effect/http";
 import {Socket} from "effect/socket";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
@@ -28,8 +51,11 @@ export interface HttpOptions {
 	readonly url: string;
 	/** The ledger's name: one Durable Object per name. */
 	readonly ledger: string;
-	/** What the door lets in: a session, an agent's token, or a local ledger's secret. */
-	readonly token: Redacted.Redacted<string>;
+	/**
+	 * What the door lets in: a fixed token (an agent's, a local ledger's secret, one session), or
+	 * a person's session that renews (`renewing`).
+	 */
+	readonly token: Redacted.Redacted<string> | Renewing;
 	/** The pool's size. Default 8. */
 	readonly maxSockets?: number;
 	/** Each call gives up after this long. Default 3 s. */
@@ -56,25 +82,37 @@ export const onTheWire = (method: string, args: readonly unknown[]): readonly un
 	}
 };
 
-/** The doorbell of one stream: every notice and every (re)connect is one ring. Never fails. */
-const doorbell = (url: string, token: Redacted.Redacted<string>): Stream.Stream<void> =>
+/**
+ * The doorbell of one stream: every notice and every (re)connect is one ring. Never fails. Each
+ * connect sends the token as it is then; when a socket fails, `lost` is told the token it used.
+ */
+const doorbell = (
+	url: string,
+	token: Effect.Effect<Redacted.Redacted<string>, DoorRefused>,
+	lost: (used: Redacted.Redacted<string>) => Effect.Effect<void>,
+): Stream.Stream<void> =>
 	Stream.callback<void>((out) =>
 		Effect.gen(function* () {
-			// A browser's WebSocket sends no Authorization header, so the token rides as a subprotocol.
-			const socket = yield* Socket.makeWebSocket(url, {
-				openTimeout: Duration.seconds(2),
-				protocols: ["fabrika", `bearer.${Redacted.value(token)}`],
-			});
-			const pull = yield* Socket.readerString(socket);
-			yield* Queue.offer(out, undefined);
-			for (;;) {
-				yield* pull;
+			const used = yield* token;
+			yield* Effect.gen(function* () {
+				// A browser's WebSocket sends no Authorization header, so the token rides as a subprotocol.
+				const socket = yield* Socket.makeWebSocket(url, {
+					openTimeout: Duration.seconds(2),
+					protocols: ["fabrika", `bearer.${Redacted.value(used)}`],
+				});
+				const pull = yield* Socket.readerString(socket);
 				yield* Queue.offer(out, undefined);
-			}
+				for (;;) {
+					yield* pull;
+					yield* Queue.offer(out, undefined);
+				}
+			}).pipe(
+				Effect.scoped,
+				// Node at the edge: Node's own global WebSocket, through Effect's Socket.
+				Effect.provide(Socket.layerWebSocketConstructorGlobal),
+				Effect.catch(() => lost(used)),
+			);
 		}).pipe(
-			Effect.scoped,
-			// Node at the edge: Node's own global WebSocket, through Effect's Socket.
-			Effect.provide(Socket.layerWebSocketConstructorGlobal),
 			Effect.catchCause(() => Effect.void),
 			Effect.andThen(Effect.sleep(Duration.millis(100))),
 			Effect.forever,
@@ -92,28 +130,56 @@ export const layerHttp = (o: HttpOptions) =>
 		Effect.gen(function* () {
 			const http = yield* HttpClient.HttpClient;
 			const timeout = o.timeout ?? Duration.seconds(3);
-			const call = (method: string, args: readonly unknown[]) =>
+			const given = o.token;
+			const current = Redacted.isRedacted(given) ? Effect.succeed(given) : given.current;
+			const renew = Redacted.isRedacted(given) ? null : given.renew;
+			/** One request: its status and its body, as text. */
+			const send = (method: string, args: readonly unknown[], token: Redacted.Redacted<string>) =>
 				HttpClientRequest.post(`${o.url}/${o.ledger}/${method}`).pipe(
-					HttpClientRequest.bearerToken(o.token),
+					HttpClientRequest.bearerToken(token),
 					HttpClientRequest.bodyJsonUnsafe(onTheWire(method, args)),
 					http.execute,
-					Effect.flatMap((res) =>
-						res.status >= 200 && res.status < 300
-							? res.json
-							: Effect.flatMap(res.text, (text) =>
-									Effect.fail(new Error(`the ledger answered ${res.status}: ${text}`)),
-								),
-					),
+					Effect.flatMap((res) => Effect.map(res.text, (text) => ({status: res.status, text}))),
 					Effect.scoped,
 					Effect.timeout(timeout),
+				);
+			const call = (method: string, args: readonly unknown[]) =>
+				Effect.gen(function* () {
+					const token = yield* current;
+					const first = yield* send(method, args, token);
+					const res =
+						first.status === 401 && renew !== null
+							? yield* send(method, args, yield* renew(token))
+							: first;
+					if (res.status < 200 || res.status >= 300)
+						return yield* Effect.fail(new Error(`the ledger answered ${res.status}: ${res.text}`));
+					return yield* Effect.try(() => JSON.parse(res.text) as unknown);
+				}).pipe(
 					Effect.mapError(
 						(e) =>
-							new LedgerUnreachable({method, message: e instanceof Error ? e.message : String(e)}),
+							new LedgerUnreachable({
+								method,
+								message:
+									e instanceof DoorRefused
+										? `the door gave no new session (${e.status}): ${e.why}`
+										: e instanceof Error
+											? e.message
+											: String(e),
+							}),
 					),
 				);
+			// A doorbell refused may be an ended session: the door's `who` says, and a 401 renews.
+			const door = doorOf(o);
+			const lost = (used: Redacted.Redacted<string>) =>
+				renew === null
+					? Effect.void
+					: door.who(used).pipe(
+							Effect.catch((e) => (e.status === 401 ? renew(used) : Effect.void)),
+							Effect.ignore,
+						);
 			const ws = o.url.replace(/^http/, "ws");
 			const watch: Raw["watch"] = (stream) =>
-				doorbell(`${ws}/${o.ledger}/tail?stream=${encodeURIComponent(stream)}`, o.token);
+				doorbell(`${ws}/${o.ledger}/tail?stream=${encodeURIComponent(stream)}`, current, lost);
 			return fromRaw(rawOf(call, watch));
 		}),
 	).pipe(Layer.provide(clients(o.maxSockets ?? 8)));
@@ -232,3 +298,78 @@ export const doorOf = (o: {readonly url: string; readonly ledger: string}) => {
 		seal: (token: Redacted.Redacted<string>, seal: Seal) => step(Progress, "seal", seal, token),
 	};
 };
+
+// ---------------------------------------------------------------- a session that renews
+
+/** A person's session that renews: what `layerHttp` sends as it is now, and after a 401. */
+export interface Renewing {
+	/** The token to send now. Fails once the door refused this person a new session. */
+	readonly current: Effect.Effect<Redacted.Redacted<string>, DoorRefused>;
+	/**
+	 * The door said 401 to `stale`: a token to send again with. One login however many callers ask
+	 * with the same stale token; one that was renewed already answers the newer token.
+	 */
+	readonly renew: (
+		stale: Redacted.Redacted<string>,
+	) => Effect.Effect<Redacted.Redacted<string>, DoorRefused>;
+}
+
+/**
+ * How long before its end a session is renewed: 5 minutes, as AWS's and Google's SDKs refresh a
+ * credential, or half of what is left when that is less.
+ */
+const EARLY_MS = 5 * 60_000;
+/** Timed logins come at most once a minute, whatever the two clocks say. */
+const LEAST_MS = 60_000;
+
+/** The door said no to the person, so asking again cannot help: 401 or 403. */
+const isFinal = (e: DoorRefused) => e.status === 401 || e.status === 403;
+
+type Held =
+	| {readonly kind: "live"; readonly session: Session}
+	| {readonly kind: "refused"; readonly refused: DoorRefused};
+
+/**
+ * Keep `first` renewed with `login`, until the scope closes: again shortly before its end, and on
+ * a 401 (`Renewing.renew`). A login the network failed leaves the old session in place, to try
+ * again; one the door refused is kept, and `current` fails with it.
+ */
+export const renewing = (
+	first: Session,
+	login: Effect.Effect<Session, DoorRefused>,
+): Effect.Effect<Renewing, never, Scope.Scope> =>
+	Effect.gen(function* () {
+		const held = yield* SynchronizedRef.make<Held>({kind: "live", session: first});
+		/** A new session, unless the one held is no longer `stale`: under the lock, so once. */
+		const renew = (stale: Redacted.Redacted<string>) =>
+			SynchronizedRef.modifyEffect(
+				held,
+				(h): Effect.Effect<readonly [Exit.Exit<Redacted.Redacted<string>, DoorRefused>, Held]> => {
+					if (h.kind === "refused") return Effect.succeed([Exit.fail(h.refused), h]);
+					if (h.session.token !== stale) return Effect.succeed([Exit.succeed(h.session.token), h]);
+					return login.pipe(
+						Effect.map((s) => [Exit.succeed(s.token), {kind: "live", session: s}] as const),
+						Effect.catch((e) => {
+							const next: Held = isFinal(e) ? {kind: "refused", refused: e} : h;
+							return Effect.succeed([Exit.fail(e), next] as const);
+						}),
+					);
+				},
+			).pipe(Effect.flatten);
+		const ahead = Effect.gen(function* () {
+			for (;;) {
+				const h = yield* SynchronizedRef.get(held);
+				if (h.kind === "refused") return;
+				const left = h.session.expires - (yield* Clock.currentTimeMillis);
+				yield* Effect.sleep(Math.max(LEAST_MS, left - Math.min(EARLY_MS, left / 2)));
+				yield* Effect.ignore(renew(h.session.token));
+			}
+		});
+		yield* Effect.forkScoped(ahead);
+		return {
+			current: Effect.flatMap(SynchronizedRef.get(held), (h) =>
+				h.kind === "live" ? Effect.succeed(h.session.token) : Effect.fail(h.refused),
+			),
+			renew,
+		};
+	});
