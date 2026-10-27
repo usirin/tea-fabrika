@@ -175,6 +175,7 @@ export async function turn(
 				"--output-format",
 				"json",
 				...conversationArgs(ask.session, continues),
+				// biome-ignore lint/plugin/no-project-settings: the first-generation factory's turn, kept as it ran; legacy only shrinks
 				"--setting-sources",
 				"project",
 				"--strict-mcp-config",

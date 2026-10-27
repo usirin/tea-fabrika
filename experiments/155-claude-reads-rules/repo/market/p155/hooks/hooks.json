@@ -1,0 +1,7 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{ "hooks": [{ "type": "command", "command": "node \"{{COPY}}/hook.mjs\" plugin-session" }] }
+		]
+	}
+}

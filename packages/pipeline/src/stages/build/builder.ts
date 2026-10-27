@@ -11,6 +11,7 @@ import {
 	fencedEnv,
 	filesOf,
 	guardHook,
+	ownRules,
 	TOOLS,
 	temps,
 } from "@kampus/fabrika/agents/sandbox";
@@ -67,11 +68,52 @@ function fenced(text: string, word = ""): string {
 }
 
 /**
+ * How the builder gets the repository's rule files. `loaded`: Claude Code
+ * reads them in the copy itself, subfolder files and imports too (`ownRules`,
+ * experiment 155). `pasted`: code read the top two from main and they are in
+ * the prompt, for a runner that loads nothing (the ACP one, ./builder-acp.ts).
+ */
+export type RulesShown = "loaded" | "pasted";
+
+const FOLLOW =
+	"Follow each rule that is about the change itself: what a change must include (a test, a changelog or changeset entry, docs kept in step), how code is shaped, which commands must pass. Leave the parts about tools and steps you do not have here: skills, other agents, opening or merging pull requests, labels. Code does those, or nobody does. Where a rule asks for something you cannot do here, say so under `left`.";
+
+/** The prompt's part on the repository's rules. Pure. */
+function rulesPart(brief: BuildBrief, shown: RulesShown): readonly string[] {
+	if (shown === "loaded")
+		return [
+			"# The repository's own rules",
+			"",
+			`The repository's rule files for agents (CLAUDE.md and AGENTS.md, and those in subfolders, where the nearest one wins) are loaded for you as you work, the way Claude Code reads them. Where there are none, follow the shape of the code around your change. ${FOLLOW}`,
+			"",
+		];
+	if (brief.rules.length === 0)
+		return [
+			"# The repository's own rules",
+			"",
+			"None: the repository keeps no CLAUDE.md or AGENTS.md on its main branch. Follow the shape of the code around your change.",
+			"",
+		];
+	return [
+		"# The repository's own rules",
+		"",
+		`The repository keeps instructions for agents that work in it. Code read them from its main branch; they are shown here as written. ${FOLLOW}`,
+		"",
+		...brief.rules.flatMap((rule) => [`## ${rule.file}`, "", fenced(rule.text, "markdown"), ""]),
+	];
+}
+
+/**
  * What the builder is sent. Pure: the same brief gives the same text. `told`:
  * the repository's check commands, as its fabrika.toml names them; none
- * named, the builder is told to find them itself.
+ * named, the builder is told to find them itself. `shown`: how it gets the
+ * repository's rules.
  */
-export function promptOf(brief: BuildBrief, told: readonly (readonly string[])[] = []): string {
+export function promptOf(
+	brief: BuildBrief,
+	told: readonly (readonly string[])[],
+	shown: RulesShown,
+): string {
 	const checks =
 		told.length === 0
 			? "Then run the repository's own checks for what you touched: its typecheck, its lint, and the tests near your change (look in package.json for the commands; prefix heavy ones with `nice -n 19`). Fix what they find."
@@ -93,26 +135,7 @@ export function promptOf(brief: BuildBrief, told: readonly (readonly string[])[]
 					]),
 					"",
 				];
-	const rules =
-		brief.rules.length === 0
-			? [
-					"# The repository's own rules",
-					"",
-					"None: the repository keeps no CLAUDE.md or AGENTS.md on its main branch. Follow the shape of the code around your change.",
-					"",
-				]
-			: [
-					"# The repository's own rules",
-					"",
-					"The repository keeps instructions for agents that work in it. Code read them from its main branch; they are shown here as written. Follow each rule that is about the change itself: what a change must include (a test, a changelog or changeset entry, docs kept in step), how code is shaped, which commands must pass. Leave the parts about tools and steps you do not have here: skills, other agents, opening or merging pull requests, labels. Code does those, or nobody does. Where a rule asks for something you cannot do here, say so under `left`.",
-					"",
-					...brief.rules.flatMap((rule) => [
-						`## ${rule.file}`,
-						"",
-						fenced(rule.text, "markdown"),
-						"",
-					]),
-				];
+	const rules = rulesPart(brief, shown);
 	return [
 		`You are building one ticket: ${brief.ticket}, "${brief.title}". Round ${brief.round}.`,
 		"",
@@ -146,10 +169,11 @@ export function promptOf(brief: BuildBrief, told: readonly (readonly string[])[]
 }
 
 /**
- * The Agent SDK options of one run. `tools` is the whole list; no settings are
- * loaded from the machine or from the copy; no server of tools is offered,
- * and the account's connectors are turned off. The sandbox is here; the two
- * Checks are in ./check.ts.
+ * The Agent SDK options of one run. `tools` is the whole list; the copy's rule
+ * files are read by Claude Code, and no settings are loaded from the machine
+ * or from the copy (`ownRules`); no server of tools is offered, and the
+ * account's connectors are turned off. The sandbox is here; the two Checks
+ * are in ./check.ts.
  */
 export const builderOptions = (
 	settings: Settings,
@@ -182,10 +206,10 @@ export const builderOptions = (
 		env: fencedEnv(agentEnv()),
 		model: settings.model,
 		effort: settings.effort,
-		settingSources: [],
+		// The copy's own rule files, read by Claude Code; none of its settings (rules.ts in agents/claude).
+		...ownRules({disableClaudeAiConnectors: true}),
 		strictMcpConfig: true,
 		mcpServers: {},
-		settings: {disableClaudeAiConnectors: true},
 		// Kept on disk, so a builder started again in the same round can carry
 		// its conversation on (`BuildBrief.session`).
 		persistSession: true,
@@ -263,7 +287,7 @@ export const draftLive = (
 		const run: DraftRun = {
 			key: brief.ticket,
 			id: stamp,
-			prompt: continues ? carryOnOf(brief) : promptOf(brief, config.checks),
+			prompt: continues ? carryOnOf(brief) : promptOf(brief, config.checks ?? [], "loaded"),
 			session: {id: brief.session, continues},
 			agent: null,
 			folder: null,

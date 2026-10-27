@@ -81,6 +81,13 @@
 	},
 	"overrides": [
 		{
+			// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
+			// out (experiment 155). So are tests: they write the options' shape to check it, and none
+			// starts a live run. See biome-plugins/README.md.
+			"includes": ["**", "!packages/fabrika/src/agents/claude/rules.ts", "!**/*.test.ts"],
+			"plugins": ["./biome-plugins/no-project-settings.grit"]
+		},
+		{
 			"includes": ["**/*.test.ts"],
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			"plugins": ["./biome-plugins/no-expect-in-if.grit"],

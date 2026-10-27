@@ -1,5 +1,5 @@
 import {join} from "node:path";
-import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {type Full, type RunOf, tell, type Word} from "@kampus/fabrika";
 import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika/agents/claude";
@@ -303,6 +303,7 @@ export const shellOptions =
 			model: config.model,
 			effort: config.effort,
 			plugins: [{type: "local", path: config.plugin}],
+			// biome-ignore lint/plugin/no-project-settings: the old operator runs today's fabrika shells, which use the target repository's own settings; legacy only shrinks, and its runner opens the SDK's query by name (shellRunner)
 			settingSources: ["project"],
 			settings: {disableClaudeAiConnectors: true},
 			permissionMode: "dontAsk",
@@ -317,10 +318,13 @@ export const shellOptions =
 
 /**
  * The shells' runner: one Agent SDK query per run, sent the shell's skill and
- * then its brief (src/shell-skill.ts), under {@link shellOptions}.
+ * then its brief (src/shell-skill.ts), under {@link shellOptions}. It opens
+ * the SDK's `query` itself: `sdkRunner`'s own opener refuses options that
+ * load the project's settings (experiment 155), and these do on purpose.
  */
 export const shellRunner = (config: ShellConfig) =>
 	sdkRunner(shellDraft, shellOptions(config), {
+		open: query,
 		prompt: (run) => {
 			const preload = preloadFor(config, run);
 			return preload === null ? run.prompt : shellPrompt(preload, run.prompt);

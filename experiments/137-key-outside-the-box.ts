@@ -67,7 +67,7 @@ import {
 	type SpawnedProcess,
 	type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import {agentEnv, toolchain} from "@kampus/fabrika/agents/sandbox";
+import {agentEnv, MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika/agents/sandbox";
 import {promptOf} from "@kampus/pipeline/stages/sort/brief";
 import {sortDraft} from "@kampus/pipeline/stages/sort/machine";
 import {sorterOptions} from "@kampus/pipeline/stages/sort/sorter";
@@ -487,6 +487,8 @@ const dockerfile = `FROM node:26.12.0-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm install --global @anthropic-ai/claude-agent-sdk-linux-${process.arch}@${SDK_VERSION} && npm cache clean --force \\
  && ln -s /usr/local/lib/node_modules/@anthropic-ai/claude-agent-sdk-linux-${process.arch}/claude /usr/local/bin/claude
+# The empty folder a run reads project settings from (ownRules, experiment 155). Debian ships none; made by root, read-only.
+RUN ${MAKE_EMPTY_FOLDER}
 USER node
 WORKDIR /home/node
 `;

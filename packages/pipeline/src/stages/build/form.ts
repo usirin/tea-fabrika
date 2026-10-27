@@ -19,7 +19,11 @@ export const BuildBrief = Schema.Struct({
 	round: Schema.Finite,
 	/** What the last review left open. Empty on a first round. */
 	open: Schema.Array(Item),
-	/** The repository's own rules for agents (../rules.ts). The builder is told them as rules to follow. */
+	/**
+	 * The repository's own rules for agents, from main (../rules.ts). Pasted
+	 * into the prompt only by the ACP builder, which loads nothing; the SDK
+	 * builder reads the copy's own rule files (`RulesShown`, ./builder.ts).
+	 */
 	rules: Schema.Array(RepoRule),
 	/** The working copy, on the ticket's branch. */
 	tree: Schema.String,

@@ -30,6 +30,13 @@ import type {Spawnable} from "./client.ts";
 //     spreads them over its own defaults.
 //   - every permission ask is refused unless the line says otherwise (./program.ts).
 //
+// It loads no settings and so no rule files either: a builder on this row is
+// handed the repository's rules as text in its prompt. The SDK runners read
+// them themselves with `ownRules` (../claude/rules.ts, experiment 155), but
+// the adapter pins an older Agent SDK (0.3.286) that experiment did not test,
+// and an option it does not know would be dropped, loading the project's
+// settings with the rules.
+//
 // What cannot cross: a PreToolUse hook and a custom spawn are functions, and
 // `_meta` is JSON. The adapter itself still reads the owner's settings files
 // for its own defaults (the permission mode among them): see experiment 76.

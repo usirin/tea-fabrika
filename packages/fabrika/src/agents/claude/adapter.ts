@@ -1,21 +1,29 @@
 import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
-import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
 import {claudeOptions} from "../acp/harness.ts";
 import {type Adapter, failed, type Raw, type Tokens} from "../agent/turn.ts";
-import {extraTools, type Open} from "./draft.ts";
+import {extraTools, NotStarted, type Open, openLive} from "./draft.ts";
 import {agentEnv} from "./env.ts";
+import {ownRules, settingsRefusal} from "./rules.ts";
 import {fencedEnv, TOOLS, temps} from "./sandbox.ts";
 import {guardHook} from "./shell-guard.ts";
 
 // Claude Code through the Agent SDK, as an adapter of the interface
 // (../agent/turn.ts). The same containment as the ACP row for Claude
-// (`claudeOptions`: no settings files, no MCP server, no connector, the
-// builder's tools, the OS sandbox), plus what only the SDK path can carry:
-// the shell guard as a PreToolUse hook, and `dontAsk`, so nothing waits on a
-// person. Claude keeps `settingSources: []` for now; when experiment 155's
-// `ownRules` lands, this adapter moves to it as the stages do.
+// (`claudeOptions`: no MCP server, no connector, the builder's tools, the OS
+// sandbox), plus what only the SDK path can carry: the shell guard as a
+// PreToolUse hook, `dontAsk`, so nothing waits on a person, and the working
+// folder's own rule files, read by Claude Code with none of the folder's
+// settings (`ownRules`, ./rules.ts, experiment 155), as the stages read them.
+// The ACP row stays on `settingSources: []`: its adapter pins an older SDK
+// that experiment 155 did not test.
+//
+// Where settings come from is said by `ownRules` alone. A stage's `more`
+// cannot name it (its type), and options that would load more are refused
+// before anything starts (`settingsRefusal`). A live turn also checks the
+// empty folder those settings are read from (`openLive`).
 //
 // What the SDK holds natively: a dollar cap (`maxBudgetUsd`), a typed answer
 // (`outputFormat`), a session id the client picks (`sessionId`, a UUID), the
@@ -84,11 +92,18 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 };
 
 export interface ClaudeAdapterConfig {
-	/** How the query is opened: the SDK's `query`, or a scripted one in a test. */
+	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
 	/** More options on top, for a stage's own needs (its hooks, its tools). */
-	readonly more?: (folder: string) => Partial<Options>;
+	readonly more?: (folder: string) => More;
 }
+
+/** What a stage may add: anything but where settings come from, which `ownRules` alone says. */
+export type More = Partial<Options> & {
+	readonly settingSources?: never;
+	readonly projectConfigRoot?: never;
+	readonly settings?: never;
+};
 
 export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 	name: "claude",
@@ -97,9 +112,11 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 		Effect.gen(function* () {
 			const own = turn.resume ?? randomUUID();
 			let pid: number | null = null;
-			const base = claudeOptions(turn.folder, turn.usd);
+			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
 			const options: Options = {
 				...base,
+				// The folder's own rule files, none of its settings (./rules.ts, experiment 155).
+				...ownRules(settings),
 				cwd: turn.folder,
 				env: fencedEnv(agentEnv()),
 				permissionMode: "dontAsk",
@@ -124,7 +141,10 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 				},
 				...config.more?.(turn.folder),
 			};
-			const q = (config.open ?? query)({prompt: turn.prompt, options});
+			// A `more` that got past its type (a cast, or JavaScript) is refused here, before any process.
+			const refused = settingsRefusal(options);
+			if (refused !== null) return yield* Effect.fail(failed("contain", refused));
+			const q = (config.open ?? openLive)({prompt: turn.prompt, options});
 			const closed = {done: false};
 			yield* Effect.addFinalizer(() =>
 				Effect.sync(() => {
@@ -132,7 +152,9 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 					q.close();
 				}),
 			);
-			const updates = Stream.fromAsyncIterable(q, (e) => failed("broke", String(e))).pipe(
+			const updates = Stream.fromAsyncIterable(q, (e) =>
+				e instanceof NotStarted ? failed("start", e.message) : failed("broke", String(e)),
+			).pipe(
 				Stream.mapEffect((m) => {
 					if (m.type === "system" && m.subtype === "init") {
 						const extra = extraTools(options.tools, m.tools);
