@@ -52,6 +52,8 @@ export * from "./host/ledger.ts";
 // rules' plain types of the same name, which they encode.
 export {DeadLetter, EndReason, Fenced, LimitKind, Over, Stale} from "./host/ledger.ts";
 export * as Monitor from "./host/monitor.ts";
+// Moving a project: the plan on the laptop, the import window on the server's door.
+export * from "./host/move.ts";
 export * from "./host/observer.ts";
 export * from "./host/rules.ts";
 export * from "./host/signer.ts";

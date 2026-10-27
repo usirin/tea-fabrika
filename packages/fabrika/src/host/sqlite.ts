@@ -19,14 +19,15 @@ import {Worker} from "node:worker_threads";
 import {Clock, Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream} from "effect";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf, type WireCall} from "./ledger.ts";
 import {MAX_DELIVERIES, RULES} from "./rules.ts";
-import {dispatch, isMethod, openDb} from "./sqlite-driver.ts";
+import {dispatch, isMethod, openDb, readOnlyRows} from "./sqlite-driver.ts";
 
 /**
  * The file's own driver, past the ledger's rules: for a test that writes a row the way a bad
  * tool or a torn copy would, and checks the ledger refuses to read it. Public since experiment
- * 114, when such a test moved out of this package with the pipeline.
+ * 114, when such a test moved out of this package with the pipeline. `readOnlyRows`: the move's
+ * read of a laptop file, which never changes it.
  */
-export {openDb};
+export {openDb, readOnlyRows};
 
 export interface SqliteOptions {
 	readonly path: string;

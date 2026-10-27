@@ -22,7 +22,15 @@
 // the tests and on the laptop side of the move. Web crypto only.
 import {Option, Schema} from "effect";
 import {isAgentName, isDoorStream, isPersonKind, MEMBERS, type Stamp, stampText} from "./door.ts";
-import {type Db, importEvent, readStream, type SqlRow, type Written, writeUnguarded} from "./rules.ts";
+import {
+	type Db,
+	importEvent,
+	LEDGER_KINDS,
+	readStream,
+	type SqlRow,
+	type Written,
+	writeUnguarded,
+} from "./rules.ts";
 
 // ---------------------------------------------------------------- the wire
 
@@ -174,7 +182,7 @@ export const planOf = (rows: readonly SqlRow[], founder: string): Plan => {
 		const where = `${s(r.stream)} rev ${n(r.rev)}`;
 		if (by.kind === "agent" && isPersonKind(kind))
 			refused.push(`${where}: ${kind} by agent ${by.id}, and only a person writes it`);
-		if (kind !== "registered" && LEDGER_WORDS.has(kind))
+		if (kind !== "registered" && LEDGER_KINDS.includes(kind))
 			refused.push(`${where}: ${kind} is the ledger's own word`);
 		const to = writerFor(by, founder);
 		const w = writers.get(writer) ?? {to, events: 0};
@@ -210,22 +218,6 @@ export const linesOf = (plan: Plan): Line[] =>
 /** The import's own stream: the seal, once. Written only by the door. */
 export const MOVE = "door/move";
 
-const LEDGER_WORDS = new Set([
-	"claimed",
-	"lease_expired",
-	"lease_resumed",
-	"cancel",
-	"exited",
-	"restarted",
-	"DOWN",
-	"EXIT",
-	"dead_letter",
-	"held",
-	"charged",
-	"limits",
-	"limit",
-]);
-
 const MIGRATION = [
 	// Each moved event: its `pos` on the old ledger, and where it landed here.
 	`CREATE TABLE IF NOT EXISTS door_imported (
@@ -243,7 +235,9 @@ export const migrateMove = (db: Db): void =>
 const OUTSIDE_DOOR = "stream != 'door' AND substr(stream, 1, 5) != 'door/'";
 
 const progressOf = (db: Db): {last: number; count: number} => {
-	const r = db.all("SELECT coalesce(max(source), 0) AS last, count(*) AS count FROM door_imported")[0];
+	const r = db.all(
+		"SELECT coalesce(max(source), 0) AS last, count(*) AS count FROM door_imported",
+	)[0];
 	return {last: n(r?.last), count: n(r?.count)};
 };
 
@@ -273,8 +267,10 @@ export const moveStateOf = (db: Db): MoveState => {
 };
 
 const readSealed = Schema.decodeUnknownOption(Schema.fromJsonString(Seal));
-const decodeChunk = Schema.decodeUnknownOption(Chunk);
-const decodeSeal = Schema.decodeUnknownOption(Seal);
+// A key the wire does not have is refused, not dropped: a chunk that names a writer is a client
+// that thinks it may, and the door says no to it, as `eventOf` does for an ordinary write.
+const decodeChunk = Schema.decodeUnknownOption(Chunk, {onExcessProperty: "error"});
+const decodeSeal = Schema.decodeUnknownOption(Seal, {onExcessProperty: "error"});
 
 /** Where the move stands. Any credential may ask. */
 export const moveProgress = (db: Db): Progress => ({state: moveStateOf(db), ...progressOf(db)});
@@ -294,9 +290,12 @@ const mayImport = (db: Db, founder: string | null, who: Stamp): Refused | null =
 		: null;
 };
 
+// No parameter property here: Node runs this file by stripping its types, and cannot strip one.
 class Stop extends Error {
-	constructor(readonly refused: Refused) {
+	readonly refused: Refused;
+	constructor(refused: Refused) {
 		super(refused.why);
+		this.refused = refused;
 	}
 }
 
@@ -313,6 +312,7 @@ export const importChunk = (
 ): Answer<{readonly progress: Progress; readonly written: readonly Written[]}> => {
 	const chunk = decodeChunk(body);
 	if (Option.isNone(chunk)) return refuse(400, "not a chunk of moved events");
+	// biome-ignore lint/plugin: a throw inside `db.tx` is how SQLite and the Durable Object roll the whole chunk back; it is caught right here and never leaves this function.
 	try {
 		return db.tx(() => {
 			const no = mayImport(db, founder, who);
@@ -356,14 +356,8 @@ export const importChunk = (
 	}
 };
 
-const isJson = (text: string): boolean => {
-	try {
-		JSON.parse(text);
-		return true;
-	} catch {
-		return false;
-	}
-};
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+const isJson = (text: string): boolean => Option.isSome(decodeJson(text));
 
 /** What landed, in the old `pos` order, as both sides hash it. */
 const landed = (db: Db): Line[] =>
