@@ -1,5 +1,5 @@
 import {Ledger, type Storage} from "@kampus/fabrika";
-import {PullRequests} from "@tea-fabrika/tracker";
+import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Exit, Scope} from "effect";
 import type {DeskMsg} from "./desk/desk.ts";
 import type {TileId} from "./desk/layout/index.ts";
@@ -90,6 +90,7 @@ export const startTiles = (options: {
 		const {history, place, edge} = options;
 		const parent = yield* Effect.scope;
 		const ledger = yield* Ledger;
+		const author = yield* Author;
 		const pullRequests = yield* PullRequests;
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
@@ -136,6 +137,7 @@ export const startTiles = (options: {
 				}).pipe(
 					Scope.provide(scope),
 					Effect.provideService(Ledger, ledger),
+					Effect.provideService(Author, author),
 					Effect.provideService(PullRequests, pullRequests),
 				);
 				open.set(tile, {host, scope, drop, state: "open"});

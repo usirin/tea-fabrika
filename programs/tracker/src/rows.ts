@@ -18,6 +18,8 @@ export const Row = Schema.Struct({
 	pos: Schema.Int,
 	type: Schema.String,
 	by: Writer,
+	/** For an agent's row: the name its person goes by on this ledger (the entry's `whose`). */
+	whose: Schema.optional(Schema.String),
 	at: Schema.Finite,
 	/** What happened, in a few words. */
 	text: Schema.String,
@@ -107,6 +109,7 @@ export const rowOf = (entry: Entry, timeline: readonly Entry[]): Row => ({
 	pos: entry.pos,
 	type: entry.fact.type,
 	by: entry.by,
+	...(entry.whose === undefined ? {} : {whose: entry.whose}),
 	at: entry.at,
 	...saidOf(entry.fact, timeline),
 });

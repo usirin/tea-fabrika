@@ -65,8 +65,9 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // table, not its run.
 //
 // The ledger: it is handed one, as the `Ledger` service, and gives it to the tracker. The host
-// process hands it a node:sqlite file in the app's home; a test hands it memory. The tracker
-// writes as the owner, the one person at the app for now. It is handed the tracker's
+// process hands it its home's ledger (host/connection.ts); a test hands it memory. The tracker
+// writes as the `Author` it is handed: the host's, which is the person its ledger's door let in,
+// or the owner on a home's own file. It is handed the tracker's
 // `PullRequests` the same way: the host's reads GitHub on the person's own `gh` login; a test's is
 // a fixed list.
 //
@@ -142,12 +143,16 @@ export const RESET = "\x1bc";
 
 /** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
 const COUNTER = listed(counter, Layer.empty);
-const trackerOn = (ledger: Ledger["Service"], pullRequests: PullRequests["Service"]) =>
+const trackerOn = (
+	ledger: Ledger["Service"],
+	author: Author["Service"],
+	pullRequests: PullRequests["Service"],
+) =>
 	listed(
 		tracker,
 		Layer.mergeAll(
 			Layer.succeed(Ledger, ledger),
-			Layer.succeed(Author, {kind: "user", id: "owner"}),
+			Layer.succeed(Author, author),
 			Layer.succeed(PullRequests, pullRequests),
 		),
 	);
@@ -201,6 +206,7 @@ export const startTsh = (options: {
 		const {jobs, history, runs} = options;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
+		const author = yield* Author;
 		const pullRequests = yield* PullRequests;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
@@ -300,7 +306,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...Shell.SMALL, COUNTER, trackerOn(ledger, pullRequests)].map((entry) =>
+			[...Shell.SMALL, COUNTER, trackerOn(ledger, author, pullRequests)].map((entry) =>
 				seenBy(entry, seen),
 			),
 		);

@@ -1,9 +1,9 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {Effect, FileSystem, Layer, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
+import {hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {serve} from "./serve.ts";
 import {pathsOf, reach} from "./socket.ts";
@@ -23,12 +23,15 @@ import {pathsOf, reach} from "./socket.ts";
 //   desk.json            the desk's tiles, kept on each change, for the next start
 //   storage/tiles/<t>/   tile <t>'s tsh: its job table and its jobs, as the terminal tsh keeps them
 //   history              the line editor's history, one for every tile
-//   ledger.sqlite        the ledger
+//   ledger.sqlite        the ledger, when the home is connected to no server
+//   ledger.json          the ledger server it is connected to, if any (connection.ts)
 //
 // One host per home: a host that finds another answering on the socket does not start, and
 // hosts started at the same moment take turns under the start lock, so exactly one listens. The
-// ledger is on one node:sqlite connection in this thread (`layerSqliteSync`): the bundle has no
-// worker file beside it. Its alarm looks for due jobs once a second, as nothing sets one yet.
+// ledger and who the host writes as are `hostLedger`'s: with no `ledger.json`, one node:sqlite
+// connection in this thread (`layerSqliteSync`: the bundle has no worker file beside it), its
+// alarm looking for due jobs once a second, and the owner; connected, the server over HTTP and
+// the person its door let in.
 
 /** Another host answers on this home's socket already. */
 export class HostAnswers extends Schema.TaggedError<HostAnswers>()("HostAnswers", {
@@ -74,7 +77,7 @@ export const runHost = (options: {
 		yield* Effect.addFinalizer(() => fs.remove(paths.pid).pipe(Effect.ignore));
 
 		const at = (...names: string[]) => path.join(home, ...names);
-		const ledger = yield* Layer.build(layerSqliteSync({path: at("ledger.sqlite"), tickMs: 1000}));
+		const ledger = yield* Layer.build(hostLedger(home));
 		const history = yield* sharedHistory(yield* fileHistory(at("history")));
 		const kept = yield* fs.readFileString(at("desk.json")).pipe(
 			Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
