@@ -1,4 +1,4 @@
-import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika";
+import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
 import {Context, Duration, Effect, Stream} from "effect";
 import type {load, PollSub, save} from "./machine.ts";
 import {type Entry, factOf, nameOf, ROOT, readRow} from "./ticket.ts";
@@ -33,6 +33,15 @@ const refused = (stream: string) => ({
 	why: `the ledger refused ${stream}`,
 });
 
+/**
+ * An agent's entry with its person's name, when this ledger's members name them. A ledger with no
+ * door has no members, and its entries stay as they are.
+ */
+const named = (entry: Entry, names: ReadonlyMap<string, string>): Entry => {
+	const whose = "for" in entry.by ? names.get(entry.by.for) : undefined;
+	return whose === undefined ? entry : {...entry, whose};
+};
+
 /** Every row after `after` under the tickets' prefix, read in pages. */
 export const loadCell = (cmd: ReturnType<typeof load>) =>
 	Effect.gen(function* () {
@@ -40,11 +49,12 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 		const entries: Entry[] = [];
 		const broken: string[] = [];
 		let last = cmd.after;
+		const names = namesOf(yield* ledger.readStream(MEMBERS));
 		for (;;) {
 			const page = yield* ledger.read(last, PAGE, ROOT);
 			for (const row of page) {
 				const read = readRow(row);
-				if (read.kind === "entry") entries.push(read.entry);
+				if (read.kind === "entry") entries.push(named(read.entry, names));
 				if (read.kind === "broken") broken.push(read.why);
 			}
 			last = page.at(-1)?.pos ?? last;

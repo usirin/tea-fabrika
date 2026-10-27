@@ -58,6 +58,8 @@ export const Entry = Schema.Struct({
 	pos: Schema.Int,
 	ticket: TicketNumber,
 	by: Writer,
+	/** For an agent's row: the name its person goes by on this ledger, from `door/members`. */
+	whose: Schema.optional(Schema.String),
 	at: Schema.Finite,
 	fact: Fact,
 });

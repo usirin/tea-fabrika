@@ -141,6 +141,31 @@ path; a deploy called from code is still to measure.
 **Everything else below is proposed.** The Door is built and in review.
 Nothing is deployed yet.
 
+**Built 2026-10-26, on the laptop's twin only: the first version's three
+things.** No deploy was run.
+
+- **connect:** `fabrika connect <address> --login <github login> --key <ssh key file>`
+  (`apps/fabrika/src/cli.ts`). It logs in once to check, then keeps the address,
+  the login and the key's path in the home's `ledger.json`. It keeps no session.
+- **log in:** the host reads an OpenSSH Ed25519 key file with no passphrase
+  (`keyFileOf`, checked once against `ssh-keygen`), signs the door's challenge
+  with it, and the door checks it against GitHub's keys for that login.
+- **invite:** `fabrika invite <login>` and `fabrika members`, from the
+  founder's home.
+- **The server:** `packages/ledger-server`. An Alchemy stack runs fabrika's own
+  Worker with the shared door's bindings. The twin runs the same Worker file with
+  the same bindings in Miniflare. It is not `alchemy dev`, because only Miniflare
+  lets a test fake GitHub.
+- **The host picks its ledger:** with a `ledger.json` it uses the server, and its
+  `Author` is the person the door let in; without one it uses `ledger.sqlite` as
+  before, as the owner.
+- **Whose agent:** the tracker's window shows an agent's row as "old-host,
+  alice's agent", with the login from `door/members`.
+- **The test:** `apps/fabrika/src/host/shared.test.ts`. Two homes, two keys and a
+  fake GitHub. The founder invites, the invited one joins and comments on a
+  ticket the founder filed, and the founder sees the comment as theirs. Someone
+  not invited is refused, and their home is left as it was.
+
 ```text
 The first version is three things, and nothing else:
 
@@ -1127,6 +1152,13 @@ None of these is in the first version.
   No deploy, no SSH login against the real GitHub, no agent talk across two
   laptops. Every Cloudflare and GitHub number is from their docs, read
   2026-10-25, not measured.
+- *Added 2026-10-26, with the first build:* the twin is Miniflare, not `alchemy
+  dev`. Both run the same Worker file and bindings, but the Alchemy stack itself
+  has only been typechecked, never deployed. A session lasts 4 hours and is not
+  renewed yet, so a host must restart after that. A key with a passphrase, and
+  ssh-agent, do not work yet. A host must restart after `fabrika connect`. Each
+  person's own object and the whole-ledger copy (section 6) are not built. The
+  tracker still polls the server instead of waiting on its doorbell.
 - The load in section 7 is guessed: lanes at once, calls per run, beats per
   run, rows per write and MB per log. The bill is small enough that a guess
   twice too low still costs little.

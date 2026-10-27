@@ -596,7 +596,7 @@ function TicketPage(props: {
 						{ticket.timeline.map((e) => (
 							<li key={e.pos} className={`tracker-entry tracker-fact-${e.fact.type}`}>
 								<p className="tracker-meta">
-									<Who by={e.by} /> {verbOf(e.fact.type)}{" "}
+									<Who entry={e} /> {verbOf(e.fact.type)}{" "}
 									<time className="tracker-quiet">{whenOf(e.at, Date.now())}</time>
 								</p>
 								{"body" in e.fact && e.fact.body !== "" ? (
@@ -694,9 +694,24 @@ const verbOf = (type: Ticket["timeline"][number]["fact"]["type"]): ReactNode => 
 	}
 };
 
-const Who = ({by}: {readonly by: Ticket["timeline"][number]["by"]}) => (
-	<span className={`tracker-who tracker-by-${by.kind}`}>
-		{by.id}
-		{by.kind === "agent" ? <small>agent</small> : null}
-	</span>
-);
+/**
+ * What a row says after its writer's id: nothing for a person; whose agent it is, by its person's
+ * name on this ledger (their id when the members do not name them); only "agent" for a row from
+ * before the door, which does not say whose.
+ */
+export const agentOf = (entry: Ticket["timeline"][number]): string | null => {
+	const {by} = entry;
+	if (by.kind === "user") return null;
+	return "for" in by ? `${entry.whose ?? by.for}'s agent` : "agent";
+};
+
+const Who = ({entry}: {readonly entry: Ticket["timeline"][number]}) => {
+	const tail = agentOf(entry);
+	return (
+		<span className={`tracker-who tracker-by-${entry.by.kind}`}>
+			{entry.by.id}
+			{"for" in entry.by ? "," : null}
+			{tail === null ? null : <small>{tail}</small>}
+		</span>
+	);
+};
