@@ -4,8 +4,9 @@ import {layer as nodePath} from "@effect/platform-node/NodePath";
 import {runMain} from "@effect/platform-node/NodeRuntime";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import {type BuildOptions, build} from "esbuild";
+import {bundlesOf, common} from "./bundles.ts";
 
-// Build the app into dist/, with esbuild: four bundles and the page's plain files.
+// Build the app into dist/, with esbuild: four bundles (bundles.ts) and the page's plain files.
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
 //   dist/host.mjs      the host process: ESM for the same Node, run by Electron's binary as Node
@@ -29,20 +30,9 @@ import {type BuildOptions, build} from "esbuild";
 
 const here = import.meta.dirname;
 
-/** Some of what the bundles hold is CommonJS and calls `require`; ESM has none of its own. */
-const REQUIRE =
-	'import {createRequire} from "node:module"; const require = createRequire(import.meta.url);';
-
 const bundle = (options: BuildOptions) =>
 	Effect.tryPromise({
-		try: () =>
-			build({
-				bundle: true,
-				logLevel: "warning",
-				legalComments: "none",
-				absWorkingDir: here,
-				...options,
-			}),
+		try: () => build({...common(here), ...options}),
 		catch: (cause) => new Error(`esbuild could not build ${options.outfile}`, {cause}),
 	});
 
@@ -50,45 +40,7 @@ const program = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
 	const at = (...parts: string[]) => path.join(here, ...parts);
-	const bundles: readonly BuildOptions[] = [
-		{
-			entryPoints: [at("src/main.ts")],
-			outfile: at("dist/main.mjs"),
-			platform: "node",
-			format: "esm",
-			target: "node24",
-			external: ["electron"],
-			banner: {js: REQUIRE},
-		},
-		{
-			entryPoints: [at("src/host/main.ts")],
-			outfile: at("dist/host.mjs"),
-			platform: "node",
-			format: "esm",
-			target: "node24",
-			// Run as plain Node: nothing of Electron is there to be imported.
-			banner: {js: REQUIRE},
-		},
-		{
-			entryPoints: [at("src/preload.ts")],
-			outfile: at("dist/preload.cjs"),
-			platform: "node",
-			format: "cjs",
-			target: "node24",
-			external: ["electron"],
-		},
-		{
-			entryPoints: [at("src/window/desk.tsx")],
-			outfile: at("dist/desk.js"),
-			platform: "browser",
-			format: "iife",
-			target: "chrome140",
-			jsx: "automatic",
-			minify: true,
-			loader: {".wasm": "binary"},
-			define: {"process.env.NODE_ENV": '"production"'},
-		},
-	];
+	const bundles = bundlesOf(at);
 
 	// Which files the bundles are made from: read, not written.
 	const metas = yield* Effect.all(
