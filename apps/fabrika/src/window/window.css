@@ -808,6 +808,39 @@ main.program:has(> .tracker) {
 	border-top: 1px solid var(--line);
 }
 
+/* A ticket's top line: quiet, and in the key color when it waits on the owner. */
+.tracker-head-line {
+	color: var(--faint);
+	font-size: 12px;
+}
+
+.tracker-head-line[data-waits] {
+	color: var(--key);
+	font-weight: 600;
+}
+
+.tracker-fact-asked,
+.tracker-fact-answered {
+	border-left-color: var(--key);
+}
+
+/* An open ask's box: what it asks, a note, and its buttons. */
+.tracker-ask {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--key);
+	border-radius: 8px;
+	background: var(--raised);
+}
+
+.tracker-ask-what {
+	color: var(--ink);
+	font-size: 14px;
+	font-weight: 600;
+}
+
 @media (prefers-reduced-motion: no-preference) {
 	.tracker .tracker-list button,
 	.tracker-list a.tracker-pull-request,
