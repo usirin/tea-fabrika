@@ -88,7 +88,7 @@ export const connectionOf = (home: string) =>
 	);
 
 /** A fresh session on `c`'s server, signed with its key file. */
-const loginWith = (c: Connection) =>
+export const loginWith = (c: Connection) =>
 	doorOf({url: c.url, ledger: c.ledger})
 		.login(c.login)
 		.pipe(Effect.provide(layerSignerFile(c.key)));
@@ -106,11 +106,17 @@ export const connect = (
 		const {url, ledger} = yield* addressOf(o.address);
 		const c: Connection = {url, ledger, login: o.login, key: o.key};
 		const session = yield* loginWith(c);
+		yield* keepConnection(home, c);
+		return session.who;
+	});
+
+/** Keep `c` in the home: its host uses that server from its next start. */
+export const keepConnection = (home: string, c: Connection) =>
+	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		yield* fs.makeDirectory(home, {recursive: true, mode: 0o700});
 		const file = yield* fileOf(home);
 		yield* fs.writeFileString(file, `${JSON.stringify(c, null, "\t")}\n`, {mode: 0o600});
-		return session.who;
 	}).pipe(
 		Effect.catchTag("PlatformError", (e) =>
 			Effect.fail(new ConnectFailed({why: `the connection could not be kept: ${e.message}`})),

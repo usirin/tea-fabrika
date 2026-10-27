@@ -19,6 +19,7 @@ import {Duration, Effect, Layer, Queue, Redacted, Schema, Stream} from "effect";
 import {HttpClient, HttpClientRequest} from "effect/http";
 import {Socket} from "effect/socket";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
+import {type Moved, Progress, type Seal} from "./move.ts";
 import {Signer} from "./signer.ts";
 import {Agent, User} from "./writer.ts";
 
@@ -222,5 +223,12 @@ export const doorOf = (o: {readonly url: string; readonly ledger: string}) => {
 		/** On a local ledger: a token for one of the person's agents. */
 		addAgent: (token: Redacted.Redacted<string>, name: string) =>
 			step(Session, "agent", {name}, token),
+		/** Where a move into this ledger stands (move.ts). */
+		moveProgress: (token: Redacted.Redacted<string>) => step(Progress, "move", {}, token),
+		/** One chunk of a move: the founder only, before the ledger opens. */
+		importChunk: (token: Redacted.Redacted<string>, events: readonly Moved[]) =>
+			step(Progress, "import", {events}, token),
+		/** The move's seal: this ledger's own hash of what it holds must match `seal`. */
+		seal: (token: Redacted.Redacted<string>, seal: Seal) => step(Progress, "seal", seal, token),
 	};
 };

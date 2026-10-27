@@ -22,6 +22,7 @@ import {FetchHttpClient} from "effect/http";
 import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
 import {type Keys, layerNobody} from "./keys.ts";
 import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
+import {importChunk, migrateMove, moveProgress, sealMove} from "./move.ts";
 import * as L from "./rules.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
@@ -96,6 +97,8 @@ export class Ledger extends DurableObject {
 	private readonly graceMs: number;
 	private readonly maxDeliveries: number | null;
 	private readonly door: Door;
+	/** A shared door's founder, the one person who may import (`move.ts`); null on any other door. */
+	private readonly founder: string | null;
 
 	constructor(ctx: Ctx, env: Env) {
 		super(ctx, env);
@@ -109,15 +112,15 @@ export class Ledger extends DurableObject {
 			tx: (fn) => ctx.storage.transactionSync(fn),
 		};
 		L.migrate(this.db);
+		migrateMove(this.db);
 		const keys = keysOf(env);
+		const config = closedWithout(configOf(env), keys);
+		this.founder = config.kind === "shared" ? config.founder : null;
 		// One runtime for the object's life: the Layer is built once, so what it keeps (GitHub's
 		// answers, for their cache time) is kept across logins. A local or closed door asks nobody.
-		this.door = new Door(
-			this.db,
-			closedWithout(configOf(env), keys),
-			ManagedRuntime.make(keys ?? layerNobody),
-			{wrote: (w) => this.wake(w.stream, w.rev, w.pos)},
-		);
+		this.door = new Door(this.db, config, ManagedRuntime.make(keys ?? layerNobody), {
+			wrote: (w) => this.wake(w.stream, w.rev, w.pos),
+		});
 	}
 
 	async register(name: string, writer: string) {
@@ -302,6 +305,7 @@ export class Ledger extends DurableObject {
 	 *   POST /<ledger>/door/challenge | login | agent-login     no credential: the login's own steps
 	 *   GET  /<ledger>/door/who | members                       any credential
 	 *   POST /<ledger>/door/invite | remove | agent             a person's credential
+	 *   POST /<ledger>/door/move | import | seal                a person's: the move (`moveStep`)
 	 *   POST /<ledger>/<method>  [args, no writer]              any credential; the door stamps
 	 *   GET  /<ledger>/tail?stream=..  Upgrade: websocket       any credential
 	 *
@@ -371,7 +375,27 @@ export class Ledger extends DurableObject {
 		if (step === "invite") return answer(await this.door.invite(me, body.name));
 		if (step === "remove") return answer(this.door.remove(me, body.id));
 		if (step === "agent") return answer(await this.door.addAgent(me, body.name));
+		if (step === "move" || step === "import" || step === "seal")
+			return this.moveStep(step, me, body);
 		return new Response("not found", {status: 404});
+	}
+
+	/**
+	 * The move's steps (`move.ts`), on a person's credential:
+	 *
+	 *   POST /<ledger>/door/move                    where the move stands: any member
+	 *   POST /<ledger>/door/import {events}         one chunk: the founder, before the ledger opens
+	 *   POST /<ledger>/door/seal {count, hash}      the check, and the ledger opens: the founder
+	 */
+	private async moveStep(step: string, me: Stamp, body: unknown) {
+		if (step === "move") return Response.json(moveProgress(this.db));
+		const res =
+			step === "import"
+				? importChunk(this.db, this.founder, me, body)
+				: await sealMove(this.db, this.founder, me, body, Date.now());
+		if (!res.ok) return refused(res);
+		this.wakeAll(res.value.written);
+		return Response.json(res.value.progress);
 	}
 
 	/** A watcher: upgrade to a WebSocket the runtime holds while the object sleeps. */

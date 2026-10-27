@@ -702,6 +702,82 @@ and an exact copy cannot lose a fact. Cost: every lane stops for minutes. One
 `import` method, which must be off once the copy is done. **How sure: 85%.**
 The doubt: no row has crossed from node:sqlite to a deployed object yet.
 
+### The move as built (2026-10-27)
+
+**Built: `fabrika move` copies the tracker's tickets, not the whole file.** Two
+parts of the lean above turned out wrong, and stay above, marked here:
+
+- *Wrong:* "every row of every table". Only the tracker's streams move. The
+  rest is one person's desk, and on a shared ledger it would be someone
+  else's clutter.
+- *Wrong:* "old rows keep their writer". The door only knows real ids, so
+  `user:owner` becomes the founder, and each agent becomes the founder's
+  agent.
+
+```ts
+// The door's import window, kept on the ledger (packages/fabrika/src/host/move.ts).
+// It is read from the rows every time, never held in memory, and it only moves forward.
+const MoveState = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("fresh")}), // founded, nothing else yet
+	Schema.Struct({kind: Schema.Literal("importing")}), // some moved rows, no seal
+	Schema.Struct({
+		kind: Schema.Literal("open"), // a normal ledger now: import is refused for good
+		by: Schema.Literals(["invite", "write", "seal"]),
+		hash: Schema.NullOr(Schema.String),
+	}),
+]);
+
+// Who wrote a row, mapped. Anything else stops the move, by name.
+writerFor(byOf("user:owner", "github:7")!, "github:7"); // "user:github:7"
+writerFor(byOf("agent:x", "github:7")!, "github:7"); // "agent:x for:github:7"
+byOf("user:github:8", "github:7"); // null: stop, "cannot map: user:github:8"
+```
+
+- **What moves.** Every stream under `tracker/ticket`: each ticket's name and
+  its inbox of facts, what the ticket view folds. Each row keeps its stream,
+  rev, kind, data, id and time. Its `pos` is the new ledger's own.
+- **What stays.** The host's names, leases, jobs, monitors, links, its own
+  inboxes and dead letters, the tsh job tables (files beside the ledger),
+  `pipeline/` streams, and ledger words such as `founded` or `invited`.
+- **The window.**
+  - Only the founder imports, logged in as a person, while `fresh` or
+    `importing`. Bob gets 403.
+  - The first invite, ordinary write or matching seal opens it. Then any import
+    or seal gets 409.
+  - A row's writer comes from the chunk only as `founder` or an agent id, so
+    a chunk cannot name anyone else.
+- **Chunks land once.** The server keeps `door_imported(source, pos)`. A chunk
+  sent again skips what landed. After a dropped link, the move asks the
+  server where it got to (`last`) and goes on from there.
+- **The hash.** Both sides take SHA-256 over the mapped rows in order, one JSON
+  line each, `[stream, rev, writer, kind, at, data, id]`. A seal with another
+  hash or count gets 409, and the ledger stays `importing`. A seal that
+  matches opens it. Sending the same seal again answers "done".
+- **The laptop's file.** The move refuses while a host answers on the home's
+  socket, or holds its start lock. It opens the file read-only and immutable,
+  so SQLite writes no side files. A `-wal` that still holds writes stops it.
+  After the seal, `ledger.json` names the shared ledger. The file stays as it
+  was, the archive.
+
+```sh
+# See the plan, write nothing: counts, writers by kind, what cannot map, the hash.
+fabrika move --from <copy of ledger.sqlite> --to <ledger url> --dry-run --founder github:<id>
+# The move. Quit the app first. It logs in with its own key; no `fabrika connect` needed.
+fabrika move --from <home>/ledger.sqlite --to <ledger url> --login <github login> --key <key file>
+```
+
+Tests, none on the network: the server's window on node:sqlite (10), the
+laptop's side against it (6), a fast-check law that any tracker rows, any chunk
+size and any dropped link fold to the same tickets (60 runs), and two flows on
+the Miniflare twin: alice moves and bob reads the same tickets, and every
+refusal above.
+
+**Lean: keep it this narrow.** Why: a move into a shared ledger is a one-time
+event per project, and each refusal is a mistake made impossible, not a rule
+written down. Cost: a new program's streams must be added to `MOVED` by hand.
+**How sure: 80%.** The doubt is the same as before: it has not run on
+Cloudflare. One real move, on the owner's file, would settle it.
+
 ## 7. Cost
 
 The Workers Paid plan ($5 a month) is already paid for, so the question is
@@ -1159,6 +1235,17 @@ None of these is in the first version.
   ssh-agent, do not work yet. A host must restart after `fabrika connect`. Each
   person's own object and the whole-ledger copy (section 6) are not built. The
   tracker still polls the server instead of waiting on its doorbell.
+- *Added 2026-10-27, with the move:* the move has run only on Miniflare and
+  on node:sqlite, never into a deployed object. Some limits:
+  - A dry run needs `--founder`, because logging in would write `founded`
+    on the server. The first real login writes it, so the server is never
+    quite empty.
+  - The read-only open skips a `-wal`, so the move refuses one that still
+    holds writes and does not fold it in.
+  - `pipeline/` streams do not move.
+  - Old `pos` numbers change; rev stays.
+  - The hash is one digest held in memory, so a project far bigger than
+    today's 27 rows is untested.
 - The load in section 7 is guessed: lanes at once, calls per run, beats per
   run, rows per write and MB per log. The bill is small enough that a guess
   twice too low still costs little.

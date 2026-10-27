@@ -38,6 +38,7 @@ const FILES = [
 	"door",
 	"keys",
 	"keys-github",
+	"move",
 	"rules",
 	"sshsig",
 ] as const;
