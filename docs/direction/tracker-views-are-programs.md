@@ -22,9 +22,9 @@ glanceOf(ticket, prs, now);
 // Status is worked out from facts. Nobody writes "done".
 columnOf(timeline, now); // "in_review": a linked PR is open
 
-// A program's inputs are split: what writes a fact, and what only changes the view.
-yield* tell(run, "write", {kind: "comment", ticket: 43, body: "Looks good."}); // a fact
-yield* tell(run, "view", {kind: "open", ticket: 44}); // no fact
+// A program's inputs: one per command, each writing one fact, and one `query` that writes none.
+yield* tell(run, "comment", {ticket: 43, body: "Looks good."}); // a fact
+yield* tell(run, "query", {ticket: 44}); // no fact
 ```
 
 The answer in eight lines:
@@ -45,9 +45,9 @@ The answer in eight lines:
 - **New facts, in order:** `linked` (a PR), `nested` (a parent), `moved` (an
   open state), then `assigned`, `related`, and later the fields only people
   read.
-- **Inputs split in two, the CQRS way** (decided 2026-10-27): `write` for what
-  becomes a fact, `view` for what only changes the window. The names are a
-  lean.
+- **Writes apart from reads, the CQRS way** (decided 2026-10-27): one input
+  per command (`comment`, `close`, ...), each one fact, and one `query` with
+  filters that writes none (changed 2026-10-28).
 - **tea and tea-program do not grow.** The desk learns to hear one `open`
   output.
 
@@ -190,8 +190,8 @@ What this says for us:
 | Elm Land's shared model | the ledger, outside every program |
 | a page | a view program: `ticket`, `board`, `list` |
 | `pushRoute` | an `open` output the desk hears |
-| a command | a `write` input: one fact on the ledger |
-| a query | a `view` input: the window changes, nothing is written |
+| a command | its own input (`comment`, `close`, ...): one fact on the ledger |
+| a query | the `query` input: the window changes, nothing is written |
 | a read model | each program's fold of the ledger |
 
 - **tea: nothing new.** Each view's machine is a parent written by hand. It
@@ -205,8 +205,8 @@ What this says for us:
 type Board = {feed: Feed; under: TicketNumber | null; picked: TicketNumber | null};
 type BoardMsg =
 	| {type: "feed"; msg: FeedMsg}
-	| {type: "write"; write: BoardWrite} // from the `write` input
-	| {type: "view"; view: BoardView}; // from the `view` input
+	| {type: "move"; move: Move} // from the `move` input: one fact
+	| {type: "query"; query: Query}; // from the `query` input: no fact
 
 const update = (s: Board, m: BoardMsg) => {
 	switch (m.type) {
@@ -214,10 +214,10 @@ const update = (s: Board, m: BoardMsg) => {
 			const [next, cmds] = feed.update(s.feed, m.msg); // the parent steps its child
 			return [{...s, feed: next}, cmds];
 		}
-		case "write":
-			return [s, [save({write: m.write})]]; // one fact; shown after the next load
-		case "view":
-			return [{...s, picked: m.view.ticket}, []];
+		case "move":
+			return [s, [save({move: m.move})]]; // one fact; shown after the next load
+		case "query":
+			return [{...s, picked: m.query.ticket ?? null}, []];
 	}
 };
 ```
@@ -435,50 +435,98 @@ yield* tickets.write(43, {type: "ended", run: "h-43-1", stage: "build",
 - **Prose still has a place:** a comment for what a person should read. A
   brief tells hand-run agents: facts for state, a comment for words.
 
-## 7. Inputs: writes apart from view changes (decided 2026-10-27)
+## 7. Inputs: one per command, and one query (decided 2026-10-27, changed 2026-10-28)
 
 **Decided 2026-10-27 by the owner:** a program keeps the inputs that change
 data apart from the inputs that only change the view, as CQRS keeps commands
-apart from queries. **The names `write` and `view` are a lean, 75% sure.**
+apart from queries. **The names `write` and `view` were a lean, 75% sure.
+Replaced 2026-10-28, below.**
 
 Today the tracker has one input, `do`, which mixes both: `file`, `comment`,
 `answer`, `close` and `reopen` become facts, while `list`, `open`, `show` and
-`find` only move the window (`programs/tracker/src/index.ts`). These names
-will also be tool names, since an agent will drive programs through tsh's MCP
-server: `tracker.write`, `tracker.view`. An agent can then be given `view`
-alone, and cannot write.
+`find` only move the window (`programs/tracker/src/index.ts`). Input names
+also become tool names, since an agent will drive programs through tsh's MCP
+server. The 2026-10-27 lean gave two tools, `tracker.write` and `tracker.view`.
+
+**Changed 2026-10-28 by the owner:** the split stays; the two inputs go.
+
+- **One input per command.** `file`, `comment`, `close`, `reopen`, `answer`.
+  Each writes one fact. The new facts follow the same rule: `link`, `nest`,
+  `move`.
+- **One `query` input for reads,** with filters. Every view reads through it.
+  It never writes a fact. Today's `list`, `open`, `show` and `find` become
+  query shapes.
+- **`quit` is its own input.** It reads nothing; it stops the program, after
+  the writes already asked for, as today.
+- **MCP tool names follow from input names:** `tracker_file`,
+  `tracker_comment`, ..., `tracker_query`. `tracker_query` carries
+  `readOnlyHint: true`, MCP's standard tool annotation
+  ([MCP, tool annotations](https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations)).
+- **An agent's program list never holds `answer`.** Only a person answers, so
+  an agent cannot even call it.
 
 ```ts
-// A sketch. Each view program's two inputs. `Write` is today's (programs/tracker/src/ticket.ts).
+// A sketch. Commands: one input each, one fact each. Reads: one `query` with filters.
+import {Schema} from "effect";
+
+const TicketNumber = Schema.Number;
+const File = Schema.Struct({title: Schema.String, body: Schema.String});
+const Comment = Schema.Struct({ticket: TicketNumber, body: Schema.String});
+const Close = Schema.Struct({ticket: TicketNumber});
+const Reopen = Schema.Struct({ticket: TicketNumber});
+const Answer = Schema.Struct({
+	ticket: TicketNumber,
+	ask: Schema.String,
+	pick: Schema.String,
+	note: Schema.NullOr(Schema.String),
+});
+const Query = Schema.Struct({
+	ticket: Schema.optional(TicketNumber), // {ticket: 43} opens one
+	status: Schema.optional(Schema.Literals(["open", "closed"])), // {status: "open", find: "login"} lists
+	find: Schema.optional(Schema.String),
+	under: Schema.optional(TicketNumber), // {under: 70, turn: "owner"} filters
+	turn: Schema.optional(Schema.String),
+});
+
 // ticket --ticket 43
 inputs: {
-	write: input(TicketWrite, "Comment, request changes, answer an ask, close, reopen, link a PR, nest, move."),
-	view: input(TicketView, "Open another ticket here, go back, fold or unfold comments, quit."),
+	comment: input(Comment, "Comment on a ticket."),
+	answer: input(Answer, "Answer an ask. A person only."),
+	close: input(Close, "Close a ticket once its asks are answered."),
+	reopen: input(Reopen, "Reopen a closed ticket."),
+	link: input(Link, "Link a PR."),
+	nest: input(Nest, "Put a ticket under a parent."),
+	move: input(Move, "Move an open ticket to another open state."),
+	query: input(Query, "Read tickets. Writes nothing."),
+	quit: input(Schema.Null, "Stop, after the writes already asked for."),
 }
-const TicketWrite = Schema.Union([Comment, Answer, Close, Reopen, Link, Nest, Move]);
-const TicketView = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("open"), ticket: TicketNumber}),
-	Schema.Struct({kind: Schema.Literal("back")}),
-	Schema.Struct({kind: Schema.Literal("comments"), open: Schema.Boolean}),
-	Schema.Struct({kind: Schema.Literal("quit")}),
-]);
+// board --under 70: move, close, query, quit
+// list: file, query, quit
 
-// board --under 70
-const BoardWrite = Schema.Union([Move, Close]); // a drag to a column; a drop on Closed
-const BoardView = Schema.Union([Pick, Open /* sends the `open` output */, Group, Quit]);
-
-// list
-const ListWrite = Schema.Union([File]);
-const ListView = Schema.Union([Open, Show, Find, Group, Quit]);
+// An agent's program list: the same inputs minus `answer`.
 ```
 
-- **`quit` sits on `view`.** It writes nothing, and it still waits for writes
-  already asked for, as today. *A lean: it could be its own input. The doubt is
-  whether an agent given only `view` should be able to end a program.*
+- **Going back and folding comments** stay keys inside the window: they write
+  nothing and read nothing new. *Open: whether an agent needs them as inputs.*
 - **One output, `open`,** on every view, heard by the desk. It is the board's
   Enter on a card.
+- **Why:** CQRS names each command by what it does, as in Greg Young's
+  `DeactivateInventoryItem` ([m-r](https://github.com/gregoryyoung/m-r);
+  [Fowler, CQRS](https://martinfowler.com/bliki/CQRS.html)). MCP and
+  Anthropic's guidance favour one clear tool per action
+  ([writing tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)).
+  One query with filters is how read APIs usually work, as GitHub's issue
+  search
+  ([searching issues](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests))
+  and GraphQL. It also fits the proposed notebook note
+  ([PR 162](https://github.com/usirin/tea-fabrika/pull/162)), where a line
+  like `board --under 70 | where turn=owner` is a filter.
 - **Cost:** one change to each program's inputs, and every `tell(run, "do",
-  ...)` in tests, tsh lines and `fabrika post` moves to one of the two.
+  ...)` in tests, tsh lines and `fabrika post` moves to its command's input or
+  to `query`.
+- **How sure: 85%.** The doubt: whether one query shape can grow to the
+  notebook's `where` without becoming its own small language. A few more
+  notebook lines would show it.
 
 ## 8. The views, the facts and the column
 
@@ -490,7 +538,7 @@ const ListView = Schema.Union([Open, Show, Find, Group, Quit]);
 | `triage`, `timeline`, `cycle` | later | | |
 
 - **Today's `tracker` program becomes `list`.** Same window, same writes.
-- **Inside a view, going somewhere is a `view` input.** A child clicked on
+- **Inside a view, going somewhere is a `query`.** A child clicked on
   #70's page shows #43 in the same tile, with back to return.
 - **Across tiles, a view asks** with `open`, and the desk places the tile, as
   Linear's peek ([peek](https://linear.app/docs/peek)).
@@ -597,7 +645,7 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 | 1 | `glanceOf`, and "next" only for a driven ticket | ticket 43 no longer says "next: triage"; laws: an open ask still always wins, done only from a merge or a person's close |
 | 2 | `linked`, the PR panel from `CodeHost`, `fabrika post` learns `started`, `link`, `ended` | a hand-run agent's three posts make ticket 43 say "Ready for your review: PR #155, 4 of 4 checks passed"; an agent cannot post checks |
 | 3 | the ticket page in six parts (section 5) | the page shows the line, properties, activity and folded comments, with no prose open by default |
-| 4 | the `write` and `view` inputs | every `do` is gone; `tracker.view` alone cannot write a fact |
+| 4 | one input per command, one `query`, `quit` (section 7) | every `do` is gone; `query` alone cannot write a fact; an agent's list has no `answer` |
 | 5 | `nested`, sub-issues and progress | 43 to 60 show under the parent with "0 of 18 done"; a loop and a missing parent are refused |
 | 6 | `feed` taken out; `ticket` its own program | `ticket --ticket 70` in a tile shows the same page; three views at once measured for start time and memory |
 | 7 | `moved`, `columnOf`, `board` | `board --under 70` shows the slices by column; a drag writes `moved`; Done takes no drop |
@@ -650,14 +698,11 @@ Small first. Each step is one pull request and costs $0 in agent runs.
   of tickets, not at tens of thousands.
 - **How sure: 75%.** Step 6 measures three views at once.
 
-### Inputs `write` and `view`
+### One input per command, one `query` (decided 2026-10-28)
 
-- **Why:** the split itself is decided. `write` and `view` are short everyday
-  words, read well as tool names (`tracker.write`), and match CQRS's command
-  and query without its jargon.
-- **Cost:** a rename across tests and callers.
-- **How sure: 75%** on the names. Other short pairs: `do` and `see`, `change`
-  and `look`.
+- **Was:** two inputs, `write` and `view`, 75% sure. Replaced 2026-10-28 by
+  the owner's choice in section 7.
+- **Why, cost and how sure (85%):** section 7.
 
 ## Open for the owner
 
