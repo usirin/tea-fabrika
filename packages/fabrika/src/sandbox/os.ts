@@ -83,7 +83,8 @@ const wrap = (parent: SandboxOptions["parent"]) => (job: Job, room: Room, launch
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const cli = yield* srt;
-		const tools = toolchain(parent, process.execPath);
+		// srt's own package too: on Linux its seccomp helper runs inside the box.
+		const tools = [...toolchain(parent, process.execPath), path.dirname(path.dirname(cli))];
 		const {settings, opens} = settingsOf(job, room, tools);
 		if (opens !== null) return yield* new SandboxError({why: "opens_home", what: opens});
 		const file = path.join(room.root, "srt.json");

@@ -185,11 +185,14 @@ describe.skipIf(!osRuns)("the os box's fence", () => {
 		expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("the commit\n");
 	});
 
-	it("holding nothing, reads no file under the home folder", async () => {
-		const exit = await run("os", sh(`ls ${homedir()}`));
+	// The repository's own files are not the box's. On CI, as on most laptops, it is under home.
+	const file = join(import.meta.dirname, "..", "..", "..", "..", "package.json");
+	it.skipIf(!file.startsWith(homedir()))("holding nothing, reads no file under home", async () => {
+		expect(existsSync(file)).toBe(true);
+		const exit = await run("os", sh(`cat ${file}`));
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");
-		// Seatbelt refuses the listing; bubblewrap shows an empty folder. Either way, no name.
 		expect(exit.value.out).toBe("");
+		expect(exit.value.code).not.toBe(0);
 	});
 
 	it("refuses a job whose reads would open the home folder", async () => {
