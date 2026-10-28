@@ -49,9 +49,16 @@ const stages = {
   measure, on triage.
 - **How many Codex jobs one person can run at once.** Experiment 157 lends a
   person's Codex login to a box one job at a time, because the login rotates
-  its refresh token. That caps the lanes a person can run in parallel. Still
-  open: can a plan be used through a key or a CI token, so many boxes run at
-  once?
+  its refresh token. That caps the lanes a person can run in parallel.
+  - *Checked 2026-10-27 against OpenAI's docs:* an API key bills at API
+    rates, never against a plan
+    ([Codex auth](https://learn.chatgpt.com/docs/auth#sign-in-with-an-api-key)).
+    OpenAI says not to share one login file across parallel jobs or machines
+    ([CI auth](https://learn.chatgpt.com/docs/auth/ci-cd-auth#operational-rules-that-matter)),
+    and not to use that way for public repositories. Business and Enterprise
+    workspaces get a Codex access token, `CODEX_ACCESS_TOKEN`, made for headless
+    jobs ([access tokens](https://learn.chatgpt.com/docs/enterprise/access-tokens)).
+    Personal plans have no such token. Which way we pick is still open.
 
 ## What it changes
 
