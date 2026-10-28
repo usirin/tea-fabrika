@@ -9,8 +9,9 @@ import {Ran, RunAsk} from "./services.ts";
 // The mutation step (docs/direction/promises-in-the-pipeline.md, step 5):
 // after the build, before review. No agent sits inside it; code does it all.
 //
-//   reading    the diff from the plan's base to the build's head, and where
-//              each kept Property's code stands. A Gather
+//   reading    the diff from the plan's base to the build's head, where
+//              each kept Property's code stands, and a hash of each file of
+//              the exam at the head. A Gather
 //              Then two pure Checks (./scope.ts): a change to the exam asks
 //              the owner, and no line to mutate is a skip
 //   testing    the repo's own tests at the head, first: a mutant is graded on
@@ -49,6 +50,7 @@ const ScopeIn = Schema.Struct({
 	base: Schema.String,
 	head: Schema.String,
 	kept: Schema.Array(CodeRef),
+	exam: Schema.Array(Schema.String),
 });
 const TestsIn = Schema.Struct({head: Schema.String});
 
@@ -136,8 +138,8 @@ export const mutation = defineMachine({
 	update: {
 		start: (s, m): Step => {
 			if (s.phase !== "idle") return stay(s);
-			const {base, head, kept} = m.ask;
-			const asked = readScope({base, head, kept});
+			const {base, head, kept, exam} = m.ask;
+			const asked = readScope({base, head, kept, exam});
 			return [{ask: m.ask, phase: "reading", asked}, [asked]];
 		},
 		resume: (s): Step =>
@@ -148,7 +150,7 @@ export const mutation = defineMachine({
 		mutation_scope_ok: (s, m): Step => {
 			if (s.phase !== "reading") return stay(s);
 			const spans = spansOf(m.value);
-			const changes = unapproved(changesOf(m.value.diff, s.ask.exam), s.ask.allowed);
+			const changes = unapproved(changesOf(m.value, s.ask.exam), s.ask.allowed);
 			if (changes.length > 0)
 				return end(s, {kind: "ask", who: "owner", for: "check_change"}, {changes, spans});
 			if (spans.length === 0) return end(s, {kind: "skip", why: "no_lines"});

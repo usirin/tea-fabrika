@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {changesOf, isSource, spansOf, unapproved} from "./scope.ts";
+import {changesOf, hashOf, isSource, spansOf, unapproved} from "./scope.ts";
 
 // The pure Checks before anything runs: which lines, and what changes the exam.
 
@@ -14,7 +14,7 @@ describe("the lines to mutate", () => {
 			line("a.ts", 6),
 			line("a.test.ts", 1),
 		];
-		expect(spansOf({diff: {files: [], added}, kept: []})).toEqual([
+		expect(spansOf({diff: {files: [], added}, kept: [], exam: []})).toEqual([
 			{file: "a.ts", from: 5, to: 7},
 			{file: "b.ts", from: 3, to: 3},
 		]);
@@ -27,6 +27,7 @@ describe("the lines to mutate", () => {
 				{file: "a.ts", from: 9, to: 13},
 				{file: "c.ts", from: 1, to: 4},
 			],
+			exam: [],
 		};
 		expect(spansOf(scope)).toEqual([
 			{file: "a.ts", from: 9, to: 13},
@@ -43,15 +44,17 @@ describe("the lines to mutate", () => {
 describe("what changes the exam", () => {
 	const comment = "  // Stryker disable next-line all: an empty outbox loops zero times";
 
-	it("finds an added disable comment, and a touched file of the exam", () => {
+	const SKIP = hashOf("skip ['logs']\n");
+
+	it("finds an added disable comment, and a touched file of the exam with its hash at the head", () => {
 		const diff = {files: ["a.ts", "skip.ts"], added: [line("a.ts", 4, comment), line("a.ts", 5)]};
-		expect(changesOf(diff, ["skip.ts", "other.ts"])).toEqual([
+		const scope = {diff, kept: [], exam: [{file: "skip.ts", hash: SKIP}]};
+		expect(changesOf(scope, ["skip.ts", "other.ts"])).toEqual([
 			{kind: "disable", file: "a.ts", line: 4, text: comment.trim()},
-			{kind: "exam", file: "skip.ts", hash: expect.stringMatching(/^[0-9a-f]{12}$/)},
+			{kind: "exam", file: "skip.ts", hash: SKIP},
 		]);
-		expect(
-			changesOf({files: ["a.ts"], added: [line("a.ts", 1, "// Stryker restore all")]}, []),
-		).toEqual([]);
+		const restore = {files: ["a.ts"], added: [line("a.ts", 1, "// Stryker restore all")]};
+		expect(changesOf({diff: restore, kept: [], exam: []}, [])).toEqual([]);
 	});
 
 	it("drops a change the owner said yes to, wherever its line moved, and keeps the rest", () => {
@@ -64,10 +67,17 @@ describe("what changes the exam", () => {
 	});
 
 	it("keeps a yes to a file of the exam for the contents it was given to", () => {
-		const exam = (text: string) =>
-			changesOf({files: ["skip.ts"], added: [line("skip.ts", 1, text)]}, ["skip.ts"]);
-		const yes = exam("skip ['logs']");
-		expect(unapproved(exam("skip ['logs']"), yes)).toEqual([]);
-		expect(unapproved(exam("skip ['everything']"), yes)).toHaveLength(1);
+		const yes = {kind: "exam" as const, file: "skip.ts", hash: SKIP};
+		expect(unapproved([yes], [yes])).toEqual([]);
+		const edited = {...yes, hash: hashOf("skip ['everything']\n")};
+		expect(unapproved([edited], [yes])).toEqual([edited]);
+	});
+
+	it("never holds a yes to a file of the exam with no hash", () => {
+		const gone = {kind: "exam" as const, file: "skip.ts", hash: null};
+		expect(unapproved([gone], [gone])).toEqual([gone]);
+		// A touched file the read gave no hash for.
+		const diff = {files: ["skip.ts"], added: []};
+		expect(changesOf({diff, kept: [], exam: []}, ["skip.ts"])).toEqual([gone]);
 	});
 });

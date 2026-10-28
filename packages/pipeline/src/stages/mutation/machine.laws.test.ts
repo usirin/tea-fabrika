@@ -39,12 +39,17 @@ const DISABLE = {
 	text: "// Stryker disable next-line all: no test can tell",
 };
 const EXAM = {...SCOPE.diff, files: [...SCOPE.diff.files, ...ASK.exam]};
+/** The skip list as the owner said yes to it, and as it reads after another edit. */
+const SAID_YES = ASK.exam.map((file) => ({file, hash: "0a1b2c3d4e5f"}));
+const EDITED = ASK.exam.map((file) => ({file, hash: "f5e4d3c2b1a0"}));
 /** A diff as it comes: clean, with a disable comment, touching the skip list, or with no source line. */
 const scopes = fc.constantFrom(
 	SCOPE,
 	{...SCOPE, diff: {...SCOPE.diff, added: [...SCOPE.diff.added, DISABLE]}},
 	{...SCOPE, diff: EXAM},
-	{diff: {files: ["README.md"], added: []}, kept: []},
+	{...SCOPE, diff: EXAM, exam: SAID_YES},
+	{...SCOPE, diff: EXAM, exam: EDITED},
+	{diff: {files: ["README.md"], added: []}, kept: [], exam: []},
 );
 /** A run with none, one or two mutants that lived, each as often. */
 const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
@@ -55,10 +60,14 @@ const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	killed: 4 - n,
 	lived: Array.from({length: n}, () => LIVED),
 }));
-/** A start that allows the disable comment, or allows nothing. */
-const asks = fc.constantFrom(ASK, {...ASK, allowed: [{kind: "disable" as const, ...DISABLE}]});
+/** A start that allows the disable comment, the skip list as it was said yes to, or nothing. */
+const asks = fc.constantFrom(
+	ASK,
+	{...ASK, allowed: [{kind: "disable" as const, ...DISABLE}]},
+	{...ASK, allowed: SAID_YES.map((s) => ({kind: "exam" as const, ...s}))},
+);
 
-const SCOPE_CMD = readScope({base: ASK.base, head: HEAD, kept: ASK.kept});
+const SCOPE_CMD = readScope({base: ASK.base, head: HEAD, kept: ASK.kept, exam: ASK.exam});
 const TESTS_CMD = runTests({head: HEAD});
 const RUN_CMD = runMutants({head: HEAD, spans: [], seed: ASK.seed, most: ASK.most});
 const NOT_RUN = {_tag: "could_not_run" as const};
@@ -126,7 +135,7 @@ const examIsTheOwners: TraceLaw = (steps) => {
 	let open = false;
 	for (const {prev, msg, cmds} of steps) {
 		if (msg.type === "mutation_scope_ok" && prev.phase === "reading")
-			open = unapproved(changesOf(msg.value.diff, prev.ask.exam), prev.ask.allowed).length > 0;
+			open = unapproved(changesOf(msg.value, prev.ask.exam), prev.ask.allowed).length > 0;
 		if (open && cmds.some((c) => c.type === "mutation_tests" || c.type === "mutation_run"))
 			return "ran with a change the owner did not allow";
 	}

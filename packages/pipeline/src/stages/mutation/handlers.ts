@@ -8,7 +8,7 @@ import {MutationRunner, MutationScope} from "./services.ts";
 export const mutationInterpret = {
 	mutation_scope: (cmd: ReturnType<typeof readScope>) =>
 		Effect.gen(function* () {
-			return yield* (yield* MutationScope).read(cmd.base, cmd.head, cmd.kept);
+			return yield* (yield* MutationScope).read(cmd.base, cmd.head, cmd.kept, cmd.exam);
 		}),
 	mutation_tests: (cmd: ReturnType<typeof runTests>) =>
 		Effect.gen(function* () {

@@ -48,11 +48,15 @@ export class MutationRunner extends Context.Service<
 export class MutationScope extends Context.Service<
 	MutationScope,
 	{
-		/** The diff from `base` to `head`, and the lines of each kept Property's code at `head`. */
+		/**
+		 * The diff from `base` to `head`, the lines of each kept Property's
+		 * code at `head`, and each file of `exam` at `head`, hashed with `hashOf`.
+		 */
 		readonly read: (
 			base: string,
 			head: string,
 			kept: readonly CodeRef[],
+			exam: readonly string[],
 		) => Effect.Effect<Scope, {readonly _tag: "unknown"}>;
 	}
 >()("MutationScope") {}

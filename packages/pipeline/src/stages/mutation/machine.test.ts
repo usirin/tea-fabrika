@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
-import {runMutants, runTests} from "./machine.ts";
-import {changesOf} from "./scope.ts";
+import {readScope, runMutants, runTests} from "./machine.ts";
+import {changesOf, hashOf, type Scope} from "./scope.ts";
 import {ASK, drive, HEAD, KILLED_ALL, LIVED, ONE_LIVED, SCOPE} from "./scripted.ts";
 
 // The mutation step on fakes of its services: every branch, the Cmds it
@@ -51,22 +51,52 @@ describe("the mutation step", () => {
 		const {over} = drive({scope});
 		if (over.phase !== "over") throw new Error("over");
 		expect(nameOf(over.outcome)).toBe("ask:owner:check_change");
-		expect(over.report.changes).toEqual([{kind: "exam", file: exam, hash: expect.any(String)}]);
+		// The read gave no hash for it, so no yes could hold.
+		expect(over.report.changes).toEqual([{kind: "exam", file: exam, hash: null}]);
 	});
 
-	it("asks the owner again when the skip list's contents change after the yes", () => {
-		const file = "skip-list.ts";
-		const edit = (text: string) => ({
-			...SCOPE,
-			diff: {files: [file], added: [{file, line: 1, text}]},
-		});
-		const approved = edit("const skip = ['logs'];");
-		const ask = {...ASK, exam: [file], allowed: changesOf(approved.diff, [file])};
+	it("reads each file of the exam at the head, with the diff", () => {
+		const {cmds} = drive({});
+		expect(cmds[0]).toEqual(
+			readScope({base: ASK.base, head: HEAD, kept: ASK.kept, exam: ASK.exam}),
+		);
+	});
 
-		const same = drive({scope: approved}, ask).over;
-		expect(same.phase === "over" && nameOf(same.outcome)).toBe("done");
-		const changed = drive({scope: edit("const skip = ['everything'];")}, ask).over;
-		expect(changed.phase === "over" && nameOf(changed.outcome)).toBe("ask:owner:check_change");
+	describe("a yes to a skip-list edit holds for its contents at the head only", () => {
+		const file = "skip-list.ts";
+		/** The diff touches the skip list; `added` is what it adds, `contents` how the file reads after. */
+		const edit = (contents: string, added: readonly string[]) => ({
+			...SCOPE,
+			diff: {files: [file], added: added.map((text, i) => ({file, line: i + 1, text}))},
+			exam: [{file, hash: hashOf(contents)}],
+		});
+		const line = "export const logs = /^debug:/;";
+		const approved = edit(`export const keep = /^error:/;\n${line}\n`, [line]);
+		const ask = {...ASK, exam: [file], allowed: changesOf(approved, [file])};
+		const name = (scope: Scope) => {
+			const {over} = drive({scope}, ask);
+			return over.phase === "over" && nameOf(over.outcome);
+		};
+
+		it("runs on the contents the owner said yes to", () => {
+			expect(name(approved)).toBe("done");
+		});
+
+		it("asks again after an edit that adds a line", () => {
+			const all = "export const all = /./;";
+			expect(name(edit(`export const keep = /^error:/;\n${all}\n`, [all]))).toBe(
+				"ask:owner:check_change",
+			);
+		});
+
+		it("asks again after an edit that only deletes a line", () => {
+			// The same lines added; only the contents at the head tell the edit apart.
+			expect(name(edit(`${line}\n`, [line]))).toBe("ask:owner:check_change");
+		});
+
+		it("asks again when the file is gone at the head", () => {
+			expect(name({...approved, exam: [{file, hash: null}]})).toBe("ask:owner:check_change");
+		});
 	});
 
 	it("runs once the owner said yes to the change, even after the line moved", () => {
@@ -83,6 +113,7 @@ describe("the mutation step", () => {
 		const scope = {
 			diff: {files: ["README.md"], added: [{file: "README.md", line: 1, text: "# hi"}]},
 			kept: [],
+			exam: [],
 		};
 		const {over, cmds} = drive({scope}, {...ASK, kept: []});
 		expect(over.phase === "over" && nameOf(over.outcome)).toBe("skip:no_lines");

@@ -37,9 +37,20 @@ export type Diff = typeof Diff.Type;
 export const CodeRef = Schema.Struct({file: Schema.String, name: Schema.String});
 export type CodeRef = typeof CodeRef.Type;
 
-/** The read: the diff, and where each kept Property's code stands at the head. */
-export const Scope = Schema.Struct({diff: Diff, kept: Schema.Array(Span)});
+/** A file as it reads at the head. `hash`: `hashOf` its contents, or `null` when it is gone. */
+export const Sum = Schema.Struct({file: Schema.String, hash: Schema.NullOr(Schema.String)});
+export type Sum = typeof Sum.Type;
+
+/**
+ * The read: the diff, where each kept Property's code stands at the head,
+ * and each file of the exam as it reads at the head.
+ */
+export const Scope = Schema.Struct({diff: Diff, kept: Schema.Array(Span), exam: Schema.Array(Sum)});
 export type Scope = typeof Scope.Type;
+
+/** A short hash of a file's contents: a reader of `Scope` hashes each file of the exam with it. */
+export const hashOf = (contents: string): string =>
+	createHash("sha256").update(contents).digest("hex").slice(0, 12);
 
 /** A change to the exam: a disable comment the diff adds, or a file of the exam it touches. */
 export const Change = Schema.Union([
@@ -49,8 +60,15 @@ export const Change = Schema.Union([
 		line: Schema.Int,
 		text: Schema.String,
 	}),
-	/** `hash`: of the lines the diff adds to the file, so a yes holds for these contents only. */
-	Schema.Struct({kind: Schema.Literal("exam"), file: Schema.String, hash: Schema.String}),
+	/**
+	 * `hash`: of the file's contents at the head, so a yes holds for these
+	 * contents only. `null`: none to hold to, gone or not read, and a yes never holds.
+	 */
+	Schema.Struct({
+		kind: Schema.Literal("exam"),
+		file: Schema.String,
+		hash: Schema.NullOr(Schema.String),
+	}),
 ]);
 export type Change = typeof Change.Type;
 
@@ -88,32 +106,36 @@ export function spansOf(scope: Scope): readonly Span[] {
 	return files.flatMap((f) => joined(all.filter((s) => s.file === f)));
 }
 
-/** What in the diff changes the exam. `exam`: the files that are part of it, such as the skip list. */
-export function changesOf(diff: Diff, exam: readonly string[]): readonly Change[] {
+/**
+ * What in the diff changes the exam. `exam`: the files that are part of it,
+ * such as the skip list. A touched one carries its hash at the head from the
+ * read, or `null` when the read has none.
+ */
+export function changesOf(scope: Scope, exam: readonly string[]): readonly Change[] {
+	const {diff} = scope;
 	const disables: Change[] = diff.added
 		.filter((a) => DISABLE.test(a.text))
 		.map((a) => ({kind: "disable", file: a.file, line: a.line, text: a.text.trim()}));
 	const touched: Change[] = exam
 		.filter((f) => diff.files.includes(f))
-		.map((file) => ({kind: "exam", file, hash: hashOf(diff, file)}));
+		.map((file) => ({
+			kind: "exam",
+			file,
+			hash: scope.exam.find((s) => s.file === file)?.hash ?? null,
+		}));
 	return [...disables, ...touched];
 }
-
-/** A short hash of the lines `diff` adds to `file`, in order, with where each sits. */
-const hashOf = (diff: Diff, file: string): string =>
-	createHash("sha256")
-		.update(JSON.stringify(diff.added.filter((a) => a.file === file).map((a) => [a.line, a.text])))
-		.digest("hex")
-		.slice(0, 12);
 
 /**
  * The same change. A disable comment is the same wherever its line moved
  * to, so a yes to it holds after an edit above it. A file of the exam is the
- * same only with the same contents: an edit after the yes asks again.
+ * same only with the same contents at the head: any edit after the yes, a
+ * deletion too, asks again. One with no hash is never the same.
  */
 const sameAs = (a: Change, b: Change): boolean => {
 	if (a.kind === "disable" && b.kind === "disable") return a.file === b.file && a.text === b.text;
-	if (a.kind === "exam" && b.kind === "exam") return a.file === b.file && a.hash === b.hash;
+	if (a.kind === "exam" && b.kind === "exam")
+		return a.file === b.file && a.hash !== null && a.hash === b.hash;
 	return false;
 };
 

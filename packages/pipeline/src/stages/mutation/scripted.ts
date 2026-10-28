@@ -37,6 +37,7 @@ export const SCOPE: Scope = {
 		],
 	},
 	kept: [{file: "src/clamp.ts", from: 9, to: 14}],
+	exam: [],
 };
 
 /** The planted weak test lets this mutant live: nothing checks a number above `high`. */
