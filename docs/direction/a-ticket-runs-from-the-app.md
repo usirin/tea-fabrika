@@ -154,8 +154,8 @@ const next = (t: Ticket, f: Facts): Go => {
 	const open = openAsk(f);
 	if (open) return wait(open); // only a person's answer moves the lane on
 	if (!triaged(f)) return run("triage");
-	if (!planned(f) || changesAsked(f)) return run("plan"); // "request changes" after a yes: plan again
-	if (!yesCovers(f, t)) return ask(approve(latestPlan(f))); // the yes names the text it saw
+	if (!planned(f) || changesRequested(f)) return run("plan"); // "request changes" after an approval: plan again
+	if (!approvalCovers(f, t)) return ask(approve(latestPlan(f))); // the approval names the text it saw
 	if (!testsWritten(f)) return run("test_writer");
 	if (!built(f)) return run("build"); // one task a round, catch-up first, quick checks, local commits only
 	const m = mutated(f); // "not_yet" | "lived" | "killed"

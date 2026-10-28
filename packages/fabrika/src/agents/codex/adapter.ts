@@ -2,7 +2,7 @@ import {realpathSync} from "node:fs";
 import {dirname} from "node:path";
 import {Effect, FileSystem, Option, Schema, Stream} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
-import {codexConfig, codexHome, codexHomeOf} from "../acp/harness.ts";
+import {codexConfig, codexHome, codexHomeOf, codexSystem, writeSystem} from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
 import {type Env, runEnv} from "../claude/env.ts";
@@ -190,6 +190,12 @@ export const codexAdapter = (
 						Effect.mapError((why) => failed("contain", why)),
 					);
 					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
+					// The turn's system prompt, as config (`codexSystem`); a `replace` prompt is a file in the home.
+					const system = codexSystem(turn.system, home);
+					yield* writeSystem(system.file).pipe(
+						Effect.provideService(FileSystem.FileSystem, fs),
+						Effect.mapError((why) => failed("start", why)),
+					);
 					const strict = strictOk(turn.schema);
 					const schemaFile = `${home}/answer-schema.json`;
 					if (strict)
@@ -208,6 +214,7 @@ export const codexAdapter = (
 						"-c",
 						'approval_policy="never"',
 						...flagsOf(codexConfig(turn.folder, tools, owner)),
+						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),
 						strict ? turn.prompt : `${turn.prompt}\n${formOf(turn.schema)}`,

@@ -2,7 +2,7 @@ import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
-import {claudeOptions} from "../acp/harness.ts";
+import {claudeOptions, claudeSystem} from "../acp/harness.ts";
 import {type Adapter, failed, type Raw, type Tokens} from "../agent/turn.ts";
 import {extraTools, NotStarted, type Open, openLive} from "./draft.ts";
 import {agentEnv} from "./env.ts";
@@ -20,15 +20,21 @@ import {guardHook} from "./shell-guard.ts";
 // The ACP row stays on `settingSources: []`: its adapter pins an older SDK
 // that experiment 155 did not test.
 //
-// Where settings come from is said by `ownRules` alone. A stage's `more`
-// cannot name it (its type), and options that would load more are refused
-// before anything starts (`settingsRefusal`). A live turn also checks the
+// A stage's `more` names only the options of an allow-list (`EXTRA_OPTIONS`): its
+// type shuts out the rest, and a `more` that names another is refused before
+// anything starts. Where settings come from is said by `ownRules` alone, and
+// options that would load more are refused too (`settingsRefusal`). A live turn also checks the
 // empty folder those settings are read from (`openLive`).
 //
-// The system prompt is Claude Code's own (`claude_code`), as on the ACP row.
-// Left unnamed, the SDK sends an empty one, and the agent gets none of Claude
-// Code's instructions (experiment 158). Its memory section is off: it would
-// have the agent keep notes under ~/.claude, outside the copy it is given.
+// The system prompt is the turn's, always named (`claudeSystem`): Claude
+// Code's own (`claude_code`) with the stage's line appended, or the stage's
+// text alone. Left unnamed, the SDK sends an empty one, and the agent gets
+// none of Claude Code's instructions (experiment 158). A stage's `more`
+// cannot name another, and it is set after `more` all the same. It is never
+// recorded (`snapshot: false`), so a resumed turn gets its own prompt, not
+// the session's first.
+// The preset's memory section is off: it would have the agent keep notes
+// under ~/.claude, outside the copy it is given.
 //
 // What the SDK holds natively: a dollar cap (`maxBudgetUsd`), a typed answer
 // (`outputFormat`), a session id the client picks (`sessionId`, a UUID), the
@@ -96,36 +102,53 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 	return {broke: `${m.subtype}${m.is_error ? " (error)" : ""}`};
 };
 
-/** Claude Code's own system prompt. */
-const CLAUDE_CODE = {type: "preset", preset: "claude_code"} as const;
-
 export interface ClaudeAdapterConfig {
 	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
-	/** More options on top, for a stage's own needs (its hooks, its tools). */
-	readonly more?: (folder: string) => More;
+	/** More options on top, for a stage's own needs: only those `EXTRA_OPTIONS` names. */
+	readonly more?: (folder: string) => ExtraOptions;
 }
 
-/** What a stage may add: anything but where settings come from, which `ownRules` alone says. */
-export type More = Partial<Options> & {
-	readonly settingSources?: never;
-	readonly projectConfigRoot?: never;
-	readonly settings?: never;
+/**
+ * The options a stage may add, and no other: an allow-list, so an option the
+ * SDK adds later is shut out until it is named here. No stage in the
+ * workspace adds any today. `disallowedTools` is the one an experiment used
+ * (158) that can only take away. Left out on purpose: `agent`, `agents` and
+ * `extraArgs`, which can swap the turn's system prompt (`agent` "applies the
+ * agent's system prompt" to the main thread); `hooks`, `env`,
+ * `permissionMode` and `canUseTool`, which would loosen the containment; and
+ * where settings come from, which `ownRules` alone says.
+ */
+export const EXTRA_OPTIONS = ["disallowedTools"] as const satisfies readonly (keyof Options)[];
+
+/** `EXTRA_OPTIONS`'s options; every other option of the SDK is `never`. */
+export type ExtraOptions = {
+	readonly [K in keyof Options]?: K extends (typeof EXTRA_OPTIONS)[number] ? Options[K] : never;
 };
+
+/** A `more` that got past its type (a cast, or JavaScript), by the first option it names outside `EXTRA_OPTIONS`. */
+const outsideExtra = (more: object): string | null =>
+	Object.keys(more).find((k) => !(EXTRA_OPTIONS as readonly string[]).includes(k)) ?? null;
 
 export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 	name: "claude",
 	holds: {usd: true, schema: true},
 	start: (turn) =>
 		Effect.gen(function* () {
+			const more = config.more?.(turn.folder) ?? {};
+			const outside = outsideExtra(more);
+			if (outside !== null)
+				return yield* Effect.fail(
+					failed(
+						"contain",
+						`a stage's options may not name ${outside}; only ${EXTRA_OPTIONS.join(", ")}`,
+					),
+				);
 			const own = turn.resume ?? randomUUID();
 			let pid: number | null = null;
 			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
 			const options: Options = {
 				...base,
-				// Claude Code's own system prompt, as the CLI and ACP's adapter give it. Named, because
-				// with none the SDK sends an empty one (experiment 158).
-				systemPrompt: CLAUDE_CODE,
 				// The folder's own rule files, none of its settings (./rules.ts, experiment 155). The
 				// preset asks the agent to keep a memory folder under ~/.claude: a contained run keeps none.
 				...ownRules({...settings, autoMemoryEnabled: false}),
@@ -151,9 +174,11 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 					pid = child.pid ?? null;
 					return child;
 				},
-				...config.more?.(turn.folder),
+				...more,
+				// The turn's own system prompt, after `more`: no stage option can drop or swap it.
+				systemPrompt: claudeSystem(turn.system),
 			};
-			// A `more` that got past its type (a cast, or JavaScript) is refused here, before any process.
+			// Where settings come from, said by `ownRules` alone, checked on the whole before any process.
 			const refused = settingsRefusal(options);
 			if (refused !== null) return yield* Effect.fail(failed("contain", refused));
 			const q = (config.open ?? openLive)({prompt: turn.prompt, options});

@@ -9,12 +9,13 @@ import {
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import type {MsgOf} from "@kampus/fabrika";
+import type {Entry, Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {headOf} from "./head.ts";
 import {load, pullRequests, type Show, save, shownOf, type Tracker, tracker} from "./machine.ts";
 import type {PullRequest} from "./pull-requests.ts";
-import {type Entry, type Fact, summaryOf, type Ticket, type Write} from "./ticket.ts";
+import {summaryOf, type Write} from "./ticket.ts";
 
 // The laws of the tracker's filters and its list of open pull requests, on tea's pbt: after
 // every step of any list of Msgs, from the real init. The tickets come in through load_ok and

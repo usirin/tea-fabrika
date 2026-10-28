@@ -1,7 +1,7 @@
+import {type Entry, type Fact, fold} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
 import {HOUR, headOf, lineOf} from "./head.ts";
 import {rowsOf} from "./rows.ts";
-import {type Entry, type Fact, fold} from "./ticket.ts";
 
 // One lane on one ticket, fact by fact, as the note's sketch draws it: the top line after each
 // step, and the rows it shows. Nothing runs lanes yet, so the facts are written here.
