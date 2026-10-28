@@ -176,17 +176,17 @@ a node shuts down. Our lease running out is that rescue.
 {type: "asked", host: "linux-1", key: "ed25519:9f3c1a7b…", can: "ci",
  has: {os: "linux", arch: "arm64", boxes: ["docker", "gvisor"], slots: 4}}
 
-// The owner's yes, in a box on the desk that shows the key's short print. Signed by the owner.
+// The owner's approval, in a box on the desk that shows the key's short print. Signed by the owner.
 {type: "joined", host: "linux-1", key: "ed25519:9f3c1a7b…", can: "ci", by: "owner", sig: "…"}
 
 // One fact takes it back. The ledger refuses that key's writes from then on.
 {type: "left", host: "linux-1", by: "owner", why: "replaced"}
 ```
 
-- **A machine joins only with the owner's yes, and the yes names its key.**
+- **A machine joins only with the owner's approval, and the approval names its key.**
   - The code is good for one use and a few minutes, like Tailscale's
     one-off [auth keys](https://tailscale.com/kb/1085/auth-keys).
-  - The yes is a separate step on purpose, like Tailscale's device approval.
+  - The approval is a separate step on purpose, like Tailscale's device approval.
     [Tailnet Lock](https://tailscale.com/kb/1226/tailnet-lock) goes one step
     further: a new node key must be signed by a key already trusted. Here the
     owner's signed `joined` fact is that signature.
@@ -364,7 +364,7 @@ needs = "macos"
 
    ```text
    fabrika runner: key 9f3c 1a7b, linux arm64, boxes docker+gvisor, 4 slots
-   fabrika runner: asked to join; waiting for a yes in the app
+   fabrika runner: asked to join; waiting for approval in the app
    ```
 
 5. In the app, a box: "A machine asks to run CI jobs: linux arm64,
@@ -380,7 +380,7 @@ the app people open, so it does not change.
 ### The rules it keeps
 
 - A runner pulls jobs and opens no port.
-- A machine joins only with the owner's yes, which names its key. One fact
+- A machine joins only with the owner's approval, which names its key. One fact
   takes it back, and the ledger checks the list of joined keys on every write.
 - Only the app files a job, and only for a commit the lane has pushed. A
   runner never files one.
@@ -428,7 +428,7 @@ the app people open, so it does not change.
 
 - **Code:**
   - the `Ci` split: review and ship read checks from `Ci`, not `CodeHost`;
-  - a runner program, its join step, and the desk's box for the yes;
+  - a runner program, its join step, and the desk's box for the approval;
   - signed writes in the ledger, and a check of the joined keys on each write.
     The sync note plans them; nothing has built them;
   - `Blobs`, for logs;

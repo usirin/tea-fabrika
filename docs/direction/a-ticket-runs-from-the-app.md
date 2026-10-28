@@ -32,7 +32,7 @@ const lane = (ticket: TicketNumber) =>
 ## The short version
 
 - **One new program, `lane`, written by hand.** It runs the stages as its
-  children, one at a time: triage, plan, the owner's yes, test writer, build,
+  children, one at a time: triage, plan, the owner's approval, test writer, build,
   mutation step, review, push, merge.
 - **Filing a ticket starts it.** There is no start button. Triage is the front
   door.
@@ -95,7 +95,7 @@ const lane = (ticket: TicketNumber) =>
 | Piece | Where | What it lacks for this step |
 |---|---|---|
 | The app's host | `apps/fabrika/src/host/` | Runs only the programs tsh lists (`apps/fabrika/src/tsh.ts`: counter and tracker). Starts nothing by itself. |
-| The tracker | `programs/tracker/src/` | Shows the nine lane facts, the top line and the ask box. Only tests write lane facts. A comment has no "request changes", and a yes keeps no hash of the text it saw. |
+| The tracker | `programs/tracker/src/` | Shows the nine lane facts, the top line and the ask box. Only tests write lane facts. A comment has no "request changes", and an approval keeps no hash of the text it saw. |
 | The stage machines | `packages/pipeline/src/stages/` | `sort` (triage's code, not renamed yet), `plan`, `test-writer`, `task`, `catchup`, `review`, `ship`. They read GitHub issues (`TicketUrl` in `build/ticket.ts`, `PlanHost` in `plan/services.ts`, `SortHost` in `sort/services.ts`), not tracker tickets. |
 | The test writer | `stages/test-writer/` ([PR 79](https://github.com/usirin/tea-fabrika/pull/79)) | The machine, its laws, a scripted drive and the code side of its mutants job are built. Its handlers (read the base, commit, run the tests) are not, and neither Draft is on `Agents`. |
 | The plan's Properties | `stages/plan/` | The plan hands back criteria. The Property shape of [the plan stage](./the-plan-stage.md) is not built, and the test writer needs it. |
@@ -111,7 +111,7 @@ const lane = (ticket: TicketNumber) =>
 Three places take part: the person's window, the assignee's host, and GitHub.
 
 - **The lane stops at the owner's box and waits.** Nothing after plan runs
-  until a person says yes.
+  until a person approves.
 - **Two loops are normal.** A mutant that lived sends the test writer back,
   and review can send build back.
 - **Each task runs quick checks.** Typecheck, lint and its own tests, then a
@@ -143,7 +143,7 @@ const At = Schema.Union([
 const Lane = Schema.Struct({
 	ticket: TicketNumber,
 	at: At,
-	plan: Schema.NullOr(PlanRef), // the version the owner said yes to, and the hash of the text that yes saw
+	plan: Schema.NullOr(PlanRef), // the version the owner approved, and the hash of the text that approval saw
 	tests: Schema.NullOr(Sha), // the test writer's local commit on the plan's base
 	head: Schema.NullOr(Sha), // the local commit review read; nothing pushed before it passed
 });
@@ -214,14 +214,14 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
     - `decline`: code closes the ticket with its one-line reason, written as
       `agent:triage`. The tracker already reads that as "closed by agent
       triage".
-    - `duplicate`: it asks, and the owner's yes closes it
+    - `duplicate`: it asks, and the owner's approval closes it
       ([what a ticket shows](./what-a-ticket-shows.md), section 5). Triage's
       own note says a duplicate closes the ticket; this plan follows the later
       note, of 2026-10-25.
     - `escalate`: `ask:owner:ruling`, a box with triage's options. After the
       answer, triage runs again and reads the answer in the timeline. A lean,
       65%: the ruling route does not say who picks its branch.
-  - **plan** ends `done`, and the parent asks for the yes: a box with
+  - **plan** ends `done`, and the parent asks for approval: a box with
     "approve" and "no". A plan with open questions ends
     `ask:owner:questions`, and they block until the owner answers
     ([a project is a parent plan](./a-project-is-a-parent-plan.md)). A "no"
@@ -229,7 +229,7 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
   - **test writer** ([the test writer](./the-test-writer.md)): `done` or
     `skip:no_properties` goes on to build. `already_passes`, `fails_on_base`
     and `cannot_test` are boxes with three picks each. A pick that changes the
-    plan counts as the owner's yes for the new version, so nobody approves
+    plan counts as the owner's approval of the new version, so nobody approves
     twice.
   - **build**: one task a round, a fresh builder each, catch-up first. Each
     round ends with the task's quick checks: `done` when all pass,
@@ -304,7 +304,7 @@ class Tickets extends Context.Service<Tickets, {
 yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", picks: ["approve", "no"]});
 // tracker/ticket/3/inbox  {type: "answered", ask: "a-1", pick: "approve", note: "", text: "sha256:9c1f…"}  by a person
 
-// A comment that asks for changes, after a yes. Only a person's stops build.
+// A comment that asks for changes, after an approval. Only a person's stops build.
 // tracker/ticket/3/inbox  {type: "commented", body: "Skip part 2.", asks: "changes"}  by a person
 ```
 
@@ -329,9 +329,9 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
   door refuses an `answered` from an agent (`PERSON_KINDS`), and the fold
   keeps an agent's out of every ticket. Anyone on the ledger can answer;
   nothing ties a box to one person.
-- **A yes covers the text it saw** (same note). The approve click carries a
-  hash of the title and body the person read. An edit after the yes needs a
-  new yes before build.
+- **An approval covers the text it saw** (same note). The approve click carries a
+  hash of the title and body the person read. An edit after the approval needs a
+  new approval before build.
 - **"Request changes" is a new button on a comment.** When a person clicks
   it, build stops and plan runs again. An agent's comment can't do this.
 - **The `pr` fact is the watcher's** ([what a ticket shows](./what-a-ticket-shows.md),
@@ -361,8 +361,8 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
 - **Why:** the ticket is already the lane's one view. Writing there means the
   window works with almost no new code.
 - **Cost:** one service with two Layers (ledger, memory), the move of nine
-  schemas, a "request changes" button on the comment form, and the hash on a
-  yes. PR 130 has merged, so nothing waits.
+  schemas, a "request changes" button on the comment form, and the hash on an
+  approval. PR 130 has merged, so nothing waits.
 - **How sure: 80%.** The doubt is from
   [what a ticket shows](./what-a-ticket-shows.md): whether `planned`,
   `pushed` and `reviewed` stay facts of their own. The first lane written
@@ -422,7 +422,7 @@ const lanes = starts.pipe(
 - **A filed ticket starts a lane, and nothing past triage needs a start of
   its own.** Any ledger member may file one: a person, or a scheduled job as
   an agent writer ([scheduled jobs on the host](./scheduled-jobs-on-the-host.md)).
-  Triage's accept starts plan, and the owner's yes starts the test writer and
+  Triage's accept starts plan, and the owner's approval starts the test writer and
   build. A reopen starts a new lane, and the old PR stays in the timeline
   ([what a ticket shows](./what-a-ticket-shows.md), section 5).
 - **There is no start button and no `delegated` fact.** An earlier draft of
@@ -441,7 +441,7 @@ const lanes = starts.pipe(
 - **What the person sees, from facts the tracker already shows:**
   - "filed", then "triage running", then "triage: send plan";
   - "plan: done", "plan v1, 2 tasks", and the box "approve plan v1";
-  - after a yes: "test writer: done", "build running, task t-1", "mutation: 0
+  - after an approval: "test writer: done", "build running, task t-1", "mutation: 0
     lived", "review at a1b2c3d: 3 of 3 met", "pushed a1b2c3d";
   - from the watcher: "PR #12 open, checks running", then "PR #12 merged" and
     the top line "done: PR #12 merged";
@@ -626,7 +626,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
 | 5 The mutation step | none | 1 | $0 |
 | 6 The box | none | 1 | $0 |
 | 3 The walking skeleton | 1 | 2 | $0 |
-| PR 142's first step: host Durable Object and timer | the owner's yes on 142 | 1 | $0 |
+| PR 142's first step: host Durable Object and timer | the owner's approval of 142 | 1 | $0 |
 | 4 A filed ticket starts a lane | 1, 3 | 3 | $0 |
 | 7 The PR watcher, on the cloud first | 1, PR 142's first step | 2 | $0 |
 | 6c The box on Cloudflare | 6 | 2 | box time |
@@ -642,7 +642,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
 1. **Tickets and the lane facts.** The nine fact schemas move into the
    pipeline; the tracker imports them. A `Tickets` service, with a ledger
    Layer and a memory one. "Request changes" on comments, and a hash on each
-   yes. Done when a pipeline program writes `started` and the window shows
+   approval. Done when a pipeline program writes `started` and the window shows
    "triage running", and an agent's "request changes" stops nothing. $0.
 2. **A system prompt on the `Turn`.** The two-case `System` field, three
    adapters, and a fake that records what it got. Done when each provider
@@ -658,8 +658,8 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
    running any child twice. Laws on `next`. $0. A walking skeleton is
    Alistair Cockburn's name (in his book *Crystal Clear*, 2004) for a thin
    build that runs end to end through the main parts; the page was not read
-   for this note. If it gets too big, it splits, with the owner's yes: triage
-   to the yes first, then the rest.
+   for this note. If it gets too big, it splits, with the owner's approval: triage
+   to the approval first, then the rest.
 4. **A filed ticket starts a lane on its assignee's host.** The `to` field on
    `filed`, the `assigned` fact and its door line, the picker in the form,
    `lanes`, the claim, and a host that starts `lanes` at boot. Done when, on
@@ -814,7 +814,7 @@ run(push, {
   ([demlik is the first real repo](./demlik-is-the-first-real-repo.md)).
   demlik moves to right after v1.
 - **There is one catch.** This repo's main has no review rule, so "merge by
-  the repo's own rules" would mean merging with nobody's yes. The fix is one
+  the repo's own rules" would mean merging with nobody's approval. The fix is one
   GitHub rule on main that needs a person's approval, set before slice 13.
 - **Cost:** one repo rule and one line in the plan.
 - **How sure: 75%.** The doubt: a lane editing the pipeline's own code. It

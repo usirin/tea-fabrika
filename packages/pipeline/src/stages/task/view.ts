@@ -10,7 +10,7 @@ import type {TaskOutcome} from "./outcome.ts";
 // are the live ones under its id, at their current versions.
 //
 //   the plan    approved, and not closed: an unapproved version only adds or rewords, so a build
-//               waits for the owner's yes before it starts
+//               waits for the owner's approval before it starts
 //   the task    in the approved version, and not removed by the owner
 //   the branch  `plan/<n>`, one per plan; where it stands now is the round's base. A plan with no
 //               branch yet starts from main.

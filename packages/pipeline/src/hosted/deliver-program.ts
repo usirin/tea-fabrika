@@ -74,7 +74,7 @@ const mostOneRun = (job: LaneJob): number =>
 export const deliverProgram = defineProgram({
 	name: "deliver",
 	description:
-		"Delivers plans, one after another: plans the ticket, builds each task on one branch in rounds (catch up with main by merge, build, review), opens ONE pull request that closes every ticket the plan covers, and ships it. It asks the owner on the desk where a plan needs a yes. Told a plan again after a crash, it goes on from where the lane stood.",
+		"Delivers plans, one after another: plans the ticket, builds each task on one branch in rounds (catch up with main by merge, build, review), opens ONE pull request that closes every ticket the plan covers, and ships it. It asks the owner on the desk where a plan needs approval. Told a plan again after a crash, it goes on from where the lane stood.",
 	flags: FLAGS,
 	inputs: {
 		plan: input(TicketUrl, "The ticket a plan is named by, as its url on GitHub."),

@@ -364,7 +364,7 @@ const write = (writer: Writer, fact: unknown) =>
     word is never the ticket's state.
   - a user closes it before anything merged: **"closed by you"**, not done.
     Won't do, duplicate, or moved.
-  - triage thinks it is a duplicate: it **asks**. The owner's yes closes it.
+  - triage thinks it is a duplicate: it **asks**. The owner's approval closes it.
   - a user reopens a done ticket: open again, and a new lane starts. The old
     pull request stays in the timeline.
 - **Who can say it.** Nobody writes "done". It is a fold of two facts only

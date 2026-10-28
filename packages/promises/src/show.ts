@@ -121,7 +121,7 @@ export function gateText(
 		...failed.flatMap((j) => [...j.problems.flatMap((p) => indent(fix(j.id, p), "  ")), ""]),
 		exam.length === 0
 			? "Exam changes for the owner: none"
-			: ["Exam changes for the owner (the owner says yes to these, never the builder):"]
+			: ["Exam changes for the owner (the owner approves these, never the builder):"]
 					.concat(indent(exam, "  - "))
 					.join("\n"),
 		failed.length === 0 ? "Gate: pass" : `Gate: FAIL, ${failed.length} of ${all.length} promises`,

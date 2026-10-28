@@ -5,7 +5,7 @@ Decided 2026-10-24. It was called the verify writer in
 disagree, this note holds.
 
 ```ts
-// A sketch. After the owner's yes, before build: one test per Property, run on the plan's base.
+// A sketch. After the owner's approval, before build: one test per Property, run on the plan's base.
 const written = draft("tests_write", {input: PlanAndCode, ok: TestFiles}); // in its box, not the builder
 const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
 
@@ -42,7 +42,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
   stuck                   // out of tries
   ```
 
-  - A pick that changes the plan counts as the owner's yes for the new
+  - A pick that changes the plan counts as the owner's approval of the new
     version, so nobody approves twice.
   - The agent never decides anything about the plan.
 - **After the mutation step, it answers each mutant that lived in one of

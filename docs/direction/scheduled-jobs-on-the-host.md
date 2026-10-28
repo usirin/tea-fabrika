@@ -12,7 +12,7 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
 		yield* act(fileTicket, {title: `The TLA+ spec ${spec.name} no longer fits its code`});
 	}
 });
-// Each ticket then runs like any other: triage, plan, the owner's yes, build.
+// Each ticket then runs like any other: triage, plan, the owner's approval, build.
 ```
 
 ## What is proposed
@@ -33,7 +33,7 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
 - **A job never changes code. It files a ticket,** written by an agent
   writer, so the timeline shows who filed it
   ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)).
-  Everything after that goes through the lane, the owner's yes on the plan
+  Everything after that goes through the lane, the owner's approval of the plan
   included. Dependabot works on a schedule too, but it opens pull requests
   ([GitHub](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates)).
   A ticket is one step more careful.

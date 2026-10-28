@@ -468,11 +468,11 @@ function LostNote(props: {
 	);
 }
 
-/** What a restart does to the jobs, said before the person says yes. */
+/** What a restart does to the jobs, said before the person confirms. */
 const JOBS_STOP =
 	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
 
-/** The one way out of a host that runs older code: the person's yes, never the app's own. */
+/** The one way out of a host that runs older code: the person confirms it, never the app on its own. */
 function Restart(): ReactNode {
 	return (
 		<button type="button" onClick={() => toApp({type: "restart"})}>

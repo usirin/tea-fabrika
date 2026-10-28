@@ -102,7 +102,7 @@ describe("answering the mutants that lived", () => {
 		expect(ratedAs(noise, {...none, ratings: [by("user:owner", "noise")]})).toBe("lives");
 	});
 
-	it("keeps an unrated noise answer open once its change ships: silence is not the owner's yes", () => {
+	it("keeps an unrated noise answer open once its change ships: silence is not the owner's approval", () => {
 		if (noise.answer !== "noise") throw new Error("noise");
 		expect(ratedAs(noise, {ratings: [], shipped: [noise.mutant]})).toBe("open");
 		expect(

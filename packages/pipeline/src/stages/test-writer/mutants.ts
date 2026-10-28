@@ -121,7 +121,7 @@ const mutants = outcomesOf({
 	/** Every `test` answer kills its mutant. `findings`: the `noise` answers, for the owner to rate. */
 	done: {findings: Schema.Array(Finding)},
 	send: {},
-	/** `disable`: a mutant changes nothing a test can see, and a disable comment needs the owner's yes. */
+	/** `disable`: a mutant changes nothing a test can see, and a disable comment needs the owner's approval. */
 	ask: {owner: ["disable"]},
 	skip: [],
 	/** `not_killed`: a new test missed its mutant, or failed on the original. `run_failed`: a run could not run. */
