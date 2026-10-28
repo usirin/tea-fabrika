@@ -94,6 +94,7 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `draft-scripted.ts` | A scripted stand-in for the Agent SDK's stream, for tests |
 | `services.ts` | The services the stages talk to |
 | `code-host-github.ts`, `code-host-github-writes.ts`, `code-host-local.ts`, `codeowners.ts` | `CodeHost` and `CodeHostWrites` over GitHub, and `CodeHost` over a local git copy |
+| `sandboxes.ts` | What is mounted in each stage's sandbox: nothing, a worktree, or the commit; a model credential only where an agent runs. `sandboxes.test.ts` plants an `env \| curl` line in every stage's sandbox |
 | `child.ts` | One command run to its end |
 | `ids.ts`, `entity.ts`, `verdict.ts`, `check-runs.ts`, `local-checks.ts`, `worktrees.ts` | Ids, ledger entities, reading today's review verdicts, check runs, working copies |
 | `sh.ts`, `comments.ts` | One command run through `execFile`, and `isMachines`: which issue comments a machine wrote. Both were in `wip/src/operator-live.ts`, which stays in `wip` with the old operator's live Layers |

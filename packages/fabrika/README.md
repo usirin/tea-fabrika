@@ -107,6 +107,7 @@ runs TypeScript as it is.
 | `@kampus/fabrika/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the rule files it reads and the settings it does not (`ownRules`, experiment 155), the guard. No Agent SDK loads |
 | `@kampus/fabrika/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
 | `@kampus/fabrika/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
+| `@kampus/fabrika/sandbox/os` | `layerOs`: the `Sandbox` on Anthropic's sandbox-runtime. It reads only its own folders and reaches only its model. The `none` sandbox, `Sandbox.layerNone`, is on the top level |
 | `@kampus/fabrika/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
 
 ### The parts
@@ -122,6 +123,9 @@ root; `pnpm lint` checks it).
 - `src/agents/`: the agents. `acp/` (any ACP harness, and the `acp` program), `claude/` (the
   Draft over the Agent SDK, its schema reader, the environment, sandbox, rule loading and guard) and `trace/`
   (an agent's spans).
+- `src/sandbox/`: the sandbox a program runs in (`Sandbox`, slice 6). `sandbox.ts` is the
+  service, the job's schemas, the sandbox's environment and the GitHub key check, and the `none`
+  sandbox; `os.ts` the sandbox on sandbox-runtime.
 - `src/*.ts` and `src/agents/*.ts`: the entry files the exports point at.
 
 ### Dependencies
@@ -131,6 +135,8 @@ root; `pnpm lint` checks it).
   - `miniflare` and `esbuild` for `/local` (esbuild bundles the ledger's Worker);
   - the Agent SDK for `/agents/claude`;
   - ACP for `/agents/acp`;
+  - `@anthropic-ai/sandbox-runtime` for `/sandbox/os` (on Linux it also needs bubblewrap, socat
+    and ripgrep);
   - `@effect/opentelemetry` and the four `@opentelemetry/*` packages for `/otel`.
 - The `tsh` bin needs the OpenTelemetry peers, and names any that is missing.
 - The top level and `/memory` load with no optional peer installed. `/local` without Miniflare
