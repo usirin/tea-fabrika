@@ -78,7 +78,13 @@ jobs:
 
       # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
       # The runner image has neither, and without them those tests skip.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends expect zsh
+      # The os box (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
+      # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
+      # 24.04 restricts by default (its README says so). On CI its tests never skip.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends expect zsh bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - run: pnpm install --frozen-lockfile
       # Main runs every test. A pull request runs the tests that import what it

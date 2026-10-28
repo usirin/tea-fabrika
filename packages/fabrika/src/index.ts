@@ -2,7 +2,7 @@
 // anywhere, in a browser too. No platform is named here. Each platform's
 // implementation is a Layer on a subpath (`/memory`, `/sqlite`, `/http`,
 // `/local`, `/storage/node`, `/otel`, `/shell`, `/agents/claude`,
-// `/agents/sandbox`, `/agents/trace`, `/agents/acp`), and a program picks its
+// `/agents/sandbox`, `/agents/trace`, `/agents/acp`, `/sandbox/os`), and a program picks its
 // layers where it starts. `browser-check.ts` bundles this file for the browser
 // and fails on any `node:*`, Miniflare, Agent SDK, ACP or OpenTelemetry module
 // it pulls in (`pnpm lint` runs it).
@@ -80,5 +80,7 @@ export * from "./program/storage.ts";
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
 export * from "./program/view.ts";
+// sandbox: the box a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
+export * as Sandbox from "./sandbox/sandbox.ts";
 // shell: tsh's parts that run anywhere, as one module. Its launcher is on `/shell`.
 export * as Shell from "./shell/index.ts";

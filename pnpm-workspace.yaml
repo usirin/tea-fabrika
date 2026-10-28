@@ -20,6 +20,8 @@ catalog:
   '@alchemy.run/cloudflare': 2.0.0-beta.84
   alchemy: 2.0.0-beta.84
   '@anthropic-ai/claude-agent-sdk': 0.3.296
+  # The OS box (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
+  '@anthropic-ai/sandbox-runtime': 0.0.81
   '@biomejs/biome': ^2.4.15
   '@demlik/code-graph': 0.10.0
   '@demlik/structure-sweep': 0.3.9
