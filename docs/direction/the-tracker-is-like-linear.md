@@ -45,6 +45,36 @@ later packs are all built on it.
   cycles, agent sessions), mapped to ledger facts, with the order to build them
   in. It ends as a proposed section here.
 
+## The study (proposed 2026-10-27)
+
+The whole study is in [tracker views are programs](./tracker-views-are-programs.md).
+In short:
+
+```ts
+// A sketch. Each view is its own small program over the one ledger.
+//   tsh> ticket --ticket 62   a parent, its sub-issues nested under it
+//   tsh> board --under 62     the same tickets as cards, one column per state
+{type: "nested", under: 62} // new: on a sub-issue's stream
+{type: "moved", state: "in_progress"} // new: a person moves it; Done is read off a merged PR
+send("open", {program: "ticket", flags: {ticket: 43}, where: "beside"}); // a board asks the desk
+```
+
+- **Every view is a program:** `ticket`, `board` and `list` first, then
+  `triage`, `timeline` and `cycle`. They share only the ledger and one fold,
+  as CQRS read models and Elm Land's shared model do.
+- **Views talk through outputs, and only to ask.** A board card asks the desk
+  to open a ticket beside it. Data never goes from view to view.
+- **tea and tea-program do not grow.** The desk learns to hear `open`.
+- **First facts:** `nested` and `moved`. Then relations, then priority,
+  labels, estimates and due dates, one at a time. A milestone is a sub-ticket
+  with a due date (60% sure).
+- **First use:** v1's 18 slices, #43 to #60, nested under one new parent and
+  shown on a board.
+- **Build order:** ten steps, small first. Step 1 waits for v1 slice 1 to
+  merge, since both change the tracker's `Fact` union.
+- **How sure: 75%.** The doubt is the cost of every view folding the whole
+  ledger. Step 2 measures it.
+
 ## What it cannot tell us
 
 - Which parts of Linear the two of us use first. The study proposes an order;
