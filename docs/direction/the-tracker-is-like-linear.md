@@ -1,5 +1,7 @@
 # The tracker is like Linear
 
+**Proposed change 2026-10-27:** [the tracker is a notebook of live lines](./the-tracker-is-a-notebook.md) would replace the Linear-style list as the main window; the data model here stays.
+
 **Decided 2026-10-27 by the owner.** The tracker is the most important place
 where people and agents work together, so it is built like Linear: a full issue
 tracker, not the smallest form that runs one lane. The pipeline, milestones and
