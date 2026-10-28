@@ -17,7 +17,8 @@ import {pathsOf} from "./socket.ts";
 // It is the app's own Electron binary, run as plain Node (`ELECTRON_RUN_AS_NODE`): the app
 // already ships it, so the host runs the same Node, with the same node:sqlite, as the build was
 // tested on, and nothing else has to be found on the user's machine. The app starts it detached,
-// with no stdin, stdout or stderr: it logs to <home>/host/log.
+// with no stdin or stdout: it logs to <home>/host/log, and its stderr is appended there too, so a
+// host that dies before its logger is up still says why (start-host.ts).
 //
 // FABRIKA_HOME is always given: the host never guesses a home, so a host started by a test can
 // never be the owner's, and the owner's never a test's. With none, it does not start.
