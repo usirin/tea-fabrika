@@ -8,11 +8,13 @@ import {
 	createTile,
 	createTree,
 	findSibling,
+	findTab,
 	findTile,
 	isLayoutTree,
 	type LayoutTree,
 	remove,
 	resize,
+	reveal,
 	type Shown,
 	setShows,
 	split,
@@ -20,6 +22,7 @@ import {
 	type TileNode,
 	TSH,
 	tiles,
+	turn,
 	unzoom,
 	zoom,
 } from "./layout/index.ts";
@@ -65,7 +68,10 @@ import {
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
 
-/** A workspace: a layout, and the tile focus sits in. `focused` always names a tile of `layout`. */
+/**
+ * A workspace: a layout, and the tile focus sits in. `focused` always names a tile of `layout`,
+ * and one that is drawn: each tabbed stack above it shows the tab that holds it.
+ */
 export interface Workspace {
 	readonly id: string;
 	readonly layout: LayoutTree;
@@ -254,7 +260,13 @@ export const savedOf = (s: Open): Saved => ({
 	next: s.next,
 });
 
-const withWorkspace = (s: Open, ws: Workspace): Open => {
+/**
+ * The desk with this workspace in it. Its focused tile is revealed on the way in, so a tabbed
+ * stack always shows the tab focus sits in, whatever moved focus there: a key, a click, a split or
+ * a tile that went.
+ */
+const withWorkspace = (s: Open, given: Workspace): Open => {
+	const ws = {...given, layout: reveal(given.layout, given.focused)};
 	const [first, ...rest] = s.workspaces.map((w) => (w.id === ws.id ? ws : w));
 	return first === undefined ? s : {...s, workspaces: [first, ...rest]};
 };
@@ -342,6 +354,19 @@ const act = (s: Open, does: Does): Step => {
 			if (to === null) return [s, []];
 			// Focus moves out of a zoomed tile: the zoom goes, so the focused tile is always drawn.
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
+			return [next, keep(next)];
+		}
+		case "tab": {
+			const to = findTab(ws.layout, ws.focused, does.to);
+			if (to === null) return [s, []];
+			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
+			return [next, keep(next)];
+		}
+		case "turn": {
+			// As tmux's next-layout, a turn undoes the zoom: a turn under it would not be seen.
+			const layout = turn(unzoom(ws.layout), ws.focused);
+			if (layout === ws.layout) return [s, []];
+			const next = withWorkspace(s, {...ws, layout});
 			return [next, keep(next)];
 		}
 		case "zoom": {
@@ -572,7 +597,7 @@ export const restore = (raw: unknown): Open | null => {
 		if (first === undefined) continue;
 		const focused = left.some((t) => t.id === ws.focused) ? ws.focused : first.id;
 		const zoomed = layout.zoomed === focused ? layout : unzoom(layout);
-		workspaces.push({id: ws.id, layout: zoomed, focused});
+		workspaces.push({id: ws.id, layout: reveal(zoomed, focused), focused});
 	}
 	const [first, ...rest] = workspaces;
 	if (first === undefined) return null;

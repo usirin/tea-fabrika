@@ -21,6 +21,8 @@ export type Violation =
 	| {readonly kind: "sizes-key-unknown"; readonly stack: StackId; readonly id: NodeId}
 	| {readonly kind: "sizes-child-missing"; readonly stack: StackId; readonly id: NodeId}
 	| {readonly kind: "sizes-not-total"; readonly stack: StackId; readonly sum: number}
+	/** A tabbed stack showing no child of its own: nothing would be drawn under its tabs. */
+	| {readonly kind: "active-not-child"; readonly stack: StackId; readonly id: NodeId}
 	| {readonly kind: "zoomed-tile-missing"; readonly id: TileId};
 
 export function checkTree(tree: LayoutTree): readonly Violation[] {
@@ -37,6 +39,8 @@ export function checkTree(tree: LayoutTree): readonly Violation[] {
 			violations.push({kind: "redundant-stack", id: node.id});
 
 		violations.push(...checkSizes(node));
+		if (node.orientation === "tabbed" && !node.children.some((child) => child.id === node.active))
+			violations.push({kind: "active-not-child", stack: node.id, id: node.active});
 		for (const child of node.children) walk(child, false);
 	};
 

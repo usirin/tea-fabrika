@@ -1,4 +1,4 @@
-import type {Direction, Orientation} from "./layout/index.ts";
+import type {Axis, Direction} from "./layout/index.ts";
 
 // The desk's keys: the prefix, and what each key after it does. tmux's shape, and Tuval's table
 // (kamp-us/phoenix, packages/tuval-ui/src/shell/keys/table.ts): with the prefix not armed, every
@@ -20,8 +20,12 @@ export const REPEAT_MS = 500;
 
 /** What a key after the prefix does. */
 export type Does =
-	| {readonly kind: "split"; readonly orientation: Orientation}
+	| {readonly kind: "split"; readonly orientation: Axis}
 	| {readonly kind: "focus"; readonly to: Direction}
+	/** Turn the stack holding the focused tile: tabbed, horizontal, vertical, as tmux's next-layout. */
+	| {readonly kind: "turn"}
+	/** Focus the next or previous tab of the nearest tabbed stack holding the focused tile. */
+	| {readonly kind: "tab"; readonly to: "previous" | "next"}
 	| {readonly kind: "zoom"}
 	| {readonly kind: "close"}
 	| {readonly kind: "new"}
@@ -48,6 +52,10 @@ export const BINDINGS: readonly Binding[] = [
 	once("<arrowdown>", {kind: "focus", to: "down"}),
 	once("<arrowup>", {kind: "focus", to: "up"}),
 	once("<arrowright>", {kind: "focus", to: "right"}),
+	// Space turns the stack, as tmux's next-layout. `[` and `]` step its tabs, left and right.
+	once(" ", {kind: "turn"}),
+	once("[", {kind: "tab", to: "previous"}),
+	once("]", {kind: "tab", to: "next"}),
 	once("z", {kind: "zoom"}),
 	once("x", {kind: "close"}),
 	once("N", {kind: "new"}),

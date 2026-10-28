@@ -104,11 +104,11 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A stack is a split (`horizontal` or `vertical`) or `tabbed`, showing the one child its `active` names ([tabbed is an orientation](../../docs/direction/tabbed-is-an-orientation.md)). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their borders, a tabbed stack's tabs, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
@@ -120,7 +120,9 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | After Ctrl-B | What it does |
 |---|---|
 | `\|` or `-` | split the focused tile side by side, or top to bottom; the new tile runs a fresh tsh |
-| `h` `j` `k` `l`, or the arrows | focus left, down, up, right |
+| `h` `j` `k` `l`, or the arrows | focus left, down, up, right; in a tabbed stack, left and right walk its tabs, as in i3 |
+| `Space` | turn the focused tile's stack: tabbed, then horizontal, then vertical (tmux's next-layout) |
+| `[` `]` | the previous or next tab of the tabbed stack holding focus, wrapping |
 | `z` | zoom the focused tile; again to undo |
 | `x` | ask `close t2? (y/n)`, then close the focused tile; on a closing tile, ask `stop t2 now? (y/n)` |
 | `N` | a new workspace, with one tile |
@@ -135,7 +137,10 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   in tmux.
 - **Typing in a tile goes to the host,** on the tile's port, to its tsh. A text box in a program's
   view stays in the page; the program gets only the inputs it declares.
-- **A click focuses a tile. Dragging a border resizes** the two tiles beside it.
+- **A click focuses a tile. Dragging a border resizes** the two tiles beside it. A click on a tab
+  focuses the tile it shows.
+- **A tabbed stack draws one line of tabs,** each named by its program, and only the tab it shows
+  under them. Focus is always on a tile that is drawn: the tab holding it shows.
 - **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
   same, and Ctrl-B twice sends it on.
 

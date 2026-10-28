@@ -2,49 +2,87 @@ import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {checkTree} from "./invariants.ts";
 import {
+	type Axis,
 	createStack,
 	createTile,
 	createTree,
 	type LayoutNode,
 	type LayoutTree,
 	type NodeId,
-	type Orientation,
 	type StackId,
 	type StackNode,
+	type TileId,
 } from "./node.ts";
-import {findSibling, remove, resize, split, tiles} from "./tree.ts";
+import {findSibling, findTab, remove, resize, reveal, split, tiles, turn} from "./tree.ts";
 
 // Ported from Tuval's layout properties (kamp-us/phoenix,
-// apps/tuval/src/shell/layout/properties.unit.test.ts), on fast-check.
+// apps/tuval/src/shell/layout/properties.unit.test.ts), on fast-check. The trees are made by
+// splits, turns and tab moves, so tabbed stacks are in them too.
 
-interface SplitStep {
-	readonly at: number;
-	readonly orientation: Orientation;
-}
+/** One step of building a tree, on the tile at `at` (mod the tiles there are). */
+type BuildStep =
+	| {readonly kind: "split"; readonly at: number; readonly orientation: Axis}
+	| {readonly kind: "turn"; readonly at: number}
+	| {readonly kind: "tab"; readonly at: number; readonly to: "next" | "previous"};
 
-const orientation = fc.constantFrom<Orientation>("horizontal", "vertical");
+const orientation = fc.constantFrom<Axis>("horizontal", "vertical");
 
-const splitStep = fc.record({at: fc.nat(), orientation});
+const splitStep = fc.record({kind: fc.constant("split" as const), at: fc.nat(), orientation});
 
-const splitSteps = fc.array(splitStep, {maxLength: 12});
+const buildStep: fc.Arbitrary<BuildStep> = fc.oneof(
+	{arbitrary: splitStep, weight: 3},
+	{arbitrary: fc.record({kind: fc.constant("turn" as const), at: fc.nat()}), weight: 1},
+	{
+		arbitrary: fc.record({
+			kind: fc.constant("tab" as const),
+			at: fc.nat(),
+			to: fc.constantFrom("next" as const, "previous" as const),
+		}),
+		weight: 1,
+	},
+);
+
+const buildSteps = fc.array(buildStep, {maxLength: 16});
 
 const seed = () => createTree(createStack("root", "horizontal", [createTile("t0")]));
 
-function build(steps: readonly SplitStep[]): LayoutTree {
+/** A tab move is what the desk does with one: focus lands on a tile, and the tree reveals it. */
+function build(steps: readonly BuildStep[]): LayoutTree {
 	let tree = seed();
 	steps.forEach((step, index) => {
 		const open = [...tiles(tree.root)];
 		const target = open[step.at % open.length];
 		if (!target) return;
-		tree = split(tree, target.id, step.orientation, {
-			tile: `t${index + 1}`,
-			stack: `s${index + 1}`,
-		});
+		if (step.kind === "split")
+			tree = split(tree, target.id, step.orientation, {
+				tile: `t${index + 1}`,
+				stack: `s${index + 1}`,
+			});
+		else if (step.kind === "turn") tree = turn(tree, target.id);
+		else tree = reveal(tree, findTab(tree, target.id, step.to)?.id ?? target.id);
 	});
 	return tree;
 }
 
-const trees = splitSteps.map(build);
+const trees = buildSteps.map(build);
+
+/** A tree and one of its tiles. */
+const picks = fc.tuple(trees, fc.nat()).map(([tree, pick]) => {
+	const open = [...tiles(tree.root)];
+	const tile = open[pick % open.length]?.id ?? "t0";
+	return {tree, tile};
+});
+
+/** Is `id` drawn: does every tabbed stack above it show the tab that holds it? */
+function drawn(node: LayoutNode, id: TileId): boolean | null {
+	if (node.tag === "tile") return node.id === id ? true : null;
+	for (const child of node.children) {
+		const below = drawn(child, id);
+		if (below === null) continue;
+		return below && (node.orientation !== "tabbed" || node.active === child.id);
+	}
+	return null;
+}
 
 function* stacks(node: LayoutNode): Generator<StackNode> {
 	if (node.tag === "tile") return;
@@ -122,22 +160,20 @@ const sizesOf = (tree: LayoutTree, id: StackId): Readonly<Record<NodeId, number>
 };
 
 /**
- * A stack holding one child is drawn the same whichever orientation it has, so `split`'s turn of a
- * single-child stack cannot be seen and `remove` cannot restore it. Shares compare to 6 decimals:
- * the scaling in `resolveSizes` is float arithmetic.
+ * A stack holding one child is drawn the same whichever way it is split, so `split`'s turn of a
+ * single-child stack cannot be seen and `remove` cannot restore it. A tabbed one adds a strip of
+ * one tab, and `split` turns it too, as i3 does: a split never keeps a lone tab. Shares compare to 6
+ * decimals: the scaling in `resolveSizes` is float arithmetic.
  */
-function normalise(node: LayoutNode): LayoutNode {
+function normalise(node: LayoutNode): unknown {
 	if (node.tag === "tile") return node;
 	const sizes: Record<string, number> = {};
 	for (const [id, value] of Object.entries(node.sizes)) {
 		sizes[id] = Number(value.toFixed(6));
 	}
-	return {
-		...node,
-		orientation: node.children.length === 1 ? "horizontal" : node.orientation,
-		children: node.children.map(normalise),
-		sizes,
-	};
+	const children = node.children.map(normalise);
+	if (node.children.length === 1) return {tag: "stack", id: node.id, children, sizes};
+	return {...node, children, sizes};
 }
 
 const same = (left: LayoutTree, right: LayoutTree) =>
@@ -226,6 +262,56 @@ describe("layout properties", () => {
 					expect(landed.id).not.toBe(target.id);
 				},
 			),
+		);
+	});
+
+	it("keeps every invariant, a tabbed stack's shown child included, under any removal from a revealed tile", () => {
+		fc.assert(
+			fc.property(picks, ({tree, tile}) => {
+				expect(checkTree(remove(reveal(tree, tile), tile))).toEqual([]);
+			}),
+		);
+	});
+
+	it("draws a revealed tile, and reveals nothing more when it is drawn already", () => {
+		fc.assert(
+			fc.property(picks, ({tree, tile}) => {
+				const shown = reveal(tree, tile);
+				expect(drawn(shown.root, tile)).toBe(true);
+				expect(checkTree(shown)).toEqual([]);
+				expect(reveal(shown, tile)).toBe(shown);
+			}),
+		);
+	});
+
+	it("comes back to the same tree, sizes and all, after three turns", () => {
+		fc.assert(
+			fc.property(picks, ({tree, tile}) => {
+				const shown = reveal(tree, tile);
+				const thrice = turn(turn(turn(shown, tile), tile), tile);
+				expect(thrice).toEqual(shown);
+			}),
+		);
+	});
+
+	it("keeps a tile drawn through a turn of the stack holding it", () => {
+		fc.assert(
+			fc.property(picks, ({tree, tile}) => {
+				expect(drawn(turn(reveal(tree, tile), tile).root, tile)).toBe(true);
+			}),
+		);
+	});
+
+	it("moves to a tab only to another tile the tree holds, one that is drawn once revealed", () => {
+		fc.assert(
+			fc.property(picks, fc.constantFrom("next" as const, "previous" as const), (pick, to) => {
+				const tree = reveal(pick.tree, pick.tile);
+				const landed = findTab(tree, pick.tile, to);
+				if (landed === null) return;
+				expect([...tiles(tree.root)].map((t) => t.id)).toContain(landed.id);
+				expect(landed.id).not.toBe(pick.tile);
+				expect(drawn(reveal(tree, landed.id).root, landed.id)).toBe(true);
+			}),
 		);
 	});
 });
