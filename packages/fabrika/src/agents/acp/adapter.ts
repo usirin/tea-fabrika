@@ -1,11 +1,18 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import {type Cause, Effect, Exit, type FileSystem, Queue, Scope, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
-import {type Adapter, type AgentFailed, failed, type Raw, type Stop} from "../agent/turn.ts";
+import {
+	type Adapter,
+	type AdapterTurn,
+	type AgentFailed,
+	failed,
+	type Raw,
+	type Stop,
+} from "../agent/turn.ts";
 import type {Env} from "../claude/env.ts";
 import {TOOLS} from "../claude/sandbox.ts";
 import {connect, type Heard} from "./client.ts";
-import {type AgentName, claudeOptions, harnessOf} from "./harness.ts";
+import {type AgentName, claudeOptions, claudeSystem, harnessOf, withSystem} from "./harness.ts";
 
 // Any harness that speaks ACP, as an adapter of the interface
 // (../agent/turn.ts): our ACP client (./client.ts) on a row of the harness
@@ -65,6 +72,23 @@ export const rawOfUpdate = (u: acp.SessionUpdate): Raw[] => {
 	}
 };
 
+/**
+ * The `_meta` Claude's row opens each session with: the builder's options,
+ * the turn's system prompt among them, and the SDK result forwarded for the
+ * turn's tokens and dollars. Pure.
+ */
+export const claudeMetaOf = (turn: Pick<AdapterTurn, "folder" | "usd" | "system">) => ({
+	claudeCode: {
+		options: {
+			...claudeOptions(turn.folder, turn.usd),
+			allowedTools: [...TOOLS],
+			// Spread by Claude's adapter over its own default, the bare preset.
+			systemPrompt: claudeSystem(turn.system),
+		},
+		emitRawSDKMessages: [{type: "result"}],
+	},
+});
+
 export const acpAdapter = (
 	row: Exclude<AgentName, "fake"> | "fake",
 	parent: Env = process.env,
@@ -79,7 +103,13 @@ export const acpAdapter = (
 			holds: {usd: row === "claude", schema: false},
 			start: (turn) =>
 				Effect.gen(function* () {
-					const harness = harnessOf(row, turn.folder, turn.usd, parent);
+					// ACP has no system prompt field: each row is told the turn's in its own way (`withSystem`).
+					const harness = withSystem(
+						harnessOf(row, turn.folder, turn.usd, parent),
+						turn.system,
+						turn.folder,
+						parent,
+					);
 					if (harness.prepare !== undefined)
 						yield* harness.prepare.pipe(Effect.mapError((why) => failed("contain", why)));
 					// The connection's own scope: the gentle stop closes it, and with it the process.
@@ -127,18 +157,7 @@ export const acpAdapter = (
 						Scope.provide(scope),
 						Effect.mapError((e) => failed("start", `${e.method}: ${e.message}`)),
 					);
-					const meta =
-						row === "claude"
-							? {
-									claudeCode: {
-										options: {
-											...claudeOptions(turn.folder, turn.usd),
-											allowedTools: [...TOOLS],
-										},
-										emitRawSDKMessages: [{type: "result"}],
-									},
-								}
-							: harness.meta;
+					const meta = row === "claude" ? claudeMetaOf(turn) : harness.meta;
 					const how = turn.resume === null ? "new" : c.can("resume") ? "resume" : "load";
 					let opened = yield* c
 						.open(how, turn.resume, turn.folder, meta)

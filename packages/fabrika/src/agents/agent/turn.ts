@@ -94,6 +94,8 @@ export const AgentFailedWhy = Schema.Literals([
 	"cannot_limit",
 	/** The session is someone else's: opened on another provider. */
 	"other_provider",
+	/** The turn's system prompt does not read: a `replace` prompt with no text that got past its type. */
+	"system",
 	/** Containment refused to start: the plan check, the home, a tool list. */
 	"contain",
 	/** The agent did not start. */
@@ -124,6 +126,40 @@ export interface Limits {
 
 export const NO_LIMITS: Limits = {usd: null, tools: null, seconds: null};
 
+/**
+ * A `replace` prompt's text: something more than spaces and line ends.
+ * Branded, so a plain string does not type as one; it is made only through
+ * the schema: `NonBlank.make(...)`, which throws on blank text, or a decode.
+ *
+ *   {_tag: "replace", text: NonBlank.make("You sort one ticket.")}   // types
+ *   {_tag: "replace", text: ""}                                      // does not type
+ */
+export const NonBlank = Schema.String.check(
+	Schema.isPattern(/\S/, {message: "a replace system prompt with no text"}),
+).pipe(Schema.brand("NonBlank"));
+export type NonBlank = typeof NonBlank.Type;
+
+// The two cases, as each maker's own setting (`claudeSystem` and `codexSystem`
+// in ../acp/harness.ts; ACP's rows send the same). The fake records it.
+//
+// append   Claude SDK: {type: "preset", preset: "claude_code", append: text, snapshot: false}   Codex: developer_instructions = text
+// replace  Claude SDK: {type: "custom", prompt: text, snapshot: false}                         Codex: model_instructions_file, a file holding text
+
+/**
+ * A turn's system prompt. Two cases and no third, so "no prompt at all"
+ * cannot be picked by mistake (a-ticket-runs-from-the-app.md, section 5):
+ *
+ *   - `append`: the maker's own coding prompt, then `text`. For a stage that codes.
+ *   - `replace`: `text` alone, in place of the maker's. For a stage with no tools.
+ *
+ * The names are the words each maker's docs use for the two behaviours.
+ */
+export const SystemPrompt = Schema.Union([
+	Schema.TaggedStruct("append", {text: Schema.String}),
+	Schema.TaggedStruct("replace", {text: NonBlank}),
+]);
+export type SystemPrompt = typeof SystemPrompt.Type;
+
 /** One turn, as a stage asks for it. Plain data but the schema. */
 export interface Turn<A> {
 	/** A row of the provider table: config, not code. */
@@ -133,6 +169,8 @@ export interface Turn<A> {
 	/** The folder the agent works in, as an absolute path. */
 	readonly folder: string;
 	readonly prompt: string;
+	/** The system prompt. Never left out: a turn with none does not type. */
+	readonly system: SystemPrompt;
 	/** The answer's schema. The last message is read by it. */
 	readonly answer: Reads<A>;
 	readonly model: string | null;
@@ -170,6 +208,8 @@ export type Raw =
 export interface AdapterTurn {
 	readonly folder: string;
 	readonly prompt: string;
+	/** The turn's system prompt, as the stage gave it: the adapter maps it to its maker's way. */
+	readonly system: SystemPrompt;
 	/** The answer as JSON Schema, for an adapter that takes one natively. */
 	readonly schema: Record<string, unknown>;
 	/** The maker's session to carry on, or `null` to open a new one. */
