@@ -156,11 +156,13 @@ const PHOENIX_NOTE = [
 	"- Smaller packages: a design system, and guards and scripts the CI runs.",
 	"Work is done by agents: a builder turns a ticket into a pull request, a reviewer checks it, a shipper merges it. The repo's owners make the calls that need a person.",
 ].join("\n");
-/** 92b's "both": the drafted bar plus the written clauses, examples without demlik's numbers. */
-const P_BAR = barLines(
-	withClauses(readBar(join(here, "92-value-bar.json")), readBar(join(here, "92-written-bar.json"))),
-	{numbers: false},
+/** 92b's "both": the drafted bar plus the written clauses. */
+export const P_BAR_BOTH = withClauses(
+	readBar(join(here, "92-value-bar.json")),
+	readBar(join(here, "92-written-bar.json")),
 );
+/** The bar as 92b's brief states it, examples without demlik's numbers. */
+const P_BAR = barLines(P_BAR_BOTH, {numbers: false});
 /** As in 92b: the 200 tickets filed just before, by number. */
 const P_WINDOW = 200;
 const pEarlier = (all: readonly Earlier[], t: Ticket) =>
@@ -168,8 +170,9 @@ const pEarlier = (all: readonly Earlier[], t: Ticket) =>
 		.filter((e) => e.n < t.n)
 		.toSorted((a, b) => b.n - a.n)
 		.slice(0, P_WINDOW);
-export const pPrompt = (all: readonly Earlier[], t: Ticket) =>
-	promptOf(t, t.body, pEarlier(all, t), P_BAR, PHOENIX_NOTE);
+/** 92b's prompt for one phoenix ticket; `bar` swaps in other bar lines (experiment 161 adds one). */
+export const pPrompt = (all: readonly Earlier[], t: Ticket, bar: readonly string[] = P_BAR) =>
+	promptOf(t, t.body, pEarlier(all, t), bar, PHOENIX_NOTE);
 
 export const Listed = Schema.Struct({
 	n: Schema.Int,
