@@ -241,7 +241,7 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
   tracker's window, on the ticket's timeline
   ([The ticket is the lane's one view](./the-ticket-is-the-lane-view.md),
   [Data first; markdown is a view](./data-first-markdown-is-a-view.md)).
-- **The owner's yes records the plan version and a hash of the ticket's title
+- **The owner's approval records the plan version and a hash of the ticket's title
   and body.** The hash is over a JSON pair. Experiment 138 showed that a plain
   join lets "ab" + "c" and "a" + "bc" share a hash.
 
@@ -249,7 +249,7 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
 // A sketch: the tracker note's `approved` fact. A plan is named by its first ticket, as
 // ids.ts names plans, so it never reads like a property's id.
 {fact: "approved", ticket: "demlik-1", plan: "demlik-1", version: 2, text: "sha256:9c1f…"}
-const covers = (yes: Approved, now: Ticket) => yes.text === sha256(JSON.stringify([now.title, now.body]));
+const covers = (approval: Approved, now: Ticket) => approval.text === sha256(JSON.stringify([now.title, now.body]));
 ```
 
 ### 10. The ticket comes from our tracker
@@ -306,8 +306,8 @@ something runs proofs.
   copy behind a Claude Code hook (`guardHook` in `stages/plan/planner.ts`).
   The box note says no fence lives inside a harness, and nothing counts on
   one, so the box goes around the program.
-- **The yes must cover what the owner saw.** A version alone does not catch an
-  edit to the ticket after the yes. The hash does, and the JSON pair keeps two
+- **The approval must cover what the owner saw.** A version alone does not catch an
+  edit to the ticket after the approval. The hash does, and the JSON pair keeps two
   different tickets from sharing one (experiment 138).
 
 ## What it costs
@@ -342,7 +342,7 @@ About 80% that the split and the shapes hold once built. The doubts:
 - Where a task lists its other properties and criteria (the sketch's
   `properties` and `criteria` lists are a guess).
 - Whether the plan's `goal` gets a `scenario` too.
-- What the owner's answer to the questions is: a yes on this version, or the
+- What the owner's answer to the questions is: an approval of this version, or the
   start of a new one.
 - Whether the plan answer `no` stays beside approve, answer and change.
 - Whether a plan that ends `stuck:unfixed` still writes `planned` (today

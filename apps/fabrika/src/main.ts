@@ -42,8 +42,8 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   version: the app does not attach, names both versions in its window, and
 //                   leaves that host running with its jobs. The host's hello names its build too:
 //                   another build, and the app attaches, with a banner, "the host runs older code"
-//   restart         either way, the window offers "Stop the old host and start this one". A yes
-//                   stops that host by its pid, waits for it to exit, and attaches, which starts
+//   restart         either way, the window offers "Stop the old host and start this one". Confirmed,
+//                   it stops that host by its pid, waits for it to exit, and attaches, which starts
 //                   one of this build (attach.ts, `restart`). Its running jobs stop; their saved
 //                   lists stay, and each comes back with `attach %n`
 //   the page        it loads and says hello: the host is told `page`, and sends the desk, its
@@ -351,7 +351,7 @@ const main = Effect.gen(function* () {
 			return exit.value.found satisfies Tried;
 		});
 	const tryAttach = tryWith(attach);
-	/** The person said yes to the restart: this app lets go of the old host's link first. */
+	/** The person confirmed the restart: this app lets go of the old host's link first. */
 	const tryRestart = Effect.gen(function* () {
 		const link = held;
 		held = null;

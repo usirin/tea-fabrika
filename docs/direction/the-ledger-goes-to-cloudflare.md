@@ -445,7 +445,7 @@ const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 | Kind of fact | Where | Why |
 |---|---|---|
 | Tickets: filed, edited, commented, closed, reopened | shared | Both people work the same tickets. |
-| Asks and their answers, a yes and the text it covers | shared | Either person may answer; the answer must be stamped. |
+| Asks and their answers, an approval and the text it covers | shared | Either person may answer; the answer must be stamped. |
 | Lanes, claims (leases), fences, released | shared | The referee must be one place, or two agents take one ticket. |
 | Stage facts and inboxes (`pipeline/ticket/…`) | shared | The ticket's timeline is the lane's one view, for both. |
 | Agents' names and their talk (section 10) | shared | Agents on two machines talk through the ledger. |
@@ -835,7 +835,7 @@ moves early. The real run comes first." no longer holds for it.
   app's own state, `desk/`, `tsh/` and `host/`, in the person's object, and
   hand programs the project's object. Then connecting a project in section 3 is a
   Layer change, not a rewrite.
-- **Then, in order:** the deploy experiment (144, the owner said yes), `connect`
+- **Then, in order:** the deploy experiment (144, the owner approved it), `connect`
   and the invite in the app, one agent message across two laptops (section
   10), the tracker's poll moved to the tail, and the whole-ledger copy.
 - **Lane 4, the jump list,** does not wait on any of it.
@@ -1100,8 +1100,8 @@ const onTalk = (talk: Talk): Cmd =>
   lands as a comment or a ticket, marked "agent for X". The model sees it
   inside a quoted block, labelled with who sent it.
 - **Code never starts a lane, a push or any outside write from a talk
-  alone.** A person on the receiving side says yes first, as an ask in a box
-  on the ticket. That yes is the supervision Meta's rule asks for.
+  alone.** A person on the receiving side approves first, as an ask in a box
+  on the ticket. That approval is the supervision Meta's rule asks for.
 - **The step that reads a talk has no [C].** It gets no `CodeHostWrites`, no
   GitHub write and no network out. It may reply on the ledger, or file a
   ticket as itself. Both stay inside the ledger, where a person sees them.
@@ -1110,10 +1110,10 @@ const onTalk = (talk: Talk): Cmd =>
 - **Lean: these three rules, in code.** Why: no filter holds against an
   adaptive attacker, but a step that cannot push cannot be talked into
   pushing. Cost: every piece of work an agent asks of another person's agent
-  waits for that person's yes. **How sure: 75%.** The doubt that remains: once
-  the person says yes, a fresh session that reads the same text later is
+  waits for that person's approval. **How sure: 75%.** The doubt that remains: once
+  the person approves, a fresh session that reads the same text later is
   still reading text nobody here controls. Starting it fresh does not make the
-  text safe. So the person's yes is the real gate, and it is only as good as
+  text safe. So the person's approval is the real gate, and it is only as good as
   what the box shows them. The box must show the talk's full text and who sent
   it, not a summary an agent wrote.
 
@@ -1122,7 +1122,7 @@ const onTalk = (talk: Talk): Cmd =>
 - **On the ticket, in its timeline** → lean. The talk's home is
   `tracker/ticket/<n>/talk`, so each message is a row on the ticket, marked
   agent to agent, with both persons' names. It folds like a comment, not like
-  an answer, so it never changes what a yes covers. The receiver's inbox gets
+  an answer, so it never changes what an approval covers. The receiver's inbox gets
   only a ring with the same id.
 - **In each agent's inbox only** → the person would have to look in two
   places, and a talk outside a ticket would be seen by nobody.
@@ -1165,7 +1165,7 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 - **Cost: under $1** on top of the plan already paid. A 2 h soak at 50 calls
   a second is 360,000 requests. The laws, latency and login runs add less. No
   model calls.
-- **The owner said yes the same day,** under $1, with everything deleted
+- **The owner approved it the same day,** under $1, with everything deleted
   after. It is experiment 144. The account and its keys are not in this repo.
 - **It settles:** the 50 ms p99 bar in [tea-host](./tea-host.md) ("If a
   deployed ledger's p99 append is over about 50 ms, a direct host-to-host path
@@ -1203,7 +1203,7 @@ None of these is in the first version.
 - One Durable Object per lane (section 9), and lane tokens at the door.
 - Each fact signed by its writer's key, the sync note's signed lines. The SSH
   proof is the first step to it.
-- A fresh proof for each yes (a step-up check), if a host bug ever writes an
+- A fresh proof for each approval (a step-up check), if a host bug ever writes an
   agent's text as a person.
 - A read cache on each laptop, if a deployed ledger is slow.
 - The box that asks a person to start work from a talk. The first version

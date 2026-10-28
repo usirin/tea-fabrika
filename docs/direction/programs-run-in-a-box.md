@@ -100,7 +100,7 @@ test:
   Its box holds nothing: no copy of the code, no shell, no network but the
   model's way out, and no login. Code reads the tickets outside and makes
   every write. A ticket that steers the agent can then change only that
-  ticket's answer, and an accept still waits for the owner's yes on the plan.
+  ticket's answer, and an accept still waits for the owner's approval of the plan.
   Cost: about 0.3 s to start a box (128), on a turn of about 4 s.
   [Experiment 137](../../experiments/137-key-outside-the-box.md) ran a triage
   turn this way, in sandbox-runtime and in Docker, with no login in the box.

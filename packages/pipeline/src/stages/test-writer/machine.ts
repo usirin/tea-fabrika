@@ -26,7 +26,7 @@ import type {TestWriterOutcome} from "./outcome.ts";
 import {File, problemsOf, testsWrite, Written} from "./written.ts";
 
 // The test writer's first job (docs/direction/the-test-writer.md): after the
-// owner's yes to the plan and before build, one test per Property, run on the
+// owner approves the plan and before build, one test per Property, run on the
 // plan's base. One agent sits inside it, the writer; code does the rest:
 //
 //   reading     which files at the base `includes` covers. A Gather

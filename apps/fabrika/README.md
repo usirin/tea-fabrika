@@ -95,7 +95,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. A host that says no hello within 10 s fails the try (`NoHello`), and the try closes its socket. A host it started that steps aside for another is no failure: it attaches to the one that answers. |
-| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; on the person's yes, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
+| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; once the person confirms, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
 | `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
@@ -332,7 +332,7 @@ Left for later, from Tuval's keys and the build:
   the same moment can both get through, as with Chromium's and proper-lockfile's own locks. A
   lock whose pid was given to another live process is waited on for 10 s, then the host stops
   and names the lock.
-- **A host of another version or build is stopped only on the person's yes,** and its running
+- **A host of another version or build is stopped only when the person confirms,** and its running
   jobs stop with it. They come back with `attach %n`. A job whose kind's `recovered` sends a
   call that was out sends it again
   ([an old host is named, then restarted](../../docs/direction/an-old-host-is-named-then-restarted.md)).

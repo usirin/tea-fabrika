@@ -24,7 +24,7 @@ import {appWire, type Wire} from "./wire.ts";
 //   wire.send({type: "page"});
 //
 //   const again = yield* restart({home, deliver: relay, start});
-//   // the person said yes to "Stop the old host and start this one": the host is stopped by its
+//   // the person confirmed "Stop the old host and start this one": the host is stopped by its
 //   // pid (host/stop.ts) and waited for, then `attach`, which finds none and starts this build's
 //
 // `attach` never stops a host. A host of another version runs on with its jobs, and the app says

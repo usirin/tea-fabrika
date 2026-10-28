@@ -10,7 +10,7 @@ const mode = rate(rule, facts);                    // Rate: advise or block, fro
 const result = controls(onBad, onGood);            // Controls: red where it must fail, green where it must pass
 const brief = briefFor("reviewer", lane);          // Brief: one typed view per role
 const ci = poll("ci", {every: "1m", read: checksOf, by: (c) => c.state}); // Poll: a fact only on change
-const yes = ask(owner, plan);                      // ask, grown: the yes keeps a hash of what it saw
+const approval = ask(owner, plan);                 // ask, grown: the approval keeps a hash of what it saw
 const touched = guarded(diff, rows);               // guarded files, grown: a change to the exam asks the owner
 ```
 
@@ -32,7 +32,7 @@ const touched = guarded(diff, rows);               // guarded files, grown: a ch
 | Controls | Check twice, gate | the test writer on the base, the mutation step, step 3 of every check |
 | Brief | Gather, a schema per role | plan, test writer, builder, reviewer |
 | Poll | Listen on the clock, Gather | pull request status, scheduled jobs, experiment 139's drift job |
-| ask, grown | ask, plus a hash | the owner's yes on the plan, any later ask |
+| ask, grown | ask, plus a hash | the owner's approval of the plan, any later ask |
 | guarded files, grown | the CODEOWNERS reader, ask | the exam: tests, `includes`, checks |
 
 ### Rate
@@ -150,12 +150,12 @@ const ci = poll("ci", {every: "1m", limit: "20s", read: checksOf, by: (checks) =
 // tick 4: "green"                 -> {fact: "pr", pr: 74, state: "green"}
 ```
 
-### ask, grown: a yes covers what it saw
+### ask, grown: an approval covers what it saw
 
 - **Already decided** in
   [tickets start in our tracker](./tickets-start-in-our-tracker.md): the
-  owner's yes records a hash of the text, and an edit after the yes needs a
-  new yes. The plan stage's `approved` fact carries it.
+  owner's approval records a hash of the text, and an edit after the approval
+  needs a new approval. The plan stage's `approved` fact carries it.
 - **What grows:** `createAsk` keeps the hash in its answer, so every ask
   works this way, not only the plan's.
 - GitHub does the same with "Dismiss stale pull request approvals when new

@@ -994,7 +994,7 @@ Three things to know before a real run. None of them came up in the first:
   an immediate stop for a person 11 times, and nothing 5 times.
 - **Owner approval on protected files.** The code host may not enforce it. If
   it does not, "can merge" can be true on a pull request that still needs an
-  owner's yes, so the gate keeps its own line for it. Proposed; not settled.
+  owner's approval, so the gate keeps its own line for it. Proposed; not settled.
   How it is read now: from the base branch's CODEOWNERS (which files, which
   owners) and the approving reviews at the head, not from GitHub's own
   "review required" answer. Where that cannot be read the fact is `unknown`.

@@ -64,7 +64,7 @@ export function ownersOf(rows: readonly OwnerRow[], path: string): readonly stri
 // a change that touches one is the owner's to decide, never a builder's. The
 // rows may come from `.github/CODEOWNERS` or from any other list of the same shape.
 
-/** The changed paths a row covers with at least one owner: each needs an owner's yes. */
+/** The changed paths a row covers with at least one owner: each needs an owner's approval. */
 export const guarded = (rows: readonly OwnerRow[], paths: readonly string[]): readonly string[] =>
 	paths.filter((path) => ownersOf(rows, path).length > 0);
 
