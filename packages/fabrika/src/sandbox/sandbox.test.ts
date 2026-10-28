@@ -13,19 +13,19 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Exit, Layer, Redacted, Stream} from "effect";
 import {afterAll, describe, expect, it} from "vitest";
 import {layerOs} from "./os.ts";
-import {envOf, type Job, layerNone, type Room, Sandbox, type SandboxError} from "./sandbox.ts";
+import {envOf, type Job, layerNone, Sandbox, type SandboxError, type Workspace} from "./sandbox.ts";
 
-// The Sandbox service in both versions, on made-up keys only. What the box is
-// handed, what it refuses to start, and, for `os`, what it can and cannot
-// reach. The planted `env | curl` line over every stage's box is in the
-// pipeline (packages/pipeline/src/boxes.test.ts).
+// The Sandbox service in both versions, on made-up keys only. What the sandbox
+// is handed, what it refuses to start, and, for `os`, what it can and cannot
+// reach. The planted `env | curl` line over every stage's sandbox is in the
+// pipeline (packages/pipeline/src/sandboxes.test.ts).
 
 const KEY = "fake-github-key-for-this-test";
 const parent = {PATH: process.env.PATH, LANG: "C", GH_TOKEN: KEY, SECRET_THING: "kept-out"};
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-test-")));
 const copy = join(scratch, "copy");
-/** Stands for where gh keeps its login: outside every box. */
+/** Stands for where gh keeps its login: outside every sandbox. */
 const elsewhere = join(scratch, "elsewhere");
 afterAll(() => rmSync(scratch, {recursive: true, force: true}));
 
@@ -41,18 +41,18 @@ const sh = (script: string, more: Partial<Job> = {}): Job => ({
 	args: ["-c", script],
 	reads: [],
 	env: {},
-	holds: {_tag: "nothing"},
-	login: {_tag: "none"},
+	mount: {_tag: "none"},
+	credential: {_tag: "none"},
 	...more,
 });
 
-const BOXES = {
+const SANDBOXES = {
 	none: layerNone({parent}).pipe(Layer.provide(nodeServices)),
 	os: layerOs({parent}).pipe(Layer.provide(nodeServices)),
 } as const;
 
-/** Run a job in a box: what it printed and its exit code, or the refusal. */
-const run = (box: keyof typeof BOXES, job: Job) =>
+/** Run a job in a sandbox: what it printed and its exit code, or the refusal. */
+const run = (kind: keyof typeof SANDBOXES, job: Job) =>
 	Effect.gen(function* () {
 		const sandbox = yield* Sandbox;
 		const handle = yield* sandbox.start(job);
@@ -64,11 +64,11 @@ const run = (box: keyof typeof BOXES, job: Job) =>
 			{concurrency: 2},
 		);
 		return {out, err, code: Number(yield* handle.exitCode)};
-	}).pipe(Effect.scoped, Effect.provide(BOXES[box]), Effect.runPromiseExit);
+	}).pipe(Effect.scoped, Effect.provide(SANDBOXES[kind]), Effect.runPromiseExit);
 
-const refusal = async (box: keyof typeof BOXES, job: Job) => {
-	const exit = await run(box, job);
-	if (Exit.isSuccess(exit)) throw new Error("the box started");
+const refusal = async (kind: keyof typeof SANDBOXES, job: Job) => {
+	const exit = await run(kind, job);
+	if (Exit.isSuccess(exit)) throw new Error("the sandbox started");
 	const failed = exit.cause.reasons.find((r) => r._tag === "Fail");
 	return (failed as {error: SandboxError} | undefined)?.error;
 };
@@ -76,11 +76,11 @@ const refusal = async (box: keyof typeof BOXES, job: Job) => {
 const osRuns = Exit.isSuccess(await run("os", sh("exit 0")));
 if (process.env.CI !== undefined && !osRuns) throw new Error("sandbox-runtime cannot start on CI");
 
-describe("the box's environment", () => {
-	const room: Room = {root: "/b", home: "/b/home", tmp: "/b/tmp", work: "/b/work"};
+describe("the sandbox's environment", () => {
+	const workspace: Workspace = {root: "/b", home: "/b/home", tmp: "/b/tmp", work: "/b/work"};
 
 	it("holds the run names, its own home and temp folder, and nothing else of the host's", () => {
-		expect(envOf(sh(""), room, parent)).toEqual({
+		expect(envOf(sh(""), workspace, parent)).toEqual({
 			PATH: parent.PATH,
 			LANG: "C",
 			HOME: "/b/home",
@@ -88,81 +88,87 @@ describe("the box's environment", () => {
 		});
 	});
 
-	it("holds the login it is lent, and a job's own names cannot replace the box's", () => {
+	it("holds the credential it is lent, and a job's own names cannot replace the sandbox's", () => {
 		const claude = sh("", {
-			login: {_tag: "claude", token: Redacted.make("model-login")},
+			credential: {_tag: "claude", token: Redacted.make("model-login")},
 			env: {HOME: "/somewhere", MODE: "plan"},
 		});
-		expect(envOf(claude, room, parent)).toMatchObject({
+		expect(envOf(claude, workspace, parent)).toMatchObject({
 			HOME: "/b/home",
 			MODE: "plan",
 			CLAUDE_CODE_OAUTH_TOKEN: "model-login",
 		});
-		const codex = sh("", {login: {_tag: "codex", auth: Redacted.make("{}")}});
-		expect(envOf(codex, room, parent)).toMatchObject({CODEX_HOME: "/b/home/.codex"});
+		const codex = sh("", {credential: {_tag: "codex", auth: Redacted.make("{}")}});
+		expect(envOf(codex, workspace, parent)).toMatchObject({CODEX_HOME: "/b/home/.codex"});
 	});
 });
 
-describe.each(["none", "os"] as const)("the %s box", (box) => {
-	const ready = box === "none" || osRuns;
+describe.each(["none", "os"] as const)("the %s sandbox", (kind) => {
+	const ready = kind === "none" || osRuns;
 
 	it.skipIf(!ready)("is handed no key the host holds, under any name", async () => {
-		const exit = await run(box, sh("env"));
+		const exit = await run(kind, sh("env"));
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");
-		// The whole answer, so a box that fails says why.
+		// The whole answer, so a sandbox that fails says why.
 		expect(exit.value).toMatchObject({code: 0, err: ""});
 		expect(exit.value.out).not.toContain(KEY);
 		expect(exit.value.out).not.toContain("kept-out");
-		expect(exit.value.out).toMatch(/^HOME=.*box-.*home$/m);
+		expect(exit.value.out).toMatch(/^HOME=.*sandbox-.*home$/m);
 	});
 
 	it.skipIf(!ready)("refuses a job that names a GitHub key", async () => {
-		const error = await refusal(box, sh("true", {env: {GH_TOKEN: "anything"}}));
-		expect(error?.why).toBe("key_in_box");
+		const error = await refusal(kind, sh("true", {env: {GH_TOKEN: "anything"}}));
+		expect(error?.why).toBe("key_in_sandbox");
 		expect(error?.what).toBe("GH_TOKEN");
 	});
 
 	it.skipIf(!ready)(
-		"refuses the host's key under another name, in an argument, or in a login",
+		"refuses the host's key under another name, in an argument, or in a credential",
 		async () => {
-			const named = await refusal(box, sh("true", {env: {HARMLESS: `x${KEY}x`}}));
-			expect([named?.why, named?.what]).toEqual(["key_in_box", "HARMLESS"]);
-			const arg = await refusal(box, sh(`echo ${KEY}`));
-			expect(arg?.why).toBe("key_in_box");
+			const named = await refusal(kind, sh("true", {env: {HARMLESS: `x${KEY}x`}}));
+			expect([named?.why, named?.what]).toEqual(["key_in_sandbox", "HARMLESS"]);
+			const arg = await refusal(kind, sh(`echo ${KEY}`));
+			expect(arg?.why).toBe("key_in_sandbox");
 			expect(arg?.what).toMatch(/^argument /);
-			const login = await refusal(
-				box,
-				sh("true", {login: {_tag: "claude", token: Redacted.make(KEY)}}),
+			const credential = await refusal(
+				kind,
+				sh("true", {credential: {_tag: "claude", token: Redacted.make(KEY)}}),
 			);
-			expect([login?.why, login?.what]).toEqual(["key_in_box", "CLAUDE_CODE_OAUTH_TOKEN"]);
+			expect([credential?.why, credential?.what]).toEqual([
+				"key_in_sandbox",
+				"CLAUDE_CODE_OAUTH_TOKEN",
+			]);
 			// The error names where, never the value.
-			expect(JSON.stringify([named, arg, login])).not.toContain(KEY);
+			expect(JSON.stringify([named, arg, credential])).not.toContain(KEY);
 		},
 	);
 
-	it.skipIf(!ready)("lends a Codex login as a file, and takes it back with the box", async () => {
-		const exit = await run(
-			box,
-			sh('cat "$CODEX_HOME/auth.json"; echo; echo "$HOME"', {
-				login: {_tag: "codex", auth: Redacted.make('{"lent": true}')},
-			}),
-		);
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
-		const [auth, home = ""] = exit.value.out.trim().split("\n");
-		expect(auth).toBe('{"lent": true}');
-		expect(existsSync(home)).toBe(false);
-	});
+	it.skipIf(!ready)(
+		"lends a Codex credential as a file, and takes it back with the sandbox",
+		async () => {
+			const exit = await run(
+				kind,
+				sh('cat "$CODEX_HOME/auth.json"; echo; echo "$HOME"', {
+					credential: {_tag: "codex", auth: Redacted.make('{"lent": true}')},
+				}),
+			);
+			if (!Exit.isSuccess(exit)) throw new Error("did not start");
+			const [auth, home = ""] = exit.value.out.trim().split("\n");
+			expect(auth).toBe('{"lent": true}');
+			expect(existsSync(home)).toBe(false);
+		},
+	);
 });
 
-describe.skipIf(!osRuns)("the os box's fence", () => {
-	it("reads and writes the copy it holds, and cannot read a file beside it", async () => {
+describe.skipIf(!osRuns)("the os sandbox's fence", () => {
+	it("reads and writes the worktree mounted in it, and cannot read a file beside it", async () => {
 		prepare();
 		writeFileSync(join(copy, "code.txt"), "the code\n");
 		writeFileSync(join(elsewhere, "hosts.yml"), `token: ${KEY}\n`);
 		const exit = await run(
 			"os",
 			sh(`cat code.txt; echo changed > code.txt; cat ${join(elsewhere, "hosts.yml")}`, {
-				holds: {_tag: "code", folder: copy},
+				mount: {_tag: "worktree", folder: copy},
 			}),
 		);
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");
@@ -173,21 +179,21 @@ describe.skipIf(!osRuns)("the os box's fence", () => {
 		expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("changed\n");
 	});
 
-	it("reads a commit it holds and cannot change it", async () => {
+	it("reads a commit mounted in it and cannot change it", async () => {
 		prepare();
 		writeFileSync(join(copy, "code.txt"), "the commit\n");
 		const exit = await run(
 			"os",
-			sh("cat code.txt; echo changed > code.txt", {holds: {_tag: "commit", folder: copy}}),
+			sh("cat code.txt; echo changed > code.txt", {mount: {_tag: "commit", folder: copy}}),
 		);
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");
 		expect(exit.value.out).toBe("the commit\n");
 		expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("the commit\n");
 	});
 
-	// The repository's own files are not the box's. On CI, as on most laptops, it is under home.
+	// The repository's own files are not the sandbox's. On CI, as on most laptops, it is under home.
 	const file = join(import.meta.dirname, "..", "..", "..", "..", "package.json");
-	it.skipIf(!file.startsWith(homedir()))("holding nothing, reads no file under home", async () => {
+	it.skipIf(!file.startsWith(homedir()))("mounting nothing, reads no file under home", async () => {
 		expect(existsSync(file)).toBe(true);
 		const exit = await run("os", sh(`cat ${file}`));
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");

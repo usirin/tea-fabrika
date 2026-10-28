@@ -80,7 +80,7 @@ export * from "./program/storage.ts";
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
 export * from "./program/view.ts";
-// sandbox: the box a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
+// sandbox: the sandbox a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
 export * as Sandbox from "./sandbox/sandbox.ts";
 // shell: tsh's parts that run anywhere, as one module. Its launcher is on `/shell`.
 export * as Shell from "./shell/index.ts";

@@ -78,7 +78,7 @@ jobs:
 
       # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
       # The runner image has neither, and without them those tests skip.
-      # The os box (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
+      # The os sandbox (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
       # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
       # 24.04 restricts by default (its README says so). On CI its tests never skip.
       - run: |
