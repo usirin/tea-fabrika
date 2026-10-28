@@ -25,9 +25,15 @@ import * as acp from "@agentclientprotocol/sdk";
 // Each session is kept in `<folder>/.fake-acp/<id>.jsonl`, every update it
 // sent with the prompt that led to it, so `session/load` can replay it and
 // `session/resume` can find it. Each prompt is noted in `<folder>/.fake-acp/log`
-// as `prompt <session> <n> <its first word>`, for a test to count.
+// as `prompt <session> <n> <its first word>`, for a test to count. A system
+// prompt handed in `_meta.system` on new, load or resume is noted there too,
+// as `system <session> <its JSON>`, so a test sees exactly what came.
 
 type Update = acp.SessionUpdate;
+
+const noteSystem = (id: string, meta: Record<string, unknown> | null | undefined) => {
+	if (meta?.system !== undefined) note(`system ${id} ${JSON.stringify(meta.system)}`);
+};
 
 const here = process.cwd();
 const home = join(here, ".fake-acp");
@@ -107,17 +113,19 @@ const app = acp
 		agentCapabilities: {loadSession: true, sessionCapabilities: {resume: {}}},
 		agentInfo: {name: "fake", version: "0"},
 	}))
-	.onRequest(acp.methods.agent.session.new, () => {
+	.onRequest(acp.methods.agent.session.new, (ctx) => {
 		const id = `fake-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 		const session = fresh();
 		sessions.set(id, session);
 		appendFileSync(historyOf(id), "");
+		noteSystem(id, ctx.params._meta);
 		return {sessionId: id, modes: modesOf(session), configOptions: configOf(session)};
 	})
 	.onRequest(acp.methods.agent.session.load, async (ctx) => {
 		const found = loaded(ctx.params.sessionId);
 		if (found === null) throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
 		sessions.set(ctx.params.sessionId, found.session);
+		noteSystem(ctx.params.sessionId, ctx.params._meta);
 		for (const update of found.updates)
 			await ctx.client.notify(acp.methods.client.session.update, {
 				sessionId: ctx.params.sessionId,
@@ -129,6 +137,7 @@ const app = acp
 		const found = loaded(ctx.params.sessionId);
 		if (found === null) throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
 		sessions.set(ctx.params.sessionId, found.session);
+		noteSystem(ctx.params.sessionId, ctx.params._meta);
 		return {modes: modesOf(found.session), configOptions: configOf(found.session)};
 	})
 	.onRequest(acp.methods.agent.session.setConfigOption, (ctx) => {

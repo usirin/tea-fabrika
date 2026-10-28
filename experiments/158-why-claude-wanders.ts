@@ -360,6 +360,10 @@ type Variant = (typeof VARIANTS)[number];
 /** The variants `job all` takes in turn. `after` and `no-format` run on their own, once the fix is in. */
 const ROUND: readonly Variant[] = ["ours", "no-guard", "preset", "as-acp", "acp"];
 
+// Since v1 slice 2 the turn's own system prompt is set after `more`, and `more`
+// cannot name one, so the arms below that name `systemPrompt` all get the
+// turn's (`maker`, nothing added: the bare preset). The arms with an empty
+// prompt no longer reproduce, on purpose: no turn goes out without one.
 const adapterOf = (v: Variant) =>
 	Effect.gen(function* () {
 		const sdk = watched(query);
@@ -434,6 +438,7 @@ const runOnce = async (v: Variant, copy: string, session: string): Promise<Ran> 
 		session,
 		folder: copy,
 		prompt: PROMPT,
+		system: {_tag: "maker", add: ""},
 		answer: Answer,
 		model: MODEL(v),
 		effort: EFFORT(v),

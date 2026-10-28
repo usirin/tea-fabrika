@@ -131,6 +131,7 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 					const running = yield* adapter.start({
 						folder: turn.folder,
 						prompt: adapter.holds.schema ? turn.prompt : `${turn.prompt}\n${formOf(schema)}`,
+						system: turn.system,
 						schema,
 						resume: known?.own ?? null,
 						session: turn.session,

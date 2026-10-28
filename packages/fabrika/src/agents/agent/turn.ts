@@ -124,6 +124,27 @@ export interface Limits {
 
 export const NO_LIMITS: Limits = {usd: null, tools: null, seconds: null};
 
+/**
+ * A turn's system prompt. Two cases and no third, so "no prompt at all"
+ * cannot be picked by mistake (a-ticket-runs-from-the-app.md, section 5):
+ *
+ *   - `maker`: the maker's own coding prompt, then `add`. For a stage that codes.
+ *   - `own`: `text` alone, in place of the maker's. For a stage with no tools.
+ *
+ * Each adapter hands it on in its maker's own way:
+ *
+ *   Claude (SDK, and ACP's Claude row):  {type: "preset", preset: "claude_code", append: add}  or  the string `text`
+ *   Codex (exec, and ACP's Codex row):   `developer_instructions = add`  or  `model_instructions_file`, a file holding `text`
+ *   the fake:                            records it, so a test sees which prompt each stage sent
+ */
+export const System = Schema.Union([
+	Schema.TaggedStruct("maker", {add: Schema.String}),
+	Schema.TaggedStruct("own", {
+		text: Schema.String.check(Schema.isNonEmpty({message: "an own system prompt with no text"})),
+	}),
+]);
+export type System = typeof System.Type;
+
 /** One turn, as a stage asks for it. Plain data but the schema. */
 export interface Turn<A> {
 	/** A row of the provider table: config, not code. */
@@ -133,6 +154,8 @@ export interface Turn<A> {
 	/** The folder the agent works in, as an absolute path. */
 	readonly folder: string;
 	readonly prompt: string;
+	/** The system prompt. Never left out: a turn with none does not type. */
+	readonly system: System;
 	/** The answer's schema. The last message is read by it. */
 	readonly answer: Reads<A>;
 	readonly model: string | null;
@@ -170,6 +193,8 @@ export type Raw =
 export interface AdapterTurn {
 	readonly folder: string;
 	readonly prompt: string;
+	/** The turn's system prompt, as the stage gave it: the adapter maps it to its maker's way. */
+	readonly system: System;
 	/** The answer as JSON Schema, for an adapter that takes one natively. */
 	readonly schema: Record<string, unknown>;
 	/** The maker's session to carry on, or `null` to open a new one. */

@@ -2,7 +2,7 @@ import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
-import {claudeOptions} from "../acp/harness.ts";
+import {claudeOptions, claudeSystem} from "../acp/harness.ts";
 import {type Adapter, failed, type Raw, type Tokens} from "../agent/turn.ts";
 import {extraTools, NotStarted, type Open, openLive} from "./draft.ts";
 import {agentEnv} from "./env.ts";
@@ -25,10 +25,13 @@ import {guardHook} from "./shell-guard.ts";
 // before anything starts (`settingsRefusal`). A live turn also checks the
 // empty folder those settings are read from (`openLive`).
 //
-// The system prompt is Claude Code's own (`claude_code`), as on the ACP row.
-// Left unnamed, the SDK sends an empty one, and the agent gets none of Claude
-// Code's instructions (experiment 158). Its memory section is off: it would
-// have the agent keep notes under ~/.claude, outside the copy it is given.
+// The system prompt is the turn's, always named (`claudeSystem`): Claude
+// Code's own (`claude_code`) with the stage's line appended, or the stage's
+// text alone. Left unnamed, the SDK sends an empty one, and the agent gets
+// none of Claude Code's instructions (experiment 158). A stage's `more`
+// cannot name another (its type), and it is set after `more` all the same.
+// The preset's memory section is off: it would have the agent keep notes
+// under ~/.claude, outside the copy it is given.
 //
 // What the SDK holds natively: a dollar cap (`maxBudgetUsd`), a typed answer
 // (`outputFormat`), a session id the client picks (`sessionId`, a UUID), the
@@ -96,9 +99,6 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 	return {broke: `${m.subtype}${m.is_error ? " (error)" : ""}`};
 };
 
-/** Claude Code's own system prompt. */
-const CLAUDE_CODE = {type: "preset", preset: "claude_code"} as const;
-
 export interface ClaudeAdapterConfig {
 	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
@@ -106,11 +106,15 @@ export interface ClaudeAdapterConfig {
 	readonly more?: (folder: string) => More;
 }
 
-/** What a stage may add: anything but where settings come from, which `ownRules` alone says. */
+/**
+ * What a stage may add: anything but where settings come from, which
+ * `ownRules` alone says, and the system prompt, which is the turn's.
+ */
 export type More = Partial<Options> & {
 	readonly settingSources?: never;
 	readonly projectConfigRoot?: never;
 	readonly settings?: never;
+	readonly systemPrompt?: never;
 };
 
 export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
@@ -123,9 +127,6 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
 			const options: Options = {
 				...base,
-				// Claude Code's own system prompt, as the CLI and ACP's adapter give it. Named, because
-				// with none the SDK sends an empty one (experiment 158).
-				systemPrompt: CLAUDE_CODE,
 				// The folder's own rule files, none of its settings (./rules.ts, experiment 155). The
 				// preset asks the agent to keep a memory folder under ~/.claude: a contained run keeps none.
 				...ownRules({...settings, autoMemoryEnabled: false}),
@@ -152,6 +153,8 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 					return child;
 				},
 				...config.more?.(turn.folder),
+				// The turn's own system prompt, after `more`: no stage option can drop or swap it.
+				systemPrompt: claudeSystem(turn.system),
 			};
 			// A `more` that got past its type (a cast, or JavaScript) is refused here, before any process.
 			const refused = settingsRefusal(options);
