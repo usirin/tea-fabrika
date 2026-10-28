@@ -111,6 +111,9 @@
 				// an SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
 				// takes a string) and kept from then on as a WebCrypto key that cannot be exported
 				"!packages/fabrika/src/host/signer.ts",
+				// the box's lent login, as an env var or an auth.json (mode 0600) inside the box, and
+				// the host's GitHub keys as plain text, so a launch that carries one is refused
+				"!packages/fabrika/src/sandbox/sandbox.ts",
 				// Jev's authorization header (the old factory)
 				"!legacy/src/local.ts",
 				// tests hold made-up secrets and read them back to check them
