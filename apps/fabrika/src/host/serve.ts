@@ -19,6 +19,7 @@ import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
 import {type Place, startTiles} from "../tiles.ts";
 import type {Screen} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
+import {serveAgents} from "./agents.ts";
 
 // The host's server: what the host process does with each app that attaches, as tmux's server
 // does with each client. It names no platform: it takes Effect's `SocketServer`, which
@@ -81,9 +82,11 @@ export const serve = (options: {
 	 * `null` names none, as a host built before builds were named.
 	 */
 	readonly build?: string | null | undefined;
+	/** The agents' socket (host/agents.ts), on a home that keeps its own ledger; none elsewhere. */
+	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, place, desk: home, ours = PROTOCOL, build = BUILD} = options;
+		const {history, place, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -195,6 +198,13 @@ export const serve = (options: {
 		};
 		begin(home.kept);
 		yield* Queue.take(asks).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
+		if (agents !== undefined)
+			yield* serveAgents(agents, () => screens.keys()).pipe(
+				Effect.catchCause((cause) =>
+					Effect.logError("fabrika host: the agents' socket failed", cause),
+				),
+				Effect.forkScoped,
+			);
 
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {

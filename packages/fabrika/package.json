@@ -26,6 +26,7 @@
 		"./agents/trace": "./src/agents/trace.ts",
 		"./agents/acp": "./src/agents/acp.ts",
 		"./agents/codex": "./src/agents/codex.ts",
+		"./mcp": "./src/mcp.ts",
 		"./sandbox/os": "./src/sandbox/os.ts",
 		"./package.json": "./package.json"
 	},
@@ -87,6 +88,10 @@
 				"types": "./dist/agents/codex.d.ts",
 				"default": "./dist/agents/codex.js"
 			},
+			"./mcp": {
+				"types": "./dist/mcp.d.ts",
+				"default": "./dist/mcp.js"
+			},
 			"./sandbox/os": {
 				"types": "./dist/sandbox/os.d.ts",
 				"default": "./dist/sandbox/os.js"
@@ -111,6 +116,7 @@
 		"@anthropic-ai/sandbox-runtime": "0.0.81",
 		"@demlik/tea": "^0.21.0",
 		"@effect/opentelemetry": "^4.0.0",
+		"@modelcontextprotocol/server": "^2.4.0",
 		"@opentelemetry/api": "^1.9.0",
 		"@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
 		"@opentelemetry/resources": "^2.11.0",
@@ -130,6 +136,9 @@
 			"optional": true
 		},
 		"@effect/opentelemetry": {
+			"optional": true
+		},
+		"@modelcontextprotocol/server": {
 			"optional": true
 		},
 		"@opentelemetry/api": {
@@ -158,6 +167,8 @@
 		"@demlik/tea": "catalog:",
 		"@effect/opentelemetry": "catalog:",
 		"@effect/vitest": "catalog:",
+		"@modelcontextprotocol/client": "catalog:",
+		"@modelcontextprotocol/server": "catalog:",
 		"@opentelemetry/api": "catalog:",
 		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
 		"@opentelemetry/resources": "catalog:",

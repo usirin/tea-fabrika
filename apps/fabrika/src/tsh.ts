@@ -141,13 +141,17 @@ export const SCREEN_KEPT = 256 * 1024;
  */
 export const RESET = "\x1bc";
 
-/** The programs tsh comes with in the app, fixed for now: the small ones, and two with a view. */
-const COUNTER = listed(counter, Layer.empty);
-const trackerOn = (
+/**
+ * The app's own programs, the two with a view, packed to write as `author`: a tile's tsh lists
+ * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
+ * ever the `author` handed here.
+ */
+export const appPrograms = (
 	ledger: Ledger["Service"],
 	author: Author["Service"],
 	pullRequests: PullRequests["Service"],
-) =>
+): readonly Entry[] => [
+	listed(counter, Layer.empty),
 	listed(
 		tracker,
 		Layer.mergeAll(
@@ -155,7 +159,8 @@ const trackerOn = (
 			Layer.succeed(Author, author),
 			Layer.succeed(PullRequests, pullRequests),
 		),
-	);
+	),
+];
 
 /** An entry whose runs are handed to `seen` as they start, however tsh starts them. */
 const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>): Entry => ({
@@ -306,7 +311,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...Shell.SMALL, COUNTER, trackerOn(ledger, author, pullRequests)].map((entry) =>
+			[...Shell.SMALL, ...appPrograms(ledger, author, pullRequests)].map((entry) =>
 				seenBy(entry, seen),
 			),
 		);

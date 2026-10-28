@@ -36,6 +36,10 @@
 			"paths": ["packages/fabrika/src/*.ts", "packages/fabrika/src/agents/*.ts"]
 		},
 		{
+			"name": "fabrika-mcp",
+			"paths": ["packages/fabrika/src/mcp"]
+		},
+		{
 			"name": "fabrika-sandbox",
 			"paths": ["packages/fabrika/src/sandbox"]
 		},

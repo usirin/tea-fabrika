@@ -10,7 +10,8 @@ import {Effect, Path, Predicate} from "effect";
 //
 //   <home>/host/        mode 0700: only the user can open anything in it, as tmux's socket folder
 //   <home>/host/sock    the Unix socket, mode 0600
-//   <home>/host/pid     the host's pid, for a test to stop its own host
+//   <home>/host/mcp     the agents' socket, mode 0600: an agent's MCP bridge (host/agents.ts)
+//   <home>/host/pid    the host's pid, for a test to stop its own host
 //   <home>/host/lock    held by a host only while it starts, with its pid (host/lock.ts)
 //   <home>/host/log     the host's log
 //
@@ -21,6 +22,8 @@ import {Effect, Path, Predicate} from "effect";
 export interface HostPaths {
 	readonly dir: string;
 	readonly sock: string;
+	/** The agents' socket: MCP, after a handshake that names the agent. */
+	readonly mcp: string;
 	readonly pid: string;
 	readonly lock: string;
 	readonly log: string;
@@ -36,6 +39,7 @@ export const pathsOf = (home: string) =>
 		const paths: HostPaths = {
 			dir,
 			sock: path.join(dir, "sock"),
+			mcp: path.join(dir, "mcp"),
 			pid: path.join(dir, "pid"),
 			lock: path.join(dir, "lock"),
 			log: path.join(dir, "log"),
