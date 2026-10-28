@@ -1,5 +1,6 @@
 import {run} from "@demlik/tea/effect";
 import {defineProgram, input, kind} from "@kampus/fabrika";
+import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema, Stream} from "effect";
 import {clockRunner, loadCell, pollRunner, saveCell} from "./ledger.ts";
 import {
@@ -14,9 +15,10 @@ import {
 	tracker as tickets,
 } from "./machine.ts";
 import {pullRequestsCell, pullRequestsWaitRunner} from "./pull-requests.ts";
-import {TicketNumber, Write} from "./ticket.ts";
+import {Write} from "./ticket.ts";
 
-// The tracker: tickets on the ledger, one stream of facts each (./ticket.ts), and a window to work
+// The tracker: tickets on the ledger, one stream of facts each (`@kampus/pipeline/tickets/ticket`,
+// so a lane writes the same facts), and a window to work
 // them (./window.tsx). Its machine (./machine.ts) holds what was read and the writes on their way;
 // its cells (./ledger.ts) are the only code that reads or writes the ledger. No React here.
 //
@@ -27,8 +29,10 @@ import {TicketNumber, Write} from "./ticket.ts";
 //
 //   {kind: "show", show: "all"}                                the list shows closed tickets too
 //   {kind: "find", text: "login"}                              and only titles with "login" in them
-//   {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""}
-//   // a click on an open ask's box: tracker/ticket/1/inbox gets {type: "answered", ...} by user:owner
+//   {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
+//   // a click on an open ask's box: tracker/ticket/1/inbox gets {type: "answered", ..., text:
+//   // "sha256:…"} by user:owner, the hash of the text the person saw
+//   {kind: "comment", ticket: 1, body: "Skip part 2.", asks: "changes"}   "Request changes"
 //
 // A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a box for each
 // open ask. Only a person answers: a tracker whose `Author` is an agent refuses the write.
@@ -38,19 +42,18 @@ import {TicketNumber, Write} from "./ticket.ts";
 // through `@tea-fabrika/tracker/github`, or a fixed list. Its machine's state is kept nowhere:
 // started again, it reads the ledger again.
 //
-// Left for later, with a place for each: an agent writing to a ticket is another `Author` on the
-// same ledger, and the poll already shows its facts; linking a pull request to a ticket and the
-// PR watcher are programs that read and write the same streams, and write the lane's facts in
-// `Fact`. Nothing writes those yet but tests.
+// A lane writes its facts through the pipeline's `Tickets` service, on the same streams, and the
+// poll shows them. Left for later: linking a pull request to a ticket, and the PR watcher.
 
+export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
+/** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
+export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 export type {Head, OpenAsk} from "./head.ts";
 export {Author} from "./ledger.ts";
 export type {Listed, Opened, Show, Shown} from "./machine.ts";
 export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
 export type {Row} from "./rows.ts";
-export type {Fact, Summary, Ticket, Write} from "./ticket.ts";
-/** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
-export {fold, ROOT, readRow} from "./ticket.ts";
+export type {Summary, Write} from "./ticket.ts";
 
 /**
  * What the window does: go to the list or a ticket, pick what the list shows, change a ticket, or

@@ -1,10 +1,11 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
+import {Entry, fold, Ticket, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
 import {Row, rowsOf} from "./rows.ts";
-import {Entry, fold, Summary, summaryOf, Ticket, TicketNumber, Write} from "./ticket.ts";
+import {Summary, summaryOf, Write} from "./ticket.ts";
 
 // The tracker's machine: the tickets as last read from the ledger, the ticket open in the window,
 // and the writes waiting their turn. Pure: the ledger is reached through its two Cmds and its Sub,

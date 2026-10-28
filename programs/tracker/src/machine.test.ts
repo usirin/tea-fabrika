@@ -1,8 +1,9 @@
 import {replay} from "@demlik/tea";
 import type {MsgOf} from "@kampus/fabrika";
+import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
 import {load, over, pullRequests, save, shownOf, statusOf, tracker} from "./machine.ts";
-import type {Entry, Write} from "./ticket.ts";
+import type {Write} from "./ticket.ts";
 
 // The machine alone, with no ledger: Msgs in, then the state, the Cmds and the Subs out.
 

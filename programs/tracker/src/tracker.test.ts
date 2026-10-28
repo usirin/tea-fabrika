@@ -9,8 +9,11 @@ import {
 	type Writer,
 } from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
+import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
+import {hashOf} from "@kampus/pipeline/tickets/yes";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
+import {lineOf} from "./head.ts";
 import {Author, type Do, type PullRequest, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
 
@@ -28,6 +31,9 @@ const PR: PullRequest = {
 };
 
 const OWNER: Writer = {kind: "user", id: "owner"};
+
+/** Ticket 1's text, as its page shows it to the person who answers. */
+const saw = {title: "Login fails", body: ""};
 
 const services = (ledger: Ledger["Service"], author: Writer) =>
 	Layer.mergeAll(
@@ -143,6 +149,39 @@ describe("the tracker", () => {
 		expect(by).toEqual({kind: "agent", id: "review"});
 	});
 
+	it("says triage running once a pipeline program writes started through `Tickets`", async () => {
+		const ledger = memoryService();
+		const lane: Writer = {kind: "agent", id: "lane", for: "owner"};
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session(ledger);
+				yield* until((s) => s.ready);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* until((s) => listed(s).length === 1);
+				// The pipeline's side: no tracker code, only the service a lane writes through.
+				yield* Effect.gen(function* () {
+					const tickets = yield* Tickets;
+					yield* tickets.write(1, {
+						type: "started",
+						run: "r-1",
+						stage: "triage",
+						task: null,
+						log: null,
+					});
+				}).pipe(
+					Effect.provide(ticketsOnLedger(lane)),
+					Effect.provide(Layer.succeed(Ledger, ledger)),
+				);
+				const shown = yield* until(
+					(s) => s.page.kind === "list" && s.page.tickets[0]?.head._tag === "running",
+				);
+				const head = shown.page.kind === "list" ? shown.page.tickets[0]?.head : undefined;
+				return head === undefined ? null : lineOf(head, String);
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toBe("triage running");
+	});
+
 	/** A stage's ask on ticket 1, written to the ledger as a lane would. */
 	const ask = (ledger: Ledger["Service"]) =>
 		ledger.send(streams("tracker/ticket/1").inbox, "ask-a-1", {
@@ -165,7 +204,7 @@ describe("the tracker", () => {
 				const asking = yield* until((s) => (opened(s)?.asks.length ?? 0) === 1);
 				yield* say({kind: "comment", ticket: 1, body: "approve"});
 				const commented = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 3);
-				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "Go."});
+				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "Go.", saw});
 				const answered = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 4);
 				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
 				return {
@@ -173,15 +212,19 @@ describe("the tracker", () => {
 					commented: [opened(commented)?.head._tag, opened(commented)?.asks.length],
 					answered: [opened(answered)?.head._tag, opened(answered)?.asks.length],
 					last: [rows.at(-1)?.kind, rows.at(-1)?.writer],
+					text: JSON.parse(rows.at(-1)?.data ?? "{}").text,
+					hash: yield* hashOf(saw),
 				};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen).toEqual({
+		expect(seen).toMatchObject({
 			asking: ["asks", [["approve", "no"]]],
 			commented: ["asks", 1],
 			answered: ["next", 0],
 			last: ["answered", "user:owner"],
 		});
+		// The answer names the text it saw, as a hash.
+		expect(seen.text).toBe(seen.hash);
 	});
 
 	it("refuses an answer from a tracker that writes as an agent, and writes nothing", async () => {
@@ -194,7 +237,7 @@ describe("the tracker", () => {
 				yield* say({kind: "file", title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				yield* ask(ledger);
-				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""});
+				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw});
 				const failed = (yield* until((s) => s.failed !== null)).failed;
 				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
 				return {why: failed?.why, kinds: rows.map((r) => r.kind)};
@@ -266,8 +309,16 @@ describe("the tracker", () => {
 		expect(
 			readInput(tracker, {type: "do", value: {kind: "find", text: "x".repeat(257)}}).kind,
 		).toBe("refused");
-		const answer = {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: ""};
+		const answer = {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw};
 		expect(readInput(tracker, {type: "do", value: answer}).kind).toBe("read");
 		expect(readInput(tracker, {type: "do", value: {...answer, pick: " "}}).kind).toBe("refused");
+		// An answer names the text it saw, or it is no answer.
+		const {saw: _, ...blind} = answer;
+		expect(readInput(tracker, {type: "do", value: blind}).kind).toBe("refused");
+		const changes = {kind: "comment", ticket: 1, body: "Skip part 2.", asks: "changes"};
+		expect(readInput(tracker, {type: "do", value: changes}).kind).toBe("read");
+		expect(readInput(tracker, {type: "do", value: {...changes, asks: "merge"}}).kind).toBe(
+			"refused",
+		);
 	});
 });

@@ -11,11 +11,12 @@ import {
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {load, over, PROBLEMS, pullRequests, save, Tracker, tracker} from "./machine.ts";
-import type {Entry, Fact, Write} from "./ticket.ts";
+import type {Write} from "./ticket.ts";
 
 // The tracker's laws, on tea's pbt: after every step of any list of Msgs, from the real init.
 // The ledger's answers are drawn too, so an answer can come late, twice, or for a write that is

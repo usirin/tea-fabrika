@@ -1,4 +1,5 @@
 import type {WindowProps} from "@kampus/fabrika";
+import {type Text, textOf} from "@kampus/pipeline/tickets/yes";
 import {
 	type FormEvent,
 	type KeyboardEvent,
@@ -46,7 +47,7 @@ const said = (w: Write): string => {
 		case "file":
 			return `new ticket "${w.title}"`;
 		case "comment":
-			return `comment on #${w.ticket}`;
+			return w.asks === "changes" ? `changes asked on #${w.ticket}` : `comment on #${w.ticket}`;
 		case "close":
 			return `close #${w.ticket}`;
 		case "reopen":
@@ -586,10 +587,16 @@ function TicketPage(props: {
 		e.preventDefault();
 		back();
 	};
-	const comment = (e?: FormEvent) => {
+	/** "Comment", or with `asks: "changes"`, "Request changes": the person says which, nothing guesses. */
+	const comment = (e?: FormEvent, asks?: "changes") => {
 		e?.preventDefault();
 		if (draft.trim() === "") return;
-		act({kind: "comment", ticket: number, body: draft.trimEnd()});
+		const body = draft.trimEnd();
+		act(
+			asks === undefined
+				? {kind: "comment", ticket: number, body}
+				: {kind: "comment", ticket: number, body, asks},
+		);
 		setDraft("");
 	};
 	const pending = saving.filter((w) => w.kind === "comment" && w.ticket === number);
@@ -637,6 +644,7 @@ function TicketPage(props: {
 							key={ask.ask}
 							number={number}
 							ask={ask}
+							saw={textOf(ticket)}
 							saving={saving.some(
 								(w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask,
 							)}
@@ -670,6 +678,14 @@ function TicketPage(props: {
 								}
 							>
 								{ticket.state === "open" ? "Close ticket" : "Reopen ticket"}
+							</button>
+							<button
+								type="button"
+								disabled={draft.trim() === ""}
+								onKeyDown={onPageKey}
+								onClick={() => comment(undefined, "changes")}
+							>
+								Request changes
 							</button>
 							<button
 								type="submit"
@@ -736,16 +752,18 @@ const TimelineRow = ({
 
 /**
  * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
- * writes `answered`; a comment never does. While the answer is saving, the buttons wait.
+ * writes `answered`; a comment never does. `saw`: the ticket's text on the page, which the answer
+ * covers. While the answer is saving, the buttons wait.
  */
 function AskBox(props: {
 	readonly number: number;
 	readonly ask: OpenAsk;
+	readonly saw: Text;
 	readonly saving: boolean;
 	readonly act: Send;
 	readonly onKey: (e: KeyboardEvent) => void;
 }) {
-	const {number, ask, saving, act, onKey} = props;
+	const {number, ask, saw, saving, act, onKey} = props;
 	const [note, setNote] = useState("");
 	return (
 		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
@@ -771,7 +789,7 @@ function AskBox(props: {
 						disabled={saving}
 						onKeyDown={onKey}
 						onClick={() =>
-							act({kind: "answer", ticket: number, ask: ask.ask, pick, note: note.trimEnd()})
+							act({kind: "answer", ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw})
 						}
 					>
 						{pick}
