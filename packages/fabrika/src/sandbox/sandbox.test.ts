@@ -109,6 +109,8 @@ describe.each(["none", "os"] as const)("the %s box", (box) => {
 	it.skipIf(!ready)("is handed no key the host holds, under any name", async () => {
 		const exit = await run(box, sh("env"));
 		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+		// The whole answer, so a box that fails says why.
+		expect(exit.value).toMatchObject({code: 0, err: ""});
 		expect(exit.value.out).not.toContain(KEY);
 		expect(exit.value.out).not.toContain("kept-out");
 		expect(exit.value.out).toMatch(/^HOME=.*box-.*home$/m);

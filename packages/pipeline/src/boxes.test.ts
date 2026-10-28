@@ -103,7 +103,7 @@ const BOXES = {
 } as const;
 
 /** Can sandbox-runtime start here? On CI it must; elsewhere a machine without it skips `os`. */
-const osRuns = await runIn(
+const osProbe = await runIn(
 	BOXES.os,
 	{
 		command: "/bin/sh",
@@ -115,10 +115,12 @@ const osRuns = await runIn(
 	},
 	"",
 ).then(
-	(r) => r.code === 0,
-	() => false,
+	(r) => (r.code === 0 ? null : r.out),
+	(e: unknown) => String(e),
 );
-if (process.env.CI !== undefined && !osRuns) throw new Error("sandbox-runtime cannot start on CI");
+const osRuns = osProbe === null;
+if (process.env.CI !== undefined && !osRuns)
+	throw new Error(`sandbox-runtime cannot start on CI: ${osProbe}`);
 
 describe("the box each stage gets", () => {
 	it("holds what section 5 says, and a login only where an agent runs", () => {
