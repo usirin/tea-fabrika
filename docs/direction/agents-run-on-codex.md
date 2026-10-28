@@ -59,6 +59,10 @@ const stages = {
     workspaces get a Codex access token, `CODEX_ACCESS_TOKEN`, made for headless
     jobs ([access tokens](https://learn.chatgpt.com/docs/enterprise/access-tokens)).
     Personal plans have no such token. Which way we pick is still open.
+  - *Lending a login stays safe only while no agent with it reads text a
+    stranger wrote.* Tickets come from our own tracker, which only we write
+    to. A stage agent that reads public pull request comments would break
+    that, so one needs this note changed first.
 
 ## What it changes
 
