@@ -251,6 +251,9 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
     machine.
   - Counting beats per run now decides only whether old beats are trimmed
     after a run ends. They are kept until then.
+  - *Proposed 2026-10-27:* beats move into the lane's own record, and nothing
+    in it is trimmed or deleted
+    ([a LaneRecord holds each lane's trace](./a-lane-record-holds-its-trace.md)).
 
 ## 4. The bridge until our pipeline runs lanes (dropped)
 
