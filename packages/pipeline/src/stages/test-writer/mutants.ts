@@ -1,21 +1,24 @@
+import {createDraft} from "@kampus/fabrika/agents/claude";
 import {Schema} from "effect";
+import {createRefineLoop} from "../../combos.ts";
 import {type Controlling, createControls, Result} from "../../controls.ts";
+import type {Check} from "../../primitives.ts";
 import {countedAs, type Facts, Finding, type Silence} from "../../rate.ts";
+import {MutantId} from "../mutation/mutant.ts";
 import {outcomesOf} from "../outcome.ts";
+import {type MutantsBrief, mutantsWriter} from "./brief.ts";
+import {File, fileProblems} from "./written.ts";
 
 // The test writer's second job (docs/direction/the-test-writer.md): after
 // the mutation step, it answers each mutant that lived in one of three ways.
-// This file is that job's code side; the writer's Draft for it is the same
-// refine combo as the first job's and is not wired here.
+// The writer drafts its answers in the refine combo, as in the first job;
+// code checks each `test` answer with both controls.
 //
 //   test     a new test kills it: red on the mutant, green on the original.
 //            Both controls, so `controls(onBad, onGood)` via the Controls child
 //   cannot   it changes nothing a test can see: the owner is asked
 //   noise    a test could tell it apart but would only lock a detail: a
 //            Finding for Rate, which the owner rates "fix" or "noise"
-
-/** A mutant that lived, as the mutation step names it: `file:line:column`. */
-export const MutantId = Schema.String.check(Schema.isPattern(/^[^:\s]+:[1-9][0-9]*:[0-9]+$/));
 
 export const MutantAnswer = Schema.Union([
 	Schema.Struct({
@@ -30,6 +33,45 @@ export const MutantAnswer = Schema.Union([
 ]);
 export type MutantAnswer = typeof MutantAnswer.Type;
 type Of<A extends MutantAnswer["answer"]> = Extract<MutantAnswer, {readonly answer: A}>;
+
+/** What the writer hands back: its new test files, whole, and one answer per mutant. */
+export const Answered = Schema.Struct({
+	files: Schema.Array(File),
+	answers: Schema.Array(MutantAnswer),
+});
+export type Answered = typeof Answered.Type;
+
+/** The writer as a Draft: its Msgs are `mutants_answer_finished`, `mutants_answer_failed`, `mutants_answer_tool`. */
+export const mutantsAnswer = createDraft({name: "mutants_answer", output: Answered});
+
+/** The Check: the box's wall as in the first job, and one answer for each mutant that lived. None is a pass. */
+export const answeredProblems: Check<Answered, MutantsBrief> = (answered, brief) => {
+	const asked = new Set<string>(brief.lived.map((m) => m.mutant));
+	const paths = new Set(answered.files.map((f) => f.path));
+	const count = new Map<string, number>();
+	const each = answered.answers.flatMap((a) => {
+		count.set(a.mutant, (count.get(a.mutant) ?? 0) + 1);
+		if (!asked.has(a.mutant)) return [`${a.mutant} is not a mutant that lived.`];
+		if (a.answer === "test" && !paths.has(a.file))
+			return [`${a.mutant}'s test is in \`${a.file}\`, which is not among the files you wrote.`];
+		return [];
+	});
+	const once = brief.lived.flatMap((m) => {
+		const n = count.get(m.mutant) ?? 0;
+		if (n === 0) return [`${m.mutant} has no answer. Kill it with a test, or say why none can.`];
+		return n > 1 ? [`${m.mutant} has ${n} answers. Give it one.`] : [];
+	});
+	return [...fileProblems(answered.files, brief), ...each, ...once];
+};
+
+/** The refine combo over the writer and the Check. Each try's prompt is the brief, then only the Check's problems. */
+export const answering = createRefineLoop({
+	draft: mutantsAnswer,
+	check: answeredProblems,
+	prompt: mutantsWriter.prompt,
+	agent: null,
+	folder: null,
+});
 
 /** The rule a `noise` answer is rated under: the owner's "fix" says the writer was wrong to let it live. */
 export const NOISE_RULE = "test_writer/noise";

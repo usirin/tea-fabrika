@@ -47,7 +47,11 @@ export const includedBy = (includes: readonly string[]) => {
 const outside = (path: string) =>
 	path.startsWith("/") || path.split("/").some((part) => part === ".." || part === "");
 
-function fileProblems(files: readonly File[], brief: WriterBrief): readonly string[] {
+/** The box's wall: each file new, plain, once, and where `includes` lets it be. Both jobs' Checks start here. */
+export function fileProblems(
+	files: readonly File[],
+	brief: Pick<WriterBrief, "includes" | "taken">,
+): readonly string[] {
 	const included = includedBy(brief.includes);
 	const taken = new Set(brief.taken);
 	const seen = new Set<string>();

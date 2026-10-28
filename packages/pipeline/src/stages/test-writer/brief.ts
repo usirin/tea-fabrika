@@ -1,6 +1,7 @@
 import {Schema} from "effect";
 import {type BriefOf, defineBrief} from "../../brief.ts";
 import {Id} from "../../entity.ts";
+import {Lived} from "../mutation/mutant.ts";
 
 // What the test writer is handed (docs/direction/the-test-writer.md): the
 // plan's Properties, the commit they are tested on, pointers to code, and the
@@ -87,3 +88,46 @@ export const writer = defineBrief({
 });
 
 export type WriterBrief = BriefOf<typeof writer>;
+
+/**
+ * The writer's second job: the mutants the mutation step let live, each to
+ * answer with a test, `cannot` or `noise` (docs/direction/the-test-writer.md).
+ */
+export const mutantsWriter = defineBrief({
+	role: "test_writer",
+	schema: Schema.Struct({
+		ticket: Schema.String,
+		/** The build's head: the mutants were made on it, and the new tests run on it. */
+		head: Schema.String,
+		lived: Schema.Array(Lived),
+		includes: Schema.Array(Schema.String),
+		/** Files at the head that `includes` covers. They exist, so they are never written. */
+		taken: Schema.Array(Schema.String),
+	}),
+	render: (b) =>
+		[
+			`# Mutants that lived on ${b.ticket}, at commit ${b.head}`,
+			"",
+			"Mutation testing made small changes to the code. No test of the repository failed with",
+			"these in, so a real bug of the same kind would pass too. Answer each one:",
+			"- `test`: write a test that passes on the code as it is and fails with the mutant in.",
+			"- `cannot`: it changes nothing a test can see. Say why; the owner is asked.",
+			"- `noise`: a test could tell it apart, but would only lock a detail. Say why; the owner rates it.",
+			"Never put a mutant into the code, even to try it.",
+			"",
+			"## Mutants",
+			...b.lived.map(
+				(m) => `- ${m.mutant} (${m.mutator}): \`${m.original}\` made \`${m.replacement}\``,
+			),
+			"",
+			"## What you may write",
+			"Only new files, and only where one of these patterns matches:",
+			...b.includes.map((i) => `- \`${i}\``),
+			"Never change a file that exists, product code or test.",
+			...(b.taken.length === 0
+				? []
+				: ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),
+		].join("\n"),
+});
+
+export type MutantsBrief = BriefOf<typeof mutantsWriter>;
