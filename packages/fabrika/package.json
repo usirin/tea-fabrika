@@ -28,6 +28,7 @@
 		"./agents/codex": "./src/agents/codex.ts",
 		"./mcp": "./src/mcp.ts",
 		"./sandbox/os": "./src/sandbox/os.ts",
+		"./spike/serve": "./src/program/spike-serve.ts",
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -95,6 +96,10 @@
 			"./sandbox/os": {
 				"types": "./dist/sandbox/os.d.ts",
 				"default": "./dist/sandbox/os.js"
+			},
+			"./spike/serve": {
+				"types": "./dist/program/spike-serve.d.ts",
+				"default": "./dist/program/spike-serve.js"
 			},
 			"./package.json": "./package.json"
 		}
