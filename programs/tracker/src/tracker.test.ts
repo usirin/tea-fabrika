@@ -9,11 +9,12 @@ import {
 	type Writer,
 } from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
-import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
+import type {CodeFact, PrFact} from "@kampus/pipeline/tickets/ticket";
+import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {hashOf} from "@kampus/pipeline/tickets/yes";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {lineOf} from "./head.ts";
+import {headOf, lineOf} from "./head.ts";
 import {Author, type Do, type PullRequest, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
 
@@ -180,6 +181,42 @@ describe("the tracker", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(seen).toBe("triage running");
+	});
+
+	it("a lane cannot make a ticket done by writing the watcher's merged fact; the watcher can", async () => {
+		const ledger = memoryService();
+		const lane: Writer = {kind: "agent", id: "lane", for: "owner"};
+		const watcher: Writer = {kind: "agent", id: "pr-watcher", for: "owner"};
+		const merged: PrFact = {
+			type: "pr",
+			url: "https://github.com/example/app/pull/7",
+			state: "merged",
+			head: "abcdef1",
+			checks: [],
+		};
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* ledger.register("tracker/ticket/1", "user:owner");
+				yield* ledger.send(streams("tracker/ticket/1").inbox, "file-1", {
+					kind: "filed",
+					writer: "user:owner",
+					data: {type: "filed", title: "Login fails", body: ""},
+				});
+				const tickets = yield* Tickets;
+				const head = () => Effect.map(tickets.read(1), (t) => headOf(t.timeline, 0)._tag);
+				const refused = yield* Effect.flip(
+					// biome-ignore lint/plugin: the test plays a lane that lies to the compiler, to show the run-time check holds
+					tickets.write(1, "w/1", merged as unknown as CodeFact),
+				);
+				const afterLane = yield* head();
+				yield* (yield* Watcher).write(1, "w/1", merged);
+				return {refused: refused.why, afterLane, afterWatcher: yield* head()};
+			}).pipe(
+				Effect.provide(Layer.mergeAll(ticketsOnLedger(lane), watcherOnLedger(watcher))),
+				Effect.provide(Layer.succeed(Ledger, ledger)),
+			),
+		);
+		expect(seen).toEqual({refused: "not_yours", afterLane: "next", afterWatcher: "done"});
 	});
 
 	/** A stage's ask on ticket 1, written to the ledger as a lane would. */

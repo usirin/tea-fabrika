@@ -112,8 +112,9 @@ export const TicketFact = Schema.Union([
 ]);
 
 /**
- * The lane facts code writes, through `Tickets.write`: every one but a person's `answered` and
- * `rated`. A lane cannot even spell an answer to its own ask, and `Tickets.write` checks it again
+ * The facts a lane writes, through `Tickets.write`: every lane fact but the watcher's `pr` and a
+ * person's `answered` and `rated` (docs/direction/a-ticket-runs-from-the-app.md, section 3). A
+ * lane cannot even spell an answer to its own ask, or a merge, and `Tickets.write` checks it again
  * at run time, so a cast one is refused too.
  */
 export const CodeFact = Schema.Union([
@@ -156,14 +157,6 @@ export const CodeFact = Schema.Union([
 		of: Count,
 		findings: Schema.Array(Id),
 	}),
-	/** The watcher saw the ticket's pull request change. Written on a change only. */
-	Schema.Struct({
-		type: Schema.Literal("pr"),
-		url: Schema.String.check(Schema.isPattern(/^https:\/\/\S+$/)),
-		state: PrState,
-		head: Sha,
-		checks: Schema.Array(Check),
-	}),
 	/** A stage asks the owner something. `picks`: the buttons, at least one. */
 	Schema.Struct({
 		type: Schema.Literal("asked"),
@@ -173,6 +166,20 @@ export const CodeFact = Schema.Union([
 	}),
 ]);
 export type CodeFact = typeof CodeFact.Type;
+
+/**
+ * The watcher saw the ticket's pull request change. Written on a change only, and only by the
+ * watcher, through `Watcher.write`: never the lane, push, merge or an agent. Done is read off this
+ * fact alone, so a lane that could write it could close its own ticket.
+ */
+export const PrFact = Schema.Struct({
+	type: Schema.Literal("pr"),
+	url: Schema.String.check(Schema.isPattern(/^https:\/\/\S+$/)),
+	state: PrState,
+	head: Sha,
+	checks: Schema.Array(Check),
+});
+export type PrFact = typeof PrFact.Type;
 
 /** The two a person writes in the window, never code. */
 export const PersonFact = Schema.Union([
@@ -197,7 +204,7 @@ export const PersonFact = Schema.Union([
 ]);
 
 /** The nine a lane works with: what code, a stage, the watcher and the person in its box write. */
-export const LaneFact = Schema.Union([...CodeFact.members, ...PersonFact.members]);
+export const LaneFact = Schema.Union([...CodeFact.members, PrFact, ...PersonFact.members]);
 export type LaneFact = typeof LaneFact.Type;
 
 /** What happened to a ticket. The first fact of every ticket is `filed`, and only the first. */
@@ -212,7 +219,8 @@ export type FactOf<T extends Fact["type"]> = Extract<Fact, {readonly type: T}>;
  * door's kinds only a person writes (`PERSON_KINDS`), and the door refuses it from an agent's
  * session. On a ledger with no door (memory, node:sqlite), the line is held twice: the tracker's
  * save refuses to write a person's fact as an agent, `Tickets.write` takes only a `CodeFact`, and
- * the fold keeps one an agent wrote out of every ticket (`step` below). `rated` is a user's too by the note, but the
+ * the fold keeps one an agent wrote out of every ticket (`step` below). `pr` is an agent's, but
+ * only the watcher's: `Tickets.write` refuses it, and only `Watcher.write` takes it. `rated` is a user's too by the note, but the
  * door does not know that kind yet, so the table cannot say `person` for it.
  */
 export const WRITTEN_BY = {
