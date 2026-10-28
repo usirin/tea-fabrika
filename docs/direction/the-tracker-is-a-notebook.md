@@ -178,7 +178,8 @@ The line is `board --under 70 | where turn=owner`. Four facts are on ticket
 #43, under #70.
 
 ```ts
-// The facts, oldest first (real rows from ticket #43 up to 05:04).
+// The facts, oldest first. A sketch: the events follow ticket #43's real ones, but row
+// numbers, costs and links are made up for the example.
 {row: 101, ticket: 43, type: "filed", title: "v1 slice 1: Tickets and the lane facts", body: "…"}
 {row: 102, ticket: 43, type: "started", run: "r-1", stage: "build", task: null, log: "slice-1"}
 {row: 103, ticket: 43, type: "pr", url: "https://github.com/…/pull/155", state: "open", head: "a1b2c3d", checks: [/* 4 passed */]}
@@ -273,8 +274,9 @@ the list as one of them.**
 
 ## What it cannot tell us
 
-- The mockup's data is real only up to 05:06 on ticket #43 and PR #155. After
-  that it was made up to show movement.
+- The mockup's events follow ticket #43 and PR #155 up to 05:06; later ones
+  were made up to show movement. The worked example's row numbers, costs and
+  links are made up too.
 - Whether re-running every line on every fact stays fast with many lines and a
   long ledger. Nothing is measured.
 - The cost line has no facts yet: the ledger has no cost facts, so `cost 43`
