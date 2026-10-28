@@ -1,5 +1,5 @@
+import {hashOf} from "@kampus/pipeline/tickets/approval";
 import {type Entry, type Fact, fold} from "@kampus/pipeline/tickets/ticket";
-import {hashOf} from "@kampus/pipeline/tickets/yes";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {factOf, summaryOf} from "./ticket.ts";

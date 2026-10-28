@@ -1,3 +1,4 @@
+import {hashOf, Text} from "@kampus/pipeline/tickets/approval";
 import {
 	Asks,
 	Body,
@@ -9,7 +10,6 @@ import {
 	TicketNumber,
 	Title,
 } from "@kampus/pipeline/tickets/ticket";
-import {hashOf, Text} from "@kampus/pipeline/tickets/yes";
 import {Effect, Schema} from "effect";
 
 // What a person does to a ticket in the window, and how the list sums one up. The facts

@@ -1,5 +1,5 @@
 import type {WindowProps} from "@kampus/fabrika";
-import {type Text, textOf} from "@kampus/pipeline/tickets/yes";
+import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
 import {
 	type FormEvent,
 	type KeyboardEvent,

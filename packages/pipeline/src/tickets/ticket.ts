@@ -99,7 +99,7 @@ export type Hash = typeof Hash.Type;
 /**
  * What a comment asks for. Missing: nothing, it is talk. `changes`: the person clicked "Request
  * changes", GitHub's word in its review box. A person's stops build and asks for a new plan or a
- * new yes; an agent's stops nothing (./yes.ts).
+ * new approval; an agent's stops nothing (./approval.ts).
  */
 export const Asks = Schema.Literal("changes");
 
@@ -185,7 +185,7 @@ export type PrFact = typeof PrFact.Type;
 export const PersonFact = Schema.Union([
 	/**
 	 * A person answered an ask: one of its picks, and a note if they wrote one. Never an agent.
-	 * `text`: the hash of the ticket's title and body the person saw (./yes.ts), so a yes covers
+	 * `text`: the hash of the ticket's title and body the person saw (./approval.ts), so an approval covers
 	 * that text and no edit after it. Missing on an answer written before the hash.
 	 */
 	Schema.Struct({

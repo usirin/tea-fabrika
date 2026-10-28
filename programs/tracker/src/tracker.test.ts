@@ -9,9 +9,9 @@ import {
 	type Writer,
 } from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
+import {hashOf} from "@kampus/pipeline/tickets/approval";
 import type {CodeFact, PrFact} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeline/tickets/tickets";
-import {hashOf} from "@kampus/pipeline/tickets/yes";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {headOf, lineOf} from "./head.ts";
