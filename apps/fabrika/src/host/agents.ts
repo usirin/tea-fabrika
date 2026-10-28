@@ -15,7 +15,7 @@ import {appPrograms} from "../tsh.ts";
 //   person's tile    #1 shows on the list within a second: the tile's tracker polls the ledger
 //
 // Each agent gets its own run of a program, never the run in a tile: the run in a tile writes as
-// the person. Its writer is the agent the hello named, for the host's person; `appPrograms` packs
+// the person. Its writer is the agent the handshake named, for the host's person; `appPrograms` packs
 // every program with that writer, the same function a tile's tsh packs them with as the person.
 // So an agent's tool call has no path to the person's writer, and the tracker refuses an agent's
 // `answered` as it refuses any agent's (programs/tracker, `mayWrite`).

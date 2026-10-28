@@ -157,14 +157,21 @@ describe("an agent drives the app's programs through MCP", () => {
 		expect(seen.runs.yours).toMatchObject([{program: "tracker"}]);
 	});
 
-	it("never writes as the person: an agent's answer is refused, and a hello cannot name a user", async () => {
+	it("never writes as the person: an agent's answer is refused, and a handshake cannot name a user", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const app = yield* trackerInTile;
 				const agent = yield* agentOn(app.home, "claude");
 				yield* agent.call("tracker_do", {value: {kind: "file", title: "Needs a yes", body: ""}});
 				yield* agent.call("tracker_do", {
-					value: {kind: "answer", ticket: 1, ask: "a1", pick: "yes", note: ""},
+					value: {
+						kind: "answer",
+						ticket: 1,
+						ask: "a1",
+						pick: "yes",
+						note: "",
+						saw: {title: "Needs a yes", body: ""},
+					},
 				});
 				// The agent's own tracker says why, on the next look.
 				const why = yield* Effect.gen(function* () {
@@ -185,7 +192,7 @@ describe("an agent drives the app's programs through MCP", () => {
 						page?.kind === "ticket" ? Reflect.get(Object(page.opened), "rows") : undefined;
 					return Array.isArray(opened) && opened.length > 0 ? opened : undefined;
 				});
-				// A bridge whose name is a person's: the host refuses its hello, and the bridge says why and ends.
+				// A bridge whose name is a person's: the host refuses its handshake, and the bridge says why and ends.
 				const asUser = yield* agentOn(app.home, "user:owner").pipe(
 					Effect.scoped,
 					Effect.as("connected"),

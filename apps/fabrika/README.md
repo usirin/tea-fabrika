@@ -296,9 +296,9 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   One more, `runs`, lists every program and its tools, the agent's own runs, and what runs in
   your tiles.
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
-  use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's hello
-  holds only an agent's name, and the host makes the writer. The tracker refuses an agent's
-  answer to an ask, as it refuses any agent's.
+  use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
+  handshake holds only an agent's name, and the host makes the writer. The tracker refuses an
+  agent's answer to an ask, as it refuses any agent's.
 
 What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X under #44". It calls
 `tracker_do` with `{value: {kind: "file", ...}}`, and within a second the ticket is on your

@@ -5,14 +5,14 @@ import {isAgentName} from "../host/door.ts";
 // rest of the socket is MCP, framed as its stdio binding frames it (spec 2026-07-28, "Transports":
 // a custom transport on a byte stream reuses the stdio framing), one JSON-RPC message a line.
 //
-//   bridge  {"type":"hello","version":1,"agent":"claude"}
-//   host    {"type":"hello","version":1}                       then MCP, both ways
+//   bridge  {"type":"handshake","version":1,"agent":"claude"}
+//   host    {"type":"handshake","version":1}                   then MCP, both ways
 //   host    {"type":"refused","why":"..."}                     then the socket closes
 //
-// The hello names an agent, and nothing else: there is no field that could name a person. The
-// host makes the writer from it, `{kind: "agent", id: "claude", for: <the host's person>}`.
+// The handshake names an agent, and nothing else: there is no field that could name a person.
+// The host makes the writer from it, `{kind: "agent", id: "claude", for: <the host's person>}`.
 
-/** The version of this first line. Raise it when the hello or what follows it changes. */
+/** The version of this first line. Raise it when the handshake or what follows it changes. */
 export const AGENTS_PROTOCOL = 1;
 
 /** An agent's name, as the door takes one: small letters, digits, dots, dashes, underscores. */
@@ -23,16 +23,16 @@ export const AgentName = Schema.String.check(
 );
 
 /** What the bridge says first. */
-export const AgentHello = Schema.Struct({
-	type: Schema.Literal("hello"),
+export const Handshake = Schema.Struct({
+	type: Schema.Literal("handshake"),
 	version: Schema.Int,
 	agent: AgentName,
 });
-export type AgentHello = typeof AgentHello.Type;
+export type Handshake = typeof Handshake.Type;
 
 /** What the host answers. */
 export const HostAnswer = Schema.Union([
-	Schema.Struct({type: Schema.Literal("hello"), version: Schema.Int}),
+	Schema.Struct({type: Schema.Literal("handshake"), version: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("refused"), why: Schema.String}),
 ]);
 export type HostAnswer = typeof HostAnswer.Type;

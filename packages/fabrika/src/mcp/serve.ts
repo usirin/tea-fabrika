@@ -12,22 +12,22 @@ import {Socket} from "effect/socket";
 import type {Agent} from "../host/writer.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {type Answer, driveFor, type InTile} from "./drive.ts";
-import {AGENTS_PROTOCOL, AgentHello, type HostAnswer, MAX_LINE} from "./hello.ts";
+import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
 
-// One agent on the host's agents' socket: its hello, then MCP, served with the official SDK's
+// One agent on the host's agents' socket: its handshake, then MCP, served with the official SDK's
 // `Server` (`@modelcontextprotocol/server`, v2, spec 2026-07-28). `serveStdio` decides the
 // protocol's era from the first message, so a client of the 2025 revisions (an `initialize`
 // first, as Claude Code sends) and one of 2026-07-28 are both served. Its transport here is the
 // socket, framed as stdio frames: one JSON-RPC message a line.
 //
 //   yield* serveAgent(socket, {programsFor, person: "owner", tiles})
-//   // bridge  {"type":"hello","version":1,"agent":"claude"}
-//   // host    {"type":"hello","version":1}
+//   // bridge  {"type":"handshake","version":1,"agent":"claude"}
+//   // host    {"type":"handshake","version":1}
 //   // client  tools/list                    toolsOf(programsFor({kind: "agent", id: "claude", for: "owner"}))
 //   // client  tools/call tracker_do {value: {kind: "file", title: "Login fails", body: ""}}
 //   //         the agent's own tracker files it, as agent:claude for:owner
 //
-// Who the agent is comes from the hello alone, and the writer is made here, as an `Agent`:
+// Who the agent is comes from the handshake alone, and the writer is made here, as an `Agent`:
 // `programsFor` is handed nothing else, so no list it makes for an agent can hold the person's
 // writer. The host gives each program the writer it is handed (apps/fabrika, host/serve.ts).
 //
@@ -45,7 +45,7 @@ export interface AgentOptions {
 	readonly server?: {readonly name: string; readonly version: string};
 }
 
-const decodeHello = Schema.decodeUnknownOption(AgentHello);
+const decodeHandshake = Schema.decodeUnknownOption(Handshake);
 
 /** A tool's answer as MCP's tool result: the data as JSON text, or the why, marked as an error. */
 const resultOf = (answer: Answer): CallToolResult =>
@@ -61,7 +61,7 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 		const services = yield* Effect.context<never>();
 		const out = yield* Queue.make<HostAnswer | JSONRPCMessage, Cause.Done>();
 		const ended = yield* Deferred.make<void>();
-		/** The transport the SDK is handed, once the hello was read. */
+		/** The transport the SDK is handed, once the handshake was read. */
 		let transport: (Transport & {readonly heard: (raw: unknown) => void}) | null = null;
 		let refused = false;
 
@@ -71,9 +71,9 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Queue.endUnsafe(out);
 		};
 
-		const begin = (hello: AgentHello) =>
+		const begin = (handshake: Handshake) =>
 			Effect.gen(function* () {
-				const who = {kind: "agent", id: hello.agent, for: person} as const;
+				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const {drive, tools} = yield* driveFor({list: programsFor(who), tiles});
 				const server = new Server(info, {capabilities: {tools: {}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));
@@ -101,7 +101,7 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 					},
 				};
 				transport = t;
-				Queue.offerUnsafe(out, {type: "hello", version: AGENTS_PROTOCOL});
+				Queue.offerUnsafe(out, {type: "handshake", version: AGENTS_PROTOCOL});
 				const handle = serveStdio(() => server, {transport: t});
 				yield* Effect.addFinalizer(() => Effect.promise(() => handle.close()).pipe(Effect.ignore));
 			});
@@ -110,16 +110,16 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				if (refused) return;
 				if (transport !== null) return transport.heard(raw);
-				const hello = decodeHello(raw);
-				if (hello._tag === "None")
+				const handshake = decodeHandshake(raw);
+				if (handshake._tag === "None")
 					return refuse(
-						"the first line is a hello that names an agent: a name of a-z, 0-9, '.', '_' and '-', never a person's (user:...)",
+						"the first line is a handshake that names an agent: a name of a-z, 0-9, '.', '_' and '-', never a person's (user:...)",
 					);
-				if (hello.value.version !== AGENTS_PROTOCOL)
+				if (handshake.value.version !== AGENTS_PROTOCOL)
 					return refuse(
-						`this host speaks version ${AGENTS_PROTOCOL} on its agents' socket, the bridge ${hello.value.version}`,
+						`this host speaks version ${AGENTS_PROTOCOL} on its agents' socket, the bridge ${handshake.value.version}`,
 					);
-				yield* begin(hello.value);
+				yield* begin(handshake.value);
 			});
 
 		const channel = Ndjson.duplex({maxLineBytes: MAX_LINE})(Socket.toChannel(socket));

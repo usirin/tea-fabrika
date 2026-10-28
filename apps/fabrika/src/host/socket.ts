@@ -22,7 +22,7 @@ import {Effect, Path, Predicate} from "effect";
 export interface HostPaths {
 	readonly dir: string;
 	readonly sock: string;
-	/** The agents' socket: MCP, after a hello that names the agent. */
+	/** The agents' socket: MCP, after a handshake that names the agent. */
 	readonly mcp: string;
 	readonly pid: string;
 	readonly lock: string;
