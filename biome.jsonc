@@ -88,6 +88,39 @@
 			"plugins": ["./biome-plugins/no-project-settings.grit"]
 		},
 		{
+			// A secret is read as a `Redacted`, never as a plain string from `process.env`
+			// (docs/direction/secrets-are-redacted.md). Experiments are left out: they are outside
+			// this rule's first change, and biome-plugins/README.md counts what it would find there.
+			"includes": ["**", "!experiments/**"],
+			"plugins": ["./biome-plugins/no-secret-env.grit"]
+		},
+		{
+			// `Redacted.value` only where a secret goes out. Each file left out, and why:
+			"includes": [
+				"**",
+				// the bearer token as a WebSocket subprotocol: a browser socket sends no header
+				"!packages/fabrika/src/host/http.ts",
+				// the door's secret in the ledger child's env, and in its locker file (mode 0600)
+				"!packages/fabrika/src/host/local.ts",
+				// the Worker's bindings: a one-way hash of the local secret, and GitHub's token
+				"!packages/fabrika/src/host/worker-options.ts",
+				// a token's one-way hash, the only form the ledger keeps
+				"!packages/fabrika/src/host/door.ts",
+				// a login's answer on the wire: the token goes to the one who logged in
+				"!packages/fabrika/src/host/durable-object.ts",
+				// an SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
+				// takes a string) and kept from then on as a WebCrypto key that cannot be exported
+				"!packages/fabrika/src/host/signer.ts",
+				// Jev's authorization header (the old factory)
+				"!legacy/src/local.ts",
+				// tests hold made-up secrets and read them back to check them
+				"!**/*.test.ts",
+				// outside this rule's first change, counted in biome-plugins/README.md
+				"!experiments/**"
+			],
+			"plugins": ["./biome-plugins/no-redacted-value.grit"]
+		},
+		{
 			"includes": ["**/*.test.ts"],
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			"plugins": ["./biome-plugins/no-expect-in-if.grit"],

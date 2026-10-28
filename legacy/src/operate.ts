@@ -57,7 +57,7 @@ import {createShipProgram} from "@kampus/pipeline/stages/ship/program";
 import {gitWorktrees, issueThread} from "@tea-fabrika/wip/operator-live";
 import {Effect, Layer} from "effect";
 import {cliFabrika} from "./fabrika-cli.ts";
-import {liveJev} from "./local.ts";
+import {jevKey, liveJev} from "./local.ts";
 import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
 import {
 	fieldRows,
@@ -120,7 +120,7 @@ const fabrika = cliFabrika({
 	},
 });
 
-const key = process.env.TYPESAFE_API_KEY;
+const key = jevKey();
 const jev =
 	key === undefined
 		? Layer.succeed(Jev, {

@@ -24,13 +24,11 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika/local";
 import * as Alchemy from "alchemy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import {Config, Effect, Option, Redacted} from "effect";
+import {Config, Effect, Option} from "effect";
 import {type ServerConfig, serverDoor} from "./config.ts";
 
-/** The GitHub token, if one is set. An empty one counts as none. */
-const githubToken = Config.option(Config.Redacted("LEDGER_GITHUB_TOKEN")).pipe(
-	Config.map(Option.filter((t) => Redacted.value(t) !== "")),
-);
+/** The GitHub token, if one is set. Effect's env provider reads an empty one as none. */
+const githubToken = Config.option(Config.Redacted("LEDGER_GITHUB_TOKEN"));
 
 export const ledgerStack = (c: ServerConfig) =>
 	Alchemy.Stack(

@@ -1,7 +1,7 @@
 import {access} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
-import {Layer} from "effect";
+import {Layer, type Redacted} from "effect";
 import {type ClaudeOptions, claudeBuilder, claudeEnricher, claudeReviewer} from "./claude.ts";
 import {localFacts} from "./code-facts.ts";
 import {fileTracker, liveJev, localPublishedApi, localRepo, localWorkspace} from "./local.ts";
@@ -73,7 +73,7 @@ export function realLayers(
 	options: {
 		readonly testing: Awaited<ReturnType<typeof testingFor>>["testing"];
 		readonly trackerDir: string;
-		readonly key: string;
+		readonly key: Redacted.Redacted<string>;
 		readonly claude: ClaudeOptions;
 		readonly settings: typeof defaultSettings | ReturnType<typeof settingsFile>;
 	},
