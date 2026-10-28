@@ -54,11 +54,16 @@ describe("StrykerJS behind MutationRunner, on the fixture", () => {
 		expect(ran.refused).toBe(2);
 		expect(ran.lived.some((m) => m.mutant.startsWith("clamp.ts:17:"))).toBe(false);
 		expect(ran.ran).toBe(ran.found);
-		const lived = ran.lived.map((m) => `${m.mutant} ${m.original} -> ${m.replacement}`);
+		// The place, without the id's tag of mutator and replacement.
+		const lived = ran.lived.map(
+			(m) => `${m.mutant.replace(/:[0-9a-f]{6}$/, "")} ${m.original} -> ${m.replacement}`,
+		);
 		// Nothing checks a number above `high`, or a low equal to the high.
 		expect(lived).toContain("clamp.ts:12:6 n > high -> false");
 		expect(lived).toContain("clamp.ts:12:6 n > high -> n >= high");
 		expect(lived).toContain("clamp.ts:10:6 low > high -> low >= high");
+		// Two mutants at one place keep apart.
+		expect(new Set(ran.lived.map((m) => m.mutant)).size).toBe(ran.lived.length);
 		expect(ran.killed + ran.refused + ran.lived.length).toBe(ran.ran);
 	}, 120_000);
 

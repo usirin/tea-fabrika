@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
 import {runMutants, runTests} from "./machine.ts";
+import {changesOf} from "./scope.ts";
 import {ASK, drive, HEAD, KILLED_ALL, LIVED, ONE_LIVED, SCOPE} from "./scripted.ts";
 
 // The mutation step on fakes of its services: every branch, the Cmds it
@@ -50,7 +51,22 @@ describe("the mutation step", () => {
 		const {over} = drive({scope});
 		if (over.phase !== "over") throw new Error("over");
 		expect(nameOf(over.outcome)).toBe("ask:owner:check_change");
-		expect(over.report.changes).toEqual([{kind: "exam", file: exam}]);
+		expect(over.report.changes).toEqual([{kind: "exam", file: exam, hash: expect.any(String)}]);
+	});
+
+	it("asks the owner again when the skip list's contents change after the yes", () => {
+		const file = "skip-list.ts";
+		const edit = (text: string) => ({
+			...SCOPE,
+			diff: {files: [file], added: [{file, line: 1, text}]},
+		});
+		const approved = edit("const skip = ['logs'];");
+		const ask = {...ASK, exam: [file], allowed: changesOf(approved.diff, [file])};
+
+		const same = drive({scope: approved}, ask).over;
+		expect(same.phase === "over" && nameOf(same.outcome)).toBe("done");
+		const changed = drive({scope: edit("const skip = ['everything'];")}, ask).over;
+		expect(changed.phase === "over" && nameOf(changed.outcome)).toBe("ask:owner:check_change");
 	});
 
 	it("runs once the owner said yes to the change, even after the line moved", () => {

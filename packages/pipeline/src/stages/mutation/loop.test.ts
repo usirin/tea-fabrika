@@ -76,9 +76,9 @@ describe("a mutant that lives goes back to the writer", () => {
 		]);
 		// The first prompt names the mutant; the second is only what the Check found.
 		expect(prompts[0]).toContain(
-			"src/clamp.ts:12:6 (EqualityOperator): `n > high` made `n >= high`",
+			`${LIVED.mutant} (EqualityOperator): \`n > high\` made \`n >= high\``,
 		);
-		expect(prompts[1]).toContain("src/clamp.ts:12:6 has no answer");
+		expect(prompts[1]).toContain(`${LIVED.mutant} has no answer`);
 		if (s.phase !== "done") throw new Error(s.phase);
 
 		// Code checks the new test on both sides: red with the mutant in, green without.

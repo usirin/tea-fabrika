@@ -16,18 +16,18 @@ import {
 // or `noise`, and code checks a `test` answer with both controls.
 
 const test: MutantAnswer = {
-	mutant: "jev.ts:82:32",
+	mutant: "jev.ts:82:32:3f9a1c",
 	answer: "test",
 	test: "redaction keeps the rest of the body",
 	file: "src/jev-redact.test.ts",
 };
 const cannot: MutantAnswer = {
-	mutant: "machine.ts:620:9",
+	mutant: "machine.ts:620:9:5d07c8",
 	answer: "cannot",
 	why: "an empty outbox loops zero times",
 };
 const noise: MutantAnswer = {
-	mutant: "jev.ts:105:13",
+	mutant: "jev.ts:105:13:b20e47",
 	answer: "noise",
 	why: "a 200 body redacted too breaks no promise",
 };
@@ -37,17 +37,17 @@ describe("answering the mutants that lived", () => {
 		const [killing, cmds] = startKills("c1", [test]);
 		expect(cmds).toEqual([
 			kills.run({
-				key: "jev.ts:82:32",
+				key: "jev.ts:82:32:3f9a1c",
 				side: "bad",
 				on: {
 					commit: "c1",
 					file: test.file,
 					test: "redaction keeps the rest of the body",
-					mutant: "jev.ts:82:32",
+					mutant: "jev.ts:82:32:3f9a1c",
 				},
 			}),
 			kills.run({
-				key: "jev.ts:82:32",
+				key: "jev.ts:82:32:3f9a1c",
 				side: "good",
 				on: {
 					commit: "c1",
@@ -86,7 +86,7 @@ describe("answering the mutants that lived", () => {
 		expect(outcomeOf([noise], {})).toEqual({
 			kind: "done",
 			part: false,
-			findings: [{id: "jev.ts:105:13", rule: NOISE_RULE}],
+			findings: [{id: "jev.ts:105:13:b20e47", rule: NOISE_RULE}],
 		});
 	});
 

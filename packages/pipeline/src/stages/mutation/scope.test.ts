@@ -47,7 +47,7 @@ describe("what changes the exam", () => {
 		const diff = {files: ["a.ts", "skip.ts"], added: [line("a.ts", 4, comment), line("a.ts", 5)]};
 		expect(changesOf(diff, ["skip.ts", "other.ts"])).toEqual([
 			{kind: "disable", file: "a.ts", line: 4, text: comment.trim()},
-			{kind: "exam", file: "skip.ts"},
+			{kind: "exam", file: "skip.ts", hash: expect.stringMatching(/^[0-9a-f]{12}$/)},
 		]);
 		expect(
 			changesOf({files: ["a.ts"], added: [line("a.ts", 1, "// Stryker restore all")]}, []),
@@ -61,5 +61,13 @@ describe("what changes the exam", () => {
 			{...yes, file: "b.ts"},
 		];
 		expect(unapproved(now, [yes])).toEqual([{...yes, file: "b.ts"}]);
+	});
+
+	it("keeps a yes to a file of the exam for the contents it was given to", () => {
+		const exam = (text: string) =>
+			changesOf({files: ["skip.ts"], added: [line("skip.ts", 1, text)]}, ["skip.ts"]);
+		const yes = exam("skip ['logs']");
+		expect(unapproved(exam("skip ['logs']"), yes)).toEqual([]);
+		expect(unapproved(exam("skip ['everything']"), yes)).toHaveLength(1);
 	});
 });

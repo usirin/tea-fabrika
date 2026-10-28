@@ -41,7 +41,13 @@ export const SCOPE: Scope = {
 
 /** The planted weak test lets this mutant live: nothing checks a number above `high`. */
 export const LIVED: Lived = {
-	mutant: idOf("src/clamp.ts", 12, 6),
+	mutant: idOf({
+		file: "src/clamp.ts",
+		line: 12,
+		column: 6,
+		mutator: "EqualityOperator",
+		replacement: "n >= high",
+	}),
 	mutator: "EqualityOperator",
 	original: "n > high",
 	replacement: "n >= high",

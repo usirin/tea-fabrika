@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import {Schema} from "effect";
 
 // What the mutation step reads before it runs anything, and the pure Checks
@@ -48,7 +49,8 @@ export const Change = Schema.Union([
 		line: Schema.Int,
 		text: Schema.String,
 	}),
-	Schema.Struct({kind: Schema.Literal("exam"), file: Schema.String}),
+	/** `hash`: of the lines the diff adds to the file, so a yes holds for these contents only. */
+	Schema.Struct({kind: Schema.Literal("exam"), file: Schema.String, hash: Schema.String}),
 ]);
 export type Change = typeof Change.Type;
 
@@ -93,15 +95,27 @@ export function changesOf(diff: Diff, exam: readonly string[]): readonly Change[
 		.map((a) => ({kind: "disable", file: a.file, line: a.line, text: a.text.trim()}));
 	const touched: Change[] = exam
 		.filter((f) => diff.files.includes(f))
-		.map((file) => ({kind: "exam", file}));
+		.map((file) => ({kind: "exam", file, hash: hashOf(diff, file)}));
 	return [...disables, ...touched];
 }
 
-/** The same change, wherever its line moved to: a yes to it holds after an edit above it. */
-const sameAs = (a: Change, b: Change): boolean =>
-	a.kind === "disable" && b.kind === "disable"
-		? a.file === b.file && a.text === b.text
-		: a.kind === b.kind && a.file === b.file;
+/** A short hash of the lines `diff` adds to `file`, in order, with where each sits. */
+const hashOf = (diff: Diff, file: string): string =>
+	createHash("sha256")
+		.update(JSON.stringify(diff.added.filter((a) => a.file === file).map((a) => [a.line, a.text])))
+		.digest("hex")
+		.slice(0, 12);
+
+/**
+ * The same change. A disable comment is the same wherever its line moved
+ * to, so a yes to it holds after an edit above it. A file of the exam is the
+ * same only with the same contents: an edit after the yes asks again.
+ */
+const sameAs = (a: Change, b: Change): boolean => {
+	if (a.kind === "disable" && b.kind === "disable") return a.file === b.file && a.text === b.text;
+	if (a.kind === "exam" && b.kind === "exam") return a.file === b.file && a.hash === b.hash;
+	return false;
+};
 
 /** The changes the owner has not said yes to. `allowed`: the ones the owner said yes to. */
 export const unapproved = (

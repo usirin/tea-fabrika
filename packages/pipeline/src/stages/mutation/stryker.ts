@@ -27,6 +27,8 @@ import {SKIP, shouldIgnore} from "./skip-list.ts";
 // Stryker's own TypeScript checker reads TypeScript's JavaScript API, which
 // TypeScript 7 does not have, so the typecheck is the repo's own command.
 // Each command runs under `nice -n 15`, with `runEnv`: no login in reach.
+// A command that never starts, such as a typecheck tool that is not there,
+// fails the whole run: it is never read as a typecheck that refused.
 // The folder is the run's own copy of the head: Stryker works in a sandbox
 // copy of it, and the typecheck step puts each file back as it found it.
 
@@ -84,18 +86,15 @@ export function sampleOf<T>(items: readonly T[], seed: number, most: number): re
 		});
 }
 
-/** A mutant's key: where it is, what kind, and what it puts there. The instrumenter and the report agree on it. */
-const keyOf = (file: string, line: number, column: number, mutator: string, replacement: string) =>
-	`${idOf(file, line, column)} ${mutator} ${replacement}`;
-
-const madeKey = (folder: string, m: Made) =>
-	keyOf(
-		relative(folder, m.fileName),
-		m.location.start.line + 1,
-		m.location.start.column + 1,
-		m.mutatorName,
-		m.replacement,
-	);
+/** A made mutant's id. The instrumenter and the report agree on it. */
+const madeId = (folder: string, m: Made) =>
+	idOf({
+		file: relative(folder, m.fileName),
+		line: m.location.start.line + 1,
+		column: m.location.start.column + 1,
+		mutator: m.mutatorName,
+		replacement: m.replacement,
+	});
 
 const relative = (folder: string, file: string) =>
 	file.startsWith(`${folder}/`) ? file.slice(folder.length + 1) : file;
@@ -168,6 +167,17 @@ const logger = {
 const notRun: CouldNotRun = {_tag: "could_not_run"};
 const couldNotRun = Effect.fail(notRun);
 
+/**
+ * Exit codes that say the program never started: -1, the process could not
+ * be made (../../child.ts); 126 and 127, `nice` found no program to run or
+ * could not run it (POSIX `nice`). Such a run tells nothing about the code.
+ */
+const NOT_STARTED = new Set([-1, 126, 127]);
+
+/** A command that ran. One that never started fails instead, so no caller can read it as an answer. */
+const started = (r: Exited): Effect.Effect<Exited, CouldNotRun> =>
+	NOT_STARTED.has(r.code) ? couldNotRun : Effect.succeed(r);
+
 /** Where a package's file is, as a path Stryker can load. */
 const pathOf = (specifier: string) => fileURLToPath(import.meta.resolve(specifier));
 
@@ -176,12 +186,15 @@ const services = (setup: StrykerSetup) =>
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-		const low = (command: readonly [string, ...string[]], cwd: string): Effect.Effect<Exited> =>
+		const low = (
+			command: readonly [string, ...string[]],
+			cwd: string,
+		): Effect.Effect<Exited, CouldNotRun> =>
 			Effect.provideService(
 				runChild("nice", ["-n", "15", ...command], {cwd, env: runEnv()}),
 				ChildProcessSpawner.ChildProcessSpawner,
 				spawner,
-			);
+			).pipe(Effect.flatMap(started));
 		// The bin is not among the package's exports; its package.json is.
 		const stryker = path.join(
 			path.dirname(pathOf("@stryker-mutator/core/package.json")),
@@ -285,7 +298,7 @@ const services = (setup: StrykerSetup) =>
 						? ask.spans.map((s) => `${s.file}:${s.from}-${s.to}`)
 						: picked.map((m) => exactly(folder, m));
 				const report = yield* strykerRun(folder, mutate);
-				const wanted = new Set(picked.map((m) => madeKey(folder, m)));
+				const wanted = new Set(picked.map((m) => madeId(folder, m)));
 				let killed = 0;
 				let refused = 0;
 				const lived: Lived[] = [];
@@ -293,8 +306,9 @@ const services = (setup: StrykerSetup) =>
 					const file = relative(folder, name);
 					for (const m of entry.mutants) {
 						const {line, column} = m.location.start;
-						if (!wanted.has(keyOf(file, line, column, m.mutatorName, m.replacement ?? "")))
-							continue;
+						const replacement = m.replacement ?? "";
+						const id = idOf({file, line, column, mutator: m.mutatorName, replacement});
+						if (!wanted.has(id)) continue;
 						if (KILLED.has(m.status)) killed++;
 						else if (!UNCAUGHT.has(m.status)) refused++;
 						else {
@@ -302,10 +316,10 @@ const services = (setup: StrykerSetup) =>
 							if (!said.takes) refused++;
 							else
 								lived.push({
-									mutant: idOf(file, line, column),
+									mutant: id,
 									mutator: m.mutatorName,
 									original: said.original,
-									replacement: m.replacement ?? "",
+									replacement,
 								});
 						}
 					}
@@ -315,11 +329,7 @@ const services = (setup: StrykerSetup) =>
 
 		const tests = (head: string) =>
 			low(setup.tests, setup.folder(head)).pipe(
-				Effect.flatMap((r) =>
-					r.code === -1
-						? couldNotRun
-						: Effect.succeed(r.code === 0 ? ("green" as const) : ("red" as const)),
-				),
+				Effect.map((r) => (r.code === 0 ? ("green" as const) : ("red" as const))),
 			);
 
 		return {tests, run};
