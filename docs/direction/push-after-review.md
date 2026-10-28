@@ -78,6 +78,9 @@ out. The review walk settles it.
 
 - **Who pushes and opens the PR:** ship, or a step the parent runs between
   review and ship.
+  *Answered 2026-10-27:* a new small program, push, between review and
+  merge ([a ticket runs from the app](./a-ticket-runs-from-the-app.md),
+  section 8).
 - **Where the local repo lives** and how build's and review's boxes see it:
   for example a folder per job, mounted into build's box and mounted read-only
   into review's.
