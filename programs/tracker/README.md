@@ -37,7 +37,7 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 | Import | File | What it gives |
 |---|---|---|
 | `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
-| | `src/ticket.ts` | The ticket, pure: `Fact` (the tracker's four and a lane's nine), `WRITTEN_BY` (only a person writes `answered`), `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
+| | `src/ticket.ts` | What a person writes, pure: `Write` (a comment can ask for changes, an answer carries the text it saw) and `factOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |

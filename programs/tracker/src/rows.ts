@@ -1,8 +1,8 @@
 import {Writer} from "@kampus/fabrika";
 import {endedAs} from "@kampus/pipeline/stages/status";
+import type {Check, Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {prRefOf, words} from "./head.ts";
-import type {Check, Entry, Fact} from "./ticket.ts";
 
 // One short row per fact on a ticket's timeline (docs/direction/what-a-ticket-shows.md,
 // section 2). A row is a view of its fact, and nothing reads it back:
@@ -62,7 +62,7 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 		case "filed":
 			return said("filed it", "", fact.body === "" ? null : fact.body);
 		case "commented":
-			return said("commented", "", fact.body);
+			return said(fact.asks === "changes" ? "asked for changes" : "commented", "", fact.body);
 		case "closed":
 			return said("closed it");
 		case "reopened":

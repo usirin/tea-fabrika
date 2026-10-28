@@ -1,7 +1,7 @@
+import {type Entry, type Fact, fold} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {type Head, HOUR, headOf, openAsksOf} from "./head.ts";
-import {type Entry, type Fact, fold} from "./ticket.ts";
 
 // The laws of a ticket's top line, over random lists of facts. The facts go through the real fold
 // first, so a fact that does not fit (an answer to an ask never asked, an agent's answer, a run
