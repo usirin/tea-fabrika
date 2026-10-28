@@ -39,7 +39,7 @@ const inCopy = <A, E>(use: (runner: MutationRunner["Service"]) => Effect.Effect<
 	);
 
 describe("StrykerJS behind MutationRunner, on the fixture", () => {
-	it("runs the repo's own tests, then lets the weak test's mutants live and leaves out what it must", async () => {
+	it("runs the repo's own tests, then lets the weak test's mutants survive and leaves out what it must", async () => {
 		const [tests, ran] = await inCopy((runner) =>
 			// One after the other: Stryker's run must not overlap the plain test run in the same copy.
 			Effect.all([runner.tests("h"), runner.run({head: "h", spans: SPANS, seed: 5, most: 150})], {
@@ -47,31 +47,31 @@ describe("StrykerJS behind MutationRunner, on the fixture", () => {
 			}),
 		);
 		expect(tests).toBe("green");
-		// The error text: the skip list.
-		expect(ran.skipped).toBe(1);
-		// No test runs `unit`, and the typecheck refuses both its mutants: `return ""` is not a
+		// The error text: the ignorer.
+		expect(ran.ignored).toBe(1);
+		// No test runs `unit`, and the typecheck rejects both its mutants: `return ""` is not a
 		// `Unit`, and a body made `{}` returns nothing.
-		expect(ran.refused).toBe(2);
-		expect(ran.lived.some((m) => m.mutant.startsWith("clamp.ts:17:"))).toBe(false);
+		expect(ran.compileErrors).toBe(2);
+		expect(ran.survived.some((m) => m.mutant.startsWith("clamp.ts:17:"))).toBe(false);
 		expect(ran.ran).toBe(ran.found);
 		// The place, without the id's tag of mutator and replacement.
-		const lived = ran.lived.map(
+		const survived = ran.survived.map(
 			(m) => `${m.mutant.replace(/:[0-9a-f]{6}$/, "")} ${m.original} -> ${m.replacement}`,
 		);
 		// Nothing checks a number above `high`, or a low equal to the high.
-		expect(lived).toContain("clamp.ts:12:6 n > high -> false");
-		expect(lived).toContain("clamp.ts:12:6 n > high -> n >= high");
-		expect(lived).toContain("clamp.ts:10:6 low > high -> low >= high");
+		expect(survived).toContain("clamp.ts:12:6 n > high -> false");
+		expect(survived).toContain("clamp.ts:12:6 n > high -> n >= high");
+		expect(survived).toContain("clamp.ts:10:6 low > high -> low >= high");
 		// Two mutants at one place keep apart.
-		expect(new Set(ran.lived.map((m) => m.mutant)).size).toBe(ran.lived.length);
-		expect(ran.killed + ran.refused + ran.lived.length).toBe(ran.ran);
+		expect(new Set(ran.survived.map((m) => m.mutant)).size).toBe(ran.survived.length);
+		expect(ran.killed + ran.compileErrors + ran.survived.length).toBe(ran.ran);
 	}, 120_000);
 
 	it("runs only the fixed-seed sample when there are more mutants than `most`", async () => {
 		const ran = await inCopy((runner) => runner.run({head: "h", spans: SPANS, seed: 5, most: 4}));
 		expect(ran.ran).toBe(4);
 		expect(ran.found).toBeGreaterThan(4);
-		expect(ran.killed + ran.refused + ran.lived.length).toBe(4);
+		expect(ran.killed + ran.compileErrors + ran.survived.length).toBe(4);
 	}, 120_000);
 });
 

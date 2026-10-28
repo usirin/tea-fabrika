@@ -44,19 +44,19 @@ export type Answered = typeof Answered.Type;
 /** The writer as a Draft: its Msgs are `mutants_answer_finished`, `mutants_answer_failed`, `mutants_answer_tool`. */
 export const mutantsAnswer = createDraft({name: "mutants_answer", output: Answered});
 
-/** The Check: the box's wall as in the first job, and one answer for each mutant that lived. None is a pass. */
+/** The Check: the box's wall as in the first job, and one answer for each mutant that survived. None is a pass. */
 export const answeredProblems: Check<Answered, MutantsBrief> = (answered, brief) => {
-	const asked = new Set<string>(brief.lived.map((m) => m.mutant));
+	const asked = new Set<string>(brief.survived.map((m) => m.mutant));
 	const paths = new Set(answered.files.map((f) => f.path));
 	const count = new Map<string, number>();
 	const each = answered.answers.flatMap((a) => {
 		count.set(a.mutant, (count.get(a.mutant) ?? 0) + 1);
-		if (!asked.has(a.mutant)) return [`${a.mutant} is not a mutant that lived.`];
+		if (!asked.has(a.mutant)) return [`${a.mutant} is not a mutant that survived.`];
 		if (a.answer === "test" && !paths.has(a.file))
 			return [`${a.mutant}'s test is in \`${a.file}\`, which is not among the files you wrote.`];
 		return [];
 	});
-	const once = brief.lived.flatMap((m) => {
+	const once = brief.survived.flatMap((m) => {
 		const n = count.get(m.mutant) ?? 0;
 		if (n === 0) return [`${m.mutant} has no answer. Kill it with a test, or say why none can.`];
 		return n > 1 ? [`${m.mutant} has ${n} answers. Give it one.`] : [];

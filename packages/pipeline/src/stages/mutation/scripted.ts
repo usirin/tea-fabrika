@@ -2,8 +2,14 @@ import {applyCell} from "@demlik/tea";
 import {Effect, Exit, Layer} from "effect";
 import type {Result} from "../../controls.ts";
 import {mutationInterpret} from "./handlers.ts";
-import {MOST, type Mutation, type MutationAsk, type MutationCmd, mutation} from "./machine.ts";
-import {idOf, type Lived} from "./mutant.ts";
+import {
+	MAX_MUTANTS,
+	type Mutation,
+	type MutationAsk,
+	type MutationCmd,
+	mutation,
+} from "./machine.ts";
+import {idOf, type Survived} from "./mutant.ts";
 import type {Scope} from "./scope.ts";
 import {MutationRunner, MutationScope, type Ran} from "./services.ts";
 
@@ -20,10 +26,10 @@ export const ASK: MutationAsk = {
 	base: BASE,
 	head: HEAD,
 	kept: [{file: "src/clamp.ts", name: "clamp"}],
-	exam: ["packages/pipeline/src/stages/mutation/skip-list.ts"],
+	exam: ["packages/pipeline/src/stages/mutation/ignorer.ts"],
 	allowed: [],
 	seed: 49,
-	most: MOST,
+	most: MAX_MUTANTS,
 };
 
 /** The build added two lines of `clamp`, and its test file. The kept Property's code is lines 9 to 14. */
@@ -40,8 +46,8 @@ export const SCOPE: Scope = {
 	exam: [],
 };
 
-/** The planted weak test lets this mutant live: nothing checks a number above `high`. */
-export const LIVED: Lived = {
+/** The planted weak test lets this mutant survive: nothing checks a number above `high`. */
+export const SURVIVED: Survived = {
 	mutant: idOf({
 		file: "src/clamp.ts",
 		line: 12,
@@ -54,8 +60,15 @@ export const LIVED: Lived = {
 	replacement: "n >= high",
 };
 
-export const KILLED_ALL: Ran = {found: 12, ran: 12, skipped: 1, refused: 2, killed: 10, lived: []};
-export const ONE_LIVED: Ran = {...KILLED_ALL, killed: 9, lived: [LIVED]};
+export const KILLED_ALL: Ran = {
+	found: 12,
+	ran: 12,
+	ignored: 1,
+	compileErrors: 2,
+	killed: 10,
+	survived: [],
+};
+export const ONE_SURVIVED: Ran = {...KILLED_ALL, killed: 9, survived: [SURVIVED]};
 
 /** What each outside thing answers. `undefined` on a slot: the default, which goes well. */
 export interface Script {

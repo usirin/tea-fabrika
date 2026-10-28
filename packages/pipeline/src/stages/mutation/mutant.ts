@@ -14,8 +14,8 @@ export const MutantId = Schema.String.check(
 );
 export type MutantId = typeof MutantId.Type;
 
-/** One mutant that lived: no test of the repo failed with it in, and the typecheck took it. */
-export const Lived = Schema.Struct({
+/** One mutant that survived: no test of the repo failed with it in, and the typecheck took it. */
+export const Survived = Schema.Struct({
 	mutant: MutantId,
 	/** Stryker's name for the kind of change, such as `EqualityOperator`. */
 	mutator: Schema.String,
@@ -23,7 +23,7 @@ export const Lived = Schema.Struct({
 	original: Schema.String,
 	replacement: Schema.String,
 });
-export type Lived = typeof Lived.Type;
+export type Survived = typeof Survived.Type;
 
 /** A mutant's place, line and column counted from 1, and what it puts there. */
 export interface Place {

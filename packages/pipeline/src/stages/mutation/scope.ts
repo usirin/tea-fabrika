@@ -7,8 +7,8 @@ import {Schema} from "effect";
 //   spansOf     which lines Stryker mutates: the source lines the build
 //               added, and the lines each kept Property covers
 //   changesOf   what in the diff changes the exam: a Stryker disable
-//               comment it adds, or a file of the exam it touches (the skip
-//               list). Each one asks the owner, unless the owner said yes
+//               comment it adds, or a file of the exam it touches (the
+//               ignorer). Each one asks the owner, unless it has approval
 //
 // No agent judges any of it. A disable comment is the one way out for a
 // mutant no test can tell apart, and only the owner opens it.
@@ -38,14 +38,18 @@ export const CodeRef = Schema.Struct({file: Schema.String, name: Schema.String})
 export type CodeRef = typeof CodeRef.Type;
 
 /** A file as it reads at the head. `hash`: `hashOf` its contents, or `null` when it is gone. */
-export const Sum = Schema.Struct({file: Schema.String, hash: Schema.NullOr(Schema.String)});
-export type Sum = typeof Sum.Type;
+export const Checksum = Schema.Struct({file: Schema.String, hash: Schema.NullOr(Schema.String)});
+export type Checksum = typeof Checksum.Type;
 
 /**
  * The read: the diff, where each kept Property's code stands at the head,
  * and each file of the exam as it reads at the head.
  */
-export const Scope = Schema.Struct({diff: Diff, kept: Schema.Array(Span), exam: Schema.Array(Sum)});
+export const Scope = Schema.Struct({
+	diff: Diff,
+	kept: Schema.Array(Span),
+	exam: Schema.Array(Checksum),
+});
 export type Scope = typeof Scope.Type;
 
 /** A short hash of a file's contents: a reader of `Scope` hashes each file of the exam with it. */
@@ -61,8 +65,8 @@ export const Change = Schema.Union([
 		text: Schema.String,
 	}),
 	/**
-	 * `hash`: of the file's contents at the head, so a yes holds for these
-	 * contents only. `null`: none to hold to, gone or not read, and a yes never holds.
+	 * `hash`: of the file's contents at the head, so an approval holds for these
+	 * contents only. `null`: none to hold to, gone or not read, and an approval never holds.
 	 */
 	Schema.Struct({
 		kind: Schema.Literal("exam"),
@@ -108,7 +112,7 @@ export function spansOf(scope: Scope): readonly Span[] {
 
 /**
  * What in the diff changes the exam. `exam`: the files that are part of it,
- * such as the skip list. A touched one carries its hash at the head from the
+ * such as the ignorer. A touched one carries its hash at the head from the
  * read, or `null` when the read has none.
  */
 export function changesOf(scope: Scope, exam: readonly string[]): readonly Change[] {
@@ -128,8 +132,8 @@ export function changesOf(scope: Scope, exam: readonly string[]): readonly Chang
 
 /**
  * The same change. A disable comment is the same wherever its line moved
- * to, so a yes to it holds after an edit above it. A file of the exam is the
- * same only with the same contents at the head: any edit after the yes, a
+ * to, so its approval holds after an edit above it. A file of the exam is the
+ * same only with the same contents at the head: any edit after the approval, a
  * deletion too, asks again. One with no hash is never the same.
  */
 const sameAs = (a: Change, b: Change): boolean => {
@@ -139,7 +143,7 @@ const sameAs = (a: Change, b: Change): boolean => {
 	return false;
 };
 
-/** The changes the owner has not said yes to. `allowed`: the ones the owner said yes to. */
+/** The changes with no approval from the owner. `allowed`: the approved ones. */
 export const unapproved = (
 	changes: readonly Change[],
 	allowed: readonly Change[],

@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
 import {readScope, runMutants, runTests} from "./machine.ts";
 import {changesOf, hashOf, type Scope} from "./scope.ts";
-import {ASK, drive, HEAD, KILLED_ALL, LIVED, ONE_LIVED, SCOPE} from "./scripted.ts";
+import {ASK, drive, HEAD, KILLED_ALL, ONE_SURVIVED, SCOPE, SURVIVED} from "./scripted.ts";
 
 // The mutation step on fakes of its services: every branch, the Cmds it
 // sends, and the report the lane reads.
@@ -28,11 +28,11 @@ describe("the mutation step", () => {
 		expect(over.phase === "over" && over.report.ran).toEqual(KILLED_ALL);
 	});
 
-	it("sends a mutant the weak test let live to the test writer, with the mutant in the report", () => {
-		const {over} = drive({run: ONE_LIVED});
+	it("sends a mutant the weak test let survive to the test writer, with the mutant in the report", () => {
+		const {over} = drive({run: ONE_SURVIVED});
 		if (over.phase !== "over") throw new Error("over");
 		expect(nameOf(over.outcome)).toBe("send:test_writer:mutant_survived");
-		expect(over.report.ran?.lived).toEqual([LIVED]);
+		expect(over.report.ran?.survived).toEqual([SURVIVED]);
 	});
 
 	it("asks the owner about a disable comment the diff adds, quoted, before anything runs", () => {
@@ -45,13 +45,13 @@ describe("the mutation step", () => {
 		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope"]);
 	});
 
-	it("asks the owner when the diff edits the skip list", () => {
-		const exam = "packages/pipeline/src/stages/mutation/skip-list.ts";
+	it("asks the owner when the diff edits the ignorer", () => {
+		const exam = "packages/pipeline/src/stages/mutation/ignorer.ts";
 		const scope = {...SCOPE, diff: {...SCOPE.diff, files: [...SCOPE.diff.files, exam]}};
 		const {over} = drive({scope});
 		if (over.phase !== "over") throw new Error("over");
 		expect(nameOf(over.outcome)).toBe("ask:owner:check_change");
-		// The read gave no hash for it, so no yes could hold.
+		// The read gave no hash for it, so no approval could hold.
 		expect(over.report.changes).toEqual([{kind: "exam", file: exam, hash: null}]);
 	});
 
@@ -62,9 +62,9 @@ describe("the mutation step", () => {
 		);
 	});
 
-	describe("a yes to a skip-list edit holds for its contents at the head only", () => {
-		const file = "skip-list.ts";
-		/** The diff touches the skip list; `added` is what it adds, `contents` how the file reads after. */
+	describe("an approval of an ignorer edit holds for its contents at the head only", () => {
+		const file = "ignorer.ts";
+		/** The diff touches the ignorer; `added` is what it adds, `contents` how the file reads after. */
 		const edit = (contents: string, added: readonly string[]) => ({
 			...SCOPE,
 			diff: {files: [file], added: added.map((text, i) => ({file, line: i + 1, text}))},
@@ -78,7 +78,7 @@ describe("the mutation step", () => {
 			return over.phase === "over" && nameOf(over.outcome);
 		};
 
-		it("runs on the contents the owner said yes to", () => {
+		it("runs on the contents the owner approved", () => {
 			expect(name(approved)).toBe("done");
 		});
 
@@ -99,7 +99,7 @@ describe("the mutation step", () => {
 		});
 	});
 
-	it("runs once the owner said yes to the change, even after the line moved", () => {
+	it("runs once the owner approved the change, even after the line moved", () => {
 		const added = {file: "src/clamp.ts", line: 11, text: DISABLE};
 		const scope = {...SCOPE, diff: {...SCOPE.diff, added: [...SCOPE.diff.added, added]}};
 		const allowed = [
@@ -133,7 +133,7 @@ describe("the mutation step", () => {
 
 	it("asks again for what was in flight after a restart, and ends the same", () => {
 		for (const restartAt of ["reading", "testing", "mutating"] as const) {
-			const {over, cmds} = drive({run: ONE_LIVED, restartAt});
+			const {over, cmds} = drive({run: ONE_SURVIVED, restartAt});
 			expect(over.phase === "over" && nameOf(over.outcome)).toBe(
 				"send:test_writer:mutant_survived",
 			);

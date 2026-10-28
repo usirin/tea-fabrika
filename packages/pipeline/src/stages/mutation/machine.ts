@@ -17,25 +17,25 @@ import {Ran, RunAsk} from "./services.ts";
 //   testing    the repo's own tests at the head, first: a mutant is graded on
 //              what they miss, so they must pass. A Check that runs code
 //   mutating   StrykerJS over those lines, a fixed-seed sample of at most
-//              `most`, the skip list left out, each mutant that lives
-//              typechecked and counted only if the typecheck takes it. A
-//              Check that runs code
+//              `most`, the ignorer's mutants left out, each mutant that
+//              survives typechecked and counted only if the typecheck takes
+//              it. A Check that runs code
 //   over       the outcome, and the report it was worked out from
 //
-// Every mutant that lives blocks the pull request and goes to the test
+// Every mutant that survives blocks the pull request and goes to the test
 // writer's mutants job (`send:test_writer:mutant_survived`), whether a
 // Property is about its line or not. The machine writes nothing.
 
 const Unknown = ["unknown"] as const;
 
-/** One run, as asked. `allowed`: the changes to the exam the owner said yes to. `most`: the sample's size. */
+/** One run, as asked. `allowed`: the changes to the exam with the owner's approval. `most`: the sample's size. */
 export const MutationAsk = Schema.Struct({
 	ticket: Schema.String,
 	base: Schema.String,
 	head: Schema.String,
 	/** The code of each kept Property: its lines are mutated too. */
 	kept: Schema.Array(CodeRef),
-	/** The files that are part of the exam, such as the skip list. A diff that touches one asks the owner. */
+	/** The files that are part of the exam, such as the ignorer. A diff that touches one asks the owner. */
 	exam: Schema.Array(Schema.String),
 	allowed: Schema.Array(Change),
 	seed: Schema.Int,
@@ -44,7 +44,7 @@ export const MutationAsk = Schema.Struct({
 export type MutationAsk = typeof MutationAsk.Type;
 
 /** About 150 mutants at most, as experiments 121 and 139 sampled. */
-export const MOST = 150;
+export const MAX_MUTANTS = 150;
 
 const ScopeIn = Schema.Struct({
 	base: Schema.String,
@@ -121,9 +121,9 @@ const end = (s: Held, outcome: MutationOutcome, report: Partial<MutationReport> 
 	[],
 ];
 
-/** The outcome of a run that came back: every mutant killed, or each one that lived goes to the writer. */
+/** The outcome of a run that came back: every mutant killed, or each one that survived goes to the writer. */
 export const outcomeOf = (ran: Ran): MutationOutcome =>
-	ran.lived.length === 0
+	ran.survived.length === 0
 		? {kind: "done", part: false}
 		: {kind: "send", to: "test_writer", why: "mutant_survived"};
 

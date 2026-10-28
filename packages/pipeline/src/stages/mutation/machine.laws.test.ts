@@ -21,7 +21,7 @@ import {
 	runTests,
 } from "./machine.ts";
 import {changesOf, unapproved} from "./scope.ts";
-import {ASK, HEAD, LIVED, SCOPE} from "./scripted.ts";
+import {ASK, HEAD, SCOPE, SURVIVED} from "./scripted.ts";
 import type {Ran} from "./services.ts";
 
 // The mutation step's laws, on tea's own property tests (`@demlik/tea/pbt`).
@@ -39,32 +39,32 @@ const DISABLE = {
 	text: "// Stryker disable next-line all: no test can tell",
 };
 const EXAM = {...SCOPE.diff, files: [...SCOPE.diff.files, ...ASK.exam]};
-/** The skip list as the owner said yes to it, and as it reads after another edit. */
-const SAID_YES = ASK.exam.map((file) => ({file, hash: "0a1b2c3d4e5f"}));
+/** The ignorer as the owner approved it, and as it reads after another edit. */
+const APPROVED = ASK.exam.map((file) => ({file, hash: "0a1b2c3d4e5f"}));
 const EDITED = ASK.exam.map((file) => ({file, hash: "f5e4d3c2b1a0"}));
-/** A diff as it comes: clean, with a disable comment, touching the skip list, or with no source line. */
+/** A diff as it comes: clean, with a disable comment, touching the ignorer, or with no source line. */
 const scopes = fc.constantFrom(
 	SCOPE,
 	{...SCOPE, diff: {...SCOPE.diff, added: [...SCOPE.diff.added, DISABLE]}},
 	{...SCOPE, diff: EXAM},
-	{...SCOPE, diff: EXAM, exam: SAID_YES},
+	{...SCOPE, diff: EXAM, exam: APPROVED},
 	{...SCOPE, diff: EXAM, exam: EDITED},
 	{diff: {files: ["README.md"], added: []}, kept: [], exam: []},
 );
-/** A run with none, one or two mutants that lived, each as often. */
+/** A run with none, one or two mutants that survived, each as often. */
 const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	found: 5,
 	ran: 5,
-	skipped: 0,
-	refused: 1,
+	ignored: 0,
+	compileErrors: 1,
 	killed: 4 - n,
-	lived: Array.from({length: n}, () => LIVED),
+	survived: Array.from({length: n}, () => SURVIVED),
 }));
-/** A start that allows the disable comment, the skip list as it was said yes to, or nothing. */
+/** A start that allows the disable comment, the ignorer as it was approved, or nothing. */
 const asks = fc.constantFrom(
 	ASK,
 	{...ASK, allowed: [{kind: "disable" as const, ...DISABLE}]},
-	{...ASK, allowed: SAID_YES.map((s) => ({kind: "exam" as const, ...s}))},
+	{...ASK, allowed: APPROVED.map((s) => ({kind: "exam" as const, ...s}))},
 );
 
 const SCOPE_CMD = readScope({base: ASK.base, head: HEAD, kept: ASK.kept, exam: ASK.exam});
@@ -110,15 +110,15 @@ const whole = (law: TraceLaw) => (steps: readonly MutationStep[]) => law(steps) 
 const overForGood: Law = ({prev, next, cmds}) =>
 	prev.phase === "over" && (next !== prev || cmds.length > 0) ? "an over state moved" : null;
 
-/** It ends `done` only when Stryker ran and nothing lived, and every mutant that lives is sent on. */
-const nothingLivesQuietly: Law = ({prev, next}) => {
+/** It ends `done` only when Stryker ran and nothing survived, and every mutant that survives is sent on. */
+const nothingSurvivesQuietly: Law = ({prev, next}) => {
 	if (prev.phase === "over" || next.phase !== "over") return null;
 	const {outcome, report} = next;
-	const lived = report.ran?.lived.length ?? 0;
-	if (outcome.kind === "done" && (report.ran === null || lived > 0))
+	const survived = report.ran?.survived.length ?? 0;
+	if (outcome.kind === "done" && (report.ran === null || survived > 0))
 		return "done without a clean run";
-	if (lived > 0 && outcome.kind !== "send") return "a mutant lived and was not sent on";
-	if (outcome.kind === "send" && lived === 0) return "sent with no mutant";
+	if (survived > 0 && outcome.kind !== "send") return "a mutant survived and was not sent on";
+	if (outcome.kind === "send" && survived === 0) return "sent with no mutant";
 	return null;
 };
 
@@ -155,7 +155,7 @@ const checkWhole = (machine: Machine, law: TraceLaw) =>
 
 describe("the mutation step's laws", () => {
 	it("hold on the real machine", () => {
-		for (const law of [overForGood, nothingLivesQuietly, testsFirst, kept])
+		for (const law of [overForGood, nothingSurvivesQuietly, testsFirst, kept])
 			checkEach(mutation, law);
 		checkWhole(mutation, examIsTheOwners);
 	});
@@ -177,7 +177,7 @@ describe("each law is seen to fail on a planted mistake", () => {
 		expect(() => checkEach(restarts, overForGood)).toThrow();
 	});
 
-	it("a run with a mutant that lived, taken as done", () => {
+	it("a run with a mutant that survived, taken as done", () => {
 		const quiet = plant({
 			mutation_run_ok: (s, m) =>
 				s.phase === "mutating"
@@ -192,10 +192,16 @@ describe("each law is seen to fail on a planted mistake", () => {
 						]
 					: [s, []],
 		});
-		expect(() => checkEach(quiet, nothingLivesQuietly)).toThrow();
-		expect(
-			outcomeOf({found: 1, ran: 1, skipped: 0, refused: 0, killed: 0, lived: [LIVED]}).kind,
-		).toBe("send");
+		expect(() => checkEach(quiet, nothingSurvivesQuietly)).toThrow();
+		const one: Ran = {
+			found: 1,
+			ran: 1,
+			ignored: 0,
+			compileErrors: 0,
+			killed: 0,
+			survived: [SURVIVED],
+		};
+		expect(outcomeOf(one).kind).toBe("send");
 	});
 
 	it("Stryker started on red tests", () => {

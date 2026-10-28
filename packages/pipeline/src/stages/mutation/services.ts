@@ -1,6 +1,6 @@
 import {Context, type Effect, Schema} from "effect";
 import type {Result} from "../../controls.ts";
-import {Lived} from "./mutant.ts";
+import {Survived} from "./mutant.ts";
 import {type CodeRef, type Scope, Span} from "./scope.ts";
 
 // The two services the mutation step's Cmds talk to. The machine names
@@ -16,18 +16,18 @@ export const RunAsk = Schema.Struct({
 });
 export type RunAsk = typeof RunAsk.Type;
 
-/** What one run found, by count, and each mutant that lived. */
+/** What one run found, by count, and each mutant that survived. Named after Stryker's statuses. */
 export const Ran = Schema.Struct({
-	/** The mutants made on the lines, less the ones the skip list took out. */
+	/** The mutants made on the lines, less the ones the ignorer took out. */
 	found: Schema.Int,
 	/** How many of them it ran: all of them, or a sample of `most`. */
 	ran: Schema.Int,
-	/** Taken out by the skip list (./skip-list.ts). */
-	skipped: Schema.Int,
-	/** No test failed on them, but the typecheck refuses them: not counted. */
-	refused: Schema.Int,
+	/** Taken out by the ignorer (./ignorer.ts): Stryker's `Ignored`. */
+	ignored: Schema.Int,
+	/** No test failed on them, but the typecheck rejects them: Stryker's `CompileError`, not counted. */
+	compileErrors: Schema.Int,
 	killed: Schema.Int,
-	lived: Schema.Array(Lived),
+	survived: Schema.Array(Survived),
 });
 export type Ran = typeof Ran.Type;
 

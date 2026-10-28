@@ -1,13 +1,13 @@
-// The mutation step's skip list (docs/direction/promises-in-the-pipeline.md):
+// The mutation step's ignorer (docs/direction/promises-in-the-pipeline.md):
 // kinds of mutant that make no useful test. Google calls them arid nodes
 // (https://arxiv.org/abs/2102.11378). It is one rule, experiment 124's, fixed
-// before any agent ran: skip every mutant inside the text of an error or a
+// before any agent ran: ignore every mutant inside the text of an error or a
 // log line. That is any argument of `new <Name>Error(...)`, of
 // `<Name>Error(...)`, of `super(...)` in a class that extends `<Name>Error`,
 // or of `console.<any>(...)`.
 //
-// The list is part of the exam. A diff that changes this file asks the owner
-// (`exam` in ./scope.ts).
+// The ignorer is part of the exam. A diff that changes this file asks the
+// owner (`exam` in ./scope.ts).
 //
 // It is a Stryker ignorer plugin, loaded by path: Stryker imports this file
 // as it is, so it imports nothing. The node types are written out here, as
@@ -34,7 +34,7 @@ export interface Path {
 }
 
 /** The ignorer's name, as a Stryker config names it. */
-export const SKIP = "arid";
+export const IGNORER = "arid";
 
 const endsError = (node: Node | null | undefined) =>
 	node != null && node.type === "Identifier" && /Error$/.test(node.name ?? "");
@@ -58,14 +58,14 @@ function why(call: Path): "error text" | "log text" | undefined {
 	return undefined;
 }
 
-/** The rule: a reason to skip the node and everything under it, or `undefined` to keep it. */
+/** The rule: a reason to ignore the node and everything under it, or `undefined` to keep it. */
 export function shouldIgnore(path: Path): string | undefined {
 	const parent = path.parentPath;
 	if (parent === null || path.listKey !== "arguments") return undefined;
 	if (!parent.isCallExpression() && !parent.isNewExpression()) return undefined;
 	const found = why(parent);
-	return found === undefined ? undefined : `${SKIP}: ${found}`;
+	return found === undefined ? undefined : `${IGNORER}: ${found}`;
 }
 
 /** What Stryker reads from a plugin file. */
-export const strykerPlugins = [{kind: "Ignore", name: SKIP, value: {shouldIgnore}}];
+export const strykerPlugins = [{kind: "Ignore", name: IGNORER, value: {shouldIgnore}}];

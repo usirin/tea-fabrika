@@ -8,8 +8,8 @@ import {strykerRunner} from "./stryker.ts";
 
 // A tool that never starts, on the runner over the fixture. Only the child
 // process is faked: the runner still lists real mutants with Stryker's
-// instrumenter, reads the report and puts each mutant that lived in for the
-// typecheck. The fake Stryker reports one mutant that lived.
+// instrumenter, reads the report and puts each mutant that survived in for
+// the typecheck. The fake Stryker reports one mutant that survived.
 
 const FIXTURE = fileURLToPath(new URL("../../../../../fixtures/mutation", import.meta.url));
 const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
@@ -65,7 +65,7 @@ const inCopy = <A, E>(
 const SPANS = [{file: "clamp.ts", from: 12, to: 12}];
 
 describe("a tool that never starts", () => {
-	it("fails the run when the typecheck tool is missing, so no mutant is counted as refused", async () => {
+	it("fails the run when the typecheck tool is missing, so no mutant is counted as a compile error", async () => {
 		const ran = await inCopy({tests: ["vitest"], typecheck: [MISSING]}, (runner) =>
 			runner.run({head: "h", spans: SPANS, seed: 5, most: 150}).pipe(Effect.flip),
 		);

@@ -1,15 +1,15 @@
 import {describe, expect, it} from "vitest";
 import {mutantsWriter} from "../test-writer/brief.ts";
 import {answeredProblems} from "../test-writer/mutants.ts";
-import {idOf, type Lived} from "./mutant.ts";
+import {idOf, type Survived} from "./mutant.ts";
 
 // A mutant's id: the writer answers each mutant by it, so two mutants must
 // never share one.
 
 const at = {file: "clamp.ts", line: 12, column: 6};
 
-/** Two mutants Stryker makes at one place in the fixture, both of which live. */
-const two: readonly Lived[] = [
+/** Two mutants Stryker makes at one place in the fixture, both of which survive. */
+const two: readonly Survived[] = [
 	{
 		mutant: idOf({...at, mutator: "ConditionalExpression", replacement: "false"}),
 		mutator: "ConditionalExpression",
@@ -36,7 +36,7 @@ describe("a mutant's id", () => {
 		const brief = mutantsWriter.fill({
 			ticket: "t",
 			head: "h",
-			lived: two,
+			survived: two,
 			includes: ["**/*.test.ts"],
 			taken: [],
 		});

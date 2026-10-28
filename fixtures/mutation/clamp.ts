@@ -1,7 +1,7 @@
 // The mutation step's toy repository (packages/pipeline/src/stages/mutation).
 // Its test is weak on purpose: nothing checks a number above `high`, so a
-// mutant of that line lives. `unit` is there for a mutant the typecheck
-// refuses, and the error text for one the skip list takes out.
+// mutant of that line survives. `unit` is there for a mutant the typecheck
+// rejects (a compile error), and the error text for one the ignorer takes out.
 
 export type Unit = "n";
 

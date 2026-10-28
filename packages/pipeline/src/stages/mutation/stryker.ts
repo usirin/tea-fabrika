@@ -5,30 +5,30 @@ import {Instrumenter} from "@stryker-mutator/instrumenter";
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild} from "../../child.ts";
-import {idOf, type Lived} from "./mutant.ts";
+import {IGNORER, shouldIgnore} from "./ignorer.ts";
+import {idOf, type Survived} from "./mutant.ts";
 import type {Span} from "./scope.ts";
 import {type CouldNotRun, MutationRunner, type Ran, type RunAsk} from "./services.ts";
-import {SKIP, shouldIgnore} from "./skip-list.ts";
 
 // `MutationRunner` on StrykerJS (10.1.1, experiment 124's), its vitest
-// runner with per-test coverage, and the skip list as its ignorer plugin.
+// runner with per-test coverage, and ./ignorer.ts as its ignorer plugin.
 // One run:
 //
 //   list       Stryker's own instrumenter makes every mutant on the lines,
-//              the skip list taking some out. Nothing runs yet
+//              the ignorer taking some out. Nothing runs yet
 //   sample     at most `most` of them, drawn with `seed`: the same on every
 //              run (experiments 121 and 139 drew 150 the same way)
 //   run        Stryker, on those mutants only, against the repo's own tests
 //   typecheck  each mutant no test killed, put in alone, then the repo's own
-//              typecheck. One it refuses is not counted: no build could ship
-//              it. A killed one is not typechecked, so the killed count may
-//              hold a few the typecheck would refuse
+//              typecheck. One it rejects is a compile error, not counted: no
+//              build could ship it. A killed one is not typechecked, so the
+//              killed count may hold a few the typecheck would reject
 //
 // Stryker's own TypeScript checker reads TypeScript's JavaScript API, which
 // TypeScript 7 does not have, so the typecheck is the repo's own command.
 // Each command runs under `nice -n 15`, with `runEnv`: no login in reach.
 // A command that never starts, such as a typecheck tool that is not there,
-// fails the whole run: it is never read as a typecheck that refused.
+// fails the whole run: it is never read as a compile error.
 // The folder is the run's own copy of the head: Stryker works in a sandbox
 // copy of it, and the typecheck step puts each file back as it found it.
 
@@ -202,9 +202,9 @@ const services = (setup: StrykerSetup) =>
 			"stryker.js",
 		);
 		const runner = pathOf("@stryker-mutator/vitest-runner");
-		const skipList = fileURLToPath(new URL("./skip-list.ts", import.meta.url));
+		const ignorer = fileURLToPath(new URL("./ignorer.ts", import.meta.url));
 
-		/** Every mutant Stryker makes on `spans`, the skip list's marked `Ignored`. */
+		/** Every mutant Stryker makes on `spans`, the ignorer's marked `Ignored`. */
 		const list = (folder: string, spans: readonly Span[]) =>
 			Effect.gen(function* () {
 				const files = [...new Set(spans.map((s) => s.file))];
@@ -250,8 +250,8 @@ const services = (setup: StrykerSetup) =>
 						JSON.stringify({
 							testRunner: "vitest",
 							...(setup.vitest === undefined ? {} : {vitest: {configFile: setup.vitest}}),
-							plugins: [runner, skipList],
-							ignorers: [SKIP],
+							plugins: [runner, ignorer],
+							ignorers: [IGNORER],
 							coverageAnalysis: "perTest",
 							mutate,
 							concurrency: setup.concurrency ?? 2,
@@ -289,9 +289,16 @@ const services = (setup: StrykerSetup) =>
 				const folder = yield* fs.realPath(setup.folder(ask.head));
 				const made = yield* list(folder, ask.spans);
 				const kept = made.filter((m) => m.status !== "Ignored");
-				const skipped = made.length - kept.length;
+				const ignored = made.length - kept.length;
 				const picked = sampleOf(kept, ask.seed, ask.most);
-				const none: Ran = {found: kept.length, ran: 0, skipped, refused: 0, killed: 0, lived: []};
+				const none: Ran = {
+					found: kept.length,
+					ran: 0,
+					ignored,
+					compileErrors: 0,
+					killed: 0,
+					survived: [],
+				};
 				if (picked.length === 0) return none;
 				const mutate =
 					picked.length === kept.length
@@ -300,8 +307,8 @@ const services = (setup: StrykerSetup) =>
 				const report = yield* strykerRun(folder, mutate);
 				const wanted = new Set(picked.map((m) => madeId(folder, m)));
 				let killed = 0;
-				let refused = 0;
-				const lived: Lived[] = [];
+				let compileErrors = 0;
+				const survived: Survived[] = [];
 				for (const [name, entry] of Object.entries(report.files)) {
 					const file = relative(folder, name);
 					for (const m of entry.mutants) {
@@ -310,12 +317,12 @@ const services = (setup: StrykerSetup) =>
 						const id = idOf({file, line, column, mutator: m.mutatorName, replacement});
 						if (!wanted.has(id)) continue;
 						if (KILLED.has(m.status)) killed++;
-						else if (!UNCAUGHT.has(m.status)) refused++;
+						else if (!UNCAUGHT.has(m.status)) compileErrors++;
 						else {
 							const said = yield* takes(folder, file, m);
-							if (!said.takes) refused++;
+							if (!said.takes) compileErrors++;
 							else
-								lived.push({
+								survived.push({
 									mutant: id,
 									mutator: m.mutatorName,
 									original: said.original,
@@ -324,7 +331,7 @@ const services = (setup: StrykerSetup) =>
 						}
 					}
 				}
-				return {...none, ran: picked.length, refused, killed, lived};
+				return {...none, ran: picked.length, compileErrors, killed, survived};
 			}).pipe(Effect.catch(() => couldNotRun));
 
 		const tests = (head: string) =>
