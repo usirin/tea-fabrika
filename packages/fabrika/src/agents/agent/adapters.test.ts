@@ -8,7 +8,7 @@ import {Effect, PlatformError, Schema, Stream} from "effect";
 import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {codexHomeOf} from "../acp/harness.ts";
+import {codexHomeOf, codexSystem} from "../acp/harness.ts";
 import {type ClaudeAdapterConfig, claudeAdapter, type More, rawOf} from "../claude/adapter.ts";
 import {type DraftRun, type Open, openLive} from "../claude/draft.ts";
 import {AGENTS_MD} from "../claude/rules.ts";
@@ -422,8 +422,10 @@ describe("codex: the system prompt", () => {
 		const text = "You sort one ticket.\nNo tools.";
 		const {flags, home} = await startedWith({_tag: "own", text: Words.make(text)});
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
-		expect(named).toEqual([`model_instructions_file=${JSON.stringify(`${home}/system.md`)}`]);
-		expect(readFileSync(`${home}/system.md`, "utf8")).toBe(text);
+		const file = codexSystem({_tag: "own", text: Words.make(text)}, home).file?.path ?? "";
+		expect(file.startsWith(`${home}/system-`)).toBe(true);
+		expect(named).toEqual([`model_instructions_file=${JSON.stringify(file)}`]);
+		expect(readFileSync(file, "utf8")).toBe(text);
 	});
 });
 

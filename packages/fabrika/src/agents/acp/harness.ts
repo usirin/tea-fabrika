@@ -244,6 +244,12 @@ export const claudeSystem = (system: System) =>
  * instructions; `model_instructions_file` replaces them, and is read from a
  * file (Codex's config reference). The file goes in Codex's own home, which
  * the agent's commands can neither read nor write (`codexConfig`).
+ *
+ * The file is named by a hash of its text. A home can be shared: ACP's is one
+ * per folder, so two sessions on one folder have one home. With one fixed
+ * name, the second session's prompt would overwrite the first's before the
+ * first Codex read it. Named by its text, a file only ever holds that text,
+ * so no session can change another's prompt.
  */
 export const codexSystem = (
 	system: System,
@@ -251,21 +257,27 @@ export const codexSystem = (
 ): {
 	readonly config: Readonly<Record<string, string>>;
 	readonly file: {readonly path: string; readonly text: string} | null;
-} =>
-	system._tag === "maker"
-		? {config: {developer_instructions: system.add}, file: null}
-		: {
-				config: {model_instructions_file: `${home}/system.md`},
-				file: {path: `${home}/system.md`, text: system.text},
-			};
+} => {
+	if (system._tag === "maker") return {config: {developer_instructions: system.add}, file: null};
+	const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
+	return {config: {model_instructions_file: path}, file: {path, text: system.text}};
+};
 
-/** Write the file `codexSystem` names, if it names one, before Codex starts. */
+/**
+ * Write the file `codexSystem` names, if it names one, before Codex starts.
+ * It goes to a fresh file first and is then renamed into place, so a Codex
+ * reading the name sees the whole text or no file, never half of it.
+ */
 export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
 	Effect.gen(function* () {
 		if (file === null) return;
 		const fs = yield* FileSystem.FileSystem;
-		yield* fs.writeFileString(file.path, file.text, {mode: 0o600}).pipe(Effect.mapError(String));
-	});
+		const dir = file.path.slice(0, file.path.lastIndexOf("/"));
+		const fresh = yield* fs.makeTempFile({directory: dir, prefix: ".system-"});
+		yield* fs.writeFileString(fresh, file.text, {mode: 0o600});
+		yield* fs.chmod(fresh, 0o600);
+		yield* fs.rename(fresh, file.path);
+	}).pipe(Effect.mapError(String));
 
 /**
  * A row, told a turn's system prompt. ACP has no system prompt field, so each

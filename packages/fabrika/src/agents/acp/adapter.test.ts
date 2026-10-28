@@ -60,10 +60,35 @@ describe("codex's row", () => {
 
 	it("names a file of the stage's own text as Codex's instructions, written before it starts", async () => {
 		const {h, codex, config} = told(OWN);
-		expect(config.model_instructions_file).toBe(`${codex}/system.md`);
+		const file = String(config.model_instructions_file);
+		expect(file.startsWith(`${codex}/system-`)).toBe(true);
 		expect(config.developer_instructions).toBeUndefined();
 		await Effect.runPromise((h.prepare ?? Effect.void).pipe(Effect.provide(nodeServices)));
-		expect(readFileSync(`${codex}/system.md`, "utf8")).toBe(TEXT);
+		expect(readFileSync(file, "utf8")).toBe(TEXT);
+	});
+
+	it("keeps the first session's prompt when a second session on the same folder prepares", async () => {
+		const {parent, folder} = madeUp();
+		const tell = (text: string) =>
+			withSystem(
+				harnessOf("codex", folder, null, parent),
+				{_tag: "own", text: Words.make(text)},
+				folder,
+				parent,
+			);
+		const prepare = (h: ReturnType<typeof tell>) =>
+			Effect.runPromise((h.prepare ?? Effect.void).pipe(Effect.provide(nodeServices)));
+		const reviewer = tell("You only review. Never edit.");
+		const builder = tell("You build. Edit the code.");
+		await prepare(reviewer);
+		// The reviewer's Codex has started but not yet read its file.
+		await prepare(builder);
+		const fileOf = (h: ReturnType<typeof tell>) =>
+			String(
+				(JSON.parse(h.env.CODEX_CONFIG ?? "{}") as Record<string, unknown>).model_instructions_file,
+			);
+		expect(readFileSync(fileOf(reviewer), "utf8")).toBe("You only review. Never edit.");
+		expect(readFileSync(fileOf(builder), "utf8")).toBe("You build. Edit the code.");
 	});
 });
 
