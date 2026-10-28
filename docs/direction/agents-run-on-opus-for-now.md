@@ -2,6 +2,11 @@
 
 Decided 2026-10-24 by the owner.
 
+*Replaced 2026-10-27 for every stage but triage:* stage agents run on GPT sol
+through Codex, and opus stays for the main session
+([stage agents run on GPT sol through Codex](./agents-run-on-codex.md)).
+Triage stays here until experiment 159 answers.
+
 ```ts
 // Sketch: who runs on what today.
 const today = {
