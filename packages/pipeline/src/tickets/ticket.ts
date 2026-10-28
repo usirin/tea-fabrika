@@ -111,8 +111,12 @@ export const TicketFact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("reopened")}),
 ]);
 
-/** The nine a lane works with: what code, a stage, the watcher and the person in its box write. */
-export const LaneFact = Schema.Union([
+/**
+ * The lane facts code writes, through `Tickets.write`: every one but a person's `answered` and
+ * `rated`. A lane cannot even spell an answer to its own ask, and `Tickets.write` checks it again
+ * at run time, so a cast one is refused too.
+ */
+export const CodeFact = Schema.Union([
 	/** Code started an agent run. `log`: where its own log is, once there is one. */
 	Schema.Struct({
 		type: Schema.Literal("started"),
@@ -167,6 +171,11 @@ export const LaneFact = Schema.Union([
 		what: Title,
 		picks: Schema.NonEmptyArray(Title),
 	}),
+]);
+export type CodeFact = typeof CodeFact.Type;
+
+/** The two a person writes in the window, never code. */
+export const PersonFact = Schema.Union([
 	/**
 	 * A person answered an ask: one of its picks, and a note if they wrote one. Never an agent.
 	 * `text`: the hash of the ticket's title and body the person saw (./yes.ts), so a yes covers
@@ -186,17 +195,14 @@ export const LaneFact = Schema.Union([
 		says: Schema.Literals(["fix", "noise"]),
 	}),
 ]);
+
+/** The nine a lane works with: what code, a stage, the watcher and the person in its box write. */
+export const LaneFact = Schema.Union([...CodeFact.members, ...PersonFact.members]);
 export type LaneFact = typeof LaneFact.Type;
 
 /** What happened to a ticket. The first fact of every ticket is `filed`, and only the first. */
 export const Fact = Schema.Union([...TicketFact.members, ...LaneFact.members]);
 export type Fact = typeof Fact.Type;
-
-/**
- * The lane facts code writes, through `Tickets.write`: every one but a person's `answered` and
- * `rated`. A lane cannot even spell an answer to its own ask.
- */
-export type CodeFact = Exclude<LaneFact, {readonly type: "answered" | "rated"}>;
 
 /** One kind of fact, by its `type`. */
 export type FactOf<T extends Fact["type"]> = Extract<Fact, {readonly type: T}>;

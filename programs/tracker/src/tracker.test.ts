@@ -161,7 +161,7 @@ describe("the tracker", () => {
 				// The pipeline's side: no tracker code, only the service a lane writes through.
 				yield* Effect.gen(function* () {
 					const tickets = yield* Tickets;
-					yield* tickets.write(1, {
+					yield* tickets.write(1, "r-1/started", {
 						type: "started",
 						run: "r-1",
 						stage: "triage",

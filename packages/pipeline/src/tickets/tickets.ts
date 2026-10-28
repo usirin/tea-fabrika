@@ -1,23 +1,29 @@
 import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika";
 import {Clock, Context, Effect, Layer, Ref, Schema} from "effect";
-import {type CodeFact, type Entry, Fact, fold, nameOf, readRow, type Ticket} from "./ticket.ts";
-import {sha256} from "./yes.ts";
+import {CodeFact, type Entry, type Fact, fold, nameOf, readRow, type Ticket} from "./ticket.ts";
 
 /** A ticket's number, as the tracker counts them from 1. */
 type TicketNumber = number;
+
+/**
+ * A write's own key, built by the lane from its run and its step, such as `r-1/started`. The
+ * ledger keeps one row per key on a stream, so a step tried again after a crash lands once, and a
+ * new step always lands, even when its fact reads the same as an earlier one.
+ */
+type WriteId = string;
 
 // The service the pipeline reads and writes tickets through
 // (docs/direction/a-ticket-runs-from-the-app.md, section 3). A lane writes its facts here, on the
 // stream the tracker already reads once a second, so its window shows them with no new code:
 //
 //   const tickets = yield* Tickets;
-//   yield* tickets.write(3, {type: "started", run: "r-1", stage: "triage", task: null, log: null});
+//   yield* tickets.write(3, "r-1/started", {type: "started", run: "r-1", stage: "triage", task: null, log: null});
 //   // tracker/ticket/3/inbox  {type: "started", ...}  by agent:lane; the window says "triage running"
 //   (yield* tickets.read(3)).timeline.at(-1)?.fact.type   // "started"
 //
 // Two Layers: `ticketsOnLedger`, for a host, and `ticketsInMemory`, for a test with no ledger.
-// Each writes as one writer, the host's. It takes only a `CodeFact`, so no lane writes a
-// person's `answered` or `rated`.
+// Each writes as one writer, the host's. It takes only a `CodeFact`, by its type and again at run
+// time, so no lane writes a person's `answered` or `rated`.
 //
 // Left for the slices that need them: `answers`, the Listen on a person's answer (slice 3), and
 // `tail`, every new fact on every ticket for `lanes` (slice 4).
@@ -30,6 +36,10 @@ export const Why = Schema.Literals([
 	"no_ticket",
 	/** The ledger refused the write. */
 	"refused",
+	/** The fact is not one code may write: a person's `answered` or `rated`, or a tracker fact. */
+	"not_yours",
+	/** The fact does not fit its schema, such as an `asked.what` with a newline. */
+	"bad_fact",
 ]);
 
 export class TicketsFailed extends Schema.TaggedError<TicketsFailed>()("TicketsFailed", {
@@ -45,21 +55,33 @@ export class Tickets extends Context.Service<
 		/** The ticket, folded from every fact on it, oldest first. */
 		readonly read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>;
 		/**
-		 * One fact on the ticket, as the host's writer. The same fact sent twice lands once: its
-		 * message id is the hash of the fact, so a write tried again after a crash is not a second
-		 * row.
+		 * One fact on the ticket, as the host's writer, under the lane's own key `id`. The same
+		 * `id` sent twice lands once; a new `id` always lands.
 		 */
-		readonly write: (n: TicketNumber, fact: CodeFact) => Effect.Effect<void, TicketsFailed>;
+		readonly write: (
+			n: TicketNumber,
+			id: WriteId,
+			fact: CodeFact,
+		) => Effect.Effect<void, TicketsFailed>;
 	}
 >()("Tickets") {}
 
-const encode = Schema.encodeSync(Fact);
-
-/** A fact's message id: the hash of its JSON, as the schema spells it. */
-const idOf = (fact: CodeFact): Effect.Effect<string> => sha256(JSON.stringify(encode(fact)));
-
 const failed = (ticket: number, why: typeof Why.Type, says: string) =>
 	new TicketsFailed({ticket, why, says});
+
+/** The kinds code may write, read off the `CodeFact` schema itself. */
+const codeTypes: ReadonlySet<string> = new Set(CodeFact.members.map((m) => m.fields.type.literal));
+
+const encodeCode = Schema.encodeUnknownEffect(CodeFact);
+
+/**
+ * `fact` as the ledger keeps it, checked at run time: a kind code may not write is `not_yours`,
+ * even one cast past the type, and a fact that fails its schema is `bad_fact`.
+ */
+const checked = (n: number, fact: CodeFact) =>
+	codeTypes.has(fact.type)
+		? encodeCode(fact).pipe(Effect.mapError((e) => failed(n, "bad_fact", e.message)))
+		: Effect.fail(failed(n, "not_yours", `code may not write a ${fact.type} fact`));
 
 /** The one ticket `n` in a fold, or `no_ticket`. */
 const ticketIn = (n: number, entries: readonly Entry[]) => {
@@ -89,13 +111,13 @@ export const ticketsOnLedger = (writer: Writer): Layer.Layer<Tickets, never, Led
 							),
 						),
 					),
-				write: (n, fact) =>
+				write: (n, id, fact) =>
 					Effect.gen(function* () {
-						const id = yield* idOf(fact);
+						const data = yield* checked(n, fact);
 						yield* ledger.send(streams(nameOf(n)).inbox, id, {
 							kind: fact.type,
 							writer: writerText(writer),
-							data: encode(fact),
+							data,
 						});
 					}).pipe(
 						Effect.catchTags({
@@ -140,15 +162,16 @@ export const ticketsInMemory = (
 							all.filter((e) => e.ticket === n),
 						),
 					),
-				write: (n, fact) =>
+				write: (n, id, fact) =>
 					Effect.gen(function* () {
+						yield* checked(n, fact);
 						const all = yield* Ref.get(entries);
 						if (!all.some((e) => e.ticket === n && e.fact.type === "filed"))
 							return yield* Effect.fail(failed(n, "no_ticket", `no ticket #${n} in memory`));
-						const id = `${n}/${yield* idOf(fact)}`;
-						if ((yield* Ref.get(ids)).has(id)) return;
+						const key = `${n}/${id}`;
+						if ((yield* Ref.get(ids)).has(key)) return;
 						const at = yield* Clock.currentTimeMillis;
-						yield* Ref.update(ids, (s) => new Set([...s, id]));
+						yield* Ref.update(ids, (s) => new Set([...s, key]));
 						yield* Ref.update(entries, (es) => [
 							...es,
 							{pos: es.length + 1, ticket: n, by: writer, at, fact},
