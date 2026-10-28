@@ -1,6 +1,6 @@
 import {Writer} from "@kampus/fabrika";
+import {type Entry, factsOf, Id, Stage, Title} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {type Entry, factsOf, Id, Stage, Title} from "./ticket.ts";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
 // One of seven things, the first that fits, in this order:

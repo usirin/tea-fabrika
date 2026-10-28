@@ -1,23 +1,34 @@
+import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {Effect, Schema, Stream} from "effect";
+import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {Effect, PlatformError, Schema, Stream} from "effect";
+import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {type ClaudeAdapterConfig, claudeAdapter, rawOf} from "../claude/adapter.ts";
+import {codexHomeOf, codexSystem} from "../acp/harness.ts";
+import {
+	type ClaudeAdapterConfig,
+	claudeAdapter,
+	type ExtraOptions,
+	rawOf,
+} from "../claude/adapter.ts";
 import {type DraftRun, type Open, openLive} from "../claude/draft.ts";
 import {AGENTS_MD} from "../claude/rules.ts";
 import {jsonSchema} from "../claude/schema.ts";
-import {codexEnvOf, flagsOf, rawOfLine, strictOk} from "../codex/adapter.ts";
+import {codexAdapter, codexEnvOf, flagsOf, rawOfLine, strictOk} from "../codex/adapter.ts";
 import {makeAgents} from "./core.ts";
 import {agentRunner} from "./draft.ts";
 import {fakeAdapter, saying} from "./fake.ts";
 import {under} from "./reap.ts";
 import {memorySessions} from "./sessions.ts";
-import {type AdapterTurn, NO_LIMITS, noReaper} from "./turn.ts";
+import {type AdapterTurn, NO_LIMITS, NonBlank, noReaper, type SystemPrompt} from "./turn.ts";
 
 // Each adapter's pure part: how what its maker says becomes the interface's
-// raw updates, and the containment that can be checked with no agent. No
-// test here starts an agent.
+// raw updates, the containment that can be checked with no agent, and the
+// system prompt each maker is handed. No test here starts an agent.
 
 /** An SDK message with only the fields `rawOf` reads. */
 const sdk = (m: Record<string, unknown>): SDKMessage =>
@@ -78,7 +89,12 @@ describe("claude: SDK messages", () => {
 		expect(of("error_during_execution")).toEqual({broke: "error_during_execution (error)"});
 	});
 
-	it("opens Claude Code's own system prompt, auto memory off (experiment 158)", async () => {
+	/** The options the SDK is opened with for one turn: an empty query, no agent starts. */
+	const openedWith = async (
+		system: SystemPrompt,
+		config: ClaudeAdapterConfig = {},
+		resume: string | null = null,
+	) => {
 		const opened: Options[] = [];
 		const open: Open = ({options}) => {
 			opened.push(options);
@@ -92,11 +108,12 @@ describe("claude: SDK messages", () => {
 		};
 		await Effect.runPromise(
 			Effect.scoped(
-				claudeAdapter({open}).start({
+				claudeAdapter({...config, open}).start({
 					folder: "/work/copy",
 					prompt: "p",
+					system,
 					schema: {},
-					resume: null,
+					resume,
 					session: "s",
 					model: null,
 					effort: null,
@@ -104,14 +121,105 @@ describe("claude: SDK messages", () => {
 				}),
 			),
 		);
+		return opened[0];
+	};
+
+	it("opens Claude Code's own system prompt with the stage's line appended, auto memory off (experiment 158)", async () => {
+		const options = await openedWith({_tag: "append", text: "You plan; you change no file."});
 		// With no system prompt named, the SDK sends an empty one: the agent gets no instructions.
-		expect(opened[0]?.systemPrompt).toEqual({type: "preset", preset: "claude_code"});
+		expect(options?.systemPrompt).toEqual({
+			type: "preset",
+			preset: "claude_code",
+			append: "You plan; you change no file.",
+			snapshot: false,
+		});
 		// The preset asks for a memory folder under ~/.claude, outside any copy a run is given.
-		expect(opened[0]?.settings).toEqual({
+		expect(options?.settings).toEqual({
 			disableClaudeAiConnectors: true,
 			autoMemoryEnabled: false,
 			pluginConfigs: AGENTS_MD,
 		});
+	});
+
+	it("opens the stage's own text alone as the whole system prompt", async () => {
+		const text = "You sort one ticket.\nNo tools.";
+		expect((await openedWith({_tag: "replace", text: NonBlank.make(text)}))?.systemPrompt).toEqual({
+			type: "custom",
+			prompt: text,
+			snapshot: false,
+		});
+	});
+
+	it("hands a resumed turn its own prompt, not the session's first: the prompt is never recorded", async () => {
+		// The SDK records a session's first prompt by default and sends that on a resume.
+		const system: SystemPrompt = {
+			_tag: "replace",
+			text: NonBlank.make("You review; you change no file."),
+		};
+		const options = await openedWith(system, {}, "a-session");
+		expect(options?.resume).toBe("a-session");
+		expect(options?.systemPrompt).toEqual({
+			type: "custom",
+			prompt: "You review; you change no file.",
+			snapshot: false,
+		});
+	});
+
+	it("takes from a stage only the options of its allow-list, and keeps the turn's prompt", async () => {
+		const more = (): ExtraOptions => ({disallowedTools: ["WebFetch"]});
+		const options = await openedWith({_tag: "append", text: "ours"}, {more});
+		expect(options?.disallowedTools).toEqual(["WebFetch"]);
+		expect(options?.systemPrompt).toEqual({
+			type: "preset",
+			preset: "claude_code",
+			append: "ours",
+			snapshot: false,
+		});
+	});
+
+	it("lets no stage swap the prompt through another option: its type refuses it, and so does the start", async () => {
+		const configs: readonly ClaudeAdapterConfig[] = [
+			// @ts-expect-error the main thread's agent brings its own system prompt
+			{more: () => ({agent: "x", agents: {x: {description: "d", prompt: "Hi"}}})},
+			// @ts-expect-error nor may a stage define agents
+			{more: () => ({agents: {x: {description: "d", prompt: "Hi"}}})},
+			// @ts-expect-error nor hand the CLI its own flags
+			{more: () => ({extraArgs: {"system-prompt": "Hi"}})},
+			// @ts-expect-error nor name the system prompt itself
+			{more: () => ({systemPrompt: "something else"})},
+		];
+		for (const config of configs) {
+			const opened: Options[] = [];
+			const open: Open = ({options}) => {
+				opened.push(options);
+				return {
+					[Symbol.asyncIterator]: () => ({
+						next: async (): Promise<IteratorResult<SDKMessage>> => ({done: true, value: undefined}),
+					}),
+					interrupt: async () => undefined,
+					close: () => {},
+				};
+			};
+			const error = await Effect.runPromise(
+				Effect.scoped(
+					Effect.flip(
+						claudeAdapter({...config, open}).start({
+							folder: "/work/copy",
+							prompt: "p",
+							system: {_tag: "append", text: "ours"},
+							schema: {},
+							resume: null,
+							session: "s",
+							model: null,
+							effort: null,
+							usd: null,
+						}),
+					),
+				),
+			);
+			expect(error).toMatchObject({_tag: "AgentFailed", why: "contain"});
+			expect(opened).toHaveLength(0);
+		}
 	});
 });
 
@@ -119,6 +227,7 @@ describe("claude: where its settings come from", () => {
 	const TURN: AdapterTurn = {
 		folder: "/work/repo",
 		prompt: "p",
+		system: {_tag: "append", text: ""},
 		schema: {},
 		resume: null,
 		session: "s",
@@ -259,6 +368,75 @@ describe("codex: exec's JSON lines", () => {
 	});
 });
 
+describe("codex: the system prompt", () => {
+	/** A made-up home with a plan login in the shape Codex writes: no key, no real token. */
+	const madeUpHome = () => {
+		const home = realpathSync(mkdtempSync(join(tmpdir(), "codex-system-")));
+		mkdirSync(join(home, ".codex"));
+		writeFileSync(
+			join(home, ".codex", "auth.json"),
+			JSON.stringify({auth_mode: "chatgpt", OPENAI_API_KEY: null, tokens: {id_token: "x"}}),
+		);
+		return home;
+	};
+
+	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
+	const startedWith = async (system: SystemPrompt) => {
+		const home = madeUpHome();
+		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
+		const seen: ChildProcess.StandardCommand[] = [];
+		const spawner = ChildProcessSpawner.make((command) => {
+			if (command._tag === "StandardCommand") seen.push(command);
+			return Effect.fail(
+				PlatformError.systemError({_tag: "NotFound", module: "test", method: "spawn"}),
+			);
+		});
+		const why = await Effect.runPromise(
+			Effect.gen(function* () {
+				const adapter = yield* codexAdapter({codex: "/nowhere/codex", parent});
+				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
+			}).pipe(
+				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+				Effect.provide(nodeServices),
+			),
+		);
+		expect(why.why).toBe("start");
+		const command = seen[0];
+		if (command === undefined) throw new Error("codex was never started");
+		const flags = command.args.flatMap((a, i) => (command.args[i - 1] === "-c" ? [a] : []));
+		return {flags, home: codexHomeOf("session:s", parent)};
+	};
+
+	const TURN: AdapterTurn = {
+		folder: "/work/copy",
+		prompt: "p",
+		system: {_tag: "append", text: ""},
+		schema: {},
+		resume: null,
+		session: "s",
+		model: null,
+		effort: null,
+		usd: null,
+	};
+
+	it("hands the stage's line on as developer instructions, on top of Codex's own", async () => {
+		const text = 'You plan; you change no file; hand back one "PlanDraft".';
+		const {flags} = await startedWith({_tag: "append", text});
+		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
+		expect(named).toEqual([`developer_instructions=${JSON.stringify(text)}`]);
+	});
+
+	it("hands the stage's own text on as Codex's whole instructions, in a file in its own home", async () => {
+		const text = "You sort one ticket.\nNo tools.";
+		const {flags, home} = await startedWith({_tag: "replace", text: NonBlank.make(text)});
+		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
+		const file = codexSystem({_tag: "replace", text: NonBlank.make(text)}, home).file?.path ?? "";
+		expect(file.startsWith(`${home}/system-`)).toBe(true);
+		expect(named).toEqual([`model_instructions_file=${JSON.stringify(file)}`]);
+		expect(readFileSync(file, "utf8")).toBe(text);
+	});
+});
+
 describe("acp: session updates", () => {
 	it("reads tool calls by id, and an update only when it has a status", () => {
 		expect(
@@ -316,6 +494,7 @@ describe("a Draft on the interface", () => {
 			session: run.session.id,
 			folder: "/nowhere",
 			prompt: run.prompt,
+			system: {_tag: "replace", text: NonBlank.make("You take notes.")},
 			answer: Note,
 			model: null,
 			effort: null,

@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {Effect, FileSystem} from "effect";
+import type {SystemPrompt} from "../agent/turn.ts";
 import {agentEnv, type Env, runEnv} from "../claude/env.ts";
 import {fencedEnv, filesOf, TOOLS, toolchain} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
@@ -200,6 +201,8 @@ export const codexEnv = (
 	folder: string,
 	mode: (typeof CODEX_MODES)[number],
 	tools: readonly string[] = toolchain(parent),
+	/** More config on top, as a turn's system prompt (`codexSystem`). */
+	more: Readonly<Record<string, unknown>> = {},
 ): Record<string, string> => {
 	const home = codexHomeOf(folder, parent);
 	return {
@@ -209,8 +212,101 @@ export const codexEnv = (
 		CODEX_HOME: home,
 		NO_BROWSER: "1",
 		INITIAL_AGENT_MODE: mode,
-		CODEX_CONFIG: JSON.stringify(codexConfig(folder, tools, parent.HOME ?? home)),
+		CODEX_CONFIG: JSON.stringify({...codexConfig(folder, tools, parent.HOME ?? home), ...more}),
 	};
+};
+
+/** The mode the codex row runs in. */
+const CODEX_ROW_MODE = "workspace-write" satisfies (typeof CODEX_MODES)[number];
+
+// ---------------------------------------------------------------- a turn's system prompt, in each maker's way
+
+/**
+ * The Agent SDK's `systemPrompt` for a turn's: Claude Code's own preset with
+ * ours appended, or ours alone as a custom prompt (the SDK's `Options`
+ * docs). The same for the SDK adapter and for ACP's Claude row, which spreads
+ * `_meta.claudeCode.options` over its own default, the bare preset.
+ *
+ * `snapshot: false`, so a resumed turn gets its own prompt. By default the SDK
+ * records a session's first prompt and sends that record on every later
+ * request and resume, ignoring the text a later turn passes (the `systemPrompt`
+ * docs of SDK 0.3.296; 0.3.286, which ACP's row pins, has the same field).
+ * Codex exec takes the turn's on every turn already.
+ */
+export const claudeSystem = (system: SystemPrompt) =>
+	system._tag === "append"
+		? ({type: "preset", preset: "claude_code", append: system.text, snapshot: false} as const)
+		: ({type: "custom", prompt: system.text, snapshot: false} as const);
+
+/**
+ * Codex's config for a turn's system prompt, and the file it names, if any.
+ * `developer_instructions` is a developer message on top of Codex's own
+ * instructions; `model_instructions_file` replaces them, and is read from a
+ * file (Codex's config reference). The file goes in Codex's own home, which
+ * the agent's commands can neither read nor write (`codexConfig`).
+ *
+ * The file is named by a hash of its text. A home can be shared: ACP's is one
+ * per folder, so two sessions on one folder have one home. With one fixed
+ * name, the second session's prompt would overwrite the first's before the
+ * first Codex read it. Named by its text, a file only ever holds that text,
+ * so no session can change another's prompt.
+ */
+export const codexSystem = (
+	system: SystemPrompt,
+	home: string,
+): {
+	readonly config: Readonly<Record<string, string>>;
+	readonly file: {readonly path: string; readonly text: string} | null;
+} => {
+	if (system._tag === "append") return {config: {developer_instructions: system.text}, file: null};
+	const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
+	return {config: {model_instructions_file: path}, file: {path, text: system.text}};
+};
+
+/**
+ * Write the file `codexSystem` names, if it names one, before Codex starts.
+ * It goes to a fresh file first and is then renamed into place, so a Codex
+ * reading the name sees the whole text or no file, never half of it.
+ */
+export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
+	Effect.gen(function* () {
+		if (file === null) return;
+		const fs = yield* FileSystem.FileSystem;
+		const dir = file.path.slice(0, file.path.lastIndexOf("/"));
+		const fresh = yield* fs.makeTempFile({directory: dir, prefix: ".system-"});
+		yield* fs.writeFileString(fresh, file.text, {mode: 0o600});
+		yield* fs.chmod(fresh, 0o600);
+		yield* fs.rename(fresh, file.path);
+	}).pipe(Effect.mapError(String));
+
+/**
+ * A row, told a turn's system prompt. ACP has no system prompt field, so each
+ * row is told in its own adapter's way: the Claude row in its
+ * `_meta.claudeCode.options` (set where the adapter builds them,
+ * ../acp/adapter.ts, with `claudeSystem`), the Codex row in `CODEX_CONFIG`,
+ * and the fake in `_meta.system`, which it notes in its log.
+ */
+export const withSystem = (
+	harness: Harness,
+	system: SystemPrompt,
+	folder: string,
+	parent: Env = process.env,
+): Harness => {
+	switch (harness.name) {
+		case "claude":
+			return harness;
+		case "codex": {
+			const {config, file} = codexSystem(system, codexHomeOf(folder, parent));
+			const prepare = harness.prepare ?? Effect.void;
+			return {
+				...harness,
+				env: codexEnv(parent, folder, CODEX_ROW_MODE, toolchain(parent), config),
+				prepare: Effect.andThen(prepare, writeSystem(file)),
+			};
+		}
+		case "fake":
+			return {...harness, meta: {...harness.meta, system}};
+	}
 };
 
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
@@ -257,7 +353,7 @@ export function harnessOf(
 			return {
 				name,
 				...node(CODEX),
-				env: codexEnv(parent, folder, "workspace-write"),
+				env: codexEnv(parent, folder, CODEX_ROW_MODE),
 				script: CODEX,
 				meta: undefined,
 				prepare: codexHome(codexHomeOf(folder, parent), codexLogin(parent)),

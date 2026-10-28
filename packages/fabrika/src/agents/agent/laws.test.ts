@@ -31,6 +31,7 @@ const turnOf = (over: Partial<Turn<Answer>> = {}): Turn<Answer> => ({
 	session: "s-1",
 	folder: "/nowhere",
 	prompt: "do the job",
+	system: {_tag: "append", text: "You do the job."},
 	answer: Answer,
 	model: null,
 	effort: null,

@@ -1,5 +1,5 @@
+import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
-import type {Entry} from "./ticket.ts";
 import {agentOf, whenOf} from "./window.tsx";
 
 // Who wrote a row, as the window says it after the writer's id.
