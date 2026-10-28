@@ -7,8 +7,9 @@ Decided 2026-10-24.
 {fact: "built", ticket: "demlik-1", task: 1, commit: "a1b2c3…"}             // build, in its box
 {fact: "reviewed", ticket: "demlik-1", task: 1, commit: "a1b2c3…", ok: true} // review reads that commit, in its box
 // The code stays in a git repo on this machine. The ledger holds only the hash.
-// Only then, outside any box:
-// leak check → push that commit → open the PR → CI → final review → ship
+// Only then, the push program, in its own box. Its push Cmds are marked `outside`,
+// so the host does them with its GitHub key. (Was "outside any box"; corrected 2026-10-27.)
+// leak check → push that commit → open the PR → CI → final review → merge
 
 // Today: draft → checks → push → open the PR → review → CI → ship
 ```
@@ -78,6 +79,9 @@ out. The review walk settles it.
 
 - **Who pushes and opens the PR:** ship, or a step the parent runs between
   review and ship.
+  *Answered 2026-10-27:* a new small program, push, between review and
+  merge ([a ticket runs from the app](./a-ticket-runs-from-the-app.md),
+  section 8).
 - **Where the local repo lives** and how build's and review's boxes see it:
   for example a folder per job, mounted into build's box and mounted read-only
   into review's.
