@@ -53,7 +53,14 @@ export const settingsOf = (
 			network: {allowedDomains: [...MODEL[job.login._tag]], deniedDomains: []},
 			filesystem: {
 				denyRead: [homedir(), ...temps()],
-				allowRead: [room.root, ...reads, ...tools.filter((t) => !opensHome(t))],
+				// The room's own folders, not the room: its settings file is srt's, not the program's.
+				allowRead: [
+					room.home,
+					room.tmp,
+					room.work,
+					...reads,
+					...tools.filter((t) => !opensHome(t)),
+				],
 				allowWrite: [room.home, room.tmp, room.work, ...writes],
 				denyWrite: [],
 			},
