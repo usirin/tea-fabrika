@@ -364,6 +364,10 @@ const ROUND: readonly Variant[] = ["ours", "no-guard", "preset", "as-acp", "acp"
 // cannot name one, so the arms below that name `systemPrompt` all get the
 // turn's (`maker`, nothing added: the bare preset). The arms with an empty
 // prompt no longer reproduce, on purpose: no turn goes out without one.
+// Since the review fixes of that slice, `more` names only an allow-list
+// (`MORE`, ../packages/fabrika/src/agents/claude/adapter.ts): the arms that
+// pass other options are refused at start, and only `after`, `no-format` and
+// `acp` run as they are.
 const adapterOf = (v: Variant) =>
 	Effect.gen(function* () {
 		const sdk = watched(query);

@@ -94,6 +94,8 @@ export const AgentFailedWhy = Schema.Literals([
 	"cannot_limit",
 	/** The session is someone else's: opened on another provider. */
 	"other_provider",
+	/** The turn's system prompt does not read: an own prompt with no text that got past its type. */
+	"system",
 	/** Containment refused to start: the plan check, the home, a tool list. */
 	"contain",
 	/** The agent did not start. */
@@ -125,6 +127,19 @@ export interface Limits {
 export const NO_LIMITS: Limits = {usd: null, tools: null, seconds: null};
 
 /**
+ * An own prompt's text: something more than spaces and line ends. Branded, so
+ * a plain string does not type as one; it is made only through the schema:
+ * `Words.make(...)`, which throws on blank text, or a decode.
+ *
+ *   {_tag: "own", text: Words.make("You sort one ticket.")}   // types
+ *   {_tag: "own", text: ""}                                   // does not type
+ */
+export const Words = Schema.String.check(
+	Schema.isPattern(/\S/, {message: "an own system prompt with no text"}),
+).pipe(Schema.brand("Words"));
+export type Words = typeof Words.Type;
+
+/**
  * A turn's system prompt. Two cases and no third, so "no prompt at all"
  * cannot be picked by mistake (a-ticket-runs-from-the-app.md, section 5):
  *
@@ -139,9 +154,7 @@ export const NO_LIMITS: Limits = {usd: null, tools: null, seconds: null};
  */
 export const System = Schema.Union([
 	Schema.TaggedStruct("maker", {add: Schema.String}),
-	Schema.TaggedStruct("own", {
-		text: Schema.String.check(Schema.isNonEmpty({message: "an own system prompt with no text"})),
-	}),
+	Schema.TaggedStruct("own", {text: Words}),
 ]);
 export type System = typeof System.Type;
 

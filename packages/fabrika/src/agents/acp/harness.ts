@@ -226,11 +226,17 @@ const CODEX_ROW_MODE = "workspace-write" satisfies (typeof CODEX_MODES)[number];
  * ours appended, or ours alone as a custom prompt (the SDK's `Options`
  * docs). The same for the SDK adapter and for ACP's Claude row, which spreads
  * `_meta.claudeCode.options` over its own default, the bare preset.
+ *
+ * `snapshot: false`, so a resumed turn gets its own prompt. By default the SDK
+ * records a session's first prompt and sends that record on every later
+ * request and resume, ignoring the text a later turn passes (the `systemPrompt`
+ * docs of SDK 0.3.296; 0.3.286, which ACP's row pins, has the same field).
+ * Codex exec takes the turn's on every turn already.
  */
 export const claudeSystem = (system: System) =>
 	system._tag === "maker"
-		? ({type: "preset", preset: "claude_code", append: system.add} as const)
-		: system.text;
+		? ({type: "preset", preset: "claude_code", append: system.add, snapshot: false} as const)
+		: ({type: "custom", prompt: system.text, snapshot: false} as const);
 
 /**
  * Codex's config for a turn's system prompt, and the file it names, if any.

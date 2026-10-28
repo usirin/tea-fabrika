@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import type {AdapterTurn, System} from "../agent/turn.ts";
+import {type AdapterTurn, type System, Words} from "../agent/turn.ts";
 import {acpAdapter, claudeMetaOf} from "./adapter.ts";
 import {codexHomeOf, harnessOf, withSystem} from "./harness.ts";
 
@@ -15,14 +15,19 @@ import {codexHomeOf, harnessOf, withSystem} from "./harness.ts";
 
 const MAKER: System = {_tag: "maker", add: "You only find; you approve nothing."};
 const TEXT = "You sort one ticket.\nNo tools.";
-const OWN: System = {_tag: "own", text: TEXT};
+const OWN: System = {_tag: "own", text: Words.make(TEXT)};
 
 describe("claude's row", () => {
-	it("opens the preset with the stage's line appended, or the stage's text alone", () => {
+	it("opens the preset with the stage's line appended, or the stage's text alone, never recorded", () => {
 		const of = (system: System) =>
 			claudeMetaOf({folder: "/work/copy", usd: null, system}).claudeCode.options.systemPrompt;
-		expect(of(MAKER)).toEqual({type: "preset", preset: "claude_code", append: MAKER.add});
-		expect(of(OWN)).toBe(TEXT);
+		expect(of(MAKER)).toEqual({
+			type: "preset",
+			preset: "claude_code",
+			append: MAKER.add,
+			snapshot: false,
+		});
+		expect(of(OWN)).toEqual({type: "custom", prompt: TEXT, snapshot: false});
 	});
 });
 

@@ -19,7 +19,7 @@ import {agentRunner} from "./draft.ts";
 import {fakeAdapter, saying} from "./fake.ts";
 import {under} from "./reap.ts";
 import {memorySessions} from "./sessions.ts";
-import {type AdapterTurn, NO_LIMITS, noReaper, type System} from "./turn.ts";
+import {type AdapterTurn, NO_LIMITS, noReaper, type System, Words} from "./turn.ts";
 
 // Each adapter's pure part: how what its maker says becomes the interface's
 // raw updates, the containment that can be checked with no agent, and the
@@ -85,7 +85,11 @@ describe("claude: SDK messages", () => {
 	});
 
 	/** The options the SDK is opened with for one turn: an empty query, no agent starts. */
-	const openedWith = async (system: System, config: ClaudeAdapterConfig = {}) => {
+	const openedWith = async (
+		system: System,
+		config: ClaudeAdapterConfig = {},
+		resume: string | null = null,
+	) => {
 		const opened: Options[] = [];
 		const open: Open = ({options}) => {
 			opened.push(options);
@@ -104,7 +108,7 @@ describe("claude: SDK messages", () => {
 					prompt: "p",
 					system,
 					schema: {},
-					resume: null,
+					resume,
 					session: "s",
 					model: null,
 					effort: null,
@@ -122,6 +126,7 @@ describe("claude: SDK messages", () => {
 			type: "preset",
 			preset: "claude_code",
 			append: "You plan; you change no file.",
+			snapshot: false,
 		});
 		// The preset asks for a memory folder under ~/.claude, outside any copy a run is given.
 		expect(options?.settings).toEqual({
@@ -133,14 +138,80 @@ describe("claude: SDK messages", () => {
 
 	it("opens the stage's own text alone as the whole system prompt", async () => {
 		const text = "You sort one ticket.\nNo tools.";
-		expect((await openedWith({_tag: "own", text}))?.systemPrompt).toBe(text);
+		expect((await openedWith({_tag: "own", text: Words.make(text)}))?.systemPrompt).toEqual({
+			type: "custom",
+			prompt: text,
+			snapshot: false,
+		});
 	});
 
-	it("keeps the turn's system prompt over a stage's options that got past their type", async () => {
-		// biome-ignore lint/plugin: a planted mistake, as JavaScript or a cast could send it; the type refuses it
-		const more = () => ({systemPrompt: "something else"}) as unknown as More;
-		const options = await openedWith({_tag: "own", text: "ours"}, {more});
-		expect(options?.systemPrompt).toBe("ours");
+	it("hands a resumed turn its own prompt, not the session's first: the prompt is never recorded", async () => {
+		// The SDK records a session's first prompt by default and sends that on a resume.
+		const system: System = {_tag: "own", text: Words.make("You review; you change no file.")};
+		const options = await openedWith(system, {}, "a-session");
+		expect(options?.resume).toBe("a-session");
+		expect(options?.systemPrompt).toEqual({
+			type: "custom",
+			prompt: "You review; you change no file.",
+			snapshot: false,
+		});
+	});
+
+	it("takes from a stage only the options of its allow-list, and keeps the turn's prompt", async () => {
+		const more = (): More => ({disallowedTools: ["WebFetch"]});
+		const options = await openedWith({_tag: "maker", add: "ours"}, {more});
+		expect(options?.disallowedTools).toEqual(["WebFetch"]);
+		expect(options?.systemPrompt).toEqual({
+			type: "preset",
+			preset: "claude_code",
+			append: "ours",
+			snapshot: false,
+		});
+	});
+
+	it("lets no stage swap the prompt through another option: its type refuses it, and so does the start", async () => {
+		const configs: readonly ClaudeAdapterConfig[] = [
+			// @ts-expect-error the main thread's agent brings its own system prompt
+			{more: () => ({agent: "x", agents: {x: {description: "d", prompt: "Hi"}}})},
+			// @ts-expect-error nor may a stage define agents
+			{more: () => ({agents: {x: {description: "d", prompt: "Hi"}}})},
+			// @ts-expect-error nor hand the CLI its own flags
+			{more: () => ({extraArgs: {"system-prompt": "Hi"}})},
+			// @ts-expect-error nor name the system prompt itself
+			{more: () => ({systemPrompt: "something else"})},
+		];
+		for (const config of configs) {
+			const opened: Options[] = [];
+			const open: Open = ({options}) => {
+				opened.push(options);
+				return {
+					[Symbol.asyncIterator]: () => ({
+						next: async (): Promise<IteratorResult<SDKMessage>> => ({done: true, value: undefined}),
+					}),
+					interrupt: async () => undefined,
+					close: () => {},
+				};
+			};
+			const error = await Effect.runPromise(
+				Effect.scoped(
+					Effect.flip(
+						claudeAdapter({...config, open}).start({
+							folder: "/work/copy",
+							prompt: "p",
+							system: {_tag: "maker", add: "ours"},
+							schema: {},
+							resume: null,
+							session: "s",
+							model: null,
+							effort: null,
+							usd: null,
+						}),
+					),
+				),
+			);
+			expect(error).toMatchObject({_tag: "AgentFailed", why: "contain"});
+			expect(opened).toHaveLength(0);
+		}
 	});
 });
 
@@ -349,7 +420,7 @@ describe("codex: the system prompt", () => {
 
 	it("hands the stage's own text on as Codex's whole instructions, in a file in its own home", async () => {
 		const text = "You sort one ticket.\nNo tools.";
-		const {flags, home} = await startedWith({_tag: "own", text});
+		const {flags, home} = await startedWith({_tag: "own", text: Words.make(text)});
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
 		expect(named).toEqual([`model_instructions_file=${JSON.stringify(`${home}/system.md`)}`]);
 		expect(readFileSync(`${home}/system.md`, "utf8")).toBe(text);
@@ -413,7 +484,7 @@ describe("a Draft on the interface", () => {
 			session: run.session.id,
 			folder: "/nowhere",
 			prompt: run.prompt,
-			system: {_tag: "own", text: "You take notes."},
+			system: {_tag: "own", text: Words.make("You take notes.")},
 			answer: Note,
 			model: null,
 			effort: null,

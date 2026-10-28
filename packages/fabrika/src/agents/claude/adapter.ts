@@ -20,16 +20,19 @@ import {guardHook} from "./shell-guard.ts";
 // The ACP row stays on `settingSources: []`: its adapter pins an older SDK
 // that experiment 155 did not test.
 //
-// Where settings come from is said by `ownRules` alone. A stage's `more`
-// cannot name it (its type), and options that would load more are refused
-// before anything starts (`settingsRefusal`). A live turn also checks the
+// A stage's `more` names only the options of an allow-list (`MORE`): its
+// type shuts out the rest, and a `more` that names another is refused before
+// anything starts. Where settings come from is said by `ownRules` alone, and
+// options that would load more are refused too (`settingsRefusal`). A live turn also checks the
 // empty folder those settings are read from (`openLive`).
 //
 // The system prompt is the turn's, always named (`claudeSystem`): Claude
 // Code's own (`claude_code`) with the stage's line appended, or the stage's
 // text alone. Left unnamed, the SDK sends an empty one, and the agent gets
 // none of Claude Code's instructions (experiment 158). A stage's `more`
-// cannot name another (its type), and it is set after `more` all the same.
+// cannot name another, and it is set after `more` all the same. It is never
+// recorded (`snapshot: false`), so a resumed turn gets its own prompt, not
+// the session's first.
 // The preset's memory section is off: it would have the agent keep notes
 // under ~/.claude, outside the copy it is given.
 //
@@ -102,26 +105,42 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 export interface ClaudeAdapterConfig {
 	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
-	/** More options on top, for a stage's own needs (its hooks, its tools). */
+	/** More options on top, for a stage's own needs: only those `MORE` names. */
 	readonly more?: (folder: string) => More;
 }
 
 /**
- * What a stage may add: anything but where settings come from, which
- * `ownRules` alone says, and the system prompt, which is the turn's.
+ * The options a stage may add, and no other: an allow-list, so an option the
+ * SDK adds later is shut out until it is named here. No stage in the
+ * workspace adds any today. `disallowedTools` is the one an experiment used
+ * (158) that can only take away. Left out on purpose: `agent`, `agents` and
+ * `extraArgs`, which can swap the turn's system prompt (`agent` "applies the
+ * agent's system prompt" to the main thread); `hooks`, `env`,
+ * `permissionMode` and `canUseTool`, which would loosen the containment; and
+ * where settings come from, which `ownRules` alone says.
  */
-export type More = Partial<Options> & {
-	readonly settingSources?: never;
-	readonly projectConfigRoot?: never;
-	readonly settings?: never;
-	readonly systemPrompt?: never;
+export const MORE = ["disallowedTools"] as const satisfies readonly (keyof Options)[];
+
+/** `MORE`'s options; every other option of the SDK is `never`. */
+export type More = {
+	readonly [K in keyof Options]?: K extends (typeof MORE)[number] ? Options[K] : never;
 };
+
+/** A `more` that got past its type (a cast, or JavaScript), by the first option it names outside `MORE`. */
+const outsideMore = (more: object): string | null =>
+	Object.keys(more).find((k) => !(MORE as readonly string[]).includes(k)) ?? null;
 
 export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 	name: "claude",
 	holds: {usd: true, schema: true},
 	start: (turn) =>
 		Effect.gen(function* () {
+			const more = config.more?.(turn.folder) ?? {};
+			const outside = outsideMore(more);
+			if (outside !== null)
+				return yield* Effect.fail(
+					failed("contain", `a stage's options may not name ${outside}; only ${MORE.join(", ")}`),
+				);
 			const own = turn.resume ?? randomUUID();
 			let pid: number | null = null;
 			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
@@ -152,11 +171,11 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 					pid = child.pid ?? null;
 					return child;
 				},
-				...config.more?.(turn.folder),
+				...more,
 				// The turn's own system prompt, after `more`: no stage option can drop or swap it.
 				systemPrompt: claudeSystem(turn.system),
 			};
-			// A `more` that got past its type (a cast, or JavaScript) is refused here, before any process.
+			// Where settings come from, said by `ownRules` alone, checked on the whole before any process.
 			const refused = settingsRefusal(options);
 			if (refused !== null) return yield* Effect.fail(failed("contain", refused));
 			const q = (config.open ?? openLive)({prompt: turn.prompt, options});
