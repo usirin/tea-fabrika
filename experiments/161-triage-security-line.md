@@ -150,6 +150,9 @@ count wrong answers.
    hardening clause. Confidence 75%. The doubt: only 10 built phoenix tickets,
    and 5 were picked because a model closed them. What would settle it: 30 or
    more built phoenix tickets drawn at random, on GPT sol with the line.
+   **Wrong, by [experiment 162](./162-triage-random-built.md):** on 30
+   random built tickets GPT sol with the line closed 9, opus 4, so "less than
+   opus" did not hold. The line itself held on 10 new security tickets.
 2. **Keep the line wherever the hardening clause goes.** Today's pipeline bar
    has no hardening clause. If one is added, the security line goes beside
    it, in the same commit. Confidence 85%: 159 showed GPT sol applies a

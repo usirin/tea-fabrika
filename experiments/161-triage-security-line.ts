@@ -24,11 +24,10 @@
 // the laptop's ChatGPT plan: run it with no `OPENAI_API_KEY` or `CODEX_API_KEY` in the environment.
 import {join} from "node:path";
 import {SYSTEM} from "./lib/sort.ts";
-import {barLines, withClauses} from "./lib/sort-bar.ts";
 import {
 	CONTROLS,
 	dBrief,
-	P_BAR_BOTH,
+	P_BAR_SECURITY,
 	P_FALSE_NO,
 	P_KEEP,
 	pPrompt,
@@ -57,16 +56,8 @@ const LABEL = "GPT sol, medium, with the two lines";
 
 // ---------------------------------------------------------------- the two lines
 
-/** The security line, as a "still a yes" clause after 92b's "a person filed it". */
-const SECURITY = {
-	id: "a-security-gap-is-not-hardening",
-	rule: "A security gap is not hardening. A hole in who may see or do what, or a secret that could leak into a log or an error message, is a yes even if nobody has used it yet: a hole nobody has used is still a hole.",
-	example: {what: "a webhook that takes a request without checking its signature"},
-	evidence: ["experiment 159: #2563 and #8010, closed by GPT sol, built by the project"],
-} as const;
-const P_BAR = barLines(withClauses(P_BAR_BOTH, {note: "", no: [], stillYes: [SECURITY]}), {
-	numbers: false,
-});
+/** The security line (`SECURITY` in `lib/triage-135.ts`, shared with 162). */
+const P_BAR = P_BAR_SECURITY;
 
 /** Today's fold rule ends with this sentence; the fold line goes right after it. */
 const FOLD_RULE_END = "A report that starts work of its own has `partOf: null`.";

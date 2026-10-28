@@ -321,7 +321,10 @@ export function fieldRows(f: {
 	readonly note: string;
 	/** What ran, for each group's `why`: "experiment 159 group p: 92b's \"both\" brief". */
 	readonly what: {readonly p: string; readonly d: string};
+	/** What really happened to a phoenix ticket; 92b's key unless given (162 has its own). */
+	readonly pTruth?: (n: string) => string | undefined;
 }): void {
+	const pTruth = f.pTruth ?? ((n: string) => truth92b[n]?.next);
 	const row = (
 		lane: string,
 		why: string,
@@ -355,7 +358,7 @@ export function fieldRows(f: {
 		runs.forEach((r, i) => {
 			row(
 				`${REPOS.p}#${n}`,
-				`${f.what.p} through Codex on the ChatGPT plan (run ${i + 1}); said ${pSaid(r)}, really ${truth92b[n]?.next}; posted nothing`,
+				`${f.what.p} through Codex on the ChatGPT plan (run ${i + 1}); said ${pSaid(r)}, really ${pTruth(n)}; posted nothing`,
 				r.tokens,
 				r.tools,
 				r.ms,
