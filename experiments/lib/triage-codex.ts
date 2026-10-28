@@ -107,7 +107,7 @@ let turns = 0;
  * One Codex turn through the adapter: a new session each time, so no turn sees another. The
  * session's Codex home is removed after the turn; the login it links to is not touched.
  */
-async function codexTurn<A>(
+export async function codexTurn<A>(
 	prompt: string,
 	answer: Schema.Codec<A, unknown>,
 	at: Where,
@@ -153,7 +153,7 @@ async function codexTurn<A>(
 }
 
 /** Where a turn runs: the experiment's name for its sessions, the empty folder, the effort. */
-interface Where {
+export interface Where {
 	readonly name: string;
 	readonly folder: string;
 	readonly effort: string;

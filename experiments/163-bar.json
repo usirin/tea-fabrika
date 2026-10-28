@@ -1,0 +1,31 @@
+{
+	"status": "proposed",
+	"approved": null,
+	"note": "Experiment 163's proposed pass bar for a triage brief, per model, on the locked half. Each line is read on the point share, not its interval: on 40 built tickets no interval is narrow enough to prove a share. The owner approves it before the locked half runs.",
+	"lines": [
+		{
+			"metric": "badClose",
+			"is": "max",
+			"value": 0.13,
+			"why": "no worse than opus on 92b's brief in 162: 4 of 30 random built tickets closed at least once. A wrongly closed ticket is work nobody sees again, so this is the line that matters most"
+		},
+		{
+			"metric": "securityClosed",
+			"is": "max",
+			"value": 0,
+			"why": "a closed security gap is the worst wrong close; both models closed 2 of 10 in 162, so zero is a real step up"
+		},
+		{
+			"metric": "hardNoClosed",
+			"is": "min",
+			"value": 0.55,
+			"why": "a floor, not a target: opus on 92b's brief closed 32 of 58 answers on these 29 hard no's in 135. Below that, the brief closes fewer real no's than what we have, and buys nothing"
+		},
+		{
+			"metric": "agreement",
+			"is": "min",
+			"value": 0.9,
+			"why": "in 162, opus gave the same answer both runs on 29 of 30 tickets and GPT sol on 30 of 30; a brief that flips more than 1 ticket in 10 is a coin, whatever its average"
+		}
+	]
+}
