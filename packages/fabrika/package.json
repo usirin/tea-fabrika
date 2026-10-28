@@ -27,6 +27,7 @@
 		"./agents/acp": "./src/agents/acp.ts",
 		"./agents/codex": "./src/agents/codex.ts",
 		"./mcp": "./src/mcp.ts",
+		"./sandbox/os": "./src/sandbox/os.ts",
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -91,6 +92,10 @@
 				"types": "./dist/mcp.d.ts",
 				"default": "./dist/mcp.js"
 			},
+			"./sandbox/os": {
+				"types": "./dist/sandbox/os.d.ts",
+				"default": "./dist/sandbox/os.js"
+			},
 			"./package.json": "./package.json"
 		}
 	},
@@ -108,6 +113,7 @@
 	"peerDependencies": {
 		"@agentclientprotocol/sdk": "^1.6.1",
 		"@anthropic-ai/claude-agent-sdk": "^0.3.296",
+		"@anthropic-ai/sandbox-runtime": "0.0.81",
 		"@demlik/tea": "^0.21.0",
 		"@effect/opentelemetry": "^4.0.0",
 		"@modelcontextprotocol/server": "^2.4.0",
@@ -124,6 +130,9 @@
 			"optional": true
 		},
 		"@anthropic-ai/claude-agent-sdk": {
+			"optional": true
+		},
+		"@anthropic-ai/sandbox-runtime": {
 			"optional": true
 		},
 		"@effect/opentelemetry": {
@@ -154,6 +163,7 @@
 	"devDependencies": {
 		"@agentclientprotocol/sdk": "catalog:",
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@anthropic-ai/sandbox-runtime": "catalog:",
 		"@demlik/tea": "catalog:",
 		"@effect/opentelemetry": "catalog:",
 		"@effect/vitest": "catalog:",

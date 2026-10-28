@@ -95,7 +95,7 @@ const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => 
 };
 
 /** The clone's git folder a worktree's `.git` file leads to, which holds the worktree's own. None for a plain clone: its `.git` is in it. */
-const gitOf = (tree: string): readonly string[] => {
+export const gitOf = (tree: string): readonly string[] => {
 	try {
 		const line = readFileSync(join(tree, ".git"), "utf8").match(/^gitdir:\s*(.+)$/m);
 		if (line?.[1] === undefined) return [];
@@ -121,15 +121,17 @@ export const filesOf = (
 	temp: readonly string[] = temps(),
 	tools: readonly string[] = toolchain(),
 ) => {
-	const home = homedir();
-	const opens = (path: string) =>
-		inside(path, home) || loginFiles().some((login) => inside(path, login) || inside(login, path));
 	return {
 		allowWrite: [tree, ...temp],
-		denyRead: [home],
-		allowRead: [tree, ...gitOf(tree), ...temp, ...tools].filter((path) => !opens(path)),
+		denyRead: [homedir()],
+		allowRead: [tree, ...gitOf(tree), ...temp, ...tools].filter((path) => !opensHome(path)),
 	};
 };
+
+/** Would reading this folder open the home folder, or a file a login lives in? */
+export const opensHome = (path: string) =>
+	inside(path, homedir()) ||
+	loginFiles().some((login) => inside(path, login) || inside(login, path));
 
 /**
  * The agent's environment as its commands need it inside `filesOf`, which

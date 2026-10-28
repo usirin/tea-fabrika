@@ -108,6 +108,7 @@ runs TypeScript as it is.
 | `@kampus/fabrika/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
 | `@kampus/fabrika/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
 | `@kampus/fabrika/mcp` | Programs as MCP tools, one per input, made from each input's schema (`toolsOf`, `callOf`); an agent's runs of them (`driveFor`); one agent served on a socket with the official MCP SDK, writing as `agent:<name>` (`serveAgent`); and the stdio bridge an MCP client starts (`bridge`) |
+| `@kampus/fabrika/sandbox/os` | `layerOs`: the `Sandbox` on Anthropic's sandbox-runtime. It reads only its own folders and reaches only its model. The `none` sandbox, `Sandbox.layerNone`, is on the top level |
 | `@kampus/fabrika/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
 
 ### The parts
@@ -124,6 +125,9 @@ root; `pnpm lint` checks it).
 - `src/agents/`: the agents. `acp/` (any ACP harness, and the `acp` program), `claude/` (the
   Draft over the Agent SDK, its schema reader, the environment, sandbox, rule loading and guard) and `trace/`
   (an agent's spans).
+- `src/sandbox/`: the sandbox a program runs in (`Sandbox`, slice 6). `sandbox.ts` is the
+  service, the job's schemas, the sandbox's environment and the GitHub key check, and the `none`
+  sandbox; `os.ts` the sandbox on sandbox-runtime.
 - `src/*.ts` and `src/agents/*.ts`: the entry files the exports point at.
 
 ### Dependencies
@@ -134,6 +138,8 @@ root; `pnpm lint` checks it).
   - the Agent SDK for `/agents/claude`;
   - ACP for `/agents/acp`;
   - `@modelcontextprotocol/server` for `/mcp`;
+  - `@anthropic-ai/sandbox-runtime` for `/sandbox/os` (on Linux it also needs bubblewrap, socat
+    and ripgrep);
   - `@effect/opentelemetry` and the four `@opentelemetry/*` packages for `/otel`.
 - The `tsh` bin needs the OpenTelemetry peers, and names any that is missing.
 - The top level and `/memory` load with no optional peer installed. `/local` without Miniflare
