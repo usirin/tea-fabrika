@@ -1,7 +1,8 @@
 import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
+import {type Entry, mayWrite, nameOf, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
 import type {ClockSub, load, PollSub, save} from "./machine.ts";
-import {type Entry, factOf, mayWrite, nameOf, ROOT, readRow} from "./ticket.ts";
+import {factOf} from "./ticket.ts";
 
 // The tracker's cells and its poll: the only code that talks to the ledger. Through the `Ledger`
 // service, never the file under it, so the same tracker runs on memory in a test and on
@@ -78,7 +79,7 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 		const author = yield* Author;
 		const writer = writerText(author);
 		const {write} = cmd;
-		const fact = factOf(write);
+		const fact = yield* factOf(write);
 		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
 		if (!mayWrite(author, fact.type))
 			return yield* Effect.fail({

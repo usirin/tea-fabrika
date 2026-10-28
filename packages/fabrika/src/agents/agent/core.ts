@@ -1,4 +1,4 @@
-import {Clock, Effect, Option, Stream} from "effect";
+import {Clock, Effect, Option, Schema, Stream} from "effect";
 import {jsonSchema, reader} from "../claude/schema.ts";
 import {
 	type Adapter,
@@ -12,6 +12,7 @@ import {
 	type Reaper,
 	type Sessions,
 	type Stopped,
+	SystemPrompt,
 	type Tokens,
 	type Turn,
 } from "./turn.ts";
@@ -22,6 +23,8 @@ import {
 //   - the provider table: a turn names its row, and nothing else changes;
 //   - our session id, mapped to the maker's, kept in `Sessions`;
 //   - a session stays on the provider it was opened on;
+//   - the system prompt, read by its schema before any adapter starts: a
+//     `replace` prompt with no text never goes out;
 //   - the prompt carries the schema when the maker has no schema field;
 //   - the answer, read with the stage's schema from the maker's typed answer
 //     or the last message: `null` on a misfit, never text;
@@ -120,6 +123,10 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 							"cannot_limit",
 							`${turn.provider} holds no dollar cap; run it with usd: null`,
 						);
+					// Read again here, so a prompt that got past its type (a cast, or JavaScript) reaches no adapter.
+					const system = yield* Schema.decodeUnknownEffect(SystemPrompt)(turn.system).pipe(
+						Effect.mapError((error) => failed("system", error.message)),
+					);
 					const known = yield* config.sessions.get(turn.session);
 					if (known !== null && known.provider !== turn.provider)
 						return yield* failed(
@@ -131,6 +138,7 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 					const running = yield* adapter.start({
 						folder: turn.folder,
 						prompt: adapter.holds.schema ? turn.prompt : `${turn.prompt}\n${formOf(schema)}`,
+						system,
 						schema,
 						resume: known?.own ?? null,
 						session: turn.session,
