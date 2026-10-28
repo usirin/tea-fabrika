@@ -1,17 +1,16 @@
-# One review a plan, and an hourly canary
+# One review a plan, and the cloud host in v1
 
 **Proposed 2026-10-27.** Three changes to the v1 plan
 ([a ticket runs from the app](./a-ticket-runs-from-the-app.md), PR 131). Each
-task gets quick checks only, and the plan gets one review at the end. One
-scheduled job, a canary, runs a whole lane every hour. The lanes and the box
-move to the cloud host inside v1, with the laptop as the twin.
+task gets quick checks only, and the plan gets one review at the end. No
+scheduled checks join v1. The lanes and the box move to the cloud host inside
+v1, with the laptop as the twin.
 
 ```ts
 // A sketch. What runs when, for one plan.
 //
 //   each task     build -> quick checks: typecheck, lint, the task's own tests go red to green -> local commit
 //   end of plan   mutation step over the changed lines -> one review of the whole diff -> push -> PR
-//   every hour    the canary: a fixture ticket runs a whole lane on the fake agent and must reach "done"
 //
 // The lane's `next`, with the per-task review gone. `built` now means every task is in and
 // its quick checks passed at its commit.
@@ -82,57 +81,27 @@ const taskChecks = check("task_checks", {input: TaskRef, ok: TaskChecks, err: ["
   reviews find real problems the end review misses, this note is wrong.
 - **How sure: 70%.**
 
-## 2. One scheduled job in v1: the canary
+## 2. No scheduled checks in v1
 
-**No scheduled review.** The one review a plan already judges the code before
-it is pushed. A scheduled review would read the same code again.
-
-**What a schedule is for here:** a check that one plan's diff cannot show. The
-one v1 needs is a canary: the pipeline itself still works. Once fabrika builds
-fabrika, a broken lane is the thing nobody would notice until a real ticket got
-stuck. Ops calls this a synthetic check: a scripted trip through the system on a
-timer, watched for the expected end.
-
-```ts
-// A sketch, on the shape of scheduled jobs on the host. It reads and judges, and files a ticket.
-const canary = scheduled("canary", {every: hours(1)}, function* () {
-	const n = yield* act(fileTicket, {title: "canary", body: CANARY_BODY, to: CANARY_PERSON, fixture: true});
-	const end = yield* listen(laneEnded(n), {within: minutes(30)}); // the Listen move, on the clock too
-	if (end.kind !== "done") {
-		yield* act(fileTicket, {title: `The canary lane did not reach done: ${nameOf(end)}`, once: "canary_red"});
-	}
-});
-
-// The answers.
-// done                     the lane reached "done": nothing written but the canary's own facts
-// stuck / skip / timeout   one ticket filed, at most one open at a time (`once`), so a broken hour
-//                          does not file 24 tickets a day
-```
-
-- **It runs on the fake agent,** on a fixture repository and the local code
-  host, like slice 3. So it costs $0 and needs no key. It checks the wiring
-  (lanes, the claim, the ledger, the stages, the facts), not the models.
-- **It runs where lanes run:** on the cloud host, with its local twin
-  ([the laptop runs the same setup as Cloudflare](./local-is-the-cloud.md)).
-- **Industry practice:** Google's SRE workbook describes a canary as "a partial
-  and time-limited deployment of a change" and its evaluation
-  ([Canarying Releases](https://sre.google/workbook/canarying-releases/)). Ours
-  is closer to the synthetic check than to that release canary. A release
-  canary is the next step, once a new fabrika build goes to the hosts
-  ([the cloud is one more host](./the-cloud-is-one-more-host.md)).
+- **No scheduled review.** The one review a plan already judges the code
+  before it is pushed. A scheduled review would read the same code again.
 - **Later, not in v1:** a mutation run over the whole repo, and audits. They
   wait until a run shows problems that span many merges.
-- **Cost:** one scheduled program, one fixture ticket, one `once` key on the
-  ticket form.
+- **A release canary comes after v1,** once new fabrika builds go out to the
+  hosts: a new build goes to one host first, is watched, then goes to the rest.
+  Google's SRE workbook calls a canary "a partial and time-limited deployment
+  of a change" and its evaluation
+  ([Canarying Releases](https://sre.google/workbook/canarying-releases/)).
+  That needs more than one host running lanes, so it waits for the cloud host
+  ([the cloud is one more host](./the-cloud-is-one-more-host.md)).
 - **How sure: 75%.** The doubt: once agents land many pull requests a day,
   problems across several merges may come sooner. The field rows would show it.
 
 ## 3. The cloud host is in v1
 
 **Today's plan:** lanes run on the assignee's laptop, and a ticket waits while
-that laptop is closed. The cloud host comes after v1. An hourly canary cannot
-work that way, and neither can a pipeline that builds itself while its owners
-sleep.
+that laptop is closed. The cloud host comes after v1. A pipeline that builds
+itself while its owners sleep cannot work that way.
 
 **What makes it a deploy, not a rewrite:** every host is the same Durable
 Object with a local twin ([the cloud is one more host](./the-cloud-is-one-more-host.md),
@@ -146,13 +115,12 @@ does, and our Worker never sees a real token
 | 7, the PR watcher | Deploys to the cloud host first. It needs no box, only GitHub reads. |
 | new, after 6 | The box on Cloudflare: one container a job, open internet, the login the GitHub Actions way. |
 | new, after 4 | Lanes on the cloud host: `lanes` runs there as well, and the claim picks one host. |
-| new, after 12 | The canary, on the cloud host. |
 
 - **The laptop stays the twin** for $0 work and for debugging. Tests run there.
 - **What experiment 148 showed:** a box made with `@cloudflare/containers` and
   open internet started on Cloudflare in both deploys. The boxes that failed had
   internet turned off, which the box no longer needs.
-- **Cost:** container time on Cloudflare, measured in the box slice, and three
+- **Cost:** container time on Cloudflare, measured in the box slice, and two
   more pull requests.
 - **How sure: 75%.** The doubt: 148 started a handful of boxes. Many at once,
   for hours, is untried.
@@ -161,15 +129,10 @@ does, and our Worker never sees a real token
 
 - Slice 11's two-way run finds real problems per-task reviews catch and the end
   review misses: go back to a review per task.
-- The canary files tickets that turn out to be noise more than rarely: it
-  stops filing and only shows on the top line, until it is fixed.
-- Boxes on Cloudflare fail to start under load: lanes stay on the laptop for v1,
-  and the canary runs there.
+- Boxes on Cloudflare fail to start under load: lanes stay on the laptop for v1.
 
 ## What it cannot tell us
 
 - Nothing here is built or run. The review counts and costs are not measured.
 - The 400-line figure comes from one study of one team, years ago.
-- Whether a canary on the fake agent catches the breaks that matter. A break
-  in a real model call would pass it.
 - What boxes on Cloudflare cost for a real lane.
