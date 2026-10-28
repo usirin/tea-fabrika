@@ -2139,6 +2139,19 @@ main.program:has(> .view) {
 	color: var(--text-primary);
 }
 
+.map-view .spot .n .tag {
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+	padding: 2px 4px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	white-space: nowrap;
+}
+
+.map-view .spot .n > :is(.w-done, .w-you, .w-stuck, .dot) {
+	margin-inline-start: auto;
+}
+
 .map-view .spot .m2 {
 	color: var(--text-faint);
 }

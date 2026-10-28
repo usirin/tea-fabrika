@@ -4,8 +4,8 @@ A map of today's programs in a tile of its own, drawn with React Flow (`@xyflow/
 box is a real program with its real input and output names and types. A wire is drawn only where
 one program's output is piped into another's input in code today. The ledger is a service, not a
 program, so the boxes that call it get a dotted line, not a wire. Inside operate, the plan's
-nine steps sit as spots: solid where operate steps that machine by hand, dashed where the step
-lives outside operate, faint where nothing does it yet.
+nine steps sit as spots. Dashed means one thing only: nothing does that step yet. A step that
+lives outside operate is solid, with a tag naming where it lives, like `in plan`.
 
 ```ts
 import {PROGRAMS, WIRES, SPOTS} from "@tea-fabrika/map";

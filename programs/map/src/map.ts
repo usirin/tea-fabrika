@@ -162,20 +162,20 @@ export const LEDGER_CALLS: readonly Call[] = [
 /**
  * Where each of the plan's nine steps lives today, from the operate program's point of view.
  * `stepped`: operate holds it and steps it by hand, as a library. `apart`: it exists, but outside
- * operate. `missing`: nothing in code does it yet.
+ * operate, as a machine or a program, `in` the place named. `missing`: nothing in code does it yet.
  */
 export type Where =
 	| {readonly kind: "stepped"; readonly by: string}
-	| {readonly kind: "apart"; readonly as: string}
+	| {readonly kind: "apart"; readonly as: "machine" | "program"; readonly in: string}
 	| {readonly kind: "missing"; readonly note: string};
 
 export const SPOTS: {readonly [S in StepName]: Where} = {
-	triage: {kind: "apart", as: "a machine, stages/sort"},
-	plan: {kind: "apart", as: "the plan program"},
-	approval: {kind: "apart", as: "the asks program"},
-	test_writer: {kind: "apart", as: "a machine, stages/test-writer"},
+	triage: {kind: "apart", as: "machine", in: "stages/sort"},
+	plan: {kind: "apart", as: "program", in: "plan"},
+	approval: {kind: "apart", as: "program", in: "asks"},
+	test_writer: {kind: "apart", as: "machine", in: "stages/test-writer"},
 	build: {kind: "stepped", by: "the build machine"},
-	mutation: {kind: "apart", as: "a machine, stages/mutation"},
+	mutation: {kind: "apart", as: "machine", in: "stages/mutation"},
 	review: {kind: "stepped", by: "the review machine"},
 	push: {kind: "missing", note: "build pushes today"},
 	merge: {kind: "stepped", by: "the ship machine"},

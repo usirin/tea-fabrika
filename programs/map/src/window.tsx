@@ -42,7 +42,8 @@ import {
 // and each output on its right, shaped by what it carries. A typed wire is a curve from an
 // output to an input; a `Ledger` call is a dotted line, since nothing is piped. The operate box
 // holds the plan's nine spots, each lit by the ticket's facts: done, running, waiting on you,
-// stuck, not run yet. A spot operate does not hold is dashed; one nothing does yet is faint too.
+// stuck, not run yet. Dashed means only that nothing does the step yet; a step that lives outside
+// operate is solid, with a tag naming where.
 // Boxes sit at fixed spots; the canvas pans and zooms, and fits the tile when the tile resizes.
 
 type View = WindowProps<typeof map>["view"];
@@ -245,7 +246,7 @@ const whereWords = (where: Where): string => {
 		case "stepped":
 			return `stepped by hand: ${where.by}`;
 		case "apart":
-			return `not in operate: ${where.as}`;
+			return `a ${where.as}, not in operate yet`;
 		case "missing":
 			return `not built: ${where.note}`;
 	}
@@ -257,8 +258,7 @@ function Spot({step}: {readonly step: StepNow}) {
 	const where = SPOTS[step.step];
 	const cls = [
 		"spot",
-		where.kind === "stepped" ? "" : "nb",
-		where.kind === "missing" ? "nob" : "",
+		where.kind === "missing" ? "nb nob" : "",
 		step.state === "running" ? "run" : "",
 		step.state === "you" ? "you" : "",
 		step.state === "stuck" ? "stuck" : "",
@@ -269,6 +269,7 @@ function Spot({step}: {readonly step: StepNow}) {
 		<div className={cls} data-step={step.step}>
 			<span className="n">
 				{stepWords(step.step)}
+				{where.kind === "apart" ? <span className="tag">in {where.in}</span> : null}
 				{step.state === "done" ? (
 					<span className="w-done" role="img" aria-label="done">
 						✓
@@ -313,7 +314,8 @@ function OperateFrame({data}: NodeProps<Node<OperateData>>) {
 				</span>
 				<span className="how">
 					Holds each child's state and steps it by hand, as a library. No wires inside. A dashed
-					spot is one of the plan's steps operate does not hold yet.
+					spot is a step nothing does yet. A tag like "in plan" names where a step lives today,
+					outside operate.
 					{data.lit.number === null ? "" : ` Lit by #${data.lit.number}'s facts.`}
 				</span>
 			</div>
@@ -574,7 +576,7 @@ function Bar({lit}: {readonly lit: Lit}) {
 				</span>
 				<span>
 					<i className="nbl" aria-hidden="true" />
-					not in operate yet
+					not built yet
 				</span>
 			</span>
 		</div>
