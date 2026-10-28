@@ -1,9 +1,9 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Effect, FileSystem, Layer, Path, Schema, Scope} from "effect";
+import {Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
-import {hostLedger} from "./connection.ts";
+import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {serve} from "./serve.ts";
 import {pathsOf, reach} from "./socket.ts";
@@ -15,8 +15,9 @@ import {pathsOf, reach} from "./socket.ts";
 //
 //   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
-//   // removed; <home>/host/sock listened on, mode 0600; the pid written; the lock let go of; the
-//   // desk read back from desk.json; until the scope closes
+//   // removed; <home>/host/sock listened on, mode 0600; on a home with its own ledger file,
+//   // <home>/host/mcp too, the agents' socket (host/agents.ts), mode 0600; the pid written; the
+//   // lock let go of; the desk read back from desk.json; until the scope closes
 //
 // In the home, beside the host's own folder (host/socket.ts):
 //
@@ -58,16 +59,24 @@ export const runHost = (options: {
 		yield* fs.chmod(paths.dir, 0o700);
 		// Under the start lock (host/lock.ts), from the look at the socket until this host listens
 		// on it: a host started at the same moment waits, then finds this one answering.
-		const server = yield* Effect.scoped(
+		// Agents get a socket only on a home that keeps its own ledger (host/agents.ts).
+		const ownLedger = Option.isNone(yield* connectionOf(home));
+		const {server, agents} = yield* Effect.scoped(
 			Effect.gen(function* () {
 				yield* holdLock(paths.lock, paths.dir);
 				const found = yield* reach(paths.sock);
 				if (found === "live") return yield* new HostAnswers({sock: paths.sock});
 				if (found === "stale") yield* fs.remove(paths.sock);
+				// No host answers, and this one holds the lock: an agents' socket here was left by one that is gone.
+				if (yield* fs.exists(paths.mcp)) yield* fs.remove(paths.mcp);
 				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
 				yield* fs.chmod(paths.sock, 0o600);
+				const forAgents = ownLedger
+					? yield* NodeSocketServer.make({path: paths.mcp}).pipe(Scope.provide(outer))
+					: undefined;
+				if (forAgents !== undefined) yield* fs.chmod(paths.mcp, 0o600);
 				yield* fs.writeFileString(paths.pid, `${pid}\n`);
-				return made;
+				return {server: made, agents: forAgents};
 			}),
 		);
 		// The pid goes while this host still listens, so it never removes the pid of a host
@@ -88,6 +97,7 @@ export const runHost = (options: {
 			history,
 			ours,
 			build,
+			agents,
 			place: (tile) => ({
 				jobs: fileStorage(at("storage", "tiles", tile)),
 				drop: fs.remove(at("storage", "tiles", tile), {recursive: true}).pipe(Effect.ignore),

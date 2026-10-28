@@ -107,6 +107,7 @@ runs TypeScript as it is.
 | `@kampus/fabrika/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the rule files it reads and the settings it does not (`ownRules`, experiment 155), the guard. No Agent SDK loads |
 | `@kampus/fabrika/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
 | `@kampus/fabrika/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
+| `@kampus/fabrika/mcp` | Programs as MCP tools, one per input, made from each input's schema (`toolsOf`, `callOf`); an agent's runs of them (`driveFor`); one agent served on a socket with the official MCP SDK, writing as `agent:<name>` (`serveAgent`); and the stdio bridge an MCP client starts (`bridge`) |
 | `@kampus/fabrika/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
 
 ### The parts
@@ -119,6 +120,7 @@ root; `pnpm lint` checks it).
 - [`src/host/`](./src/host/README.md): the host and the ledger. Leases, takeover, replay, calls,
   monitors, links, supervision trees and limits.
 - [`src/shell/`](./src/shell/README.md): tsh.
+- `src/mcp/`: programs as MCP tools, for an agent to drive (`/mcp`).
 - `src/agents/`: the agents. `acp/` (any ACP harness, and the `acp` program), `claude/` (the
   Draft over the Agent SDK, its schema reader, the environment, sandbox, rule loading and guard) and `trace/`
   (an agent's spans).
@@ -131,6 +133,7 @@ root; `pnpm lint` checks it).
   - `miniflare` and `esbuild` for `/local` (esbuild bundles the ledger's Worker);
   - the Agent SDK for `/agents/claude`;
   - ACP for `/agents/acp`;
+  - `@modelcontextprotocol/server` for `/mcp`;
   - `@effect/opentelemetry` and the four `@opentelemetry/*` packages for `/otel`.
 - The `tsh` bin needs the OpenTelemetry peers, and names any that is missing.
 - The top level and `/memory` load with no optional peer installed. `/local` without Miniflare

@@ -98,7 +98,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; on the person's yes, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
-| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). |
+| `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
@@ -276,6 +277,36 @@ the keys message (64 KiB here, for a paste), and the test that tsh refuses a lin
 opens. Left: its pty (`node-pty` and a native shell, a different product), `Ghostty.load()` (it
 fetches a `data:` url), its React hook (this page holds no state), and its Esc and Ctrl-C buttons.
 
+## An agent drives a program
+
+Claude Code (or any MCP client) can drive the app's programs while you watch. Tell it once
+where the app's home is:
+
+```sh
+claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
+  node <repo>/apps/fabrika/src/cli.ts mcp --as claude
+```
+
+- `fabrika mcp` is a stdio bridge: it passes MCP's lines to the running host on
+  `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
+  official SDK (`@kampus/fabrika/mcp`, spec 2026-07-28). With no host running, the bridge says so
+  on stderr and ends: open the app first.
+- **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
+  the input's own description and its schema as JSON Schema (`tracker_do`, `counter_press`).
+  One more, `runs`, lists every program and its tools, the agent's own runs, and what runs in
+  your tiles.
+- **The agent writes as itself.** Its calls go to its own run of the program, started on first
+  use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's hello
+  holds only an agent's name, and the host makes the writer. The tracker refuses an agent's
+  answer to an ask, as it refuses any agent's.
+
+What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X under #44". It calls
+`tracker_do` with `{value: {kind: "file", ...}}`, and within a second the ticket is on your
+tile's list; its first row says `agent:claude`.
+
+Not yet: a home connected to a ledger server has no agents' socket (there the server's door
+would stamp what the host writes as you). The agent's runs end when its client goes.
+
 ## Commands
 
 ```sh
@@ -289,7 +320,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
   `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
-  host's `host/sock`, `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
+  host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows

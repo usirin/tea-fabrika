@@ -16,17 +16,22 @@
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli post comment 9 --as triage \
 //     --body-file note.md
 //   // as agent:triage, for the home's person (host/post.ts); then the tickets, one line each
+//   FABRIKA_HOME=<home> node apps/fabrika/src/cli.ts mcp --as claude
+//   // the MCP bridge an agent's client starts (host/agents.ts): stdin and stdout to the running
+//   // host's agents' socket, as agent:claude, for the home's person
 //
 // FABRIKA_HOME is always given, as for the host (host/main.ts): this never guesses a home, so a
 // test's home is never the owner's. The owner names theirs.
-import {NodeRuntime, NodeServices} from "@effect/platform-node";
+import {NodeRuntime, NodeServices, NodeSocket} from "@effect/platform-node";
 import {writerText} from "@kampus/fabrika";
+import {BridgeStopped, bridge} from "@kampus/fabrika/mcp";
 import type {Do} from "@tea-fabrika/tracker";
-import {Config, Effect, Option} from "effect";
+import {Config, Console, Effect, Logger, Option} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
 import {post} from "./host/post.ts";
+import {pathsOf, reach} from "./host/socket.ts";
 
 const home = Flag.String("home").pipe(
 	Flag.withDescription("the app's home: FABRIKA_HOME"),
@@ -161,8 +166,39 @@ const postCmd = Command.make("post").pipe(
 	]),
 );
 
+/**
+ * The MCP bridge an agent's client starts: the agents' socket of the home's running host, on
+ * stdin and stdout. Stdout is the client's alone, so every word of ours goes to stderr. It starts
+ * no host: with none, it says so and ends.
+ */
+const mcpCmd = Command.make("mcp", {home, as}, (a) =>
+	Effect.gen(function* () {
+		const {mcp} = yield* pathsOf(a.home);
+		if ((yield* reach(mcp)) !== "live")
+			return yield* new BridgeStopped({
+				why: `no fabrika host serves agents on ${a.home}: open the app on it (a home connected to a ledger server has no agents' socket yet)`,
+			});
+		yield* bridge(yield* NodeSocket.makeNet({path: mcp}), a.as);
+	}).pipe(
+		Effect.scoped,
+		Effect.catch((e) =>
+			Console.error(`fabrika mcp: ${e._tag === "BridgeStopped" ? e.why : String(e)}`).pipe(
+				Effect.andThen(
+					Effect.sync(() => {
+						process.exitCode = 1;
+					}),
+				),
+			),
+		),
+		// The bridge is over, but Node's stdin still holds the process open while the client keeps
+		// its end: let go of it, so the client sees this process end. Node, at this command's edge.
+		Effect.ensuring(Effect.sync(() => process.stdin.destroy())),
+		Effect.provideService(Logger.LogToStderr, true),
+	),
+);
+
 const fabrika = Command.make("fabrika").pipe(
-	Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd, postCmd]),
+	Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd, postCmd, mcpCmd]),
 );
 
 NodeRuntime.runMain(
