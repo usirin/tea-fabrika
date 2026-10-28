@@ -165,7 +165,7 @@ const deskWindow = (preload: string, launch: Launch) => {
 		width: 1200,
 		height: 760,
 		title: "fabrika",
-		backgroundColor: "#16181d",
+		backgroundColor: "#0a0b0c",
 		show: !quiet,
 		paintWhenInitiallyHidden: true,
 		webPreferences: {

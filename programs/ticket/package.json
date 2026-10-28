@@ -1,0 +1,31 @@
+{
+	"name": "@tea-fabrika/ticket",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program with a window: one ticket, read from the ledger with the tracker's machine. Its title, whose turn it is, its body, its facts and its properties; it answers the open ask and comments through the tracker's own writes.",
+	"exports": {
+		".": "./src/index.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
+		"@tea-fabrika/tracker": "workspace:*",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"react": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

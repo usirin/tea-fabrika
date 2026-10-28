@@ -137,7 +137,14 @@ describe("an agent drives the app's programs through MCP", () => {
 			}),
 		);
 		expect(seen.mode).toBe(0o600);
-		expect(seen.tools.tools.map((t) => t.name)).toEqual(["runs", "counter_press", "tracker_do"]);
+		expect(seen.tools.tools.map((t) => t.name)).toEqual([
+			"runs",
+			"counter_press",
+			"tracker_do",
+			"ticket_do",
+			"map_in",
+			"trace_in",
+		]);
 		// The tool is the input: its description and its schema are the tracker's own `do`.
 		expect(seen.doTool?.description).toMatch(/^What the window does/);
 		expect(seen.doTool?.inputSchema).toMatchObject({

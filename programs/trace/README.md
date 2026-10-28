@@ -1,0 +1,49 @@
+# trace: `@tea-fabrika/trace`
+
+One ticket's runs laid out in time, in a tile of its own, like tracks in a music editor. One track
+per step, one clip per run, the waits on a person striped, answers marked on the ruler, and a cost
+meter on each track. A playhead replays the facts up to a time: drag it back and the trace shows
+the ticket as it was then.
+
+```ts
+import {traceOf} from "@tea-fabrika/trace";
+import {atSeven, SEVEN, SEVEN_NOW} from "@tea-fabrika/tracker/seven";
+
+traceOf(SEVEN, SEVEN_NOW).tracks.map((t) => t.name);
+// ["ticket", "triage", "plan", "approval", "test_writer", "build", "mutation", "review", "push", "merge"]
+
+traceOf(SEVEN, SEVEN_NOW, atSeven(10, 5)).tracks[2]?.clips;
+// [{run: "r-2", from: 10:03, to: 10:05, open: true, ...}]: at 10:05 the plan was still running
+
+// tsh> trace --ticket 7
+```
+
+## What's in it
+
+| Import | File | What it gives |
+|---|---|---|
+| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `ticket`, input `in` (quit). Its view is the ticket's facts and the clock (`One`). |
+| | `src/trace.ts` | `traceOf`, `axisOf`, `placeOf`, `ticksOf`, `stopsOf`: the facts folded into tracks up to a time. Pure. |
+| `@tea-fabrika/trace/window` | `src/window.tsx` | `TraceWindow`: the tracks, the ruler and the playhead. ← and → step from fact to fact; Home and End jump. |
+
+## Why no timeline library
+
+A small component of our own (about 380 lines, and 220 for its fold), after looking at the MIT and Apache ones:
+
+- `react-calendar-timeline` (MIT) is shaped like a calendar: groups and items on a date axis,
+  with `moment` as a dependency. It has no wait stripes, markers or playhead. Bending it into a
+  music editor's look would cost more than the component.
+- `@xzdarcy/react-timeline-editor` (MIT) is the closest in look, but it allows React up to 18
+  only (this repo uses 19) and has had few changes lately.
+- The fold is the hard part, and it is ours anyway: `traceOf` is pure and tested. The window
+  only places boxes at a percentage.
+
+Confidence about 75%. A library would pay off once the trace needs zoom, scroll over hours, or
+many tickets at once.
+
+## Not done
+
+- The playhead replays only this window. In the mockup it moves every tile to that time; that
+  needs a desk-wide clock the desk does not have.
+- The mockup names a model per track. The facts carry no model, so a track says agent, code or a
+  person.

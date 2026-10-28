@@ -9,6 +9,12 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
 - [`counter`](./counter/README.md): the smallest program with a window, the fabrika app's first.
 - [`tracker`](./tracker/README.md): tickets on the ledger, one stream of facts each, with a
   window to list, file, read, comment on, close and reopen them.
+- [`ticket`](./ticket/README.md): one ticket in a tile, laid out like a Linear issue, that
+  answers its open ask and comments. It runs the tracker's machine, opened on one ticket.
+- [`map`](./map/README.md): a React Flow map of today's programs, with their real inputs,
+  outputs and wires, lit by one ticket's facts.
+- [`trace`](./trace/README.md): one ticket's runs in time, a track per step, with a playhead
+  that replays the facts.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.

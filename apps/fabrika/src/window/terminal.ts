@@ -25,8 +25,8 @@ import {readToTerminal} from "../messages.ts";
 // fetched (`Ghostty.load` fetches a data: url, which this page's policy refuses), once, and
 // every tile's terminal shares it.
 
-/** The app's own colors (window.css). */
-const THEME = {background: "#16181d", foreground: "#d8dce4", cursor: "#3b82f6"};
+/** The app's own colors (window.css): a tile's surface (`--n-2`), and its second ink (`--n-11`). */
+const THEME = {background: "#101113", foreground: "#bababc", cursor: "#bababc"};
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 /** Rows of the screen read back as text: the newest, as the draft's terminal reads them. */
 const MIRRORED = 200;

@@ -15,6 +15,9 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
+import {map} from "@tea-fabrika/map";
+import {ticket} from "@tea-fabrika/ticket";
+import {trace} from "@tea-fabrika/trace";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
@@ -49,8 +52,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //     closing hangs up its shell, but softer: nothing is stopped. The programs end on their own,
 //     then tsh's line closes, and tsh ends. `ended` says when.
 //
-// Which programs tsh comes with is fixed here for now: the small ones, the counter and the
-// tracker. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
+// Which programs tsh comes with is fixed here for now: the small ones, the counter, the tracker,
+// and one ticket's three windows: `ticket`, `map` and `trace`. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
 // a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
 // tsh's job table, which tsh writes before the run starts, and again when `attach` moves it.
@@ -64,7 +67,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
 // table, not its run.
 //
-// The ledger: it is handed one, as the `Ledger` service, and gives it to the tracker. The host
+// The ledger: it is handed one, as the `Ledger` service, and gives it to the four that read
+// tickets. The host
 // process hands it its home's ledger (host/connection.ts); a test hands it memory. The tracker
 // writes as the `Author` it is handed: the host's, which is the person its ledger's door let in,
 // or the owner on a home's own file. It is handed the tracker's
@@ -142,7 +146,8 @@ export const SCREEN_KEPT = 256 * 1024;
 export const RESET = "\x1bc";
 
 /**
- * The app's own programs, the two with a view, packed to write as `author`: a tile's tsh lists
+ * The app's own programs: the counter, and the four that read tickets (the tracker, and one
+ * ticket's page, map and trace), packed to write as `author`: a tile's tsh lists
  * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
  * ever the `author` handed here.
  */
@@ -150,17 +155,20 @@ export const appPrograms = (
 	ledger: Ledger["Service"],
 	author: Author["Service"],
 	pullRequests: PullRequests["Service"],
-): readonly Entry[] => [
-	listed(counter, Layer.empty),
-	listed(
-		tracker,
-		Layer.mergeAll(
-			Layer.succeed(Ledger, ledger),
-			Layer.succeed(Author, author),
-			Layer.succeed(PullRequests, pullRequests),
-		),
-	),
-];
+): readonly Entry[] => {
+	const tickets = Layer.mergeAll(
+		Layer.succeed(Ledger, ledger),
+		Layer.succeed(Author, author),
+		Layer.succeed(PullRequests, pullRequests),
+	);
+	return [
+		listed(counter, Layer.empty),
+		listed(tracker, tickets),
+		listed(ticket, tickets),
+		listed(map, tickets),
+		listed(trace, tickets),
+	];
+};
 
 /** An entry whose runs are handed to `seen` as they start, however tsh starts them. */
 const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>): Entry => ({

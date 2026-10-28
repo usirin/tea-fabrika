@@ -421,6 +421,7 @@ function Tabbed(props: {
 						aria-current={child.id === stack.active}
 						onPointerDown={clicked(child)}
 					>
+						<span className="tid">{child.id}</span>
 						{tabName(child)}
 					</li>
 				))}
