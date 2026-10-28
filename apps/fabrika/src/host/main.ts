@@ -25,7 +25,8 @@ import {pathsOf} from "./socket.ts";
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
 // with it, their jobs stay for `attach` at the next start, and the socket and the pid file go.
-// There is no command for a person to stop it. A test stops its own by the pid in its home.
+// A person stops it only through the window's restart, or `fabrika connect`, which stops it so the
+// app starts one on the new ledger (host/connection.ts). A test stops its own by the pid in its home.
 //
 // Node at its thinnest edge, said here: `process.env`, `process.pid`, and `process.umask`, set to
 // 0o077 before anything is made, so every file the host makes is the user's alone even before
