@@ -9,7 +9,12 @@ import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
 import {codexHomeOf, codexSystem} from "../acp/harness.ts";
-import {type ClaudeAdapterConfig, claudeAdapter, type More, rawOf} from "../claude/adapter.ts";
+import {
+	type ClaudeAdapterConfig,
+	claudeAdapter,
+	type ExtraOptions,
+	rawOf,
+} from "../claude/adapter.ts";
 import {type DraftRun, type Open, openLive} from "../claude/draft.ts";
 import {AGENTS_MD} from "../claude/rules.ts";
 import {jsonSchema} from "../claude/schema.ts";
@@ -19,7 +24,7 @@ import {agentRunner} from "./draft.ts";
 import {fakeAdapter, saying} from "./fake.ts";
 import {under} from "./reap.ts";
 import {memorySessions} from "./sessions.ts";
-import {type AdapterTurn, NO_LIMITS, noReaper, type System, Words} from "./turn.ts";
+import {type AdapterTurn, NO_LIMITS, NonBlank, noReaper, type SystemPrompt} from "./turn.ts";
 
 // Each adapter's pure part: how what its maker says becomes the interface's
 // raw updates, the containment that can be checked with no agent, and the
@@ -86,7 +91,7 @@ describe("claude: SDK messages", () => {
 
 	/** The options the SDK is opened with for one turn: an empty query, no agent starts. */
 	const openedWith = async (
-		system: System,
+		system: SystemPrompt,
 		config: ClaudeAdapterConfig = {},
 		resume: string | null = null,
 	) => {
@@ -120,7 +125,7 @@ describe("claude: SDK messages", () => {
 	};
 
 	it("opens Claude Code's own system prompt with the stage's line appended, auto memory off (experiment 158)", async () => {
-		const options = await openedWith({_tag: "maker", add: "You plan; you change no file."});
+		const options = await openedWith({_tag: "append", text: "You plan; you change no file."});
 		// With no system prompt named, the SDK sends an empty one: the agent gets no instructions.
 		expect(options?.systemPrompt).toEqual({
 			type: "preset",
@@ -138,7 +143,7 @@ describe("claude: SDK messages", () => {
 
 	it("opens the stage's own text alone as the whole system prompt", async () => {
 		const text = "You sort one ticket.\nNo tools.";
-		expect((await openedWith({_tag: "own", text: Words.make(text)}))?.systemPrompt).toEqual({
+		expect((await openedWith({_tag: "replace", text: NonBlank.make(text)}))?.systemPrompt).toEqual({
 			type: "custom",
 			prompt: text,
 			snapshot: false,
@@ -147,7 +152,10 @@ describe("claude: SDK messages", () => {
 
 	it("hands a resumed turn its own prompt, not the session's first: the prompt is never recorded", async () => {
 		// The SDK records a session's first prompt by default and sends that on a resume.
-		const system: System = {_tag: "own", text: Words.make("You review; you change no file.")};
+		const system: SystemPrompt = {
+			_tag: "replace",
+			text: NonBlank.make("You review; you change no file."),
+		};
 		const options = await openedWith(system, {}, "a-session");
 		expect(options?.resume).toBe("a-session");
 		expect(options?.systemPrompt).toEqual({
@@ -158,8 +166,8 @@ describe("claude: SDK messages", () => {
 	});
 
 	it("takes from a stage only the options of its allow-list, and keeps the turn's prompt", async () => {
-		const more = (): More => ({disallowedTools: ["WebFetch"]});
-		const options = await openedWith({_tag: "maker", add: "ours"}, {more});
+		const more = (): ExtraOptions => ({disallowedTools: ["WebFetch"]});
+		const options = await openedWith({_tag: "append", text: "ours"}, {more});
 		expect(options?.disallowedTools).toEqual(["WebFetch"]);
 		expect(options?.systemPrompt).toEqual({
 			type: "preset",
@@ -198,7 +206,7 @@ describe("claude: SDK messages", () => {
 						claudeAdapter({...config, open}).start({
 							folder: "/work/copy",
 							prompt: "p",
-							system: {_tag: "maker", add: "ours"},
+							system: {_tag: "append", text: "ours"},
 							schema: {},
 							resume: null,
 							session: "s",
@@ -219,7 +227,7 @@ describe("claude: where its settings come from", () => {
 	const TURN: AdapterTurn = {
 		folder: "/work/repo",
 		prompt: "p",
-		system: {_tag: "maker", add: ""},
+		system: {_tag: "append", text: ""},
 		schema: {},
 		resume: null,
 		session: "s",
@@ -373,7 +381,7 @@ describe("codex: the system prompt", () => {
 	};
 
 	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: System) => {
+	const startedWith = async (system: SystemPrompt) => {
 		const home = madeUpHome();
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
@@ -402,7 +410,7 @@ describe("codex: the system prompt", () => {
 	const TURN: AdapterTurn = {
 		folder: "/work/copy",
 		prompt: "p",
-		system: {_tag: "maker", add: ""},
+		system: {_tag: "append", text: ""},
 		schema: {},
 		resume: null,
 		session: "s",
@@ -412,17 +420,17 @@ describe("codex: the system prompt", () => {
 	};
 
 	it("hands the stage's line on as developer instructions, on top of Codex's own", async () => {
-		const add = 'You plan; you change no file; hand back one "PlanDraft".';
-		const {flags} = await startedWith({_tag: "maker", add});
+		const text = 'You plan; you change no file; hand back one "PlanDraft".';
+		const {flags} = await startedWith({_tag: "append", text});
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
-		expect(named).toEqual([`developer_instructions=${JSON.stringify(add)}`]);
+		expect(named).toEqual([`developer_instructions=${JSON.stringify(text)}`]);
 	});
 
 	it("hands the stage's own text on as Codex's whole instructions, in a file in its own home", async () => {
 		const text = "You sort one ticket.\nNo tools.";
-		const {flags, home} = await startedWith({_tag: "own", text: Words.make(text)});
+		const {flags, home} = await startedWith({_tag: "replace", text: NonBlank.make(text)});
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
-		const file = codexSystem({_tag: "own", text: Words.make(text)}, home).file?.path ?? "";
+		const file = codexSystem({_tag: "replace", text: NonBlank.make(text)}, home).file?.path ?? "";
 		expect(file.startsWith(`${home}/system-`)).toBe(true);
 		expect(named).toEqual([`model_instructions_file=${JSON.stringify(file)}`]);
 		expect(readFileSync(file, "utf8")).toBe(text);
@@ -486,7 +494,7 @@ describe("a Draft on the interface", () => {
 			session: run.session.id,
 			folder: "/nowhere",
 			prompt: run.prompt,
-			system: {_tag: "own", text: Words.make("You take notes.")},
+			system: {_tag: "replace", text: NonBlank.make("You take notes.")},
 			answer: Note,
 			model: null,
 			effort: null,

@@ -190,7 +190,7 @@ export const codexAdapter = (
 						Effect.mapError((why) => failed("contain", why)),
 					);
 					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
-					// The turn's system prompt, as config (`codexSystem`); an own prompt is a file in the home.
+					// The turn's system prompt, as config (`codexSystem`); a `replace` prompt is a file in the home.
 					const system = codexSystem(turn.system, home);
 					yield* writeSystem(system.file).pipe(
 						Effect.provideService(FileSystem.FileSystem, fs),

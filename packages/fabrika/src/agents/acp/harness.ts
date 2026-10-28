@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {Effect, FileSystem} from "effect";
-import type {System} from "../agent/turn.ts";
+import type {SystemPrompt} from "../agent/turn.ts";
 import {agentEnv, type Env, runEnv} from "../claude/env.ts";
 import {fencedEnv, filesOf, TOOLS, toolchain} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
@@ -233,9 +233,9 @@ const CODEX_ROW_MODE = "workspace-write" satisfies (typeof CODEX_MODES)[number];
  * docs of SDK 0.3.296; 0.3.286, which ACP's row pins, has the same field).
  * Codex exec takes the turn's on every turn already.
  */
-export const claudeSystem = (system: System) =>
-	system._tag === "maker"
-		? ({type: "preset", preset: "claude_code", append: system.add, snapshot: false} as const)
+export const claudeSystem = (system: SystemPrompt) =>
+	system._tag === "append"
+		? ({type: "preset", preset: "claude_code", append: system.text, snapshot: false} as const)
 		: ({type: "custom", prompt: system.text, snapshot: false} as const);
 
 /**
@@ -252,13 +252,13 @@ export const claudeSystem = (system: System) =>
  * so no session can change another's prompt.
  */
 export const codexSystem = (
-	system: System,
+	system: SystemPrompt,
 	home: string,
 ): {
 	readonly config: Readonly<Record<string, string>>;
 	readonly file: {readonly path: string; readonly text: string} | null;
 } => {
-	if (system._tag === "maker") return {config: {developer_instructions: system.add}, file: null};
+	if (system._tag === "append") return {config: {developer_instructions: system.text}, file: null};
 	const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
 	return {config: {model_instructions_file: path}, file: {path, text: system.text}};
 };
@@ -288,7 +288,7 @@ export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
  */
 export const withSystem = (
 	harness: Harness,
-	system: System,
+	system: SystemPrompt,
 	folder: string,
 	parent: Env = process.env,
 ): Harness => {

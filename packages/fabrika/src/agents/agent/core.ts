@@ -12,7 +12,7 @@ import {
 	type Reaper,
 	type Sessions,
 	type Stopped,
-	System,
+	SystemPrompt,
 	type Tokens,
 	type Turn,
 } from "./turn.ts";
@@ -23,8 +23,8 @@ import {
 //   - the provider table: a turn names its row, and nothing else changes;
 //   - our session id, mapped to the maker's, kept in `Sessions`;
 //   - a session stays on the provider it was opened on;
-//   - the system prompt, read by its schema before any adapter starts: an own
-//     prompt with no text never goes out;
+//   - the system prompt, read by its schema before any adapter starts: a
+//     `replace` prompt with no text never goes out;
 //   - the prompt carries the schema when the maker has no schema field;
 //   - the answer, read with the stage's schema from the maker's typed answer
 //     or the last message: `null` on a misfit, never text;
@@ -124,7 +124,7 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 							`${turn.provider} holds no dollar cap; run it with usd: null`,
 						);
 					// Read again here, so a prompt that got past its type (a cast, or JavaScript) reaches no adapter.
-					const system = yield* Schema.decodeUnknownEffect(System)(turn.system).pipe(
+					const system = yield* Schema.decodeUnknownEffect(SystemPrompt)(turn.system).pipe(
 						Effect.mapError((error) => failed("system", error.message)),
 					);
 					const known = yield* config.sessions.get(turn.session);

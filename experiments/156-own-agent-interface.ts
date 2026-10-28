@@ -272,7 +272,7 @@ const turnOf = <A>(
 	folder: copy,
 	prompt,
 	// Added in v1 slice 2: every turn names one. This run sent none on Codex and ACP.
-	system: {_tag: "maker", add: ""},
+	system: {_tag: "append", text: ""},
 	answer,
 	model: MODEL(row),
 	effort: EFFORT,

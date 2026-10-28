@@ -20,7 +20,7 @@ import {guardHook} from "./shell-guard.ts";
 // The ACP row stays on `settingSources: []`: its adapter pins an older SDK
 // that experiment 155 did not test.
 //
-// A stage's `more` names only the options of an allow-list (`MORE`): its
+// A stage's `more` names only the options of an allow-list (`EXTRA_OPTIONS`): its
 // type shuts out the rest, and a `more` that names another is refused before
 // anything starts. Where settings come from is said by `ownRules` alone, and
 // options that would load more are refused too (`settingsRefusal`). A live turn also checks the
@@ -105,8 +105,8 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 export interface ClaudeAdapterConfig {
 	/** How the query is opened: `openLive` unless named, a scripted one in a test. */
 	readonly open?: Open;
-	/** More options on top, for a stage's own needs: only those `MORE` names. */
-	readonly more?: (folder: string) => More;
+	/** More options on top, for a stage's own needs: only those `EXTRA_OPTIONS` names. */
+	readonly more?: (folder: string) => ExtraOptions;
 }
 
 /**
@@ -119,16 +119,16 @@ export interface ClaudeAdapterConfig {
  * `permissionMode` and `canUseTool`, which would loosen the containment; and
  * where settings come from, which `ownRules` alone says.
  */
-export const MORE = ["disallowedTools"] as const satisfies readonly (keyof Options)[];
+export const EXTRA_OPTIONS = ["disallowedTools"] as const satisfies readonly (keyof Options)[];
 
-/** `MORE`'s options; every other option of the SDK is `never`. */
-export type More = {
-	readonly [K in keyof Options]?: K extends (typeof MORE)[number] ? Options[K] : never;
+/** `EXTRA_OPTIONS`'s options; every other option of the SDK is `never`. */
+export type ExtraOptions = {
+	readonly [K in keyof Options]?: K extends (typeof EXTRA_OPTIONS)[number] ? Options[K] : never;
 };
 
-/** A `more` that got past its type (a cast, or JavaScript), by the first option it names outside `MORE`. */
-const outsideMore = (more: object): string | null =>
-	Object.keys(more).find((k) => !(MORE as readonly string[]).includes(k)) ?? null;
+/** A `more` that got past its type (a cast, or JavaScript), by the first option it names outside `EXTRA_OPTIONS`. */
+const outsideExtra = (more: object): string | null =>
+	Object.keys(more).find((k) => !(EXTRA_OPTIONS as readonly string[]).includes(k)) ?? null;
 
 export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 	name: "claude",
@@ -136,10 +136,13 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 	start: (turn) =>
 		Effect.gen(function* () {
 			const more = config.more?.(turn.folder) ?? {};
-			const outside = outsideMore(more);
+			const outside = outsideExtra(more);
 			if (outside !== null)
 				return yield* Effect.fail(
-					failed("contain", `a stage's options may not name ${outside}; only ${MORE.join(", ")}`),
+					failed(
+						"contain",
+						`a stage's options may not name ${outside}; only ${EXTRA_OPTIONS.join(", ")}`,
+					),
 				);
 			const own = turn.resume ?? randomUUID();
 			let pid: number | null = null;
