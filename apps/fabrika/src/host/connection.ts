@@ -9,6 +9,11 @@
 //   yield* invite(home, "bob")            // alice's session invites bob; he gets in at his first login
 //   Layer.build(hostLedger(home))         // Ledger over HTTP, Author {kind: "user", id: "github:7"}
 //
+// `fabrika connect` is `connectAndRestart`: the same, then the home's running host is stopped by
+// its pid. An app that runs sees its link end and starts a host again, as after any lost link,
+// and that host reads the new file. Nothing for the person to do. What a stop costs is what the
+// window's restart costs: each tile's running jobs stop, and `attach %n` brings each back.
+//
 // No session is kept on disk: the file names the key, never a token, and a session is short
 // (the door's `SESSION_MS`, 4 hours). A host logs in when it starts, and keeps its session
 // renewed while it runs (`renewing`): again 5 minutes before the end, and on any 401, as after
@@ -23,6 +28,7 @@ import {DoorRefused, doorOf, layerHttp, renewing} from "@kampus/fabrika/http";
 import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {Author} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Layer, Option, Path, Schema} from "effect";
+import {stopHost} from "./stop.ts";
 
 /** The file in a home that says which ledger server it is connected to. */
 export const CONNECTION_FILE = "ledger.json";
@@ -109,6 +115,24 @@ export const connect = (
 		const session = yield* loginWith(c);
 		yield* keepConnection(home, c);
 		return session.who;
+	});
+
+/**
+ * `connect`, then stop the home's running host (host/stop.ts), as the window's "Stop the old host"
+ * does. A running app sees its link end, and its reconnect (reconnect.ts) starts a host again,
+ * which reads the new `ledger.json`. Answers who the door says this person is, and what came of
+ * the host: `stopped`, `none` (none ran: the next start uses it), or why it did not stop.
+ */
+export const connectAndRestart = (
+	home: string,
+	o: {readonly address: string; readonly login: string; readonly key: string},
+) =>
+	Effect.gen(function* () {
+		const who = yield* connect(home, o);
+		const host = yield* stopHost(home).pipe(
+			Effect.catchTag("NotStopped", (e) => Effect.succeed({kind: "running", why: e.why} as const)),
+		);
+		return {who, host};
 	});
 
 /** Keep `c` in the home: its host uses that server from its next start. */
