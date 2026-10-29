@@ -26,7 +26,7 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 //                               {type: "closed"}                                           user:owner
 
 // What it sends on its one output `ticket`: the ticket the person opens, by its number, each
-// time that changes. `tracker | ticket | trace` follows it; `tracker` alone prints each pick.
+// time that changes. `tracker | ticket | runs` follows it; `tracker` alone prints each pick.
 yield* tell(run, "do", {kind: "open", ticket: 7});        // sends 7
 yield* tell(run, "do", {kind: "open", ticket: 7});        // sends nothing: the same pick
 

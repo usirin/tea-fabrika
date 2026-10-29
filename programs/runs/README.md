@@ -22,14 +22,17 @@ traceOf(SEVEN, SEVEN_NOW, atSeven(10, 5)).tracks[2]?.clips;
 
 // tsh> runs --ticket 7
 // tsh> runs --ticket 7 | trace     a run picked here: its trace id goes out on `id`, and trace reads it
+// tsh> tracker | ticket | runs     input `ticket` takes each ticket sent: the runs follow it
 traceIdOf(SEVEN, "r-2");          // SEVEN_TRACE: the trace id plan's `started` holds
 ```
+
+With no flag it waits for a ticket on its input. When that input ends, it keeps the last ticket.
 
 ## What's in it
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/runs` | `src/index.ts` | `runs`, the program: flag `ticket`, input `in` (`choose` a run, `quit`), output `id`: the trace id of each run picked that has one. `traceIdOf` reads it off the run's `started`. Its view is the ticket's facts and the clock (`One`). |
+| `@tea-fabrika/runs` | `src/index.ts` | `runs`, the program: flag `ticket` (left out, it waits), input `in` (`choose` a run, `quit`), input `ticket` (a ticket to lay out now), output `id`: the trace id of each run picked that has one. `traceIdOf` reads it off the run's `started`. Its view is the ticket's facts and the clock (`One`). |
 | | `src/trace.ts` | `traceOf`, `axisOf`, `placeOf`, `ticksOf`, `stopsOf`: the facts folded into tracks up to a time. Pure. |
 | `@tea-fabrika/runs/window` | `src/window.tsx` | `RunsWindow`: the tracks, the ruler and the playhead. ← and → step from fact to fact; Home and End jump. |
 

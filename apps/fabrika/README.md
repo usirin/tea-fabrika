@@ -162,9 +162,11 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   new tiles beside it, in t2's place, each with a third of its space. In a row they become
   siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
   folded. Unfolding one takes space only from the line's other windows.
-- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the trace
+- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the runs
   both show #7; pick another, and both follow. Each sends the ticket it is on, by its number,
   each time that changes ([the pipe the line carries](../../docs/direction/fold-not-tabs.md#the-pipe-the-line-carries)).
+  The line can go on: in `tracker | ticket | runs | trace`, a run picked in the runs opens its
+  job's trace in the fourth window.
 - **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
   A run alone has none.
 - **A line's other windows have no tsh.** Ctrl-C in one goes to the typed-in tile's tsh. A
@@ -180,7 +182,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   - Ctrl-B x on a closing tile asks `stop t2 now? (y/n)`. y stops them, and the tile goes.
   - On one window of a line, y ends that one process: it gets the end of its inputs (`end`), and
     its window goes when it is over. Its neighbours follow the pipes. In
-    `tracker | ticket | trace`, closing the ticket's window leaves the trace on the last ticket,
+    `tracker | ticket | runs`, closing the ticket's window leaves the runs on the last ticket,
     and the tracker's next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that
     answered stopped`. Asked again, `stop t3 now?`, y stops the process (`kill`).
   - The typed-in tile of a line holds its tsh: closing it ends tsh and every process of the line.
@@ -365,10 +367,11 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 
 ## What it does not do yet
 
-- **One real line only.** `tracker | ticket | trace` is the one line whose programs pipe. The
-  map takes no ticket from a pipe yet.
+- **One real line only.** `tracker | ticket | runs` is the one line whose programs pipe a
+  ticket, and `runs | trace` the one that pipes a run's trace id. The map takes no ticket from
+  a pipe yet; `trace` takes a trace id, never a ticket.
 - **An upstream ends on its next send, not at once.** With the ticket's window closed, the
-  tracker in `tracker | ticket | trace` looks alive until the next pick, then fails.
+  tracker in `tracker | ticket | runs` looks alive until the next pick, then fails.
 
 - **The cursor moves one code point at a time.** It can stop between a letter and its accent,
   which readline steps over, or inside an emoji made of several.

@@ -146,6 +146,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			"ticket_ticket",
 			"map_in",
 			"runs_in",
+			"runs_ticket",
 			"trace_do",
 			"trace_id",
 		]);

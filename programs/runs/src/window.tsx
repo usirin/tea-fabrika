@@ -214,7 +214,12 @@ function Chosen({trace, run}: {readonly trace: Trace; readonly run: string}) {
 	);
 }
 
-export function RunsWindow({view, send}: WindowProps<typeof runs>) {
+/** The window, drawn afresh for each ticket it lays out: a playhead moved on #7 starts live on #3. */
+export function RunsWindow(props: WindowProps<typeof runs>) {
+	return <Tracks key={props.view.number ?? 0} {...props} />;
+}
+
+function Tracks({view, send}: WindowProps<typeof runs>) {
 	// The playhead: `null` is live, at now; a time is a replay up to it.
 	const [at, setAt] = useState<number | null>(null);
 	const [chosen, setChosen] = useState<string | null>(null);
@@ -250,9 +255,11 @@ export function RunsWindow({view, send}: WindowProps<typeof runs>) {
 				<p className="empty">
 					{view.unreachable !== null
 						? `The ledger cannot be read: ${view.unreachable}`
-						: view.ready
-							? `No ticket #${n}.`
-							: "Reading the ledger."}
+						: !view.ready
+							? "Reading the ledger."
+							: view.number === null
+								? "No ticket yet: pick one in the tracker, or start it with --ticket."
+								: `No ticket #${n}.`}
 				</p>
 			</section>
 		);

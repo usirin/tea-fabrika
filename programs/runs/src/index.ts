@@ -15,6 +15,11 @@ import {Effect, Schema, Stream} from "effect";
 //   {kind: "quit"}               on `in`: it ends
 //
 //   tsh> runs --ticket 7 | trace   a run picked here opens its job's trace there
+//   tsh> tracker | ticket | runs
+//   // it lays out the ticket the tracker picks, and moves to the next pick
+//
+// Which ticket it lays out comes from the flag, then from its input `ticket`, the latest one
+// winning. The input's end changes nothing: the last ticket stays, until `in` ends.
 //
 // It was the `trace` program until the job record came (docs/direction/a-job-record-holds-its-trace.md):
 // `trace` now opens one job's spans and steps (programs/trace). This one stays the ticket's view
@@ -42,10 +47,19 @@ export const traceIdOf = (timeline: readonly Entry[], runId: string): string | n
 export const runs = defineProgram({
 	name: "runs",
 	description:
-		"One ticket's runs laid out in time: a track per step, a clip per run, the waits on a person, the answers, and what each step cost. A playhead replays the facts up to a time. A run picked sends its trace id. It has a window.",
-	flags: {ticket: flag(TicketNumber, "The ticket to lay out, by its number.")},
+		"One ticket's runs laid out in time: a track per step, a clip per run, the waits on a person, the answers, and what each step cost. A playhead replays the facts up to a time. Lays out the ticket a pipe sends it. A run picked sends its trace id. It has a window.",
+	flags: {
+		ticket: flag(
+			Schema.UndefinedOr(TicketNumber),
+			"The ticket to lay out first, by its number. Left out, it waits for one on its input ticket.",
+		),
+	},
 	inputs: {
 		in: input(In, "What the window sends: a run picked, or quit, and it ends."),
+		ticket: input(
+			TicketNumber,
+			"A ticket to lay out now, by its number: what a pipe from the ticket or the tracker sends.",
+		),
 	},
 	outputs: {
 		id: output(TraceId, "The trace id of each run picked that has one, for `trace` to open."),
@@ -55,9 +69,10 @@ export const runs = defineProgram({
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
-			yield* runtime.dispatch({type: "open", ticket: flags.ticket}).pipe(Effect.orDie);
+			const open = (ticket: number) => runtime.dispatch({type: "open", ticket}).pipe(Effect.orDie);
+			if (flags.ticket !== undefined) yield* open(flags.ticket);
 			yield* watch("tickets", "tickets", runtime);
-			yield* inputs.in.pipe(
+			const window = inputs.in.pipe(
 				Stream.takeWhile((d) => d.kind !== "quit"),
 				Stream.runForEach((d) => {
 					if (d.kind !== "choose") return Effect.void;
@@ -65,6 +80,9 @@ export const runs = defineProgram({
 					return id === null ? Effect.void : send("id", id);
 				}),
 			);
+			// The picks, until their input ends; then the last one stays, until `in` ends.
+			const picks = inputs.ticket.pipe(Stream.runForEach(open), Effect.andThen(Effect.never));
+			yield* Effect.raceFirst(window, picks);
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();
 		}).pipe(Effect.scoped),

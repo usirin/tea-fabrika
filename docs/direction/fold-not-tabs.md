@@ -180,8 +180,9 @@ the desk's own copy of the page's strip and border sizes to work out what fits
 
 - **The minimum.** 220 by 120 comes from the prototype. A desk on a laptop
   screen will show whether it folds too much.
-- **One line only so far.** `tracker | ticket | trace` is the one line whose
-  programs pipe (below). It ran in the app once, on a test home.
+- **One line only so far.** `tracker | ticket | runs` is the one line whose
+  programs pipe a ticket (below), and it can go on to `| trace`. It ran in
+  the app on a test home, twice.
 
 ## A line's windows close one by one
 
@@ -204,13 +205,13 @@ const windowYes = (s: Open, tile: TileId, process: string): Step => {
 // The tile goes when the process is over, as any window does.
 ```
 
-What the line `tracker | ticket | trace` does when the ticket's window closes:
+What the line `tracker | ticket | runs` does when the ticket's window closes:
 
 | Process | What happens |
 |---|---|
 | ticket | its inputs end; it ends on its own, and its window goes |
 | tracker (upstream) | goes on; its next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that answered stopped` |
-| trace (downstream) | its input from the ticket ends; it keeps showing the last ticket, and ends when its own window closes |
+| runs (downstream) | its input from the ticket ends; it keeps showing the last ticket, and ends when its own window closes |
 
 - **The typed-in tile is the line's.** Closing it ends tsh and every process
   of the line, as before. Closing a window never closes it.
@@ -241,12 +242,15 @@ ticket: output(TicketNumber, "The ticket the person picks, by its number ...")
 // programs/ticket: inputs and outputs
 inputs:  {do, ticket: input(TicketNumber, "A ticket to show now ...")}
 outputs: {ticket: output(TicketNumber, "The ticket it shows ...")}
-// programs/trace: inputs
+// programs/runs: inputs and outputs
 inputs:  {in, ticket: input(TicketNumber, "A ticket to lay out now ...")}
+outputs: {id: output(TraceId, "The trace id of each run picked ...")}   // for `| trace`
 ```
 
-Each still runs alone: `ticket 7` and `trace 7` take the ticket as a flag, and
-with no flag they wait for one on their input. A ticket's writes name their
+Each still runs alone: `ticket --ticket 7` and `runs --ticket 7` take the
+ticket as a flag, and with no flag they wait for one on their input. `trace`
+takes no ticket: it takes a trace id, so `tracker | ticket | runs | trace`
+opens the trace of a run picked in the runs. A ticket's writes name their
 ticket (`{kind: "comment", ticket: 7, body}`), so a comment typed on #7 never
 lands on #3 picked after it.
 
