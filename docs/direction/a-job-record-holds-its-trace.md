@@ -32,6 +32,44 @@ const record = env.JOB_RECORD.get(env.JOB_RECORD.idFromName(span.traceId));
 const spans = yield* Traces.read(traceId); // the trace tile draws these
 ```
 
+## Changed 2026-10-28: the host keeps the group, tsh keeps the list
+
+Decided by the owner the same day, after part A
+([#170](https://github.com/usirin/tea-fabrika/pull/170)) moved tsh's job
+table onto the host. Unix has two layers here, and the first version of this
+note merged them:
+
+- **The kernel keeps process groups:** which process is in which group. That
+  is the host's part. A job is a leader run and every run it started, and they
+  share one trace.
+- **The shell keeps the job table:** `%1`, `%2`, which job is in front,
+  `jobs`, `fg`. bash's table is its own and goes when bash goes. That is tsh's
+  part, kept in tsh's own state on the ledger, as before part A.
+
+```ts
+// The host: which job a run is in, and the job's trace. No numbers, no foreground.
+yield* leaderOf("lane:700:t2:r1:build"); // "lane:700"
+// serve starts every run under traceOf(its leader), so a job is one trace
+
+// tsh: its own job table, in its own state (packages/fabrika/src/shell/jobs.ts)
+{ jobs: [{ n: 1, text: "seq --to 3 | tally", state: "done", background: false, stages: [/* … */] }] }
+```
+
+Keeping jobs alive with no shell open is a multiplexer's work. tmux is a
+program that keeps terminals and runs a shell in each: OS, then bash, then
+tmux, then bash, then the program. WezTerm's mux server and VS Code's pty host
+do the same. Here that program is the app's tiling. It is not built yet, and
+where it keeps its layout is its own business, not the host's.
+
+What this changes below:
+
+- "A job is the host's, not tsh's" (What was decided) now means the group and
+  its trace. `jobs`, `&`, `attach %n` and detach stay on tsh's own table.
+- "tsh's job table moves to the host" (What it changes) is dropped, with its
+  part of the cost and the "moving the job table" doubt.
+- Nothing else moves. The record's key is still the job's trace id, from its
+  leader's first run.
+
 ## Words
 
 - **Program:** the code. `seq`, `double`, the lane, the tracker.
@@ -116,7 +154,8 @@ after, and no Cmds.
 
 ## What was decided
 
-- **A job is the host's, not tsh's.** Today a job lives in tsh's job table
+- **A job is the host's, not tsh's.** *Changed 2026-10-28, see above: the
+  host keeps the group and its trace; the job table stays tsh's.* Today a job lives in tsh's job table
   (`packages/fabrika/src/shell/jobs.ts`) and leaves it when it ends. Now that
   we have hosts, the host keeps jobs, the way a kernel keeps process groups
   and a shell only shows them. Anything that starts a program makes a job: a
@@ -190,7 +229,8 @@ after, and no Cmds.
   run, `runs/r-7/beats`, that the ticket's fold never reads. They now sit in
   the job's record. It is the same idea: a stream nobody folds, kept beside
   the ticket, readable from any machine.
-- **tsh's job table moves to the host.** The 10-25 tile decisions (`&` makes
+- **tsh's job table moves to the host.** *Dropped 2026-10-28, see above: the
+  table stays tsh's.* The 10-25 tile decisions (`&` makes
   a background job, `attach %n` brings it into a tile) stay as they are. They
   now act on the host's jobs.
 - **Slice 3t of the v1 plan** ([a ticket runs from the app](./a-ticket-runs-from-the-app.md))
@@ -221,7 +261,7 @@ after, and no Cmds.
   job ever run.
 
 **Cost:** host jobs (tsh's table, `&`, `attach` and detach move onto the
-host), the child's trace id on `startChild`, a step row per Msg, a small OTLP receiver in the
+host; *dropped 2026-10-28, the table stays tsh's*), the child's trace id on `startChild`, a step row per Msg, a small OTLP receiver in the
 Worker, the object, a `Storage` over it, the `Traces` service, and the tile. We
 give up Jaeger's search and compare. A bad deploy of the record's code
 redeploys the ledger too, the same risk the per-project Worker already takes.
@@ -233,7 +273,8 @@ redeploys the ledger too, the same risk the per-project Worker already takes.
   write is a trip over the network. A timing test settles it: writes per lane,
   and time per write, on Miniflare now and on Cloudflare once a deploy is
   agreed.
-- **Moving the job table.** tsh's jobs carry detach and attach across a tsh
+- **Moving the job table.** *Gone 2026-10-28: the table no longer moves.*
+  tsh's jobs carry detach and attach across a tsh
   restart today. The host has to keep the same promises. tsh's existing tests
   for them are the bar.
 - A span that arrives before its job's object exists. The object is made on
