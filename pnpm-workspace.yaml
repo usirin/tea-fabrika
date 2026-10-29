@@ -53,6 +53,8 @@ catalog:
   '@xterm/addon-fit': 0.11.0
   '@xterm/addon-webgl': 0.19.0
   '@xterm/xterm': 6.0.0
+  # React Flow, MIT: the map program's window (programs/map).
+  '@xyflow/react': 12.12.0
   effect: 4.0.6
   electron: 45.0.0
   esbuild: 0.28.2

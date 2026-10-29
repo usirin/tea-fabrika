@@ -1,7 +1,8 @@
 # fabrika app: `@kampus/fabrika-app`
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
-tmux. Every tile runs its own tsh, with the small programs `counter` and `tracker` loaded. A
+tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map` and
+`trace` loaded. A
 program with a view runs inside a tile. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
 "Decided 2026-10-25: tiles, like tmux".
@@ -59,8 +60,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 ## Where it sits
 
-- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika`,
-  `programs/counter` and `programs/tracker`, and nothing imports it.
+- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika` and the
+  programs in `programs/`, and nothing imports it.
 - Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
   `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
   `src/host/main.ts`, `src/host/run.ts`, `src/host/socket.ts`, `src/host/lock.ts` and
@@ -111,6 +112,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/window/` | `desk.tsx`, the page: the tiles, their borders, a tabbed stack's tabs, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
+| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the ticket, map and trace views of the stand-in ticket #7, as the host would send them. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
@@ -297,7 +299,8 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   official SDK (`@kampus/fabrika/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
-  the input's own description and its schema as JSON Schema (`tracker_do`, `counter_press`).
+  the input's own description and its schema as JSON Schema (`tracker_do`, `ticket_do`,
+  `counter_press`).
   One more, `runs`, lists every program and its tools, the agent's own runs, and what runs in
   your tiles.
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first

@@ -48,12 +48,30 @@ import {Write} from "./ticket.ts";
 export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 /** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
 export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
-export type {Head, OpenAsk} from "./head.ts";
+export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits} from "./head.ts";
 export {Author} from "./ledger.ts";
-export type {Listed, Opened, Show, Shown} from "./machine.ts";
+export {
+	Failed,
+	type Listed,
+	Opened,
+	openedOf,
+	over,
+	type Show,
+	type Shown,
+	statusOf,
+	Tracker,
+	type TrackerMsg,
+} from "./machine.ts";
+export {One, oneOf} from "./one.ts";
 export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
-export type {Row} from "./rows.ts";
-export type {Summary, Write} from "./ticket.ts";
+export {checksLine, Row} from "./rows.ts";
+export {currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords} from "./steps.ts";
+export {type Summary, Write} from "./ticket.ts";
+/**
+ * The tracker's machine, for a program that reads the same tickets another way: the ticket,
+ * map and trace programs run it with `ticketsOptions`, open one ticket, and show that.
+ */
+export {tickets};
 
 /**
  * What the window does: go to the list or a ticket, pick what the list shows, change a ticket, or
@@ -85,12 +103,36 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 	}
 };
 
-const options = {
+/** How the machine runs: its cells and Subs, on the `Ledger`, `Author` and `PullRequests` services. */
+export const ticketsOptions = {
 	ctx: undefined,
 	interpret: {load: loadCell, save: saveCell, pull_requests: pullRequestsCell},
 	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner},
 	terminal: over,
 };
+
+/**
+ * The machine as a program declares it: kept nowhere, since the ledger keeps the tickets. `main`
+ * runs it and shows it; no ref of a run ever starts it.
+ */
+export const ticketsKind = kind({
+	machine: tickets,
+	state: Tracker,
+	parent: "main",
+	options: () => ticketsOptions,
+	drawing: () => ({
+		name: "tickets",
+		steps: {
+			load: "read the ledger",
+			save: "write a fact",
+			poll: "wait for news",
+			pull_requests: "read the open pull requests",
+			pull_requests_wait: "wait to read them again",
+			clock: "keep the time",
+		},
+	}),
+	status: statusOf,
+});
 
 export const tracker = defineProgram({
 	name: "tracker",
@@ -103,32 +145,11 @@ export const tracker = defineProgram({
 		),
 	},
 	outputs: {},
-	// The ledger keeps the tickets, so the machine is kept nowhere else: main runs it and shows it.
-	// No ref of this run ever starts it.
-	machines: {
-		tickets: kind({
-			machine: tickets,
-			state: Tracker,
-			parent: "main",
-			options: () => options,
-			drawing: () => ({
-				name: "tickets",
-				steps: {
-					load: "read the ledger",
-					save: "write a fact",
-					poll: "wait for news",
-					pull_requests: "read the open pull requests",
-					pull_requests_wait: "wait to read them again",
-					clock: "keep the time",
-				},
-			}),
-			status: statusOf,
-		}),
-	},
+	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: Shown, of: shownOf},
 	main: ({inputs, watch}) =>
 		Effect.gen(function* () {
-			const runtime = yield* (yield* run(tickets, options)).ready;
+			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* watch("tickets", "tickets", runtime);
 			yield* inputs.do.pipe(
 				Stream.takeWhile((d) => d.kind !== "quit"),

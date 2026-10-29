@@ -7,7 +7,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./window": "./src/window.tsx",
-		"./github": "./src/github.ts"
+		"./github": "./src/github.ts",
+		"./seven": "./src/seven.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit -p ."

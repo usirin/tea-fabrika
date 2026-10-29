@@ -1,23 +1,114 @@
+/*
+ * The app's tokens: round 6's graphite palette (oklch), its type scale and spacing. What each
+ * colour means is held strictly: the accent means "your turn" and nothing else; red means stuck
+ * or broken; amber running; green done. The four type colours live only on the program map's
+ * ports and wires, never on text.
+ */
 :root {
 	color-scheme: dark;
-	--ground: #16181d;
-	--ink: #d8dce4;
-	--faint: #8a93a3;
-	--line: #2a2f3a;
-	--key: #3b82f6;
-	/* For a program's view: a second ink, a surface above the ground, a row under the pointer or
-	   picked, the two states of a thing (open, closed), something that went wrong, and a sans
-	   face for a view that is not a terminal. */
-	--soft: #b8bdc7;
-	--raised: #1d2027;
-	--hover: #1e2128;
-	--pick: #252a38;
-	--open: #4cc38a;
-	--closed: #a28bf0;
-	--alert: #f0868a;
-	--sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	--n-1: oklch(0.15 0.003 260);
+	--n-2: oklch(0.178 0.004 260);
+	--n-3: oklch(0.205 0.004 260);
+	--n-4: oklch(0.232 0.004 260);
+	--n-5: oklch(0.256 0.004 260);
+	--n-6: oklch(0.28 0.004 260);
+	--n-7: oklch(0.322 0.004 260);
+	--n-8: oklch(0.4 0.004 260);
+	--n-9: oklch(0.625 0.004 260);
+	--n-10: oklch(0.695 0.004 260);
+	--n-11: oklch(0.79 0.002 260);
+	--n-12: oklch(0.94 0.001 260);
+	--a-3: oklch(0.27 0.035 266);
+	--a-5: oklch(0.33 0.059 266);
+	--a-9: oklch(0.54 0.14 266);
+	--a-10: oklch(0.59 0.14 266);
+	--a-11: oklch(0.8 0.084 266);
+
+	--surface-sunken: var(--n-1);
+	--surface: var(--n-2);
+	--surface-raised: var(--n-3);
+	--surface-hover: var(--n-4);
+	--surface-selected: var(--n-5);
+	--border-faint: var(--n-5);
+	--border: var(--n-6);
+	--border-strong: var(--n-7);
+	--wire: var(--n-8);
+	--text-faint: var(--n-9);
+	--text-muted: var(--n-10);
+	--text-secondary: var(--n-11);
+	--text-primary: var(--n-12);
+	--focus: var(--n-11);
+	--tile-focus: var(--n-9);
+	--turn: var(--a-11);
+	--turn-fill: var(--a-9);
+	--turn-fill-hover: var(--a-10);
+	--turn-fg: oklch(0.985 0 0);
+	--done: oklch(0.78 0.1 155);
+	--running: oklch(0.82 0.1 82);
+	--stuck: oklch(0.72 0.15 25);
+	--person-bg: var(--n-7);
+	--agent-bg: var(--n-4);
+	--ty-fact: oklch(0.76 0.075 205);
+	--ty-turn: oklch(0.76 0.085 345);
+	--ty-step: oklch(0.8 0.085 120);
+	--ty-checks: oklch(0.8 0.06 55);
+
+	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+	--fs-title: 1.375rem;
+	--fs-head: 0.9375rem;
+	--fs-body: 0.8125rem;
+	--fs-prose: 0.875rem;
+	--fs-small: 0.75rem;
+	--fs-micro: 0.6875rem;
+	--s-1: 4px;
+	--s-2: 8px;
+	--s-3: 12px;
+	--s-4: 16px;
+	--s-5: 20px;
+	--s-6: 24px;
+	--s-8: 32px;
+	--s-10: 40px;
+	--r-sm: 4px;
+	--r: 6px;
+	--r-lg: 8px;
+	--r-xl: 12px;
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--fast: 120ms;
+
+	/* The names the counter's and the tracker's windows were written with, on the same palette. */
+	--ground: var(--surface);
+	--ink: var(--text-secondary);
+	--faint: var(--text-faint);
+	--line: var(--border);
+	--key: var(--turn-fill);
+	--soft: var(--text-muted);
+	--raised: var(--surface-raised);
+	--hover: var(--surface-hover);
+	--pick: var(--surface-selected);
+	--open: var(--done);
+	--closed: oklch(0.72 0.12 300);
+	--alert: var(--stuck);
+	--sans: var(--font);
+	font-family: var(--mono);
 	font-size: 14px;
+	-webkit-font-smoothing: antialiased;
+}
+
+.f-fact {
+	--ty: var(--ty-fact);
+}
+
+.f-turn {
+	--ty: var(--ty-turn);
+}
+
+.f-step {
+	--ty: var(--ty-step);
+}
+
+.f-checks {
+	--ty: var(--ty-checks);
 }
 
 html,
@@ -25,8 +116,8 @@ body,
 #root {
 	height: 100%;
 	margin: 0;
-	background: var(--ground);
-	color: var(--ink);
+	background: var(--surface-sunken);
+	color: var(--text-secondary);
 }
 
 #root[role="alert"] {
@@ -39,6 +130,9 @@ body,
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+	box-sizing: border-box;
+	padding: var(--s-1) var(--s-1) 0;
+	gap: var(--s-1);
 }
 
 .workspace {
@@ -65,32 +159,54 @@ body,
 /* A tabbed stack: one line of tabs, as quiet as the status line, and the shown child under it. */
 .stack.tabbed {
 	flex-direction: column;
+	border-radius: var(--r-lg);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
 }
 
 .tabs {
 	display: flex;
 	flex: 0 0 auto;
+	height: 40px;
 	margin: 0;
-	padding: 0;
+	padding: 0 var(--s-1);
 	list-style: none;
-	border-bottom: 1px solid var(--line);
-	color: var(--faint);
-	font-size: 12px;
+	border-bottom: 1px solid var(--border-faint);
+	color: var(--text-muted);
+	font: 400 var(--fs-small) var(--mono);
 }
 
 .tabs li {
+	display: flex;
 	flex: 0 1 auto;
+	align-items: center;
+	gap: var(--s-2);
 	min-width: 0;
-	padding: 2px 10px;
+	padding: 0 var(--s-3);
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	cursor: default;
 }
 
+.tabs .tid {
+	color: var(--text-faint);
+}
+
 .tabs li[aria-current="true"] {
-	background: var(--raised);
-	color: var(--ink);
+	color: var(--text-primary);
+	box-shadow: inset 0 -2px 0 var(--text-secondary);
+}
+
+.tabs li[aria-current="true"] .tid {
+	color: var(--text-secondary);
+}
+
+.tabs .hint {
+	margin-left: auto;
+	padding-right: var(--s-2);
+	color: var(--text-faint);
+	font-family: var(--font);
 }
 
 /* A child's share is its grow: the borders between them are a fixed few pixels. */
@@ -105,8 +221,13 @@ body,
 	flex: 0 0 4px;
 	margin: 0;
 	border: 0;
-	background: var(--line);
+	border-radius: 2px;
+	background: transparent;
 	touch-action: none;
+}
+
+.border:hover {
+	background: var(--border);
 }
 
 .stack.horizontal > .border {
@@ -123,12 +244,24 @@ body,
 	min-width: 0;
 	min-height: 0;
 	box-sizing: border-box;
-	border: 1px solid var(--line);
+	border-radius: var(--r-lg);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
 	overflow: hidden;
 }
 
 .tile.focused {
-	border-color: var(--key);
+	box-shadow: inset 0 0 0 1px var(--tile-focus);
+}
+
+/* In a tabbed stack the stack is the frame: its tile draws none of its own. */
+.stack.tabbed .tile {
+	border-radius: 0 0 var(--r-lg) var(--r-lg);
+	box-shadow: none;
+}
+
+.stack.tabbed:has(.tile.focused) {
+	box-shadow: inset 0 0 0 1px var(--tile-focus);
 }
 
 /* A tile's terminal fills its slot, with a small margin, as a terminal app's does. */
@@ -166,14 +299,22 @@ main.program {
 	flex-direction: column;
 	box-sizing: border-box;
 	padding: 16px;
-	background: var(--ground);
+	background: var(--surface);
 	overflow: auto;
 	outline: none;
 }
 
+/* A tile's frame stays drawn over its view: the view sits one pixel in. */
+.tile > main.program {
+	inset: 1px;
+	border-radius: inherit;
+}
+
 /* A closing tile: its programs were given the end of their inputs, and it waits for their end. */
 .tile.closing {
-	border-style: dashed;
+	box-shadow: none;
+	outline: 1px dashed var(--border-strong);
+	outline-offset: -1px;
 }
 
 .closing-note {
@@ -182,7 +323,7 @@ main.program {
 	right: 0;
 	margin: 0;
 	padding: 2px 8px;
-	background: #2b2f3a;
+	background: var(--surface-raised);
 	color: var(--faint);
 	font-size: 12px;
 }
@@ -192,7 +333,7 @@ main.program {
 	position: absolute;
 	inset: auto 0 0 0;
 	padding: 8px 12px;
-	background: #2b2f3a;
+	background: var(--surface-raised);
 	border-top: 1px solid var(--key);
 }
 
@@ -210,10 +351,10 @@ kbd {
 	display: flex;
 	gap: 16px;
 	align-items: center;
-	padding: 2px 8px;
-	border-top: 1px solid var(--line);
-	color: var(--faint);
-	font-size: 12px;
+	height: 28px;
+	padding: 0 var(--s-3);
+	color: var(--text-muted);
+	font: 400 var(--fs-small) var(--mono);
 }
 
 .workspaces {
@@ -225,12 +366,13 @@ kbd {
 }
 
 .workspaces li[aria-current="true"] {
-	color: var(--ink);
+	color: var(--text-primary);
 	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 
 .prefix.armed {
-	color: var(--key);
+	color: var(--text-primary);
 }
 
 .starting {
@@ -340,6 +482,70 @@ button:hover {
 button:focus-visible {
 	outline: 2px solid var(--key);
 	outline-offset: 2px;
+}
+
+/*
+ * A round 6 view's base (programs/ticket, map and trace): its type and a plain reset of its
+ * controls. Here, before any rule that styles a control more closely, so those still win.
+ */
+.view {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--surface);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+	font-feature-settings: "cv11", "ss01";
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+}
+
+.view *,
+.view *::before,
+.view *::after {
+	box-sizing: border-box;
+}
+
+.view button,
+.view input,
+.view textarea {
+	font: inherit;
+	color: inherit;
+}
+
+.view button {
+	background: none;
+	border: 0;
+	border-radius: 0;
+	padding: 0;
+	cursor: pointer;
+	text-align: start;
+}
+
+.view button:hover {
+	border-color: transparent;
+}
+
+.view button:disabled {
+	cursor: default;
+}
+
+.view :focus {
+	outline: none;
+}
+
+.view :focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: var(--r-sm);
+}
+
+.view p,
+.view h1,
+.view h2,
+.view h3 {
+	margin: 0;
 }
 
 /*
@@ -901,5 +1107,1437 @@ main.program:has(> .tracker) {
 	.tracker-list a.tracker-pull-request,
 	.tracker .tracker-shows button {
 		transition: background-color 80ms ease-out;
+	}
+}
+
+/*
+ * Round 6: the three windows one ticket is seen through, each a program in its own tile.
+ * programs/ticket (a page, as Linear draws an issue), programs/map (today's programs on a canvas)
+ * and programs/trace (one ticket's runs in time, as a music editor lays out tracks). Everything
+ * here is under `.view`, so the app's own buttons and tiles keep their look, and the rules match
+ * the round 6 mockup's, class for class.
+ */
+
+main.program:has(> .view) {
+	padding: 0;
+	container: main / inline-size;
+}
+
+.view .sr {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.view .mono {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+
+.view .faint {
+	color: var(--text-faint);
+}
+
+.view .muted {
+	color: var(--text-muted);
+}
+
+.view .prim {
+	color: var(--text-primary);
+}
+
+.view .trunc {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-inline-size: 0;
+}
+
+.view .kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 18px;
+	block-size: 18px;
+	padding-inline: 4px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font: 500 var(--fs-micro) / 1 var(--font);
+	color: var(--text-muted);
+}
+
+.view .cmd {
+	padding: 2px 6px;
+	border-radius: var(--r-sm);
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font: 400 var(--fs-small) / 1.4 var(--mono);
+	color: var(--text-primary);
+	white-space: nowrap;
+}
+
+.view .note {
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	max-inline-size: 60ch;
+	text-wrap: pretty;
+}
+
+.view .empty,
+.view .view-empty {
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.view .view-empty {
+	margin: var(--s-8) auto;
+}
+
+.view .alert {
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-lg);
+	box-shadow: inset 0 0 0 1px var(--stuck);
+	color: var(--stuck);
+	font-size: var(--fs-small);
+}
+
+.view .tag {
+	font: 500 var(--fs-micro) / 1 var(--font);
+	color: var(--text-secondary);
+	padding: 3px 5px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	white-space: nowrap;
+	letter-spacing: 0.02em;
+}
+
+/* Buttons: one filled for "your turn", the rest quiet. */
+.view .btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	block-size: 28px;
+	padding-inline: var(--s-3);
+	border-radius: var(--r);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text-primary);
+	font-weight: 500;
+	white-space: nowrap;
+	transition:
+		background-color var(--fast) ease,
+		scale 150ms ease-out;
+}
+
+.view .btn:disabled {
+	color: var(--text-faint);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	background: none;
+}
+
+.view .btn.quiet {
+	background: none;
+	box-shadow: none;
+	color: var(--text-secondary);
+	padding-inline: var(--s-2);
+}
+
+.view .btn.turn {
+	background: var(--turn-fill);
+	box-shadow: none;
+	color: var(--turn-fg);
+}
+
+.view .btn.sm {
+	block-size: 24px;
+	padding-inline: var(--s-2);
+	font-size: var(--fs-small);
+}
+
+@media (hover: hover) {
+	.view .btn:not(:disabled):hover {
+		background: var(--surface-hover);
+	}
+
+	.view .btn.quiet:not(:disabled):hover {
+		color: var(--text-primary);
+	}
+
+	.view .btn.turn:hover {
+		background: var(--turn-fill-hover);
+	}
+}
+
+.view .btn:not(:disabled):active {
+	scale: 0.97;
+}
+
+/* Marks: who did it, by shape and face, never colour. A person a circle, an agent a square. */
+.view .m {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	inline-size: 18px;
+	block-size: 18px;
+	font: 600 10px / 1 var(--font);
+	color: var(--text-primary);
+}
+
+.view .m.p {
+	border-radius: 50%;
+	background: var(--person-bg);
+}
+
+.view .m.p.you {
+	box-shadow:
+		0 0 0 2px var(--surface-raised),
+		0 0 0 3.5px var(--turn-fill);
+}
+
+.view .m.a {
+	border-radius: var(--r-sm);
+	background: var(--agent-bg);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	color: var(--text-secondary);
+}
+
+.view .m svg {
+	inline-size: 10px;
+	block-size: 10px;
+}
+
+.view .m.s {
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	color: var(--text-muted);
+}
+
+.view .m.lg {
+	inline-size: 24px;
+	block-size: 24px;
+	font-size: 11px;
+}
+
+.view .who {
+	color: var(--text-primary);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.view .who.ag {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+
+.view .dot {
+	flex: none;
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+.view .dot.run {
+	background: var(--running);
+	box-shadow: none;
+}
+
+.view .dot.you {
+	box-shadow: inset 0 0 0 1.5px var(--turn);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.view .dot.run.live {
+		animation: breathe 2.4s ease-in-out infinite;
+	}
+}
+
+@keyframes breathe {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.view .w-done {
+	color: var(--done);
+}
+
+.view .w-run {
+	color: var(--running);
+}
+
+.view .w-stuck {
+	color: var(--stuck);
+}
+
+.view .w-you {
+	color: var(--turn);
+	font-weight: 600;
+}
+
+.view .kv {
+	display: grid;
+	grid-template-columns: 76px minmax(0, 1fr);
+	gap: 4px var(--s-3);
+	margin: 0;
+	font-size: var(--fs-small);
+}
+
+.view .kv dt {
+	color: var(--text-faint);
+}
+
+.view .kv dd {
+	margin: 0;
+	color: var(--text-secondary);
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+
+.view .kv .mono {
+	color: var(--text-primary);
+}
+
+/* 1. The ticket: a page, as Linear draws an issue. */
+
+.ticket-view {
+	overflow: auto;
+}
+
+.ticket-view .tkv {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 280px;
+	min-block-size: 100%;
+}
+
+.ticket-view .tk-main {
+	min-inline-size: 0;
+	padding: var(--s-8) var(--s-10) var(--s-10);
+}
+
+.ticket-view .tk-col {
+	max-inline-size: 700px;
+	margin-inline: auto;
+	display: grid;
+	gap: var(--s-6);
+}
+
+.ticket-view .idl {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	margin-block-end: 6px;
+}
+
+.ticket-view .idl .mono {
+	color: var(--text-muted);
+}
+
+.ticket-view .tk-title {
+	font-size: var(--fs-title);
+	line-height: 1.3;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	color: var(--text-primary);
+	text-wrap: balance;
+	overflow-wrap: anywhere;
+}
+
+.ticket-view .turnc {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	flex-wrap: wrap;
+	padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+.ticket-view .turnc.you {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--turn-fill);
+}
+
+.ticket-view .turnc.stuck {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--stuck);
+}
+
+.ticket-view .turnc .what {
+	display: grid;
+	min-inline-size: 0;
+	flex: 1 1 260px;
+}
+
+.ticket-view .turnc .big {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.ticket-view .turnc .sub {
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 6px;
+}
+
+.ticket-view .turnc .acts {
+	display: inline-flex;
+	gap: var(--s-2);
+	margin-inline-start: auto;
+}
+
+.ticket-view .noform {
+	flex: 1 1 100%;
+	display: grid;
+	gap: var(--s-2);
+}
+
+.ticket-view .noform textarea {
+	inline-size: 100%;
+	min-block-size: 52px;
+	padding: var(--s-2);
+	border-radius: var(--r);
+	border: 0;
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text-primary);
+	resize: vertical;
+}
+
+.ticket-view .noform .row2 {
+	display: flex;
+	gap: var(--s-2);
+	justify-content: flex-end;
+}
+
+.ticket-view .desc {
+	max-inline-size: 66ch;
+	font-size: var(--fs-prose);
+	line-height: 1.65;
+	color: var(--text-secondary);
+	text-wrap: pretty;
+	display: grid;
+	gap: var(--s-3);
+}
+
+.ticket-view .act-h {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	margin: 0 0 var(--s-2);
+	padding-block-start: var(--s-4);
+	border-block-start: 1px solid var(--border-faint);
+}
+
+.ticket-view .act-h h2 {
+	font-size: var(--fs-body);
+	font-weight: 600;
+	color: var(--text-primary);
+}
+
+.ticket-view .act-h .hint {
+	margin-inline-start: auto;
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+}
+
+.ticket-view .acts-l {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+}
+
+.ticket-view .act {
+	border-radius: var(--r-lg);
+}
+
+.ticket-view .act.open {
+	background: color-mix(in oklab, var(--surface-raised) 60%, var(--surface));
+}
+
+.ticket-view .act-r {
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto 14px;
+	gap: var(--s-3);
+	align-items: center;
+	inline-size: 100%;
+	min-block-size: 34px;
+	padding: 4px var(--s-2);
+	border-radius: var(--r-lg);
+	transition: background-color 100ms ease;
+}
+
+@media (hover: hover) {
+	.ticket-view .act-r:hover {
+		background: var(--surface-hover);
+	}
+}
+
+.ticket-view .act-r .line {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+	min-inline-size: 0;
+}
+
+.ticket-view .act-r .w {
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.ticket-view .act-r .code {
+	font: 400 var(--fs-small) var(--mono);
+	color: var(--text-faint);
+}
+
+.ticket-view .act-r .quote {
+	color: var(--text-muted);
+}
+
+.ticket-view .act-r time {
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.ticket-view .chev {
+	inline-size: 14px;
+	block-size: 14px;
+	color: var(--text-faint);
+	opacity: 0;
+	transition: opacity var(--fast) ease;
+}
+
+.ticket-view .act-r:hover .chev,
+.ticket-view .act-r:focus-visible .chev,
+.ticket-view .act.open .chev {
+	opacity: 1;
+}
+
+.ticket-view .act.open .chev {
+	rotate: 90deg;
+}
+
+.ticket-view .act-x {
+	padding: 2px var(--s-3) var(--s-3) 38px;
+	display: grid;
+	gap: var(--s-2);
+}
+
+.ticket-view .composer {
+	margin-block-start: var(--s-3);
+	border-radius: var(--r-lg);
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	transition: box-shadow var(--fast) ease;
+}
+
+.ticket-view .composer:focus-within {
+	box-shadow:
+		inset 0 0 0 1px var(--border-strong),
+		0 0 0 2px var(--surface),
+		0 0 0 3.5px var(--focus);
+}
+
+.ticket-view .composer textarea {
+	display: block;
+	inline-size: 100%;
+	min-block-size: 64px;
+	resize: vertical;
+	padding: var(--s-3);
+	border: 0;
+	background: none;
+	color: var(--text-primary);
+	line-height: 1.5;
+}
+
+.ticket-view .composer textarea:focus-visible {
+	outline: none;
+}
+
+.ticket-view textarea::placeholder {
+	color: var(--text-faint);
+}
+
+.ticket-view .composer .cf {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: 0 var(--s-2) var(--s-2) var(--s-3);
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.ticket-view .composer .cf .sp {
+	margin-inline-end: auto;
+	display: inline-flex;
+	gap: 2px;
+	align-items: center;
+}
+
+/* The properties, as Linear keeps them: a quiet column beside the work. */
+.ticket-view .tk-side {
+	border-inline-start: 1px solid var(--border-faint);
+	padding: var(--s-5) var(--s-4) var(--s-8);
+	display: grid;
+	gap: var(--s-5);
+	align-content: start;
+	position: sticky;
+	inset-block-start: 0;
+	align-self: start;
+}
+
+.ticket-view .tk-side h3,
+.ticket-view .props-inline h3 {
+	margin: 0 0 var(--s-1);
+	font-size: var(--fs-small);
+	font-weight: 500;
+	color: var(--text-faint);
+}
+
+.ticket-view .props {
+	display: grid;
+	grid-template-columns: 64px minmax(0, 1fr);
+	gap: 0 var(--s-3);
+	margin: 0;
+	font-size: var(--fs-small);
+	align-items: center;
+}
+
+.ticket-view .props dt {
+	color: var(--text-faint);
+	min-block-size: 30px;
+	display: flex;
+	align-items: center;
+}
+
+.ticket-view .props dd {
+	margin: 0;
+	min-inline-size: 0;
+	min-block-size: 30px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-secondary);
+}
+
+.ticket-view .meter {
+	display: inline-flex;
+	gap: 2px;
+}
+
+.ticket-view .meter i {
+	inline-size: 7px;
+	block-size: 4px;
+	border-radius: 1px;
+	background: var(--border);
+}
+
+.ticket-view .meter i.d {
+	background: var(--text-faint);
+}
+
+.ticket-view .meter i.run {
+	background: var(--running);
+}
+
+.ticket-view .meter i.you {
+	background: var(--turn-fill);
+}
+
+.ticket-view .meter i.bad {
+	background: var(--stuck);
+}
+
+.ticket-view .made {
+	display: grid;
+	gap: var(--s-2);
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	justify-items: start;
+}
+
+.ticket-view .props-inline {
+	display: none;
+}
+
+@container main (max-width: 760px) {
+	.ticket-view .tkv {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.ticket-view .tk-side {
+		display: none;
+	}
+
+	.ticket-view .props-inline {
+		display: grid;
+		gap: var(--s-1);
+		padding: var(--s-3) var(--s-3) var(--s-2);
+		border-radius: var(--r-lg);
+		box-shadow: inset 0 0 0 1px var(--border-faint);
+	}
+
+	.ticket-view .props-inline .props {
+		grid-template-columns: 64px minmax(0, 1fr) 64px minmax(0, 1fr);
+	}
+
+	.ticket-view .tk-main {
+		padding: var(--s-5) var(--s-4) var(--s-8);
+	}
+
+	.ticket-view .turnc .acts {
+		margin-inline-start: 0;
+	}
+}
+
+@container main (max-width: 560px) {
+	.ticket-view .props-inline .props {
+		grid-template-columns: 64px minmax(0, 1fr);
+	}
+}
+
+/* The bar over the map and the trace. */
+
+.view .mapbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2) var(--s-4);
+	padding: var(--s-2) var(--s-4);
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	border-block-end: 1px solid var(--border-faint);
+}
+
+.view .mapbar .state {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--text-secondary);
+}
+
+.view .legend {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--s-3);
+	margin-inline-start: auto;
+	color: var(--text-faint);
+}
+
+.view .legend > span {
+	display: inline-flex;
+	gap: 5px;
+	align-items: center;
+}
+
+.view .shape {
+	inline-size: 10px;
+	block-size: 10px;
+	flex: none;
+	overflow: visible;
+}
+
+.view .shape * {
+	fill: var(--surface-raised);
+	stroke: var(--ty);
+	stroke-width: 1.6;
+}
+
+/* 2. The program map: today's programs on a React Flow canvas. */
+
+.map-view .canvas {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+.map-view .legend .svcl {
+	inline-size: 18px;
+	block-size: 0;
+	border-block-start: 2px dotted var(--border-strong);
+}
+
+.map-view .legend .nbl {
+	inline-size: 12px;
+	block-size: 10px;
+	border-radius: 3px;
+	outline: 1px dashed var(--n-8);
+	outline-offset: -1px;
+}
+
+/* React Flow's own canvas, on the app's surface. */
+.map-view .react-flow {
+	--xy-background-color: var(--surface);
+	--xy-edge-stroke: var(--wire);
+	--xy-handle-background-color: transparent;
+	--xy-handle-border-color: transparent;
+	background: var(--surface);
+}
+
+.map-view .react-flow__node {
+	cursor: default;
+}
+
+.map-view .react-flow__attribution {
+	background: transparent;
+	font-size: 9px;
+}
+
+.map-view .react-flow__attribution a {
+	color: var(--text-faint);
+}
+
+.map-view .node {
+	position: relative;
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+}
+
+.map-view .node.lit {
+	box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+
+.map-view .node.store {
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.map-view .node-h {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-3) 6px;
+	min-block-size: 32px;
+}
+
+.map-view .node-h .n {
+	font: 500 var(--fs-body) var(--mono);
+	color: var(--text-primary);
+	white-space: nowrap;
+}
+
+.map-view .node-h .sig {
+	margin-inline-start: auto;
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.map-view .node-b {
+	padding: 0 var(--s-3) var(--s-3);
+	font-size: var(--fs-small);
+	display: grid;
+	gap: 2px;
+	min-inline-size: 0;
+}
+
+.map-view .ins,
+.map-view .outs {
+	display: grid;
+	gap: 1px;
+	padding: 0 var(--s-3) var(--s-2);
+}
+
+.map-view .in,
+.map-view .outr {
+	position: relative;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	block-size: 17px;
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.map-view .in .from {
+	color: var(--text-faint);
+	font-family: var(--font);
+}
+
+.map-view .outr {
+	justify-content: flex-end;
+}
+
+.map-view .outl {
+	padding: 0 var(--s-3) var(--s-2);
+	font: 400 var(--fs-micro) / 1.5 var(--mono);
+	color: var(--text-faint);
+}
+
+/* A port is React Flow's handle, drawn as its family's shape on the box's edge. */
+.map-view .react-flow__handle.port {
+	position: absolute;
+	inline-size: 11px;
+	block-size: 11px;
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+
+.map-view .in .react-flow__handle.port {
+	left: calc(-1 * var(--s-3) - 1px);
+}
+
+.map-view .outr .react-flow__handle.port {
+	left: auto;
+	right: calc(-1 * var(--s-3) - 1px);
+}
+
+.map-view .react-flow__handle.port svg {
+	inline-size: 10px;
+	block-size: 10px;
+	overflow: visible;
+}
+
+.map-view .react-flow__handle.port svg * {
+	fill: var(--surface-raised);
+	stroke: var(--ty);
+	stroke-width: 1.6;
+}
+
+.map-view .in.nil .react-flow__handle.port svg * {
+	stroke: var(--border-strong);
+}
+
+.map-view .react-flow__handle.call-h {
+	inline-size: 1px;
+	block-size: 1px;
+	min-width: 0;
+	min-height: 0;
+	border: 0;
+	background: transparent;
+}
+
+/* Wires: a typed one in its family's colour, a ledger call dotted and grey. */
+.map-view .react-flow__edge-path.wire {
+	stroke: var(--ty);
+	stroke-width: 1.4;
+}
+
+.map-view .react-flow__edge-path.call {
+	stroke: var(--border-strong);
+	stroke-width: 1.2;
+	stroke-dasharray: 1 4;
+	stroke-linecap: round;
+}
+
+.map-view .wl,
+.map-view .cl {
+	position: absolute;
+	pointer-events: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+}
+
+.map-view .wl {
+	block-size: 18px;
+	padding-inline: 5px 7px;
+	border-radius: 9px;
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+}
+
+.map-view .cl {
+	padding: 1px 3px;
+	background: var(--surface);
+	font: 400 10px / 1 var(--font);
+	color: var(--text-faint);
+}
+
+/* A lane's frame: operate with its nine spots, deliver with its children. */
+.map-view .frame {
+	border-radius: var(--r-xl);
+	box-shadow: inset 0 0 0 1px var(--border);
+	background: color-mix(in oklab, var(--surface-raised) 35%, var(--surface));
+	padding: 0 var(--s-3) var(--s-3);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+}
+
+.map-view .frame-h {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px var(--s-2);
+	align-items: baseline;
+	padding: var(--s-2) 0;
+}
+
+.map-view .frame-h .n {
+	font: 500 var(--fs-body) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .frame-h .sig {
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+}
+
+.map-view .frame-h .port-line {
+	flex: 1 1 100%;
+}
+
+.map-view .frame-h .how {
+	flex: 1 1 100%;
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+}
+
+.map-view .spots {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--s-2);
+}
+
+.map-view .spot {
+	display: grid;
+	gap: 2px;
+	align-content: start;
+	min-block-size: 82px;
+	padding: 6px var(--s-2) var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+	min-inline-size: 0;
+}
+
+.map-view .spot .n {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	font: 500 var(--fs-small) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .spot .n .tag {
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+	padding: 2px 4px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	white-space: nowrap;
+}
+
+.map-view .spot .n > :is(.w-done, .w-you, .w-stuck, .dot) {
+	margin-inline-start: auto;
+}
+
+.map-view .spot .m2 {
+	color: var(--text-faint);
+}
+
+.map-view .spot .st {
+	color: var(--text-secondary);
+	font-family: var(--mono);
+}
+
+.map-view .spot.nb {
+	box-shadow: none;
+	outline: 1px dashed var(--n-8);
+	outline-offset: -1px;
+}
+
+.map-view .spot.nob {
+	background: none;
+	opacity: 0.75;
+}
+
+.map-view .nob .n,
+.map-view .nob .st {
+	color: var(--text-faint);
+}
+
+.map-view .spot.you {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--turn-fill);
+}
+
+.map-view .spot.run {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--running);
+}
+
+.map-view .spot.stuck {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--stuck);
+}
+
+.map-view .spot.nb.you,
+.map-view .spot.nb.run,
+.map-view .spot.nb.stuck {
+	outline-color: var(--text-faint);
+}
+
+.map-view .chips {
+	display: grid;
+	gap: 6px;
+}
+
+.map-view .chip {
+	display: grid;
+	grid-template-columns: 6ch auto minmax(0, 1fr);
+	align-items: center;
+	gap: var(--s-2);
+	padding: 6px var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+}
+
+.map-view .chip .n {
+	font: 500 var(--fs-small) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .chip .ag {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	padding: 3px 6px;
+	border-radius: var(--r);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font-family: var(--mono);
+	color: var(--text-secondary);
+}
+
+.map-view .chip .ag svg {
+	inline-size: 10px;
+	block-size: 10px;
+	flex: none;
+}
+
+/* 3. The trace: an arrangement, a track per step and a clip per run. */
+
+.trace-view {
+	overflow: auto;
+}
+
+.trace-view .legend .swatch {
+	position: static;
+	display: inline-block;
+	inline-size: 18px;
+	block-size: 10px;
+}
+
+.trace-view .legend .turn-bar {
+	display: inline-block;
+	inline-size: 2px;
+	block-size: 10px;
+	border-radius: 1px;
+	background: var(--text-muted);
+}
+
+.trace-view .arr-body {
+	display: grid;
+	grid-template-columns: 190px minmax(0, 1fr);
+	padding: var(--s-2) 32px var(--s-4) var(--s-4);
+}
+
+.trace-view .arr-heads,
+.trace-view .arr-time {
+	display: grid;
+	grid-auto-rows: 34px;
+	grid-template-rows: 30px;
+}
+
+.trace-view .arr-time {
+	position: relative;
+	touch-action: none;
+	cursor: ew-resize;
+}
+
+.trace-view .trk-h {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 46px;
+	align-items: center;
+	gap: var(--s-2);
+	padding-inline-end: var(--s-3);
+	border-block-start: 1px solid var(--border-faint);
+	min-inline-size: 0;
+}
+
+.trace-view .trk-h .n {
+	font: 500 var(--fs-small) var(--mono);
+	color: var(--text-primary);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.trace-view .trk-h .n small {
+	font: 400 var(--fs-micro) var(--font);
+	color: var(--text-faint);
+	margin-inline-start: 6px;
+}
+
+.trace-view .trk-h.nb .n {
+	color: var(--text-muted);
+}
+
+.trace-view .cpu {
+	display: grid;
+	gap: 2px;
+	justify-items: end;
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+}
+
+.trace-view .cpu .bar3 {
+	inline-size: 40px;
+	block-size: 4px;
+	border-radius: 2px;
+	background: var(--border-faint);
+	overflow: hidden;
+}
+
+.trace-view .cpu .bar3 i {
+	display: block;
+	block-size: 100%;
+	background: var(--text-muted);
+}
+
+.trace-view .ruler {
+	position: relative;
+	border-block-end: 1px solid var(--border);
+	font-size: var(--fs-micro);
+	color: var(--text-faint);
+}
+
+.trace-view .ruler .tk {
+	position: absolute;
+	inset-block-end: 4px;
+	translate: -50% 0;
+	font-family: var(--mono);
+}
+
+/* The last tick sits left of its line, so the playhead at now does not cover it. */
+.trace-view .ruler .tk.end {
+	translate: calc(-100% - 8px) 0;
+}
+
+.trace-view .ruler .mk {
+	position: absolute;
+	inset-block-start: 2px;
+	display: inline-flex;
+	gap: 3px;
+	align-items: center;
+	padding: 1px 5px 1px 4px;
+	border-radius: 0 var(--r-sm) var(--r-sm) 0;
+	background: var(--surface-raised);
+	box-shadow:
+		inset 2px 0 0 var(--turn-fill),
+		inset 0 0 0 1px var(--border);
+	color: var(--text-secondary);
+	white-space: nowrap;
+	font-size: var(--fs-micro);
+	z-index: 3;
+}
+
+.trace-view .ruler .mk.no {
+	box-shadow:
+		inset 2px 0 0 var(--text-muted),
+		inset 0 0 0 1px var(--border);
+}
+
+.trace-view .trk {
+	position: relative;
+	border-block-start: 1px solid var(--border-faint);
+}
+
+/* A line under each of the ruler's ticks, over every track. */
+.trace-view .grid {
+	position: absolute;
+	inset: 30px 0 0;
+	z-index: 1;
+	pointer-events: none;
+}
+
+.trace-view .gl {
+	position: absolute;
+	inset-block: 0;
+	inline-size: 1px;
+	background: var(--border-faint);
+}
+
+.trace-view .trk.nb {
+	background-color: color-mix(in oklab, var(--surface-sunken) 50%, transparent);
+}
+
+.trace-view .clip {
+	position: absolute;
+	z-index: 2;
+	inset-block: 5px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-inline-size: 4px;
+	overflow: hidden;
+	padding-inline: 5px;
+	border-radius: var(--r-sm);
+	background: var(--surface-selected);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-secondary);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.trace-view .clip.sel {
+	box-shadow: inset 0 0 0 1px var(--text-secondary);
+	color: var(--text-primary);
+}
+
+.trace-view .clip.run {
+	box-shadow:
+		inset 0 0 0 1px var(--border-strong),
+		inset 2px 0 0 var(--running);
+}
+
+.trace-view .clip.send {
+	background: none;
+	box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+
+.trace-view .clip.stuck {
+	box-shadow:
+		inset 0 0 0 1px var(--border-strong),
+		inset 2px 0 0 var(--stuck);
+}
+
+.trace-view .clip.root {
+	background: var(--surface-hover);
+	cursor: default;
+}
+
+.trace-view .clip .turns {
+	display: flex;
+	gap: 2px;
+	align-items: center;
+	block-size: 100%;
+}
+
+.trace-view .clip .turns i {
+	inline-size: 2px;
+	block-size: 10px;
+	border-radius: 1px;
+	background: var(--text-muted);
+}
+
+.trace-view .wait {
+	position: absolute;
+	z-index: 2;
+	inset-block: 7px;
+	border-radius: var(--r-sm);
+	background: repeating-linear-gradient(135deg, var(--turn-fill) 0 3px, transparent 3px 7px);
+	box-shadow: inset 0 0 0 1px var(--turn-fill);
+	opacity: 0.9;
+}
+
+.trace-view .wait.done {
+	opacity: 0.45;
+}
+
+.trace-view .ph {
+	position: absolute;
+	inset-block: 0;
+	inline-size: 0;
+	z-index: 6;
+	pointer-events: none;
+}
+
+.trace-view .ph::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: -1px;
+	inline-size: 2px;
+	background: var(--text-primary);
+}
+
+.trace-view .ph.live::before {
+	background: var(--text-secondary);
+}
+
+.trace-view .ph-h {
+	position: absolute;
+	inset-block-start: 2px;
+	inset-inline-start: -7px;
+	inline-size: 14px;
+	block-size: 14px;
+	pointer-events: auto;
+	border-radius: 3px 3px 7px 7px;
+	background: var(--text-primary);
+	cursor: ew-resize;
+}
+
+.trace-view .after {
+	position: absolute;
+	inset-block: 30px 0;
+	inset-inline-end: 0;
+	background: color-mix(in oklab, var(--surface) 62%, transparent);
+	z-index: 5;
+	pointer-events: none;
+}
+
+.trace-view .arr-foot {
+	margin: 0 var(--s-4) var(--s-4);
+	display: grid;
+	gap: var(--s-3);
+}
+
+.trace-view .span-d {
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-lg);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+@container main (max-width: 760px) {
+	.trace-view .arr-body {
+		grid-template-columns: 120px minmax(0, 1fr);
+		padding-inline: var(--s-2);
+	}
+
+	.trace-view .trk-h {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.trace-view .trk-h .cpu,
+	.trace-view .trk-h .n small {
+		display: none;
 	}
 }

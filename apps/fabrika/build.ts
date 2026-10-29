@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {fileURLToPath} from "node:url";
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {layer as nodePath} from "@effect/platform-node/NodePath";
 import {runMain} from "@effect/platform-node/NodeRuntime";
@@ -13,14 +14,15 @@ import {bundlesOf, common} from "./bundles.ts";
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
-//   dist/desk.html, dist/window.css
+//   dist/desk.html, dist/window.css   the page's stylesheet, React Flow's base rules first
 //
 // Every bundle gets the same build id, as the define `FABRIKA_BUILD` (src/build-id.ts): the first
 // 12 hex of a SHA-256 over every source file the four bundles are made from, by name and bytes. So
 // the same code builds to the same id, and any change to it, a dependency's too, to another. The
 // host names it in its hello, and the app compares it with its own. esbuild says which files a
 // bundle takes (its metafile), so the bundles are read once without writing, for the list, then
-// built. Node's own `node:crypto` makes the hash: this script is an edge.
+// built. Node's own `node:crypto` makes the hash, and `node:url` turns a resolved package file into a
+// path: this script is an edge.
 //
 // The WebAssembly is in desk.js twice, about 560 KiB each: ghostty-web's own bundle holds it
 // as a data: url, which the page cannot fetch, and the bytes the page compiles are a second copy
@@ -29,6 +31,9 @@ import {bundlesOf, common} from "./bundles.ts";
 // `pnpm --filter @kampus/fabrika-app build`, or `start`, which builds and opens the app.
 
 const here = import.meta.dirname;
+
+/** React Flow's base rules: the map's canvas needs them, and the app's styles go on top. */
+const FLOW_CSS = "@xyflow/react/dist/base.css";
 
 const bundle = (options: BuildOptions) =>
 	Effect.tryPromise({
@@ -64,7 +69,13 @@ const program = Effect.gen(function* () {
 				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
 			),
 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
-			fs.copyFile(at("src/window/window.css"), at("dist/window.css")),
+			// One stylesheet, as the page's policy serves only that: React Flow's own rules for the
+			// map program's canvas first, then the app's, which restyle them.
+			Effect.gen(function* () {
+				const flow = yield* fs.readFileString(fileURLToPath(import.meta.resolve(FLOW_CSS)));
+				const own = yield* fs.readFileString(at("src/window/window.css"));
+				yield* fs.writeFileString(at("dist/window.css"), `${flow}\n${own}`);
+			}),
 		],
 		{concurrency: "unbounded", discard: true},
 	);
