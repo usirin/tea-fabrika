@@ -1136,6 +1136,41 @@ main.program:has(> .tracker) {
 	font-weight: 600;
 }
 
+/* A duplicate hint: advice, so quieter than an ask. Dismissed, it fades. */
+.tracker-hint {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px dashed var(--line);
+	border-radius: 8px;
+}
+
+.tracker-hint[data-says="dismiss"] {
+	opacity: 0.6;
+}
+
+.tracker-hint-what {
+	color: var(--ink);
+}
+
+.tracker .tracker-hint-link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--ink);
+	font: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.tracker .tracker-hint button[aria-pressed="true"] {
+	border-color: var(--key);
+	color: var(--ink);
+	font-weight: 600;
+}
+
 @media (prefers-reduced-motion: no-preference) {
 	.tracker .tracker-list button,
 	.tracker-list a.tracker-pull-request,

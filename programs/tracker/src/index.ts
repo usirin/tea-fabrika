@@ -2,7 +2,8 @@ import {run} from "@demlik/tea/effect";
 import {defineProgram, input, kind} from "@kampus/fabrika";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema, Stream} from "effect";
-import {clockRunner, loadCell, pollRunner, saveCell} from "./ledger.ts";
+import {duplicatesCell} from "./duplicates.ts";
+import {clockRunner, loadCell, pollRunner, saveCell, saveHintsCell} from "./ledger.ts";
 import {
 	Find,
 	over,
@@ -33,6 +34,12 @@ import {Write} from "./ticket.ts";
 //   // a click on an open ask's box: tracker/ticket/1/inbox gets {type: "answered", ..., text:
 //   // "sha256:…"} by user:owner, the hash of the text the person saw
 //   {kind: "comment", ticket: 1, body: "Skip part 2.", asks: "changes"}   "Request changes"
+//   {kind: "rate_duplicate", ticket: 9, of: 4, says: "dismiss"}   a click on a duplicate hint
+//   // tracker/ticket/9/inbox gets {type: "duplicate_rated", of: 4, says: "dismiss"} by user:owner
+//
+// Once its own filing lands, it asks Jev whether the new ticket is a duplicate of an open one,
+// when the host gave it a `Jev` (./duplicates.ts). A hint at or above the floor goes on the new
+// ticket as `maybe_duplicate`, written as the agent `duplicates`: advice only, it closes nothing.
 //
 // A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a box for each
 // open ask. Only a person answers: a tracker whose `Author` is an agent refuses the write.
@@ -48,6 +55,7 @@ import {Write} from "./ticket.ts";
 export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 /** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
 export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
+export {Hint, hintsOn} from "./duplicates.ts";
 export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits} from "./head.ts";
 export {Author} from "./ledger.ts";
 export {
@@ -106,7 +114,13 @@ const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
 /** How the machine runs: its cells and Subs, on the `Ledger`, `Author` and `PullRequests` services. */
 export const ticketsOptions = {
 	ctx: undefined,
-	interpret: {load: loadCell, save: saveCell, pull_requests: pullRequestsCell},
+	interpret: {
+		load: loadCell,
+		save: saveCell,
+		pull_requests: pullRequestsCell,
+		duplicates: duplicatesCell,
+		save_hints: saveHintsCell,
+	},
 	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner},
 	terminal: over,
 };
@@ -129,6 +143,8 @@ export const ticketsKind = kind({
 			pull_requests: "read the open pull requests",
 			pull_requests_wait: "wait to read them again",
 			clock: "keep the time",
+			duplicates: "ask Jev for a duplicate",
+			save_hints: "write the duplicate hints",
 		},
 	}),
 	status: statusOf,

@@ -93,6 +93,8 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `schema.ts`, `refine.ts` | `zodCmd`, the zod slot of a Cmd; the draft-and-vet child |
 | `draft-scripted.ts` | A scripted stand-in for the Agent SDK's stream, for tests |
 | `services.ts` | The services the stages talk to |
+| `jev-live.ts` | The live `Jev`: one HTTP call each, a spend cap checked before each call, and a receipt per call (`JevReceipts`). `jevFromConfig` reads `TYPESAFE_API_KEY` and fails to build without it. No test builds it |
+| `tickets/duplicates.ts` | The duplicate hint at filing: the cheap filter (`candidatesOf`), the Jev question (`duplicateJudge`), the ranking at the floor (`hintsOf`). Experiment 167 |
 | `code-host-github.ts`, `code-host-github-writes.ts`, `code-host-local.ts`, `codeowners.ts` | `CodeHost` and `CodeHostWrites` over GitHub, and `CodeHost` over a local git copy |
 | `sandboxes.ts` | What is mounted in each stage's sandbox: nothing, a worktree, or the commit; a model credential only where an agent runs. `sandboxes.test.ts` plants an `env \| curl` line in every stage's sandbox |
 | `child.ts` | One command run to its end |
@@ -154,7 +156,7 @@ Moved to `@kampus/fabrika` in experiment 114, because nothing in them is the pip
   - Listen: a Sub.
   - Draft: an agent's run as a Sub over the Agent SDK's stream (fabrika's `createDraft`), its conversation named up front and its answer typed by a schema.
   - Check: a pure function, or a Cmd when it runs code.
-  - Judge: one Jev question with fixed choices. The floor is applied in update.
+  - Judge: one Jev question with fixed choices. The floor is applied in update. `createYesNoJudge` is the one-answer kind: a `noul`, 0 to 1, read as `{yes}`.
 - `schema.ts`: a move's Cmd is tea's own `Cmd.define` from `@demlik/tea/effect`; the one Cmd part kept here is `zodCmd`, for a spec with a zod slot, which tea's Effect `Cmd.define` does not take. It goes when the repo is off zod. What a Draft needs from its output schema (the JSON Schema the Agent SDK takes, and a reader for the answer) is fabrika's, on `@kampus/fabrika/agents/claude`.
 - `combos.ts`: the moves joined, as data and pure functions a parent calls: refine (Draft and Check in a loop), gate (pass, or park with why), ask (post a question, listen for replies, read each by code or a Judge into one of a fixed set of answers), remember (write, then read back) and spawn (a child per item).
 - `refine.ts`: draft and vet, a small child machine made per use. `createRefine({ name })` names its Cmds `<name>_write` and `<name>_check`. A writer agent turn, a checker in code, the checker's problems back to the writer in the same conversation, up to a limit, then it stops for its parent. Triage's enrichment in `legacy` is its first use.

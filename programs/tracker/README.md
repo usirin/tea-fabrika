@@ -41,6 +41,7 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
 | | `src/steps.ts` | The plan's nine steps for one ticket, from its facts alone: `stepsOf`, `currentOf`, `STEPS`. The approval is the ask whose picks hold "approve". |
+| | `src/duplicates.ts` | The duplicate hint's cell, `duplicatesCell` (no `Jev` service: no call), and `hintsOn`, a ticket's hints with each one's newest word. |
 | | `src/one.ts` | `One` and `oneOf`: the open ticket's facts and the clock, the view the map and trace programs fold for themselves. |
 | `@tea-fabrika/tracker/seven` | `src/seven.ts` | A stand-in: ticket #7 as a lane would leave it (`SEVEN`), and `trackerAtSeven()`, the machine's state with it read. For tests and the app's screenshots; the times, costs and ids are made up. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
@@ -101,6 +102,26 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   repositories are one list, `GITHUB.repos` in `src/github.ts`.
 - **A pull request's title is anyone's words.** On a public repository anyone can open one. The
   window only draws it; nothing reads it as an instruction.
+- **A new ticket may get a duplicate hint.** Once its filing lands, the cheap filter
+  (`candidatesOf` in `@kampus/pipeline/tickets/duplicates`) keeps up to 20 open tickets that
+  share a rare word with it, Jev answers one yes-or-no for each ("could the new one be closed
+  and #N worked without losing anything?"), and code keeps the answers at 0.7 or more, at most
+  three. Each is a `maybe_duplicate` fact on the new ticket, written as the agent `duplicates`
+  for the person who filed. The ticket's page shows "Maybe the same as #6", with Accept and
+  Dismiss. It is advice only: nothing closes, merges or hides a ticket.
+
+  ```ts
+  yield* tell(run, "do", {kind: "rate_duplicate", ticket: 9, of: 6, says: "dismiss"});
+  //   tracker/ticket/9/inbox   {type: "maybe_duplicate", of: 6, yes: 0.78}   agent:duplicates for:owner
+  //                            {type: "duplicate_rated", of: 6, says: "dismiss"}   user:owner
+  ```
+
+  Accept and dismiss are a person's facts (an agent's is refused, here and at the door), so the
+  false alarms can be counted; the newest word counts. With no `Jev` service there is no hint
+  and no call: in the app, Jev is on only when the home holds `jev.key`
+  (`apps/fabrika/src/host/jev.ts`). A Jev that fails leaves no hint and says so under the
+  problems; the filing stands. Measured in
+  [experiment 167](../../experiments/167-duplicate-hint.md).
 
 ## Keys
 

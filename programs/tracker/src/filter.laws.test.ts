@@ -13,7 +13,17 @@ import type {Entry, Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {headOf} from "./head.ts";
-import {load, pullRequests, type Show, save, shownOf, type Tracker, tracker} from "./machine.ts";
+import {
+	duplicates,
+	load,
+	pullRequests,
+	type Show,
+	save,
+	saveHints,
+	shownOf,
+	type Tracker,
+	tracker,
+} from "./machine.ts";
 import type {PullRequest} from "./pull-requests.ts";
 import {summaryOf, type Write} from "./ticket.ts";
 
@@ -24,7 +34,12 @@ import {summaryOf, type Write} from "./ticket.ts";
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
-type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pullRequests>;
+type Cmd =
+	| ReturnType<typeof load>
+	| ReturnType<typeof save>
+	| ReturnType<typeof pullRequests>
+	| ReturnType<typeof duplicates>
+	| ReturnType<typeof saveHints>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -96,6 +111,8 @@ const after = fc.nat({max: 30});
 const show = fc.constantFrom<Show>("open", "closed", "all");
 const find = fc.constantFrom(...FINDS);
 const saveOf = (i: string, w: Write, next: number) => save({id: i, write: w, next});
+const hintAsk = (t: number) =>
+	duplicates({ticket: t, filed: {title: "Login fails", body: ""}, candidates: []});
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
@@ -125,6 +142,16 @@ const table: MsgArbitraryTable<Msg> = {
 		.array(pullRequest, {maxLength: 4})
 		.map((list) => pullRequests.ok(pullRequests({}), {pullRequests: list}, 0)),
 	pull_requests_err: fc.constant(pullRequests.err(pullRequests({}), {_tag: "unreachable"}, 0)),
+	// The duplicate hints have laws of their own (machine.laws.test.ts); drawn here so the
+	// filter's laws hold with them in the list.
+	duplicates_ok: ticket.map((t) =>
+		duplicates.ok(hintAsk(t), {kind: "scored", scores: [{of: t + 1, yes: 0.9}]}, 0),
+	),
+	duplicates_err: ticket.map((t) => duplicates.err(hintAsk(t), {_tag: "unreachable"}, 0)),
+	save_hints_ok: ticket.map((t) => saveHints.ok(saveHints({ticket: t, hints: []}), {}, 0)),
+	save_hints_err: ticket.map((t) =>
+		saveHints.err(saveHints({ticket: t, hints: []}), {_tag: "unreachable"}, 0),
+	),
 };
 /** Lists of Msgs, long enough to load tickets, read pull requests, and filter them a few times. */
 const lists = fc.array(arbMsg(table), {maxLength: 40, size: "max"});

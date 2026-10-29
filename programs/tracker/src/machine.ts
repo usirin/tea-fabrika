@@ -1,7 +1,15 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Entry, fold, Ticket, TicketNumber} from "@kampus/pipeline/tickets/ticket";
+import {
+	Candidate,
+	candidatesOf,
+	hintsOf,
+	openOf,
+	Scored,
+} from "@kampus/pipeline/tickets/duplicates";
+import {Body, Entry, fold, Ticket, TicketNumber, Title} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
+import {Hint, hintsOn} from "./duplicates.ts";
 import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
 import {Row, rowsOf} from "./rows.ts";
@@ -22,6 +30,13 @@ import {Summary, summaryOf, Write} from "./ticket.ts";
 //   clock  a Sub, always on until it quits: `tick` with the time, once a minute, as Elm's
 //          `Time.every`. A ticket's top line says "idle" from the clock alone (./head.ts), so the
 //          time is in the state and the view stays a pure function of it
+//   duplicates  once this tracker's own filing lands: Jev reads the new ticket against the open
+//          ones the cheap filter kept (./duplicates.ts). The hints at or above the floor go to
+//          the ledger with `save_hints`, as `maybe_duplicate` facts. Advice only: nothing closes
+//
+//   save_ok {ticket: 9} for a `file`   // cmds [load, duplicates {ticket: 9, filed, candidates: [#4, #6]}]
+//   duplicates_ok {kind: "scored", scores: [{of: 4, yes: 0.83}, {of: 6, yes: 0.12}]}
+//   // cmds [save_hints {ticket: 9, hints: [{of: 4, yes: 0.83}]}]; the page shows "maybe the same as #4"
 //
 // What the list shows is part of the state too, as in Elm's Model: `show` (open, closed or all)
 // and `find` (the title search). `shownOf`, the view, picks the tickets and pull requests by them.
@@ -60,9 +75,35 @@ export const pullRequests = Cmd.define("pull_requests", {
 	err: ["unreachable"],
 });
 
+/**
+ * Ask Jev whether a ticket just filed is a duplicate of one of `candidates`. `off`: no Jev was
+ * given, so nothing was asked.
+ */
+export const duplicates = Cmd.define("duplicates", {
+	input: Schema.Struct({
+		ticket: TicketNumber,
+		filed: Schema.Struct({title: Title, body: Body}),
+		candidates: Schema.Array(Candidate),
+	}),
+	ok: Schema.Union([
+		Schema.Struct({kind: Schema.Literal("off")}),
+		Schema.Struct({kind: Schema.Literal("scored"), scores: Schema.Array(Scored)}),
+	]),
+	err: ["unreachable"],
+});
+
+/** Put a ticket's duplicate hints on the ledger, as code's facts, not as the person's. */
+export const saveHints = Cmd.define("save_hints", {
+	input: Schema.Struct({ticket: TicketNumber, hints: Schema.Array(Scored)}),
+	ok: Schema.Struct({}),
+	err: ["unreachable", "refused"],
+});
+
 type LoadCmd = ReturnType<typeof load>;
 type SaveCmd = ReturnType<typeof save>;
 type PullRequestsCmd = ReturnType<typeof pullRequests>;
+type DuplicatesCmd = ReturnType<typeof duplicates>;
+type SaveHintsCmd = ReturnType<typeof saveHints>;
 
 /** The poll, as its runner sees it: rows after `after` are news. */
 export type PollSub = Sub<"poll", {readonly after: number}>;
@@ -125,6 +166,8 @@ export const Tracker = Schema.Struct({
 	pullRequests: PullRequestsRead,
 	/** The time at the clock's last tick. 0: no tick yet, so no ticket is idle yet. */
 	now: Schema.Finite,
+	/** Tickets this tracker filed whose duplicate hint is still out: asked of Jev, or saving. */
+	hinting: Schema.Array(TicketNumber),
 });
 export type Tracker = typeof Tracker.Type;
 
@@ -139,7 +182,10 @@ export type TrackerMsg =
 	| {readonly type: "refresh"}
 	| {readonly type: "tick"; readonly now: number};
 
-type Step = readonly [Tracker, readonly (LoadCmd | SaveCmd | PullRequestsCmd)[]];
+type Step = readonly [
+	Tracker,
+	readonly (LoadCmd | SaveCmd | PullRequestsCmd | DuplicatesCmd | SaveHintsCmd)[],
+];
 
 /** The most problems kept. */
 export const PROBLEMS = 20;
@@ -159,6 +205,7 @@ const start: Tracker = {
 	find: "",
 	pullRequests: {ask: "busy", list: null, why: null},
 	now: 0,
+	hinting: [],
 };
 
 /** The number a new ticket tries first: one past the newest known. */
@@ -183,6 +230,33 @@ const isFirst = (s: Tracker, id: string) => s.saving[0]?.id === id;
 const why = (error: {readonly _tag: string; readonly [detail: string]: unknown}) =>
 	typeof error.why === "string" ? error.why : error._tag;
 
+const problem = (s: Tracker, text: string): Tracker => ({
+	...s,
+	problems: [...s.problems, text].slice(-PROBLEMS),
+});
+
+/** Read the ledger again: now, or once the load that is out is back. */
+const reload = (s: Tracker): Step =>
+	s.load === "idle" ? [{...s, load: "busy"}, [load({after: s.seen})]] : [{...s, load: "again"}, []];
+
+/** The ticket's hint is no longer out. */
+const hinted = (s: Tracker, ticket: number): Tracker => ({
+	...s,
+	hinting: s.hinting.filter((n) => n !== ticket),
+});
+
+/**
+ * A write landed as ticket `ticket`. A filing asks Jev about the open tickets the cheap filter
+ * keeps; with none kept, nothing is asked.
+ */
+const hintFor = (s: Tracker, write: Write, ticket: number): Step => {
+	if (write.kind !== "file") return [s, []];
+	const filed = {title: write.title, body: write.body};
+	const candidates = candidatesOf(filed, openOf(s.tickets, ticket));
+	if (candidates.length === 0) return [s, []];
+	return [{...s, hinting: [...s.hinting, ticket]}, [duplicates({ticket, filed, candidates})]];
+};
+
 export const tracker = defineMachine({
 	types: {
 		model: {} as Tracker,
@@ -190,7 +264,7 @@ export const tracker = defineMachine({
 		sub: {} as PollSub | PullRequestsSub | ClockSub,
 		ctx: undefined,
 	},
-	cmds: [load, save, pullRequests],
+	cmds: [load, save, pullRequests, duplicates, saveHints],
 	init: (): Step => [start, [load({after: 0}), pullRequests({})]],
 	update: {
 		list: (s): Step => [{...s, open: null}, []],
@@ -240,11 +314,35 @@ export const tracker = defineMachine({
 				: [{...next, load: "idle"}, []];
 		},
 
-		save_ok: (s, m): Step => (isFirst(s, m.cmd.id) ? settled(s, s.saving.slice(1)) : [s, []]),
+		save_ok: (s, m): Step => {
+			const [front, ...rest] = s.saving;
+			if (front === undefined || front.id !== m.cmd.id) return [s, []];
+			const [next, sent] = settled(s, rest);
+			const [asking, asked] = hintFor(next, front.write, m.value.ticket);
+			return [asking, [...sent, ...asked]];
+		},
 		save_err: (s, m): Step =>
 			isFirst(s, m.cmd.id)
 				? settled({...s, failed: {write: m.cmd.write, why: why(m.error)}}, s.saving.slice(1))
 				: [s, []],
+
+		duplicates_ok: (s, m): Step => {
+			const hints = m.value.kind === "scored" ? hintsOf(m.value.scores) : [];
+			if (hints.length === 0) return [hinted(s, m.cmd.ticket), []];
+			return [s, [saveHints({ticket: m.cmd.ticket, hints})]];
+		},
+		duplicates_err: (s, m): Step => [
+			problem(hinted(s, m.cmd.ticket), `no duplicate hint on #${m.cmd.ticket}: ${why(m.error)}`),
+			[],
+		],
+		save_hints_ok: (s, m): Step => reload(hinted(s, m.cmd.ticket)),
+		save_hints_err: (s, m): Step => [
+			problem(
+				hinted(s, m.cmd.ticket),
+				`the duplicate hints on #${m.cmd.ticket} were not saved: ${why(m.error)}`,
+			),
+			[],
+		],
 	},
 	subs: [
 		{
@@ -262,8 +360,8 @@ export const tracker = defineMachine({
 	],
 });
 
-/** It is over: asked to quit, with nothing left to save. */
-export const over = (s: Tracker) => s.quitting && s.saving.length === 0;
+/** It is over: asked to quit, with nothing left to save and no hint still out. */
+export const over = (s: Tracker) => s.quitting && s.saving.length === 0 && s.hinting.length === 0;
 
 /** Its status line, for a host's list of runs. */
 export const statusOf = (s: Tracker): string => {
@@ -288,13 +386,15 @@ export type Listed = typeof Listed.Type;
 /**
  * One ticket's page. `head`: its top line (./head.ts). `rows`: one per fact, oldest first
  * (./rows.ts). `asks`: the asks with no answer yet, each drawn with its box, even on a closed
- * ticket. The page's `opened` is `null` when no ticket has that number yet.
+ * ticket. `duplicates`: its duplicate hints, each with accept and dismiss (./duplicates.ts). The
+ * page's `opened` is `null` when no ticket has that number yet.
  */
 export const Opened = Schema.Struct({
 	ticket: Ticket,
 	head: Head,
 	rows: Schema.Array(Row),
 	asks: Schema.Array(OpenAsk),
+	duplicates: Schema.Array(Hint),
 });
 export type Opened = typeof Opened.Type;
 
@@ -353,17 +453,22 @@ const listOf = (s: Tracker): Shown["page"] => {
 	};
 };
 
-/** One ticket as its page shows it, at `now`. */
-export const openedOf = (ticket: Ticket, now: number): Opened => ({
+/** One ticket as its page shows it, at `now`. `tickets`: every ticket read, for the hints' titles. */
+export const openedOf = (ticket: Ticket, now: number, tickets: readonly Ticket[]): Opened => ({
 	ticket,
 	head: headOf(ticket.timeline, now),
 	rows: rowsOf(ticket.timeline),
 	asks: openAsksOf(ticket.timeline),
+	duplicates: hintsOn(ticket, tickets),
 });
 
 const ticketOf = (s: Tracker, number: number): Shown["page"] => {
 	const ticket = s.tickets.find((t) => t.number === number);
-	return {kind: "ticket", number, opened: ticket === undefined ? null : openedOf(ticket, s.now)};
+	return {
+		kind: "ticket",
+		number,
+		opened: ticket === undefined ? null : openedOf(ticket, s.now, s.tickets),
+	};
 };
 
 export const shownOf = (s: Tracker): Shown => ({

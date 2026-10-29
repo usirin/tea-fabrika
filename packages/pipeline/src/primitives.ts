@@ -221,3 +221,50 @@ export function createJudge<const N extends string, const C extends string>(conf
 
 	return {name: config.name, choices, criteria: config.choices, ask, rule, handle};
 }
+
+/**
+ * Judge, the yes-or-no form: Jev says how sure it is of a yes, from 0 to 1 (its `noul`). Made for
+ * ranking: ask it once per candidate, and code sorts by the yes and applies the floor in update.
+ * A yes below the floor is not acted on.
+ *
+ *   const same = createYesNoJudge({name: "duplicate", instructions: "Is `new` ...?", criteria})
+ *   same.ask({key: "9/4", texts: {new: "...", existing: "..."}})   // ok: {yes: 0.83}
+ *   same.rule(0.83, 0.7)   // {sure: true, yes: 0.83}
+ */
+export function createYesNoJudge<const N extends string>(config: {
+	readonly name: N;
+	readonly instructions: string;
+	readonly criteria: {readonly true: string; readonly false: string};
+}) {
+	const questions = jevQuestions({
+		answer: {type: "noul", instructions: config.instructions, criteria: config.criteria},
+	});
+	const ask = Cmd.define(`${config.name}_judge`, {
+		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
+		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
+		ok: Schema.Struct({yes: Schema.Finite}),
+		err: ["judge_failed"],
+	});
+
+	const rule = (yes: number, floor: number) => ({sure: yes >= floor, yes});
+
+	/** One call over the `Jev` service: the texts and the question, the reply read against it. */
+	const judge = (model: string, texts: Readonly<Record<string, string>>) =>
+		Effect.gen(function* () {
+			const jev = yield* Jev;
+			const request = {state: texts, model, questions};
+			const outcome = yield* jev.call(request).pipe(
+				Effect.match({
+					onSuccess: (reply) => decodeJevReply(request, reply),
+					onFailure: (failure) => jevCallThrew(failure.cause),
+				}),
+			);
+			if (outcome._tag === "Err") return yield* Effect.fail({_tag: "judge_failed" as const});
+			return {yes: outcome.value.answers.answer.noul};
+		});
+
+	/** The handler for `ask`. */
+	const handle = (model: string) => (cmd: ReturnType<typeof ask>) => judge(model, cmd.texts);
+
+	return {name: config.name, questions, ask, rule, judge, handle};
+}

@@ -66,14 +66,14 @@ export const Shown = Schema.Struct({
 });
 export type Shown = typeof Shown.Type;
 
-/** One ticket's page, at `now`. */
-export const pageOf = (ticket: Ticket, now: number): Page => {
+/** One ticket's page, at `now`. `tickets`: every ticket read, for its duplicate hints' titles. */
+export const pageOf = (ticket: Ticket, now: number, tickets: readonly Ticket[] = []): Page => {
 	const timeline = ticket.timeline;
 	const plan = factsOf(timeline, "planned").at(-1);
 	const pr = factsOf(timeline, "pr").at(-1);
 	const first = timeline[0];
 	return {
-		opened: openedOf(ticket, now),
+		opened: openedOf(ticket, now, tickets),
 		body: textOf(ticket).body,
 		filed: first === undefined ? null : {by: first.by, at: first.at},
 		steps: stepsOf(timeline),
@@ -89,7 +89,7 @@ export const shownOf = (s: Tracker): Shown => {
 	return {
 		ready: s.ready,
 		number: s.open,
-		page: ticket === undefined ? null : pageOf(ticket, s.now),
+		page: ticket === undefined ? null : pageOf(ticket, s.now, s.tickets),
 		saving: s.saving.map((w) => w.write),
 		failed: s.failed,
 		unreachable: s.unreachable,

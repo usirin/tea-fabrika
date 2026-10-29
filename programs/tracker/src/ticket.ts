@@ -5,6 +5,7 @@ import {
 	type Fact,
 	Id,
 	Said,
+	Says,
 	State,
 	type Ticket,
 	TicketNumber,
@@ -45,6 +46,13 @@ export const Write = Schema.Union([
 		note: Body,
 		saw: Text,
 	}),
+	/** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
+	Schema.Struct({
+		kind: Schema.Literal("rate_duplicate"),
+		ticket: TicketNumber,
+		of: TicketNumber,
+		says: Says,
+	}),
 ]);
 export type Write = typeof Write.Type;
 
@@ -71,6 +79,8 @@ export const factOf = (write: Write): Effect.Effect<Fact> => {
 				note: write.note,
 				text,
 			}));
+		case "rate_duplicate":
+			return Effect.succeed({type: "duplicate_rated", of: write.of, says: write.says});
 	}
 };
 
