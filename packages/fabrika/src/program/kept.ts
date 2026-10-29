@@ -1,4 +1,11 @@
-import {type Cmd, type Machine, type OnError, RuntimeDiscardNotice, type Sub} from "@demlik/tea";
+import {
+	type Cmd,
+	foldUpdates,
+	type Machine,
+	type OnError,
+	RuntimeDiscardNotice,
+	type Sub,
+} from "@demlik/tea";
 import type {
 	CellErrors,
 	EffectInterpret,
@@ -10,8 +17,8 @@ import type {
 	StoreFailed,
 	SubscribeServices,
 } from "@demlik/tea/effect";
-import {Deferred, Effect, Latch, type Scope, Stream} from "effect";
-import type {Handle, StateRefused, StateSchema, StorageFailed} from "./storage.ts";
+import {Cause, Clock, Deferred, Effect, Fiber, Latch, Queue, type Scope, Stream} from "effect";
+import type {Handle, MachineStep, StateRefused, StateSchema, StorageFailed} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
 // How a program starts one copy of one of its machines, kept: what a ref's
@@ -61,6 +68,13 @@ import {type Drawing, runTraced} from "./trace.ts";
 //
 // One once the run is closing (its last save: tea's "stop-save") has nobody
 // waiting on `done()`: it ends the program run instead, in the same words.
+//
+// On a storage that keeps steps (a job's record, ../host/traces.ts), each Msg
+// the machine folds is kept too: the Msg, the state after it, and the Cmds it
+// started, got by folding the Msg again from the state before it, since tea's
+// `observe` hands over only the Msg and the state. They are written in order,
+// behind the fold, and the run's scope waits for the last. A step that cannot
+// be kept ends the run, as a failed save does.
 
 /** tea's own timer, the one its Effect engine runs when it is given none: here it is held like every other Sub. */
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
@@ -167,7 +181,41 @@ export const runKept = <
 			store: handle.store(name, id, state),
 			onError,
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
+		// Before the run, so its finalizer runs after tea's `stop()`: every step folded is written.
+		const keep = handle.step === undefined ? null : yield* stepsOf(handle.step, name, id, state);
 		const booting = yield* runTraced(name, machine, opts, drawing(kept));
+		if (keep !== null) {
+			// Each step's Cmds, from the state before it: `update` is pure, so folding the Msg again
+			// gives the Cmds tea started for it (tea's `observe` hands over the Msg and the state only).
+			let before: S | null = null;
+			const clock = yield* Clock.Clock;
+			const offBoot = booting.onBoot((s) => {
+				before = s;
+			});
+			const off = booting.observe((msg, after) => {
+				const cmds = before === null ? [] : foldUpdates(machine, before, [msg]).cmds;
+				before = after;
+				keep.add({at: clock.currentTimeMillisUnsafe(), msg, state: after, cmds});
+			});
+			yield* Effect.addFinalizer(() =>
+				Effect.sync(() => {
+					offBoot();
+					off();
+				}),
+			);
+			yield* keep.failed.pipe(
+				Effect.flatMap((cause) =>
+					Effect.sync(() => {
+						const ended = new Error(`${name} run ${id} failed to keep a step: ${wordsOf(cause)}`, {
+							cause,
+						});
+						if (closing) broken(ended);
+						else Deferred.doneUnsafe(failed, Effect.die(ended));
+					}),
+				),
+				Effect.forkScoped,
+			);
+		}
 		// Added after the run, so it runs before tea's `stop()`: what tea reports from here on, its last
 		// save among them, has nobody waiting on `done()`.
 		yield* Effect.addFinalizer(() =>
@@ -183,6 +231,35 @@ export const runKept = <
 		yield* shut.open;
 		const done = () => Effect.raceFirst(runtime.done(), Deferred.await(failed));
 		return {...runtime, done};
+	});
+
+/**
+ * Where a machine run's steps go: written one at a time, in the order they
+ * were folded, behind the fold, since tea's `observe` cannot wait. The
+ * scope's end waits for the last one. `failed`: the first write that did not
+ * land; nothing after it is written.
+ */
+const stepsOf = <S>(
+	write: NonNullable<Handle["step"]>,
+	name: string,
+	id: string,
+	state: StateSchema<S>,
+) =>
+	Effect.gen(function* () {
+		const queue = yield* Queue.unbounded<MachineStep<S>, Cause.Done>();
+		const failed = yield* Deferred.make<unknown>();
+		const writer = yield* Stream.fromQueue(queue).pipe(
+			Stream.runForEach((step) => write(name, id, state, step)),
+			Effect.catchCause((cause) => Deferred.succeed(failed, Cause.squash(cause))),
+			Effect.forkScoped,
+		);
+		yield* Effect.addFinalizer(() => Queue.end(queue).pipe(Effect.andThen(Fiber.await(writer))));
+		return {
+			add: (step: MachineStep<S>) => {
+				Queue.offerUnsafe(queue, step);
+			},
+			failed: Deferred.await(failed),
+		};
 	});
 
 /** A failure in a few words: its message, else its tag, else itself. */

@@ -14,6 +14,7 @@ import {
 	Semaphore,
 } from "effect";
 import {KeyValueStore} from "effect/persistence";
+import {holdsSecret} from "./secrets.ts";
 
 // Where a program's runs keep what must outlive the process. The starter hands
 // one to `start` with the run's id, the way a Unix daemon is handed its spool
@@ -177,6 +178,29 @@ export type Listed<S> =
 	| {readonly kind: "kept"; readonly id: string; readonly state: S}
 	| {readonly kind: "refused"; readonly id: string; readonly why: string};
 
+/**
+ * One Msg a machine run folded: when, the Msg, the state it left, and the
+ * Cmds it started. Elm's debugger shows a program as a list of these.
+ */
+export interface MachineStep<S> {
+	readonly at: number;
+	readonly msg: unknown;
+	readonly state: S;
+	readonly cmds: readonly unknown[];
+}
+
+/**
+ * Where a storage writes its runs' steps, each state as its machine's schema
+ * encoded it. A job's record keeps them (../host/traces.ts); memory and
+ * folder storage keep none.
+ */
+export type StepLog = (
+	run: string,
+	machine: string,
+	id: string,
+	step: MachineStep<unknown>,
+) => Effect.Effect<void, StorageBroken>;
+
 /** One open of one run: the only way to write to it. */
 export interface Handle {
 	readonly run: string;
@@ -218,6 +242,17 @@ export interface Handle {
 	deadLetter(output: string, n: number, why: string): Effect.Effect<void, StorageFailed>;
 	/** Say how this start of the run ended. */
 	end(status: Exclude<RunStatus, "running">): Effect.Effect<void, StorageFailed>;
+	/**
+	 * Keep one step of one machine run, its state through the machine's
+	 * schema, fenced like a save. Only on a storage that keeps steps (a job's
+	 * record); memory and folder storage have none.
+	 */
+	readonly step?: <S>(
+		machine: string,
+		id: string,
+		state: StateSchema<S>,
+		step: MachineStep<S>,
+	) => Effect.Effect<void, StorageFailed>;
 }
 
 export interface Storage {
@@ -283,6 +318,14 @@ const through = <S>(state: StateSchema<S>, machine: string, id: string) => {
 	const decode = Schema.decodeUnknownExit(state);
 	return {
 		encode: (value: S) => {
+			// A secret is never kept, by any storage: its schema would write it as its text, or as
+			// "<redacted>", which never reads back (./secrets.ts).
+			if (holdsSecret(value))
+				return Effect.die(
+					new Error(
+						`${machine} run ${id}: its state holds a secret (a Redacted), so it was not saved: keep where to find the secret, not the secret`,
+					),
+				);
 			const exit = encode(value);
 			return Exit.isSuccess(exit)
 				? Effect.succeed(exit.value)
@@ -309,8 +352,14 @@ const promised = <A>(effect: Effect.Effect<A, StorageFailed>): Promise<A> =>
 		Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
 	);
 
-/** A storage over one `KeyValueStore`. `kv`: how to reach it; asked once per call. */
-function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>): Storage {
+/**
+ * A storage over one `KeyValueStore`. `kv`: how to reach it; asked once per
+ * call. `steps`: where each machine step goes, for a storage that keeps them.
+ */
+function storageOn(
+	kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>,
+	steps: StepLog | undefined,
+): Storage {
 	// Every write of this storage, through every handle it opened, one at a time: in one process
 	// the fence's check and the write it guards are one step.
 	const lock = Semaphore.makeUnsafe(1);
@@ -517,6 +566,16 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					const found = yield* fence;
 					yield* rewrite(found, {...found.record, status});
 				}).pipe(one),
+			...(steps === undefined
+				? {}
+				: {
+						step: <S>(machine: string, id: string, state: StateSchema<S>, step: MachineStep<S>) =>
+							Effect.gen(function* () {
+								const kept = yield* through(state, machine, id).encode(step.state);
+								yield* fence;
+								yield* steps(run, machine, id, {...step, state: kept});
+							}).pipe(one),
+					}),
 		};
 	};
 
@@ -561,15 +620,20 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 /**
  * A storage on any `KeyValueStore` Layer: memory, a folder through any
  * `FileSystem`, SQL, Web Storage. The Layer is built once, at the first use,
- * and lives as long as the storage value does.
+ * and lives as long as the storage value does. `steps`: where each machine
+ * step goes, when this storage keeps them (a job's record does); left out,
+ * its handles have no `step`.
  */
-export function storageOf<E>(layer: Layer.Layer<KeyValueStore.KeyValueStore, E>): Storage {
+export function storageOf<E>(
+	layer: Layer.Layer<KeyValueStore.KeyValueStore, E>,
+	steps?: StepLog,
+): Storage {
 	const scope = Scope.makeUnsafe();
 	const built = Layer.buildWithScope(layer, scope).pipe(
 		Effect.map((context) => Context.get(context, KeyValueStore.KeyValueStore)),
 		Effect.mapError(broken("the storage could not be opened")),
 	);
-	return storageOn(Effect.runSync(Effect.cached(built)));
+	return storageOn(Effect.runSync(Effect.cached(built)), steps);
 }
 
 /**

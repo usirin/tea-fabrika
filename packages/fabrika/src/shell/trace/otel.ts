@@ -70,12 +70,21 @@ const over = (processor: SpanProcessor, viewing: Viewing | "raw") =>
 		Layer.provide(Resource.layer({serviceName: SERVICE})),
 	);
 
-/** Spans exported over OTLP/HTTP to `endpoint` (a collector's base url), in batches, through the view. */
-export const tracing = (endpoint: string, viewing: Viewing = {}) =>
+/**
+ * Spans exported over OTLP/HTTP to `endpoint` (a collector's base url), in batches, through the view.
+ * `headers`: sent with each batch, as OTLP exporters send them. A job's record takes spans at
+ * `<ledger url>/<ledger>`, behind the door, so its exporter sends `authorization`.
+ */
+export const tracing = (
+	endpoint: string,
+	viewing: Viewing = {},
+	headers: Readonly<Record<string, string>> = {},
+) =>
 	over(
 		new BatchSpanProcessor(
 			new OTLPTraceExporter({
 				url: `${endpoint}/v1/traces`,
+				headers: {...headers},
 				timeoutMillis: Duration.toMillis(FLUSH),
 			}),
 		),
