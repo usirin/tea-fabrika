@@ -370,7 +370,7 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 						? `The record of ${view.id ?? "this trace"} cannot be read: ${view.why ?? "no reason given"}`
 						: view.read === "reading"
 							? "Reading the record."
-							: "Waiting for a trace id."}
+							: "Pick a run, and its trace shows here."}
 				</p>
 			</section>
 		);

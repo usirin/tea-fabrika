@@ -8,7 +8,10 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 // is chosen. Elm's debugger and Redux DevTools hold the same: the history, and where you look in
 // it. Pure: the record is reached through its one Cmd, whose cell is in ./index.ts.
 //
-//   look     read the job's record (`read`), from the flag, once at the start
+//   look     read the job's record (`read`): from the flag at the start, then from each id told
+//            on `id`. A newer id replaces the record shown, its open rows and its detail; the
+//            same id again changes nothing, unless it could not be read; an answer for an id it
+//            replaced is dropped
 //   toggle   open a row that groups others, or close it: a job, a run, a machine run, a round,
 //            an agent's turns. A row that groups nothing, or is not in the record, changes nothing
 //   choose   show one row's detail: a span's tags and events, or a step's Msg, the state before
@@ -65,6 +68,18 @@ type Step = readonly [Model, readonly ReadCmd[]];
 
 const start: Model = {read: {at: "waiting"}, open: [], chosen: null};
 
+/** The trace id the machine reads or shows. `null`: none told yet. */
+export const idOf = (r: Read): string | null => {
+	switch (r.at) {
+		case "waiting":
+			return null;
+		case "read":
+			return r.trace.trace;
+		default:
+			return r.id;
+	}
+};
+
 const why = (error: {readonly _tag: string; readonly [detail: string]: unknown}) =>
 	typeof error.why === "string" ? error.why : error._tag;
 
@@ -73,10 +88,13 @@ export const trace = defineMachine({
 	cmds: [read],
 	init: (): Step => [start, []],
 	update: {
+		// A newer id replaces the record shown, with its rows and its detail. The same id again
+		// changes nothing, unless its record could not be read: then it is asked again. An answer
+		// for an id it replaced is dropped below.
 		look: (s, m): Step =>
-			s.read.at === "waiting"
-				? [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]]
-				: [s, []],
+			idOf(s.read) === m.id && s.read.at !== "unread"
+				? [s, []]
+				: [{read: {at: "reading", id: m.id}, open: [], chosen: null}, [read({id: m.id})]],
 		read_ok: (s, m): Step =>
 			s.read.at === "reading" && s.read.id === m.cmd.id
 				? [{read: {at: "read", trace: m.value}, open: [JOB], chosen: null}, []]
@@ -102,7 +120,7 @@ export const trace = defineMachine({
 export const statusOf = (s: Model): string => {
 	switch (s.read.at) {
 		case "waiting":
-			return "waiting for a trace id";
+			return "waiting for a run to be picked";
 		case "reading":
 			return "reading the record";
 		case "unread":

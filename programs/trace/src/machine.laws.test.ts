@@ -11,9 +11,9 @@ import {
 import type {MsgOf} from "@kampus/fabrika";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Model, read, trace} from "./machine.ts";
+import {idOf, type Model, read, trace} from "./machine.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
-import {findOf, groupsOf, nodesOf, treeOf} from "./tree.ts";
+import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 
 // The trace machine's laws, on tea's pbt: after every step of any list of Msgs, from the real
 // init. The record's answers are drawn too, so one can come for a trace that was not asked for,
@@ -73,14 +73,31 @@ const chosenIsARow = every(
 );
 
 const oneRead = every(
-	"the record is asked for once, by the first look, for the id it named",
+	"a record is asked for only by a look, for the id it named, if that id is not the one held or it could not be read",
 	({prev, msg, cmds}) =>
 		cmds.length === 0 ||
 		(cmds.length === 1 &&
 			msg.type === "look" &&
-			prev.read.at === "waiting" &&
+			(idOf(prev.read) !== msg.id || prev.read.at === "unread") &&
 			cmds[0]?.id === msg.id),
 );
+
+const newestWins: Law = {
+	name: "the id held is the last one looked at, and a record read is that id's",
+	check: (machine) =>
+		propertyTrace(
+			machine,
+			ctx,
+			lists,
+			(steps, last) => {
+				const looked = steps.findLast((s) => s.msg.type === "look")?.msg;
+				const held = idOf(last.read);
+				if (looked?.type !== "look") return held === null;
+				return held === looked.id;
+			},
+			OPTS,
+		),
+};
 
 const twiceIsNothing: Law = {
 	name: "a row toggled twice is open as it was",
@@ -100,7 +117,7 @@ const twiceIsNothing: Law = {
 		),
 };
 
-const LAWS = [openAreGroups, chosenIsARow, oneRead, twiceIsNothing];
+const LAWS = [openAreGroups, chosenIsARow, oneRead, newestWins, twiceIsNothing];
 
 /** The names of the laws `machine` breaks. */
 const broken = (machine: Machine): readonly string[] =>
@@ -125,9 +142,30 @@ const PLANTS = {
 	opensAnything: plant({toggle: (s, m) => [{...s, open: [...s.open, m.row]}, []]}),
 	/** A choose takes any row. */
 	choosesAnything: plant({choose: (s, m) => [{...s, chosen: m.row}, []]}),
-	/** Every look reads the record again. */
+	/** Every look reads the record again, the one held too. */
 	readsEveryLook: plant({
-		look: (s, m) => [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]],
+		look: (_, m) => [{read: {at: "reading", id: m.id}, open: [], chosen: null}, [read({id: m.id})]],
+	}),
+	/** The first look wins: a later id is never read. */
+	firstLookWins: plant({
+		look: (s, m) =>
+			s.read.at === "waiting"
+				? [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]]
+				: [s, []],
+	}),
+	/** An answer for an id it no longer reads still shows. */
+	takesLateAnswers: plant({
+		read_ok: (s, m) =>
+			s.read.at === "reading"
+				? [{read: {at: "read", trace: m.value}, open: [JOB], chosen: null}, []]
+				: [s, []],
+	}),
+	/** A newer id keeps the old record's open rows. */
+	keepsOldRows: plant({
+		look: (s, m) =>
+			idOf(s.read) === m.id && s.read.at !== "unread"
+				? [s, []]
+				: [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]],
 	}),
 	/** A toggle only ever opens. */
 	neverCloses: plant({
@@ -146,8 +184,11 @@ describe("the trace machine's laws", () => {
 	it("each law is seen to fail on a planted mistake", () => {
 		expect(broken(PLANTS.opensAnything)).toContain(openAreGroups.name);
 		expect(broken(PLANTS.choosesAnything)).toEqual([chosenIsARow.name]);
-		// A look that reads again also drops the record it read, so the rows open in it are left over.
-		expect(broken(PLANTS.readsEveryLook)).toContain(oneRead.name);
+		expect(broken(PLANTS.readsEveryLook)).toEqual([oneRead.name]);
+		expect(broken(PLANTS.firstLookWins)).toEqual([newestWins.name]);
+		expect(broken(PLANTS.takesLateAnswers)).toEqual([newestWins.name]);
+		// The old rows are left over while the new record is read.
+		expect(broken(PLANTS.keepsOldRows)).toContain(openAreGroups.name);
 		expect(broken(PLANTS.neverCloses)).toEqual([twiceIsNothing.name]);
 	});
 });

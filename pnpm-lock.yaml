@@ -821,6 +821,9 @@ importers:
         specifier: 'catalog:'
         version: 4.0.6
     devDependencies:
+      '@tea-fabrika/trace':
+        specifier: workspace:*
+        version: link:../trace
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5

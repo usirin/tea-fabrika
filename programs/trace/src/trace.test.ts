@@ -18,7 +18,7 @@ const keyOf = (record: JobTrace, name: string): string => {
 	return found.key;
 };
 
-const session = (records: readonly JobTrace[], id: string) =>
+const session = (records: readonly JobTrace[], id: string | undefined) =>
 	Effect.gen(function* () {
 		const started = yield* start(trace, {id}, {}, {id: "trace:test", storage: memoryStorage()});
 		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
@@ -120,6 +120,27 @@ describe("the trace program", () => {
 		expect(shown.chosen).toBeNull();
 	});
 
+	it("with no flag, waits for an id on `id`; a newer id replaces the record and its open rows", async () => {
+		const other = "f".repeat(32);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session([TALLY_TRACE], undefined);
+				const waiting = yield* until(() => true);
+				yield* offer(run, "id", TALLY_ID);
+				const first = yield* until((s) => s.read === "read");
+				yield* say({kind: "toggle", row: keyOf(TALLY_TRACE, "tally")});
+				yield* until((s) => s.rows.length === 4);
+				yield* offer(run, "id", other);
+				const next = yield* until((s) => s.read === "read" && s.id === other);
+				return {waiting, first, next};
+			}).pipe(Effect.scoped),
+		);
+		expect([seen.waiting.read, seen.waiting.id]).toEqual(["waiting", null]);
+		expect([seen.first.id, seen.first.title]).toEqual([TALLY_ID, "seq --to 3 | tally"]);
+		// Nobody wrote the other trace: the job's row alone, and tally's open row is gone with its record.
+		expect(seen.next.rows.map((r) => [r.kind, r.name])).toEqual([["job", "job"]]);
+	});
+
 	it("reads a trace nobody wrote as an empty record: the job's row alone", async () => {
 		const shown = await Effect.runPromise(
 			Effect.gen(function* () {
@@ -155,5 +176,7 @@ describe("the trace program", () => {
 	it("reads what its window sends, and refuses a row it does not know the shape of", () => {
 		expect(readInput(trace, {type: "do", value: {kind: "toggle", row: "job"}}).kind).toBe("read");
 		expect(readInput(trace, {type: "do", value: {kind: "open", row: "job"}}).kind).toBe("refused");
+		expect(readInput(trace, {type: "id", value: TALLY_ID}).kind).toBe("read");
+		expect(readInput(trace, {type: "id", value: "not-a-trace"}).kind).toBe("refused");
 	});
 });

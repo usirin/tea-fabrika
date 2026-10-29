@@ -1,9 +1,12 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, openJobs, type Storage} from "@kampus/fabrika";
+import {Ledger, memoryStorage, openJobs, type Storage, streams} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
+import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
+import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
-import {Effect, FileSystem, Schema} from "effect";
+import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
+import {Effect, FileSystem, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
@@ -109,6 +112,19 @@ const session = (
 			window(run).heard({type: "msg", msg: {type: "press", value}});
 		return {host, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
 	});
+
+/** Ticket 7 on `ledger`, as a lane left it (@tea-fabrika/tracker/seven). */
+const seedSeven = (ledger: Ledger["Service"]) =>
+	Effect.gen(function* () {
+		yield* ledger.register(nameOf(7), "user:owner");
+		yield* ledger.send(streams(nameOf(7)).inbox, "filed", {
+			kind: "filed",
+			writer: "user:owner",
+			data: {type: "filed", title: SEVEN_TITLE, body: SEVEN_BODY},
+		});
+		const tickets = yield* Tickets;
+		for (const e of SEVEN.slice(1)) yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+	}).pipe(Effect.provide(ticketsOnLedger(LANE)), Effect.provide(Layer.succeed(Ledger, ledger)));
 
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem>) =>
 	Effect.runPromise(test.pipe(Effect.provide(nodeFileSystem)));
@@ -434,6 +450,53 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(rows).toEqual(["tsh$ counter | double", "double 2", "tsh$"]);
+	});
+
+	it("is one of two on `runs --ticket 7 | trace`: both open in the foreground, and a run picked in runs opens its trace", async () => {
+		const ledger = memoryService();
+		const seen = await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("runs --ticket 7 | trace\r");
+				yield* s.opened(2);
+				const opens = s.seen.flatMap((x) => (x.kind === "open" ? [x] : []));
+				const of = (program: string) => opens.find((o) => o.program === program)?.run ?? "";
+				// Picked once runs has drawn ticket 7, as a person can only click a drawn clip.
+				yield* s.until("runs drew ticket 7", () =>
+					s.seen.find(
+						(x) =>
+							x.kind === "view" &&
+							x.run === of("runs") &&
+							JSON.stringify(x.data).includes(SEVEN_TRACE),
+					),
+				);
+				const picked = s
+					.window(of("runs"))
+					.heard({type: "msg", msg: {type: "in", value: {kind: "choose", run: "r-2"}}});
+				const read = yield* s.until("trace read #7's record", () =>
+					s.seen.find(
+						(x) =>
+							x.kind === "view" &&
+							x.run === of("trace") &&
+							(x.data as {read?: string; id?: string}).read === "read",
+					),
+				);
+				s.window(of("runs")).closed();
+				s.window(of("trace")).closed();
+				yield* s.prompts(2);
+				return {opens, picked, read};
+			}).pipe(Effect.scoped),
+		);
+		// tsh tells the tile of both windows, each in the foreground, the last stage first, as tsh
+		// starts a line's stages. Which one covers the tile is the desk's to say: today the later
+		// `covered` takes it (desk/desk.ts), so runs shows and trace is not drawn.
+		expect(seen.opens.map((o) => [o.program, o.placed])).toEqual([
+			["trace", "foreground"],
+			["runs", "foreground"],
+		]);
+		expect(seen.picked).toEqual({kind: "read"});
+		expect((seen.read as {data: {id: string}}).data.id).toBe(SEVEN_TRACE);
 	});
 });
 

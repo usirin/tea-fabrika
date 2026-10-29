@@ -10,6 +10,7 @@ Redux DevTools, and Jaeger's span detail. The design is
 ```ts
 // tsh> seq --to 3 | tally            job 1: two runs, one trace
 // tsh> trace --id <its trace id>     the trace takes over the tile
+// tsh> runs --ticket 7 | trace       no flag: "pick a run" until an id comes on `id`; a newer one replaces it
 
 // What the window sends on `do`, and what the tile shows after:
 {kind: "toggle", row: "span:<tally's span>"}   // tally opens: "count total"
@@ -35,7 +36,7 @@ type Read =
 type Model = {read: Read; open: RowKey[]; chosen: RowKey | null};
 
 type TraceMsg =
-	| {type: "look"; id: string}           // read the record, once, from the flag
+	| {type: "look"; id: string}           // read a record: from the flag, then each id on `id`; a newer one replaces it
 	| {type: "toggle"; row: string}        // open or close a row that groups others
 	| {type: "choose"; row: string | null} // show one row's detail; null closes it
 	// and read_ok, read_err: the answers of its one Cmd
@@ -71,7 +72,7 @@ job   seq --to 3 | tally        the tsh line's span
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id`, input `do` (`toggle`, `choose`, `quit`). Its view is `Shown`. |
+| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id` (may be left out), inputs `do` (`toggle`, `choose`, `quit`) and `id` (a trace id, as `runs` sends). Its view is `Shown`. |
 | | `src/machine.ts` | `trace`, the machine, and `read`, its one Cmd. Pure. |
 | | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: the record as rows. Pure. |
 | | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail. `changesOf`: a JSON Patch of two states. Pure. |
@@ -93,8 +94,9 @@ The rows are a WAI-ARIA treegrid. One row holds the focus at a time.
 - The app reads the fixture through `memoryTraces`, not the job's record. The host does not
   hand programs the record yet. When it does, the app provides `layerTraces` instead and nothing
   here changes.
-- The record is read once, when the program starts. A job still running shows what was there
-  then.
+- A record is read once, when its id comes. A job still running shows what was there then.
+- `runs --ticket 7 | trace` wires, but one tile shows one window: today runs covers it, and
+  trace is not drawn. What a line with two windows shows is not decided.
 - The record holds no ticket, so the trace draws no link to one. Opening the ticket program from
   a trace needs a way to start another program from a window, which the desk does not have.
 - The fixture's spans are written by hand in the record's shape, not caught from a real run.

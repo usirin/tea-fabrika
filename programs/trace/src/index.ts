@@ -22,8 +22,12 @@ import {Shown, shownOf} from "./view.ts";
 //   {kind: "choose", row: "step:…"}      the step's detail shows
 //   {kind: "quit"}                       it ends
 //
+//   tsh> runs --ticket 7 | trace         no flag: it says "pick a run" until an id comes on `id`
+//   // a run picked in runs' window: runs sends its trace id, and this one reads that record.
+//   // A newer id replaces the record shown.
+//
 // The record holds no ticket. A trace that belongs to a ticket is opened from that ticket's
-// facts; the trace never draws another program's view.
+// facts, as `runs` does; the trace never draws another program's view.
 
 /** What the window does: open or close a row, show one row's detail, or quit. */
 export const Do = Schema.Union([
@@ -60,10 +64,14 @@ export const trace = defineProgram({
 	description:
 		"One job's trace, read from its record: a bar per span, nested by parent, one colour per program, and every grouped row opening down to one step, with its Msg, the state before and after, and its Cmds. It has a window.",
 	flags: {
-		id: flag(TraceId, "The job's trace id: 32 hex characters, the trace id of its first run."),
+		id: flag(
+			Schema.UndefinedOr(TraceId),
+			"The job's trace id: 32 hex characters, the trace id of its first run. Left out, it waits for one on `id`.",
+		),
 	},
 	inputs: {
 		do: input(Do, "What the window does: open or close a row, show a row's detail, or quit."),
+		id: input(TraceId, "A job's trace id: its record replaces the one shown, as `runs` sends."),
 	},
 	outputs: {},
 	machines: {trace: traceKind},
@@ -71,8 +79,11 @@ export const trace = defineProgram({
 	main: ({flags, inputs, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(traceMachine, traceOptions)).ready;
-			yield* runtime.dispatch({type: "look", id: flags.id}).pipe(Effect.orDie);
+			const look = (id: string) => runtime.dispatch({type: "look", id}).pipe(Effect.orDie);
+			if (flags.id !== undefined) yield* look(flags.id);
 			yield* watch("trace", "trace", runtime);
+			// Each id told, for as long as the run is: a pipe's end does not end the window.
+			yield* inputs.id.pipe(Stream.runForEach(look), Effect.forkScoped);
 			yield* inputs.do.pipe(
 				Stream.takeWhile((d) => d.kind !== "quit"),
 				// The predicate narrows: past it, `d` is never a quit.

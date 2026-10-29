@@ -214,7 +214,7 @@ function Chosen({trace, run}: {readonly trace: Trace; readonly run: string}) {
 	);
 }
 
-export function RunsWindow({view}: WindowProps<typeof runs>) {
+export function RunsWindow({view, send}: WindowProps<typeof runs>) {
 	// The playhead: `null` is live, at now; a time is a replay up to it.
 	const [at, setAt] = useState<number | null>(null);
 	const [chosen, setChosen] = useState<string | null>(null);
@@ -343,7 +343,11 @@ export function RunsWindow({view}: WindowProps<typeof runs>) {
 							track={t}
 							trace={shown}
 							chosen={chosen}
-							choose={(run) => setChosen((c) => (c === run ? null : run))}
+							choose={(run) => {
+								// Picked, not let go: the run's trace id goes out on `id`, for `trace` to open.
+								if (chosen !== run) send({type: "in", value: {kind: "choose", run}});
+								setChosen(chosen === run ? null : run);
+							}}
 						/>
 					))}
 					{live ? null : <div className="after" style={{insetInlineStart: `${head}%`}} />}
