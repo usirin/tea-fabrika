@@ -52,8 +52,11 @@ type Exception = {what: string; why: string; status: "decided" | "proposed"};
   together, and tsh's lines are that language. Following Elm strictly is what
   made tsh possible: each program has typed inputs and outputs, so a pipe is
   just wiring, checked before anything runs.
-- **The factory as one line** (proposed). Whether
-  `tracker | triage | plan | build | review | ship` can be the factory, with a
-  stage's `send` going back through the tracker and the ledger, is being
-  tested in [experiment 168](../../experiments/168-the-factory-is-one-line.md).
-  Until it is decided, the hand-written parent is the answer.
+- **The factory is not a line** (decided 2026-10-29). The factory is one thin
+  coordinator program, a hand-written parent around the stage programs, with
+  its children listed as jobs under it.
+  [Experiment 168](../../experiments/168-the-factory-is-one-line.md) explored
+  `tracker | triage | plan | build | review | ship` as the factory; it ran, and
+  it was an exploration, not a plan. What stays is that each stage is a program
+  that runs alone and pipes, so a person can run one part again by hand
+  (`build --ticket 7 | review`) and watch it.

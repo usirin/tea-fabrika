@@ -5,6 +5,14 @@ and the ticket goes back to build. A tsh pipe only flows one way. Which loop
 shape lets that `send` work on one line, reads well, and runs on our
 primitives? And can an agent write the line from the help text alone?
 
+**Decided 2026-10-29, after this ran: the factory does not become one line.**
+This was an exploration, never a plan to change the pipeline. The factory
+stays one thin coordinator program around the stage programs, the Elm parent.
+What the experiment gave us is the other half: every stage is a program that
+runs alone and pipes, so a person can run one part again by hand, such as
+`build --ticket 7 | review`, and watch it. The answer below is what the
+experiment found if the factory were a line; it is kept as it was.
+
 **Answer: send it back through the tracker. The line stays exactly the
 factory, with no new syntax, and the loop lives in the ledger, not on the line.**
 
@@ -238,6 +246,13 @@ harness tells right from wrong. Its numbers say nothing about any agent.
   ran too. The right-answer compare caught them; tsh did not.
 
 ## Recommendation
+
+**Not taken (2026-10-29).** The factory stays a hand-written coordinator
+program, shape 3 grown to all stages, with its children listed as jobs under
+it, the way Temporal lists a parent's child workflows. One parent for the
+whole factory also removes this section's "one parent per loop" cost. The
+recommendation below stays as written, marked wrong for the factory; it still
+holds for a line typed by hand.
 
 **Build the factory line as shape 4: through the tracker.** Confidence 70%.
 
