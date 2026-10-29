@@ -17,9 +17,9 @@ import {BUILTINS} from "./grammar.ts";
 export type ProgramList = ReadonlyMap<string, Entry>;
 
 /**
- * Make a program list. Two programs with one name, or a program named like a
- * built-in (`jobs`, `tell`, ...), is refused here, when the list is made:
- * a name on a line must mean one thing.
+ * Make a program list. Two programs with one name, a program named like a
+ * built-in (`jobs`, `tell`, ...), or a program with a flag named `help`, is
+ * refused here, when the list is made: a name on a line must mean one thing.
  */
 export function programList(entries: readonly Entry[]): ProgramList {
 	const list = new Map<string, Entry>();
@@ -30,6 +30,8 @@ export function programList(entries: readonly Entry[]): ProgramList {
 		if (list.has(name)) throw new Error(`two programs are named ${name}`);
 		if (!/^[a-z][a-z0-9-]*$/.test(name))
 			throw new Error(`a program on a tsh line is named in small letters, digits and -: ${name}`);
+		if (Object.hasOwn(entry.program.flags, "help"))
+			throw new Error(`${name} cannot have a flag named help: --help shows every program's help`);
 		list.set(name, entry);
 	}
 	return list;

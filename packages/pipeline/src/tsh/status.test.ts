@@ -14,7 +14,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 // first cannot be read (stuck), the second is a draft (skipped), the third's
 // checks are still running, until the test lets them settle.
 
-const {describe: describeEntry, Programs, programList, SMALL, tsh} = Shell;
+const {helpOf, Programs, programList, SMALL, tsh} = Shell;
 type ProgramList = Shell.ProgramList;
 type Printed = Shell.Printed;
 type Ready = Shell.Ready;
@@ -162,18 +162,23 @@ describe("status lines: the user's job", () => {
 	});
 });
 
-describe("status lines: --describe", () => {
-	it("names the machines that have a status line, and says nothing of them for a program with no machine", () => {
+describe("status lines: --help", () => {
+	it("names the machines that have a status line, last, and says nothing of them for a program with no machine", () => {
 		const list = programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"))]);
 		const page = (name: string) => {
 			const entry = list.get(name);
 			if (entry === undefined) throw new Error(name);
-			return describeEntry(entry);
+			return helpOf(entry);
 		};
-		expect(page("review-scripted")).toContain(
-			"status lines: queue, review (one per copy, under the job in jobs)",
-		);
-		expect(page("tally")).toContain("status lines: count (one per copy, under the job in jobs)");
-		expect(page("say").some((l) => l.startsWith("status lines"))).toBe(false);
+		expect(page("review-scripted").slice(-3)).toEqual([
+			"Machines:",
+			"  queue   one status line per copy, under its job in jobs",
+			"  review  one status line per copy, under its job in jobs",
+		]);
+		expect(page("tally").slice(-2)).toEqual([
+			"Machines:",
+			"  count  one status line per copy, under its job in jobs",
+		]);
+		expect(page("say")).not.toContain("Machines:");
 	});
 });

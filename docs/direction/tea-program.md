@@ -284,7 +284,7 @@ Three layers, each with one job.
   React.*
 - **A status line is declared on each kind, one per machine.** `status` is
   a `state => string`, typed by that machine's state, so the line is said
-  once, where the program is read, and `--describe` can show it. tea is
+  once, where the program is read, and `--help` can show it. tea is
   unchanged. It is required on every kind: a kind with no line does not
   compile, and is refused past the types. A program that runs many
   copies of one machine (one review per pull request) shows one line per

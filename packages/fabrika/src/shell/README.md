@@ -19,6 +19,38 @@ tsh: does not fit: seq's outputs (n: integer) fit no input of upper (text: strin
              ^
 ```
 
+Every program answers `--help` (or `-h`), read off its declaration: a usage line, what it does,
+its flags, inputs and outputs in aligned columns, pipes from the listed programs that fit, and
+its machines last. `help <program>` prints the same. `--help <name>` shows one part whole.
+
+```text
+$ packages/fabrika/bin/tsh-small -c 'seq --help'
+Usage: seq --to TO
+       seq --to TO | ...
+
+Counts from 1 up to a number, one value at a time, and ends.
+
+Flags:
+  --to    integer >= 0  The last number it sends.
+  --help                This help (or -h). One part whole: --help --to
+
+Outputs: printed, or sent into a pipe (>name picks one)
+  >n  integer  Each number, in order.
+
+Example pipes:
+  seq --to TO | double
+  seq --to TO | tally
+```
+
+- A flag the line must give is bare in the usage (`--to TO`). One with a default is in brackets,
+  and its default ends its text.
+- As GNU's `--help` does, once `--help` is in a command tsh reads none of its other words, so a
+  half-typed `ship --mode --help` still answers. The word for a text that is `--help` is
+  `--text=--help`.
+- A program may not declare a flag named `help`: `programList` refuses it.
+- The layout follows GNU's `--help`, cargo's and gh's help, clig.dev's help guidance, and
+  ripgrep's `command | rg` usage line for the pipe forms (`help.ts`).
+
 An app hands tsh its programs as the `Programs` service, and `runTsh` runs it. This is a whole
 bin, the one `fixtures/acp-tsh/tsh.ts` is:
 
@@ -89,8 +121,8 @@ What an app needs is public, in two places:
 
 - `Shell`, a namespace on the top level (`./index.ts`): the program list (`programList`,
   `Programs`, `SMALL`), tsh as a program (`tsh`), and the parts a test of a line
-  uses (`parse`, `check`, `complete`, `describe`, `EMPTY`, `shapeLines`, `typeOf`, `Shorten`).
-  `Search` is the Ctrl-R search (`search.ts`), for a line editor an app writes itself, as the
+  uses (`parse`, `check`, `complete`, `helpOf`, `partsHelp`, `EMPTY`, `shapeLines`, `typeOf`,
+  `Shorten`).  `Search` is the Ctrl-R search (`search.ts`), for a line editor an app writes itself, as the
   fabrika app does. None of it names a platform. The jobs tsh shows are the host's: `HostJobs`
   and `openJobs` are on the top level too (`../host/host-jobs.ts`).
 - `@kampus/fabrika/shell`: `runTsh` and `homeOf`. The launcher holds a terminal, files and
@@ -108,8 +140,8 @@ The trace files are on `@kampus/fabrika/otel`.
 | `grammar.ts` | The line grammar: statements, `;` `&` `&&` `\|\|`, pipes, `--flag value`, `input=value`, `$( )` |
 | `check.ts` | A parsed line checked against the program list before anything starts |
 | `decode.ts` | A word on a line read as a value of a program's own shape |
-| `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit`, and `--describe` |
-| `complete.ts` | Tab completion, from the line typed so far |
+| `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit` |
+| `help.ts` | What `<program> --help` prints, whole or one part, from the program's declaration || `complete.ts` | Tab completion, from the line typed so far |
 | `search.ts` | Ctrl-R history search |
 | `launch.ts` | Command line and environment reading: `--json`, `-c`, `TSH_HOME`, `TSH_TRACE` |
 | `short.ts` | A sent value as one short line |

@@ -59,6 +59,9 @@ export interface Flag<T> extends Declared<"flag", T> {
 	/** What a run is started with when the flag is not given. Left out: it must be given, unless its shape takes `undefined`. */
 	readonly default?: {readonly value: T};
 }
+/** A flag a line must give: it has no default, and its shape does not take `undefined`. */
+export const mustBeGiven = (declared: Flag<unknown>): boolean =>
+	declared.default === undefined && declared.shape.problem(undefined) !== undefined;
 /**
  * When a value told to an input counts as taken: AMQP's two acknowledgement
  * modes. `auto`: once `main` reads it off the line. `manual`: once `main`

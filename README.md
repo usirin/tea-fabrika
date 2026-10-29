@@ -177,7 +177,7 @@ Steps:
 6. Look before you run. These only read:
 
    ```sh
-   deliver --describe
+   deliver --help
    ship --mode read pr=https://github.com/acme/widgets/pull/12
    ```
 

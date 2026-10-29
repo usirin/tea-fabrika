@@ -12,7 +12,7 @@ package's public names.
 
 ```sh
 bin/tsh -c 'programs'                         # the small ones, acp, ship, review-scripted, build, operate, the desk
-bin/tsh -c 'ship --describe'                  # its flags, inputs, outputs and machines
+bin/tsh -c 'ship --help'                      # how to run it: usage, flags, inputs, outputs, pipes
 bin/tsh -c 'ship --mode read pr=<pull request url>'   # reads only: says what ship would send
 bin/tsh -c 'review-scripted --rubrics <folder> pr=<pull request url> | ship --mode read'
 bin/tsh -c 'desk-demo

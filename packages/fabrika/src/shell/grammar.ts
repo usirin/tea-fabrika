@@ -1,3 +1,4 @@
+import {didYouMean} from "./did-you-mean.ts";
 import {type At, type Token, words} from "./words.ts";
 
 // The grammar of a tsh line: a small fixed one, read from the shell words
@@ -11,16 +12,23 @@ import {type At, type Token, words} from "./words.ts";
 //   statement  builtin word* ['&']  |  pipeline ['&']
 //   pipeline   command ('|' command)*
 //   command    program part*
-//   part       --flag value | --flag=value | input=value | >output | <input | --describe [name]
+//   part       --flag value | --flag=value | input=value | >output | <input
 //   value      word | $( pipeline )
+//   help       program word* (--help | -h) [name] word*
 //
 //   ship --mode read pr=https://github.com/o/r/pull/1        flags are argv, `input=value` is told on stdin
 //   review-scripted --rubrics r ... pr=$(…) | ship --mode read   a pipe: an output of the left into an input of the right
 //   ship --mode read &                                       a job: the prompt comes back
 //   tell %1 pr https://github.com/o/r/pull/2                 a built-in: plain words only
+//   ship --mode --help                                        ship's help: every other word is left unread
 //
 // `>output` names the output a pipe or a `$(…)` takes, and `<input` the input
 // a pipe feeds, when the shapes alone do not pick one.
+//
+// `--help` or `-h` anywhere in a command asks for the program's help, as GNU
+// asks of `--help`: every other word of that command is left unread, so a
+// half-typed line still answers. The word right after it, if any, names the
+// one flag, input or output to show whole.
 
 export type Value =
 	| {readonly kind: "text"; readonly text: string; readonly at: At}
@@ -44,10 +52,13 @@ export interface Command {
 	readonly out: Named | null;
 	/** `<name`: the input a pipe into this command feeds. */
 	readonly into: Named | null;
-	/** `--describe [name]`: show the program's declaration, or one flag, input or output of it whole, and run nothing. */
-	readonly describe: {readonly at: At; readonly name: Named | null} | null;
+	/** `--help [name]` or `-h [name]`: show the program's help, or one flag, input or output of it whole, and run nothing. */
+	readonly help: {readonly at: At; readonly name: Named | null} | null;
 	readonly at: At;
 }
+
+/** The words that ask a program for its help, as on any Unix tool. */
+export const HELP_WORDS: ReadonlySet<string> = new Set(["--help", "-h"]);
 
 export interface Pipeline {
 	readonly commands: readonly [Command, ...Command[]];
@@ -103,7 +114,12 @@ export interface Refused {
 
 export type Parsed = {readonly kind: "parsed"; readonly statements: readonly Statement[]} | Refused;
 
-const refused = (at: number, why: string): Refused => ({kind: "refused", at, why});
+const refused = (at: number, why: string, guess?: string): Refused => ({
+	kind: "refused",
+	at,
+	why,
+	...(guess === undefined ? {} : {didYouMean: guess}),
+});
 
 /** A stop in the walk: the parse is refused. Thrown inside this file only, and caught by `parse`. */
 class Stop {
@@ -120,8 +136,8 @@ export function parse(line: string): Parsed {
 	let i = 0;
 	const peek = (): Token | undefined => tokens[i];
 	const isOp = (t: Token | undefined, op: string): boolean => t?.kind === "op" && t.op === op;
-	const stopAt = (at: number, why: string): never => {
-		throw new Stop(refused(at, why));
+	const stopAt = (at: number, why: string, guess?: string): never => {
+		throw new Stop(refused(at, why, guess));
 	};
 	const startOf = (t: Token | undefined) => t?.start ?? line.length;
 
@@ -132,7 +148,12 @@ export function parse(line: string): Parsed {
 			return {kind: "text", text: t.text, at: {start: t.start, end: t.end}};
 		}
 		if (isOp(t, "$(")) return sub();
-		return stopAt(startOf(t) === line.length ? flagEnd : startOf(t), `${name} needs a value`);
+		// `map --hlep` at the end of a line is a slip for --help, not a flag missing its value.
+		return stopAt(
+			startOf(t) === line.length ? flagEnd : startOf(t),
+			`${name} needs a value`,
+			didYouMean(name, ["--help"]),
+		);
 	};
 
 	const sub = (): Value => {
@@ -153,11 +174,22 @@ export function parse(line: string): Parsed {
 		if (/^[-<>]/.test(first.text) || first.text.includes("="))
 			stopAt(first.start, `expected a program name, not ${first.text}`);
 		i += 1;
+		const program = {name: first.text, at: {start: first.start, end: first.end}};
+		const help = helpIn();
+		if (help !== null)
+			return {
+				program,
+				flags: [],
+				told: [],
+				out: null,
+				into: null,
+				help: help.help,
+				at: {start: first.start, end: help.end},
+			};
 		const flags: Given[] = [];
 		const told: Given[] = [];
 		let out: Named | null = null;
 		let into: Named | null = null;
-		let describe: Command["describe"] = null;
 		let end = first.end;
 		for (let t = peek(); t !== undefined; t = peek()) {
 			if (t.kind === "op") {
@@ -173,14 +205,7 @@ export function parse(line: string): Parsed {
 				if (rest === "") return stopAt(t.end, `${name} needs a value after =`);
 				return {kind: "text", text: rest, at: {start: t.end - rest.length, end: t.end}};
 			};
-			if (text === "--describe") {
-				// The word after it, if any, names what to show whole: mode, --mode, pr, >found.
-				const next = peek();
-				const name =
-					next?.kind === "word" ? {name: next.text, at: {start: next.start, end: next.end}} : null;
-				if (name !== null) i += 1;
-				describe = {at, name};
-			} else if (text.startsWith("--")) {
+			if (text.startsWith("--")) {
 				const eq = text.indexOf("=");
 				const name = eq === -1 ? text.slice(2) : text.slice(2, eq);
 				if (name === "") stopAt(t.start, "a flag needs a name after --");
@@ -210,14 +235,39 @@ export function parse(line: string): Parsed {
 				);
 			end = tokens[i - 1]?.end ?? end;
 		}
+		return {program, flags, told, out, into, help: null, at: {start: first.start, end}};
+	};
+
+	/**
+	 * A `--help` or `-h` among the words of the command that starts here, and
+	 * the word after it, if any: what to show whole (mode, --mode, pr, >found).
+	 * When there is one, the walk steps past the whole command, its `$( )`s
+	 * too, unread. `null`: the command asks for no help, and nothing is read.
+	 */
+	const helpIn = (): {help: NonNullable<Command["help"]>; end: number} | null => {
+		let depth = 0;
+		let asked: number | null = null;
+		let j = i;
+		for (; j < tokens.length; j++) {
+			const t = tokens[j];
+			if (t?.kind === "op") {
+				if (t.op === "$(") depth += 1;
+				else if (t.op === ")" && depth > 0) depth -= 1;
+				else if (depth === 0) break;
+			} else if (t !== undefined && depth === 0 && asked === null && HELP_WORDS.has(t.text))
+				asked = j;
+		}
+		const word = asked === null ? undefined : tokens[asked];
+		if (asked === null || word === undefined) return null;
+		const next = asked + 1 < j ? tokens[asked + 1] : undefined;
+		const name =
+			next?.kind === "word" && !HELP_WORDS.has(next.text)
+				? {name: next.text, at: {start: next.start, end: next.end}}
+				: null;
+		i = j;
 		return {
-			program: {name: first.text, at: {start: first.start, end: first.end}},
-			flags,
-			told,
-			out,
-			into,
-			describe,
-			at: {start: first.start, end},
+			help: {at: {start: word.start, end: word.end}, name},
+			end: tokens[j - 1]?.end ?? word.end,
 		};
 	};
 

@@ -1,13 +1,11 @@
 import {Effect} from "effect";
 import {type Job, jobNamed} from "../host/jobs.ts";
-import type {Entry} from "../program/listed.ts";
-import {type Listed, listing} from "../program/program.ts";
-import type {Part} from "./check.ts";
 import {copyRows, fullRows} from "./copies.ts";
-import {readValue, shapeLines, typeOf} from "./decode.ts";
+import {readValue} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {reattach, type Shell, waitForJob} from "./execute.ts";
 import type {Named, Statement} from "./grammar.ts";
+import {columns, helpOf} from "./help.ts";
 
 // tsh's built-ins: the words that work on tsh itself, not on a program. They
 // read the host's job table (the `jobs` machine's state, ../host/jobs.ts),
@@ -24,8 +22,8 @@ import type {Named, Statement} from "./grammar.ts";
 //   attach %1 [&]           a job from an earlier tsh: start it again under its run ids;
 //                           one from this tsh: wait for it here
 //   programs                what can be started, by name
-//   <program> --describe    (not a built-in: a part of a command) the program's declaration
-//   help, exit [status]
+//   help [program]          tsh's own help; or a program's, as `<program> --help` prints it (./help.ts)
+//   exit [status]
 
 type BuiltinStatement = Extract<Statement, {readonly kind: "builtin"}>;
 export interface Said {
@@ -44,62 +42,11 @@ export const HELP = [
 	"  ... &                                    a job: the prompt comes back",
 	"  --flag $(a ...)  input=$(a ...)          a's values, typed, into the line",
 	"  >output <input                           name the output or input a pipe or $( ) takes",
-	"  <program> --describe [name]              its flags, inputs, outputs and machines; or one whole",
-	"  jobs | ps | programs | help | exit [status]",
+	"  <program> --help [name]  (or -h)         how to run it: flags, inputs, outputs; or one whole",
+	"  jobs | ps | programs | help [program] | exit [status]",
 	"  tell %n <input> <value>... | close %n <input> | stop %n | attach %n [&]",
 	"Values are read as text first, then as JSON. Ctrl-C stops what runs here; Ctrl-D leaves.",
 ].join("\n");
-
-/** How each kind of part is written on a line. */
-const written: Readonly<Record<Part["kind"], (name: string) => string>> = {
-	flag: (n) => `--${n}`,
-	input: (n) => `${n}=`,
-	output: (n) => `>${n}`,
-};
-
-/**
- * The lines `--describe` prints: a program's man page, from its declaration,
- * each shape in a few words. `parts`: the ones named after `--describe`, each
- * shown whole, one field a line.
- */
-export function describe(entry: Entry, parts: readonly Part[] | null = null): readonly string[] {
-	const page = listing(entry.program);
-	const declared = {flag: page.flags, input: page.inputs, output: page.outputs};
-	/** A flag's default, as it is shown after its description. */
-	const fallback = (d: Listed) =>
-		d.default === undefined ? "" : ` (default: ${JSON.stringify(d.default.value)})`;
-	if (parts !== null)
-		return parts.flatMap((part) => {
-			const one = declared[part.kind].find((d) => d.name === part.name);
-			return one === undefined
-				? []
-				: [
-						`${written[part.kind](part.name)}  (${part.kind} of ${page.name})  ${one.description}${fallback(one)}`,
-						...shapeLines(one.schema, "  "),
-					];
-		});
-	const rows = (title: string, kind: Part["kind"]) =>
-		declared[kind].length === 0
-			? [`${title}: none`]
-			: [
-					`${title}:`,
-					...declared[kind].map(
-						(d) =>
-							`  ${written[kind](d.name)}  ${typeOf(d.schema)}  ${d.description}${fallback(d)}`,
-					),
-				];
-	return [
-		`${page.name}: ${page.description}`,
-		...rows("flags", "flag"),
-		...rows("inputs", "input"),
-		...rows("outputs", "output"),
-		`machines: ${page.machines.length === 0 ? "none" : page.machines.join(", ")}`,
-		...(page.status.length === 0
-			? []
-			: [`status lines: ${page.status.join(", ")} (one per copy, under the job in jobs)`]),
-		`${page.name} --describe <name> shows one flag, input or output whole.`,
-	];
-}
 
 /** The job a built-in's first word names, or why none. */
 function named(shell: Shell, word: Named | undefined, verb: string): Job | string {
@@ -131,13 +78,37 @@ export const runBuiltin = (
 			return failed(status);
 		};
 		switch (st.name) {
-			case "help":
-				for (const line of HELP.split("\n")) shell.print("out", line);
+			case "help": {
+				if (first === undefined) {
+					for (const line of HELP.split("\n")) shell.print("out", line);
+					return ok;
+				}
+				if (second !== undefined)
+					return refuse(
+						`help takes one program. For one of its parts: ${first.name} --help ${second.name}`,
+					);
+				const entry = shell.list.get(first.name);
+				if (entry === undefined) {
+					const guess = didYouMean(first.name, [...shell.list.keys()]);
+					return refuse(
+						`no program named ${first.name}${guess === undefined ? "" : `. Did you mean ${guess}?`}`,
+						127,
+					);
+				}
+				for (const line of helpOf(entry, shell.list)) shell.print("out", line);
 				return ok;
-			case "programs":
-				for (const [name, entry] of shell.list)
-					shell.print("out", `${name}  ${entry.program.description}`);
+			}
+			case "programs": {
+				const rows = [...shell.list].map(([name, entry]) => ({
+					name,
+					shape: "",
+					text: entry.program.description,
+				}));
+				for (const row of columns(rows)) shell.print("out", row.slice(2));
+				shell.print("out", "");
+				shell.print("out", "<program> --help shows how to run one.");
 				return ok;
+			}
 			case "jobs":
 				for (const job of shell.table.getState().jobs) {
 					shell.print("out", `[${job.n}] ${job.state.padEnd(8)}  ${job.text}`);
