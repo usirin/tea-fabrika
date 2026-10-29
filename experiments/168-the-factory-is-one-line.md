@@ -305,6 +305,12 @@ The doubts, and what would settle each:
 
 ## Notes
 
+- **`trace` here is today's `runs`.** This ran before pull request 172, which
+  renamed the ticket-runs view to `runs` and gave the name `trace` to a new
+  program that shows one job's trace. The tasks, the help text and the results
+  say `trace --ticket 7`; read that as `runs --ticket 7`. The script still
+  imports `@tea-fabrika/trace`, so `STEP=help` or `STEP=agent` run again today
+  would list the new `trace`: change it to `runs` first.
 - **`lib/triage-codex.ts` does not run any more.** Agent turns now need a
   `system` prompt (v1 slice 2), and it passes none, so experiments 159, 161
   and 162 fail at once with a schema error. This script passes one. Not fixed
