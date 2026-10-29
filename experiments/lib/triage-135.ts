@@ -163,6 +163,18 @@ export const P_BAR_BOTH = withClauses(
 );
 /** The bar as 92b's brief states it, examples without demlik's numbers. */
 const P_BAR = barLines(P_BAR_BOTH, {numbers: false});
+/** Experiment 161's security line, as a "still a yes" clause after 92b's "a person filed it". */
+export const SECURITY = {
+	id: "a-security-gap-is-not-hardening",
+	rule: "A security gap is not hardening. A hole in who may see or do what, or a secret that could leak into a log or an error message, is a yes even if nobody has used it yet: a hole nobody has used is still a hole.",
+	example: {what: "a webhook that takes a request without checking its signature"},
+	evidence: ["experiment 159: #2563 and #8010, closed by GPT sol, built by the project"],
+} as const;
+/** 92b's "both" bar with 161's security line, as 161 and 162 state it. */
+export const P_BAR_SECURITY = barLines(
+	withClauses(P_BAR_BOTH, {note: "", no: [], stillYes: [SECURITY]}),
+	{numbers: false},
+);
 /** As in 92b: the 200 tickets filed just before, by number. */
 const P_WINDOW = 200;
 const pEarlier = (all: readonly Earlier[], t: Ticket) =>

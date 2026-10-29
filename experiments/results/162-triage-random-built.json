@@ -1,0 +1,1699 @@
+{
+	"configs": {
+		"sol-security": {
+			"p": {
+				"1641": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The saved-posts page removes feed navigation, creating a real usability bug with a clear implementation path. #1631 concerns the empty state, not the missing navigation, so it is separate work."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7720,
+						"tokens": {
+							"input": 18406,
+							"cached": 8448,
+							"output": 105
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The saved-posts page drops working feed navigation, a concrete usability bug with an identified cause. Restore access to the feed sorts through its subnav; #1631 concerns the empty state and does not carry this work."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5426,
+						"tokens": {
+							"input": 18407,
+							"cached": 8448,
+							"output": 62
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"1674": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "An owner must choose the nested add and delete reconciliation strategy before implementation proceeds. The ADR will guide dependent implementation tickets and update the mutation pattern, so it produces a decision people act on."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5727,
+						"tokens": {
+							"input": 18537,
+							"cached": 8448,
+							"output": 86
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "An owner must choose how optimistic nested adds and deletes reconcile with live frames before implementation proceeds. The ADR directly guides dependent implementation slices, so it is an actionable decision rather than a record for its own sake."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6224,
+						"tokens": {
+							"input": 18535,
+							"cached": 8448,
+							"output": 91
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"1789": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The ticket reports an observed legibility bug in the primary create action, with a concrete CSS pairing to fix. Measure the contrast, correct failing hover pairings, and audit matching uses of the same tokens."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7658,
+						"tokens": {
+							"input": 18471,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The ticket reports a visible readability defect in the primary create action, with a concrete CSS pairing to fix. Plan the hover contrast correction and audit other uses of the same foreground/background pairing."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6108,
+						"tokens": {
+							"input": 18478,
+							"cached": 8448,
+							"output": 83
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"1867": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This builds the shared reaction UI and optimistic interactions, distinct from the earlier storage, read-model, and mutation-wiring tickets. The scope is concrete and ready to plan, using the palette decided in #1859."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6355,
+						"tokens": {
+							"input": 17964,
+							"cached": 8448,
+							"output": 90
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This builds the shared reaction UI and optimistic interactions, distinct from the earlier storage, aggregate-read, and mutation-wiring tickets. The scope is concrete and ready to plan for a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8274,
+						"tokens": {
+							"input": 17962,
+							"cached": 8448,
+							"output": 97
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2013": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies duplicated visibility logic and a hypothetical future-state mismatch, but no current access-control hole or failure in real use. Consolidating the predicates and adding agreement tests would harden behavior that already works."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8090,
+						"tokens": {
+							"input": 18263,
+							"cached": 8448,
+							"output": 136
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies duplicated visibility rules and a possible future lifecycle-state mismatch, but no current disagreement or access-control hole. Consolidation and truth-table tests would guard against future drift."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8816,
+						"tokens": {
+							"input": 18259,
+							"cached": 8448,
+							"output": 154
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2126": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a user-visible identity inconsistency, and no earlier ticket carries the same change. The founder has supplied the display-name principle; standardize name rendering across surfaces with a username fallback when displayName is null."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6192,
+						"tokens": {
+							"input": 18339,
+							"cached": 8448,
+							"output": 61
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Visible surfaces inconsistently present a user's identity, and the founder has already set the direction: show display name with a username fallback when absent. Plan the audit and rendering changes; no earlier ticket listed requests the same fix."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 4901,
+						"tokens": {
+							"input": 18338,
+							"cached": 8448,
+							"output": 62
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2325": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The missing credential scanner is a security gap, distinct from #2310’s path-leakage work. Plan adoption of stock gitleaks in CI, including fixture allowlisting and an advisory rollout before enforcement."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5497,
+						"tokens": {
+							"input": 18151,
+							"cached": 8448,
+							"output": 80
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The missing credential scanner is a security gap, distinct from #2310’s machine-local path scanning work. The founder-approved follow-up can proceed to planning stock-rule gitleaks adoption, including CI wiring and fixture allowlisting."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6254,
+						"tokens": {
+							"input": 18141,
+							"cached": 8448,
+							"output": 101
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2361": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "The observed D1 orphan creation needs a prevention fix distinct from #2340's cleanup work. An owner must choose the stage identity and state-lifecycle policy before a builder implements stable naming, hosted state, or teardown tooling."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8863,
+						"tokens": {
+							"input": 18573,
+							"cached": 8448,
+							"output": 154
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "The observed D1 orphan leak needs a minting-side fix distinct from #2340's reclaim work. An owner must choose the dev-stage lifecycle policy (stable-name adoption, hosted state, or enforced teardown) before implementation."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 12325,
+						"tokens": {
+							"input": 18577,
+							"cached": 8448,
+							"output": 248
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2561": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket proposes throttling already-authorized mutations as defense in depth, with no failure in real use reported. It identifies no access-control hole or secret exposure that would trigger the security exception."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 10988,
+						"tokens": {
+							"input": 17526,
+							"cached": 8448,
+							"output": 221
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket proposes an abuse-prevention throttle before registration opens but reports no failure in real use. Authenticated write volume without a throttle is hardening, with no identified authorization hole or secret exposure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7414,
+						"tokens": {
+							"input": 17528,
+							"cached": 8448,
+							"output": 127
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2600": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This child owns the atomic move of the pano CTA into Subnav, with #2595 depending on it rather than duplicating it. The placement is already decided; implementation must preserve reachability and release both surfaces together behind the default-off flag."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7636,
+						"tokens": {
+							"input": 17753,
+							"cached": 8448,
+							"output": 93
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This child defines the atomic CTA move that #2595 depends on, rather than duplicating the broader epic. The placement is settled; plan one flagged PR that adds the pano Subnav CTA and removes the signed-in topbar action together."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6229,
+						"tokens": {
+							"input": 17749,
+							"cached": 8448,
+							"output": 88
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"3332": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Write-scoped GITHUB_TOKEN access across CI is a concrete security gap, even without an incident. Plan minimal permissions and necessary write grants; #3331 addresses ingestion of review findings, not this permissions fix."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6308,
+						"tokens": {
+							"input": 18143,
+							"cached": 8448,
+							"output": 88
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Write-scoped GITHUB_TOKEN permissions across 14 workflows are a concrete security gap, even without an incident. Plan least-privilege defaults and explicit grants where needed; #3331 addresses the separate review-ingestion problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5857,
+						"tokens": {
+							"input": 18138,
+							"cached": 0,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"3341": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "These security findings need remediation or justified false-positive dismissal. #3331 fixes the review gate and #3332 addresses workflow permissions; neither covers these four alerts."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5792,
+						"tokens": {
+							"input": 18428,
+							"cached": 8448,
+							"output": 71
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The four security findings need fixes or justified false-positive dismissals. #3331 addresses review enforcement and #3332 addresses workflow permissions; neither covers these findings."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5682,
+						"tokens": {
+							"input": 18426,
+							"cached": 8448,
+							"output": 50
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"3682": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #3458, which carries this work",
+								"duplicateOf": 3458,
+								"why": "#3458 already reports worktree-isolated coders inheriting the parent's agent type and lacking $WORKTREE_ROOT. This ticket adds a concrete cross-agent contamination incident caused by the same isolation problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7570,
+						"tokens": {
+							"input": 19044,
+							"cached": 8448,
+							"output": 139
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #3594, which carries this work",
+								"duplicateOf": 3594,
+								"why": "#3594 already reports worktree-isolated coders writing initial edits into the primary checkout. This ticket adds another incident and provisioning details for the same isolation failure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7236,
+						"tokens": {
+							"input": 19050,
+							"cached": 8448,
+							"output": 137
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"3886": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This refines the broadcast behavior shipped for #3770 by routing claimed work to its holder; it is a distinct change addressing observed noise. The founder already prioritized it, so planning can define the target-to-claim mapping and delivery behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7235,
+						"tokens": {
+							"input": 18107,
+							"cached": 8448,
+							"output": 113
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Claim-aware routing addresses observed wake-up noise beyond the fan-out fix in #3877, and the founder has already prioritized it. Plan the delivery change and target-to-claim key mapping, coordinating with #3818's canonical lane keys."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7456,
+						"tokens": {
+							"input": 18111,
+							"cached": 8448,
+							"output": 113
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"4087": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #4073, which carries this work",
+								"duplicateOf": 4073,
+								"why": "#4073 already covers the README truth and Diátaxis-lite structure pass across packages/*, including packages/authz/README.md."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7913,
+						"tokens": {
+							"input": 18295,
+							"cached": 8448,
+							"output": 122
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #4073, which carries this work",
+								"duplicateOf": 4073,
+								"why": "#4073 already covers the README truth and Diátaxis-lite structure pass across packages/*, including packages/authz/README.md."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8567,
+						"tokens": {
+							"input": 18289,
+							"cached": 8448,
+							"output": 166
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"4236": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "An owner must decide where direct Node invocations are permitted and how legitimate CI uses are exempted before the guard and skill docs change. The surviving invocations break subdirectory and consumer-install use, so this affects behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6744,
+						"tokens": {
+							"input": 18631,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"why": "The remaining invocations break subdirectory and consumer-install use, so this changes behavior. An owner must first decide which contexts may invoke the source directly and how legitimate CI uses are exempted before the guard and skill docs change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7010,
+						"tokens": {
+							"input": 18631,
+							"cached": 8448,
+							"output": 95
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"5092": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The merged contract specifies an unimplemented epic verb group, wire format, and ledger required to run build-epic. No earlier ticket carries this implementation; the contract supplies the design for a builder to follow."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6953,
+						"tokens": {
+							"input": 17766,
+							"cached": 8448,
+							"output": 79
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The merged build-epic contract requires an unimplemented epic verb group, wire format, and ledger, leaving the skill unable to run. The design is specified, so the next step is to plan implementation and hand it to a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5264,
+						"tokens": {
+							"input": 17767,
+							"cached": 8448,
+							"output": 85
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"5254": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "A readable, empty decisions directory is a normal adoption state, but the contract prevents minting the first ADR. Plan a consistent fix across all three verbs and check whether their implementations need matching changes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7233,
+						"tokens": {
+							"input": 18042,
+							"cached": 8448,
+							"output": 93
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "An empty, readable decisions directory is a valid fresh-adopter state, and refusing it blocks the first ADR. Fix the contract consistently across all three verbs and check whether the implementation needs the same change; #5247 carries the separate conformance work."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9047,
+						"tokens": {
+							"input": 18046,
+							"cached": 8448,
+							"output": 117
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"5416": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #5111, which carries this work",
+								"duplicateOf": 5111,
+								"why": "#5111 reports the same session-keyed review-code head handle causing concurrent reviews to share and tear down each other's worktrees. The secondary eval-token refusal is already covered by #5406."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5994,
+						"tokens": {
+							"input": 18000,
+							"cached": 8448,
+							"output": 112
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #5111, which carries this work",
+								"duplicateOf": 5111,
+								"why": "#5111 reports the same session-keyed review-code head handle causing concurrent reviews to share and tear down each other's worktrees. The secondary eval-token refusal is already covered by #5406."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5777,
+						"tokens": {
+							"input": 17992,
+							"cached": 8448,
+							"output": 74
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"5669": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The founder already ruled to remove the effort pin from builder and shipper while keeping it on reviewer. Implement that behavior, document the reason, and verify the platform’s behavior when effort is omitted."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7481,
+						"tokens": {
+							"input": 17705,
+							"cached": 8448,
+							"output": 99
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The founder already ruled to remove effort from builder and shipper while keeping it on reviewer. Implement that change, document the rationale, and verify the platform’s behavior when effort is omitted as part of the work."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5864,
+						"tokens": {
+							"input": 17710,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"5685": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "A builder bypassed an actual permission denial, exposing a security gap in fabrika's build instructions. Add explicit denial handling that stops the mutation and reports the blocked action for a driver or human decision."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 4825,
+						"tokens": {
+							"input": 17644,
+							"cached": 8448,
+							"output": 58
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "A real run bypassed a permission denial through another tool, exposing a security gap in the build skill. Add instructions to stop on denial, report the denied action, and prohibit retrying the same mutation through another tool."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5820,
+						"tokens": {
+							"input": 17638,
+							"cached": 8448,
+							"output": 91
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"6585": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #6551, which carries this work",
+								"duplicateOf": 6551,
+								"why": "#6551 reports the same live entity broadcast leak of the mutator's myVote/isSaved to subscribers. This ticket explicitly subsumes it and specifies the fix for that same problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5048,
+						"tokens": {
+							"input": 17350,
+							"cached": 8448,
+							"output": 72
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #6551, which carries this work",
+								"duplicateOf": 6551,
+								"why": "#6551 reports the same live entity broadcast leak of the mutator’s myVote/isSaved to other subscribers. This ticket adds an implementation approach for that same fix."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8857,
+						"tokens": {
+							"input": 17350,
+							"cached": 8448,
+							"output": 100
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7043": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a concrete implementation slice of #7042, not a duplicate of the broader epic. It specifies the welcome screen, flag, persisted arrival marker, and return-to-context behavior clearly enough to plan and hand to a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6499,
+						"tokens": {
+							"input": 17202,
+							"cached": 3328,
+							"output": 85
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a concrete implementation slice of #7042: a single welcome screen with flag-gated arrival routing, persisted once-per-account display, and return-to-context navigation. The scope and acceptance criteria are defined, so it is ready to plan for a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7950,
+						"tokens": {
+							"input": 17206,
+							"cached": 8448,
+							"output": 112
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7894": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket comes from code inspection and identifies no real use that failed. It explicitly leaves unmeasured whether any registered spell needs the missing scope."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9527,
+						"tokens": {
+							"input": 17622,
+							"cached": 8448,
+							"output": 199
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent found this by reading boot wiring and reports no failure in real use. The ticket explicitly leaves open whether any shipped spell needs the missing window or process scope."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9684,
+						"tokens": {
+							"input": 17625,
+							"cached": 8448,
+							"output": 174
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7952": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The accepted ruling requires live config delivery, but the reload path never notifies running processes or calls the existing permission-mode mapping. Build the kernel delivery and row message seam so changed permissionMode applies to an open session."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5608,
+						"tokens": {
+							"input": 17655,
+							"cached": 8448,
+							"output": 85
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The reload path never delivers config changes to running processes, so the tested permissionMode mapping has no caller. #7509 already establishes the intended behavior; the next step is to implement kernel delivery and the row-level receive seam."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5845,
+						"tokens": {
+							"input": 17654,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8018": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #7978, which carries this work",
+								"duplicateOf": 7978,
+								"why": "This reports the same Pi sent-message delay as #7978. The founder's retest shows that #7997 did not resolve it, so the original ticket should be reopened."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5360,
+						"tokens": {
+							"input": 17536,
+							"cached": 8448,
+							"output": 71
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: same problem as #7978",
+								"duplicateOf": 7978,
+								"why": "#7978 already reports Pi showing the sent message only when the reply arrives. This ticket shows that #7997 did not resolve that same problem for Pi; reopen #7978 with this evidence."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7012,
+						"tokens": {
+							"input": 17533,
+							"cached": 8448,
+							"output": 120
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8057": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The fold still announces expanded/collapsed correctly, and the ticket reports no real assistive-technology failure caused by the dangling references. Changing transcript semantics would harden a limitation without a demonstrated incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8323,
+						"tokens": {
+							"input": 17501,
+							"cached": 8448,
+							"output": 165
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket reports no failure in real use: assistive technology ignores the dangling references and still announces expanded/collapsed correctly. Changing transcript semantics would harden an incomplete relationship without an observed user impact."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7221,
+						"tokens": {
+							"input": 17498,
+							"cached": 8448,
+							"output": 142
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8121": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Add a visible running-turn indicator within the stated accessibility constraints. #8120 concerns hidden composer status copy; this ticket addresses the phase dot and an indicator at the foot of the transcript."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9516,
+						"tokens": {
+							"input": 16928,
+							"cached": 8448,
+							"output": 183
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Build a visible running-turn indicator with a non-motion signal, reduced-motion support, and no additional status announcement. #8120 addresses hidden composer status copy; this ticket addresses indistinguishable phase styling and missing transcript activity feedback."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6494,
+						"tokens": {
+							"input": 16926,
+							"cached": 8448,
+							"output": 99
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8173": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is the Pi-specific implementation child of the streaming work, with distinct scope from the port, Claude backend, and window changes. It fixes missing partial replies through a concrete server projection change with defined acceptance criteria."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7685,
+						"tokens": {
+							"input": 17576,
+							"cached": 8448,
+							"output": 106
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a scoped Pi server projection change that makes partial replies visible, distinct from the shared port and Claude backend tickets. The implementation and acceptance criteria are concrete enough to hand to a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7470,
+						"tokens": {
+							"input": 17575,
+							"cached": 8448,
+							"output": 81
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8174": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "There is no 'Filed by' footer, so the rule preserving person-filed tickets applies. The requested resize shim and growing-row tests are concrete changes ready to plan."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 12333,
+						"tokens": {
+							"input": 17484,
+							"cached": 8448,
+							"output": 210
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This requests concrete shim and follow-test changes; no earlier ticket names the same work. It has no agent-filed footer, so the hardening rule alone cannot close it; plan the tests and change production code only if they expose a bug."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 12519,
+						"tokens": {
+							"input": 17484,
+							"cached": 8448,
+							"output": 189
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8179": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The posture and measurements are already settled; the work is to document them accurately. The ADR guides backend configuration and prevents reliance on network and git protections the sandbox does not provide."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 13674,
+						"tokens": {
+							"input": 18016,
+							"cached": 8448,
+							"output": 243
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The spike already established the posture and its limits; the remaining work is to document them. That guidance informs backend implementation and security assumptions, so it is a record readers act on."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6994,
+						"tokens": {
+							"input": 18019,
+							"cached": 8448,
+							"output": 103
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8457": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The founder already ruled to retire opencode, and no earlier ticket carries this removal. Plan the complete package, shell, release wiring and documentation cleanup, with founder approval for the workflow changes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5472,
+						"tokens": {
+							"input": 17738,
+							"cached": 8448,
+							"output": 56
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The founder has already ruled to retire opencode, and no earlier ticket carries this removal. Plan the complete package, shell, release wiring and documentation cleanup, with founder approval for the workflow changes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 4667,
+						"tokens": {
+							"input": 17737,
+							"cached": 8448,
+							"output": 57
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8672": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket asks for tests over an existing merge without showing a failure in real use. The ordering concerns are explicitly unconfirmed, and #8664 reports a separate slot-collapsing problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5039,
+						"tokens": {
+							"input": 18058,
+							"cached": 8448,
+							"output": 72
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket asks for tests over existing merge behavior without a confirmed failure in real use. The ordering concerns are hypothetical, and #8664 addresses a separate slot-sharing problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6089,
+						"tokens": {
+							"input": 18053,
+							"cached": 0,
+							"output": 93
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8731": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a distinct authoring API change: derive takesKeys from the typed key handler and prevent authors from setting it separately. The scope and acceptance criteria are concrete, with implementation depending on #8728."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5793,
+						"tokens": {
+							"input": 17293,
+							"cached": 8448,
+							"output": 84
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a distinct implementation child of the authoring API: derive takesKeys from a typed key handler and prevent authors from setting it separately. The scope and acceptance criteria are clear, so it can be planned for a builder after #8728."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6220,
+						"tokens": {
+							"input": 17291,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9196": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "No route was posted over a text FAIL: the observed gate stopped at CANT-SEE, and ship independently checks review-code. The proposed check prevents a hypothetical false record with no demonstrated incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8736,
+						"tokens": {
+							"input": 18142,
+							"cached": 8448,
+							"output": 140
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "No false PASS record was posted: the observed gate ended CANT-SEE, and all prior routes waited for text PASS. Ship independently checks review-code, so this adds a safeguard without a demonstrated failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8562,
+						"tokens": {
+							"input": 18136,
+							"cached": 8448,
+							"output": 152
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9533": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "Check whether preview workers can use a separate signing secret and whether any flows require sessions to verify across stages. This differs from #9339's request for access to the production secret and respects the founder's ruling."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6242,
+						"tokens": {
+							"input": 17670,
+							"cached": 8448,
+							"output": 111
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "This is distinct from #9339: it investigates isolating preview signing secrets while preserving the founder-only production secret. First verify whether any flows require sessions to work across stages and whether a preview-only secret would safely enable agent captures."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6397,
+						"tokens": {
+							"input": 17668,
+							"cached": 8448,
+							"output": 91
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9740": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The release workflows cannot publish the seven packages, and the guard rejects workspace links that pnpm correctly rewrites when packing. Plan the workflow additions and guard correction together; the supplied evidence establishes a concrete release blocker."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 12359,
+						"tokens": {
+							"input": 17927,
+							"cached": 8448,
+							"output": 250
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The release workflow cannot publish these packages, and the guard rejects sibling dependencies that pnpm correctly rewrites when packing. Updating the guard and release wiring is concrete implementation work; the earlier package extraction and publishability tickets do not describe this control-plane gap."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7053,
+						"tokens": {
+							"input": 17931,
+							"cached": 8448,
+							"output": 142
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9826": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Private repository links and issue references can leak into public bodies, making this a security gap. Plan configurable enforcement in fabrika's public-body leak guard; fabrika's home is this repo."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6801,
+						"tokens": {
+							"input": 17389,
+							"cached": 3328,
+							"output": 72
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The missing guard permits private repository links and issue references to leak into public bodies, which is a security gap. Add configurable restrictions and enforce them on public-body writes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5558,
+						"tokens": {
+							"input": 17385,
+							"cached": 8448,
+							"output": 51
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9935": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This applies the established help rule to a distinct set of verbs and removes their guard baseline exemptions. The scope and acceptance criteria are clear enough to plan and hand to a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8567,
+						"tokens": {
+							"input": 16807,
+							"cached": 8448,
+							"output": 117
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This implements the established help rule for review and review-ui verbs, a scope no earlier ticket covers. The next step is to plan the help, contract, baseline and test updates for a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6976,
+						"tokens": {
+							"input": 16809,
+							"cached": 8448,
+							"output": 95
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10591": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a distinct gap in the new sign-off reader: an agent can clear a park reserved for a person's action. Apply the agent-stamp skip, verify it rejects agent-posted sign-offs, and update ADR 0455."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6506,
+						"tokens": {
+							"input": 17168,
+							"cached": 8448,
+							"output": 103
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a distinct gap in the new owner sign-off reader: an agent can clear a park reserved for a person's action. Apply the existing agent-stamp exclusion, test the bypass, and update ADR 0455's owner-only steps table."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7381,
+						"tokens": {
+							"input": 17173,
+							"cached": 8448,
+							"output": 109
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				]
+			},
+			"d": {}
+		}
+	}
+}
