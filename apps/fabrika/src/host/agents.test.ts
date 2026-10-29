@@ -143,7 +143,9 @@ describe("an agent drives the app's programs through MCP", () => {
 			"tracker_do",
 			"ticket_do",
 			"map_in",
-			"trace_in",
+			"runs_in",
+			"trace_do",
+			"trace_id",
 		]);
 		// The tool is the input: its description and its schema are the tracker's own `do`.
 		expect(seen.doTool?.description).toMatch(/^What the window does/);
