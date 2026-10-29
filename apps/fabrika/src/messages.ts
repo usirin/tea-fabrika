@@ -154,21 +154,26 @@ export type ToApp = typeof ToApp.Type;
 
 /**
  * What the page tells the host, on the desk's port: a key the desk takes, a click on a tile, a
- * border let go. A tile's id names a folder in the app's home, so it is read by its pattern (`t`
- * and a number) and nothing else passes. The host stamps each key with its own clock.
+ * border let go, a click on a title bar (fold) or on a strip (unfold). A tile's id names a folder
+ * in the app's home, so it is read by its pattern (`t` and a number) and nothing else passes. The
+ * host stamps each key with its own clock.
  *
  *   {type: "press", id: 3, key: "<c-b>"}
  *   {type: "click", tile: "t2"}
- *   {type: "resize", stack: "s2", sizes: {t1: 30, t2: 70}}
+ *   {type: "resize", container: "s2", sizes: {t1: 30, t2: 70}}
+ *   {type: "fold", tile: "t2"}
+ *   {type: "unfold", node: "s4"}
  */
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
 	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
 	Schema.Struct({
 		type: Schema.Literal("resize"),
-		stack: Schema.String,
+		container: Schema.String,
 		sizes: Schema.Record(Schema.String, Schema.Number),
 	}),
+	Schema.Struct({type: Schema.Literal("fold"), tile: TileIdSchema}),
+	Schema.Struct({type: Schema.Literal("unfold"), node: Schema.String}),
 ]);
 export type FromPage = typeof FromPage.Type;
 

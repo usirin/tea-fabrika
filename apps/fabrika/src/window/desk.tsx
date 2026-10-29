@@ -23,11 +23,13 @@ import {
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
 import {keyName} from "../desk/keys.ts";
 import {
-	findChildTile,
+	type ContainerNode,
 	findTile,
+	fold,
+	isFolded,
 	type LayoutNode,
-	type SplitStack,
-	type TabbedStack,
+	type NodeId,
+	openShares,
 	type TileId,
 	type TileNode,
 	tiles,
@@ -53,6 +55,7 @@ import {WINDOWS} from "./windows.tsx";
 //   Ctrl-B l      the same: focus moves right
 //   counter       typed into t1's terminal, which sends it to t1's tsh in the host
 //   Ctrl-B x      "close t1? (y/n)" on the tile; y closes it, at once or once what runs in it ends
+//   title bar     a click folds its tile into a strip, in its place; a click on the strip opens it
 //
 // Every key is read in the capture phase, before ghostty-web or a program's view sees it. The
 // host says, with each desk, which keys the desk takes now (`takes`): those go to the host and no
@@ -256,6 +259,13 @@ const onKey = (e: KeyboardEvent) => {
 /** The run a tile shows, if any: a run covering its tsh. */
 const runOf = (tile: TileNode) => tile.shows.run;
 
+/** What a strip or a title bar calls a node: its tile's program, or its tiles' programs in order. */
+const nameOf = (node: LayoutNode): string =>
+	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(" · ");
+
+/** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
+const noFocus = (e: ReactPointerEvent) => e.preventDefault();
+
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
 	const view = store.views.get(run);
 	const send = (msg: unknown) => window.fabrika.send(`run:${run}`, {type: "msg", msg});
@@ -293,8 +303,10 @@ function Tile(props: {
 	/** The tile's question, as tmux's confirm-before asks it, or none. */
 	readonly asking: string | null;
 	readonly closing: boolean;
+	/** Does the desk let this tile fold: no for the last open tile of the workspace. */
+	readonly folds: boolean;
 }): ReactNode {
-	const {tile, focused, asking, closing} = props;
+	const {tile, focused, asking, closing, folds} = props;
 	const run = runOf(tile);
 	return (
 		<section
@@ -302,8 +314,23 @@ function Tile(props: {
 			data-tile={tile.id}
 			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
 			aria-current={focused}
-			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
+			onPointerDownCapture={(e) => {
+				// A press on the title bar folds the tile; it does not focus it first.
+				if (e.target instanceof Element && e.target.closest(".titlebar") !== null) return;
+				toHost({type: "click", tile: tile.id});
+			}}
 		>
+			<button
+				type="button"
+				className="titlebar"
+				aria-label={`fold tile ${tile.id}`}
+				disabled={!folds}
+				onPointerDown={noFocus}
+				onClick={() => toHost({type: "fold", tile: tile.id})}
+			>
+				<span>{nameOf(tile)}</span>
+				<span className="tid">{tile.id}</span>
+			</button>
 			<Slot tile={tile.id} />
 			{run !== null && <View tile={tile.id} run={run.id} />}
 			{closing && (
@@ -320,118 +347,112 @@ function Tile(props: {
 	);
 }
 
-/** The share of each child, after a drag of the border between `at` and the next child. */
-const dragged = (stack: SplitStack, at: number, fraction: number) => {
-	const ids = stack.children.map((c) => c.id);
-	const a = ids[at];
-	const b = ids[at + 1];
-	if (a === undefined || b === undefined) return stack.sizes;
-	const before = ids.slice(0, at).reduce((sum, id) => sum + (stack.sizes[id] ?? 0), 0);
-	const pair = (stack.sizes[a] ?? 0) + (stack.sizes[b] ?? 0);
+/**
+ * The sizes after a drag of the border between two open children, `a` and `b`: they split their
+ * own two shares at `fraction` of the way across them, and no other child's share changes.
+ */
+const dragged = (
+	sizes: Readonly<Record<NodeId, number>>,
+	a: NodeId,
+	b: NodeId,
+	fraction: number,
+): Readonly<Record<NodeId, number>> => {
+	const pair = (sizes[a] ?? 0) + (sizes[b] ?? 0);
 	const MIN = Math.min(5, pair / 2);
-	const left = Math.min(pair - MIN, Math.max(MIN, fraction * 100 - before));
-	return {...stack.sizes, [a]: left, [b]: pair - left};
+	const left = Math.min(pair - MIN, Math.max(MIN, fraction * pair));
+	return {...sizes, [a]: left, [b]: pair - left};
 };
 
-/** A row or a column, with a border to drag between each two children. */
-function Stack(props: {
-	readonly stack: SplitStack;
+/**
+ * A row or a column. An open child gets its share of the space the strips leave (`openShares`),
+ * with a border to drag between each two open children; a folded one is a strip in its place.
+ */
+function Container(props: {
+	readonly container: ContainerNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
 }): ReactNode {
-	const {stack, ws, desk} = props;
+	const {container, ws, desk} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Readonly<Record<string, number>> | null>(null);
-	const sizes = drag ?? stack.sizes;
-	const across = stack.orientation === "horizontal";
-	const border = (at: number) => (e: ReactPointerEvent<HTMLHRElement>) => {
+	const shares = openShares(drag === null ? container : {...container, sizes: drag});
+	const row = container.orientation === "horizontal";
+	const open = container.children.filter((child) => !isFolded(child)).map((child) => child.id);
+	const cell = (id: NodeId) =>
+		[...(ref.current?.children ?? [])].find(
+			(el) => el instanceof HTMLElement && el.dataset.cell === id,
+		);
+	const border = (a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
 		e.preventDefault();
 		e.stopPropagation();
-		const box = ref.current?.getBoundingClientRect();
-		if (box === undefined) return;
+		const [first, second] = [cell(a)?.getBoundingClientRect(), cell(b)?.getBoundingClientRect()];
+		if (first === undefined || second === undefined) return;
+		const [from, to] = row ? [first.left, second.right] : [first.top, second.bottom];
 		const target = e.currentTarget;
 		target.setPointerCapture(e.pointerId);
-		let last = stack.sizes;
+		let last = container.sizes;
 		const move = (m: PointerEvent) => {
-			const fraction = across
-				? (m.clientX - box.left) / box.width
-				: (m.clientY - box.top) / box.height;
-			last = dragged(stack, at, fraction);
+			const at = row ? m.clientX : m.clientY;
+			last = dragged(container.sizes, a, b, (at - from) / Math.max(1, to - from));
 			setDrag(last);
 		};
 		const up = () => {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", up);
 			setDrag(null);
-			toHost({type: "resize", stack: stack.id, sizes: last});
+			toHost({type: "resize", container: container.id, sizes: last});
 		};
 		target.addEventListener("pointermove", move);
 		target.addEventListener("pointerup", up);
 	};
 	return (
-		<div className={`stack ${stack.orientation}`} data-stack={stack.id} ref={ref}>
-			{stack.children.flatMap((child, i) => [
-				...(i === 0
-					? []
-					: [
-							<hr
-								key={`border-${child.id}`}
-								className="border"
-								aria-orientation={across ? "vertical" : "horizontal"}
-								onPointerDown={border(i - 1)}
-							/>,
-						]),
-				<div key={child.id} className="cell" style={{flexGrow: sizes[child.id] ?? 1}}>
-					<Node node={child} ws={ws} desk={desk} />
-				</div>,
-			])}
+		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
+			{container.children.flatMap((child) => {
+				if (isFolded(child)) return [<Strip key={child.id} node={child} />];
+				const before = open[open.indexOf(child.id) - 1];
+				return [
+					...(before === undefined
+						? []
+						: [
+								<hr
+									key={`border-${child.id}`}
+									className="border"
+									aria-orientation={row ? "vertical" : "horizontal"}
+									onPointerDown={border(before, child.id)}
+								/>,
+							]),
+					<div
+						key={child.id}
+						className="cell"
+						data-cell={child.id}
+						style={{flexGrow: shares[child.id] ?? 1}}
+					>
+						<Node node={child} ws={ws} desk={desk} />
+					</div>,
+				];
+			})}
 		</div>
 	);
 }
 
-/** A tab's name: its tile's program, or for a stack the programs of its tiles, in reading order. */
-const tabName = (node: LayoutNode): string =>
-	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(", ");
-
 /**
- * A tabbed stack: a strip of one line naming each child, and the child it shows under it. A
- * click on a tab is a click on the tile it shows: the desk moves focus there and shows its tab.
+ * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
+ * parent's direction, named by its programs. A click opens every tile it stands for.
  */
-function Tabbed(props: {
-	readonly stack: TabbedStack;
-	readonly ws: Workspace;
-	readonly desk: Open;
-}): ReactNode {
-	const {stack, ws, desk} = props;
-	const shown = stack.children.find((child) => child.id === stack.active);
-	const clicked = (child: LayoutNode) => (e: ReactPointerEvent<HTMLLIElement>) => {
-		// The tab takes no focus: the desk gives it to the tile it shows.
-		e.preventDefault();
-		const tile = child.tag === "tile" ? child : findChildTile(ws.layout, child.id, "start");
-		if (tile !== null) toHost({type: "click", tile: tile.id});
-	};
+function Strip({node}: {readonly node: LayoutNode}): ReactNode {
+	const name = nameOf(node);
 	return (
-		<div className="stack tabbed" data-stack={stack.id}>
-			{/* A list, as the status line's workspaces: Ctrl-B [ and ] walk it, never the Tab key. */}
-			<ol className="tabs" aria-label="tabs">
-				{stack.children.map((child) => (
-					<li
-						key={child.id}
-						aria-current={child.id === stack.active}
-						onPointerDown={clicked(child)}
-					>
-						<span className="tid">{child.id}</span>
-						{tabName(child)}
-					</li>
-				))}
-			</ol>
-			{shown !== undefined && (
-				<div key={shown.id} className="cell" style={{flexGrow: 1}}>
-					<Node node={shown} ws={ws} desk={desk} />
-				</div>
-			)}
-		</div>
+		<button
+			type="button"
+			className="strip"
+			data-strip={node.id}
+			aria-label={`open ${name}, ${node.id}`}
+			onPointerDown={noFocus}
+			onClick={() => toHost({type: "unfold", node: node.id})}
+		>
+			<span className="strip-name">{name}</span>
+		</button>
 	);
 }
 
@@ -442,11 +463,10 @@ function Node(props: {
 }): ReactNode {
 	const {node, ws, desk} = props;
 	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} />;
-	if (node.orientation === "tabbed") return <Tabbed stack={node} ws={ws} desk={desk} />;
-	return <Stack stack={node} ws={ws} desk={desk} />;
+	return <Container container={node} ws={ws} desk={desk} />;
 }
 
-/** A tile as the desk has it now: focused or not, asking or not, closing or not. */
+/** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
 function DeskTile(props: {
 	readonly tile: TileNode;
 	readonly ws: Workspace;
@@ -459,6 +479,7 @@ function DeskTile(props: {
 			focused={tile.id === ws.focused}
 			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
 			closing={desk.closing.includes(tile.id)}
+			folds={fold(ws.layout, tile.id) !== ws.layout}
 		/>
 	);
 }

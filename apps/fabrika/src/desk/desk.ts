@@ -4,17 +4,18 @@ import {Schema} from "effect";
 import {bindingOf, type Does, PREFIX, REPEAT_MS} from "./keys.ts";
 import {
 	checkTree,
-	createStack,
+	createContainer,
 	createTile,
 	createTree,
+	findChildTile,
 	findSibling,
-	findTab,
 	findTile,
+	fold,
 	isLayoutTree,
 	type LayoutTree,
+	type NodeId,
 	remove,
 	resize,
-	reveal,
 	type Shown,
 	setShows,
 	split,
@@ -23,6 +24,7 @@ import {
 	TSH,
 	tiles,
 	turn,
+	unfold,
 	unzoom,
 	zoom,
 } from "./layout/index.ts";
@@ -45,6 +47,14 @@ import {
 //   y, something runs        t2 is closing: close {tile: "t2"} gives its tsh and programs the end
 //                            of their inputs. When its tsh has ended (`ended`), t2 goes
 //   Ctrl-B x on a closing t2 asks "stop t2 now? (y/n)": y and t2 goes, stop {tile: "t2"}
+//
+// Any tile folds into a strip in its place (docs/direction/fold-not-tabs.md). Focus is always on
+// an open tile:
+//
+//   Ctrl-B f, or a click on t2's title bar   t2 folds, and focus goes to the next open tile
+//   the last open tile                       does not fold: nothing changes
+//   a click on t2's strip, or focus onto t2  t2 opens again, at the size it had
+//   a click on a folded column's strip       every tile in it opens: {type: "unfold", node: "s4"}
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
@@ -70,7 +80,7 @@ import {
 
 /**
  * A workspace: a layout, and the tile focus sits in. `focused` always names a tile of `layout`,
- * and one that is drawn: each tabbed stack above it shows the tab that holds it.
+ * and one that is open, not folded.
  */
 export interface Workspace {
 	readonly id: string;
@@ -110,12 +120,16 @@ export type DeskMsg =
 	| {readonly type: "key"; readonly key: string; readonly at: number}
 	/** A tile was clicked. */
 	| {readonly type: "click"; readonly tile: TileId}
-	/** A border was dragged: a stack's new sizes, in percent. */
+	/** A border was dragged: a container's new sizes, in percent. */
 	| {
 			readonly type: "resize";
-			readonly stack: string;
+			readonly container: string;
 			readonly sizes: Readonly<Record<string, number>>;
 	  }
+	/** A tile's title bar was clicked: fold it. */
+	| {readonly type: "fold"; readonly tile: TileId}
+	/** A strip was clicked: open the folded tile, or every tile of the folded container, it stands for. */
+	| {readonly type: "unfold"; readonly node: NodeId}
 	/** A run with a view is in a tile's foreground, started there or attached: it covers the tile's tsh. */
 	| {readonly type: "covered"; readonly tile: TileId; readonly run: Shown}
 	/** A run with a view ended. */
@@ -232,7 +246,7 @@ export const fresh = (): Open => ({
 
 const blank = (n: number): Workspace => ({
 	id: `w${n}`,
-	layout: createTree(createStack(`s${n}`, "horizontal", [createTile(`t${n}`)])),
+	layout: createTree(createContainer(`s${n}`, "horizontal", [createTile(`t${n}`)])),
 	focused: `t${n}`,
 });
 
@@ -261,12 +275,11 @@ export const savedOf = (s: Open): Saved => ({
 });
 
 /**
- * The desk with this workspace in it. Its focused tile is revealed on the way in, so a tabbed
- * stack always shows the tab focus sits in, whatever moved focus there: a key, a click, a split or
- * a tile that went.
+ * The desk with this workspace in it. Its focused tile is unfolded on the way in, so focus is
+ * always on an open tile, whatever moved focus there: a key, a click or a tile that went.
  */
 const withWorkspace = (s: Open, given: Workspace): Open => {
-	const ws = {...given, layout: reveal(given.layout, given.focused)};
+	const ws = {...given, layout: unfold(given.layout, given.focused)};
 	const [first, ...rest] = s.workspaces.map((w) => (w.id === ws.id ? ws : w));
 	return first === undefined ? s : {...s, workspaces: [first, ...rest]};
 };
@@ -296,8 +309,36 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 		return {...s, workspaces, active, running, closing, ask};
 	}
 	const layout = doomed.reduce(remove, ws.layout);
-	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, left, ws.focused);
+	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, openIn(layout), ws.focused);
 	return {...withWorkspace(s, {...ws, layout, focused}), running, closing, ask};
+};
+
+/** The open tiles of a layout, in reading order. */
+const openIn = (layout: LayoutTree): readonly TileId[] =>
+	[...tiles(layout.root)].filter((t) => !t.folded).map((t) => t.id);
+
+/**
+ * Fold a tile of a workspace. Focus on it goes to the next open tile in reading order, else the
+ * one before. The last open tile does not fold, and nothing changes. A question asked is answered
+ * no, as a click answers it.
+ */
+const folded = (s: Open, ws: Workspace, tile: TileId): Step => {
+	const layout = fold(ws.layout, tile);
+	if (layout === ws.layout) return [s, []];
+	const all = tilesOf(ws).map((t) => t.id);
+	const focused = ws.focused === tile ? heirOf(all, openIn(layout), tile) : ws.focused;
+	const next = {...withWorkspace(s, {...ws, layout, focused}), ask: null};
+	return [next, keep(next)];
+};
+
+/** Open a folded tile, or every tile of a folded container, and focus its first tile. */
+const unfolded = (s: Open, node: NodeId): Step => {
+	const ws = activeOf(s);
+	const layout = unfold(ws.layout, node);
+	const first = findChildTile(layout, node, "start");
+	if (layout === ws.layout || first === null) return [s, []];
+	const next = {...withWorkspace(s, {...ws, layout, focused: first.id}), ask: null};
+	return [next, keep(next)];
 };
 
 /** Where focus goes when its tile is taken: the next tile left in reading order, else the one before. */
@@ -343,7 +384,7 @@ const act = (s: Open, does: Does): Step => {
 	const ws = activeOf(s);
 	switch (does.kind) {
 		case "split": {
-			const ids = {tile: `t${s.next}`, stack: `s${s.next}`};
+			const ids = {tile: `t${s.next}`, container: `s${s.next}`};
 			const layout = split(unzoom(ws.layout), ws.focused, does.orientation, ids);
 			if (layout === ws.layout || findTile(layout, ids.tile) === null) return [s, []];
 			const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};
@@ -356,12 +397,8 @@ const act = (s: Open, does: Does): Step => {
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
 			return [next, keep(next)];
 		}
-		case "tab": {
-			const to = findTab(ws.layout, ws.focused, does.to);
-			if (to === null) return [s, []];
-			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
-			return [next, keep(next)];
-		}
+		case "fold":
+			return folded(s, ws, ws.focused);
 		case "turn": {
 			// As tmux's next-layout, a turn undoes the zoom: a turn under it would not be seen.
 			const layout = turn(unzoom(ws.layout), ws.focused);
@@ -536,11 +573,13 @@ export const deskMachine = defineMachine({
 		click: onOpen((s, m) => clicked(s, m.tile)),
 		resize: onOpen((s, m) => {
 			const ws = activeOf(s);
-			const layout = resize(ws.layout, m.stack, m.sizes);
+			const layout = resize(ws.layout, m.container, m.sizes);
 			if (layout === ws.layout) return [s, []];
 			const next = withWorkspace(s, {...ws, layout});
 			return [next, keep(next)];
 		}),
+		fold: onOpen((s, m) => folded(s, activeOf(s), m.tile)),
+		unfold: onOpen((s, m) => unfolded(s, m.node)),
 		covered: onOpen((s, m) => covered(s, m.tile, m.run)),
 		over: onOpen((s, m) => over(s, m.run)),
 		jobs: onOpen((s, m) =>
@@ -597,7 +636,7 @@ export const restore = (raw: unknown): Open | null => {
 		if (first === undefined) continue;
 		const focused = left.some((t) => t.id === ws.focused) ? ws.focused : first.id;
 		const zoomed = layout.zoomed === focused ? layout : unzoom(layout);
-		workspaces.push({id: ws.id, layout: reveal(zoomed, focused), focused});
+		workspaces.push({id: ws.id, layout: unfold(zoomed, focused), focused});
 	}
 	const [first, ...rest] = workspaces;
 	if (first === undefined) return null;

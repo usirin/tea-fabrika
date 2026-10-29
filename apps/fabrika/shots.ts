@@ -5,7 +5,7 @@ import {One, oneOf} from "@tea-fabrika/tracker";
 import {SEVEN_NOW, trackerAtSeven} from "@tea-fabrika/tracker/seven";
 import {Schema} from "effect";
 import {chromium} from "playwright";
-import {createStack, createTabbed, createTile, type StackNode} from "./src/desk/layout/node.ts";
+import {type ContainerNode, createContainer, createTile} from "./src/desk/layout/node.ts";
 import {readToPage, readToWindow} from "./src/messages.ts";
 
 // The desk's page with no Electron and no host: the built renderer (dist/) in headless Chromium,
@@ -17,10 +17,13 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 //   pnpm --filter @kampus/fabrika-app shots                writes docs/round-6/*.png
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app shots  writes them there
 //
-//   ticket.png         t1, t2, t3 tabbed, on t1: the ticket
-//   map.png            the same, on t2: the map of today's programs
-//   trace.png          the same, on t3: the ticket's runs in time
+//   ticket.png         the ticket, with the map and the trace folded into strips beside it
+//   folded-column.png  the ticket beside a column of the map over the trace, the column folded
+//   folded-trace.png   the same column open, the trace folded into a strip under the map
 //   side-by-side.png   the ticket beside the map over the trace
+//
+// The round-6 pictures in docs/round-6 were made when the map and the trace were tabs. The
+// script now draws folds; run it with SHOTS set to keep those pictures as they are.
 
 const DIST = join(import.meta.dirname, "dist");
 const OUT = process.env.SHOTS ?? join(import.meta.dirname, "docs", "round-6");
@@ -43,14 +46,33 @@ for (const view of Object.values(views)) {
 	if (read.kind === "refused") throw new Error(`a view does not read: ${read.why}`);
 }
 
-const tiles = [
-	createTile("t1", {kind: "tsh", run: {id: "1", program: "ticket"}}),
-	createTile("t2", {kind: "tsh", run: {id: "2", program: "map"}}),
-	createTile("t3", {kind: "tsh", run: {id: "3", program: "trace"}}),
-] as const;
+/** The three tiles, each showing its program; the ones named in `folded` folded into strips. */
+const tilesWith = (...folded: readonly string[]) =>
+	(
+		[
+			["t1", "1", "ticket"],
+			["t2", "2", "map"],
+			["t3", "3", "trace"],
+		] as const
+	).map(([tile, run, program]) =>
+		createTile(tile, {kind: "tsh", run: {id: run, program}}, folded.includes(tile)),
+	);
+
+/** The ticket beside a column of the map over the trace. */
+const column = (...folded: readonly string[]) => {
+	const [ticket, map, trace] = tilesWith(...folded);
+	if (ticket === undefined || map === undefined || trace === undefined)
+		throw new Error("three tiles");
+	return createContainer(
+		"s1",
+		"horizontal",
+		[ticket, createContainer("s2", "vertical", [map, trace])],
+		{t1: 42, s2: 58},
+	);
+};
 
 /** The desk message for one layout, focused on `focused`. */
-const deskWith = (root: StackNode, focused: string) => {
+const deskWith = (root: ContainerNode, focused: string) => {
 	const msg = {
 		type: "desk",
 		desk: {
@@ -71,24 +93,13 @@ const deskWith = (root: StackNode, focused: string) => {
 };
 
 const shots = [
-	{name: "ticket", desk: deskWith(createTabbed("s1", tiles, "t1"), "t1")},
-	{name: "map", desk: deskWith(createTabbed("s1", tiles, "t2"), "t2")},
-	{name: "trace", desk: deskWith(createTabbed("s1", tiles, "t3"), "t3")},
 	{
-		name: "side-by-side",
-		desk: deskWith(
-			createStack(
-				"s1",
-				"horizontal",
-				[tiles[0], createStack("s2", "vertical", [tiles[1], tiles[2]])],
-				{
-					t1: 42,
-					s2: 58,
-				},
-			),
-			"t1",
-		),
+		name: "ticket",
+		desk: deskWith(createContainer("s1", "horizontal", tilesWith("t2", "t3")), "t1"),
 	},
+	{name: "folded-column", desk: deskWith(column("t2", "t3"), "t1")},
+	{name: "folded-trace", desk: deskWith(column("t3"), "t2")},
+	{name: "side-by-side", desk: deskWith(column(), "t1")},
 ];
 
 /** The bridge preload.cjs gives the page, with the host's messages played into it. */

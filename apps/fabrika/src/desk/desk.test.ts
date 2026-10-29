@@ -210,10 +210,10 @@ describe("the desk", () => {
 		expect(opened(s).active).toBe("w1");
 	});
 
-	it("resizes a stack from a dragged border", () => {
+	it("resizes a container from a dragged border", () => {
 		const two = fold(prefixed("|")).s;
 		const root = activeOf(opened(two)).layout.root;
-		const {s} = fold([{type: "resize", stack: root.id, sizes: {t1: 70, t2: 30}}], two);
+		const {s} = fold([{type: "resize", container: root.id, sizes: {t1: 70, t2: 30}}], two);
 		expect(activeOf(opened(s)).layout.root.sizes).toEqual({t1: 70, t2: 30});
 	});
 
@@ -225,62 +225,83 @@ describe("the desk", () => {
 	});
 });
 
-describe("tabs", () => {
-	const root = (s: Desk) => activeOf(opened(s)).layout.root;
-	const shown = (s: Desk) => {
-		const r = root(s);
-		return r.orientation === "tabbed" ? r.active : null;
-	};
-	/** t1, t2 and t3 side by side, focus on t3, then Space twice: three tabs showing t3. */
-	const tabbed = fold([
-		...prefixed("|"),
-		...prefixed("|", 10),
-		...prefixed(" ", 20),
-		...prefixed(" ", 30),
-	]).s;
+describe("folds", () => {
+	const layout = (s: Desk) => activeOf(opened(s)).layout;
+	const folded = (s: Desk) =>
+		tilesOf(activeOf(opened(s)))
+			.filter((t) => t.folded)
+			.map((t) => t.id);
+	/** t1, t2 and t3 side by side, focus on t3. */
+	const row = fold([...prefixed("|"), ...prefixed("|", 10)]).s;
+	/** t1 beside a column of t2 over t3, the column s3, focus on t3. */
+	const column = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
 
-	it("turns the focused tile's stack with Space: vertical, tabbed, then horizontal, and saves each", () => {
-		const turned = fold([...prefixed("|"), ...prefixed(" ", 10)]);
-		expect(root(turned.s).orientation).toBe("vertical");
+	it("turns the focused tile's container with Space, horizontal to vertical and back, and saves each", () => {
+		const turned = fold(prefixed(" ", 20), row);
+		expect(layout(turned.s).root.orientation).toBe("vertical");
 		expect(turned.cmds.at(-1)?.type).toBe("save");
-		expect(root(tabbed).orientation).toBe("tabbed");
-		expect(shown(tabbed)).toBe("t3");
-		expect(root(fold(prefixed(" ", 40), tabbed).s).orientation).toBe("horizontal");
+		expect(layout(fold(prefixed(" ", 30), turned.s).s).root.orientation).toBe("horizontal");
 	});
 
-	it("steps to the next and previous tab with ] and [, wrapping, and focus follows", () => {
-		const next = fold(prefixed("]", 40), tabbed).s;
-		expect([focus(next), shown(next)]).toEqual(["t1", "t1"]);
-		const back = fold(prefixed("[", 50), next).s;
-		expect([focus(back), shown(back)]).toEqual(["t3", "t3"]);
+	it("folds the focused tile with Ctrl-B f, keeps its share, moves focus to an open tile, and saves", () => {
+		const {s, cmds} = fold(prefixed("f", 20), row);
+		expect(folded(s)).toEqual(["t3"]);
+		expect(focus(s)).toBe("t2");
+		expect(layout(s).root.sizes).toEqual(layout(row).root.sizes);
+		expect(cmds.map((c) => c.type)).toEqual(["save"]);
 	});
 
-	it("walks the tabs with h and l, as i3, and j and k leave them", () => {
-		const left = fold(prefixed("h", 40), tabbed).s;
-		expect([focus(left), shown(left)]).toEqual(["t2", "t2"]);
-		expect(focus(fold(prefixed("j", 40), tabbed).s)).toBe("t3");
-		expect(fold(prefixed("j", 40), tabbed).cmds).toEqual([]);
+	it("folds a tile from its title bar, and focus stays where it was", () => {
+		const {s} = fold([{type: "fold", tile: "t1"}], row);
+		expect(folded(s)).toEqual(["t1"]);
+		expect(focus(s)).toBe("t3");
 	});
 
-	it("shows the tab of a tile clicked in it, and of the tile focus goes to when one closes", () => {
-		const clicked = fold([{type: "click", tile: "t1"}], tabbed).s;
-		expect(shown(clicked)).toBe("t1");
-		const closed = fold([...prefixed("x", 40), {type: "key", key: "y", at: 50}], tabbed).s;
-		expect(ids(closed)).toEqual(["t1", "t2"]);
-		expect(shown(closed)).toBe(focus(closed));
+	it("refuses to fold the last open tile: nothing changes", () => {
+		const one = fold(
+			[
+				{type: "fold", tile: "t1"},
+				{type: "fold", tile: "t2"},
+			],
+			row,
+		).s;
+		const again = fold(prefixed("f", 20), one);
+		expect(folded(again.s)).toEqual(["t1", "t2"]);
+		expect(again.cmds).toEqual([]);
+		expect(fold([{type: "fold", tile: "t3"}], one).cmds).toEqual([]);
 	});
 
-	it("comes back from a kept desk showing the focused tile's tab", () => {
-		const kept = savedOf(opened(tabbed));
-		const hidden = {
-			...kept,
-			workspaces: kept.workspaces.map((ws) => ({
-				...ws,
-				layout: {...ws.layout, root: {...ws.layout.root, active: "t1"}},
-			})),
-		};
-		const back = restore(JSON.parse(JSON.stringify(hidden)));
-		expect(back === null ? null : shown(back)).toBe("t3");
+	it("opens a folded tile when focus moves onto it, or its strip is clicked", () => {
+		const shut = fold(prefixed("f", 20), row).s;
+		const moved = fold(prefixed("l", 30), shut).s;
+		expect([focus(moved), folded(moved)]).toEqual(["t3", []]);
+		const clicked = fold([{type: "unfold", node: "t3"}], shut).s;
+		expect([focus(clicked), folded(clicked)]).toEqual(["t3", []]);
+	});
+
+	it("folds a whole column when its tiles fold, and its strip opens them all", () => {
+		const shut = fold([...prefixed("f", 20), ...prefixed("f", 30)], column).s;
+		expect(folded(shut)).toEqual(["t2", "t3"]);
+		expect(focus(shut)).toBe("t1");
+		const {s, cmds} = fold([{type: "unfold", node: "s3"}], shut);
+		expect([focus(s), folded(s)]).toEqual(["t2", []]);
+		expect(cmds.map((c) => c.type)).toEqual(["save"]);
+		expect(fold([{type: "unfold", node: "s3"}], s).cmds).toEqual([]);
+	});
+
+	it("folds a zoomed tile out of its zoom", () => {
+		const zoomed = fold(prefixed("z", 20), row).s;
+		const {s} = fold(prefixed("f", 30), zoomed);
+		expect([layout(s).zoomed, folded(s), focus(s)]).toEqual([null, ["t3"], "t2"]);
+	});
+
+	it("comes back from a kept desk with its folds, and the focused tile open", () => {
+		const shut = fold(prefixed("f", 20), row).s;
+		const kept = savedOf(opened(shut));
+		expect(savedOf(restore(JSON.parse(JSON.stringify(kept))) ?? opened(row))).toEqual(kept);
+		const onFolded = {...kept, workspaces: kept.workspaces.map((ws) => ({...ws, focused: "t3"}))};
+		const back = restore(JSON.parse(JSON.stringify(onFolded)));
+		expect(back === null ? null : folded(back)).toEqual([]);
 	});
 });
 
@@ -321,12 +342,21 @@ describe("a kept desk", () => {
 					...ws.layout,
 					root: {
 						...ws.layout.root,
-						children: [{tag: "tile", id: "../x", shows: {kind: "tsh", run: null}}],
+						children: [{tag: "tile", id: "../x", shows: {kind: "tsh", run: null}, folded: false}],
 					},
 				},
 			})),
 		};
 		expect(restore(named)).toBeNull();
+		// A desk kept before containers and folds: its root was a "stack". It is not read back.
+		const old = {
+			...kept,
+			workspaces: kept.workspaces.map((ws) => ({
+				...ws,
+				layout: {...ws.layout, root: {...ws.layout.root, tag: "stack"}},
+			})),
+		};
+		expect(restore(old)).toBeNull();
 	});
 });
 
