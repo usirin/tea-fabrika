@@ -34,6 +34,7 @@ import {
 	Shipped,
 	shipProgram,
 } from "@kampus/pipeline/stages/ship/program";
+import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Do, STEPS, tracker} from "@tea-fabrika/tracker";
 import {Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
@@ -61,6 +62,7 @@ const REAL: {readonly [N in ProgramName]: AnyProgram} = {
 // export: a bare url, or review's `passed`.
 const TYPES: Readonly<Record<string, ShapeSchema<any>>> = {
 	Do,
+	TicketNumber,
 	TicketUrl,
 	Planned,
 	Revised,
