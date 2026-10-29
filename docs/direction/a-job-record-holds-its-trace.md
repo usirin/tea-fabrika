@@ -13,6 +13,7 @@ export class JobRecord extends DurableObject {
 	// SQLite inside the object. Nothing here is ever deleted.
 	//   job      what was started and how it ended: the line, who, which host
 	//   state    each run's Storage: machine runs, outbox, dead letters, how it ended
+	//   steps    every Msg each machine folded, with the state after it and its Cmds
 	//   spans    one row per span of the job's trace, from every host
 	//   beats    the live row while an agent works: "review running 3m · 9 turns"
 	//   summary  written when the job ends: time per step, rounds, cost
@@ -64,6 +65,54 @@ today. The record stays, so the trace opens again from history.
 
 A lane is the same, bigger: the lane is the job, triage, build and review are
 its runs, and each agent's turns are spans inside its run.
+
+## Every step is kept, and the tile opens it
+
+A tea program is a state machine: a Msg comes in, `update` gives the next
+state and the Cmds to run. So what happened is the list of steps, and the
+record keeps every one. This is Elm's own debugger, and Redux DevTools: a list
+of Msgs, and clicking one shows the state at that point.
+
+`double` has no machine, so its run shows only spans. `tally` has one
+(`count`, in the same file): `seq --to 3 | tally` folds three `add`s.
+
+```ts
+// A sketch. One row per step of every machine run, appended, never replaced.
+steps: { run: "tally-5d02c7a1", machine: "count", id: "total", n: 1, at: 4,
+         msg: { type: "add", n: 1 }, state: { total: 1 }, cmds: [] }
+steps: { run: "tally-5d02c7a1", machine: "count", id: "total", n: 2, at: 6,
+         msg: { type: "add", n: 2 }, state: { total: 3 }, cmds: [] }
+steps: { run: "tally-5d02c7a1", machine: "count", id: "total", n: 3, at: 8,
+         msg: { type: "add", n: 3 }, state: { total: 6 }, cmds: [] }
+```
+
+In the tile: the `tally` row opens to `count total`, which opens to its
+three steps. Clicking `add 2` shows `{ total: 1 }` before, `{ total: 3 }`
+after, and no Cmds.
+
+- **Nothing is hidden, everything opens.** A row in the tile that groups
+  others (a run, a round, an agent's turns) opens with a click to show what
+  is inside, down to one step. A step opens to its Msg, the state before and
+  after, and the Cmds it started.
+- **Values live in the record, not in spans.** Spans keep "names, tags and
+  ids, never values" (`packages/fabrika/src/program/trace.ts`): that rule was
+  made for spans that leave for Jaeger or any other backend. Steps are written
+  by the run's `Storage` into our own record, behind the same door as facts.
+  A span names its steps by run and number, so the tile finds them.
+- **Storage keeps only the newest state today** (two slots, the newest whole
+  one wins). The record appends a row per step instead. Restarts still read
+  the newest.
+
+**Doubts for this part:**
+
+- **Size.** The tracker's state holds every ticket, so a full state per step
+  is large. A step can keep only what changed (a JSON Patch,
+  [RFC 6902](https://www.rfc-editor.org/rfc/rfc6902)) with a full state every
+  so many steps, the way video keeps key frames. The build measures which.
+- **Secrets.** A state that holds a `Redacted` value must not write its text
+  into a step. Storage writes states to disk today too, so the hole would not
+  be new, but the record keeps them forever. The build adds a law: a state
+  with a `Redacted` in it writes no secret text into any row.
 
 ## What was decided
 
@@ -119,6 +168,7 @@ its runs, and each agent's turns are spans inside its run.
 |---|---|---|
 | `job` | the host, when the job starts and ends | `jobs`, history |
 | `state` | each run, through `Storage`, at each step | the host, at a restart |
+| `steps` | each run, through `Storage`, one row per Msg | the tile, when a row is opened |
 | `spans` | every host's exporter, as the job goes | the trace tile |
 | `beats` | the running agent's harness, newest wins | the ticket's live row |
 | `summary` | the job, once, when it ends | the numbers page |
@@ -171,7 +221,7 @@ its runs, and each agent's turns are spans inside its run.
   job ever run.
 
 **Cost:** host jobs (tsh's table, `&`, `attach` and detach move onto the
-host), the child's trace id on `startChild`, a small OTLP receiver in the
+host), the child's trace id on `startChild`, a step row per Msg, a small OTLP receiver in the
 Worker, the object, a `Storage` over it, the `Traces` service, and the tile. We
 give up Jaeger's search and compare. A bad deploy of the record's code
 redeploys the ledger too, the same risk the per-project Worker already takes.
