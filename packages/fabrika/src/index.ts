@@ -65,6 +65,8 @@ export * from "./host/signer.ts";
 export {type KeyFile, keyFileOf, keyFileText, keyLineOf, keyOnly} from "./host/sshsig.ts";
 export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
+// A job's record, read: the shape the trace tile draws, `Traces`, and the `Storage` over it.
+export * from "./host/traces.ts";
 export * from "./host/writer.ts";
 // program: a tea machine as a program.
 export * from "./program/ear.ts";
@@ -84,6 +86,8 @@ export * from "./program/storage.ts";
 // `StorageStale`. Its tag is still "Stale" (experiment 114).
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
+// A run's trace id: what names its job's record (`Traces.read`).
+export {runTraceId} from "./program/trace-id.ts";
 export * from "./program/view.ts";
 // sandbox: the sandbox a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
 export * as Sandbox from "./sandbox/sandbox.ts";

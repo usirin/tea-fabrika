@@ -182,7 +182,7 @@ export type Listed<S> =
  * One Msg a machine run folded: when, the Msg, the state it left, and the
  * Cmds it started. Elm's debugger shows a program as a list of these.
  */
-export interface Step<S> {
+export interface MachineStep<S> {
 	readonly at: number;
 	readonly msg: unknown;
 	readonly state: S;
@@ -198,7 +198,7 @@ export type StepLog = (
 	run: string,
 	machine: string,
 	id: string,
-	step: Step<unknown>,
+	step: MachineStep<unknown>,
 ) => Effect.Effect<void, StorageBroken>;
 
 /** One open of one run: the only way to write to it. */
@@ -251,7 +251,7 @@ export interface Handle {
 		machine: string,
 		id: string,
 		state: StateSchema<S>,
-		step: Step<S>,
+		step: MachineStep<S>,
 	) => Effect.Effect<void, StorageFailed>;
 }
 
@@ -569,7 +569,7 @@ function storageOn(
 			...(steps === undefined
 				? {}
 				: {
-						step: <S>(machine: string, id: string, state: StateSchema<S>, step: Step<S>) =>
+						step: <S>(machine: string, id: string, state: StateSchema<S>, step: MachineStep<S>) =>
 							Effect.gen(function* () {
 								const kept = yield* through(state, machine, id).encode(step.state);
 								yield* fence;

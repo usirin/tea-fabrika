@@ -70,6 +70,24 @@ Layer on its own subpath.
 | `@kampus/fabrika` | `dead-letters.ts` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source; behind a door, only a person may); `limitEnds(name)` lists the runs a limit ended |
 | `@kampus/fabrika` | `observer.ts` | `whereis` and `getState`: who holds a name, and its last saved state. Writes nothing |
 | `@kampus/fabrika/laws` | `laws.ts` | The ledger's law suite, `runLaws`, and `layerPlanted` (the SQL with one mistake) |
+| `@kampus/fabrika` | `traces.ts` | A job's record, read: `JobTrace` (job, runs, spans, steps, opened) and its parts as Effect Schemas, the shape the trace tile draws. `Traces`, the service that reads one by trace id. `jobStorage`: the `Storage` of a job's runs, in its record, with one step per Msg. `jobWrites`: the host's `began` and `ended`, and `opened` and `spanOf`: the span a run's work hangs under, kept as it opens, so a child run started on any host nests under its parent's span before that span ends. `JobCall`: one call as it crosses the door |
+| (inside the ledger) | `job-record.ts` | `JobRecord`: one Durable Object per host job, named `<ledger>/<trace id>`, in the ledger's own Worker and its Miniflare twin (bound as `JOB_RECORD`). SQLite inside, nothing ever deleted. No request reaches it but through the ledger's door |
+| (inside the ledger) | `job-rules.ts` | The record's SQL: the `job`, `state`, `steps`, `spans` and `opened` tables, and every call on them in one transaction. A step is kept as a JSON Patch of the one before, or whole once the patches since the last whole state would outweigh it, or after 100 (experiment 166) |
+| (inside the ledger) | `otlp.ts` | OTLP over HTTP, JSON, decoded with Effect Schema: each span by its trace id, its service, tags and events, at most 5,000 spans a request and 1 KiB a tag |
+| `@kampus/fabrika/http` | `http.ts` | `recordsHttp`: calls to the jobs' records through the door, untraced, so a record's own writes are not spans of its job. `layerTracesHttp`: `Traces` over them |
+| `@kampus/fabrika/local` | `inside.ts` | `recordsInside`: the same calls past the door, as a writer the test names. `recordInside`: one record's every row (`dump`) and its steps' bytes (`sizes`), for the laws and experiment 166 |
+
+A job's record has two doors in the ledger's Worker, both behind the ledger's own door, which
+stamps who sent each write:
+
+```text
+POST /<ledger>/job/<trace>    one JobCall as JSON: the runs' Storage, a step, began, ended, opened, spanOf, read
+POST /<ledger>/v1/traces      OTLP/HTTP JSON, as any OpenTelemetry exporter sends it (protobuf: 415)
+```
+
+The direction note is `docs/direction/a-job-record-holds-its-trace.md`. Its `beats`, `summary`
+and `logs` tables are not built yet: each comes with its writer (the host's heartbeats, the
+job's end, a run's output lines), so no table is made before something writes it.
 
 To make the GitHub token: create a fine-grained personal access token with public repositories
 (read-only) and no permissions, and set it as the Worker's `GITHUB_TOKEN` secret.
@@ -245,6 +263,13 @@ escalates, and a dead letter sent back) and `experiments/101-real-agents-faults.
 Code agents in containers, their hosts killed mid-question) and `experiments/102-limits.ts` (dollar,
 token, wall and children limits on a tree of tickets on three hosts, with a crash loop, a SIGKILL
 and a freeze mid-spend).
+
+A job's record is tested from `../shell`, since its tests run tsh's programs and its tracer, and
+the shell sits above the host. `../shell/job-record.test.ts` runs `seq --to 3 | tally` against the
+Miniflare twin, through the door, and reads back one record with both runs, every span and
+tally's three `add` steps. `../shell/job-record.laws.test.ts` is the secret law: a state that holds a `Redacted`, under each of Effect
+Schema's ways to write one, leaves no secret text in any row of any table, over HTTP and past the
+door. With the refusal planted out, 9 of its 11 cases fail.
 
 ## Not in it yet
 

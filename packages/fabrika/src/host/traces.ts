@@ -1,4 +1,4 @@
-import {Context, Effect, Layer, Schema} from "effect";
+import {Context, Effect, Layer, Schema, Tracer} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/storage.ts";
 
@@ -11,6 +11,7 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 //   trace.runs     [{run: "seq-3f9a1c02", status: "ended", ...}, {run: "tally-5d02c7a1", machines: [{machine: "count", id: "total"}], ...}]
 //   trace.spans    [{name: "seq --to 3 | tally", service: "tsh", ...}, {name: "run", service: "tally", events: [{name: "told add"}, ...]}, ...]
 //   trace.steps    [{run: "tally-5d02c7a1", machine: "count", id: "total", n: 1, msg: {type: "add", n: 1}, state: {total: 1}, cmds: []}, ...]
+//   trace.opened   [{run: "lane:700", span: "9f2c...", at, by}, ...]   spans still open, that others nest under
 //
 // The schemas are the record's read shape: the trace tile (#74) is built on them. The record
 // itself is in ./job-record.ts (workerd) and ./job-rules.ts (its SQL); a program's runs write it
@@ -48,15 +49,16 @@ export const Job = Schema.Struct({
 export type Job = typeof Job.Type;
 
 /** A tag's value on a span or an event: OpenTelemetry's plain kinds. */
-export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
-export const Tags = Schema.Record(Schema.String, Tag);
+export const SpanTag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+/** A span's or an event's tags, by name. */
+export const SpanTags = Schema.Record(Schema.String, SpanTag);
 
 /** A moment inside a span: `told add`, `sent n`, `msg add`. */
 export const SpanEvent = Schema.Struct({
 	name: Schema.String,
 	/** Unix ms. */
 	at: Schema.Number,
-	tags: Tags,
+	tags: SpanTags,
 });
 export type SpanEvent = typeof SpanEvent.Type;
 
@@ -72,7 +74,7 @@ export const Span = Schema.Struct({
 	start: Schema.Number,
 	end: Schema.Number,
 	status: Schema.Literals(["unset", "ok", "error"]),
-	tags: Tags,
+	tags: SpanTags,
 	events: Schema.Array(SpanEvent),
 	/** Who sent it, as the door stamped the exporter. */
 	by: Schema.String,
@@ -96,6 +98,21 @@ export const Step = Schema.Struct({
 });
 export type Step = typeof Step.Type;
 
+/**
+ * A span a run's work hangs under, kept as it opens. A span reaches `spans` only once it ends,
+ * so while a lane runs, its stages' spans name a parent that only this says: run `lane:700`, still
+ * open. A child run started meanwhile nests under it the same way (`jobWrites`' `spanOf`).
+ */
+export const Opened = Schema.Struct({
+	/** The run, or the hosted name, whose span it is. */
+	run: Schema.String,
+	span: SpanId,
+	/** Unix ms. */
+	at: Schema.Number,
+	by: Schema.String,
+});
+export type Opened = typeof Opened.Type;
+
 /** A job's whole record, read: what the trace tile draws. */
 export const JobTrace = Schema.Struct({
 	trace: TraceId,
@@ -106,6 +123,8 @@ export const JobTrace = Schema.Struct({
 	spans: Schema.Array(Span),
 	/** By run, machine run and number. */
 	steps: Schema.Array(Step),
+	/** By when they opened. A run taken over has one per host that ran it, the newest last. */
+	opened: Schema.Array(Opened),
 });
 export type JobTrace = typeof JobTrace.Type;
 
@@ -139,6 +158,13 @@ export const JobCall = Schema.Union([
 		at: Schema.Number,
 	}),
 	Schema.Struct({op: Schema.Literal("ended"), how: JobEnd, at: Schema.Number}),
+	Schema.Struct({
+		op: Schema.Literal("opened"),
+		run: Schema.String,
+		span: SpanId,
+		at: Schema.Number,
+	}),
+	Schema.Struct({op: Schema.Literal("spanOf"), run: Schema.String}),
 	Schema.Struct({op: Schema.Literal("read")}),
 ]);
 export type JobCall = typeof JobCall.Type;
@@ -149,6 +175,7 @@ export const RecordRead = Schema.Struct({
 	runs: Schema.Array(Schema.String),
 	spans: Schema.Array(Span),
 	steps: Schema.Array(Step),
+	opened: Schema.Array(Opened),
 });
 export type RecordRead = typeof RecordRead.Type;
 
@@ -218,7 +245,18 @@ export const jobStorage = (calls: RecordCalls, trace: string): Storage =>
 			calls(trace, {op: "step", run, machine, id, ...step}).pipe(Effect.asVoid),
 	);
 
-/** The host's two writes to a job's record: when it started, and how it ended. */
+const SpanOf = Schema.Struct({span: Schema.NullOr(SpanId)});
+
+/**
+ * The host's writes to a job's record: when it started and how it ended, and the span each of
+ * its runs' work hangs under, so a child run nests under its parent's. A span reaches the record
+ * only once it ends; a lane's span is still open while its stages start.
+ *
+ *   const lane = yield* Effect.makeSpan("lane:700", {parent: traceOf("lane:700")});
+ *   yield* job.opened("lane:700", lane.spanId, now);          // before any child can start
+ *   const up = yield* job.spanOf("lane:700");                 // in the child's host
+ *   start(build, {}).pipe(Effect.withParentSpan(up ?? traceOf("lane:700")));
+ */
 export const jobWrites = (calls: RecordCalls, trace: string) => ({
 	began: (job: {
 		readonly n: number;
@@ -227,6 +265,19 @@ export const jobWrites = (calls: RecordCalls, trace: string) => ({
 		readonly at: number;
 	}) => calls(trace, {op: "began", ...job}).pipe(Effect.asVoid),
 	ended: (how: JobEnd, at: number) => calls(trace, {op: "ended", how, at}).pipe(Effect.asVoid),
+	/** Keep the span `run`'s work hangs under. Kept before it returns. */
+	opened: (run: string, span: string, at: number) =>
+		calls(trace, {op: "opened", run, span, at}).pipe(Effect.asVoid),
+	/** The newest span `run` opened, as a parent in this job's trace. `null`: it opened none. */
+	spanOf: (run: string): Effect.Effect<Tracer.ExternalSpan | null, StorageBroken> =>
+		calls(trace, {op: "spanOf", run}).pipe(
+			Effect.flatMap(decodeAs(SpanOf, "answer to spanOf")),
+			Effect.map((a) =>
+				a.span === null
+					? null
+					: Tracer.externalSpan({traceId: trace, spanId: a.span, sampled: true}),
+			),
+		),
 });
 
 /** Reading a job's record failed: it could not be reached, or it answered what no record says. */
@@ -258,7 +309,14 @@ export const layerTraces = (calls: RecordCalls) =>
 						const record = yield* storage.record(run);
 						if (record !== null) runs.push(record);
 					}
-					return {trace: id, job: raw.job, runs, spans: raw.spans, steps: raw.steps};
+					return {
+						trace: id,
+						job: raw.job,
+						runs,
+						spans: raw.spans,
+						steps: raw.steps,
+						opened: raw.opened,
+					};
 				}).pipe(
 					Effect.mapError(
 						(e) =>

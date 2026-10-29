@@ -43,6 +43,7 @@ export const ledgerStack = (c: ServerConfig) =>
 				observability: {enabled: false},
 				env: {
 					LEDGER: Cloudflare.DurableObject("Ledger"),
+					JOB_RECORD: Cloudflare.DurableObject("JobRecord"),
 					...ledgerBindings({door: serverDoor(c)}),
 					...(token === undefined ? {} : {GITHUB_TOKEN: token}),
 				},

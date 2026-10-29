@@ -18,7 +18,7 @@ import type {
 	SubscribeServices,
 } from "@demlik/tea/effect";
 import {Cause, Clock, Deferred, Effect, Fiber, Latch, Queue, type Scope, Stream} from "effect";
-import type {Handle, StateRefused, StateSchema, Step, StorageFailed} from "./storage.ts";
+import type {Handle, MachineStep, StateRefused, StateSchema, StorageFailed} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
 // How a program starts one copy of one of its machines, kept: what a ref's
@@ -68,6 +68,13 @@ import {type Drawing, runTraced} from "./trace.ts";
 //
 // One once the run is closing (its last save: tea's "stop-save") has nobody
 // waiting on `done()`: it ends the program run instead, in the same words.
+//
+// On a storage that keeps steps (a job's record, ../host/traces.ts), each Msg
+// the machine folds is kept too: the Msg, the state after it, and the Cmds it
+// started, got by folding the Msg again from the state before it, since tea's
+// `observe` hands over only the Msg and the state. They are written in order,
+// behind the fold, and the run's scope waits for the last. A step that cannot
+// be kept ends the run, as a failed save does.
 
 /** tea's own timer, the one its Effect engine runs when it is given none: here it is held like every other Sub. */
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
@@ -239,7 +246,7 @@ const stepsOf = <S>(
 	state: StateSchema<S>,
 ) =>
 	Effect.gen(function* () {
-		const queue = yield* Queue.unbounded<Step<S>, Cause.Done>();
+		const queue = yield* Queue.unbounded<MachineStep<S>, Cause.Done>();
 		const failed = yield* Deferred.make<unknown>();
 		const writer = yield* Stream.fromQueue(queue).pipe(
 			Stream.runForEach((step) => write(name, id, state, step)),
@@ -248,7 +255,7 @@ const stepsOf = <S>(
 		);
 		yield* Effect.addFinalizer(() => Queue.end(queue).pipe(Effect.andThen(Fiber.await(writer))));
 		return {
-			add: (step: Step<S>) => {
+			add: (step: MachineStep<S>) => {
 				Queue.offerUnsafe(queue, step);
 			},
 			failed: Deferred.await(failed),
