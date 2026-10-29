@@ -20,6 +20,7 @@ import {type Placed, type Runs, startTsh, type WindowScreen} from "./tsh.ts";
 type Seen =
 	| {readonly kind: "open"; readonly run: string; readonly program: string; readonly placed: Placed}
 	| {readonly kind: "forward"; readonly run: string}
+	| {readonly kind: "line"; readonly runs: readonly string[]}
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
 	| {readonly kind: "close"; readonly run: string}
 	| {readonly kind: "running"; readonly count: number};
@@ -45,6 +46,7 @@ const session = (
 				screen.show((m) => seen.push({kind: "view", run, data: m.data}));
 			},
 			forward: (run) => seen.push({kind: "forward", run}),
+			line: (runs) => seen.push({kind: "line", runs}),
 			ended: (run) => {
 				const screen = screens.get(run);
 				if (screen === undefined) return;

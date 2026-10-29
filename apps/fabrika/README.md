@@ -39,7 +39,8 @@ type Down = {type: "hello"; version: number; build?: string} | {type: "port" | "
 // "desk": the desk runs in the host. The page draws it, and sends the keys it takes and clicks.
 type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile: TileId}
 	| {type: "resize"; container: string; sizes: Record<string, number>}
-	| {type: "fold"; tile: TileId} | {type: "unfold"; node: string};
+	| {type: "fold"; tile: TileId} | {type: "unfold"; node: string}
+	| {type: "area"; width: number; height: number}; // the workspace's size, so a line can fold
 type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
 	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
 	| {type: "answer"; id: number; took: boolean}
@@ -105,14 +106,14 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
-| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
+| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | runs` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
@@ -155,6 +156,16 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   is the next tile's Up.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
+- **A line with several windows opens in place,** in the tile it was typed in
+  ([a line opens in place](../../docs/direction/fold-not-tabs.md#a-line-opens-in-place)).
+  `tracker | ticket | trace` in t2: the tracker covers t2, and the ticket and the trace open as
+  new tiles beside it, in t2's place, each with a third of its space. In a row they become
+  siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
+  folded. Unfolding one takes space only from the line's other windows.
+- **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
+  A run alone has none.
+- **A line's other windows have no tsh.** Ctrl-C in one goes to the typed-in tile's tsh. A
+  window goes when its run ends, and a kept desk reads back without them.
 - **A run with `&` is a job in the background, and no tile opens.** The prompt is back at once.
   `attach %n` brings it into the tile, as bash's `fg` does.
 - **Ctrl-B x always asks, as tmux's `kill-pane` does:** `close t2? (y/n)`. Only y says yes; any
@@ -344,6 +355,11 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - `experiments/141-tiles-in-one-page.ts` measures 1, 4, 8 and 16 tiles on the built app.
 
 ## What it does not do yet
+
+- **No real line of windows runs yet.** The app's programs have no outputs, so
+  `tracker | ticket | trace` does not pipe; the desk side is tested on its own.
+- **Closing one window of a line** (Ctrl-B x, y) takes its tile away, but its run goes on until
+  the line ends.
 
 - **The cursor moves one code point at a time.** It can stop between a letter and its accent,
   which readline steps over, or inside an emoji made of several.

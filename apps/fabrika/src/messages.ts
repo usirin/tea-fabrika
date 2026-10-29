@@ -68,6 +68,12 @@ const KeyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64
 /** A number the page gives each key it sends the host, so the answer names the key it is for. */
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
+/** A size on the page, in whole px: no screen is wider than this. */
+const Pixels = Schema.Int.check(
+	Schema.isGreaterThanOrEqualTo(0),
+	Schema.isLessThanOrEqualTo(100_000),
+);
+
 /**
  * What the app found of the host on its home, once a try to attach answered: the window's
  * branches (docs/direction/an-old-host-is-named-then-restarted.md).
@@ -163,6 +169,7 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "resize", container: "c2", sizes: {t1: 30, t2: 70}}
  *   {type: "fold", tile: "t2"}
  *   {type: "unfold", node: "c4"}
+ *   {type: "area", width: 1432, height: 868}     the workspace was drawn at this size, in px
  */
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
@@ -174,6 +181,7 @@ export const FromPage = Schema.Union([
 	}),
 	Schema.Struct({type: Schema.Literal("fold"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("unfold"), node: Schema.String}),
+	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
 ]);
 export type FromPage = typeof FromPage.Type;
 

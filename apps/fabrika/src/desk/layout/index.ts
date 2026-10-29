@@ -1,5 +1,19 @@
 export {checkTree, type Violation} from "./invariants.ts";
 export {
+	type Area,
+	BORDER,
+	extents,
+	fits,
+	freeTint,
+	type LineIds,
+	linesIn,
+	MIN_WINDOW,
+	type Opening,
+	openLine,
+	quiet,
+	STRIP,
+} from "./line.ts";
+export {
 	across,
 	type ContainerId,
 	type ContainerNode,
@@ -8,6 +22,7 @@ export {
 	createTree,
 	type Direction,
 	type Edge,
+	freeShare,
 	isContainerNode,
 	isFolded,
 	isLayoutNode,
@@ -16,6 +31,8 @@ export {
 	isTileNode,
 	type LayoutNode,
 	type LayoutTree,
+	type Line,
+	lineOf,
 	type NodeId,
 	type Orientation,
 	openShares,
@@ -23,8 +40,11 @@ export {
 	type Shown,
 	type Shows,
 	SIZE_TOLERANCE,
+	shareLine,
+	TINTS,
 	type TileId,
 	type TileNode,
+	type Tint,
 	TSH,
 } from "./node.ts";
 export {
@@ -42,6 +62,7 @@ export {
 	setShows,
 	settle,
 	split,
+	spread,
 	tiles,
 	turn,
 	unfold,

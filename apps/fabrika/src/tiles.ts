@@ -17,7 +17,9 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //   const tiles = yield* startTiles({history, jobs, edge});
 //   yield* tiles.open("t1")       t1's tsh starts on the host's table: edge.terminal("t1", screen)
 //   // t1 runs `counter`:         edge.view("counter:1a2b", screen), and the desk is told
-//   //                            {type: "covered", tile: "t1", run: {id: "counter:1a2b", program: "counter"}}
+//   //                            {type: "covered", tile: "t1", runs: [{id: "counter:1a2b", program: "counter"}]}
+//   // t1 runs `tracker | ticket`: each view gets its port as it begins, and once both have, the
+//   //                            desk is told the line: {type: "covered", tile: "t1", runs: [tracker, ticket]}
 //   // t1 runs `tally &`:         nothing is shown: a job in the background, as in bash
 //   yield* tiles.close("t1")      t1's tsh and its programs get the end of their inputs; nothing stops
 //   // they end, then tsh does:   the desk is told {type: "ended", tile: "t1"}
@@ -93,10 +95,16 @@ export const startTiles = (options: {
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
 
-		/** A run in the foreground covers its tile: its view gets a port, and the desk is told. */
-		const cover = (run: string, one: Live) => {
-			edge.view(run, one.screen);
-			edge.tell({type: "covered", tile: one.tile, run: {id: run, program: one.program}});
+		/**
+		 * A line in the foreground covers its tile: the desk is told its runs with a view, still
+		 * running, at once, so it can open them in place. Each got its port as it came forward.
+		 */
+		const cover = (tile: TileId, runs: readonly string[]) => {
+			const [first, ...rest] = runs.flatMap((run) => {
+				const one = live.get(run);
+				return one === undefined ? [] : [{id: run, program: one.program}];
+			});
+			if (first !== undefined) edge.tell({type: "covered", tile, runs: [first, ...rest]});
 		};
 
 		/** A run is over: its port goes and the desk is told, once, whoever saw it end first. */
@@ -120,14 +128,15 @@ export const startTiles = (options: {
 						began: (run, program, placed, screen) => {
 							const one: Live = {tile, program, placed, screen};
 							live.set(run, one);
-							if (placed === "foreground") cover(run, one);
+							if (placed === "foreground") edge.view(run, screen);
 						},
 						forward: (run) => {
 							const one = live.get(run);
 							if (one === undefined || one.placed === "foreground") return;
 							one.placed = "foreground";
-							cover(run, one);
+							edge.view(run, one.screen);
 						},
+						line: (runs) => cover(tile, runs),
 						ended: over,
 						running: (count) => edge.tell({type: "jobs", tile, running: count}),
 					},

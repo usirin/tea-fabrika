@@ -233,6 +233,10 @@ export const serve = (options: {
 				case "unfold":
 					if (step({type: "unfold", node: m.node})) shout();
 					return;
+				case "area":
+					// Nothing to draw: the size only says where the next line's windows fit.
+					step({type: "area", width: m.width, height: m.height});
+					return;
 			}
 		};
 

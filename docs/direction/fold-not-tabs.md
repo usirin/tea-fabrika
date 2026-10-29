@@ -116,10 +116,83 @@ that made it impossible would have to count open tiles, and TypeScript cannot.
   mixes its folded tiles into the parent's row. That is right by the rules, but
   it may surprise.
 
+## A line opens in place
+
+**Decided 2026-10-28.** A tsh line with several windowed programs, such as
+`tracker | ticket | trace`, opens its windows in the tile it was typed in, by
+the split rule above. They share that tile's space evenly. When a window
+would be too small, all but the first open folded. One faint tint marks the
+line's tiles and strips.
+
+```ts
+// apps/fabrika/src/desk/layout/node.ts
+interface Line { id: string; from: TileId; tint: Tint }   // Tint: 0..5
+
+type Shows =
+  | { kind: "tsh"; run: Shown | null }               // a tile with its own tsh
+  | { kind: "line"; run: Shown; line: Line }         // the typed-in tile: tsh, first window on top
+  | { kind: "window"; run: Shown; line: Line };      // another window of the line: no tsh
+
+// apps/fabrika/src/desk/layout/line.ts
+const MIN_WINDOW = { width: 220, height: 120 };       // title bar included
+openLine(tree, "t2", {
+  runs: [tracker, ticket, trace],
+  tint: freeTint(allTrees),                          // the first tint no line has
+  orientation: "horizontal",                         // a line runs left to right
+  ids: { tiles: ["t3", "t4"], container: "c3" },
+  area: { width: 1432, height: 868 },                // the page says it; null opens all
+});
+```
+
+One example, a desk of `t1 | t2` in a row, the line typed in `t2`:
+
+| The tile's spot | What opens |
+|---|---|
+| In a row, room for each | `t1 | t2 | t3 | t4`; t2, t3, t4 each a third of t2's old share |
+| In a column (runs across) | a new row `c3` in t2's place, holding t2, t3, t4 |
+| Each would be under 220px | t2 open with the whole share; t3 and t4 as strips beside it |
+| One run only | t2 is covered by it, as before; no line, no tint |
+
+- **The typed-in tile keeps its tsh.** The first window covers it, as a run
+  always covered its tile. Focus stays there. The other windows are new tiles
+  with no tsh of their own: Ctrl-C in one goes to the typed-in tile's tsh.
+- **Shares stay inside the line.** Unfolding a window takes its share from the
+  line's other open windows (`shareLine`), and closing one gives its share back
+  to them (`freeShare`). Tiles outside the line keep their size.
+- **The tint is on tiles and strips, not in the tree.** The tree holds which
+  line a tile is in; the page mixes `--line-N` into the border at 30% and into
+  the ground at a sixth of that. Six tints, in oklch at close lightness, so no line
+  stands out over another.
+- **When the run ends, its window goes.** The typed-in tile goes back to its
+  tsh. A desk kept and read back holds no windows (`quiet`): their runs did not
+  live through the restart.
+
+**Why:** a line is one thing the person asked for, so it lands where they
+asked, not spread over the workspace. The split rule already says where a
+second tile goes; a line is the same rule for n tiles. Folding past the
+minimum keeps every window readable and still in the picture, as a strip.
+
+**Cost:** a page message, `area`, with the workspace's size in pixels, and
+the desk's own copy of the page's strip and border sizes to work out what fits
+(`extents`). Those can drift from the CSS. A window tile has no tsh, so
+closing it with `y` takes the tile away but its run goes on until the line
+ends.
+
+**How sure: 75%.** The doubts:
+
+- **No real line has run yet.** The app's programs have no outputs, so
+  `tracker | ticket | trace` cannot pipe today. The desk path is tested
+  straight and in the screenshots; tsh's side has only run single windows.
+- **Closing one window.** Whether `y` on a window should stop its run, or the
+  whole line. One real use settles it.
+- **The minimum.** 220 by 120 comes from the prototype. A desk on a laptop
+  screen will show whether it folds too much.
+
 ## What it cannot tell us
 
 - Whether people fold, or close and reopen. No one has used it on a real desk
   yet.
 - How a workspace reads with many strips side by side.
-- Whether some program's windows should open folded. That, and opening a
-  line's windows in place, are left for later work.
+- Whether some program's windows should open folded, apart from a line's
+  windows past the minimum.
+- How a line reads once its programs truly pipe into each other.

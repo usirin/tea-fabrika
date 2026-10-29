@@ -112,7 +112,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 				return {covered, views: [...d.views]};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.covered).toMatchObject({type: "covered", tile: "t1", run: {program: "counter"}});
+		expect(seen.covered).toMatchObject({type: "covered", tile: "t1", runs: [{program: "counter"}]});
 		expect(seen.views).toHaveLength(1);
 	});
 
@@ -129,8 +129,8 @@ describe("the tiles", {timeout: 20_000}, () => {
 				return {covered, over, gone: d.gone};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.covered).toMatchObject({type: "covered", tile: "t1", run: {program: "counter"}});
-		const run = seen.covered.type === "covered" ? seen.covered.run.id : "";
+		expect(seen.covered).toMatchObject({type: "covered", tile: "t1", runs: [{program: "counter"}]});
+		const run = seen.covered.type === "covered" ? seen.covered.runs[0].id : "";
 		expect(seen.over).toEqual({type: "over", run});
 		expect(seen.gone).toEqual([`run:${run}`]);
 	});
@@ -208,7 +208,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 		);
 		// t1's counter is still in the host's table, running: t2's stop dropped only t2's jobs.
 		expect(seen.table).toEqual([[1, "running"]]);
-		const run = seen.covered.type === "covered" ? seen.covered.run.id : "";
+		const run = seen.covered.type === "covered" ? seen.covered.runs[0].id : "";
 		// t1's counter still covers t1: it is not over, and its port is still there.
 		expect(seen.told).not.toContainEqual({type: "over", run});
 		expect(seen.told.filter((m) => m.type === "jobs" && m.tile === "t1").at(-1)).toEqual({
