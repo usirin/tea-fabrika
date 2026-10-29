@@ -25,6 +25,11 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 //                               {type: "commented", body: "Seen it too."}                  user:owner
 //                               {type: "closed"}                                           user:owner
 
+// What it sends on its one output `ticket`: the ticket the person opens, by its number, each
+// time that changes. `tracker | ticket | trace` follows it; `tracker` alone prints each pick.
+yield* tell(run, "do", {kind: "open", ticket: 7});        // sends 7
+yield* tell(run, "do", {kind: "open", ticket: 7});        // sends nothing: the same pick
+
 // What its window is shown (`Shown`), once the facts are read back:
 // {ready: true, page: {kind: "list", tickets: [{number: 1, title: "Login fails", state: "closed",
 //   comments: 1, at: ...}], pullRequests: [...], counts: {open: 0, closed: 1, pullRequests: 0}},
@@ -36,7 +41,7 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
+| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
 | | `src/ticket.ts` | What a person writes, pure: `Write` (a comment can ask for changes, an answer carries the text it saw) and `factOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
@@ -72,6 +77,9 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   one button per pick and a note. A click sends `{kind: "answer", ...}`. A comment never answers.
   Only a person answers: a tracker whose `Author` is an agent refuses it, and the fold keeps an
   agent's `answered` out.
+- **A pick goes down a pipe.** Opening a ticket sends its number on `ticket`, once per change,
+  so a pipe carries the latest pick. If the reader down the pipe has ended, that send fails and
+  the tracker ends with it, as a Unix writer does on a closed pipe.
 - **Quit waits for writes.** `{kind: "quit"}` ends the program once every write asked for is on
   the ledger.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
