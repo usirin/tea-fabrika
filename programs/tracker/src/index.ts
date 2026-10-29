@@ -42,7 +42,7 @@ import {Write} from "./ticket.ts";
 // ticket as `maybe_duplicate`, written as the agent `duplicates`: advice only, it closes nothing.
 //
 // Its one output is the ticket the person picks (opens), sent each time the pick changes, so
-// `tracker | ticket | trace` shows the picked ticket in the next two windows:
+// `tracker | ticket | runs` shows the picked ticket in the next two windows:
 //
 //   {kind: "open", ticket: 7}    sends 7 on `ticket`
 //   {kind: "list"}, then {kind: "open", ticket: 7}   sends nothing: 7 is still the pick

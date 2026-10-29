@@ -27,7 +27,7 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //                                 started leave the host's table
 //   yield* tiles.end("ticket:9c1d")   one window of a line closed: that process gets the end of its
 //                                 inputs. Its neighbours follow the pipes: the tracker's next send
-//                                 fails and it ends; the trace's input ends, and it shows the last
+//                                 fails and it ends; the runs' input ends, and it shows the last
 //   yield* tiles.kill("ticket:9c1d")  the same window, "stop now": that process stops
 //
 // Closing is tmux's kill-pane, made soft: a tile owns its tsh as a pane owns its shell, and the

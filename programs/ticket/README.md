@@ -17,9 +17,9 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
 // {kind: "answer", ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 // tracker/ticket/7/inbox gets {type: "answered", ask: "a-1", pick: "approve", ...} by user:owner
 
-// tsh> tracker | ticket | trace
+// tsh> tracker | ticket | runs
 // input `ticket` takes the tracker's pick: 7, then 3. The window shows #7, then #3.
-// output `ticket` sends what it shows, once per change: 7, then 3, on to the trace.
+// output `ticket` sends what it shows, once per change: 7, then 3, on to the runs.
 ```
 
 ## What's in it

@@ -18,7 +18,7 @@ import {Shown, shownOf} from "./view.ts";
 // them: an answer, a comment, a close are the same facts the tracker writes.
 //
 //   tsh> ticket --ticket 7          its window takes over the tile, on ticket 7
-//   tsh> tracker | ticket | trace   it shows the ticket the tracker picks, and sends it on
+//   tsh> tracker | ticket | runs    it shows the ticket the tracker picks, and sends it on
 //   {kind: "answer", ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}   on `do`
 //   // tracker/ticket/7/inbox gets {type: "answered", ask: "a-1", pick: "approve", ...} by user:owner
 //   {kind: "comment", ticket: 7, body: "Skip part 2.", asks: "changes"}         "Request changes"

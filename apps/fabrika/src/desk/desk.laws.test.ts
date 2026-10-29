@@ -144,7 +144,7 @@ const asked: readonly Msg[] = [
 		runs: [
 			{id: "tracker:1", program: "tracker"},
 			{id: "ticket:1", program: "ticket"},
-			{id: "trace:1", program: "trace"},
+			{id: "runs:1", program: "runs"},
 		],
 	},
 	{type: "click", tile: "t2"},
