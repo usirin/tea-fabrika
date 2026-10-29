@@ -47,7 +47,7 @@ export type Tint = 0 | 1 | 2 | 3 | 4 | 5;
 export const TINTS: readonly Tint[] = [0, 1, 2, 3, 4, 5];
 
 /**
- * A tsh line whose windows opened together, as `tracker | ticket | trace`: its id (its first
+ * A tsh line whose windows opened together, as `tracker | ticket | runs`: its id (its first
  * window's run), the tile it was typed in, and its tint. Only a line of two windows or more has
  * one: a run alone gets no tint.
  */
