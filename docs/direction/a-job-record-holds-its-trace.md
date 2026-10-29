@@ -58,8 +58,11 @@ yield* leaderOf("lane:700:t2:r1:build"); // "lane:700"
 Keeping jobs alive with no shell open is a multiplexer's work. tmux is a
 program that keeps terminals and runs a shell in each: OS, then bash, then
 tmux, then bash, then the program. WezTerm's mux server and VS Code's pty host
-do the same. Here that program is the app's tiling. It is not built yet, and
-where it keeps its layout is its own business, not the host's.
+do the same. Here it already exists: `apps/fabrika/src/tiles.ts` keeps one
+tsh per tile in the host process, as tmux runs one shell per pane, and the app
+is only a client. Each tile's tsh keeps its own jobs in the tile's folder, like
+each pane's bash. Where it keeps its layout is its own business, not the
+host's. Part A's table on the host was the one layer too many.
 
 What this changes below:
 
