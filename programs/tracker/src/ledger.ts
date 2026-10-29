@@ -1,7 +1,7 @@
 import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
 import {type Entry, mayWrite, nameOf, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
-import type {ClockSub, load, PollSub, save} from "./machine.ts";
+import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";
 import {factOf} from "./ticket.ts";
 
 // The tracker's cells and its poll: the only code that talks to the ledger. Through the `Ledger`
@@ -93,6 +93,44 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 			data: fact,
 		});
 		return {ticket};
+	}).pipe(
+		Effect.catchTags({
+			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
+			Denied: (e) => Effect.fail(refused(e.stream)),
+			Fenced: (e) => Effect.fail(refused(e.stream)),
+			UnknownName: (e) => Effect.fail(refused(e.stream)),
+		}),
+	);
+
+/**
+ * Who writes a duplicate hint: code, as the agent `duplicates` working for whoever sits at the
+ * window, never the person. On a ledger behind the door, the door stamps the row from the session
+ * instead, so there it reads as the session's writer until a host's agents sign in as their
+ * person.
+ */
+export const hinterOf = (author: Writer): Writer =>
+	author.kind === "user"
+		? {kind: "agent", id: "duplicates", for: author.id}
+		: "for" in author
+			? {kind: "agent", id: "duplicates", for: author.for}
+			: author;
+
+/** A ticket's duplicate hints, one fact each, under ids made from the ticket and the hint. */
+export const saveHintsCell = (cmd: ReturnType<typeof saveHints>) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const writer = writerText(hinterOf(yield* Author));
+		for (const hint of cmd.hints)
+			yield* ledger.send(
+				streams(nameOf(cmd.ticket)).inbox,
+				`maybe_duplicate/${cmd.ticket}/${hint.of}`,
+				{
+					kind: "maybe_duplicate",
+					writer,
+					data: {type: "maybe_duplicate", of: hint.of, yes: hint.yes},
+				},
+			);
+		return {};
 	}).pipe(
 		Effect.catchTags({
 			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),

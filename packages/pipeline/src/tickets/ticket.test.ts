@@ -181,7 +181,49 @@ describe("a lane's facts", () => {
 			],
 			"run r-1 ended, but it never started",
 		],
+		[
+			"a ticket hinted as a duplicate of itself",
+			[filed, entry(2, 1, {type: "maybe_duplicate", of: 1, yes: 0.9})],
+			"a ticket hinted as a duplicate of itself",
+		],
+		[
+			"the same hint twice",
+			[
+				filed,
+				entry(2, 1, {type: "maybe_duplicate", of: 4, yes: 0.9}),
+				entry(3, 1, {type: "maybe_duplicate", of: 4, yes: 0.8}),
+			],
+			"#4 hinted as a duplicate a second time",
+		],
+		[
+			"a word on a hint never given",
+			[filed, entry(2, 1, {type: "duplicate_rated", of: 4, says: "accept"})],
+			"a word on #4, which was never hinted as a duplicate",
+		],
 	];
+	it("keep an agent's accept or dismiss out, and take a person's newest word", () => {
+		const hint = entry(2, 1, {type: "maybe_duplicate", of: 4, yes: 0.9});
+		const {tickets, problems} = fold(
+			[],
+			[
+				filed,
+				hint,
+				by(3, build, {type: "duplicate_rated", of: 4, says: "accept"}),
+				entry(4, 1, {type: "duplicate_rated", of: 4, says: "accept"}),
+				entry(5, 1, {type: "duplicate_rated", of: 4, says: "dismiss"}),
+			],
+		);
+		expect(problems).toEqual([
+			"row 3 on #1: duplicate_rated written by an agent, but only a person writes it",
+		]);
+		expect(tickets[0]?.timeline.map((e) => e.fact.type)).toEqual([
+			"filed",
+			"maybe_duplicate",
+			"duplicate_rated",
+			"duplicate_rated",
+		]);
+		expect(tickets[0]?.state).toBe("open");
+	});
 	it.each(misfits)("keep %s out, and say why", (_, entries, why) => {
 		const {problems} = fold([], entries);
 		expect(problems.at(-1)).toMatch(why);

@@ -101,6 +101,14 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 		}
 		case "rated":
 			return said(`rated finding ${fact.finding}: ${words(fact.says)}`);
+		case "maybe_duplicate":
+			return said(`maybe the same as #${fact.of}`, `Jev ${fact.yes.toFixed(2)}`);
+		case "duplicate_rated":
+			return said(
+				fact.says === "accept"
+					? `accepted: the same as #${fact.of}`
+					: `dismissed: not the same as #${fact.of}`,
+			);
 	}
 };
 

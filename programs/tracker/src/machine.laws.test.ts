@@ -11,11 +11,22 @@ import {
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import {FLOOR} from "@kampus/pipeline/tickets/duplicates";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {load, over, PROBLEMS, pullRequests, save, Tracker, tracker} from "./machine.ts";
+import {
+	duplicates,
+	load,
+	over,
+	PROBLEMS,
+	pullRequests,
+	save,
+	saveHints,
+	Tracker,
+	tracker,
+} from "./machine.ts";
 import type {Write} from "./ticket.ts";
 
 // The tracker's laws, on tea's pbt: after every step of any list of Msgs, from the real init.
@@ -25,7 +36,12 @@ import type {Write} from "./ticket.ts";
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
-type Cmd = ReturnType<typeof load> | ReturnType<typeof save> | ReturnType<typeof pullRequests>;
+type Cmd =
+	| ReturnType<typeof load>
+	| ReturnType<typeof save>
+	| ReturnType<typeof pullRequests>
+	| ReturnType<typeof duplicates>
+	| ReturnType<typeof saveHints>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -55,6 +71,14 @@ const entry: fc.Arbitrary<Entry> = fc.record({
 });
 const after = fc.nat({max: 30});
 const saveOf = (i: string, w: Write, next: number) => save({id: i, write: w, next});
+/** The ask for a duplicate hint on `t`, as an answer names it. */
+const asked = (t: number) =>
+	duplicates({ticket: t, filed: {title: "Login fails", body: ""}, candidates: []});
+/** Jev's answers: none, or a few, some above the floor and some below. */
+const scores = fc.array(
+	fc.record({of: ticket, yes: fc.constantFrom(0.1, FLOOR - 0.01, FLOOR, 0.95)}),
+	{maxLength: 4},
+);
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
@@ -87,6 +111,16 @@ const table: MsgArbitraryTable<Msg> = {
 	save_err: fc
 		.tuple(id, write, fc.constantFrom("unreachable" as const, "refused" as const))
 		.map(([i, w, tag]) => save.err(saveOf(i, w, 1), {_tag: tag}, 0)),
+	duplicates_ok: fc
+		.tuple(ticket, fc.oneof(fc.constant(null), scores))
+		.map(([t, s]) =>
+			duplicates.ok(asked(t), s === null ? {kind: "off"} : {kind: "scored", scores: s}, 0),
+		),
+	duplicates_err: ticket.map((t) => duplicates.err(asked(t), {_tag: "unreachable"}, 0)),
+	save_hints_ok: ticket.map((t) => saveHints.ok(saveHints({ticket: t, hints: []}), {}, 0)),
+	save_hints_err: fc
+		.tuple(ticket, fc.constantFrom("unreachable" as const, "refused" as const))
+		.map(([t, tag]) => saveHints.err(saveHints({ticket: t, hints: []}), {_tag: tag}, 0)),
 };
 /** Lists of Msgs, long enough to queue a few writes and answer them. */
 const lists = fc.array(arbMsg(table), {maxLength: 40, size: "max"});
@@ -115,7 +149,10 @@ const drive = (machine: Machine, from: Tracker, msgs: readonly Msg[]) => {
 	return {s, cmds};
 };
 
-/** A working ledger: it takes the save that is out, again and again, at most `n` times. */
+/**
+ * A working ledger: it takes the save that is out, again and again, at most `n` times. Then a Jev
+ * that is off answers each duplicate hint still out.
+ */
 const ledgerTakes = (machine: Machine, from: Tracker, n: number) => {
 	let s = from;
 	const cmds: Cmd[] = [];
@@ -124,6 +161,11 @@ const ledgerTakes = (machine: Machine, from: Tracker, n: number) => {
 		if (front === undefined) break;
 		const answer = save.ok(saveOf(front.id, front.write, 1), {ticket: 1}, 0);
 		const step = drive(machine, s, [answer]);
+		s = step.s;
+		cmds.push(...step.cmds);
+	}
+	for (const t of s.hinting) {
+		const step = drive(machine, s, [duplicates.ok(asked(t), {kind: "off"}, 0)]);
 		s = step.s;
 		cmds.push(...step.cmds);
 	}
@@ -243,6 +285,40 @@ const newsIsRead: Law = {
 		),
 };
 
+const hintsOnlyOwnFiling = every(
+	"a duplicate hint is asked for only when this tracker's own filing lands, once, for that ticket",
+	(step) => {
+		const asks = step.cmds.filter((c) => c.type === "duplicates");
+		if (asks.length === 0) return true;
+		const {prev, msg} = step;
+		const filing =
+			msg.type === "save_ok" && answeredFront(step) && prev.saving[0]?.write.kind === "file";
+		return (
+			filing &&
+			asks.length === 1 &&
+			asks[0]?.ticket === msg.value.ticket &&
+			step.next.hinting.includes(msg.value.ticket)
+		);
+	},
+);
+
+const hintsAtFloor = every(
+	`a hint is saved only from Jev's answer, at ${FLOOR} or more, at most three, each one Jev gave`,
+	({msg, cmds}) => {
+		const saved = cmds.filter((c) => c.type === "save_hints");
+		if (saved.length === 0) return true;
+		if (msg.type !== "duplicates_ok" || msg.value.kind !== "scored") return false;
+		const given = msg.value.scores;
+		return saved.every(
+			(c) =>
+				c.ticket === msg.cmd.ticket &&
+				c.hints.length > 0 &&
+				c.hints.length <= 3 &&
+				c.hints.every((h) => h.yes >= FLOOR && given.some((g) => same(g, h))),
+		);
+	},
+);
+
 const LAWS = [
 	oneSaveOut,
 	inOrder,
@@ -253,6 +329,8 @@ const LAWS = [
 	quitFinishes,
 	writeLands,
 	newsIsRead,
+	hintsOnlyOwnFiling,
+	hintsAtFloor,
 ];
 
 /** The names of the laws `machine` breaks. */
@@ -311,6 +389,24 @@ const PLANTS = {
 	deafToQuit: plant({quit: (s) => [s, []]}),
 	/** A move is not heard. */
 	deafToMoves: plant({moved: (s) => [s, []]}),
+	/** Every write that lands asks Jev, not only a filing. */
+	hintsEveryWrite: plant({
+		save_ok: (s, m) => {
+			const [next, cmds] = real.save_ok(s, m);
+			if (cmds.some((c) => c.type === "duplicates")) return [next, cmds];
+			const t = m.value.ticket;
+			return [{...next, hinting: [...next.hinting, t]}, [...cmds, asked(t)]];
+		},
+	}),
+	/** Every score Jev gave is saved as a hint, under the floor too. */
+	savesBelowFloor: plant({
+		duplicates_ok: (s, m) =>
+			m.value.kind === "scored" && m.value.scores.length > 0
+				? [s, [saveHints({ticket: m.cmd.ticket, hints: m.value.scores})]]
+				: real.duplicates_ok(s, m),
+	}),
+	/** A hint answered is never taken off the list of those out, so a quit never ends. */
+	hintNeverClears: plant({duplicates_ok: (s) => [s, []]}),
 } satisfies Readonly<Record<string, Machine>>;
 
 describe("the tracker's laws", () => {
@@ -332,6 +428,9 @@ describe("the tracker's laws", () => {
 			dropsWhatWaits: [inOrder.name, writeLands.name],
 			deafToQuit: [quitFinishes.name],
 			deafToMoves: [newsIsRead.name],
+			hintsEveryWrite: [hintsOnlyOwnFiling.name],
+			savesBelowFloor: [hintsAtFloor.name],
+			hintNeverClears: [quitFinishes.name],
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);

@@ -4,6 +4,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
 import {GITHUB, gitHubPullRequests} from "@tea-fabrika/tracker/github";
 import {Effect, FileSystem, Layer, Logger} from "effect";
+import {hostJev} from "./jev.ts";
 import {runHost} from "./run.ts";
 import {pathsOf} from "./socket.ts";
 
@@ -53,7 +54,10 @@ const main = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
 	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
-	return yield* runHost({home, pid: process.pid}).pipe(Effect.provide(Logger.layer([toFile])));
+	// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
+	return yield* runHost({home, pid: process.pid}).pipe(
+		Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),
+	);
 }).pipe(
 	Effect.scoped,
 	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests)),

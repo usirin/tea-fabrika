@@ -12,6 +12,7 @@ import {lineOf, waits} from "./head.ts";
 import type {
 	Do,
 	Head,
+	Hint,
 	OpenAsk,
 	Opened,
 	PullRequest,
@@ -54,6 +55,8 @@ const said = (w: Write): string => {
 			return `reopen #${w.ticket}`;
 		case "answer":
 			return `answer "${w.pick}" on #${w.ticket}`;
+		case "rate_duplicate":
+			return `${w.says} the hint #${w.of} on #${w.ticket}`;
 	}
 };
 
@@ -627,6 +630,18 @@ function TicketPage(props: {
 							<HeadLine head={opened.head} />
 						</p>
 					</header>
+					{opened.duplicates.map((hint) => (
+						<DuplicateHint
+							key={hint.of}
+							number={number}
+							hint={hint}
+							saving={saving.some(
+								(w) => w.kind === "rate_duplicate" && w.ticket === number && w.of === hint.of,
+							)}
+							act={act}
+							onKey={onPageKey}
+						/>
+					))}
 					<ol className="tracker-timeline" aria-label="timeline">
 						{opened.rows.map((row) => (
 							<TimelineRow key={row.pos} row={row} onKey={onPageKey} />
@@ -795,6 +810,68 @@ function AskBox(props: {
 						{pick}
 					</button>
 				))}
+				{saving ? <small>saving…</small> : null}
+			</div>
+		</section>
+	);
+}
+
+/**
+ * A duplicate hint: "maybe the same as #4", the other ticket a link to its page, and accept and
+ * dismiss. Advice: neither button closes or hides a ticket. The person's newest word shows as the
+ * pressed button, and the other one changes it.
+ */
+function DuplicateHint(props: {
+	readonly number: number;
+	readonly hint: Hint;
+	readonly saving: boolean;
+	readonly act: Send;
+	readonly onKey: (e: KeyboardEvent) => void;
+}) {
+	const {number, hint, saving, act, onKey} = props;
+	const rate = (says: "accept" | "dismiss") =>
+		act({kind: "rate_duplicate", ticket: number, of: hint.of, says});
+	return (
+		<section
+			className="tracker-hint"
+			data-says={hint.says ?? undefined}
+			aria-label={`maybe the same as #${hint.of}`}
+		>
+			<p className="tracker-hint-what">
+				Maybe the same as{" "}
+				<button
+					type="button"
+					className="tracker-hint-link"
+					onKeyDown={onKey}
+					onClick={() => act({kind: "open", ticket: hint.of})}
+				>
+					#{hint.of}
+					{hint.title === null ? null : ` ${hint.title}`}
+				</button>
+				{hint.state === "closed" ? <span className="tracker-quiet"> (closed)</span> : null}
+			</p>
+			<div className="tracker-row">
+				<small className="tracker-quiet">
+					Jev {hint.yes.toFixed(2)}. A hint: nothing is closed.
+				</small>
+				<button
+					type="button"
+					aria-pressed={hint.says === "accept"}
+					disabled={saving}
+					onKeyDown={onKey}
+					onClick={() => rate("accept")}
+				>
+					Accept
+				</button>
+				<button
+					type="button"
+					aria-pressed={hint.says === "dismiss"}
+					disabled={saving}
+					onKeyDown={onKey}
+					onClick={() => rate("dismiss")}
+				>
+					Dismiss
+				</button>
 				{saving ? <small>saving…</small> : null}
 			</div>
 		</section>

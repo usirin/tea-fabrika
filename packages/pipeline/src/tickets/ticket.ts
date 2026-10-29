@@ -207,8 +207,32 @@ export const PersonFact = Schema.Union([
 export const LaneFact = Schema.Union([...CodeFact.members, PrFact, ...PersonFact.members]);
 export type LaneFact = typeof LaneFact.Type;
 
+/** How sure Jev is of a yes: 0 (no) to 1 (yes). */
+export const Yes = Schema.Finite.check(
+	Schema.isGreaterThanOrEqualTo(0),
+	Schema.isLessThanOrEqualTo(1),
+);
+
+/** What a person says to a duplicate hint, in Linear's and GitHub's words. */
+export const Says = Schema.Literals(["accept", "dismiss"]);
+export type Says = typeof Says.Type;
+
+/**
+ * A duplicate hint and a person's word on it (./duplicates.ts). Advice only: neither fact closes,
+ * merges or hides a ticket, and no stage reads them to decide. They are kept so the false alarms
+ * can be counted: a dismissed hint is one.
+ *
+ *   {type: "maybe_duplicate", of: 4, yes: 0.83}       code, after Jev read #9 against #4
+ *   {type: "duplicate_rated", of: 4, says: "accept"}   a person, never an agent
+ */
+export const HintFact = Schema.Union([
+	Schema.Struct({type: Schema.Literal("maybe_duplicate"), of: TicketNumber, yes: Yes}),
+	Schema.Struct({type: Schema.Literal("duplicate_rated"), of: TicketNumber, says: Says}),
+]);
+export type HintFact = typeof HintFact.Type;
+
 /** What happened to a ticket. The first fact of every ticket is `filed`, and only the first. */
-export const Fact = Schema.Union([...TicketFact.members, ...LaneFact.members]);
+export const Fact = Schema.Union([...TicketFact.members, ...LaneFact.members, ...HintFact.members]);
 export type Fact = typeof Fact.Type;
 
 /** One kind of fact, by its `type`. */
@@ -237,6 +261,8 @@ export const WRITTEN_BY = {
 	asked: "anyone",
 	answered: "person",
 	rated: "anyone",
+	maybe_duplicate: "anyone",
+	duplicate_rated: "person",
 } as const satisfies Writes<Fact["type"]>;
 
 /** May `by` write a fact of this kind: a person's kind only by a user. */
@@ -347,6 +373,16 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 				? null
 				: `"${fact.pick}" is not one of ask ${fact.ask}'s picks`;
 		}
+		case "maybe_duplicate":
+			if (timeline[0]?.ticket === fact.of) return `a ticket hinted as a duplicate of itself`;
+			return factsOf(timeline, "maybe_duplicate").some((h) => h.of === fact.of)
+				? `#${fact.of} hinted as a duplicate a second time`
+				: null;
+		// A person may change their mind: the newest word on a hint is the one that counts.
+		case "duplicate_rated":
+			return factsOf(timeline, "maybe_duplicate").some((h) => h.of === fact.of)
+				? null
+				: `a word on #${fact.of}, which was never hinted as a duplicate`;
 		default:
 			return null;
 	}
