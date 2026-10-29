@@ -67,12 +67,17 @@ describe("the desk's port", () => {
 		expect(readToPage({type: "answer", id: 3, took: true}).kind).toBe("read");
 	});
 
-	it("takes keys, clicks and a border let go from the page, and nothing that opens or stops a tile", () => {
+	it("takes keys, clicks, a border let go and folds from the page, and nothing that opens or stops a tile", () => {
 		expect(readFromPage({type: "press", id: 0, key: "<c-b>"}).kind).toBe("read");
 		expect(readFromPage({type: "press", id: 0, key: "<c-b>", at: 12}).kind).toBe("refused");
 		expect(readFromPage({type: "click", tile: "t2"}).kind).toBe("read");
 		expect(readFromPage({type: "click", tile: "../t2"}).kind).toBe("refused");
-		expect(readFromPage({type: "resize", stack: "s1", sizes: {t1: 40, t2: 60}}).kind).toBe("read");
+		const sizes = {t1: 40, t2: 60};
+		expect(readFromPage({type: "resize", container: "c1", sizes}).kind).toBe("read");
+		expect(readFromPage({type: "resize", stack: "c1", sizes}).kind).toBe("refused");
+		expect(readFromPage({type: "fold", tile: "t2"}).kind).toBe("read");
+		expect(readFromPage({type: "fold", tile: "../t2"}).kind).toBe("refused");
+		expect(readFromPage({type: "unfold", node: "c4"}).kind).toBe("read");
 		expect(readFromPage({type: "open", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "stop", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");

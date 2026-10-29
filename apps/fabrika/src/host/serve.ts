@@ -222,7 +222,13 @@ export const serve = (options: {
 					if (step({type: "click", tile: m.tile})) shout();
 					return;
 				case "resize":
-					if (step({type: "resize", stack: m.stack, sizes: m.sizes})) shout();
+					if (step({type: "resize", container: m.container, sizes: m.sizes})) shout();
+					return;
+				case "fold":
+					if (step({type: "fold", tile: m.tile})) shout();
+					return;
+				case "unfold":
+					if (step({type: "unfold", node: m.node})) shout();
 					return;
 			}
 		};

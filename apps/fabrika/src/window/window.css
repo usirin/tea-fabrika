@@ -141,72 +141,73 @@ body,
 	min-height: 0;
 }
 
-.stack {
+.container {
 	flex: 1;
 	display: flex;
+	gap: 0;
 	min-width: 0;
 	min-height: 0;
 }
 
-.stack.horizontal {
+.container.horizontal {
 	flex-direction: row;
 }
 
-.stack.vertical {
+.container.vertical {
 	flex-direction: column;
 }
 
-/* A tabbed stack: one line of tabs, as quiet as the status line, and the shown child under it. */
-.stack.tabbed {
-	flex-direction: column;
+/*
+ * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
+ * parent's direction. Beside others in a row it stands up, its name written sideways; in a column
+ * it lies down. A click opens what it stands for.
+ */
+.strip {
+	flex: none;
+	display: grid;
+	place-items: center;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
 	border-radius: var(--r-lg);
 	background: var(--surface);
 	box-shadow: inset 0 0 0 1px var(--border-faint);
-}
-
-.tabs {
-	display: flex;
-	flex: 0 0 auto;
-	height: 40px;
-	margin: 0;
-	padding: 0 var(--s-1);
-	list-style: none;
-	border-bottom: 1px solid var(--border-faint);
 	color: var(--text-muted);
 	font: 400 var(--fs-small) var(--mono);
+	cursor: pointer;
 }
 
-.tabs li {
-	display: flex;
-	flex: 0 1 auto;
-	align-items: center;
-	gap: var(--s-2);
-	min-width: 0;
-	padding: 0 var(--s-3);
+.strip-name {
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-	cursor: default;
 }
 
-.tabs .tid {
-	color: var(--text-faint);
+.container.horizontal > .strip {
+	width: 22px;
+	margin: 0 2px;
 }
 
-.tabs li[aria-current="true"] {
+.container.horizontal > .strip > .strip-name {
+	max-height: 100%;
+	writing-mode: vertical-rl;
+}
+
+.container.vertical > .strip {
+	height: 20px;
+	margin: 2px 0;
+}
+
+.container.vertical > .strip > .strip-name {
+	max-width: 100%;
+}
+
+.strip:hover,
+.strip:focus-visible {
 	color: var(--text-primary);
-	box-shadow: inset 0 -2px 0 var(--text-secondary);
-}
-
-.tabs li[aria-current="true"] .tid {
-	color: var(--text-secondary);
-}
-
-.tabs .hint {
-	margin-left: auto;
-	padding-right: var(--s-2);
-	color: var(--text-faint);
-	font-family: var(--font);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	outline: none;
 }
 
 /* A child's share is its grow: the borders between them are a fixed few pixels. */
@@ -230,15 +231,16 @@ body,
 	background: var(--border);
 }
 
-.stack.horizontal > .border {
+.container.horizontal > .border {
 	cursor: col-resize;
 }
 
-.stack.vertical > .border {
+.container.vertical > .border {
 	cursor: row-resize;
 }
 
 .tile {
+	--bar: 20px;
 	position: relative;
 	flex: 1;
 	min-width: 0;
@@ -254,21 +256,53 @@ body,
 	box-shadow: inset 0 0 0 1px var(--tile-focus);
 }
 
-/* In a tabbed stack the stack is the frame: its tile draws none of its own. */
-.stack.tabbed .tile {
-	border-radius: 0 0 var(--r-lg) var(--r-lg);
-	box-shadow: none;
+/* A tile's title bar: its program and its id. A click focuses the tile; a double-click folds it
+   into a strip. */
+.titlebar {
+	position: absolute;
+	inset: 0 0 auto 0;
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	height: var(--bar);
+	margin: 0;
+	padding: 0 var(--s-3);
+	border: 0;
+	border-bottom: 1px solid var(--border-faint);
+	background: transparent;
+	color: var(--text-muted);
+	font: 400 var(--fs-small) var(--mono);
+	text-align: left;
+	cursor: pointer;
 }
 
-.stack.tabbed:has(.tile.focused) {
-	box-shadow: inset 0 0 0 1px var(--tile-focus);
+.titlebar .tid {
+	margin-left: auto;
+	color: var(--text-faint);
 }
 
-/* A tile's terminal fills its slot, with a small margin, as a terminal app's does. */
+.titlebar:hover:not([aria-disabled="true"]) {
+	color: var(--text-primary);
+}
+
+/* The last open tile of a workspace does not fold. */
+.titlebar[aria-disabled="true"] {
+	cursor: default;
+}
+
+.tile.focused .titlebar {
+	color: var(--text-secondary);
+}
+
+/* A tile's terminal fills its slot, under its title bar, with a small margin, as a terminal app's does. */
 .slot,
 .term {
 	position: absolute;
 	inset: 0;
+}
+
+.tile > .slot {
+	top: var(--bar);
 }
 
 .term {
@@ -306,8 +340,8 @@ main.program {
 
 /* A tile's frame stays drawn over its view: the view sits one pixel in. */
 .tile > main.program {
-	inset: 1px;
-	border-radius: inherit;
+	inset: var(--bar) 1px 1px;
+	border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
 
 /* A closing tile: its programs were given the end of their inputs, and it waits for their end. */

@@ -57,8 +57,8 @@ tiles.attach("tile-b", "term-1"); // tile B shows the same terminal, counter in 
   a terminal sees the same front job, and a key typed in any of them goes to
   the same tsh. WezTerm does this: focus set by one client is sent to every
   client (its `sessionhandler.rs`). tmux does it for clients of one session.
-- **The layout is the app's.** Which tile sits where, splits and tabs, as in
-  [tabbed is an orientation](./tabbed-is-an-orientation.md). The host knows
+- **The layout is the app's.** Which tile sits where, splits and folds, as in
+  [fold, not tabs](./fold-not-tabs.md). The host knows
   no layout, the way an X server knows nothing of i3's tree.
 - **Traces do not change.** A job's trace id is still its JobRecord's key
   ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)), and a

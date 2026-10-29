@@ -1,5 +1,20 @@
 # Tabbed is an orientation
 
+**Replaced 2026-10-28 by [fold, not tabs](./fold-not-tabs.md).** The desk has
+no tabs now. Containers run horizontal or vertical only, and any tile folds
+into a strip that keeps its place. The note below is kept as it was written,
+with what turned out wrong marked.
+
+What was wrong:
+
+- **Wrong: tabs were the missing piece.** A tab hides a tile and moves its
+  place into a bar. What the desk needed was a way to make a tile small while
+  it keeps its place, which a fold does.
+- **Wrong: i3 was the model.** AeroSpace, which keeps only two directions and
+  makes nested containers alternate, gives a tree with one shape per picture.
+- **Wrong: it is the smallest change.** It added `active`, a second container
+  shape and `reveal`. A fold is one boolean on a tile.
+
 **Proposed 2026-10-28.** A stack in the desk's layout tree can be tabbed: its
 children lie one over another, and one shows. Tabbed is a third value of the
 stack's `orientation`, beside `horizontal` and `vertical`, as in i3. Nothing

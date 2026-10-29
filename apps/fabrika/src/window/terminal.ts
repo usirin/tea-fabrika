@@ -14,7 +14,7 @@ import {readToTerminal} from "../messages.ts";
 //   term.focus();           // its keys go to t1's tsh
 //   term.dispose();         // the tile closed: its port goes
 //
-// It lives outside React on purpose: a split moves a tile into a new stack, and React would make
+// It lives outside React on purpose: a split moves a tile into a new container, and React would make
 // the tile's element again, and with it a fresh terminal. The element is made once here, and the
 // desk's page moves it into whichever slot the tile has now.
 //
