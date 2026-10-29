@@ -1,49 +1,102 @@
 # trace: `@tea-fabrika/trace`
 
-One ticket's runs laid out in time, in a tile of its own, like tracks in a music editor. One track
-per step, one clip per run, the waits on a person striped, answers marked on the ruler, and a cost
-meter on each track. A playhead replays the facts up to a time: drag it back and the trace shows
-the ticket as it was then.
+One job's trace in a tile of its own. It reads the job's record through the `Traces` service and
+draws it as a waterfall: one bar per span, nested by parent, one colour per program, and the
+events as dots. Every row that groups others opens, down to one step. A step shows its Msg, the
+state before and after, what changed, and the Cmds it started. The models are Elm's debugger,
+Redux DevTools, and Jaeger's span detail. The design is
+[A JobRecord holds each host job](../../docs/direction/a-job-record-holds-its-trace.md).
 
 ```ts
-import {traceOf} from "@tea-fabrika/trace";
-import {atSeven, SEVEN, SEVEN_NOW} from "@tea-fabrika/tracker/seven";
+// tsh> seq --to 3 | tally            job 1: two runs, one trace
+// tsh> trace --id <its trace id>     the trace takes over the tile
 
-traceOf(SEVEN, SEVEN_NOW).tracks.map((t) => t.name);
-// ["ticket", "triage", "plan", "approval", "test_writer", "build", "mutation", "review", "push", "merge"]
-
-traceOf(SEVEN, SEVEN_NOW, atSeven(10, 5)).tracks[2]?.clips;
-// [{run: "r-2", from: 10:03, to: 10:05, open: true, ...}]: at 10:05 the plan was still running
-
-// tsh> trace --ticket 7
+// What the window sends on `do`, and what the tile shows after:
+{kind: "toggle", row: "span:<tally's span>"}   // tally opens: "count total"
+{kind: "toggle", row: "machine:[…]"}           // count total opens: add 1, add 2, add 3
+{kind: "choose", row: "step:[…, 2]"}           // add 2's detail:
+// {msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
+//  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
 ```
+
+## The program, types first
+
+The Elm answer: a Model, Msgs, an update, and a view of the Model. Which rows are open is in the
+Model, as Elm keeps it, so a second window on the same run shows the same rows open.
+
+```ts
+// src/machine.ts
+type Read =
+	| {at: "waiting"}
+	| {at: "reading"; id: TraceId}
+	| {at: "read"; trace: JobTrace}
+	| {at: "unread"; id: TraceId; why: string};
+
+type Model = {read: Read; open: RowKey[]; chosen: RowKey | null};
+
+type TraceMsg =
+	| {type: "look"; id: string}           // read the record, once, from the flag
+	| {type: "toggle"; row: string}        // open or close a row that groups others
+	| {type: "choose"; row: string | null} // show one row's detail; null closes it
+	// and read_ok, read_err: the answers of its one Cmd
+	;
+
+const read = Cmd.define("read", {input: {id: TraceId}, ok: JobTrace, err: ["unread"]});
+```
+
+A row is named by a key from `treeOf(trace)` (`src/tree.ts`): `job`, `span:<id>`, `run:<run>`,
+`turns:<span>`, `machine:[run, machine, id]`, `step:[run, machine, id, n]`. A toggle of a row
+that groups nothing, or that the record does not hold, changes nothing. So does a choose of a
+row the record does not hold.
+
+The tree, as the `seq --to 3 | tally` fixture makes it:
+
+```text
+job   seq --to 3 | tally        the tsh line's span
+  run seq                       a run's span, coloured by program
+  run tally
+    machine count total         tally's machine run, timed by its own span
+      step add 1                each Msg it took
+      step add 2
+      step add 3
+```
+
+- A span nests under its parent. A span whose parent never came sits under the job.
+- A run with no span still gets a row, so nothing in the record is left out.
+- An agent's `chat` and `execute_tool` spans fold into one "N turns" row inside the span they
+  ran in.
+- A span with an error status, a failed run or a failed job is drawn red.
 
 ## What's in it
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `ticket`, input `in` (quit). Its view is the ticket's facts and the clock (`One`). |
-| | `src/trace.ts` | `traceOf`, `axisOf`, `placeOf`, `ticksOf`, `stopsOf`: the facts folded into tracks up to a time. Pure. |
-| `@tea-fabrika/trace/window` | `src/window.tsx` | `TraceWindow`: the tracks, the ruler and the playhead. ← and → step from fact to fact; Home and End jump. |
+| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id`, input `do` (`toggle`, `choose`, `quit`). Its view is `Shown`. |
+| | `src/machine.ts` | `trace`, the machine, and `read`, its one Cmd. Pure. |
+| | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: the record as rows. Pure. |
+| | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail. `changesOf`: a JSON Patch of two states. Pure. |
+| `@tea-fabrika/trace/memory` | `src/memory.ts` | `memoryTraces(records)`: `Traces` over records in memory. |
+| `@tea-fabrika/trace/tally` | `src/tally.ts` | `TALLY_TRACE`, `TALLY_ID`: the `seq --to 3 \| tally` job, in the record's shape. |
+| `@tea-fabrika/trace/window` | `src/window.tsx` | `TraceWindow`: the waterfall as a treegrid. |
 
-## Why no timeline library
+## The keyboard
 
-A small component of our own (about 380 lines, and 220 for its fold), after looking at the MIT and Apache ones:
+The rows are a WAI-ARIA treegrid. One row holds the focus at a time.
 
-- `react-calendar-timeline` (MIT) is shaped like a calendar: groups and items on a date axis,
-  with `moment` as a dependency. It has no wait stripes, markers or playhead. Bending it into a
-  music editor's look would cost more than the component.
-- `@xzdarcy/react-timeline-editor` (MIT) is the closest in look, but it allows React up to 18
-  only (this repo uses 19) and has had few changes lately.
-- The fold is the hard part, and it is ours anyway: `traceOf` is pure and tested. The window
-  only places boxes at a percentage.
-
-Confidence about 75%. A library would pay off once the trace needs zoom, scroll over hours, or
-many tickets at once.
+- ↑ and ↓ move. Home and End go to the first and last row.
+- → opens a closed row, or moves into an open one. ← closes an open row, or moves to its parent.
+- Enter and Space do what a click does: a grouped row opens or closes and shows its detail, a
+  leaf shows its detail, and a second press hides it.
 
 ## Not done
 
-- The playhead replays only this window. In the mockup it moves every tile to that time; that
-  needs a desk-wide clock the desk does not have.
-- The mockup names a model per track. The facts carry no model, so a track says agent, code or a
-  person.
+- The app reads the fixture through `memoryTraces`, not the job's record. The host does not
+  hand programs the record yet. When it does, the app provides `layerTraces` instead and nothing
+  here changes.
+- The record is read once, when the program starts. A job still running shows what was there
+  then.
+- The record holds no ticket, so the trace draws no link to one. Opening the ticket program from
+  a trace needs a way to start another program from a window, which the desk does not have.
+- The fixture's spans are written by hand in the record's shape, not caught from a real run.
+- The colours are six fixed hues, given out to programs in the order they first appear. A job
+  with more than six programs reuses them.

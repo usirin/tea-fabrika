@@ -1,0 +1,31 @@
+{
+	"name": "@tea-fabrika/runs",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program with a window: one ticket's runs laid out in time, like tracks in a music editor. A track per step, a clip per run, the waits on a person striped, the answers marked, and a playhead that replays the facts up to a time.",
+	"exports": {
+		".": "./src/index.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
+		"@tea-fabrika/tracker": "workspace:*",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"react": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

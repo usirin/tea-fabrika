@@ -70,6 +70,8 @@ export * from "./host/traces.ts";
 export * from "./host/writer.ts";
 // program: a tea machine as a program.
 export * from "./program/ear.ts";
+// What changed between two states, as a JSON Patch: the trace tile's diff of a step.
+export {diff as jsonPatchOf, type Json, type Op as JsonPatchOp} from "./program/json-patch.ts";
 // The kept run's types appear in what `defineProgram` hands back, so an app's
 // declarations name them (experiment 114: the pipeline's build needs them).
 export type {KeptFailed, KeptOptions} from "./program/kept.ts";

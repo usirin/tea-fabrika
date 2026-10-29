@@ -1,9 +1,8 @@
 # fabrika app: `@kampus/fabrika-app`
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
-tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map` and
-`trace` loaded. A
-program with a view runs inside a tile. The design is
+tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
+`runs` and `trace` loaded. A program with a view runs inside a tile. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
 "Decided 2026-10-25: tiles, like tmux".
 
@@ -113,7 +112,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
-| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the ticket, map and trace views of the stand-in ticket #7, as the host would send them. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
+| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys

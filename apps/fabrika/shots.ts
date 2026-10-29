@@ -1,6 +1,14 @@
 import {mkdir, readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Shown, shownOf} from "@tea-fabrika/ticket";
+import {
+	type Model,
+	nodesOf,
+	Shown as TraceShown,
+	shownOf as traceShownOf,
+	treeOf,
+} from "@tea-fabrika/trace";
+import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {One, oneOf} from "@tea-fabrika/tracker";
 import {SEVEN_NOW, trackerAtSeven} from "@tea-fabrika/tracker/seven";
 import {Schema} from "effect";
@@ -9,21 +17,26 @@ import {type ContainerNode, createContainer, createTile} from "./src/desk/layout
 import {readToPage, readToWindow} from "./src/messages.ts";
 
 // The desk's page with no Electron and no host: the built renderer (dist/) in headless Chromium,
-// handed a desk and three views as the host would send them. The views are the ticket, map and
-// trace programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven). It opens no
+// handed a desk and its views as the host would send them. The views are the ticket, map and
+// runs programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven), and the trace
+// program's, of the `seq --to 3 | tally` record (@tea-fabrika/trace/tally). It opens no
 // window, takes no focus and needs no network: the page's files are served from dist/ by the
 // browser's own request hook. Not part of `pnpm test`.
 //
 //   pnpm --filter @kampus/fabrika-app shots                writes docs/round-6/*.png
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app shots  writes them there
 //
-//   ticket.png         the ticket, with the map and the trace folded into strips beside it
-//   folded-column.png  the ticket beside a column of the map over the trace, the column folded
-//   folded-trace.png   the same column open, the trace folded into a strip under the map
-//   side-by-side.png   the ticket beside the map over the trace
+//   ticket.png         the ticket, with the map and the runs folded into strips beside it
+//   folded-column.png  the ticket beside a column of the map over the runs, the column folded
+//   folded-runs.png    the same column open, the runs folded into a strip under the map
+//                      (folded-trace.png before the old trace view became `runs`)
+//   side-by-side.png   the ticket beside the map over the runs
+//   job-trace.png      the job's trace as it first opens, the ticket, map and runs folded beside it
+//   job-step.png       the same, the trace opened to tally, count total, add 2
 //
-// The round-6 pictures in docs/round-6 were made when the map and the trace were tabs. The
-// script now draws folds; run it with SHOTS set to keep those pictures as they are.
+// The round-6 pictures in docs/round-6 were made when the map and the runs were tabs, and the
+// runs view was named `trace`. The script now draws folds; run it with SHOTS set to keep those
+// pictures as they are.
 
 const DIST = join(import.meta.dirname, "dist");
 const OUT = process.env.SHOTS ?? join(import.meta.dirname, "docs", "round-6");
@@ -36,40 +49,69 @@ const TYPES: Readonly<Record<string, string>> = {
 };
 
 const state = trackerAtSeven();
+
+/** The trace's state with the rows named open, and the last one chosen. */
+const traceWith = (names: readonly string[]): Model => {
+	const nodes = nodesOf(treeOf(TALLY_TRACE));
+	const keys = names.map((name) => {
+		const found = nodes.find((n) => n.name === name);
+		if (found === undefined) throw new Error(`the tally trace has no row ${name}`);
+		return found.key;
+	});
+	return {
+		read: {at: "read", trace: TALLY_TRACE},
+		open: ["job", ...keys.slice(0, -1)],
+		chosen: keys.at(-1) ?? null,
+	};
+};
+const traceView = (model: Model) => ({
+	type: "view",
+	program: "trace",
+	data: Schema.encodeSync(TraceShown)(traceShownOf(model)),
+});
+
 const views = {
 	1: {type: "view", program: "ticket", data: Schema.encodeSync(Shown)(shownOf(state))},
 	2: {type: "view", program: "map", data: Schema.encodeSync(One)(oneOf(state))},
-	3: {type: "view", program: "trace", data: Schema.encodeSync(One)(oneOf(state))},
+	3: {type: "view", program: "runs", data: Schema.encodeSync(One)(oneOf(state))},
+	4: traceView({read: {at: "read", trace: TALLY_TRACE}, open: ["job"], chosen: null}),
+	5: traceView(traceWith(["tally", "count total", "add 2"])),
 } as const;
 for (const view of Object.values(views)) {
 	const read = readToWindow(view);
 	if (read.kind === "refused") throw new Error(`a view does not read: ${read.why}`);
 }
 
-/** The three tiles, each showing its program; the ones named in `folded` folded into strips. */
-const tilesWith = (...folded: readonly string[]) =>
-	(
-		[
-			["t1", "1", "ticket"],
-			["t2", "2", "map"],
-			["t3", "3", "trace"],
-		] as const
-	).map(([tile, run, program]) =>
-		createTile(tile, {kind: "tsh", run: {id: run, program}}, folded.includes(tile)),
-	);
+/** The run, and so the view, each tile shows. t4 and t5 both show the trace, opened two ways. */
+const RUNS = {
+	t1: {id: "1", program: "ticket"},
+	t2: {id: "2", program: "map"},
+	t3: {id: "3", program: "runs"},
+	t4: {id: "4", program: "trace"},
+	t5: {id: "5", program: "trace"},
+} as const;
+type Tile = keyof typeof RUNS;
 
-/** The ticket beside a column of the map over the trace. */
-const column = (...folded: readonly string[]) => {
-	const [ticket, map, trace] = tilesWith(...folded);
-	if (ticket === undefined || map === undefined || trace === undefined)
+/** The tiles named, each showing its run; the ones named in `folded` folded into strips. */
+const tilesOf = (names: readonly Tile[], folded: readonly Tile[]) =>
+	names.map((name) => createTile(name, {kind: "tsh", run: RUNS[name]}, folded.includes(name)));
+
+/** The ticket beside a column of the map over the runs. */
+const column = (...folded: readonly Tile[]) => {
+	const [ticket, map, runs] = tilesOf(["t1", "t2", "t3"], folded);
+	if (ticket === undefined || map === undefined || runs === undefined)
 		throw new Error("three tiles");
 	return createContainer(
 		"c1",
 		"horizontal",
-		[ticket, createContainer("c2", "vertical", [map, trace])],
+		[ticket, createContainer("c2", "vertical", [map, runs])],
 		{t1: 42, c2: 58},
 	);
 };
+
+/** One trace tile filling the row, with the ticket, the map and the runs folded beside it. */
+const traceRow = (trace: "t4" | "t5") =>
+	createContainer("c1", "horizontal", tilesOf(["t1", "t2", "t3", trace], ["t1", "t2", "t3"]));
 
 /** The desk message for one layout, focused on `focused`. */
 const deskWith = (root: ContainerNode, focused: string) => {
@@ -83,7 +125,7 @@ const deskWith = (root: ContainerNode, focused: string) => {
 			ask: null,
 			running: {},
 			closing: [],
-			next: 4,
+			next: 6,
 		},
 		takes: {all: false, keys: ["<c-b>"]},
 	};
@@ -95,11 +137,16 @@ const deskWith = (root: ContainerNode, focused: string) => {
 const shots = [
 	{
 		name: "ticket",
-		desk: deskWith(createContainer("c1", "horizontal", tilesWith("t2", "t3")), "t1"),
+		desk: deskWith(
+			createContainer("c1", "horizontal", tilesOf(["t1", "t2", "t3"], ["t2", "t3"])),
+			"t1",
+		),
 	},
 	{name: "folded-column", desk: deskWith(column("t2", "t3"), "t1")},
-	{name: "folded-trace", desk: deskWith(column("t3"), "t2")},
+	{name: "folded-runs", desk: deskWith(column("t3"), "t2")},
 	{name: "side-by-side", desk: deskWith(column(), "t1")},
+	{name: "job-trace", desk: deskWith(traceRow("t4"), "t4")},
+	{name: "job-step", desk: deskWith(traceRow("t5"), "t5")},
 ];
 
 /** The bridge preload.cjs gives the page, with the host's messages played into it. */
