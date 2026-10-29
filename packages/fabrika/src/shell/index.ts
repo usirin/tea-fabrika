@@ -1,6 +1,6 @@
 // tsh's parts that run anywhere, as one module: `Shell` on the top level of
 // `@kampus/fabrika`, read as `Shell.programList`, `Shell.tsh`. A module, like
-// `Call` and `Monitor`: its names (`check`, `parse`, `EMPTY`, `describe`) are
+// `Call` and `Monitor`: its names (`check`, `parse`, `EMPTY`, `helpOf`) are
 // the shell's, and would say too little on the flat list beside the host's.
 //
 // It is what an app hands tsh and what it tests its lines with. The launcher
@@ -14,11 +14,12 @@
 // on the top level, beside the rest of the host.
 export {EMPTY, type Job, type Jobs, type JobsMsg} from "../host/jobs.ts";
 // A line, read the way tsh reads it before anything starts: for an app's own tests of its lines.
-export {describe} from "./builtins.ts";
 export {type Checked, check} from "./check.ts";
 export {complete} from "./complete.ts";
 export {shapeLines, typeOf} from "./decode.ts";
 export {parse} from "./grammar.ts";
+// What `<program> --help` prints: the whole help, or one part of it whole.
+export {helpOf, partsHelp} from "./help.ts";
 // What tsh starts.
 export {type ProgramList, Programs, programList, statusOf} from "./programs.ts";
 // Ctrl-R, bash's reverse-i-search: a key in, the search after it out. For a line editor of an

@@ -9,7 +9,7 @@ import {programsOf} from "./fabrika-list.ts";
 // is read as a value, which names no program of this package's, is the
 // shell's own test (`@kampus/fabrika`'s shell/decode.test.ts).
 
-const {check, describe: describeEntry, parse, shapeLines, typeOf} = Shell;
+const {check, helpOf, parse, partsHelp, shapeLines, typeOf} = Shell;
 const list = programsOf(defaultConfig("/tsh"));
 
 const checked = (line: string): Shell.Checked => {
@@ -66,8 +66,9 @@ describe("check: names and values", () => {
 		["seq --to 2 >m | double", 11, "seq has no output named m", "n", 2],
 		["seq --to 2 >n", 11, ">n names the output a pipe or a $( ) takes", undefined, 2],
 		["double <n", 7, "<n names the input a pipe feeds", undefined, 2],
-		["ship --mode read --describe", 17, "--describe stands alone", undefined, 2],
-		["ship --describe >fond", 16, "ship has no flag, input or output named >fond", ">found", 2],
+		["ship --help >fond", 12, "ship has no flag, input or output named >fond", ">found", 2],
+		["ship --hepl x", 5, "ship has no flag --hepl", "--help", 2],
+		["double n=$(seq --help)", 15, "--help shows a program's help and runs nothing", undefined, 2],
 	])("refuses %j at %i: %s", (line, at, why, guess, status) => {
 		const r = refusal(line);
 		expect(r.at).toBe(at);
@@ -84,36 +85,75 @@ describe("check: names and values", () => {
 		);
 	});
 
-	it("names the part a --describe asks for", () => {
-		const c = checked("double --describe n");
-		expect(c.kind === "describe" && c.parts).toEqual([
+	it("names the part a --help asks for", () => {
+		const c = checked("double --help n");
+		expect(c.kind === "help" && c.parts).toEqual([
 			{kind: "input", name: "n"},
 			{kind: "output", name: "n"},
 		]);
 	});
+
+	it("answers --help or -h anywhere in a line, as GNU's --help does: nothing else is checked", () => {
+		for (const line of [
+			"ship --mode read --help",
+			"ship --mode --help",
+			"ship -h",
+			"seq --to 3 | ship --mode red -h",
+			"ship --mode red bogus --help",
+		]) {
+			const c = checked(line);
+			expect(c.kind === "help" && c.entry.program.name, line).toBe("ship");
+		}
+		expect(refusal("shp --help").why).toBe("no program named shp");
+	});
 });
 
-describe("--describe", () => {
+describe("--help", () => {
 	const lines = (name: string) => {
 		const entry = list.get(name);
 		if (entry === undefined) throw new Error(name);
-		return describeEntry(entry);
+		return helpOf(entry, list);
 	};
 
-	it("prints every shape in a few words: no line of ship's or review's page is a wall", () => {
-		for (const name of ["ship", "review-scripted"]) {
+	it("leads with the usage, then sections; every line fits 80 columns but a default too long to cut", () => {
+		for (const name of ["ship", "review-scripted", "seq"]) {
 			const page = lines(name);
-			for (const line of page) expect(line.length, line).toBeLessThan(260);
-			expect(page.join("\n")).toContain("machines:");
+			expect(page[0], name).toMatch(new RegExp(`^Usage: ${name}`));
+			for (const line of page)
+				if (!line.includes("(default:")) expect(line.length, line).toBeLessThanOrEqual(80);
+			expect(page).toContain("Flags:");
 		}
-		expect(lines("ship").find((l) => l.includes(">outcome"))).toContain("{pr, outcome, name}");
+		const ship = lines("ship");
+		expect(ship.slice(0, 3)).toEqual([
+			"Usage: ship [--mode MODE] [pr=PR] [ask=ASK] [forget=FORGET]",
+			"       ... | ship",
+			"       ship | ...",
+		]);
+		expect(ship.find((l) => l.startsWith("  >outcome"))).toContain("{pr, outcome, name}");
+		expect(ship).toContain(
+			"  --help                    This help (or -h). One part whole: --help --mode",
+		);
+		// The rare part goes last: machines, after every section a person runs it by.
+		expect(ship.indexOf("Machines:")).toBeGreaterThan(ship.indexOf("Example pipes:"));
+		expect(lines("seq")[0]).toBe("Usage: seq --to TO");
+	});
+
+	it("shows pipes that fit, from the programs listed, the richest shape first", () => {
+		const ship = lines("ship");
+		const at = ship.indexOf("Example pipes:");
+		expect(ship[at + 1]).toBe("  review-scripted | ship");
+		expect(lines("seq")).toContain("  seq --to TO | double");
+		// With no list, no pipes.
+		const entry = list.get("ship");
+		if (entry === undefined) throw new Error("ship");
+		expect(helpOf(entry)).not.toContain("Example pipes:");
 	});
 
 	it("prints one part whole, one field a line", () => {
 		const entry = list.get("ship");
 		if (entry === undefined) throw new Error("ship");
-		const whole = describeEntry(entry, [{kind: "output", name: "outcome"}]);
-		expect(whole[0]).toContain(">outcome  (output of ship)");
+		const whole = partsHelp(entry, [{kind: "output", name: "outcome"}]);
+		expect(whole[0]).toBe("ship >outcome  (an output of ship)");
 		expect(whole).toContain('        cleanup: "done" | "failed" | "not_run"');
 		expect(whole.length).toBeGreaterThan(20);
 	});
@@ -200,12 +240,19 @@ describe("check: the config fills the flags a line leaves out", () => {
 			expect(checked(line).kind, line).toBe("line");
 	});
 
-	it("--describe shows each default", () => {
+	it("--help shows each default, and a flag with one is not asked for in the usage", () => {
 		const entry = ours.get("operate");
 		if (entry === undefined) throw new Error("operate");
-		const page = describeEntry(entry);
-		expect(page.find((l) => l.startsWith("  --model"))).toContain('(default: "sonnet")');
-		expect(page.find((l) => l.startsWith("  --ship"))).toContain('(default: "write")');
+		const page = helpOf(entry);
+		/** One flag's row, its wrapped lines joined. */
+		const row = (flag: string) => {
+			const at = page.findIndex((l) => l.startsWith(`  --${flag} `));
+			const end = page.findIndex((l, i) => i > at && !l.startsWith("    "));
+			return page.slice(at, end).join(" ").replace(/\s+/g, " ");
+		};
+		expect(row("model")).toContain('(default: "sonnet")');
+		expect(row("ship")).toContain('(default: "write")');
+		expect(page[0]).toContain("[--model MODEL]");
 		// No cap on build rounds: the stall rule stops a loop.
 		expect(page.find((l) => l.startsWith("  --rounds"))).toBeUndefined();
 	});

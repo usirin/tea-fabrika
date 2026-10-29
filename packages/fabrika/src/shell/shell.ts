@@ -4,10 +4,11 @@ import {Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
-import {describe, runBuiltin, type Said} from "./builtins.ts";
+import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
+import {helpOf, partsHelp} from "./help.ts";
 import {Programs} from "./programs.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a view
@@ -168,8 +169,12 @@ export const tsh = defineProgram({
 							if (checked.kind === "refused") {
 								for (const l of refusalLines(text, checked)) print("err", l);
 								said = {status: checked.status, exit: false};
-							} else if (checked.kind === "describe") {
-								for (const l of describe(checked.entry, checked.parts)) print("out", l);
+							} else if (checked.kind === "help") {
+								const page =
+									checked.parts === null
+										? helpOf(checked.entry, list)
+										: partsHelp(checked.entry, checked.parts);
+								for (const l of page) print("out", l);
 								said = {status: 0, exit: false};
 							} else {
 								const done = yield* runLine(

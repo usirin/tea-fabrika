@@ -1,5 +1,5 @@
 import type {Entry} from "../program/listed.ts";
-import {type Declared, type Flag, fit, type Shape} from "../program/shape.ts";
+import {type Declared, type Flag, fit, mustBeGiven, type Shape} from "../program/shape.ts";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {
@@ -57,9 +57,9 @@ export type Refusal = Refused & {readonly status: number};
 export type Checked =
 	| {readonly kind: "line"; readonly line: Line}
 	| {
-			readonly kind: "describe";
+			readonly kind: "help";
 			readonly entry: Entry;
-			/** The parts named after `--describe`, to show whole. `null`: the whole program, short. */
+			/** The parts named after `--help`, to show whole. `null`: the whole program, short. */
 			readonly parts: readonly Part[] | null;
 	  }
 	| Refusal;
@@ -82,7 +82,7 @@ export interface Part {
 }
 
 /**
- * The parts a name after `--describe` means: `--mode` a flag, `>found` an
+ * The parts a name after `--help` means: `--mode` a flag, `>found` an
  * output, `<pr` or `pr=` an input, and a bare `pr` every part so named
  * (double has an input n and an output n).
  */
@@ -124,22 +124,13 @@ const stop = (refusal: Refusal): never => {
 /** Check one statement's pipeline against the program list. `text` is the whole line, for each stage's own text. */
 export function check(pipeline: Pipeline, list: ProgramList, text: string): Checked {
 	try {
-		const [head] = pipeline.commands;
-		if (head.describe !== null || pipeline.commands.some((c) => c.describe !== null)) {
-			const asked = pipeline.commands.find((c) => c.describe !== null) ?? head;
-			if (
-				pipeline.commands.length > 1 ||
-				asked.flags.length + asked.told.length > 0 ||
-				asked.out !== null ||
-				asked.into !== null
-			)
-				return no(
-					asked.describe?.at.start ?? asked.at.start,
-					"--describe stands alone: the program, and at most one of its names after it",
-				);
+		// `--help` in any command of the pipe shows that program's help and runs nothing, as
+		// `seq 3 | grep --help` does in bash: the first command that asks is the one answered.
+		const asked = pipeline.commands.find((c) => c.help !== null);
+		if (asked !== undefined && asked.help !== null) {
 			const entry = entryOf(asked, list);
-			const name = asked.describe?.name ?? null;
-			if (name === null) return {kind: "describe", entry, parts: null};
+			const {name} = asked.help;
+			if (name === null) return {kind: "help", entry, parts: null};
 			const parts = partsNamed(entry, name.name);
 			if (parts.length === 0) {
 				const {program} = entry;
@@ -154,7 +145,7 @@ export function check(pipeline: Pipeline, list: ProgramList, text: string): Chec
 					didYouMean(name.name, known),
 				);
 			}
-			return {kind: "describe", entry, parts};
+			return {kind: "help", entry, parts};
 		}
 		return {kind: "line", line: lineOf(pipeline, list, text, true)};
 	} catch (stopped) {
@@ -192,6 +183,14 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 	});
 	const stages = pipeline.commands.map((command, i): Stage => {
 		const entry = entries[i] as Entry;
+		// Only a statement's own pipeline reaches here with one: `check` answers that one first.
+		if (command.help !== null)
+			stop(
+				no(
+					command.help.at.start,
+					"--help shows a program's help and runs nothing, so it gives no value to a $( )",
+				),
+			);
 		const wire = wires[i] ?? null;
 		const fed = i === 0 ? null : (wires[i - 1]?.input ?? null);
 		if (command.out !== null && wire === null && top)
@@ -290,7 +289,8 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 				no(
 					given.at.start,
 					`${program.name} has no flag --${given.name}`,
-					maybeDashes(didYouMean(given.name, declared)),
+					// Every program also takes --help: `--hlep` was meant as that.
+					maybeDashes(didYouMean(given.name, [...declared, "help"])),
 				),
 			);
 		if (seen.has(given.name)) return stop(no(given.at.start, `--${given.name} is given twice`));
@@ -302,7 +302,7 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 		if (seen.has(name)) continue;
 		const flag: Flag<unknown> = program.flags[name];
 		// A flag with a default is filled from it when the run starts.
-		if (flag.default === undefined && flag.shape.problem(undefined) !== undefined)
+		if (mustBeGiven(flag))
 			stop(no(command.at.end, `${program.name} needs --${name}: ${flag.description}`));
 	}
 	return flags;
