@@ -1,15 +1,28 @@
 import {describe, expect, it} from "vitest";
 import {checkTree} from "./invariants.ts";
-import {createStack, createTile, createTree, type LayoutTree, type StackNode} from "./node.ts";
+import {
+	createStack,
+	createTabbed,
+	createTile,
+	createTree,
+	isLayoutTree,
+	isStackNode,
+	type LayoutTree,
+	type StackNode,
+} from "./node.ts";
 import {
 	find,
 	findChildTile,
 	findSibling,
+	findStack,
+	findTab,
 	layoutSignature,
 	remove,
 	resize,
+	reveal,
 	setShows,
 	split,
+	turn,
 	unzoom,
 	zoom,
 } from "./tree.ts";
@@ -329,6 +342,118 @@ describe("layout.checkTree", () => {
 			{kind: "empty-stack", id: "s"},
 			{kind: "zoomed-tile-missing", id: "nope"},
 		]);
+	});
+});
+
+describe("layout tabs", () => {
+	/** root(horizontal)[a, s(tabbed, showing c)[b, c, d]]: a beside three tabs. */
+	const tabbed = () =>
+		createTree(
+			createStack("root", "horizontal", [
+				createTile("a"),
+				createTabbed("s", [createTile("b"), createTile("c"), createTile("d")], "c"),
+			]),
+		);
+	const shownIn = (tree: LayoutTree, id: string) => {
+		const stack = findStack(tree, id);
+		return stack?.orientation === "tabbed" ? stack.active : null;
+	};
+
+	it("turns the stack holding a tile tabbed, then horizontal, then vertical, keeping its sizes", () => {
+		const tree = createTree(
+			createStack("root", "horizontal", [createTile("a"), createTile("b")], {a: 70, b: 30}),
+		);
+
+		const once = turn(tree, "b");
+		const twice = turn(once, "b");
+		const thrice = turn(twice, "b");
+
+		expect([once, twice, thrice].map((t) => t.root.orientation)).toEqual([
+			"vertical",
+			"tabbed",
+			"horizontal",
+		]);
+		expect(shownIn(twice, "root")).toBe("b");
+		expect(twice.root.sizes).toEqual({a: 70, b: 30});
+		expect(thrice).toEqual(tree);
+		expect("active" in thrice.root).toBe(false);
+	});
+
+	it("builds a tabbed stack only on one of its children", () => {
+		const children = [createTile("a"), createTile("b")] as const;
+
+		expect(createTabbed("s", children).active).toBe("a");
+		expect(createTabbed("s", children, "b").active).toBe("b");
+		expect(createTabbed("s", children, "nope").active).toBe("a");
+	});
+
+	it("steps through tabs with wrap, entering a tab where it shows", () => {
+		const tree = tabbed();
+
+		expect(findTab(tree, "c", "next")?.id).toBe("d");
+		expect(findTab(tree, "d", "next")?.id).toBe("b");
+		expect(findTab(tree, "b", "previous")?.id).toBe("d");
+		expect(findTab(tree, "a", "next")).toBeNull();
+	});
+
+	it("walks tabs with left and right, as i3, and leaves the stack up, down and past the first tab", () => {
+		const tree = tabbed();
+
+		expect(findSibling(tree, "c", "left")?.id).toBe("b");
+		expect(findSibling(tree, "c", "right")?.id).toBe("d");
+		expect(findSibling(tree, "b", "left")?.id).toBe("a");
+		expect(findSibling(tree, "c", "up")).toBeNull();
+		expect(findSibling(tree, "c", "down")).toBeNull();
+		// From a, focus enters the tabs through the one they show.
+		expect(findSibling(tree, "a", "right")?.id).toBe("c");
+	});
+
+	it("reveals a tile through every tabbed stack above it, and leaves a drawn tile's tree alone", () => {
+		const tree = tabbed();
+
+		expect(shownIn(reveal(tree, "b"), "s")).toBe("b");
+		expect(reveal(tree, "c")).toBe(tree);
+		expect(reveal(tree, "a")).toBe(tree);
+		expect(reveal(tree, "nope")).toBe(tree);
+	});
+
+	it("shows the neighbour when the shown tab goes, and keeps the shown one when another goes", () => {
+		expect(shownIn(remove(tabbed(), "c"), "s")).toBe("b");
+		expect(shownIn(remove(tabbed(), "d"), "s")).toBe("c");
+		expect(checkTree(remove(tabbed(), "c"))).toEqual([]);
+	});
+
+	it("nests a split inside the shown tab and keeps showing it", () => {
+		const next = split(tabbed(), "c", "vertical", ids("e", "n"));
+
+		expect(shownIn(next, "s")).toBe("n");
+		expect(findStack(next, "n")?.children.map((child) => child.id)).toEqual(["c", "e"]);
+		expect(checkTree(next)).toEqual([]);
+		expect(shownIn(remove(next, "e"), "s")).toBe("c");
+	});
+
+	it("names a tabbed stack showing no child of its own", () => {
+		const tree = createTree(
+			createStack("root", "horizontal", [
+				createTile("a"),
+				{...createTabbed("s", [createTile("b"), createTile("c")]), active: "a"},
+			]),
+		);
+
+		expect(checkTree(tree)).toEqual([{kind: "active-not-child", stack: "s", id: "a"}]);
+	});
+
+	it("reads a tabbed stack back, and refuses one whose shown child is no id, or a split naming one", () => {
+		const tree = tabbed();
+		const marked = {...createStack("x", "vertical", [createTile("y")]), active: "y"};
+
+		expect(isLayoutTree(JSON.parse(JSON.stringify(tree)))).toBe(true);
+		expect(isStackNode({...findStack(tree, "s"), active: 3})).toBe(false);
+		expect(isStackNode(marked)).toBe(false);
+	});
+
+	it("changes the signature when another tab shows", () => {
+		expect(layoutSignature(reveal(tabbed(), "b"))).not.toBe(layoutSignature(tabbed()));
 	});
 });
 

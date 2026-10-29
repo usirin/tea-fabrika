@@ -62,6 +62,37 @@ body,
 	flex-direction: column;
 }
 
+/* A tabbed stack: one line of tabs, as quiet as the status line, and the shown child under it. */
+.stack.tabbed {
+	flex-direction: column;
+}
+
+.tabs {
+	display: flex;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-bottom: 1px solid var(--line);
+	color: var(--faint);
+	font-size: 12px;
+}
+
+.tabs li {
+	flex: 0 1 auto;
+	min-width: 0;
+	padding: 2px 10px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	cursor: default;
+}
+
+.tabs li[aria-current="true"] {
+	background: var(--raised);
+	color: var(--ink);
+}
+
 /* A child's share is its grow: the borders between them are a fixed few pixels. */
 .cell {
 	flex-basis: 0;

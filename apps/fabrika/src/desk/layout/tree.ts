@@ -1,4 +1,6 @@
 import {
+	type Axis,
+	arrange,
 	createStack,
 	createTile,
 	type Direction,
@@ -7,23 +9,26 @@ import {
 	type LayoutTree,
 	type NodeId,
 	type Orientation,
-	resolveSizes,
 	type Shows,
 	type StackId,
 	type StackNode,
 	type TileId,
 	type TileNode,
+	turned,
 } from "./node.ts";
 
-// The pure layout tree: split, remove, focus by direction, resize and zoom, each a total function
-// on immutable data addressed by id. Ported from Tuval's (kamp-us/phoenix,
+// The pure layout tree: split, remove, focus by direction, resize, zoom and tabs, each a total
+// function on immutable data addressed by id. Ported from Tuval's (kamp-us/phoenix,
 // apps/tuval/src/shell/layout/tree.ts) as it is: a window there is a tile here, and `setProcess`
-// is `setShows`. Nothing here imports React, tea or Effect.
+// is `setShows`. Tabs are i3's. Nothing here imports React, tea or Effect.
 //
 //   const tree = createTree(createStack("s0", "horizontal", [createTile("t1")]));
 //   split(tree, "t1", "horizontal", {tile: "t2", stack: "s2"})   t1 and t2 side by side, 50 and 50
 //   findSibling(next, "t2", "left")                              t1
 //   remove(next, "t2")                                           the tree we started with
+//   turn(next, "t2")                                             s0 vertical; again, tabbed on t2
+//   findTab(tabbed, "t2", "next")                                t1, the tab after t2, wrapping
+//   reveal(tabbed, "t1")                                         s0 shows t1
 
 /** The ids the desk mints for one split. `stack` is spent only when the split nests a new stack. */
 export interface SplitIds {
@@ -74,14 +79,24 @@ export function findChildTile(tree: LayoutTree, id: StackId, edge: Edge): TileNo
 	return stack ? edgeTile(stack, edge) : null;
 }
 
+/** A tabbed stack is entered through the child it shows, from either side, as i3 enters one. */
 function edgeTile(node: LayoutNode, edge: Edge): TileNode | null {
 	if (node.tag === "tile") return node;
-	const child = edge === "start" ? node.children[0] : node.children[node.children.length - 1];
+	const child =
+		node.orientation === "tabbed"
+			? node.children.find((each) => each.id === node.active)
+			: edge === "start"
+				? node.children[0]
+				: node.children[node.children.length - 1];
 	return child ? edgeTile(child, edge) : null;
 }
 
-const axisOf = (direction: Direction): Orientation =>
+const axisOf = (direction: Direction): Axis =>
 	direction === "left" || direction === "right" ? "horizontal" : "vertical";
+
+/** The axis focus moves along in a stack: tabs lie in a row, so left and right walk them, as in i3. */
+const alongOf = (orientation: Orientation): Axis =>
+	orientation === "tabbed" ? "horizontal" : orientation;
 
 const isBackward = (direction: Direction): boolean => direction === "left" || direction === "up";
 
@@ -104,11 +119,69 @@ export function findSibling(tree: LayoutTree, id: TileId, direction: Direction):
 		if (!stack) return null;
 		const index = stack.children.findIndex((child) => child.id === childId);
 		if (index < 0) return null;
-		if (stack.orientation === axis) {
+		if (alongOf(stack.orientation) === axis) {
 			const neighbour = stack.children[index + step];
 			if (neighbour) return edgeTile(neighbour, entryEdge);
 		}
 		childId = stack.id;
+	}
+	return null;
+}
+
+/**
+ * The tile focus lands on when it goes to the next or previous tab: in the nearest tabbed stack
+ * holding `id`, the tab after or before the one holding it, wrapping at the ends, entered where it
+ * shows. `null` when no tabbed stack holds the tile, or it has one tab.
+ */
+export function findTab(tree: LayoutTree, id: TileId, to: "next" | "previous"): TileNode | null {
+	const ancestors = ancestorsOf(tree.root, id);
+	if (!ancestors) return null;
+
+	let childId: NodeId = id;
+	for (let i = ancestors.length - 1; i >= 0; i--) {
+		const stack = ancestors[i];
+		if (!stack) return null;
+		if (stack.orientation === "tabbed") {
+			const n = stack.children.length;
+			const index = stack.children.findIndex((child) => child.id === childId);
+			const tab = stack.children[(index + (to === "next" ? 1 : -1) + n) % n];
+			return n < 2 || index < 0 || !tab ? null : edgeTile(tab, "start");
+		}
+		childId = stack.id;
+	}
+	return null;
+}
+
+/**
+ * Turn the stack holding `id` to its next orientation (`turned`): tabbed, horizontal, vertical.
+ * Turned tabbed, it shows `id`. Its sizes stay, so a split turned tabbed and back has them again.
+ */
+export function turn(tree: LayoutTree, id: TileId): LayoutTree {
+	const parent = ancestorsOf(tree.root, id)?.at(-1);
+	if (!parent) return tree;
+	const root = withStack(tree.root, parent.id, (stack) =>
+		arrange(stack, {orientation: turned(stack.orientation), show: id}),
+	);
+	return root ? {...tree, root} : tree;
+}
+
+/**
+ * Make `id` drawn: every tabbed stack above it shows the tab that holds it, as focus moving into a
+ * tab does in i3. The same tree when it is drawn already, or is not in the tree.
+ */
+export function reveal(tree: LayoutTree, id: TileId): LayoutTree {
+	const root = revealIn(tree.root, id);
+	return root === null || root === tree.root ? tree : {...tree, root};
+}
+
+/** `stack` with the tile drawn, the same object when it was, or `null` when the tile is not under it. */
+function revealIn(stack: StackNode, id: TileId): StackNode | null {
+	for (const child of stack.children) {
+		const next = child.tag === "tile" ? (child.id === id ? child : null) : revealIn(child, id);
+		if (next === null) continue;
+		const held = next === child ? stack : replaceChild(stack, child.id, next);
+		const shown = held.orientation !== "tabbed" || held.active === child.id;
+		return shown ? held : arrange(held, {show: child.id});
 	}
 	return null;
 }
@@ -132,12 +205,7 @@ function ancestorsOf(stack: StackNode, id: TileId): StackNode[] | null {
  * nests a stack under `ids.stack`. An unknown tile, or new ids already taken, leave the tree as it
  * is: `checkTree` is what proves a tree's ids unique. The new tile shows a fresh tsh.
  */
-export function split(
-	tree: LayoutTree,
-	id: TileId,
-	orientation: Orientation,
-	ids: SplitIds,
-): LayoutTree {
+export function split(tree: LayoutTree, id: TileId, orientation: Axis, ids: SplitIds): LayoutTree {
 	const taken = new Set<NodeId>(idsOf(tree.root));
 	if (taken.has(ids.tile) || taken.has(ids.stack)) return tree;
 	const root = splitIn(tree.root, id, orientation, ids, createTile(ids.tile));
@@ -147,7 +215,7 @@ export function split(
 function splitIn(
 	stack: StackNode,
 	id: TileId,
-	orientation: Orientation,
+	orientation: Axis,
 	ids: SplitIds,
 	created: TileNode,
 ): StackNode | null {
@@ -162,7 +230,7 @@ function splitIn(
 			];
 			const share = stack.sizes[id] ?? 100 / stack.children.length;
 			const sizes = {...stack.sizes, [id]: share / 2, [ids.tile]: share / 2};
-			return {...stack, orientation, children, sizes: resolveSizes(children, sizes)};
+			return arrange(stack, {orientation, children, sizes});
 		}
 		return replaceChild(stack, id, createStack(ids.stack, orientation, [target, created]));
 	}
@@ -193,12 +261,7 @@ export function remove(tree: LayoutTree, id: TileId): LayoutTree {
 	let root = result.stack;
 	let onlyChild = root.children.length === 1 ? root.children[0] : undefined;
 	while (onlyChild?.tag === "stack") {
-		root = {
-			...root,
-			orientation: onlyChild.orientation,
-			children: onlyChild.children,
-			sizes: onlyChild.sizes,
-		};
+		root = {...onlyChild, id: root.id};
 		onlyChild = root.children.length === 1 ? root.children[0] : undefined;
 	}
 
@@ -250,14 +313,17 @@ function withoutChild(stack: StackNode, childId: NodeId): StackNode {
 		const freed = child.id === heir?.id ? (stack.sizes[childId] ?? 0) : 0;
 		sizes[child.id] = (stack.sizes[child.id] ?? 0) + freed;
 	}
-	return {...stack, children, sizes: resolveSizes(children, sizes)};
+	// A tabbed stack that loses the tab it showed shows the heir, as a closed tab shows its neighbour.
+	const show = stack.orientation === "tabbed" && stack.active === childId ? heir?.id : undefined;
+	return arrange(stack, {children, sizes, show});
 }
 
 function replaceChild(stack: StackNode, childId: NodeId, node: LayoutNode): StackNode {
 	const children = stack.children.map((child) => (child.id === childId ? node : child));
 	const sizes: Record<NodeId, number> = {};
 	for (const [id, size] of Object.entries(stack.sizes)) sizes[id === childId ? node.id : id] = size;
-	return {...stack, children, sizes: resolveSizes(children, sizes)};
+	const show = stack.orientation === "tabbed" && stack.active === childId ? node.id : undefined;
+	return arrange(stack, {children, sizes, show});
 }
 
 /**
@@ -269,10 +335,7 @@ export function resize(
 	id: StackId,
 	sizes: Readonly<Record<NodeId, number>>,
 ): LayoutTree {
-	const root = withStack(tree.root, id, (stack) => ({
-		...stack,
-		sizes: resolveSizes(stack.children, sizes),
-	}));
+	const root = withStack(tree.root, id, (stack) => arrange(stack, {sizes}));
 	return root ? {...tree, root} : tree;
 }
 
@@ -294,7 +357,7 @@ export function unzoom(tree: LayoutTree): LayoutTree {
 /**
  * One tree as one string, so two trees that are equal but not the same object compare equal: a
  * layout read back from disk is a new object whatever it says. Any change to structure, order,
- * orientation, sizes, what a tile shows or the zoomed tile gives another string.
+ * orientation, the tab shown, sizes, what a tile shows or the zoomed tile gives another string.
  */
 export function layoutSignature(tree: LayoutTree): string {
 	return JSON.stringify([tree.zoomed, nodeShape(tree.root)]);
@@ -306,6 +369,7 @@ function nodeShape(node: LayoutNode): unknown {
 		"s",
 		node.id,
 		node.orientation,
+		node.orientation === "tabbed" ? node.active : null,
 		node.children.map((child) => [nodeShape(child), node.sizes[child.id] ?? null]),
 	];
 }

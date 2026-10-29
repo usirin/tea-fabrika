@@ -23,11 +23,14 @@ import {
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
 import {keyName} from "../desk/keys.ts";
 import {
+	findChildTile,
 	findTile,
 	type LayoutNode,
-	type StackNode,
+	type SplitStack,
+	type TabbedStack,
 	type TileId,
 	type TileNode,
+	tiles,
 } from "../desk/layout/index.ts";
 import {
 	type Attached,
@@ -318,7 +321,7 @@ function Tile(props: {
 }
 
 /** The share of each child, after a drag of the border between `at` and the next child. */
-const dragged = (stack: StackNode, at: number, fraction: number) => {
+const dragged = (stack: SplitStack, at: number, fraction: number) => {
 	const ids = stack.children.map((c) => c.id);
 	const a = ids[at];
 	const b = ids[at + 1];
@@ -330,8 +333,9 @@ const dragged = (stack: StackNode, at: number, fraction: number) => {
 	return {...stack.sizes, [a]: left, [b]: pair - left};
 };
 
+/** A row or a column, with a border to drag between each two children. */
 function Stack(props: {
-	readonly stack: StackNode;
+	readonly stack: SplitStack;
 	readonly ws: Workspace;
 	readonly desk: Open;
 }): ReactNode {
@@ -386,14 +390,59 @@ function Stack(props: {
 	);
 }
 
+/** A tab's name: its tile's program, or for a stack the programs of its tiles, in reading order. */
+const tabName = (node: LayoutNode): string =>
+	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(", ");
+
+/**
+ * A tabbed stack: a strip of one line naming each child, and the child it shows under it. A
+ * click on a tab is a click on the tile it shows: the desk moves focus there and shows its tab.
+ */
+function Tabbed(props: {
+	readonly stack: TabbedStack;
+	readonly ws: Workspace;
+	readonly desk: Open;
+}): ReactNode {
+	const {stack, ws, desk} = props;
+	const shown = stack.children.find((child) => child.id === stack.active);
+	const clicked = (child: LayoutNode) => (e: ReactPointerEvent<HTMLLIElement>) => {
+		// The tab takes no focus: the desk gives it to the tile it shows.
+		e.preventDefault();
+		const tile = child.tag === "tile" ? child : findChildTile(ws.layout, child.id, "start");
+		if (tile !== null) toHost({type: "click", tile: tile.id});
+	};
+	return (
+		<div className="stack tabbed" data-stack={stack.id}>
+			{/* A list, as the status line's workspaces: Ctrl-B [ and ] walk it, never the Tab key. */}
+			<ol className="tabs" aria-label="tabs">
+				{stack.children.map((child) => (
+					<li
+						key={child.id}
+						aria-current={child.id === stack.active}
+						onPointerDown={clicked(child)}
+					>
+						{tabName(child)}
+					</li>
+				))}
+			</ol>
+			{shown !== undefined && (
+				<div key={shown.id} className="cell" style={{flexGrow: 1}}>
+					<Node node={shown} ws={ws} desk={desk} />
+				</div>
+			)}
+		</div>
+	);
+}
+
 function Node(props: {
 	readonly node: LayoutNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
 }): ReactNode {
 	const {node, ws, desk} = props;
-	if (node.tag === "stack") return <Stack stack={node} ws={ws} desk={desk} />;
-	return <DeskTile tile={node} ws={ws} desk={desk} />;
+	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} />;
+	if (node.orientation === "tabbed") return <Tabbed stack={node} ws={ws} desk={desk} />;
+	return <Stack stack={node} ws={ws} desk={desk} />;
 }
 
 /** A tile as the desk has it now: focused or not, asking or not, closing or not. */

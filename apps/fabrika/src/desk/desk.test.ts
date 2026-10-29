@@ -225,6 +225,65 @@ describe("the desk", () => {
 	});
 });
 
+describe("tabs", () => {
+	const root = (s: Desk) => activeOf(opened(s)).layout.root;
+	const shown = (s: Desk) => {
+		const r = root(s);
+		return r.orientation === "tabbed" ? r.active : null;
+	};
+	/** t1, t2 and t3 side by side, focus on t3, then Space twice: three tabs showing t3. */
+	const tabbed = fold([
+		...prefixed("|"),
+		...prefixed("|", 10),
+		...prefixed(" ", 20),
+		...prefixed(" ", 30),
+	]).s;
+
+	it("turns the focused tile's stack with Space: vertical, tabbed, then horizontal, and saves each", () => {
+		const turned = fold([...prefixed("|"), ...prefixed(" ", 10)]);
+		expect(root(turned.s).orientation).toBe("vertical");
+		expect(turned.cmds.at(-1)?.type).toBe("save");
+		expect(root(tabbed).orientation).toBe("tabbed");
+		expect(shown(tabbed)).toBe("t3");
+		expect(root(fold(prefixed(" ", 40), tabbed).s).orientation).toBe("horizontal");
+	});
+
+	it("steps to the next and previous tab with ] and [, wrapping, and focus follows", () => {
+		const next = fold(prefixed("]", 40), tabbed).s;
+		expect([focus(next), shown(next)]).toEqual(["t1", "t1"]);
+		const back = fold(prefixed("[", 50), next).s;
+		expect([focus(back), shown(back)]).toEqual(["t3", "t3"]);
+	});
+
+	it("walks the tabs with h and l, as i3, and j and k leave them", () => {
+		const left = fold(prefixed("h", 40), tabbed).s;
+		expect([focus(left), shown(left)]).toEqual(["t2", "t2"]);
+		expect(focus(fold(prefixed("j", 40), tabbed).s)).toBe("t3");
+		expect(fold(prefixed("j", 40), tabbed).cmds).toEqual([]);
+	});
+
+	it("shows the tab of a tile clicked in it, and of the tile focus goes to when one closes", () => {
+		const clicked = fold([{type: "click", tile: "t1"}], tabbed).s;
+		expect(shown(clicked)).toBe("t1");
+		const closed = fold([...prefixed("x", 40), {type: "key", key: "y", at: 50}], tabbed).s;
+		expect(ids(closed)).toEqual(["t1", "t2"]);
+		expect(shown(closed)).toBe(focus(closed));
+	});
+
+	it("comes back from a kept desk showing the focused tile's tab", () => {
+		const kept = savedOf(opened(tabbed));
+		const hidden = {
+			...kept,
+			workspaces: kept.workspaces.map((ws) => ({
+				...ws,
+				layout: {...ws.layout, root: {...ws.layout.root, active: "t1"}},
+			})),
+		};
+		const back = restore(JSON.parse(JSON.stringify(hidden)));
+		expect(back === null ? null : shown(back)).toBe("t3");
+	});
+});
+
 describe("a kept desk", () => {
 	it("comes back as it was, and opens each tile's tsh", () => {
 		const kept = fold([...prefixed("|"), ...prefixed("-", 10), ...prefixed("N", 20)]).s;

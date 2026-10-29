@@ -32,7 +32,16 @@ import {
 	tilesOf,
 	whereIs,
 } from "./desk.ts";
-import {checkTree, findTile, setShows, TSH, tiles} from "./layout/index.ts";
+import {
+	checkTree,
+	findTile,
+	type LayoutNode,
+	type LayoutTree,
+	setShows,
+	TSH,
+	tiles,
+	unzoom,
+} from "./layout/index.ts";
 
 // The desk's laws, on tea's pbt: after every step of any list of Msgs, from the real init. Keys,
 // clicks and drags come in any order, and so does what the tiles say (a run covers a tile, a run
@@ -50,9 +59,11 @@ const run = fc.constantFrom(
 );
 /** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
 const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
+/** The tab keys come less often, so they do not crowd out the questions and the closes. */
 const key = fc.oneof(
-	{arbitrary: fc.constant("<c-b>"), weight: 1},
-	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 1},
+	{arbitrary: fc.constant("<c-b>"), weight: 4},
+	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 3},
+	{arbitrary: fc.constantFrom(" ", "[", "]"), weight: 1},
 );
 
 /** A Cmd's failed answer. The desk's Cmds declare no errors, so a malformed answer is the one left. */
@@ -175,6 +186,22 @@ const whole = everyStep(
 		}
 		return s.workspaces.some((ws) => ws.id === s.active);
 	},
+);
+
+/** Is the tile drawn under `node`: does each tabbed stack on the way down show the tab holding it? */
+const drawn = (node: LayoutNode, tile: string): boolean | null => {
+	if (node.tag === "tile") return node.id === tile ? true : null;
+	for (const child of node.children) {
+		const below = drawn(child, tile);
+		if (below !== null) return below && (node.orientation !== "tabbed" || node.active === child.id);
+	}
+	return null;
+};
+
+const focusShows = everyStep(
+	"the focused tile is always drawn: every tabbed stack above it shows the tab that holds it",
+	({next: s}) =>
+		s.at === "over" || s.workspaces.every((ws) => drawn(ws.layout.root, ws.focused) === true),
 );
 
 const booksTidy = everyStep(
@@ -308,6 +335,7 @@ const comesBack = atTheEnd(
 
 const LAWS = [
 	whole,
+	focusShows,
 	booksTidy,
 	opensAndStops,
 	closesOnce,
@@ -346,6 +374,13 @@ const plant = (update: Partial<Machine["update"]>): Machine => ({
 const focusOn = (s: Open, focused: string): Open => {
 	const [first, ...rest] = s.workspaces.map((ws) =>
 		ws.id === activeOf(s).id ? {...ws, focused} : ws,
+	);
+	return first === undefined ? s : {...s, workspaces: [first, ...rest]};
+};
+/** The desk with the active workspace's layout put back as this one. */
+const layoutOf = (s: Open, layout: LayoutTree): Open => {
+	const [first, ...rest] = s.workspaces.map((ws) =>
+		ws.id === activeOf(s).id ? {...ws, layout} : ws,
 	);
 	return first === undefined ? s : {...s, workspaces: [first, ...rest]};
 };
@@ -441,6 +476,18 @@ const PLANTS = {
 			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
 		},
 	}),
+	/** `]` and `[` move focus to the next tab and leave the tab shown as it was. */
+	hidesTheTab: plant({
+		key: (s, m) => {
+			const [next, cmds] = real.key(s, m);
+			const tab = m.key === "]" || m.key === "[";
+			if (s.at !== "open" || next.at !== "open" || !tab) return [next, cmds];
+			const [was, now] = [activeOf(s), activeOf(next)];
+			if (was.id !== now.id || was.focused === now.focused) return [next, cmds];
+			const back = layoutOf(next, unzoom(activeOf(s).layout));
+			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
+		},
+	}),
 	/** A desk started again on a kept one starts fresh. */
 	forgetsTheKept: {...deskMachine, init: (_loaded) => deskMachine.init(null, undefined)},
 } satisfies Record<string, Machine>;
@@ -456,16 +503,25 @@ describe("the desk's laws", () => {
 		);
 		expect(caught).toEqual({
 			// Focus left on a gone tile breaks the layout, and so the saves, the split and the restore.
-			focusOnTheGone: [whole.name, savesChanges.name, splitOpens.name, comesBack.name],
+			// A tile that is gone is drawn nowhere, either.
+			focusOnTheGone: [
+				whole.name,
+				focusShows.name,
+				savesChanges.name,
+				splitOpens.name,
+				comesBack.name,
+			],
 			countsTheGone: [booksTidy.name],
 			forgetsToOpen: [opensAndStops.name, splitOpens.name],
 			closesTwice: [closesOnce.name],
 			// An id given twice makes a split that does not split, and a kept desk that does not read.
+			// A tsh that ends takes one of two tiles of the same id, and the other stays.
 			mintsTwice: [
 				whole.name,
 				opensAndStops.name,
 				freshIds.name,
 				savesChanges.name,
+				endedGoes.name,
 				splitOpens.name,
 				comesBack.name,
 			],
@@ -477,6 +533,8 @@ describe("the desk's laws", () => {
 			deafToEnded: [endedGoes.name],
 			swallowsCtrlC: [ctrlCReaches.name],
 			splitKeepsFocus: [splitOpens.name],
+			// A kept desk comes back showing the focused tile's tab, so not as it was kept.
+			hidesTheTab: [focusShows.name, comesBack.name],
 			forgetsTheKept: [comesBack.name],
 		});
 		// Every law is caught by at least one plant.
