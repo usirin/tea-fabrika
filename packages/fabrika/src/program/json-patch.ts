@@ -1,6 +1,6 @@
 // What changed between two JSON values, as a JSON Patch (RFC 6902), and that patch applied again.
 // A job's record keeps a machine's steps this way: a whole state every so many steps, and only
-// what changed in between, the way a video keeps key frames (experiment 169).
+// what changed in between, the way a video keeps key frames (experiment 166).
 //
 //   diff({total: 1}, {total: 3})                       [{op: "replace", path: "/total", value: 3}]
 //   diff({list: [1]}, {list: [1, 2]})                  [{op: "add", path: "/list/1", value: 2}]
@@ -26,8 +26,8 @@ export type Op =
 	| {readonly op: "replace"; readonly path: string; readonly value: Json};
 
 /** RFC 6901: `~` is `~0` and `/` is `~1` inside one part of a pointer. */
-const escape = (part: string) => part.replaceAll("~", "~0").replaceAll("/", "~1");
-const unescape = (part: string) => part.replaceAll("~1", "/").replaceAll("~0", "~");
+const toPart = (key: string) => key.replaceAll("~", "~0").replaceAll("/", "~1");
+const fromPart = (part: string) => part.replaceAll("~1", "/").replaceAll("~0", "~");
 
 const isObject = (v: Json): v is {readonly [k: string]: Json} =>
 	typeof v === "object" && v !== null && !Array.isArray(v);
@@ -60,9 +60,9 @@ const walk = (from: Json, to: Json, path: string, out: Op[]): void => {
 	}
 	if (isObject(from) && isObject(to)) {
 		for (const k of Object.keys(from))
-			if (!Object.hasOwn(to, k)) out.push({op: "remove", path: `${path}/${escape(k)}`});
+			if (!Object.hasOwn(to, k)) out.push({op: "remove", path: `${path}/${toPart(k)}`});
 		for (const k of Object.keys(to)) {
-			const at = `${path}/${escape(k)}`;
+			const at = `${path}/${toPart(k)}`;
 			if (Object.hasOwn(from, k)) walk(from[k] as Json, to[k] as Json, at, out);
 			else out.push({op: "add", path: at, value: to[k] as Json});
 		}
@@ -84,7 +84,7 @@ export class PatchMisfit extends Error {}
 const partsOf = (path: string): readonly string[] => {
 	if (path === "") return [];
 	if (!path.startsWith("/")) throw new PatchMisfit(`not a JSON pointer: ${path}`);
-	return path.slice(1).split("/").map(unescape);
+	return path.slice(1).split("/").map(fromPart);
 };
 
 const indexOf = (part: string, length: number, adding: boolean): number => {
