@@ -16,6 +16,44 @@ JSON.stringify({key});                                       // '{"key":"<redact
 headers.authorization = `Bearer ${Redacted.value(key)}`;     // the one line
 ```
 
+## Changed 2026-10-28: a state holds a secret's name, never the secret
+
+Decided by the owner. Part B
+([#171](https://github.com/usirin/tea-fabrika/pull/171)) found that no Effect
+encoding both hides a `Redacted` and reads it back, so every storage now
+refuses to save a state that holds one. That stays. What it guards against is
+said more exactly here:
+
+- **Keys in the owner's own Cloudflare account are fine.** It is like a key
+  given to a hosted service the owner trusts. "Public repositories" below is
+  not the main reason.
+- **The shared record is not fine.** A job's record
+  ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)) is read
+  by everyone in the project, including people invited later, and nothing in
+  it is ever deleted. A key in a step would be readable by any future member,
+  forever, and still there after the key is rotated.
+- **Copies leave.** Agents copy step and trace data into `experiments/results/`
+  and `field/`, which are public.
+
+```ts
+// A sketch. The state keeps a name; a Cmd asks for the key when it needs it.
+type State = { model: "opus"; key: { secret: "anthropic" } };
+const key = yield* (yield* Secrets).get("anthropic"); // Redacted<string>
+```
+
+- **Each person's keys live in their own ledger object,** the one per person
+  that sits beside the project's
+  ([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)).
+  Only that person reads them. The laptop twin is Miniflare.
+- **Encrypting saved state was weighed and dropped.** It is Temporal's payload
+  codec: a project key that every host needs, that is rotated with a keyring
+  because nothing is deleted, and that loses every record if lost. No need we
+  have pays for that.
+- **Not now:** lending one key to another member. A "share this key" step can
+  come when a shared paid account needs it.
+- **How sure: 85%.** The doubt: a token that changes often, such as a login's,
+  needs `set` as well as `get`. The service has both.
+
 ## What was decided
 
 - **fabrika will build public repositories too.** A log, a trace, an error
