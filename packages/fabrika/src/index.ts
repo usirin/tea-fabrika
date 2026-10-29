@@ -45,8 +45,13 @@ export {
 	type Writes,
 } from "./host/door.ts";
 export * from "./host/host.ts";
+// A host's jobs: the one table a host keeps and every tsh on it shows. The table's own parts
+// (`Jobs`, `EMPTY`) are on `Shell`, where a line editor reads them.
+export {HostJobs, type JobsOnHost, type JobTable, openJobs} from "./host/host-jobs.ts";
+export {traceIdOf} from "./host/jobs.ts";
 // Where the door gets a person's keys: the service it asks, for a Layer written elsewhere.
 export * from "./host/keys.ts";
+export * from "./host/leader.ts";
 export * from "./host/ledger.ts";
 // Names in two places. The ledger's records win over the host's and the
 // rules' plain types of the same name, which they encode.

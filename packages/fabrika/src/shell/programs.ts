@@ -1,7 +1,6 @@
 import {Context} from "effect";
 import type {Entry} from "../program/listed.ts";
 import type {Ended} from "../program/program.ts";
-import type {Storage} from "../program/storage.ts";
 import {BUILTINS} from "./grammar.ts";
 
 // The program list: what tsh can start by name, like the directories on a
@@ -36,15 +35,12 @@ export function programList(entries: readonly Entry[]): ProgramList {
 	return list;
 }
 
-/** The program list tsh starts programs from. Whoever starts tsh provides it. */
-export class Programs extends Context.Service<Programs, ProgramList>()("tsh/Programs") {}
-
 /**
- * Where tsh's jobs keep what must outlive tsh: each job's run id names its
- * run in this storage, so a job started again under the same id finds what
- * it left, like a daemon handed its spool directory.
+ * The program list tsh starts programs from. Whoever starts tsh provides it,
+ * beside the host's jobs (`HostJobs`, ../host/host-jobs.ts): where its jobs are kept,
+ * and their runs' storage, like a daemon handed its spool directory.
  */
-export class JobStorage extends Context.Service<JobStorage, Storage>()("tsh/JobStorage") {}
+export class Programs extends Context.Service<Programs, ProgramList>()("tsh/Programs") {}
 
 /** How a run ended, as a shell's exit status: 0 ended, 1 failed, 130 stopped (as by Ctrl-C). */
 export const statusOf = (ended: Ended<unknown>): number =>

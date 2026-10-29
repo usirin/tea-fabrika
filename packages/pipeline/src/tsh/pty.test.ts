@@ -51,7 +51,7 @@ describe.skipIf(EXPECT === undefined)("tsh on a terminal", () => {
 	it("killed with kill -9, opened again: the job is there, and attach by run id goes on from its total", async () => {
 		const {out, status} = await script("kept.exp");
 		expect(out, out).not.toContain("CHECK FAILED");
-		expect(status).toBe(0);
+		expect(status, out).toBe(0);
 	});
 });
 

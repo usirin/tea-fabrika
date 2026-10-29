@@ -7,15 +7,15 @@ import {
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import {Effect} from "effect";
+import {Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import type {MsgOf} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
-import {type Job, Jobs, jobsMachine, type StageRecord} from "./jobs.ts";
-import {TABLE} from "./shell.ts";
+import {openJobs, TABLE} from "./host-jobs.ts";
+import {EMPTY, Job, Jobs, jobsMachine, type StageRecord} from "./jobs.ts";
 
-// The laws of tsh's job table, on tea's pbt: after every step of any list of Msgs, from the real
+// The laws of the host's job table (moved here from tsh with the table), on tea's pbt: after every step of any list of Msgs, from the real
 // init. A job begins as tsh says it does: every program in it running. The rest comes in any
 // order, numbers and run ids that name no job included, as a tsh that crashed and came back may
 // send them.
@@ -79,8 +79,9 @@ const live = (job: Job): boolean => job.stages.some((st) => !st.ended);
 const lastOf = (job: Job, run: string): boolean =>
 	job.stages.some((st) => st.run === run) && job.stages.every((st) => st.ended || st.run === run);
 
-/** A table an earlier tsh kept: one job detached with a program ended, one running in the background. */
+/** A table an earlier host kept: one job detached with a program ended, one running in the background, and 2 and 4 gone. */
 const KEPT: Jobs = {
+	next: 5,
 	jobs: [
 		{
 			n: 1,
@@ -112,23 +113,50 @@ const numbersOnce = everyStep(
 	},
 );
 
-const lowestFree = everyStep(
-	"a line that begins is a new job at the end, running, with the lowest number no job has; nothing else changes",
+const numbered = everyStep(
+	"a line that begins is a new job at the end, running, numbered the table's next, and next goes up by one; nothing else changes, and no other Msg moves next",
 	({prev, msg, next}) => {
-		if (msg.type !== "began") return true;
-		const taken = new Set(prev.jobs.map((job) => job.n));
-		let free = 1;
-		while (taken.has(free)) free += 1;
+		if (msg.type !== "began") return next.next === prev.next;
 		const made: Job = {
-			n: free,
+			n: prev.next,
 			text: msg.text,
 			stages: msg.stages,
 			state: "running",
 			background: msg.background,
 		};
-		return JSON.stringify(next.jobs) === JSON.stringify([...prev.jobs, made]);
+		return (
+			next.next === prev.next + 1 &&
+			JSON.stringify(next.jobs) === JSON.stringify([...prev.jobs, made])
+		);
 	},
 );
+
+/**
+ * Across a whole list of Msgs, not one step: a number a job ever had, in the table it started
+ * from or since, is never given to a job that begins later. As WezTerm's and tmux's ids, so a
+ * `%2` read an hour ago names the same job or none.
+ */
+const neverReused: Law = {
+	name: "a job's number is never given to another job, across any list of Msgs",
+	check: (machine) => {
+		const holds = (loaded: Jobs | null) =>
+			fc.assert(
+				fc.property(lists, (list) => {
+					const {states, steps} = foldEvents(machine, ctx, loaded, list);
+					const had = new Set((states[0]?.jobs ?? []).map((job) => job.n));
+					for (const {msg, next} of steps) {
+						const made = msg.type === "began" ? next.jobs.at(-1) : undefined;
+						if (made !== undefined && had.has(made.n)) return false;
+						for (const job of next.jobs) had.add(job.n);
+					}
+					return true;
+				}),
+				OPTS,
+			);
+		holds(null);
+		holds(KEPT);
+	},
+};
 
 const detachedWaits = everyStep(
 	"a detached job is not touched by a program's end or by fg: only attach and drop change it",
@@ -222,7 +250,8 @@ const keptComesBack: Law = {
 
 const LAWS = [
 	numbersOnce,
-	lowestFree,
+	numbered,
+	neverReused,
 	detachedWaits,
 	leavesRightly,
 	runningLive,
@@ -267,7 +296,22 @@ const PLANTS = {
 			const [next] = real.began(s, m);
 			const made = next.jobs.at(-1);
 			if (made === undefined) return [next, []];
-			return [{jobs: [...s.jobs, {...made, n: s.jobs.length + 1}]}, []];
+			return [{...next, jobs: [...s.jobs, {...made, n: s.jobs.length + 1}]}, []];
+		},
+	}),
+	/**
+	 * The rule before `next`: a new job takes the lowest number no job has now, so the number of a
+	 * job that ended is given again, and `next` follows it.
+	 */
+	lowestFree: plant({
+		began: (s, m) => {
+			const [next] = real.began(s, m);
+			const made = next.jobs.at(-1);
+			if (made === undefined) return [next, []];
+			const taken = new Set(s.jobs.map((job) => job.n));
+			let free = 1;
+			while (taken.has(free)) free += 1;
+			return [{jobs: [...s.jobs, {...made, n: free}], next: free + 1}, []];
 		},
 	}),
 	/** A program's end is marked on a detached job too. */
@@ -276,13 +320,14 @@ const PLANTS = {
 			const [next] = real.stage_ended(s, m);
 			const mark = (job: Job): Job =>
 				job.state !== "detached" ? job : {...job, stages: endedIn(job.stages, m.run)};
-			return [{jobs: next.jobs.map(mark)}, []];
+			return [{...next, jobs: next.jobs.map(mark)}, []];
 		},
 	}),
 	/** A job leaves at the end of its first program. */
 	leavesEarly: plant({
 		stage_ended: (s, m) => [
 			{
+				...s,
 				jobs: s.jobs.filter(
 					(job) => job.state !== "running" || !job.stages.some((st) => st.run === m.run),
 				),
@@ -292,12 +337,13 @@ const PLANTS = {
 	}),
 	/** drop takes a running job too. */
 	dropsRunning: plant({
-		dropped: (s, m) => [{jobs: s.jobs.filter((job) => job.n !== m.n)}, []],
+		dropped: (s, m) => [{...s, jobs: s.jobs.filter((job) => job.n !== m.n)}, []],
 	}),
 	/** A job whose programs all ended stays in the table. */
 	keepsEnded: plant({
 		stage_ended: (s, m) => [
 			{
+				...s,
 				jobs: s.jobs.map((job) =>
 					job.state !== "running" ? job : {...job, stages: endedIn(job.stages, m.run)},
 				),
@@ -311,6 +357,7 @@ const PLANTS = {
 			const [next] = real.detached(s, m);
 			return [
 				{
+					...next,
 					jobs: next.jobs.map((job) =>
 						job.state === "detached" ? {...job, background: false} : job,
 					),
@@ -325,6 +372,7 @@ const PLANTS = {
 	attachKeepsEnded: plant({
 		attached: (s, m) => [
 			{
+				...s,
 				jobs: s.jobs.map((job) =>
 					job.n === m.n && job.state === "detached"
 						? {...job, state: "running" as const, background: m.background}
@@ -337,7 +385,7 @@ const PLANTS = {
 	/** drop does nothing. */
 	deafToDrop: plant({dropped: (s) => [s, []]}),
 	/** A tsh started again begins with an empty table. */
-	forgetsTheKept: {...jobsMachine, init: () => [{jobs: []}, []]},
+	forgetsTheKept: {...jobsMachine, init: () => [EMPTY, []]},
 } satisfies Record<string, Machine>;
 
 describe("the job table's laws", () => {
@@ -353,12 +401,15 @@ describe("the job table's laws", () => {
 			// A number given twice muddles every law that finds a job by its number.
 			countsForNumbers: [
 				numbersOnce.name,
-				lowestFree.name,
+				numbered.name,
+				neverReused.name,
 				detachedWaits.name,
 				backgroundByAsk.name,
 				lastEndLeaves.name,
 				dropLeaves.name,
 			],
+			// The rule before `next`: a job that ended frees its number, and the next job takes it.
+			lowestFree: [numbered.name, neverReused.name],
 			endsDetached: [detachedWaits.name],
 			leavesEarly: [leavesRightly.name],
 			dropsRunning: [leavesRightly.name],
@@ -427,9 +478,39 @@ describe("the job table is kept", () => {
 		const withHandle = plant({
 			began: (s, m) => {
 				const [next] = real.began(s, m);
-				return [{jobs: next.jobs.map((job) => ({...job, handle: {pid: 1}}))}, []];
+				return [{...next, jobs: next.jobs.map((job) => ({...job, handle: {pid: 1}}))}, []];
 			},
 		});
 		await expect(keepsEvery(withHandle, null, 20)).rejects.toThrow(/Counterexample/);
+	});
+
+	it("a table kept before `next` was opens, and numbers on after every number in it", async () => {
+		// The table as older code kept it: its jobs, and no `next`.
+		const Older = Schema.Struct({jobs: Schema.Array(Job)});
+		const opened = await Effect.runPromise(
+			Effect.gen(function* () {
+				const storage = memoryStorage();
+				const home = yield* storage.open(TABLE.run, null);
+				yield* Effect.promise(() =>
+					home.store(TABLE.machine, TABLE.key, Older).save({jobs: KEPT.jobs}),
+				);
+				const host = yield* openJobs(storage);
+				yield* host.table.dispatch({
+					type: "began",
+					text: "counter",
+					stages: [{program: "counter", flags: {}, run: "r9", wire: null, ended: false}],
+					background: false,
+				});
+				return {kept: host.kept, table: host.table.getState()};
+			}).pipe(Effect.scoped),
+		);
+		expect(opened.kept).toBe(true);
+		// 1 and 3 were in it, so the next job is 4: never 2, which an ended job may have had.
+		expect(opened.table.jobs.map((job) => [job.n, job.state])).toEqual([
+			[1, "detached"],
+			[3, "detached"],
+			[4, "running"],
+		]);
+		expect(opened.table.next).toBe(5);
 	});
 });

@@ -5,10 +5,12 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {
 	defineProgram,
 	ear,
+	HostJobs,
 	input,
 	kind,
 	listed,
 	memoryStorage,
+	openJobs,
 	Shell,
 	type Storage,
 	start,
@@ -29,7 +31,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 // Ctrl-C on `signal`, and everything it says heard on `printed` and `ready`.
 // No terminal here; ./pty.test.ts drives the real one.
 
-const {JobStorage, Programs, programList, SMALL, tsh} = Shell;
+const {Programs, programList, SMALL, tsh} = Shell;
 type ProgramList = Shell.ProgramList;
 type Printed = Shell.Printed;
 type Ready = Shell.Ready;
@@ -98,12 +100,13 @@ const session = (list: ProgramList, storage: Storage, show: Show = "short") =>
 		const printed = ear<Printed>();
 		const ready = ear<Ready>();
 		runs += 1;
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show},
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:test-${runs}`, storage},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>
@@ -149,19 +152,20 @@ describe("tsh: the user's job, one session", () => {
 				]);
 				expect(yield* line("sqe --to 3")).toMatchObject({status: 127});
 
-				// A job: the prompt comes back, and it says its totals as it is told numbers.
+				// A job: the prompt comes back, and it says its totals as it is told numbers. Each line
+				// that started a program was a job too: the four above were %1 to %4, so this is %5.
 				const job = yield* line("tally &");
-				expect(job.err[0]).toMatch(/^\[1\] tally:[0-9a-f]{8}$/);
-				for (const n of [2, 3, 4]) expect((yield* line(`tell %1 add ${n}`)).status).toBe(0);
-				yield* heard("[1] total 9");
+				expect(job.err[0]).toMatch(/^\[5\] tally:[0-9a-f]{8}$/);
+				for (const n of [2, 3, 4]) expect((yield* line(`tell %5 add ${n}`)).status).toBe(0);
+				yield* heard("[5] total 9");
 				// Under the job, its one copy's status line.
-				expect((yield* line("jobs")).out).toEqual(["[1] running   tally", "      total 9"]);
-				expect((yield* line("ps")).out[1]).toMatch(/^tally:[0-9a-f]{8} +tally +%1 +running$/);
-				yield* line("close %1 add");
-				yield* heard("[1] ended  tally");
+				expect((yield* line("jobs")).out).toEqual(["[5] running   tally", "      total 9"]);
+				expect((yield* line("ps")).out[1]).toMatch(/^tally:[0-9a-f]{8} +tally +%5 +running$/);
+				yield* line("close %5 add");
+				yield* heard("[5] ended  tally");
 				expect((yield* line("jobs")).out).toEqual([]);
-				// A number freed is given again.
-				expect((yield* line("tally &")).err[0]).toMatch(/^\[1\] /);
+				// A number is never given again, as WezTerm's and tmux's ids: the next job is %6.
+				expect((yield* line("tally &")).err[0]).toMatch(/^\[6\] /);
 				started.close("line");
 				yield* started.run.ended;
 			}).pipe(Effect.scoped),
@@ -204,9 +208,10 @@ describe("tsh: the user's job, one session", () => {
 				const fore = yield* line("seq --to 5 | lazy");
 				expect(fore.status).toBe(0);
 				expect(fore.err).toEqual(["tsh: lazy ended with 5 told on n never read"]);
+				// The line in the foreground was %1, so this job is %2.
 				yield* line("seq --to 3 | lazy &");
-				yield* heard("[1] lazy ended:");
-				yield* heard("[1] lazy ended: it stopped reading, with 3 told on n never read");
+				yield* heard("[2] lazy ended:");
+				yield* heard("[2] lazy ended: it stopped reading, with 3 told on n never read");
 			}).pipe(Effect.scoped),
 		);
 	});
@@ -237,8 +242,9 @@ describe("tsh: Ctrl-C", () => {
 				expect((yield* line("say --text after")).out).toEqual(["after"]);
 
 				// A job brought here with attach is stopped the same way, and leaves the table.
+				// The two lines above were %1 and %2, so this job is %3.
 				yield* line("sleep --ms 60000 &");
-				const attached = yield* Effect.forkScoped(line("attach %1"));
+				const attached = yield* Effect.forkScoped(line("attach %3"));
 				yield* Effect.sleep(Duration.millis(50));
 				yield* tell(started.run, "signal", "interrupt");
 				expect((yield* Fiber.join(attached)).status).toBe(130);

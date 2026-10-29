@@ -1,4 +1,5 @@
 import {Effect} from "effect";
+import {type Job, jobNamed} from "../host/jobs.ts";
 import type {Entry} from "../program/listed.ts";
 import {type Listed, listing} from "../program/program.ts";
 import type {Part} from "./check.ts";
@@ -7,11 +8,11 @@ import {readValue, shapeLines, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {reattach, type Shell, waitForJob} from "./execute.ts";
 import type {Named, Statement} from "./grammar.ts";
-import {type Job, jobNamed} from "./jobs.ts";
 
 // tsh's built-ins: the words that work on tsh itself, not on a program. They
-// read the job table (the `jobs` machine's state) and act through the
-// starter's handles this tsh holds for the runs it started.
+// read the host's job table (the `jobs` machine's state, ../host/jobs.ts),
+// send it Msgs, and act through the starter's handles this tsh holds for the
+// runs it started.
 //
 //   jobs                    each job: its number, running or detached, its line,
 //                           and under it a full line with its waiting writer, and

@@ -3,13 +3,14 @@ import {
 	type AnyRun,
 	type AnyRunning,
 	type Entry,
+	HostJobs,
+	type JobsOnHost,
 	Ledger,
 	listed,
 	memoryStorage,
 	offer,
 	readInput,
 	Shell,
-	type Storage,
 	start,
 	tell,
 	viewOf,
@@ -29,7 +30,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // tell its tile of its runs, so a test drives it with no Electron (tsh.test.ts). tiles.ts holds
 // one per tile, in the host process (host/main.ts).
 //
-//   const tsh = yield* startTsh({jobs: memoryStorage(), history, runs});
+//   const jobs = yield* openJobs(memoryStorage());          // the host's one table, in its scope
+//   const tsh = yield* startTsh({jobs, history, runs});
 //   const stop = tsh.terminal.show((m) => send(m));   // a reset, the screen, then each write
 //   tsh.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
@@ -56,16 +58,19 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 // and one ticket's three windows: `ticket`, `map` and `trace`. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
 // a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
-// tsh's job table, which tsh writes before the run starts, and again when `attach` moves it.
+// the host's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
-// Storage: it is handed where tsh keeps its jobs, as the terminal tsh is
-// (packages/fabrika/src/shell/main.ts), and the history every tile shares. tiles.ts hands it a
-// folder for its tile in the app's home; a test hands it memory. The next tsh on the same
-// storage finds the jobs as "from an earlier tsh, not running", and `attach %n` starts one again
-// where it left off, with its view.
+// Jobs: it is handed the host's job table (`openJobs`), the one every tile's tsh shows, so a job
+// is the same `%n` in each tile, as WezTerm's panes are the mux's and not a window's
+// (docs/direction/the-host-keeps-terminals-and-jobs.md). It is handed the history every tile
+// shares too. tiles.ts hands it the host process's table; a test opens one on memory. A tsh's
+// own jobs are those it started: when its scope closes, the ones still running are detached in
+// the host's table, and `drop` takes them out. The next host on the same storage finds the jobs
+// as "from an earlier tsh, not running", and `attach %n` starts one again where it left off,
+// with its view.
 //
-// tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is its
-// table, not its run.
+// tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is the
+// host's table, not its run.
 //
 // The ledger: it is handed one, as the `Ledger` service, and gives it to the four that read
 // tickets. The host
@@ -128,6 +133,11 @@ export interface Tsh {
 	readonly close: Effect.Effect<void>;
 	/** Done when tsh has ended: `exit`, Ctrl-D on an empty line, or after `close`. */
 	readonly ended: Effect.Effect<void>;
+	/**
+	 * Take the jobs this tsh started out of the host's table, once its scope has closed and they
+	 * are detached: the tile is gone. Other tiles' jobs stay.
+	 */
+	readonly drop: Effect.Effect<void>;
 }
 
 /** tsh's run. In memory, so each tile's tsh has the same id with no clash. */
@@ -205,13 +215,17 @@ const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
 		? "background"
 		: "foreground";
 
-/** How many jobs of a table run now: started by this tsh, and not ended. */
-const runningIn = (table: Shell.Jobs | null): number =>
-	table?.jobs.filter((job) => job.state === "running").length ?? 0;
+/** The jobs of a table that hold a run of `mine`: the ones this tsh started. */
+const ownIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): readonly Shell.Job[] =>
+	table?.jobs.filter((job) => job.stages.some((st) => mine.has(st.run))) ?? [];
 
-/** Start a tile's tsh: it keeps its jobs in `jobs`, and the line editor its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `PullRequests`. */
+/** How many of this tsh's jobs run now: started by it, and not ended. Other tiles' are not counted. */
+const runningIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): number =>
+	ownIn(table, mine).filter((job) => job.state === "running").length;
+
+/** Start a tile's tsh: it shows the host's `jobs`, and the line editor keeps its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `PullRequests`. */
 export const startTsh = (options: {
-	readonly jobs: Storage;
+	readonly jobs: JobsOnHost;
 	readonly history: SharedHistory;
 	readonly runs: Runs;
 }) =>
@@ -223,10 +237,25 @@ export const startTsh = (options: {
 		const pullRequests = yield* PullRequests;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
-		/** tsh's job table now, read as a run is seen. Set once tsh started; no run starts before. */
+		/** The host's job table now, read off tsh as a run is seen. Set once tsh started; no run starts before. */
 		let table: () => Shell.Jobs | null = () => null;
 		/** Every run tsh started that has not ended, by id, so `close` reaches each. */
 		const all = new Map<string, AnyRunning>();
+		/** Every run tsh started, ended or not: a job holding one is this tile's, in the host's table. */
+		const mine = new Set<string>();
+		/** This tsh's jobs that still say running when its scope closes run nowhere now: detached, as the host does at its start. */
+		/** Msgs to the host's table for each of this tsh's jobs in `state`, one after another, as tsh sends them. */
+		const toOwn = (state: Shell.Job["state"], msg: (n: number) => Shell.JobsMsg) =>
+			Effect.suspend(() =>
+				Effect.forEach(
+					ownIn(jobs.table.getState(), mine).filter((job) => job.state === state),
+					(job) => jobs.table.dispatch(msg(job.n)).pipe(Effect.ignore),
+					{concurrency: 1, discard: true},
+				),
+			);
+		const detachOwn = toOwn("running", (n) => ({type: "detached", n}));
+		// Added before tsh starts, so it runs after tsh and its runs have stopped.
+		yield* Effect.addFinalizer(() => detachOwn);
 		/** Where each run with a view is now, by id: one in the background is not drawn. */
 		const shown = new Map<string, {placed: Placed}>();
 		/** `close` was said: every input ends, and tsh's line too once no job runs. */
@@ -309,6 +338,9 @@ export const startTsh = (options: {
 		const seen = (running: AnyRunning) =>
 			Effect.gen(function* () {
 				all.set(running.run.id, running);
+				// tsh notes a job in the table before its runs start: only now is it known to be this tile's.
+				mine.add(running.run.id);
+				recount(table());
 				yield* running.run.ended.pipe(
 					Effect.ensuring(Effect.sync(() => all.delete(running.run.id))),
 					Effect.forkIn(scope),
@@ -331,10 +363,7 @@ export const startTsh = (options: {
 				ready: () => toEditor({type: "ready"}),
 			},
 			{id: TSH, storage: memoryStorage()},
-		).pipe(
-			Effect.provideService(Shell.Programs, programs),
-			Effect.provideService(Shell.JobStorage, jobs),
-		);
+		).pipe(Effect.provideService(Shell.Programs, programs), Effect.provideService(HostJobs, jobs));
 		// tsh's flags are this file's own: a refusal here is a mistake in it, not something to show.
 		if (started.kind !== "running")
 			return yield* Effect.die(`tsh refused its flags: ${started.why}`);
@@ -351,6 +380,12 @@ export const startTsh = (options: {
 			started.close("line");
 			started.close("signal");
 		};
+		/** The tile is told how many of its jobs run; after `close`, tsh ends once none does. */
+		const recount = (now: Shell.Jobs | null) => {
+			const count = runningIn(now, mine);
+			runs.running(count);
+			if (hungUp && count === 0) endTsh();
+		};
 
 		const over = yield* Deferred.make<void>();
 		yield* started.run.ended.pipe(
@@ -359,19 +394,18 @@ export const startTsh = (options: {
 			Effect.forkScoped,
 		);
 		yield* started.run.machines.jobs.changes.pipe(
-			Stream.runForEach((jobs) =>
+			Stream.runForEach((now) =>
 				Effect.sync(() => {
-					if (jobs === null) return;
-					toEditor({type: "jobs", jobs});
+					if (now === null) return;
+					// The host's whole table: every tile's jobs, so `%n` completes the same in each.
+					toEditor({type: "jobs", jobs: now});
 					// `attach %n` moved a job of the background to the foreground: its view covers the tile now.
 					for (const [run, where] of shown)
-						if (where.placed === "background" && placedIn(jobs, run) === "foreground") {
+						if (where.placed === "background" && placedIn(now, run) === "foreground") {
 							where.placed = "foreground";
 							runs.forward(run);
 						}
-					const count = runningIn(jobs);
-					runs.running(count);
-					if (hungUp && count === 0) endTsh();
+					recount(now);
 				}),
 			),
 			Effect.forkScoped,
@@ -428,9 +462,10 @@ export const startTsh = (options: {
 				if (hungUp) return;
 				hungUp = true;
 				for (const running of all.values()) endInputs(running);
-				if (runningIn(table()) === 0) endTsh();
+				if (runningIn(table(), mine) === 0) endTsh();
 			}),
 			ended: Deferred.await(over),
+			drop: toOwn("detached", (n) => ({type: "dropped", n})),
 		};
 		return tsh;
 	});

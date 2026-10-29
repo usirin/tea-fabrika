@@ -16,10 +16,12 @@ import {defineMachine} from "@demlik/tea";
 import {
 	defineProgram,
 	flag,
+	HostJobs,
 	kind,
 	listed,
 	memoryStorage,
 	offer,
+	openJobs,
 	output,
 	Shell,
 	start,
@@ -179,6 +181,8 @@ export const openSession = async (o: {
 	};
 	const readies: (() => void)[] = [];
 	const opened = Effect.gen(function* () {
+		// The job table is the host's (packages/fabrika/src/host/host-jobs.ts): opened here, shown by tsh.
+		const hostJobs = yield* openJobs(jobs);
 		const started = yield* start(
 			Shell.tsh,
 			{show: "short"},
@@ -194,7 +198,7 @@ export const openSession = async (o: {
 			{id: `tsh:${o.who}`, storage: memoryStorage()},
 		).pipe(
 			Effect.provideService(Shell.Programs, programs),
-			Effect.provideService(Shell.JobStorage, jobs),
+			Effect.provideService(HostJobs, hostJobs),
 		);
 		if (started.kind !== "running")
 			return yield* Effect.die(`tsh refused its flags: ${started.why}`);

@@ -1,10 +1,11 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
+import type {JobTable} from "../host/host-jobs.ts";
+import type {Job, JobsMsg, StageRecord} from "../host/jobs.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
 import {StateRefused, type Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
-import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
 import {attachTitleOf, Shorten, titleOf} from "./title.ts";
@@ -28,11 +29,10 @@ import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 /** What tsh holds while it runs: handed to everything that runs a line. */
 export interface Shell {
 	readonly list: ProgramList;
+	/** Where the host keeps its jobs' runs. */
 	readonly storage: Storage;
-	readonly table: {
-		readonly dispatch: (msg: JobsMsg) => Effect.Effect<void, unknown>;
-		readonly getState: () => Jobs;
-	};
+	/** The host's job table: tsh reads it and sends it Msgs, and never keeps a copy. */
+	readonly table: JobTable;
 	readonly print: (to: "out" | "err", text: string) => void;
 	/** How a value a program sends is printed: short for a person, or its JSON whole. */
 	readonly show: Show;

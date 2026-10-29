@@ -10,15 +10,17 @@
 //   import {listed, Shell} from "@kampus/fabrika";
 //   const programs = Shell.programList([...Shell.SMALL, listed(hello, Layer.empty)]);
 
+// The host's job table, as tsh shows it. The host's jobs themselves (`HostJobs`, `openJobs`) are
+// on the top level, beside the rest of the host.
+export {EMPTY, type Job, type Jobs, type JobsMsg} from "../host/jobs.ts";
 // A line, read the way tsh reads it before anything starts: for an app's own tests of its lines.
 export {describe} from "./builtins.ts";
 export {type Checked, check} from "./check.ts";
 export {complete} from "./complete.ts";
 export {shapeLines, typeOf} from "./decode.ts";
 export {parse} from "./grammar.ts";
-export {EMPTY, type Jobs} from "./jobs.ts";
-// What tsh starts, and from where.
-export {JobStorage, type ProgramList, Programs, programList, statusOf} from "./programs.ts";
+// What tsh starts.
+export {type ProgramList, Programs, programList, statusOf} from "./programs.ts";
 // Ctrl-R, bash's reverse-i-search: a key in, the search after it out. For a line editor of an
 // app's own (apps/fabrika's), so tsh searches its history the same way in both.
 export * as Search from "./search.ts";

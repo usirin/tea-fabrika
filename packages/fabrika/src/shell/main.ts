@@ -4,14 +4,15 @@ import {join} from "node:path";
 import * as readline from "node:readline";
 import {PassThrough} from "node:stream";
 import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
+import {HostJobs, openJobs} from "../host/host-jobs.ts";
+import {EMPTY} from "../host/jobs.ts";
 import {start} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
 import {complete} from "./complete.ts";
 import {runIdOf} from "./execute.ts";
-import {EMPTY} from "./jobs.ts";
 import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
-import {JobStorage, type ProgramList, Programs} from "./programs.ts";
+import {type ProgramList, Programs} from "./programs.ts";
 import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
@@ -68,9 +69,10 @@ const startTsh = (
 	said: Queue.Queue<Said, Cause.Done>,
 ) =>
 	Effect.gen(function* () {
-		const storage = fileStorage(join(home, "storage"));
-		// A fresh run each time: what outlives one tsh is its job table and its jobs, in the job
-		// storage. tsh's own run is never started again, so it keeps its record in memory, and
+		// On a terminal the launcher is tsh's host: it keeps the jobs, in the home, and tsh shows them.
+		const jobs = yield* openJobs(fileStorage(join(home, "storage")));
+		// A fresh run each time: what outlives one tsh is the host's job table and its jobs, in the
+		// job storage. tsh's own run is never started again, so it keeps its record in memory, and
 		// the folder does not fill with one record per session.
 		const id = yield* runIdOf("tsh");
 		return yield* start(
@@ -81,7 +83,7 @@ const startTsh = (
 				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
 			},
 			{id, storage: memoryStorage()},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
 	});
 
 /** One tsh per home: two would each run the jobs of one table. */
@@ -333,12 +335,14 @@ const terminal = (
 
 		rl.prompt();
 		yield* started.run.ended;
+		// Draw all tsh said before the terminal is let go: its last `ready` may still be on its way
+		// when its run ends, and readline draws nothing once closed.
+		Queue.endUnsafe(said);
+		yield* Fiber.join(drawer);
 		process.stdin.off("data", onKeys);
 		process.stdin.setRawMode(false);
 		process.stdin.pause();
 		rl.close();
-		Queue.endUnsafe(said);
-		yield* Fiber.join(drawer);
 		return yield* Ref.get(last);
 	});
 

@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
+import {EMPTY, type Jobs} from "../host/jobs.ts";
 import {complete} from "./complete.ts";
-import {EMPTY, type Jobs} from "./jobs.ts";
 import {programList} from "./programs.ts";
 import {SMALL} from "./small.ts";
 
@@ -11,6 +11,7 @@ import {SMALL} from "./small.ts";
 
 const list = programList(SMALL);
 const TALLY: Jobs = {
+	next: 2,
 	jobs: [
 		{
 			n: 1,

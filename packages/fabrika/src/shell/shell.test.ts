@@ -1,10 +1,11 @@
 import {Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {HostJobs, openJobs, TABLE} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
 import {start, tell} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
-import {JobStorage, Programs, programList} from "./programs.ts";
-import {type Printed, type Ready, TABLE, TABLE_REFUSED, tsh} from "./shell.ts";
+import {Programs, programList} from "./programs.ts";
+import {type Printed, type Ready, TABLE_REFUSED, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";
 
 // tsh's own job table, saved by older code: tsh does not open it and does not write over it. It
@@ -23,6 +24,7 @@ describe("tsh: a job table saved by older code", () => {
 			Effect.gen(function* () {
 				const printed = ear<Printed>();
 				const ready = ear<Ready>();
+				const jobs = yield* openJobs(storage);
 				const started = yield* start(
 					tsh,
 					{show: "short"},
@@ -30,7 +32,7 @@ describe("tsh: a job table saved by older code", () => {
 					{id: "tsh:old-table", storage},
 				).pipe(
 					Effect.provideService(Programs, programList(SMALL)),
-					Effect.provideService(JobStorage, storage),
+					Effect.provideService(HostJobs, jobs),
 				);
 				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 				expect(yield* tell(started.run, "line", "say --text still")).toBe("queued");
