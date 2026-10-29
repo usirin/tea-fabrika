@@ -77,7 +77,7 @@ export {currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords} from
 export {type Summary, Write} from "./ticket.ts";
 /**
  * The tracker's machine, for a program that reads the same tickets another way: the ticket,
- * map and trace programs run it with `ticketsOptions`, open one ticket, and show that.
+ * map and runs programs run it with `ticketsOptions`, open one ticket, and show that.
  */
 export {tickets};
 

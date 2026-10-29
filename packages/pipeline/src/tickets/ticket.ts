@@ -1,4 +1,4 @@
-import {type Row, Writer, type Writes, writerOf} from "@kampus/fabrika";
+import {type Row, TraceId, Writer, type Writes, writerOf} from "@kampus/fabrika";
 import {Option, Schema} from "effect";
 
 // A ticket: one stream of facts on the ledger, and nothing else
@@ -39,9 +39,11 @@ export const Said = Body.check(Schema.isPattern(/\S/));
 // Nine more kinds, the facts a lane works with
 // (docs/direction/what-a-ticket-shows.md, section 2). Each is a tagged struct under `type`, the
 // key the tracker's first four already use on the ledger, so the rows written before still read.
-// The fields added since (`asks` on a comment, `text` on an answer) are optional for that reason.
+// The fields added since (`asks` on a comment, `text` on an answer, `trace` on a start) are
+// optional for that reason.
 //
-//   {type: "started", run: "r-7", stage: "build", task: "t-2", log: null}            code
+//   {type: "started", run: "r-7", stage: "build", task: "t-2", log: null,
+//    trace: "9c41…e07a"}                                                             code
 //   {type: "ended", run: "r-7", stage: "build", outcome: {kind: "send", to: "review", why: "built"},
 //    usd: 0.41, input: 12000, output: 3000, turns: 14}                               code
 //   {type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve", "no"]}   the stage that asks
@@ -118,13 +120,18 @@ export const TicketFact = Schema.Union([
  * at run time, so a cast one is refused too.
  */
 export const CodeFact = Schema.Union([
-	/** Code started an agent run. `log`: where its own log is, once there is one. */
+	/**
+	 * Code started an agent run. `log`: where its own log is, once there is one. `trace`: the trace
+	 * id of the job the run is in, the key of its `JobRecord`
+	 * (docs/direction/a-job-record-holds-its-trace.md). Left out by a run that has no record.
+	 */
 	Schema.Struct({
 		type: Schema.Literal("started"),
 		run: Id,
 		stage: Stage,
 		task: Schema.NullOr(Id),
 		log: Schema.NullOr(Schema.String),
+		trace: Schema.optionalKey(TraceId),
 	}),
 	/** The run ended, with its stage's answer, what it cost and how long it went. */
 	Schema.Struct({

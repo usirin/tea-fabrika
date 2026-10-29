@@ -22,6 +22,7 @@
 		"@modelcontextprotocol/server": "catalog:",
 		"@tea-fabrika/counter": "workspace:*",
 		"@tea-fabrika/map": "workspace:*",
+		"@tea-fabrika/runs": "workspace:*",
 		"@tea-fabrika/ticket": "workspace:*",
 		"@tea-fabrika/trace": "workspace:*",
 		"@tea-fabrika/tracker": "workspace:*",

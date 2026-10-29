@@ -52,6 +52,17 @@
 	--ty-turn: oklch(0.76 0.085 345);
 	--ty-step: oklch(0.8 0.085 120);
 	--ty-checks: oklch(0.8 0.06 55);
+	/*
+	 * One colour per service, on the trace's bars only (programs/trace): six hues at one lightness,
+	 * softer than the status colours and clear of their hues, so a bar's colour says whose it is and
+	 * red still says only that it went wrong.
+	 */
+	--svc-0: oklch(0.72 0.075 225);
+	--svc-1: oklch(0.72 0.075 305);
+	--svc-2: oklch(0.72 0.075 190);
+	--svc-3: oklch(0.72 0.075 340);
+	--svc-4: oklch(0.72 0.075 120);
+	--svc-5: oklch(0.72 0.075 60);
 
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -519,7 +530,7 @@ button:focus-visible {
 }
 
 /*
- * A round 6 view's base (programs/ticket, map and trace): its type and a plain reset of its
+ * A round 6 view's base (programs/ticket, map, runs and trace): its type and a plain reset of its
  * controls. Here, before any rule that styles a control more closely, so those still win.
  */
 .view {
@@ -1182,7 +1193,7 @@ main.program:has(> .tracker) {
 /*
  * Round 6: the three windows one ticket is seen through, each a program in its own tile.
  * programs/ticket (a page, as Linear draws an issue), programs/map (today's programs on a canvas)
- * and programs/trace (one ticket's runs in time, as a music editor lays out tracks). Everything
+ * and programs/runs (one ticket's runs in time, as a music editor lays out tracks). Everything
  * here is under `.view`, so the app's own buttons and tiles keep their look, and the rules match
  * the round 6 mockup's, class for class.
  */
@@ -1882,7 +1893,7 @@ main.program:has(> .view) {
 	}
 }
 
-/* The bar over the map and the trace. */
+/* The bar over the map, the runs and the trace. */
 
 .view .mapbar {
 	display: flex;
@@ -2310,20 +2321,20 @@ main.program:has(> .view) {
 	flex: none;
 }
 
-/* 3. The trace: an arrangement, a track per step and a clip per run. */
+/* 3. The runs: an arrangement, a track per step and a clip per run. */
 
-.trace-view {
+.runs-view {
 	overflow: auto;
 }
 
-.trace-view .legend .swatch {
+.runs-view .legend .swatch {
 	position: static;
 	display: inline-block;
 	inline-size: 18px;
 	block-size: 10px;
 }
 
-.trace-view .legend .turn-bar {
+.runs-view .legend .turn-bar {
 	display: inline-block;
 	inline-size: 2px;
 	block-size: 10px;
@@ -2331,26 +2342,26 @@ main.program:has(> .view) {
 	background: var(--text-muted);
 }
 
-.trace-view .arr-body {
+.runs-view .arr-body {
 	display: grid;
 	grid-template-columns: 190px minmax(0, 1fr);
 	padding: var(--s-2) 32px var(--s-4) var(--s-4);
 }
 
-.trace-view .arr-heads,
-.trace-view .arr-time {
+.runs-view .arr-heads,
+.runs-view .arr-time {
 	display: grid;
 	grid-auto-rows: 34px;
 	grid-template-rows: 30px;
 }
 
-.trace-view .arr-time {
+.runs-view .arr-time {
 	position: relative;
 	touch-action: none;
 	cursor: ew-resize;
 }
 
-.trace-view .trk-h {
+.runs-view .trk-h {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 46px;
 	align-items: center;
@@ -2360,7 +2371,7 @@ main.program:has(> .view) {
 	min-inline-size: 0;
 }
 
-.trace-view .trk-h .n {
+.runs-view .trk-h .n {
 	font: 500 var(--fs-small) var(--mono);
 	color: var(--text-primary);
 	white-space: nowrap;
@@ -2368,17 +2379,17 @@ main.program:has(> .view) {
 	text-overflow: ellipsis;
 }
 
-.trace-view .trk-h .n small {
+.runs-view .trk-h .n small {
 	font: 400 var(--fs-micro) var(--font);
 	color: var(--text-faint);
 	margin-inline-start: 6px;
 }
 
-.trace-view .trk-h.nb .n {
+.runs-view .trk-h.nb .n {
 	color: var(--text-muted);
 }
 
-.trace-view .cpu {
+.runs-view .cpu {
 	display: grid;
 	gap: 2px;
 	justify-items: end;
@@ -2386,7 +2397,7 @@ main.program:has(> .view) {
 	color: var(--text-muted);
 }
 
-.trace-view .cpu .bar3 {
+.runs-view .cpu .bar3 {
 	inline-size: 40px;
 	block-size: 4px;
 	border-radius: 2px;
@@ -2394,20 +2405,20 @@ main.program:has(> .view) {
 	overflow: hidden;
 }
 
-.trace-view .cpu .bar3 i {
+.runs-view .cpu .bar3 i {
 	display: block;
 	block-size: 100%;
 	background: var(--text-muted);
 }
 
-.trace-view .ruler {
+.runs-view .ruler {
 	position: relative;
 	border-block-end: 1px solid var(--border);
 	font-size: var(--fs-micro);
 	color: var(--text-faint);
 }
 
-.trace-view .ruler .tk {
+.runs-view .ruler .tk {
 	position: absolute;
 	inset-block-end: 4px;
 	translate: -50% 0;
@@ -2415,11 +2426,11 @@ main.program:has(> .view) {
 }
 
 /* The last tick sits left of its line, so the playhead at now does not cover it. */
-.trace-view .ruler .tk.end {
+.runs-view .ruler .tk.end {
 	translate: calc(-100% - 8px) 0;
 }
 
-.trace-view .ruler .mk {
+.runs-view .ruler .mk {
 	position: absolute;
 	inset-block-start: 2px;
 	display: inline-flex;
@@ -2437,37 +2448,37 @@ main.program:has(> .view) {
 	z-index: 3;
 }
 
-.trace-view .ruler .mk.no {
+.runs-view .ruler .mk.no {
 	box-shadow:
 		inset 2px 0 0 var(--text-muted),
 		inset 0 0 0 1px var(--border);
 }
 
-.trace-view .trk {
+.runs-view .trk {
 	position: relative;
 	border-block-start: 1px solid var(--border-faint);
 }
 
 /* A line under each of the ruler's ticks, over every track. */
-.trace-view .grid {
+.runs-view .grid {
 	position: absolute;
 	inset: 30px 0 0;
 	z-index: 1;
 	pointer-events: none;
 }
 
-.trace-view .gl {
+.runs-view .gl {
 	position: absolute;
 	inset-block: 0;
 	inline-size: 1px;
 	background: var(--border-faint);
 }
 
-.trace-view .trk.nb {
+.runs-view .trk.nb {
 	background-color: color-mix(in oklab, var(--surface-sunken) 50%, transparent);
 }
 
-.trace-view .clip {
+.runs-view .clip {
 	position: absolute;
 	z-index: 2;
 	inset-block: 5px;
@@ -2486,48 +2497,48 @@ main.program:has(> .view) {
 	cursor: pointer;
 }
 
-.trace-view .clip.sel {
+.runs-view .clip.sel {
 	box-shadow: inset 0 0 0 1px var(--text-secondary);
 	color: var(--text-primary);
 }
 
-.trace-view .clip.run {
+.runs-view .clip.run {
 	box-shadow:
 		inset 0 0 0 1px var(--border-strong),
 		inset 2px 0 0 var(--running);
 }
 
-.trace-view .clip.send {
+.runs-view .clip.send {
 	background: none;
 	box-shadow: inset 0 0 0 1px var(--text-muted);
 }
 
-.trace-view .clip.stuck {
+.runs-view .clip.stuck {
 	box-shadow:
 		inset 0 0 0 1px var(--border-strong),
 		inset 2px 0 0 var(--stuck);
 }
 
-.trace-view .clip.root {
+.runs-view .clip.root {
 	background: var(--surface-hover);
 	cursor: default;
 }
 
-.trace-view .clip .turns {
+.runs-view .clip .turns {
 	display: flex;
 	gap: 2px;
 	align-items: center;
 	block-size: 100%;
 }
 
-.trace-view .clip .turns i {
+.runs-view .clip .turns i {
 	inline-size: 2px;
 	block-size: 10px;
 	border-radius: 1px;
 	background: var(--text-muted);
 }
 
-.trace-view .wait {
+.runs-view .wait {
 	position: absolute;
 	z-index: 2;
 	inset-block: 7px;
@@ -2537,11 +2548,11 @@ main.program:has(> .view) {
 	opacity: 0.9;
 }
 
-.trace-view .wait.done {
+.runs-view .wait.done {
 	opacity: 0.45;
 }
 
-.trace-view .ph {
+.runs-view .ph {
 	position: absolute;
 	inset-block: 0;
 	inline-size: 0;
@@ -2549,7 +2560,7 @@ main.program:has(> .view) {
 	pointer-events: none;
 }
 
-.trace-view .ph::before {
+.runs-view .ph::before {
 	content: "";
 	position: absolute;
 	inset-block: 0;
@@ -2558,11 +2569,11 @@ main.program:has(> .view) {
 	background: var(--text-primary);
 }
 
-.trace-view .ph.live::before {
+.runs-view .ph.live::before {
 	background: var(--text-secondary);
 }
 
-.trace-view .ph-h {
+.runs-view .ph-h {
 	position: absolute;
 	inset-block-start: 2px;
 	inset-inline-start: -7px;
@@ -2574,7 +2585,7 @@ main.program:has(> .view) {
 	cursor: ew-resize;
 }
 
-.trace-view .after {
+.runs-view .after {
 	position: absolute;
 	inset-block: 30px 0;
 	inset-inline-end: 0;
@@ -2583,30 +2594,316 @@ main.program:has(> .view) {
 	pointer-events: none;
 }
 
-.trace-view .arr-foot {
+.runs-view .arr-foot {
 	margin: 0 var(--s-4) var(--s-4);
 	display: grid;
 	gap: var(--s-3);
 }
 
-.trace-view .span-d {
+.runs-view .span-d {
 	padding: var(--s-2) var(--s-3);
 	border-radius: var(--r-lg);
 	box-shadow: inset 0 0 0 1px var(--border-faint);
 }
 
 @container main (max-width: 760px) {
-	.trace-view .arr-body {
+	.runs-view .arr-body {
 		grid-template-columns: 120px minmax(0, 1fr);
 		padding-inline: var(--s-2);
 	}
 
-	.trace-view .trk-h {
+	.runs-view .trk-h {
 		grid-template-columns: minmax(0, 1fr);
 	}
 
-	.trace-view .trk-h .cpu,
-	.trace-view .trk-h .n small {
+	.runs-view .trk-h .cpu,
+	.runs-view .trk-h .n small {
+		display: none;
+	}
+}
+
+/* 4. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
+
+.trace-view {
+	overflow: auto;
+}
+
+.trace-view .legend .swatch {
+	display: inline-block;
+	inline-size: 10px;
+	block-size: 10px;
+	border-radius: 2px;
+}
+
+.trace-view .wf {
+	inline-size: calc(100% - 2 * var(--s-4));
+	margin: var(--s-2) var(--s-4) var(--s-3);
+	table-layout: fixed;
+	border-collapse: collapse;
+}
+
+.trace-view .wf-c-name {
+	inline-size: 34%;
+}
+
+.trace-view .wf-row {
+	block-size: 26px;
+	cursor: default;
+}
+
+.trace-view .wf-row:not(.wf-head):hover {
+	background: var(--surface-hover);
+}
+
+.trace-view .wf-row.sel {
+	background: var(--surface-selected);
+}
+
+.trace-view .wf-row:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.trace-view .wf th,
+.trace-view .wf td {
+	padding: 0;
+	text-align: start;
+	vertical-align: middle;
+	font-weight: 400;
+}
+
+.trace-view .wf-head {
+	block-size: 22px;
+	color: var(--text-faint);
+	font-size: var(--fs-micro);
+	border-block-end: 1px solid var(--border-faint);
+}
+
+.trace-view .wf-name {
+	overflow: hidden;
+	white-space: nowrap;
+	color: var(--text-secondary);
+}
+
+.trace-view .wf-in {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-inline-size: 0;
+}
+
+.trace-view th.wf-name {
+	padding-inline-start: 6px;
+}
+
+.trace-view .wf-caret {
+	inline-size: 10px;
+	flex: none;
+	color: var(--text-faint);
+	font-size: var(--fs-micro);
+}
+
+.trace-view .wf-swatch {
+	inline-size: 3px;
+	block-size: 14px;
+	flex: none;
+	border-radius: 1px;
+}
+
+.trace-view .wf-note {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-track {
+	position: relative;
+	block-size: 26px;
+	margin-inline-end: 64px;
+}
+
+.trace-view .wf-head .wf-track {
+	block-size: 22px;
+}
+
+.trace-view .wf-tick {
+	position: absolute;
+	inset-block-start: 4px;
+	transform: translateX(-50%);
+	font-variant-numeric: tabular-nums;
+}
+
+.trace-view .wf-tick:first-child {
+	transform: none;
+}
+
+.trace-view .wf-span {
+	position: absolute;
+	inset-block: 7px;
+	border-radius: 3px;
+	opacity: 0.85;
+}
+
+.trace-view .wf-span.wrong {
+	opacity: 1;
+}
+
+.trace-view .wf-dot {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: 5px;
+	block-size: 5px;
+	margin: -2.5px 0 0 -2.5px;
+	border-radius: 50%;
+	background: var(--surface-sunken);
+	box-shadow: 0 0 0 1px var(--text-primary);
+}
+
+.trace-view .wf-took {
+	position: absolute;
+	inset-block-start: 50%;
+	transform: translateY(-50%);
+	font-size: var(--fs-micro);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.trace-view .wf-mark {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: 9px;
+	block-size: 9px;
+	margin: -4.5px 0 0 -4.5px;
+	transform: rotate(45deg);
+	border-radius: 1px;
+}
+
+.trace-view .wf-detail {
+	display: grid;
+	gap: var(--s-2);
+	margin: var(--s-1) 0 var(--s-3) var(--s-6);
+	padding: var(--s-3);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-detail h4 {
+	margin: var(--s-1) 0 0;
+	font: 600 var(--fs-micro) / 1.4 var(--font);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.trace-view .wf-detail-h {
+	margin: 0;
+	color: var(--text-secondary);
+}
+
+.trace-view .wf-detail-h b {
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.trace-view .wf-detail p,
+.trace-view .wf-detail ul,
+.trace-view .wf-detail ol {
+	margin: 0;
+}
+
+.trace-view .wf-detail ul,
+.trace-view .wf-detail ol {
+	padding-inline-start: var(--s-4);
+}
+
+.trace-view .wf-json {
+	margin: 0;
+}
+
+.trace-view .wf-json figcaption {
+	margin-block-end: 2px;
+	font: 600 var(--fs-micro) / 1.4 var(--font);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.trace-view .wf-json pre,
+.trace-view .wf-detail code {
+	margin: 0;
+	padding: 2px 6px;
+	border-radius: var(--r-sm);
+	background: var(--surface-sunken);
+	font: 400 var(--fs-small) / 1.5 var(--mono);
+	color: var(--text-primary);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.trace-view .wf-json pre {
+	display: block;
+	padding: var(--s-1) var(--s-2);
+}
+
+.trace-view .wf-states {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: var(--s-2);
+}
+
+.trace-view .wf-diff li.replace,
+.trace-view .wf-diff li.add {
+	color: var(--done);
+}
+
+.trace-view .wf-diff li.remove {
+	color: var(--stuck);
+}
+
+.trace-view .wf-bad {
+	color: var(--stuck);
+	font-weight: 600;
+}
+
+.trace-view .wf-tags {
+	border-collapse: collapse;
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-tags th,
+.trace-view .wf-tags td {
+	padding: 1px var(--s-3) 1px 0;
+	text-align: start;
+	vertical-align: top;
+	font-weight: 400;
+	overflow-wrap: anywhere;
+}
+
+.trace-view .wf-tags th {
+	color: var(--text-faint);
+}
+
+.trace-view .wf-tags td {
+	color: var(--text-primary);
+}
+
+.trace-view > .note {
+	margin: 0 var(--s-4) var(--s-4);
+}
+
+@container main (max-width: 760px) {
+	.trace-view .wf {
+		inline-size: calc(100% - 2 * var(--s-2));
+		margin-inline: var(--s-2);
+	}
+
+	.trace-view .wf-c-name {
+		inline-size: 40%;
+	}
+
+	.trace-view .wf-note {
 		display: none;
 	}
 }

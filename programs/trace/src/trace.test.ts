@@ -1,104 +1,182 @@
-import type {Entry} from "@kampus/pipeline/tickets/ticket";
-import {atSeven, OWNER, SEVEN, SEVEN_NOW} from "@tea-fabrika/tracker/seven";
+import {type JobTrace, memoryStorage, offer, readInput, start, type Word} from "@kampus/fabrika";
+import {Effect, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {axisOf, placeOf, stopsOf, ticksOf, traceOf} from "./trace.ts";
+import {type Do, trace} from "./index.ts";
+import {memoryTraces} from "./memory.ts";
+import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
+import {nodesOf, treeOf} from "./tree.ts";
+import {type Shown, shownOf} from "./view.ts";
 
-const track = (trace: ReturnType<typeof traceOf>, name: string) => {
-	const found = trace.tracks.find((t) => t.name === name);
-	if (found === undefined) throw new Error(`no track ${name}`);
-	return found;
+// The trace program with no window, on the `seq --to 3 | tally` record held in memory. Told what
+// its window sends, it opens the rows named, down to one step, and shows that step's Msg, the
+// state before and after, and its Cmds: the done-when of the trace tile (#74).
+
+/** The key of the row named `name` in a record's tree. */
+const keyOf = (record: JobTrace, name: string): string => {
+	const found = nodesOf(treeOf(record)).find((n) => n.name === name);
+	if (found === undefined) throw new Error(`no row ${name}`);
+	return found.key;
 };
 
-describe("traceOf", () => {
-	it("lays ticket 7 out live: a ticket row, the nine steps, a clip per run, the open wait", () => {
-		const trace = traceOf(SEVEN, SEVEN_NOW);
-		expect(trace.tracks.map((t) => t.name)).toEqual([
-			"ticket",
-			"triage",
-			"plan",
-			"approval",
-			"test_writer",
-			"build",
-			"mutation",
-			"review",
-			"push",
-			"merge",
+const session = (records: readonly JobTrace[], id: string | undefined) =>
+	Effect.gen(function* () {
+		const started = yield* start(trace, {id}, {}, {id: "trace:test", storage: memoryStorage()});
+		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
+		const {run} = started;
+		const say = (d: Do): Effect.Effect<Word> => offer(run, "do", d);
+		const until = (ok: (shown: Shown) => boolean) =>
+			run.machines.trace.changes.pipe(
+				Stream.filter((s) => s !== null),
+				Stream.map(shownOf),
+				Stream.filter(ok),
+				Stream.runHead,
+				Effect.map(Option.getOrThrow),
+			);
+		return {run, say, until};
+	}).pipe(Effect.provide(memoryTraces(records)));
+
+describe("the trace program", () => {
+	it("opens tally, count total, add 2: total 1 before, 3 after, and no Cmds", async () => {
+		const tally = keyOf(TALLY_TRACE, "tally");
+		const count = keyOf(TALLY_TRACE, "count total");
+		const add2 = keyOf(TALLY_TRACE, "add 2");
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session([TALLY_TRACE], TALLY_ID);
+				const first = yield* until((s) => s.read === "read");
+				yield* say({kind: "toggle", row: tally});
+				yield* say({kind: "toggle", row: count});
+				yield* say({kind: "choose", row: add2});
+				const opened = yield* until((s) => s.chosen !== null);
+				yield* say({kind: "quit"});
+				return {first, opened, ended: (yield* run.ended).kind};
+			}).pipe(Effect.scoped),
+		);
+
+		// As it first opens: the job's row is open, its two runs show, closed.
+		expect(seen.first.title).toBe("seq --to 3 | tally");
+		expect(seen.first.rows.map((r) => [r.depth, r.name, r.open])).toEqual([
+			[0, "seq --to 3 | tally", true],
+			[1, "seq", false],
+			[1, "tally", false],
 		]);
-		expect(trace.from).toBe(atSeven(10, 2));
-		expect(trace.to).toBe(SEVEN_NOW);
-		expect(trace.spans).toBe(2);
-		expect(trace.usd).toBeCloseTo(0.49);
-		const plan = track(trace, "plan");
-		expect(plan.who).toBe("agent");
-		expect(plan.clips).toMatchObject([
-			{run: "r-2", from: atSeven(10, 3), to: atSeven(10, 9), open: false},
+
+		// Opened down to the step: the path, and the step's detail.
+		expect(seen.opened.rows.map((r) => [r.depth, r.kind, r.name])).toEqual([
+			[0, "job", "seq --to 3 | tally"],
+			[1, "run", "seq"],
+			[1, "run", "tally"],
+			[2, "machine", "count total"],
+			[3, "step", "add 1"],
+			[3, "step", "add 2"],
+			[3, "step", "add 3"],
 		]);
-		expect(track(trace, "approval")).toMatchObject({
-			who: "person",
-			waits: [{ask: "a-1", from: atSeven(10, 9), to: SEVEN_NOW, pick: null}],
+		expect(seen.opened.chosen).toEqual({
+			kind: "step",
+			key: add2,
+			run: "tally-5d02c7a1",
+			machine: "count",
+			id: "total",
+			n: 2,
+			at: 6,
+			msg: {type: "add", n: 2},
+			before: {kind: "kept", state: {total: 1}},
+			after: {total: 3},
+			changes: [{op: "replace", path: "/total", before: 1, after: 3}],
+			cmds: [],
 		});
-		expect(track(trace, "build")).toMatchObject({who: "none", clips: [], usd: 0});
-		expect(trace.markers).toEqual([]);
+		expect(seen.ended).toBe("ended");
 	});
 
-	it("replays up to the playhead: the plan's run is open, and nothing after it is there", () => {
-		const trace = traceOf(SEVEN, SEVEN_NOW, atSeven(10, 5));
-		expect(trace.from).toBe(atSeven(10, 2));
-		expect(trace.to).toBe(SEVEN_NOW);
-		expect(trace.upTo).toBe(atSeven(10, 5));
-		expect(track(trace, "plan").clips).toMatchObject([
-			{run: "r-2", to: atSeven(10, 5), open: true, ended: null},
+	it("shows the first step's state before as the machine's start, which no row keeps", async () => {
+		const add1 = keyOf(TALLY_TRACE, "add 1");
+		const chosen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session([TALLY_TRACE], TALLY_ID);
+				yield* until((s) => s.read === "read");
+				yield* say({kind: "choose", row: add1});
+				return (yield* until((s) => s.chosen !== null)).chosen;
+			}).pipe(Effect.scoped),
+		);
+		expect(chosen?.kind === "step" && [chosen.before, chosen.after, chosen.changes]).toEqual([
+			{kind: "start"},
+			{total: 1},
+			[],
 		]);
-		expect(track(trace, "approval").waits).toEqual([]);
-		expect(trace.usd).toBeCloseTo(0.11);
 	});
 
-	it("marks an answer on the ruler and closes its wait; the axis ends at the last fact", () => {
-		const answered: Entry = {
-			pos: 8,
-			ticket: 7,
-			by: OWNER,
-			at: atSeven(10, 20),
-			fact: {type: "answered", ask: "a-1", pick: "approve", note: ""},
-		};
-		const trace = traceOf([...SEVEN, answered], atSeven(10, 30));
-		expect(trace.to).toBe(atSeven(10, 20));
-		expect(trace.markers).toEqual([{at: atSeven(10, 20), kind: "answer", says: "approve"}]);
-		expect(track(trace, "approval").waits).toMatchObject([{to: atSeven(10, 20), pick: "approve"}]);
+	it("closes an open row, and takes no row the record does not hold", async () => {
+		const shown = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {say, until} = yield* session([TALLY_TRACE], TALLY_ID);
+				yield* until((s) => s.read === "read");
+				yield* say({kind: "toggle", row: "span:ffffffffffffffff"});
+				yield* say({kind: "choose", row: "span:ffffffffffffffff"});
+				yield* say({kind: "toggle", row: "job"});
+				return yield* until((s) => s.rows.length === 1);
+			}).pipe(Effect.scoped),
+		);
+		expect(shown.rows.map((r) => [r.name, r.open])).toEqual([["seq --to 3 | tally", false]]);
+		expect(shown.chosen).toBeNull();
 	});
 
-	it("keeps a stage outside the nine on a track of its own after them", () => {
-		const extra: Entry = {
-			pos: 8,
-			ticket: 7,
-			by: SEVEN[1]?.by ?? OWNER,
-			at: atSeven(10, 10),
-			fact: {type: "started", run: "r-3", stage: "sort", task: null, log: null},
-		};
-		const trace = traceOf([...SEVEN, extra], SEVEN_NOW);
-		expect(trace.tracks.at(-1)).toMatchObject({name: "sort", clips: [{run: "r-3", open: true}]});
+	it("with no flag, waits for an id on `id`; a newer id replaces the record and its open rows", async () => {
+		const other = "f".repeat(32);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session([TALLY_TRACE], undefined);
+				const waiting = yield* until(() => true);
+				yield* offer(run, "id", TALLY_ID);
+				const first = yield* until((s) => s.read === "read");
+				yield* say({kind: "toggle", row: keyOf(TALLY_TRACE, "tally")});
+				yield* until((s) => s.rows.length === 4);
+				yield* offer(run, "id", other);
+				const next = yield* until((s) => s.read === "read" && s.id === other);
+				return {waiting, first, next};
+			}).pipe(Effect.scoped),
+		);
+		expect([seen.waiting.read, seen.waiting.id]).toEqual(["waiting", null]);
+		expect([seen.first.id, seen.first.title]).toEqual([TALLY_ID, "seq --to 3 | tally"]);
+		// Nobody wrote the other trace: the job's row alone, and tally's open row is gone with its record.
+		expect(seen.next.rows.map((r) => [r.kind, r.name])).toEqual([["job", "job"]]);
 	});
-});
 
-describe("the axis", () => {
-	it("is at least five minutes, so one fact does not fill it", () => {
-		const one = SEVEN.slice(0, 1);
-		expect(axisOf(one, atSeven(10, 2))).toEqual({from: atSeven(10, 2), to: atSeven(10, 7)});
+	it("reads a trace nobody wrote as an empty record: the job's row alone", async () => {
+		const shown = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {until} = yield* session([], "0".repeat(32));
+				return yield* until((s) => s.read === "read");
+			}).pipe(Effect.scoped),
+		);
+		expect(shown.rows.map((r) => [r.kind, r.name, r.opens])).toEqual([["job", "job", false]]);
 	});
 
-	it("places a time from 0 to 100, ticks on round minutes, and stops at each fact", () => {
-		const trace = traceOf(SEVEN, SEVEN_NOW);
-		expect(placeOf(trace, trace.from)).toBe(0);
-		expect(placeOf(trace, trace.to)).toBe(100);
-		expect(ticksOf(trace)).toEqual([
-			atSeven(10, 2),
-			atSeven(10, 4),
-			atSeven(10, 6),
-			atSeven(10, 8),
-			atSeven(10, 10),
-			atSeven(10, 12),
-			atSeven(10, 14),
+	it("shows the span detail of a run: its tags, its events, its record", () => {
+		const tally = keyOf(TALLY_TRACE, "tally");
+		const chosen = shownOf({
+			read: {at: "read", trace: TALLY_TRACE},
+			open: ["job"],
+			chosen: tally,
+		}).chosen;
+		expect(chosen?.kind).toBe("span");
+		if (chosen?.kind !== "span") return;
+		expect([chosen.service, chosen.at, chosen.took, chosen.status]).toEqual(["tally", 1, 12, "ok"]);
+		expect(chosen.tags).toContainEqual(["tea.run.id", "tally-5d02c7a1"]);
+		expect(chosen.events.map((e) => e.name)).toEqual([
+			"told add",
+			"sent total",
+			"told add",
+			"sent total",
+			"told add",
+			"sent total",
 		]);
-		expect(stopsOf(SEVEN)).toEqual([atSeven(10, 2), atSeven(10, 3), atSeven(10, 9)]);
+		expect(chosen.run).toEqual({run: "tally-5d02c7a1", status: "ended", flags: {}});
+	});
+
+	it("reads what its window sends, and refuses a row it does not know the shape of", () => {
+		expect(readInput(trace, {type: "do", value: {kind: "toggle", row: "job"}}).kind).toBe("read");
+		expect(readInput(trace, {type: "do", value: {kind: "open", row: "job"}}).kind).toBe("refused");
+		expect(readInput(trace, {type: "id", value: TALLY_ID}).kind).toBe("read");
+		expect(readInput(trace, {type: "id", value: "not-a-trace"}).kind).toBe("refused");
 	});
 });

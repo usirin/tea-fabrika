@@ -13,8 +13,10 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
   answers its open ask and comments. It runs the tracker's machine, opened on one ticket.
 - [`map`](./map/README.md): a React Flow map of today's programs, with their real inputs,
   outputs and wires, lit by one ticket's facts.
-- [`trace`](./trace/README.md): one ticket's runs in time, a track per step, with a playhead
-  that replays the facts.
+- [`runs`](./runs/README.md): one ticket's runs in time, a track per step, with a playhead
+  that replays the facts. It was `trace` until the job record.
+- [`trace`](./trace/README.md): one job's trace from its record, a bar per span, and every
+  grouped row opening down to one step: its Msg, the state before and after, and its Cmds.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.

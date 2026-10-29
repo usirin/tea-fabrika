@@ -30,7 +30,7 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
   ticket.
 - Only a person answers. The tracker's save cell refuses an `answered` written by an agent, and
   this program uses that same cell.
-- The panel's Trace and Made of rows name a command to type (`trace --ticket 7`,
+- The panel's Runs and Made of rows name a command to type (`runs --ticket 7`,
   `map --ticket 7`), since a window cannot open a tile yet.
 
 ## Not done

@@ -17,8 +17,11 @@ import {
 } from "@kampus/fabrika";
 import {counter} from "@tea-fabrika/counter";
 import {map} from "@tea-fabrika/map";
+import {runs} from "@tea-fabrika/runs";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
+import {memoryTraces} from "@tea-fabrika/trace/memory";
+import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Deferred, Effect, Layer, Queue, Stream} from "effect";
 import {type EditorMsg, editor} from "./editor/editor.ts";
@@ -55,8 +58,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //     then tsh's line closes, and tsh ends. `ended` says when.
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter, the tracker,
-// and one ticket's three windows: `ticket`, `map` and `trace`. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
-// a view is drawn: it tells its tile, shows the view its data on each change, and reads
+// one ticket's three windows: `ticket`, `map` and `runs`, and `trace`, one job's record. Every
+// run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
 // the host's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
@@ -156,10 +159,12 @@ export const SCREEN_KEPT = 256 * 1024;
 export const RESET = "\x1bc";
 
 /**
- * The app's own programs: the counter, and the four that read tickets (the tracker, and one
- * ticket's page, map and trace), packed to write as `author`: a tile's tsh lists
+ * The app's own programs: the counter, the four that read tickets (the tracker, and one
+ * ticket's page, map and runs), packed to write as `author`: a tile's tsh lists
  * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
- * ever the `author` handed here.
+ * ever the `author` handed here. And `trace`, one job's record: on records held in memory, the
+ * `seq --to 3 | tally` example alone, until the host reaches the job's record
+ * (packages/fabrika/src/host/traces.ts).
  */
 export const appPrograms = (
 	ledger: Ledger["Service"],
@@ -176,7 +181,8 @@ export const appPrograms = (
 		listed(tracker, tickets),
 		listed(ticket, tickets),
 		listed(map, tickets),
-		listed(trace, tickets),
+		listed(runs, tickets),
+		listed(trace, memoryTraces([TALLY_TRACE])),
 	];
 };
 

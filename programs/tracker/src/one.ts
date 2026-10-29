@@ -2,8 +2,8 @@ import {Ticket, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import type {Tracker} from "./machine.ts";
 
-// One ticket as the tracker machine holds it, whole: what the map and trace programs show their
-// windows. Each window folds the timeline its own way (the map into the nine steps, the trace
+// One ticket as the tracker machine holds it, whole: what the map and runs programs show their
+// windows. Each window folds the timeline its own way (the map into the nine steps, the runs
 // into tracks up to its playhead), so the view hands over the facts and the clock, nothing more.
 //
 //   oneOf(state)   // state.open = 7

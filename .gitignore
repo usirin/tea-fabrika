@@ -2,6 +2,8 @@ node_modules
 dist
 .env
 runs
+# The runs program is code, not a live run's state.
+!/programs/runs/
 .teahouse
 # Miniflare's cache, left wherever a ledger in Miniflare is started (tsh, the experiments).
 .wrangler

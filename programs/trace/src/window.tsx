@@ -1,376 +1,484 @@
 import type {WindowProps} from "@kampus/fabrika";
-import {nameOf} from "@kampus/pipeline/stages/outcome";
-import {endedAs} from "@kampus/pipeline/stages/status";
-import {stepWords} from "@tea-fabrika/tracker";
-import {type KeyboardEvent, type PointerEvent, useRef, useState} from "react";
+import {Fragment, type KeyboardEvent} from "react";
 import type {trace} from "./index.ts";
-import {
-	type Clip,
-	placeOf,
-	stopsOf,
-	type Trace,
-	type Track,
-	ticksOf,
-	traceOf,
-	type Who,
-} from "./trace.ts";
+import type {Change, Detail, Row, Shown} from "./view.ts";
 
-// The trace's window: an arrangement, as a music editor shows a song. Track heads on the left,
-// each with what the step cost as a small meter; time runs right. A clip is a run, its agent turns
-// drawn as small bars; a stripe is a wait on you; a flag on the ruler is your answer. The
-// playhead is live at now; drag it back, or move it with the arrow keys from fact to fact, and
-// the clips and stripes show the facts up to it, as Elm's debugger replays a program's messages.
-// A small component of its own, not a timeline library: see this package's README for why.
+// The trace's window: a waterfall, as Jaeger draws a trace. Names on the left, nested by parent;
+// time runs right, one bar per span in its program's colour, red when it went wrong, its events
+// as dots, a step as a mark. Every row that groups others opens with a click or a key, and the
+// chosen row opens in place beneath itself: a span as Jaeger's span detail (its tags, its events),
+// a step as Elm's debugger and Redux DevTools show one (its Msg, what changed, the state before
+// and after, its Cmds). What is open and what is chosen is the program's state: this component
+// keeps none, and only sends `toggle` and `choose`.
+//
+// The keys are the WAI-ARIA tree grid's: ↑ and ↓ move between rows, → opens a row (or moves into
+// it), ← closes it (or moves to its parent), Enter and Space do what a click does, Home and End
+// jump.
 
-const hhmm = (at: number): string =>
-	new Date(at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false});
-
-const usd = (n: number) => `$${n.toFixed(2)}`;
-
-const WHO: {readonly [W in Who]: string} = {
-	agent: "agent",
-	code: "code",
-	person: "a person",
-	none: "not run yet",
-	ticket: "all steps",
+/** How long, in a few characters: `0.8 ms`, `12 ms`, `3.4 s`, `2m 05s`. */
+export const took = (ms: number): string => {
+	if (ms < 10) return `${Math.round(ms * 10) / 10} ms`;
+	if (ms < 1000) return `${Math.round(ms)} ms`;
+	if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+	const s = Math.round(ms / 1000);
+	return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
 
-function Meter({value, of}: {readonly value: number; readonly of: number}) {
-	return (
-		<span className="cpu" title={usd(value)}>
-			<span>{usd(value)}</span>
-			<span className="bar3" aria-hidden="true">
-				<i style={{inlineSize: `${of <= 0 ? 0 : Math.min(100, (value / of) * 100)}%`}} />
-			</span>
-		</span>
-	);
-}
-
-function Head({track, trace, most}: {track: Track; trace: Trace; most: number}) {
-	const name = track.name === "ticket" ? `ticket` : stepWords(track.name);
-	return (
-		<div className={`trk-h${track.who === "none" ? " nb" : ""}`}>
-			<span className="n">
-				{name}
-				<small>{WHO[track.who]}</small>
-			</span>
-			{track.who === "person" ? (
-				<span />
-			) : (
-				<Meter value={track.usd} of={track.name === "ticket" ? trace.usd : most} />
-			)}
-		</div>
-	);
-}
-
-const labelOf = (clip: Clip): string => {
-	if (clip.open) return "running";
-	if (clip.ended === null) return "";
-	if (clip.ended.outcome.kind === "done") {
-		const n = clip.ended.turns;
-		return n === 0 ? "code" : `${n} ${n === 1 ? "turn" : "turns"}`;
-	}
-	return nameOf(clip.ended.outcome);
+/** The ruler's ticks: a round step that gives at most six. */
+const ticksOf = (length: number): readonly number[] => {
+	const raw = length / 6;
+	const tens = 10 ** Math.floor(Math.log10(raw));
+	const step = ([1, 2, 5, 10].map((m) => m * tens).find((s) => s >= raw) ?? 10 * tens) || 1;
+	const out: number[] = [];
+	for (let t = 0; t <= length + 1e-9; t += step) out.push(t);
+	return out;
 };
 
-function ClipBox(props: {
-	readonly clip: Clip;
-	readonly trace: Trace;
-	readonly step: string;
-	readonly chosen: boolean;
-	readonly choose: (run: string) => void;
-}) {
-	const {clip, trace, step, chosen, choose} = props;
-	const left = placeOf(trace, clip.from);
-	const width = placeOf(trace, clip.to) - left;
-	const turns = clip.ended?.turns ?? 0;
-	const cls = [
-		"clip",
-		clip.open ? "run" : "",
-		clip.ended !== null && clip.ended.outcome.kind !== "done" ? "send" : "",
-		clip.ended?.outcome.kind === "stuck" ? "stuck" : "",
-		chosen ? "sel" : "",
-	]
-		.filter((c) => c !== "")
-		.join(" ");
-	const said = `${stepWords(step)}, ${clip.run}, ${hhmm(clip.from)} to ${clip.open ? "the playhead" : hhmm(clip.to)}${
-		clip.ended === null ? ", running" : `, ${nameOf(clip.ended.outcome)}, ${usd(clip.ended.usd)}`
-	}`;
-	return (
-		<button
-			type="button"
-			className={cls}
-			style={{insetInlineStart: `${left}%`, inlineSize: `max(4px, ${width}%)`}}
-			aria-label={said}
-			aria-pressed={chosen}
-			onClick={() => choose(clip.run)}
-		>
-			{turns > 0 ? (
-				<span className="turns" aria-hidden="true">
-					{Array.from({length: Math.min(turns, 14)}, (_, i) => (
-						<i key={String(i)} />
-					))}
-				</span>
-			) : null}
-			<span>{labelOf(clip)}</span>
-		</button>
-	);
-}
+/** A value as JSON: on one line when short, else indented. */
+const json = (value: unknown): string => {
+	const one = JSON.stringify(value) ?? "undefined";
+	return one.length <= 64 ? one : (JSON.stringify(value, null, 2) ?? one);
+};
 
-function Row(props: {
-	readonly track: Track;
-	readonly trace: Trace;
-	readonly chosen: string | null;
-	readonly choose: (run: string) => void;
-}) {
-	const {track, trace, chosen, choose} = props;
-	if (track.name === "ticket")
+const place = (at: number, length: number) => `${(at / length) * 100}%`;
+
+/** A service's colour: its place in the trace's list, one of six. */
+const colourOf = (shown: Shown, service: string) =>
+	`var(--svc-${Math.max(0, shown.services.indexOf(service)) % 6})`;
+
+const KIND_WORD: Readonly<Record<Row["kind"], string>> = {
+	job: "job",
+	span: "span",
+	run: "run",
+	turns: "an agent's turns",
+	machine: "machine run",
+	step: "step",
+};
+
+function Bar({row, shown}: {readonly row: Row; readonly shown: Shown}) {
+	const colour = row.wrong ? "var(--stuck)" : colourOf(shown, row.service);
+	if (row.kind === "step")
 		return (
-			<div className="trk">
-				{track.clips.map((c) => (
-					<span
-						key={c.run}
-						className="clip root"
-						style={{
-							insetInlineStart: `${placeOf(trace, c.from)}%`,
-							inlineSize: `${placeOf(trace, c.to) - placeOf(trace, c.from)}%`,
-						}}
-						aria-hidden="true"
-					>
-						<span>one ticket, one trace</span>
-					</span>
-				))}
-			</div>
+			<span
+				className="wf-mark"
+				style={{insetInlineStart: place(row.from, shown.length), background: colour}}
+				aria-hidden="true"
+			/>
 		);
+	const width = Math.max(0, row.to - row.from);
 	return (
-		<div className={`trk${track.who === "none" ? " nb" : ""}`}>
-			{track.waits.map((w) => (
-				<span
-					key={w.ask}
-					className={`wait${w.pick === null ? "" : " done"}`}
-					style={{
-						insetInlineStart: `${placeOf(trace, w.from)}%`,
-						inlineSize: `max(3px, ${placeOf(trace, w.to) - placeOf(trace, w.from)}%)`,
-					}}
-					title={`waits on you: ${w.what}`}
-				/>
-			))}
-			{track.clips.map((c) => (
-				<ClipBox
-					key={c.run}
-					clip={c}
-					trace={trace}
-					step={track.name}
-					chosen={chosen === c.run}
-					choose={choose}
-				/>
-			))}
-		</div>
+		<>
+			<span
+				className={`wf-span${row.wrong ? " wrong" : ""}`}
+				style={{
+					insetInlineStart: place(row.from, shown.length),
+					inlineSize: `max(2px, ${place(width, shown.length)})`,
+					background: colour,
+				}}
+				aria-hidden="true"
+			>
+				{row.dots.map((d, i) => (
+					<i
+						key={`${d.name}-${String(i)}`}
+						className="wf-dot"
+						style={{insetInlineStart: width === 0 ? "0" : `${((d.at - row.from) / width) * 100}%`}}
+						title={`${d.name} at +${took(d.at)}`}
+					/>
+				))}
+			</span>
+			<span
+				className="wf-took"
+				style={{insetInlineStart: `calc(${place(row.to, shown.length)} + 6px)`}}
+				aria-hidden="true"
+			>
+				{took(width)}
+			</span>
+		</>
 	);
 }
 
-function Chosen({trace, run}: {readonly trace: Trace; readonly run: string}) {
-	const track = trace.tracks.find((t) => t.clips.some((c) => c.run === run));
-	const clip = track?.clips.find((c) => c.run === run);
-	if (track === undefined || clip === undefined) return null;
-	const e = clip.ended;
+function ChangeLine({change}: {readonly change: Change}) {
+	switch (change.op) {
+		case "add":
+			return (
+				<li className="add">
+					<span className="mono">{change.path}</span> added <code>{json(change.after)}</code>
+				</li>
+			);
+		case "remove":
+			return (
+				<li className="remove">
+					<span className="mono">{change.path}</span> removed <code>{json(change.before)}</code>
+				</li>
+			);
+		case "replace":
+			return (
+				<li className="replace">
+					<span className="mono">{change.path}</span> <code>{json(change.before)}</code> →{" "}
+					<code>{json(change.after)}</code>
+				</li>
+			);
+	}
+}
+
+function Pre({label, value}: {readonly label: string; readonly value: unknown}) {
 	return (
-		<dl className="span-d kv">
-			<dt>run</dt>
+		<figure className="wf-json">
+			<figcaption>{label}</figcaption>
+			<pre>{json(value)}</pre>
+		</figure>
+	);
+}
+
+function Tags({tags}: {readonly tags: readonly (readonly [string, string])[]}) {
+	if (tags.length === 0) return <p className="faint">No tags.</p>;
+	return (
+		<table className="wf-tags">
+			<tbody>
+				{tags.map(([k, v]) => (
+					<tr key={k}>
+						<th scope="row" className="mono">
+							{k}
+						</th>
+						<td className="mono">{v}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	);
+}
+
+function JobFacts({job}: {readonly job: NonNullable<Shown["job"]>}) {
+	return (
+		<dl className="kv">
+			<dt>job</dt>
 			<dd>
-				<span className="mono">{clip.run}</span>
+				<span className="mono">%{job.n}</span> <span className="mono">{job.text}</span>
 			</dd>
-			<dt>step</dt>
+			<dt>started</dt>
 			<dd>
-				{stepWords(track.name)}
-				{clip.task === null ? null : (
-					<>
-						, task <span className="mono">{clip.task}</span>
-					</>
-				)}
+				by <span className="mono">{job.by}</span> on <span className="mono">{job.host}</span>
 			</dd>
-			<dt>time</dt>
+			<dt>ended</dt>
 			<dd>
-				{hhmm(clip.from)} to {clip.open ? "the playhead" : hhmm(clip.to)}
+				{job.ended === null
+					? "still running"
+					: `${job.ended.how}, after ${took(job.ended.at - job.started)}`}
 			</dd>
-			{e === null ? null : (
-				<>
-					<dt>ended</dt>
-					<dd>
-						{endedAs(e.outcome, "done")} <span className="mono">{nameOf(e.outcome)}</span>
-					</dd>
-					<dt>cost</dt>
-					<dd>
-						<span className="mono">{usd(e.usd)}</span> · {e.turns}{" "}
-						{e.turns === 1 ? "turn" : "turns"} ·{" "}
-						<span className="mono">{e.input.toLocaleString("en")}</span>{" "}
-						<span className="faint">in</span>{" "}
-						<span className="mono">{e.output.toLocaleString("en")}</span>{" "}
-						<span className="faint">out</span>
-					</dd>
-				</>
-			)}
 		</dl>
 	);
 }
 
-export function TraceWindow({view}: WindowProps<typeof trace>) {
-	// The playhead: `null` is live, at now; a time is a replay up to it.
-	const [at, setAt] = useState<number | null>(null);
-	const [chosen, setChosen] = useState<string | null>(null);
-	const lane = useRef<HTMLDivElement>(null);
-	const timeline = view.ticket?.timeline ?? [];
-	const now = view.now === 0 ? (timeline.at(-1)?.at ?? 0) : view.now;
-	const shown: Trace = traceOf(timeline, now, at ?? now);
-	const live = at === null || at >= shown.to;
-	const most = Math.max(0.01, ...shown.tracks.filter((t) => t.name !== "ticket").map((t) => t.usd));
-	const stops = stopsOf(timeline);
+function RunFacts({run}: {readonly run: NonNullable<Extract<Detail, {kind: "span"}>["run"]>}) {
+	return (
+		<dl className="kv">
+			<dt>run</dt>
+			<dd className="mono">{run.run}</dd>
+			<dt>status</dt>
+			<dd>{run.status}</dd>
+			<dt>flags</dt>
+			<dd>
+				<code>{json(run.flags)}</code>
+			</dd>
+		</dl>
+	);
+}
 
-	const moveTo = (t: number | null) => setAt(t === null || t >= shown.to ? null : t);
-	const fromPointer = (e: PointerEvent<HTMLDivElement>) => {
-		const box = lane.current?.getBoundingClientRect();
-		if (box === undefined || box.width === 0) return;
-		const f = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
-		moveTo(shown.from + f * (shown.to - shown.from));
+function Opened({detail}: {readonly detail: Detail}) {
+	switch (detail.kind) {
+		case "step":
+			return (
+				<section
+					className="wf-detail"
+					aria-label={`step ${detail.n} of ${detail.machine} ${detail.id}`}
+				>
+					<p className="wf-detail-h">
+						<b>
+							{detail.machine} {detail.id}
+						</b>{" "}
+						step {detail.n} <span className="faint">at +{took(detail.at)}, run</span>{" "}
+						<span className="mono faint">{detail.run}</span>
+					</p>
+					<Pre label="Msg" value={detail.msg} />
+					<section className="wf-diff" aria-label="what changed">
+						<h4>What changed</h4>
+						{detail.before.kind === "start" ? (
+							<p className="faint">The first step: the state before it is the machine's start.</p>
+						) : detail.changes.length === 0 ? (
+							<p className="faint">Nothing: the state stayed as it was.</p>
+						) : (
+							<ul>
+								{detail.changes.map((c) => (
+									<ChangeLine key={`${c.op}${c.path}`} change={c} />
+								))}
+							</ul>
+						)}
+					</section>
+					<div className="wf-states">
+						{detail.before.kind === "kept" ? (
+							<Pre label="State before" value={detail.before.state} />
+						) : (
+							<figure className="wf-json">
+								<figcaption>State before</figcaption>
+								<p className="faint">The machine's start: no row keeps it.</p>
+							</figure>
+						)}
+						<Pre label="State after" value={detail.after} />
+					</div>
+					<section aria-label="Cmds">
+						<h4>Cmds</h4>
+						{detail.cmds.length === 0 ? (
+							<p className="faint">None.</p>
+						) : (
+							<ul className="wf-cmds">
+								{detail.cmds.map((c, i) => (
+									<li key={String(i)}>
+										<code>{json(c)}</code>
+									</li>
+								))}
+							</ul>
+						)}
+					</section>
+				</section>
+			);
+		case "span":
+			return (
+				<section className="wf-detail" aria-label={`span ${detail.name}`}>
+					<p className="wf-detail-h">
+						<b>{detail.service}</b> {detail.name}{" "}
+						<span className="faint">
+							{took(detail.took)}, from +{took(detail.at)}
+						</span>{" "}
+						{detail.status === "error" ? <span className="wf-bad">error</span> : null}
+					</p>
+					{detail.job === null ? null : <JobFacts job={detail.job} />}
+					{detail.run === null ? null : <RunFacts run={detail.run} />}
+					<h4>Tags</h4>
+					<Tags tags={detail.tags} />
+					<h4>Events</h4>
+					{detail.events.length === 0 ? (
+						<p className="faint">None.</p>
+					) : (
+						<ol className="wf-events">
+							{detail.events.map((e, i) => (
+								<li key={`${e.name}-${String(i)}`}>
+									<span className="mono faint">+{took(e.at)}</span> {e.name}
+									{e.tags.length === 0 ? null : (
+										<span className="faint"> {e.tags.map(([k, v]) => `${k}=${v}`).join(", ")}</span>
+									)}
+								</li>
+							))}
+						</ol>
+					)}
+					<p className="faint mono">
+						span {detail.span}
+						{detail.parent === null ? ", a root" : `, under ${detail.parent}`}
+					</p>
+				</section>
+			);
+		case "machine":
+			return (
+				<section className="wf-detail" aria-label={`machine run ${detail.machine} ${detail.id}`}>
+					<p className="wf-detail-h">
+						<b>
+							{detail.machine} {detail.id}
+						</b>{" "}
+						{detail.steps} {detail.steps === 1 ? "step" : "steps"}, run{" "}
+						<span className="mono faint">{detail.run}</span>
+					</p>
+					<Pre label="State after its newest step" value={detail.state} />
+				</section>
+			);
+		case "group":
+			return (
+				<section className="wf-detail" aria-label={detail.name}>
+					<p className="wf-detail-h">
+						<b>{detail.name}</b> groups {detail.size} {detail.size === 1 ? "row" : "rows"}
+					</p>
+					{detail.job === null ? null : <JobFacts job={detail.job} />}
+					{detail.run === null ? null : <RunFacts run={detail.run} />}
+				</section>
+			);
+	}
+}
+
+/** The row elements of the grid, in order, for the keys to move between. */
+const rowsIn = (grid: Element | null): HTMLElement[] =>
+	grid === null ? [] : [...grid.querySelectorAll<HTMLElement>("[data-row]")];
+
+export function TraceWindow({view, send}: WindowProps<typeof trace>) {
+	const chosen = view.chosen?.key ?? null;
+	const toggle = (row: string) => send({type: "do", value: {kind: "toggle", row}});
+	const choose = (row: string | null) => send({type: "do", value: {kind: "choose", row}});
+	/** A click, or Enter or Space: a grouped row opens or closes, and shows its detail. */
+	const press = (row: Row) => {
+		if (row.opens) {
+			toggle(row.key);
+			if (chosen !== row.key) choose(row.key);
+		} else choose(chosen === row.key ? null : row.key);
 	};
-	const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-		const head = shown.upTo;
-		if (e.key === "ArrowLeft") moveTo(stops.findLast((s) => s < head) ?? shown.from);
-		else if (e.key === "ArrowRight") moveTo(stops.find((s) => s > head) ?? null);
-		else if (e.key === "Home") moveTo(shown.from);
-		else if (e.key === "End") moveTo(null);
-		else return;
+
+	const onKey = (e: KeyboardEvent<HTMLTableRowElement>, row: Row) => {
+		const all = rowsIn(e.currentTarget.closest("[role=treegrid]"));
+		const here = all.indexOf(e.currentTarget);
+		const go = (i: number) => all[Math.max(0, Math.min(all.length - 1, i))]?.focus();
+		switch (e.key) {
+			case "ArrowDown":
+				go(here + 1);
+				break;
+			case "ArrowUp":
+				go(here - 1);
+				break;
+			case "Home":
+				go(0);
+				break;
+			case "End":
+				go(all.length - 1);
+				break;
+			case "ArrowRight":
+				if (row.opens && !row.open) toggle(row.key);
+				else if (row.open) go(here + 1);
+				break;
+			case "ArrowLeft": {
+				if (row.open) toggle(row.key);
+				else {
+					const parent = view.rows
+						.slice(
+							0,
+							view.rows.findIndex((r) => r.key === row.key),
+						)
+						.findLast((r) => r.depth < row.depth);
+					if (parent !== undefined) go(view.rows.indexOf(parent));
+				}
+				break;
+			}
+			case "Enter":
+			case " ":
+				press(row);
+				break;
+			default:
+				return;
+		}
 		e.preventDefault();
 	};
 
-	const n = view.number === null ? "" : `${view.number}`;
-	if (view.ticket === null)
+	if (view.read !== "read")
 		return (
 			<section className="view trace-view" aria-label="trace">
 				<p className="empty">
-					{view.unreachable !== null
-						? `The ledger cannot be read: ${view.unreachable}`
-						: view.ready
-							? `No ticket #${n}.`
-							: "Reading the ledger."}
+					{view.read === "unread"
+						? `The record of ${view.id ?? "this trace"} cannot be read: ${view.why ?? "no reason given"}`
+						: view.read === "reading"
+							? "Reading the record."
+							: "Pick a run, and its trace shows here."}
 				</p>
 			</section>
 		);
 
-	const head = placeOf(shown, shown.upTo);
+	const focusable = chosen ?? view.rows[0]?.key ?? null;
 	return (
-		<section className="view trace-view" aria-label={`trace ${n}`}>
+		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 			<div className="mapbar">
-				<span className="state" role="status">
-					{live ? (
-						<>
-							<span className="dot" aria-hidden="true" />
-							<span>Live. The playhead follows now.</span>
-						</>
-					) : (
-						<span>
-							Replaying at <span className="mono prim">{hhmm(shown.upTo)}</span>: #{n} as it was
-							then.
-						</span>
-					)}
+				<span className="state">
+					<b className="mono">{view.title}</b>
 				</span>
 				<span className="faint">
-					trace {n} · {shown.spans} {shown.spans === 1 ? "run" : "runs"} · {usd(shown.usd)}
+					{view.spans} {view.spans === 1 ? "span" : "spans"} · {view.steps}{" "}
+					{view.steps === 1 ? "step" : "steps"} · {took(view.length)}
+					{view.job?.ended == null ? "" : ` · ${view.job.ended.how}`}
 				</span>
-				<span className="legend">
-					<span>
-						<span className="wait swatch" aria-hidden="true" />
-						waits on you
-					</span>
-					<span>
-						<span className="turn-bar" aria-hidden="true" />
-						one agent turn
-					</span>
+				<span className="legend" title="one colour per program">
+					{view.services.map((s) => (
+						<span key={s}>
+							<span className="swatch" style={{background: colourOf(view, s)}} aria-hidden="true" />
+							{s}
+						</span>
+					))}
 				</span>
-				{live ? null : (
-					<button type="button" className="btn sm" onClick={() => moveTo(null)}>
-						Back to now
-					</button>
-				)}
+				<span className="faint mono">trace {view.id}</span>
 			</div>
-			<div className="arr-body">
-				<div className="arr-heads">
-					<div />
-					{shown.tracks.map((t) => (
-						<Head key={t.name} track={t} trace={shown} most={most} />
-					))}
-				</div>
-				<div
-					className="arr-time"
-					ref={lane}
-					onPointerDown={(e) => {
-						if ((e.target as HTMLElement).closest(".clip") !== null) return;
-						e.currentTarget.setPointerCapture(e.pointerId);
-						fromPointer(e);
-					}}
-					onPointerMove={(e) => {
-						if (e.currentTarget.hasPointerCapture(e.pointerId)) fromPointer(e);
-					}}
-				>
-					<div className="ruler">
-						{ticksOf(shown).map((t) => (
-							<span
-								key={t}
-								className={`tk${placeOf(shown, t) > 96 ? " end" : ""}`}
-								style={{insetInlineStart: `${placeOf(shown, t)}%`}}
+			{/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells. */}
+			<table className="wf" role="treegrid" aria-label="spans and steps" aria-readonly="true">
+				<colgroup>
+					<col className="wf-c-name" />
+					<col />
+				</colgroup>
+				<thead>
+					<tr className="wf-row wf-head">
+						<th scope="col" className="wf-name">
+							name
+						</th>
+						<th scope="col" className="wf-lane">
+							<div className="wf-track">
+								{ticksOf(view.length).map((t) => (
+									<span
+										key={t}
+										className="wf-tick"
+										style={{insetInlineStart: place(t, view.length)}}
+									>
+										{took(t)}
+									</span>
+								))}
+							</div>
+						</th>
+					</tr>
+				</thead>
+				<tbody>
+					{view.rows.map((row) => (
+						<Fragment key={row.key}>
+							<tr
+								className={`wf-row${row.key === chosen ? " sel" : ""}${row.wrong ? " wrong" : ""}`}
+								data-row={row.key}
+								aria-level={row.depth + 1}
+								aria-expanded={row.opens ? row.open : undefined}
+								aria-selected={row.key === chosen}
+								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}`}
+								tabIndex={row.key === focusable ? 0 : -1}
+								onClick={() => press(row)}
+								onKeyDown={(e) => onKey(e, row)}
 							>
-								{hhmm(t)}
-							</span>
-						))}
-						{shown.markers.map((m) => (
-							<span
-								key={`${m.at}-${m.says}`}
-								className={`mk${m.kind === "answer" && m.says === "approve" ? "" : " no"}`}
-								style={{insetInlineStart: `${placeOf(shown, m.at)}%`}}
-							>
-								{m.kind === "answer" && m.says === "approve" ? "✓ approve" : m.says}
-							</span>
-						))}
-					</div>
-					<div className="grid" aria-hidden="true">
-						{ticksOf(shown).map((t) => (
-							<i key={t} className="gl" style={{insetInlineStart: `${placeOf(shown, t)}%`}} />
-						))}
-					</div>
-					{shown.tracks.map((t) => (
-						<Row
-							key={t.name}
-							track={t}
-							trace={shown}
-							chosen={chosen}
-							choose={(run) => setChosen((c) => (c === run ? null : run))}
-						/>
+								<td className="wf-name">
+									<span
+										className="wf-in"
+										style={{paddingInlineStart: `calc(${row.depth} * 14px + 6px)`}}
+									>
+										<span className="wf-caret" aria-hidden="true">
+											{row.opens ? (row.open ? "▾" : "▸") : ""}
+										</span>
+										<span
+											className="wf-swatch"
+											style={{
+												background: row.wrong ? "var(--stuck)" : colourOf(view, row.service),
+											}}
+											aria-hidden="true"
+										/>
+										<span className={row.kind === "step" ? "mono" : ""}>{row.name}</span>
+										{row.note === "" ? null : <span className="faint wf-note">{row.note}</span>}
+									</span>
+								</td>
+								<td className="wf-lane">
+									<div className="wf-track">
+										<Bar row={row} shown={view} />
+									</div>
+								</td>
+							</tr>
+							{row.key === chosen && view.chosen !== null ? (
+								<tr className="wf-open">
+									<td colSpan={2}>
+										<Opened detail={view.chosen} />
+									</td>
+								</tr>
+							) : null}
+						</Fragment>
 					))}
-					{live ? null : <div className="after" style={{insetInlineStart: `${head}%`}} />}
-					<div className={`ph${live ? " live" : ""}`} style={{insetInlineStart: `${head}%`}}>
-						<button
-							type="button"
-							className="ph-h"
-							role="slider"
-							aria-label="Playhead"
-							aria-valuemin={shown.from}
-							aria-valuemax={shown.to}
-							aria-valuenow={shown.upTo}
-							aria-valuetext={live ? `now, ${hhmm(shown.upTo)}` : hhmm(shown.upTo)}
-							onKeyDown={onKey}
-						/>
-					</div>
-				</div>
-			</div>
-			<div className="arr-foot">
-				{chosen === null ? null : <Chosen trace={shown} run={chosen} />}
-				<p className="note">
-					Drag the playhead, or focus it and use <span className="kbd">←</span>{" "}
-					<span className="kbd">→</span> to step from fact to fact. <span className="kbd">End</span>{" "}
-					goes back to now. Like Elm's debugger, the trace is replayed from the facts up to that
-					time.
-				</p>
-			</div>
+				</tbody>
+			</table>
+			<p className="note">
+				Click a row, or use <span className="kbd">↑</span> <span className="kbd">↓</span> to move,{" "}
+				<span className="kbd">→</span> <span className="kbd">←</span> to open and close, and{" "}
+				<span className="kbd">Enter</span> to open a row's detail. Every step opens to its Msg, the
+				state before and after, and its Cmds.
+			</p>
 		</section>
 	);
 }
