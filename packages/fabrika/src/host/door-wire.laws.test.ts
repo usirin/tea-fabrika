@@ -30,22 +30,30 @@ afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
 
-/** What the Worker is bundled from: worker-options.ts bundles durable-object.ts and its imports. */
+/**
+ * What the Worker is bundled from in this folder: worker-options.ts bundles durable-object.ts and
+ * its imports, the jobs' records (`JobRecord`) among them. What they import from `../program` is
+ * not copied: the copy sits beside this folder, so `../program` is the real one.
+ */
 const FILES = [
 	"worker-options",
 	"beside",
 	"durable-object",
 	"door",
+	"job-record",
+	"job-rules",
 	"keys",
 	"keys-github",
 	"move",
+	"otlp",
 	"rules",
 	"sshsig",
+	"traces",
 ] as const;
 
 /** A copy of the Worker's files with one mistake in durable-object.ts, imported from its own folder. */
 async function plant(from: string, to: string): Promise<Options> {
-	const dir = mkdtempSync(join(import.meta.dirname, ".door-wire-laws-plant-"));
+	const dir = mkdtempSync(join(import.meta.dirname, "..", ".door-wire-laws-plant-"));
 	madeDirs.push(dir);
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
