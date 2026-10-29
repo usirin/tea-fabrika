@@ -199,9 +199,24 @@ importers:
       '@tea-fabrika/ask-log':
         specifier: workspace:*
         version: link:packs/ask-log
+      '@tea-fabrika/counter':
+        specifier: workspace:*
+        version: link:programs/counter
+      '@tea-fabrika/map':
+        specifier: workspace:*
+        version: link:programs/map
       '@tea-fabrika/owner-desk':
         specifier: workspace:*
         version: link:packs/owner-desk
+      '@tea-fabrika/ticket':
+        specifier: workspace:*
+        version: link:programs/ticket
+      '@tea-fabrika/trace':
+        specifier: workspace:*
+        version: link:programs/trace
+      '@tea-fabrika/tracker':
+        specifier: workspace:*
+        version: link:programs/tracker
       '@tea-fabrika/ui-verification':
         specifier: workspace:*
         version: link:packs/ui-verification

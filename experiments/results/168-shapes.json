@@ -1,0 +1,669 @@
+[
+	{
+		"shape": "1 named pipe",
+		"full": "mkfifo --name redo; tracker | triage | plan | build --from redo | review --to redo | ship",
+		"hand": "mkfifo --name redo; plan --ticket 7 | build --from redo | review --to redo | ship",
+		"whole": {
+			"typed": "mkfifo --name redo; tracker | triage | plan | build --from redo | review --to redo | ship",
+			"began": [
+				"[1] tracker:b38b4afc triage:0af96cf1 plan:77e4a5be build:e9e0a565 review:ff32df5d ship:288d37da"
+			],
+			"asked": true,
+			"answered": 0,
+			"endToEnd": true,
+			"shipped": true,
+			"runs": [
+				"triage#7",
+				"triage#8",
+				"triage#9",
+				"plan#7",
+				"plan#9",
+				"build#9",
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"jobsAsking": [
+				"[1] running   tracker | triage | plan | build --from redo | review --to redo | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 ask:owner:approval: waiting",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on"
+			],
+			"jobsDone": [
+				"[1] running   tracker | triage | plan | build --from redo | review --to redo | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 approved: passed on",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on",
+				"      build   #7 done: passed on",
+				"      review  #7 done: passed on",
+				"      ship    #7 done: passed on"
+			],
+			"ps": [
+				"RUN                       PROGRAM    JOB  STATE",
+				"tracker:b38b4afc          tracker    %1   running",
+				"triage:0af96cf1           triage     %1   running",
+				"plan:77e4a5be             plan       %1   running",
+				"build:e9e0a565            build      %1   running",
+				"review:ff32df5d           review     %1   running",
+				"ship:288d37da             ship       %1   running"
+			],
+			"map": {
+				"boxes": [
+					"tracker",
+					"triage",
+					"plan",
+					"build",
+					"review",
+					"ship"
+				],
+				"forward": [
+					"tracker -> triage",
+					"triage -> plan",
+					"plan -> build",
+					"build -> review",
+					"review -> ship"
+				],
+				"back": [
+					"review -> build (pipe redo)"
+				],
+				"sendsOnLedger": 1
+			},
+			"stopped": [
+				"[1] ended 130  tracker | triage | plan | build --from redo | review --to redo | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped"
+			],
+			"jobsAfter": [],
+			"dropped": []
+		},
+		"ctrlC": {
+			"held": true,
+			"status": 130,
+			"printed": [
+				"[1] ended 130  tracker | triage | plan | build --from redo | review --to redo | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped",
+				"[stopped] tracker | triage | plan | build --from redo | review --to redo | ship"
+			],
+			"jobsAfter": [],
+			"finished": true,
+			"runsAgain": [
+				"build#7",
+				"review#7",
+				"ship#7"
+			]
+		},
+		"byHand": {
+			"typed": "mkfifo --name redo; plan --ticket 7 | build --from redo | review --to redo | ship",
+			"told": "mkfifo --name redo; plan --ticket 7 | build --from redo | review --to redo | ship",
+			"ended": "only by Ctrl-C",
+			"status": 130,
+			"shipped": true,
+			"runs": [
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"dropped": [],
+			"printed": [
+				"build said #7  done  stage build",
+				"review said #7  send:build:checks_red  stage review  to build",
+				"build said #7  done  stage build",
+				"review said #7  done  stage review",
+				"ship said #7  done  stage ship",
+				"ship ticket 7",
+				"[stopped] plan --ticket 7 | build --from redo | review --to redo | ship"
+			],
+			"again": null
+		}
+	},
+	{
+		"shape": "2 wire back (^build)",
+		"full": "tracker | triage | plan | build | review ^build | ship",
+		"hand": "plan --ticket 7 | build | review ^build | ship",
+		"whole": {
+			"typed": "tracker | triage | plan | build --from loop-1 | review --to loop-1 | ship",
+			"began": [
+				"[1] tracker:d9a62a1c triage:4d0f8d39 plan:3c758169 build:58a1992d review:eae84ca1 ship:35b72444"
+			],
+			"asked": true,
+			"answered": 0,
+			"endToEnd": true,
+			"shipped": true,
+			"runs": [
+				"triage#7",
+				"triage#8",
+				"triage#9",
+				"plan#7",
+				"plan#9",
+				"build#9",
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"jobsAsking": [
+				"[1] running   tracker | triage | plan | build --from loop-1 | review --to loop-1 | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 ask:owner:approval: waiting",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on"
+			],
+			"jobsDone": [
+				"[1] running   tracker | triage | plan | build --from loop-1 | review --to loop-1 | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 approved: passed on",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on",
+				"      build   #7 done: passed on",
+				"      review  #7 done: passed on",
+				"      ship    #7 done: passed on"
+			],
+			"ps": [
+				"RUN                       PROGRAM    JOB  STATE",
+				"tracker:d9a62a1c          tracker    %1   running",
+				"triage:4d0f8d39           triage     %1   running",
+				"plan:3c758169             plan       %1   running",
+				"build:58a1992d            build      %1   running",
+				"review:eae84ca1           review     %1   running",
+				"ship:35b72444             ship       %1   running"
+			],
+			"map": {
+				"boxes": [
+					"tracker",
+					"triage",
+					"plan",
+					"build",
+					"review",
+					"ship"
+				],
+				"forward": [
+					"tracker -> triage",
+					"triage -> plan",
+					"plan -> build",
+					"build -> review",
+					"review -> ship"
+				],
+				"back": [
+					"review -> build (pipe loop-1)"
+				],
+				"sendsOnLedger": 1
+			},
+			"stopped": [
+				"[1] ended 130  tracker | triage | plan | build --from loop-1 | review --to loop-1 | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped"
+			],
+			"jobsAfter": [],
+			"dropped": []
+		},
+		"ctrlC": {
+			"held": true,
+			"status": 130,
+			"printed": [
+				"[1] ended 130  tracker | triage | plan | build --from loop-2 | review --to loop-2 | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped",
+				"[stopped] tracker | triage | plan | build --from loop-2 | review --to loop-2 | ship"
+			],
+			"jobsAfter": [],
+			"finished": true,
+			"runsAgain": [
+				"build#7",
+				"review#7",
+				"ship#7"
+			]
+		},
+		"byHand": {
+			"typed": "plan --ticket 7 | build | review ^build | ship",
+			"told": "plan --ticket 7 | build --from loop-4 | review --to loop-4 | ship",
+			"ended": "only by Ctrl-C",
+			"status": 130,
+			"shipped": true,
+			"runs": [
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"dropped": [],
+			"printed": [
+				"build said #7  done  stage build",
+				"review said #7  send:build:checks_red  stage review  to build",
+				"build said #7  done  stage build",
+				"review said #7  done  stage review",
+				"ship said #7  done  stage ship",
+				"ship ticket 7",
+				"[stopped] plan --ticket 7 | build --from loop-4 | review --to loop-4 | ship"
+			],
+			"again": null
+		}
+	},
+	{
+		"shape": "2b wire back, not a writer",
+		"full": "tracker | triage | plan | build | review ^build | ship",
+		"hand": "plan --ticket 7 | build | review ^build | ship",
+		"whole": {
+			"typed": "tracker | triage | plan | build --from loop-5 | review --to loop-5 | ship",
+			"began": [
+				"[1] tracker:6df0f530 triage:98ad1490 plan:b19c051f build:64549caa review:5a834f8f ship:438ccad5"
+			],
+			"asked": true,
+			"answered": 0,
+			"endToEnd": true,
+			"shipped": true,
+			"runs": [
+				"triage#7",
+				"triage#8",
+				"triage#9",
+				"plan#7",
+				"plan#9",
+				"build#9",
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"jobsAsking": [
+				"[1] running   tracker | triage | plan | build --from loop-5 | review --to loop-5 | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 ask:owner:approval: waiting",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on"
+			],
+			"jobsDone": [
+				"[1] running   tracker | triage | plan | build --from loop-5 | review --to loop-5 | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 approved: passed on",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on",
+				"      build   #7 done: passed on",
+				"      review  #7 done: passed on",
+				"      ship    #7 done: passed on"
+			],
+			"ps": [
+				"RUN                       PROGRAM    JOB  STATE",
+				"tracker:6df0f530          tracker    %1   running",
+				"triage:98ad1490           triage     %1   running",
+				"plan:b19c051f             plan       %1   running",
+				"build:64549caa            build      %1   running",
+				"review:5a834f8f           review     %1   running",
+				"ship:438ccad5             ship       %1   running"
+			],
+			"map": {
+				"boxes": [
+					"tracker",
+					"triage",
+					"plan",
+					"build",
+					"review",
+					"ship"
+				],
+				"forward": [
+					"tracker -> triage",
+					"triage -> plan",
+					"plan -> build",
+					"build -> review",
+					"review -> ship"
+				],
+				"back": [
+					"review -> build (pipe loop-5)"
+				],
+				"sendsOnLedger": 1
+			},
+			"stopped": [
+				"[1] ended 130  tracker | triage | plan | build --from loop-5 | review --to loop-5 | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped"
+			],
+			"jobsAfter": [],
+			"dropped": []
+		},
+		"ctrlC": {
+			"held": true,
+			"status": 130,
+			"printed": [
+				"[1] ended 130  tracker | triage | plan | build --from loop-6 | review --to loop-6 | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped",
+				"[stopped] tracker | triage | plan | build --from loop-6 | review --to loop-6 | ship"
+			],
+			"jobsAfter": [],
+			"finished": true,
+			"runsAgain": [
+				"build#7",
+				"review#7",
+				"ship#7"
+			]
+		},
+		"byHand": {
+			"typed": "plan --ticket 7 | build | review ^build | ship",
+			"told": "plan --ticket 7 | build --from loop-8 | review --to loop-8 | ship",
+			"ended": "by itself",
+			"status": 0,
+			"shipped": false,
+			"runs": [
+				"build#7",
+				"review#7"
+			],
+			"dropped": [
+				{
+					"ticket": 7,
+					"fifo": "loop-8"
+				}
+			],
+			"printed": [
+				"build said #7  done  stage build",
+				"review said #7  send:build:checks_red  stage review  to build"
+			],
+			"again": null
+		}
+	},
+	{
+		"shape": "3 parent (build-review)",
+		"full": "tracker | triage | plan | build-review | ship",
+		"hand": "plan --ticket 7 | build-review | ship",
+		"whole": {
+			"typed": "tracker | triage | plan | build-review | ship",
+			"began": [
+				"[1] tracker:3aeb98c2 triage:17c03e87 plan:4c2e5121 build-review:9b92beee ship:314a842b"
+			],
+			"asked": true,
+			"answered": 0,
+			"endToEnd": true,
+			"shipped": true,
+			"runs": [
+				"triage#7",
+				"triage#8",
+				"triage#9",
+				"plan#7",
+				"plan#9",
+				"build#9",
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"jobsAsking": [
+				"[1] running   tracker | triage | plan | build-review | ship",
+				"      triage        #7 done: passed on",
+				"      triage        #8 skip:declined: not passed on",
+				"      triage        #9 done: passed on",
+				"      plan          #7 ask:owner:approval: waiting",
+				"      plan          #9 done: passed on",
+				"      build-review  #9 lap 1: in build"
+			],
+			"jobsDone": [
+				"[1] running   tracker | triage | plan | build-review | ship",
+				"      triage        #7 done: passed on",
+				"      triage        #8 skip:declined: not passed on",
+				"      triage        #9 done: passed on",
+				"      plan          #7 approved: passed on",
+				"      plan          #9 done: passed on",
+				"      build-review  #9 lap 1: build did not pass it on",
+				"      build-review  #7 lap 2: passed review, passed on",
+				"      ship          #7 done: passed on"
+			],
+			"ps": [
+				"RUN                       PROGRAM    JOB  STATE",
+				"tracker:3aeb98c2          tracker    %1   running",
+				"triage:17c03e87           triage     %1   running",
+				"plan:4c2e5121             plan       %1   running",
+				"build-review:9b92beee     build-review %1   running",
+				"ship:314a842b             ship       %1   running"
+			],
+			"map": {
+				"boxes": [
+					"tracker",
+					"triage",
+					"plan",
+					"build-review",
+					"ship"
+				],
+				"forward": [
+					"tracker -> triage",
+					"triage -> plan",
+					"plan -> build-review",
+					"build-review -> ship"
+				],
+				"back": [],
+				"sendsOnLedger": 1
+			},
+			"stopped": [
+				"[1] ended 130  tracker | triage | plan | build-review | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build-review stopped",
+				"[1] ship stopped"
+			],
+			"jobsAfter": [],
+			"dropped": []
+		},
+		"ctrlC": {
+			"held": true,
+			"status": 130,
+			"printed": [
+				"[1] ended 130  tracker | triage | plan | build-review | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build-review stopped",
+				"[1] ship stopped",
+				"[stopped] tracker | triage | plan | build-review | ship"
+			],
+			"jobsAfter": [],
+			"finished": true,
+			"runsAgain": [
+				"build#7",
+				"review#7",
+				"ship#7"
+			]
+		},
+		"byHand": {
+			"typed": "plan --ticket 7 | build-review | ship",
+			"told": "plan --ticket 7 | build-review | ship",
+			"ended": "by itself",
+			"status": 0,
+			"shipped": true,
+			"runs": [
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"dropped": [],
+			"printed": [
+				"build-review said #7  done  stage build",
+				"build-review said #7  send:build:checks_red  stage review  to build",
+				"build-review said #7  done  stage build",
+				"build-review said #7  done  stage review",
+				"ship said #7  done  stage ship",
+				"ship ticket 7"
+			],
+			"again": null
+		}
+	},
+	{
+		"shape": "4 through the tracker",
+		"full": "tracker | triage | plan | build | review | ship",
+		"hand": "plan --ticket 7 | build | review | ship",
+		"whole": {
+			"typed": "tracker | triage | plan | build | review | ship",
+			"began": [
+				"[1] tracker:93a742d3 triage:84103591 plan:4c2ca358 build:8ac4a97a review:79afcba2 ship:35ad4575"
+			],
+			"asked": true,
+			"answered": 0,
+			"endToEnd": true,
+			"shipped": true,
+			"runs": [
+				"triage#7",
+				"triage#8",
+				"triage#9",
+				"plan#7",
+				"plan#9",
+				"build#9",
+				"build#7",
+				"review#7",
+				"build#7",
+				"review#7",
+				"ship#7"
+			],
+			"jobsAsking": [
+				"[1] running   tracker | triage | plan | build | review | ship",
+				"      triage  #7 done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 ask:owner:approval: waiting",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on"
+			],
+			"jobsDone": [
+				"[1] running   tracker | triage | plan | build | review | ship",
+				"      triage  #7 already done: passed on",
+				"      triage  #8 skip:declined: not passed on",
+				"      triage  #9 done: passed on",
+				"      plan    #7 already done: passed on",
+				"      plan    #9 done: passed on",
+				"      build   #9 stuck:cannot_meet: not passed on",
+				"      build   #7 done: passed on",
+				"      review  #7 done: passed on",
+				"      ship    #7 done: passed on"
+			],
+			"ps": [
+				"RUN                       PROGRAM    JOB  STATE",
+				"tracker:93a742d3          tracker    %1   running",
+				"triage:84103591           triage     %1   running",
+				"plan:4c2ca358             plan       %1   running",
+				"build:8ac4a97a            build      %1   running",
+				"review:79afcba2           review     %1   running",
+				"ship:35ad4575             ship       %1   running"
+			],
+			"map": {
+				"boxes": [
+					"tracker",
+					"triage",
+					"plan",
+					"build",
+					"review",
+					"ship"
+				],
+				"forward": [
+					"tracker -> triage",
+					"triage -> plan",
+					"plan -> build",
+					"build -> review",
+					"review -> ship"
+				],
+				"back": [],
+				"sendsOnLedger": 1
+			},
+			"stopped": [
+				"[1] ended 130  tracker | triage | plan | build | review | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped"
+			],
+			"jobsAfter": [],
+			"dropped": []
+		},
+		"ctrlC": {
+			"held": true,
+			"status": 130,
+			"printed": [
+				"[1] ended 130  tracker | triage | plan | build | review | ship",
+				"[1] tracker stopped",
+				"[1] triage stopped",
+				"[1] plan stopped",
+				"[1] build stopped",
+				"[1] review stopped",
+				"[1] ship stopped",
+				"[stopped] tracker | triage | plan | build | review | ship"
+			],
+			"jobsAfter": [],
+			"finished": true,
+			"runsAgain": [
+				"build#7",
+				"review#7",
+				"ship#7"
+			]
+		},
+		"byHand": {
+			"typed": "plan --ticket 7 | build | review | ship",
+			"told": "plan --ticket 7 | build | review | ship",
+			"ended": "by itself",
+			"status": 0,
+			"shipped": false,
+			"runs": [
+				"build#7",
+				"review#7"
+			],
+			"dropped": [],
+			"printed": [
+				"build said #7  done  stage build",
+				"review said #7  send:build:checks_red  stage review  to build"
+			],
+			"again": {
+				"typed": "build --ticket 7 | review | ship",
+				"status": 0,
+				"shipped": true,
+				"runs": [
+					"build#7",
+					"review#7",
+					"ship#7"
+				]
+			}
+		}
+	}
+]
