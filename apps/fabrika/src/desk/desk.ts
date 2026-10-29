@@ -64,11 +64,11 @@ import {
 //
 // A line with several windows opens in place, in the tile it was typed in (layout/line.ts):
 //
-//   update(desk, {type: "covered", tile: "t1", runs: [tracker, ticket, trace]})
+//   update(desk, {type: "covered", tile: "t1", runs: [tracker, ticket, runs]})
 //                  t1 shows the tracker over its tsh; t4 and t5, new, show the ticket and the
-//                  trace beside it, one tint for the three; save
+//                  runs beside it, one tint for the three; save
 //   the same in a workspace too small for three  t4 and t5 open folded, t1 keeps the whole share
-//   update(desk, {type: "over", run: "trace:1"})  t5 goes: it was the trace's window, with no tsh
+//   update(desk, {type: "over", run: "runs:1"})  t5 goes: it was the runs' window, with no tsh
 //   Ctrl-C in t4                                  goes to t1's tsh, where the line was typed
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.

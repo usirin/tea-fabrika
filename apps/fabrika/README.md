@@ -158,7 +158,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   back. The other tiles stay as they were.
 - **A line with several windows opens in place,** in the tile it was typed in
   ([a line opens in place](../../docs/direction/fold-not-tabs.md#a-line-opens-in-place)).
-  `tracker | ticket | trace` in t2: the tracker covers t2, and the ticket and the trace open as
+  `tracker | ticket | runs` in t2: the tracker covers t2, and the ticket and the runs open as
   new tiles beside it, in t2's place, each with a third of its space. In a row they become
   siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
   folded. Unfolding one takes space only from the line's other windows.
@@ -357,7 +357,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 ## What it does not do yet
 
 - **No real line of windows runs yet.** The app's programs have no outputs, so
-  `tracker | ticket | trace` does not pipe; the desk side is tested on its own.
+  `tracker | ticket | runs` does not pipe; the desk side is tested on its own.
 - **Closing one window of a line** (Ctrl-B x, y) takes its tile away, but its run goes on until
   the line ends.
 

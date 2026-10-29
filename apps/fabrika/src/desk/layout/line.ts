@@ -17,15 +17,15 @@ import {
 } from "./node.ts";
 import {findTile, fold, remove, setShows, spread, tiles, unzoom} from "./tree.ts";
 
-// A tsh line with several windows, `tracker | ticket | trace`, opens in place: in the tile it was
+// A tsh line with several windows, `tracker | ticket | runs`, opens in place: in the tile it was
 // typed in, by the tree's own split rule (docs/direction/fold-not-tabs.md, "A line opens in
 // place"). The tile keeps its tsh, covered by the first window, where the data starts; the other
 // windows are tiles of their own beside it, with no tsh. When they would be too small to read,
 // they open folded, and only the first is open.
 //
-//   openLine(tree, "t1", {runs: [tracker, ticket, trace], tint: 0, orientation: "horizontal",
+//   openLine(tree, "t1", {runs: [tracker, ticket, runs], tint: 0, orientation: "horizontal",
 //     ids: {tiles: ["t4", "t5"], container: "c4"}, area: {width: 1440, height: 860}})
-//   // t1 in a row: t1 (tracker), t4 (ticket), t5 (trace), each a third of t1's old share
+//   // t1 in a row: t1 (tracker), t4 (ticket), t5 (runs), each a third of t1's old share
 //   // the same in a 300px column: t4 and t5 folded into strips, t1 open with the whole share
 
 /** A size in px: the workspace the page draws in, or one tile in it. */

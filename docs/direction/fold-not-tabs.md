@@ -119,7 +119,7 @@ that made it impossible would have to count open tiles, and TypeScript cannot.
 ## A line opens in place
 
 **Decided 2026-10-28.** A tsh line with several windowed programs, such as
-`tracker | ticket | trace`, opens its windows in the tile it was typed in, by
+`tracker | ticket | runs`, opens its windows in the tile it was typed in, by
 the split rule above. They share that tile's space evenly. When a window
 would be too small, all but the first open folded. One faint tint marks the
 line's tiles and strips.
@@ -136,7 +136,7 @@ type Shows =
 // apps/fabrika/src/desk/layout/line.ts
 const MIN_WINDOW = { width: 220, height: 120 };       // title bar included
 openLine(tree, "t2", {
-  runs: [tracker, ticket, trace],
+  runs: [tracker, ticket, runs],
   tint: freeTint(allTrees),                          // the first tint no line has
   orientation: "horizontal",                         // a line runs left to right
   ids: { tiles: ["t3", "t4"], container: "c3" },
@@ -181,7 +181,7 @@ ends.
 **How sure: 75%.** The doubts:
 
 - **No real line has run yet.** The app's programs have no outputs, so
-  `tracker | ticket | trace` cannot pipe today. The desk path is tested
+  `tracker | ticket | runs` cannot pipe today. The desk path is tested
   straight and in the screenshots; tsh's side has only run single windows.
 - **Closing one window.** Whether `y` on a window should stop its run, or the
   whole line. One real use settles it.

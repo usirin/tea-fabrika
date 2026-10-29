@@ -9,14 +9,14 @@ import {findTile, fold, remove, tiles, unfold} from "./tree.ts";
 
 const tracker = {id: "tracker:1", program: "tracker"};
 const ticket = {id: "ticket:1", program: "ticket"};
-const trace = {id: "trace:1", program: "trace"};
+const runs = {id: "runs:1", program: "runs"};
 
 /** a beside b, in a row. */
 const row = (): LayoutTree =>
 	createTree(createContainer("c1", "horizontal", [createTile("a"), createTile("b")]));
 
 const opening = (over: Partial<Opening> = {}): Opening => ({
-	runs: [tracker, ticket, trace],
+	runs: [tracker, ticket, runs],
 	tint: 2,
 	orientation: "horizontal",
 	ids: {tiles: ["t4", "t5"], container: "c4"},
@@ -38,7 +38,7 @@ describe("openLine", () => {
 		const line: Line = {id: "tracker:1", from: "b", tint: 2};
 		expect(ids(tree)).toEqual(["a", "b", "t4", "t5"]);
 		expect(findTile(tree, "b")?.shows).toEqual({kind: "line", run: tracker, line});
-		expect(findTile(tree, "t5")?.shows).toEqual({kind: "window", run: trace, line});
+		expect(findTile(tree, "t5")?.shows).toEqual({kind: "window", run: runs, line});
 		expect(tree.root.sizes.a).toBeCloseTo(50);
 		expect(tree.root.sizes.t4).toBeCloseTo(50 / 3);
 		expect(checkTree(tree)).toEqual([]);

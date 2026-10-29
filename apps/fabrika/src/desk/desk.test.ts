@@ -379,8 +379,8 @@ describe("a kept desk", () => {
 describe("a line with several windows", () => {
 	const tracker = {id: "tracker:1", program: "tracker"};
 	const ticket = {id: "ticket:1", program: "ticket"};
-	const trace = {id: "trace:1", program: "trace"};
-	const line = [tracker, ticket, trace] as const;
+	const runs = {id: "runs:1", program: "runs"};
+	const line = [tracker, ticket, runs] as const;
 	const layout = (s: Desk) => activeOf(opened(s)).layout;
 	const sizes = (s: Desk) => layout(s).root.sizes;
 	/** The same keys, each share within a hundredth of a percent. */
@@ -401,7 +401,7 @@ describe("a line with several windows", () => {
 		const own = {id: "tracker:1", from: "t2", tint: 0};
 		expect(tile(s, "t2")?.shows).toEqual({kind: "line", run: tracker, line: own});
 		expect(tile(s, "t3")?.shows).toEqual({kind: "window", run: ticket, line: own});
-		expect(tile(s, "t4")?.shows).toEqual({kind: "window", run: trace, line: own});
+		expect(tile(s, "t4")?.shows).toEqual({kind: "window", run: runs, line: own});
 		expect(layout(s).root.children.every((c) => c.tag === "tile" && !c.folded)).toBe(true);
 		// Focus stays where the line was typed, and only t2 has a tsh to open.
 		expect(focus(s)).toBe("t2");
@@ -473,7 +473,7 @@ describe("a line with several windows", () => {
 
 	it("takes a window away when its run ends, its space back to the line", () => {
 		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(1440)).s;
-		const {s: after, cmds} = fold([{type: "over", run: trace.id}], s);
+		const {s: after, cmds} = fold([{type: "over", run: runs.id}], s);
 		expect(ids(after)).toEqual(["t1", "t2", "t3"]);
 		expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
 		expect(sizes(after).t1).toBeCloseTo(50);
@@ -509,7 +509,7 @@ describe("a line with several windows", () => {
 		const one = fold([{type: "covered", tile: "t2", runs: line}], beside(2400)).s;
 		const two = fold(
 			[
-				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, trace]},
+				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, runs]},
 				{type: "covered", tile: "t4", runs: [counter]},
 			],
 			one,
