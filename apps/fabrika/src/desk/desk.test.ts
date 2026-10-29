@@ -257,6 +257,22 @@ describe("folds", () => {
 		expect(focus(s)).toBe("t3");
 	});
 
+	it("focuses a tile on one click of its title bar, and folds it on a double-click", () => {
+		const once = fold([{type: "click", tile: "t1"}], row).s;
+		expect([focus(once), folded(once)]).toEqual(["t1", []]);
+		// A double-click is two presses, each a click, then the fold.
+		const twice = fold(
+			[
+				{type: "click", tile: "t1"},
+				{type: "click", tile: "t1"},
+				{type: "fold", tile: "t1"},
+			],
+			row,
+		).s;
+		expect(folded(twice)).toEqual(["t1"]);
+		expect(focus(twice)).toBe("t2");
+	});
+
 	it("refuses to fold the last open tile: nothing changes", () => {
 		const one = fold(
 			[

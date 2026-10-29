@@ -55,7 +55,8 @@ f       fold the focused tile into a strip
 Space   turn the focused tile's container: horizontal, then vertical
 ```
 
-A click on a tile's title bar folds it too. A click on a strip opens it.
+A double-click on a tile's title bar folds it too. A single click there only
+focuses the tile, as a click anywhere on it does. A click on a strip opens it.
 
 One tree, before and after Ctrl-B f on `t3`, then on `t2`:
 
@@ -89,8 +90,9 @@ One tree, before and after Ctrl-B f on `t3`, then on `t2`:
   double-click on a device's title bar folds it into a thin strip that keeps
   its place in the chain
   ([Live manual, working with instruments and effects](https://www.ableton.com/en/manual/working-with-instruments-and-effects/)).
-  The desk does the same with one click, since a desk title bar has no other
-  click to compete with.
+  The desk does the same, with a double-click too. A first draft folded on one
+  click; that was dropped, since one click on a title bar should focus the
+  tile, as a click anywhere else on it does.
 - **A fold keeps the picture.** A strip stays where the tile was, so the
   layout reads the same with a tile folded or open. A tab moves the tile out of
   sight and into a bar.

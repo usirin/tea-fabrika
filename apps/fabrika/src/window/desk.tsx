@@ -55,7 +55,8 @@ import {WINDOWS} from "./windows.tsx";
 //   Ctrl-B l      the same: focus moves right
 //   counter       typed into t1's terminal, which sends it to t1's tsh in the host
 //   Ctrl-B x      "close t1? (y/n)" on the tile; y closes it, at once or once what runs in it ends
-//   title bar     a click folds its tile into a strip, in its place; a click on the strip opens it
+//   title bar     a click focuses its tile; a double-click folds it into a strip, in its place;
+//                 a click on the strip opens it
 //
 // Every key is read in the capture phase, before ghostty-web or a program's view sees it. The
 // host says, with each desk, which keys the desk takes now (`takes`): those go to the host and no
@@ -314,19 +315,20 @@ function Tile(props: {
 			data-tile={tile.id}
 			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
 			aria-current={focused}
-			onPointerDownCapture={(e) => {
-				// A press on the title bar folds the tile; it does not focus it first.
-				if (e.target instanceof Element && e.target.closest(".titlebar") !== null) return;
-				toHost({type: "click", tile: tile.id});
-			}}
+			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
 		>
+			{/* A press on the title bar focuses the tile, as anywhere on it; a double-click folds it,
+			    as on a device's title bar in Ableton Live. Not `disabled` when it cannot fold: a
+			    disabled button would swallow the press that focuses. */}
 			<button
 				type="button"
 				className="titlebar"
-				aria-label={`fold tile ${tile.id}`}
-				disabled={!folds}
+				aria-label={`tile ${tile.id}: double-click to fold`}
+				aria-disabled={!folds}
 				onPointerDown={noFocus}
-				onClick={() => toHost({type: "fold", tile: tile.id})}
+				onDoubleClick={() => {
+					if (folds) toHost({type: "fold", tile: tile.id});
+				}}
 			>
 				<span>{nameOf(tile)}</span>
 				<span className="tid">{tile.id}</span>

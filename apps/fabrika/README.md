@@ -140,8 +140,8 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   in tmux.
 - **Typing in a tile goes to the host,** on the tile's port, to its tsh. A text box in a program's
   view stays in the page; the program gets only the inputs it declares.
-- **A click focuses a tile. Dragging a border resizes** the two open tiles beside it. A click on a
-  tile's title bar folds it.
+- **A click focuses a tile. Dragging a border resizes** the two open tiles beside it. A
+  double-click on a tile's title bar folds it, as in Ableton Live; one click there only focuses.
 - **A folded tile is a thin strip in its place,** standing up in a row and lying down in a
   column, named by its program. A column whose tiles are all folded is one strip with all their
   names. A click on a strip opens it. A folded tile keeps its size; the open tiles share the

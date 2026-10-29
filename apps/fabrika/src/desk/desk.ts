@@ -51,10 +51,11 @@ import {
 // Any tile folds into a strip in its place (docs/direction/fold-not-tabs.md). Focus is always on
 // an open tile:
 //
-//   Ctrl-B f, or a click on t2's title bar   t2 folds, and focus goes to the next open tile
-//   the last open tile                       does not fold: nothing changes
-//   a click on t2's strip, or focus onto t2  t2 opens again, at the size it had
-//   a click on a folded column's strip       every tile in it opens: {type: "unfold", node: "c4"}
+//   Ctrl-B f, or a double-click on t2's title bar  t2 folds, and focus goes to the next open tile
+//   a single click on t2's title bar               only focuses t2, as a click anywhere on it does
+//   the last open tile                             does not fold: nothing changes
+//   a click on t2's strip, or focus onto t2        t2 opens again, at the size it had
+//   a click on a folded column's strip             every tile in it opens: {type: "unfold", node: "c4"}
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
@@ -126,7 +127,7 @@ export type DeskMsg =
 			readonly container: string;
 			readonly sizes: Readonly<Record<string, number>>;
 	  }
-	/** A tile's title bar was clicked: fold it. */
+	/** A tile's title bar was double-clicked: fold it. */
 	| {readonly type: "fold"; readonly tile: TileId}
 	/** A strip was clicked: open the folded tile, or every tile of the folded container, it stands for. */
 	| {readonly type: "unfold"; readonly node: NodeId}
