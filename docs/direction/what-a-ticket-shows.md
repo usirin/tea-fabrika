@@ -251,6 +251,9 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
     machine.
   - Counting beats per run now decides only whether old beats are trimmed
     after a run ends. They are kept until then.
+  - *Decided 2026-10-28:* beats move into the job's own record, and nothing
+    in it is trimmed or deleted
+    ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md)).
 
 ## 4. The bridge until our pipeline runs lanes (dropped)
 

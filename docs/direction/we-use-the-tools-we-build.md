@@ -52,9 +52,9 @@ than $5.
 
 - Whether the upkeep stays small once two people use the tools all day.
   Daily use from v1's slice 14 on shows it.
-- Whether keeping every lane's trace forever
-  ([a LaneRecord holds each lane's trace](./a-lane-record-holds-its-trace.md),
-  proposed) stays inside 5 GB. Measure it once real lanes run.
+- Whether keeping every job's trace forever
+  ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md),
+  decided) stays inside 5 GB. Measure it once real lanes run.
 
 ## What it cannot tell us
 
