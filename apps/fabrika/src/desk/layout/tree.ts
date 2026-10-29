@@ -6,6 +6,7 @@ import {
 	createTile,
 	type Direction,
 	type Edge,
+	freeShare,
 	isFolded,
 	type LayoutNode,
 	type LayoutTree,
@@ -13,6 +14,7 @@ import {
 	type Orientation,
 	resolveSizes,
 	type Shows,
+	shareLine,
 	type TileId,
 	type TileNode,
 } from "./node.ts";
@@ -168,42 +170,67 @@ export function split(
 	orientation: Orientation,
 	ids: SplitIds,
 ): LayoutTree {
+	const target = findTile(tree, id);
+	if (target === null) return tree;
+	return spread(tree, id, orientation, [target, createTile(ids.tile)], ids.container);
+}
+
+/**
+ * Put `tiles` in the place of the tile `id`, along `orientation`, each with an even part of its
+ * share: the split rule for any number of tiles. The parent's own orientation adds them beside
+ * each other in the parent; the other one nests a container of them under `container`. A
+ * container holding one child turns to the new orientation instead of nesting. The first of
+ * `tiles` may be `id` itself, changed; any other id already in the tree, or an unknown tile,
+ * leaves the tree as it is.
+ */
+export function spread(
+	tree: LayoutTree,
+	id: TileId,
+	orientation: Orientation,
+	tiles: readonly [TileNode, ...TileNode[]],
+	container: ContainerId,
+): LayoutTree {
 	const taken = new Set<NodeId>(idsOf(tree.root));
-	if (taken.has(ids.tile) || taken.has(ids.container)) return tree;
-	const root = splitIn(tree.root, id, orientation, ids, createTile(ids.tile));
+	taken.delete(id);
+	const made = new Set<NodeId>();
+	for (const tile of tiles) {
+		if (taken.has(tile.id) || made.has(tile.id)) return tree;
+		made.add(tile.id);
+	}
+	if (taken.has(container) || (made.has(container) && tiles.length > 1)) return tree;
+	const root = spreadIn(tree.root, id, orientation, tiles, container);
 	return root ? {...tree, root} : tree;
 }
 
-function splitIn(
+function spreadIn(
 	container: ContainerNode,
 	id: TileId,
 	orientation: Orientation,
-	ids: SplitIds,
-	created: TileNode,
+	tiles: readonly [TileNode, ...TileNode[]],
+	nested: ContainerId,
 ): ContainerNode | null {
 	const index = container.children.findIndex((child) => child.tag === "tile" && child.id === id);
-	const target = index < 0 ? undefined : container.children[index];
-	if (target?.tag === "tile") {
+	if (index >= 0) {
 		if (container.orientation === orientation || container.children.length === 1) {
 			const children = [
-				...container.children.slice(0, index + 1),
-				created,
+				...container.children.slice(0, index),
+				...tiles,
 				...container.children.slice(index + 1),
 			];
-			const share = container.sizes[id] ?? 100 / container.children.length;
-			const sizes = {...container.sizes, [id]: share / 2, [ids.tile]: share / 2};
+			const share = (container.sizes[id] ?? 100 / container.children.length) / tiles.length;
+			const sizes: Record<NodeId, number> = {...container.sizes};
+			delete sizes[id];
+			for (const tile of tiles) sizes[tile.id] = share;
 			return remade({...container, orientation}, children, sizes);
 		}
-		return replaceChild(
-			container,
-			id,
-			createContainer(ids.container, orientation, [target, created]),
-		);
+		const [only] = tiles;
+		const node = tiles.length === 1 ? only : createContainer(nested, orientation, tiles);
+		return replaceChild(container, id, node);
 	}
 
 	for (const child of container.children) {
 		if (child.tag !== "container") continue;
-		const next = splitIn(child, id, orientation, ids, created);
+		const next = spreadIn(child, id, orientation, tiles, nested);
 		if (next) return replaceChild(container, child.id, next);
 	}
 	return null;
@@ -222,7 +249,7 @@ function idsOf(node: LayoutNode): NodeId[] {
  */
 export function remove(tree: LayoutTree, id: TileId): LayoutTree {
 	if (findTile(tree, id) === null || [...tiles(tree.root)].length < 2) return tree;
-	const root = settle(without(tree.root, id));
+	const root = settle(without(inParent(tree.root, id, freeShare), id));
 	const open = isFolded(root) ? unfoldIn(root, edgeTile(root, "start")?.id ?? id) : root;
 	return {root: open ?? root, zoomed: tree.zoomed === id ? null : tree.zoomed};
 }
@@ -336,16 +363,28 @@ export function setShows(tree: LayoutTree, id: TileId, shows: Shows): LayoutTree
 }
 
 /**
- * Fold `id` into a strip, in its place. Its share stays, for when it unfolds. Refused, the same
- * tree back, for an unknown tile, a folded one, and the last open tile: a workspace is never only
- * strips. A zoom on it goes, as a folded tile is not drawn alone.
+ * Fold `id` into a strip, in its place. Its share stays, for when it unfolds; a window of a line
+ * hands its share to the line's other open windows beside it instead (`shareLine`), and `unfold`
+ * takes it back from them. Refused, the same tree back, for an unknown tile, a folded one, and
+ * the last open tile: a workspace is never only strips. A zoom on it goes, as a folded tile is
+ * not drawn alone.
  */
 export function fold(tree: LayoutTree, id: TileId): LayoutTree {
 	const tile = findTile(tree, id);
 	if (tile === null || tile.folded) return tree;
 	const root = mapTile(tree.root, id, (t) => ({...t, folded: true}));
 	if (root === null || isFolded(root)) return tree;
-	return {root, zoomed: tree.zoomed === id ? null : tree.zoomed};
+	return {root: inParent(root, id, shareLine), zoomed: tree.zoomed === id ? null : tree.zoomed};
+}
+
+/** `root` with the parent of the tile `id` changed by `f`, given that id. */
+function inParent(
+	root: ContainerNode,
+	id: TileId,
+	f: (parent: ContainerNode, id: TileId) => ContainerNode,
+): ContainerNode {
+	const parent = ancestorsOf(root, id)?.at(-1);
+	return parent === undefined ? root : (withContainer(root, parent.id, (c) => f(c, id)) ?? root);
 }
 
 /**
@@ -363,10 +402,10 @@ function unfoldIn(container: ContainerNode, id: NodeId): ContainerNode | null {
 	if (node === null) return null;
 	const shut = [...tiles(node)].filter((tile) => tile.folded);
 	if (shut.length === 0) return null;
-	return shut.reduce(
-		(at, tile) => mapTile(at, tile.id, (t) => ({...t, folded: false})) ?? at,
-		container,
-	);
+	return shut.reduce((at, tile) => {
+		const opened = mapTile(at, tile.id, (t) => ({...t, folded: false})) ?? at;
+		return inParent(opened, tile.id, shareLine);
+	}, container);
 }
 
 /** Draw `id` alone. Zoom never writes `sizes`, so unzoom restores the layout exactly. */

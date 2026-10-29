@@ -119,6 +119,11 @@ export interface Runs {
 	readonly began: (run: string, program: string, placed: Placed, screen: WindowScreen) => void;
 	/** A run with a view that began in the background is in the foreground now: `attach`, as `fg`. */
 	readonly forward: (run: string) => void;
+	/**
+	 * A line's runs with a view are all in the foreground now, in the line's order: said once
+	 * each has begun, or once `attach` brought them. One run, or several to open in place.
+	 */
+	readonly line: (runs: readonly [string, ...string[]]) => void;
 	/** That run ended: its view goes, if it is still shown. */
 	readonly ended: (run: string) => void;
 	/** How many of tsh's jobs run now. */
@@ -215,11 +220,13 @@ const kept = (screen: string): string => {
 	return tail.slice(tail.indexOf("\n") + 1);
 };
 
-/** Where the job holding `run` was started: tsh notes the job before its runs start. */
+/** The job holding `run`: tsh notes the job before its runs start. */
+const jobOf = (table: Shell.Jobs | null, run: string): Shell.Job | undefined =>
+	table?.jobs.find((job) => job.stages.some((st) => st.run === run));
+
+/** Where the job holding `run` was started. */
 const placedIn = (table: Shell.Jobs | null, run: string): Placed =>
-	table?.jobs.find((job) => job.stages.some((st) => st.run === run))?.background === true
-		? "background"
-		: "foreground";
+	jobOf(table, run)?.background === true ? "background" : "foreground";
 
 /** The jobs of a table that hold a run of `mine`: the ones this tsh started. */
 const ownIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): readonly Shell.Job[] =>
@@ -264,6 +271,21 @@ export const startTsh = (options: {
 		yield* Effect.addFinalizer(() => detachOwn);
 		/** Where each run with a view is now, by id: one in the background is not drawn. */
 		const shown = new Map<string, {placed: Placed}>();
+		/**
+		 * Tell the tile a job's runs with a view, in its line's order, once every one of them is
+		 * shown in the foreground or has ended. Said by the last of them to begin, so the tile hears
+		 * the whole line at once and can open it in place.
+		 */
+		const together = (job: Shell.Job | undefined) => {
+			if (job === undefined) return;
+			const windows = job.stages.filter((st) => {
+				const entry = programs.get(st.program);
+				return entry !== undefined && viewOf(entry.program) !== undefined;
+			});
+			const ready = windows.every((st) => st.ended || shown.get(st.run)?.placed === "foreground");
+			const [first, ...rest] = windows.flatMap((st) => (shown.has(st.run) ? [st.run] : []));
+			if (ready && first !== undefined) runs.line([first, ...rest]);
+		};
 		/** `close` was said: every input ends, and tsh's line too once no job runs. */
 		let hungUp = false;
 		/** Every input of a run ends, as stdin's end: what it does then is its own. */
@@ -316,6 +338,7 @@ export const startTsh = (options: {
 				const placed = placedIn(table(), r.id);
 				shown.set(r.id, {placed});
 				runs.began(r.id, r.program.name, placed, window);
+				if (placed === "foreground") together(jobOf(table(), r.id));
 				yield* machine.changes.pipe(
 					Stream.filter((state) => state !== null),
 					Stream.runForEach((state) =>
@@ -405,12 +428,17 @@ export const startTsh = (options: {
 					if (now === null) return;
 					// The host's whole table: every tile's jobs, so `%n` completes the same in each.
 					toEditor({type: "jobs", jobs: now});
-					// `attach %n` moved a job of the background to the foreground: its view covers the tile now.
+					// `attach %n` moved a job of the background to the foreground: its views cover the tile
+					// now, told as one line.
+					const moved = new Set<Shell.Job>();
 					for (const [run, where] of shown)
 						if (where.placed === "background" && placedIn(now, run) === "foreground") {
 							where.placed = "foreground";
 							runs.forward(run);
+							const job = jobOf(now, run);
+							if (job !== undefined) moved.add(job);
 						}
+					for (const job of moved) together(job);
 					recount(now);
 				}),
 			),

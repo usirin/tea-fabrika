@@ -32,7 +32,7 @@ import {
 	tilesOf,
 	whereIs,
 } from "./desk.ts";
-import {checkTree, findTile, setShows, TSH, tiles} from "./layout/index.ts";
+import {checkTree, findTile, quiet, tiles, unfold} from "./layout/index.ts";
 
 // The desk's laws, on tea's pbt: after every step of any list of Msgs, from the real init. Keys,
 // clicks and drags come in any order, and so does what the tiles say (a run covers a tile, a run
@@ -47,7 +47,17 @@ const tile = fc.constantFrom("t1", "t2", "t3", "t4", "t5", "t6");
 const run = fc.constantFrom(
 	{id: "counter:1", program: "counter"},
 	{id: "tracker:1", program: "tracker"},
+	{id: "ticket:1", program: "ticket"},
+	{id: "trace:1", program: "trace"},
 );
+/** A line's runs with a view: mostly one, sometimes two or three, each run once. */
+const line = fc
+	.uniqueArray(run, {minLength: 1, maxLength: 3, selector: (r) => r.id})
+	.map((runs) => {
+		const [first, ...rest] = runs;
+		if (first === undefined) throw new Error("a line has a run");
+		return [first, ...rest] as const;
+	});
 /** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
 const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
 /**
@@ -85,7 +95,11 @@ const table: MsgArbitraryTable<Msg> = {
 	}),
 	fold: arbRecordMsg("fold", {tile}),
 	unfold: arbRecordMsg("unfold", {node}),
-	covered: arbRecordMsg("covered", {tile, run}),
+	covered: arbRecordMsg("covered", {tile, runs: line}),
+	area: arbRecordMsg("area", {
+		width: fc.integer({min: 0, max: 3000}),
+		height: fc.integer({min: 0, max: 2000}),
+	}),
 	over: arbRecordMsg("over", {run: run.map((r) => r.id)}),
 	jobs: arbRecordMsg("jobs", {tile, running: fc.nat({max: 2})}),
 	closing: arbRecordMsg("closing", {tile}),
@@ -108,7 +122,7 @@ const table: MsgArbitraryTable<Msg> = {
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
  */
 const lists = fc.array(
-	arbMsg(table, {weights: {key: 24, click: 2, covered: 2, over: 2, jobs: 2, closing: 1}}),
+	arbMsg(table, {weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1}}),
 	{maxLength: 60, size: "max"},
 );
 const OPTS = {numRuns: 400, seed: 1};
@@ -139,15 +153,18 @@ const sameSet = (a: readonly string[], b: readonly string[]) =>
 const tilesIn = (cmds: readonly DeskCmd[], type: "open" | "stop" | "close") =>
 	cmds.flatMap((c) => (c.type === type ? [c.tile] : []));
 
-/** The desk as it is kept, with what runs in each tile left out: a kept desk shows no run. */
+/**
+ * The desk as it is kept, with what runs in each tile left out: a kept desk shows no run, and a
+ * line's other windows are gone. Focus on one of them goes to the first tile, open.
+ */
 const kept = (s: Open): Saved => ({
 	...savedOf(s),
-	workspaces: s.workspaces.map((ws) => ({
-		...ws,
-		layout: [...tiles(ws.layout.root)]
-			.filter((t) => t.shows.run !== null)
-			.reduce((l, t) => setShows(l, t.id, TSH), ws.layout),
-	})),
+	workspaces: s.workspaces.map((ws) => {
+		const layout = quiet(ws.layout);
+		if (findTile(ws.layout, ws.focused)?.shows.kind !== "window") return {...ws, layout};
+		const focused = [...tiles(layout.root)][0]?.id ?? ws.focused;
+		return {...ws, layout: unfold(layout, focused), focused};
+	}),
 });
 
 /** Press keys a moment apart, long after any list's keys: the repeat window is over by then. */
@@ -204,11 +221,18 @@ const booksTidy = everyStep(
 );
 
 const opensAndStops = everyStep(
-	"it opens a tsh for every tile it makes and stops every tile that goes, and no other",
+	"it opens a tsh for every tile it makes but a line's window, and stops every tile that goes, and no other",
 	({prev, next, cmds}) => {
 		const before = tileIds(prev);
 		const now = tileIds(next);
-		const made = [...now].filter((t) => !before.has(t));
+		const windows = new Set(
+			next.at === "open"
+				? next.workspaces.flatMap((ws) =>
+						tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [t.id] : [])),
+					)
+				: [],
+		);
+		const made = [...now].filter((t) => !before.has(t) && !windows.has(t));
 		const gone = [...before].filter((t) => !now.has(t));
 		return sameSet(tilesIn(cmds, "open"), made) && sameSet(tilesIn(cmds, "stop"), gone);
 	},
@@ -289,12 +313,13 @@ const endedGoes = everyStep(
 );
 
 const ctrlCReaches = everyStep(
-	"Ctrl-C over a program in the focused tile goes to that tile's tsh at once",
+	"Ctrl-C over a program in the focused tile goes at once to the tsh it runs in: the tile's, or the one its line was typed in",
 	({prev, msg, cmds}) => {
 		if (prev.at !== "open" || prev.ask !== null || prev.prefix.armed) return true;
 		const focused = focusedOf(prev);
 		if (msg.type !== "key" || msg.key !== "<c-c>" || focused?.shows.run == null) return true;
-		return same(cmds, [send({tile: focused.id, data: "\x03"})]);
+		const to = focused.shows.kind === "window" ? focused.shows.line.from : focused.id;
+		return same(cmds, [send({tile: to, data: "\x03"})]);
 	},
 );
 
@@ -501,6 +526,8 @@ describe("the desk's laws", () => {
 				opensAndStops.name,
 				freshIds.name,
 				savesChanges.name,
+				// Two tiles under one id: one goes when its tsh ends, and the other stays.
+				endedGoes.name,
 				splitOpens.name,
 				comesBack.name,
 			],
@@ -512,7 +539,8 @@ describe("the desk's laws", () => {
 			deafToEnded: [endedGoes.name],
 			swallowsCtrlC: [ctrlCReaches.name],
 			splitKeepsFocus: [splitOpens.name],
-			foldsUnderFocus: [focusOpen.name],
+			// A kept desk opens its focused tile again as it reads it, so the fold under focus shows there too.
+			foldsUnderFocus: [focusOpen.name, comesBack.name],
 			forgetsTheKept: [comesBack.name],
 		});
 		// Every law is caught by at least one plant.

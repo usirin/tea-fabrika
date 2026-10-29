@@ -1,5 +1,6 @@
 import {mkdir, readFile} from "node:fs/promises";
 import {join} from "node:path";
+import {applyCell} from "@demlik/tea";
 import {Shown, shownOf} from "@tea-fabrika/ticket";
 import {
 	type Model,
@@ -9,16 +10,17 @@ import {
 	treeOf,
 } from "@tea-fabrika/trace";
 import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
-import {One, oneOf} from "@tea-fabrika/tracker";
+import {One, oneOf, tracker} from "@tea-fabrika/tracker";
 import {SEVEN_NOW, trackerAtSeven} from "@tea-fabrika/tracker/seven";
 import {Schema} from "effect";
 import {chromium} from "playwright";
+import {type Desk, type DeskCmd, type DeskMsg, deskMachine} from "./src/desk/desk.ts";
 import {type ContainerNode, createContainer, createTile} from "./src/desk/layout/node.ts";
 import {readToPage, readToWindow} from "./src/messages.ts";
 
 // The desk's page with no Electron and no host: the built renderer (dist/) in headless Chromium,
-// handed a desk and its views as the host would send them. The views are the ticket, map and
-// runs programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven), and the trace
+// handed a desk and its views as the host would send them. The views are the tracker, ticket,
+// map and runs programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven), and the trace
 // program's, of the `seq --to 3 | tally` record (@tea-fabrika/trace/tally). It opens no
 // window, takes no focus and needs no network: the page's files are served from dist/ by the
 // browser's own request hook. Not part of `pnpm test`.
@@ -33,6 +35,8 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 //   side-by-side.png   the ticket beside the map over the runs
 //   job-trace.png      the job's trace as it first opens, the ticket, map and runs folded beside it
 //   job-step.png       the same, the trace opened to tally, count total, add 2
+//   line-beside.png    `tracker | ticket | runs` typed in t2, beside the map: three windows, one tint
+//   line-tight.png     the same line typed in the third of three columns: the ticket and runs folded
 //
 // The round-6 pictures in docs/round-6 were made when the map and the runs were tabs, and the
 // runs view was named `trace`. The script now draws folds; run it with SHOTS set to keep those
@@ -76,6 +80,11 @@ const views = {
 	3: {type: "view", program: "runs", data: Schema.encodeSync(One)(oneOf(state))},
 	4: traceView({read: {at: "read", trace: TALLY_TRACE}, open: ["job"], chosen: null}),
 	5: traceView(traceWith(["tally", "count total", "add 2"])),
+	6: {
+		type: "view",
+		program: "tracker",
+		data: Schema.encodeSync(tracker.view.data)(tracker.view.of(state)),
+	},
 } as const;
 for (const view of Object.values(views)) {
 	const read = readToWindow(view);
@@ -126,6 +135,7 @@ const deskWith = (root: ContainerNode, focused: string) => {
 			running: {},
 			closing: [],
 			next: 6,
+			area: null,
 		},
 		takes: {all: false, keys: ["<c-b>"]},
 	};
@@ -133,6 +143,35 @@ const deskWith = (root: ContainerNode, focused: string) => {
 	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
 	return msg;
 };
+
+/** The workspace's size in the 1440 by 900 window, as the page tells the host. */
+const AREA: DeskMsg = {type: "area", width: 1432, height: 868};
+const LINE = [
+	{id: "6", program: "tracker"},
+	{id: "1", program: "ticket"},
+	{id: "3", program: "runs"},
+] as const;
+
+/**
+ * The desk message after these Msgs, from a fresh desk: the desk machine's own steps, so the
+ * picture is what `tracker | ticket | runs` opens.
+ */
+const deskAfter = (msgs: readonly DeskMsg[]) => {
+	const [first] = deskMachine.init(null, undefined);
+	const desk = msgs.reduce<Desk>(
+		(s, m) => applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, m)[0],
+		first,
+	);
+	const msg = {type: "desk", desk, takes: {all: false, keys: ["<c-b>"]}};
+	const read = readToPage(JSON.parse(JSON.stringify(msg)));
+	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
+	return msg;
+};
+
+const split: readonly DeskMsg[] = [
+	{type: "key", key: "<c-b>", at: 0},
+	{type: "key", key: "|", at: 1},
+];
 
 const shots = [
 	{
@@ -147,6 +186,29 @@ const shots = [
 	{name: "side-by-side", desk: deskWith(column(), "t1")},
 	{name: "job-trace", desk: deskWith(traceRow("t4"), "t4")},
 	{name: "job-step", desk: deskWith(traceRow("t5"), "t5")},
+	// The map in t1; in t2, beside it, the line opens: three windows, each a third of t2, one tint.
+	{
+		name: "line-beside",
+		desk: deskAfter([
+			AREA,
+			...split,
+			{type: "covered", tile: "t1", runs: [{id: "2", program: "map"}]},
+			{type: "covered", tile: "t2", runs: LINE},
+		]),
+	},
+	// Three columns; the line typed in the third would be under 220px a window: the ticket and the
+	// runs open folded, and the tracker has the column.
+	{
+		name: "line-tight",
+		desk: deskAfter([
+			AREA,
+			...split,
+			{type: "key", key: "<c-b>", at: 10},
+			{type: "key", key: "|", at: 11},
+			{type: "covered", tile: "t1", runs: [{id: "2", program: "map"}]},
+			{type: "covered", tile: "t3", runs: LINE},
+		]),
+	},
 ];
 
 /** The bridge preload.cjs gives the page, with the host's messages played into it. */

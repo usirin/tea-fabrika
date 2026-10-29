@@ -28,6 +28,7 @@ import {
 	fold,
 	isFolded,
 	type LayoutNode,
+	lineOf,
 	type NodeId,
 	openShares,
 	type TileId,
@@ -135,12 +136,12 @@ const follow = (run: string) =>
 	});
 
 /**
- * Make what the desk shows, and let go of what it no longer does: a terminal for each tile, in
- * any workspace, and the view of each run covering one.
+ * Make what the desk shows, and let go of what it no longer does: a terminal for each tile with a
+ * tsh, in any workspace, and the view of each run shown in one. A line's window has no terminal.
  */
 const follows = (desk: Desk) => {
 	const all = desk.at === "open" ? desk.workspaces.flatMap((ws) => tilesOf(ws)) : [];
-	const tiles = new Set(all.map((t) => t.id));
+	const tiles = new Set(all.flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])));
 	const runs = new Set(all.flatMap((t) => (t.shows.run === null ? [] : [t.shows.run.id])));
 	for (const tile of tiles)
 		if (!terminals.has(tile) && ghostty !== null) terminals.set(tile, terminalFor(ghostty, tile));
@@ -160,6 +161,34 @@ const follows = (desk: Desk) => {
 		store.views.delete(run);
 		window.fabrika.forget(`run:${run}`);
 	}
+};
+
+/** The workspace's element, measured for the host, and the size it was last told. */
+let measured: HTMLElement | null = null;
+let told = "";
+
+/**
+ * Tell the host the workspace's size in px, when it changed: the desk opens a line's windows
+ * folded where they would be too small (layout/line.ts). `again` tells it even when it did not
+ * change, as to a host attached anew.
+ */
+const tellArea = (again = false) => {
+	if (measured === null) return;
+	const width = Math.round(measured.clientWidth);
+	const height = Math.round(measured.clientHeight);
+	const now = `${width}x${height}`;
+	if (now === told && !again) return;
+	told = now;
+	toHost({type: "area", width, height});
+};
+
+const sizes = new ResizeObserver(() => tellArea());
+
+/** The workspace's ref: measured while it is drawn. */
+const measure = (el: HTMLDivElement | null) => {
+	if (measured !== null) sizes.unobserve(measured);
+	measured = el;
+	if (el !== null) sizes.observe(el);
 };
 
 /** The keys while the host decides. */
@@ -235,6 +264,8 @@ const heard = (raw: unknown) => {
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) holdStep({type: "down"});
+			// On one, it may be a host that never heard the workspace's size.
+			else tellArea(true);
 			return changed();
 	}
 };
@@ -263,6 +294,17 @@ const runOf = (tile: TileNode) => tile.shows.run;
 /** What a strip or a title bar calls a node: its tile's program, or its tiles' programs in order. */
 const nameOf = (node: LayoutNode): string =>
 	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(" · ");
+
+/**
+ * The tint a node is drawn with: its line's, when every tile under it shows a window of the one
+ * line, else none. The desk picks it (layout/line.ts); the page only mixes it in (window.css).
+ */
+const tintOf = (node: LayoutNode): number | undefined => {
+	const lines = [...tiles(node)].map((tile) => lineOf(tile));
+	const [first] = lines;
+	if (first == null || lines.some((line) => line?.id !== first.id)) return undefined;
+	return first.tint;
+};
 
 /** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
 const noFocus = (e: ReactPointerEvent) => e.preventDefault();
@@ -309,11 +351,14 @@ function Tile(props: {
 }): ReactNode {
 	const {tile, focused, asking, closing, folds} = props;
 	const run = runOf(tile);
+	const line = lineOf(tile);
+	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
 	return (
 		<section
 			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
 			data-tile={tile.id}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
+			data-tint={tintOf(tile)}
+			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
 			aria-current={focused}
 			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
 		>
@@ -333,7 +378,7 @@ function Tile(props: {
 				<span>{nameOf(tile)}</span>
 				<span className="tid">{tile.id}</span>
 			</button>
-			<Slot tile={tile.id} />
+			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
 			{run !== null && <View tile={tile.id} run={run.id} />}
 			{closing && (
 				<p className="closing-note" role="status">
@@ -449,6 +494,7 @@ function Strip({node}: {readonly node: LayoutNode}): ReactNode {
 			type="button"
 			className="strip"
 			data-strip={node.id}
+			data-tint={tintOf(node)}
 			aria-label={`open ${name}, ${node.id}`}
 			onPointerDown={noFocus}
 			onClick={() => toHost({type: "unfold", node: node.id})}
@@ -653,6 +699,7 @@ function App(): ReactNode {
 		<div className={`desk${view.dim ? " lost" : ""}`}>
 			<div
 				className="workspace"
+				ref={measure}
 				data-workspace={ws.id}
 				data-zoomed={zoomed ?? undefined}
 				inert={view.dim}
