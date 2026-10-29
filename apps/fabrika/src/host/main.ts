@@ -8,7 +8,7 @@ import {runHost} from "./run.ts";
 import {pathsOf} from "./socket.ts";
 
 // The host process: the entry of dist/host.mjs. It holds every tile's tsh, every program, the
-// line editor's history, each tile's jobs, the ledger and the desk, and it outlives the app, as
+// line editor's history, one job table for every tile, the ledger and the desk, and it outlives the app, as
 // tmux's server outlives its clients. The app is a client of it (attach.ts): it starts the host
 // when none answers, and Cmd-Q quits the app only.
 //
@@ -24,7 +24,8 @@ import {pathsOf} from "./socket.ts";
 // never be the owner's, and the owner's never a test's. With none, it does not start.
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
-// with it, their jobs stay for `attach` at the next start, and the socket and the pid file go.
+// with it, the jobs stay in the host's table for `attach` at the next start, and the socket and
+// the pid file go.
 // A person stops it only through the window's restart, or `fabrika connect`, which stops it so the
 // app starts one on the new ledger (host/connection.ts). A test stops its own by the pid in its home.
 //

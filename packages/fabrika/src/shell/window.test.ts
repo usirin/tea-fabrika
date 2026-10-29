@@ -1,12 +1,13 @@
 import {defineMachine} from "@demlik/tea";
 import {Effect, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
+import {HostJobs, openJobs} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
 import {listed} from "../program/listed.ts";
 import {defineProgram, kind, start, tell} from "../program/program.ts";
 import {input, output} from "../program/shape.ts";
 import {memoryStorage} from "../program/storage.ts";
-import {JobStorage, Programs, programList} from "./programs.ts";
+import {Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 
 // A program with a window, run in tsh's foreground: tsh keeps its inputs open, since its window
@@ -71,12 +72,13 @@ const session = () =>
 		const ready = ear<Ready>();
 		const storage = memoryStorage();
 		const list = programList([listed(win, Layer.empty), listed(bare, Layer.empty)]);
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:window", storage},
-		).pipe(Effect.provideService(JobStorage, storage), Effect.provideService(Programs, list));
+		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		return {run: started.run, printed, ready};
 	});

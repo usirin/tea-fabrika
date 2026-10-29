@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import type {JobsOnHost} from "@kampus/fabrika";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {BUILD} from "../build-id.ts";
@@ -16,7 +17,7 @@ import {BINDINGS, PREFIX} from "../desk/keys.ts";
 import type {SharedHistory} from "../editor/history.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
-import {type Place, startTiles} from "../tiles.ts";
+import {startTiles} from "../tiles.ts";
 import type {Screen} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import {serveAgents} from "./agents.ts";
@@ -25,9 +26,10 @@ import {serveAgents} from "./agents.ts";
 // does with each client. It names no platform: it takes Effect's `SocketServer`, which
 // host/main.ts makes on the socket file, and a test makes on one of its own (host.test.ts).
 //
-// The host holds everything that runs: the tiles (tiles.ts), each with its tsh and programs, and
-// the desk (desk/desk.ts), stepped here, in one place, whoever sends the key. An app is only a
-// client: it shows the desk on its page and relays the page's ports.
+// The host holds everything that runs: the tiles (tiles.ts), each with its tsh and programs, the
+// one job table every tile's tsh shows, and the desk (desk/desk.ts), stepped here, in one place,
+// whoever sends the key. An app is only a client: it shows the desk on its page and relays the
+// page's ports.
 //
 //   app   hello {version: 1}               link.ts: the handshake; another version is refused. The
 //                                          host's hello back names its build, for the app to compare
@@ -73,7 +75,8 @@ const KEYS: ToPage = {
 
 export const serve = (options: {
 	readonly history: SharedHistory;
-	readonly place: (tile: string) => Place;
+	/** The host's one job table (`openJobs`), handed to every tile's tsh. */
+	readonly jobs: JobsOnHost;
 	readonly desk: DeskHome;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
@@ -86,7 +89,7 @@ export const serve = (options: {
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, place, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
+		const {history, jobs, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -157,7 +160,7 @@ export const serve = (options: {
 
 		const tiles = yield* startTiles({
 			history,
-			place,
+			jobs,
 			edge: {
 				tell: (m) => {
 					if (step(m)) shout();

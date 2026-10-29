@@ -1,8 +1,8 @@
+import {type Jobs, jobNamed} from "../host/jobs.ts";
 import type {Flag, Input} from "../program/shape.ts";
 import {own} from "./check.ts";
 import {choices} from "./decode.ts";
 import {BUILTINS} from "./grammar.ts";
-import {type Jobs, jobNamed} from "./jobs.ts";
 import type {ProgramList} from "./programs.ts";
 import {type Token, words} from "./words.ts";
 

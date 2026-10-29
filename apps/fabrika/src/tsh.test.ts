@@ -1,5 +1,5 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, type Storage} from "@kampus/fabrika";
+import {Ledger, memoryStorage, openJobs, type Storage} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
@@ -23,6 +23,7 @@ type Seen =
 
 const session = (
 	opts: {
+		/** Where the host keeps its job table, kept between hosts as the home's folder is. */
 		readonly jobs?: Storage;
 		/** Kept between hosts, as the history file is. Each host shares it with no other. */
 		readonly history?: History;
@@ -51,8 +52,9 @@ const session = (
 			},
 			running: (count) => seen.push({kind: "running", count}),
 		};
+		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
 		const host = yield* startTsh({
-			jobs: opts.jobs ?? memoryStorage(),
+			jobs: yield* openJobs(opts.jobs ?? memoryStorage()),
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
 		}).pipe(

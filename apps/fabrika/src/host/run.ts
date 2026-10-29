@@ -1,4 +1,5 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
+import {openJobs} from "@kampus/fabrika";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
@@ -22,7 +23,9 @@ import {pathsOf, reach} from "./socket.ts";
 // In the home, beside the host's own folder (host/socket.ts):
 //
 //   desk.json            the desk's tiles, kept on each change, for the next start
-//   storage/tiles/<t>/   tile <t>'s tsh: its job table and its jobs, as the terminal tsh keeps them
+//   storage/jobs/        the host's one job table and its jobs' runs, for every tile's tsh, as
+//                        the terminal tsh's host keeps them. A storage/tiles/<t>/ folder left
+//                        by an older build (one table per tile) is not read, and not removed
 //   history              the line editor's history, one for every tile
 //   ledger.sqlite        the ledger, when the home is connected to no server
 //   ledger.json          the ledger server it is connected to, if any (connection.ts)
@@ -92,16 +95,15 @@ export const runHost = (options: {
 			Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
 			Effect.orElseSucceed((): unknown => null),
 		);
+		// One job table for the host process, for every tile's tsh, open until the host stops.
+		const jobs = yield* openJobs(fileStorage(at("storage", "jobs")));
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		return yield* serve({
 			history,
 			ours,
 			build,
 			agents,
-			place: (tile) => ({
-				jobs: fileStorage(at("storage", "tiles", tile)),
-				drop: fs.remove(at("storage", "tiles", tile), {recursive: true}).pipe(Effect.ignore),
-			}),
+			jobs,
 			desk: {
 				kept,
 				save: (saved) =>

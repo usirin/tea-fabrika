@@ -1,4 +1,4 @@
-import {ear, memoryStorage, Shell, start, tell} from "@kampus/fabrika";
+import {ear, HostJobs, memoryStorage, openJobs, Shell, start, tell} from "@kampus/fabrika";
 import {Deferred, Duration, Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
@@ -14,7 +14,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 // first cannot be read (stuck), the second is a draft (skipped), the third's
 // checks are still running, until the test lets them settle.
 
-const {describe: describeEntry, JobStorage, Programs, programList, SMALL, tsh} = Shell;
+const {describe: describeEntry, Programs, programList, SMALL, tsh} = Shell;
 type ProgramList = Shell.ProgramList;
 type Printed = Shell.Printed;
 type Ready = Shell.Ready;
@@ -25,12 +25,13 @@ const session = (list: ProgramList) =>
 		const printed = ear<Printed>();
 		const ready = ear<Ready>();
 		const storage = memoryStorage();
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:status", storage},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>

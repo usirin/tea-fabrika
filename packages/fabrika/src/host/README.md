@@ -61,6 +61,9 @@ Layer on its own subpath.
 | `@kampus/fabrika` | `rules.ts` | The SQL and its migrations, shared by the Durable Object and node:sqlite |
 | `@kampus/fabrika` | `tail.ts` | `tail`: a live read of one stream, in order, once each. `meter` counts what it read |
 | `@kampus/fabrika` | `host.ts` | `serve`, `Self`, `cast`, `envelope`, `savedState`, and the host machine with its laws' inputs |
+| `@kampus/fabrika`, and `Shell` | `jobs.ts` | The job table: what a job is, its machine, its `next` number, and `traceIdOf`, a job's trace. Moved here from tsh |
+| `@kampus/fabrika` | `host-jobs.ts` | Where a host keeps its jobs. `openJobs` and `HostJobs`: the one table a host keeps and every tsh on it shows |
+| `@kampus/fabrika` | `leader.ts` | `leaderOf`: the name that leads a name's job on the ledger, up its parents. `serve` starts each program in its leader's trace |
 | `@kampus/fabrika`, as `Call` | `call.ts` | gen_server:call as a tea module: send, a reply-to, a deadline, a retry under the same id. `Call.update`, as Elm names a module's update |
 | `@kampus/fabrika`, as `Monitor` | `monitor.ts` | Monitors as a tea module: keep watching a name, monitor again after each DOWN, and report every death once (a `down`, or a `gap` of deaths no monitor was on) |
 | `@kampus/fabrika` | `supervisor.ts` | OTP's `supervisor` as a tea program: `one_for_one`, `one_for_all`, `rest_for_one`, a supervisor under a supervisor, its calls, `shutdown` per child, opt-in restart backoff. `supervisor(name, spec)` gives the program, or refuses the spec |
@@ -88,6 +91,32 @@ The rules, in short:
 - A host stops its program when the ledger says its lease is lost (a renew answers `lost`, or a
   newer claim shows), or at its lease's end plus the grace (10 minutes) with no word from the
   ledger. While it hears nothing it renews every second.
+
+## Jobs
+
+A job is what one start on a host made: a root run and every run it started, like a Unix process
+group. The host keeps them, as WezTerm's mux keeps every pane; a shell only shows them
+(`jobs.ts`, `host-jobs.ts`, and
+[the decision](../../../../docs/direction/the-host-keeps-terminals-and-jobs.md)).
+
+```ts
+const jobs = yield* openJobs(fileStorage(home)); // a host in one process: one table, kept
+yield* leaderOf("lane:700:build");                // on the ledger: "lane:700", up the parents
+```
+
+- **In one process** (tsh's launcher, the app's host process) the host keeps one job table, one
+  tea machine, in the storage it is handed. Every tsh on the host is handed the same table, so
+  each tile in the app sees the same `%n`. tsh's `jobs`, `&`, `attach %n` and `fg` are views of
+  it and Msgs to it.
+- **Numbers count up and are never given twice**, as WezTerm's and tmux's ids: the table keeps
+  `next`, and a job that ended does not free its number. A table kept before `next` reads back
+  with `next` after every number in it.
+- **On the ledger** the registry is the table already. A name with no parent leads a job;
+  `startChild` puts the child in its parent's job, as a forked child keeps its parent's process
+  group. `leaderOf` reads it, and nothing more is written.
+- **One job, one trace.** `serve` starts each program under its leader's trace (`traceOf`), so a
+  lane's stages are in the lane's trace on any host, and a name taken over goes on in it. The
+  law is `packages/pipeline/src/hosted/lane-trace-id.laws.test.ts`.
 
 ## Monitors, links and the supervisor
 

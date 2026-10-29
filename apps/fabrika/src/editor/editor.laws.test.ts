@@ -857,6 +857,7 @@ const piece = fc.oneof(
 const data = fc.array(piece, {minLength: 1, maxLength: 4}).map((ps) => ps.join(""));
 const HISTORY = ["ls", "seq --to 3", "say", "true"];
 const job: Shell.Jobs = {
+	next: 2,
 	jobs: [
 		{
 			n: 1,

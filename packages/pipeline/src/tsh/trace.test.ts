@@ -3,7 +3,16 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {runTraceId} from "@demlik/tea/otel";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
-import {ear, memoryStorage, Shell, type Storage, start, tell} from "@kampus/fabrika";
+import {
+	ear,
+	HostJobs,
+	memoryStorage,
+	openJobs,
+	Shell,
+	type Storage,
+	start,
+	tell,
+} from "@kampus/fabrika";
 import {agentTrace} from "@kampus/fabrika/agents/trace";
 import {endpointOf, memoryTracing} from "@kampus/fabrika/otel";
 import {fileStorage} from "@kampus/fabrika/storage/node";
@@ -24,7 +33,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 // tree. Spans are kept in memory here (`memoryTracing`), as a viewer is sent
 // them; `TSH_TRACE` sends the same spans to Jaeger.
 
-const {JobStorage, Programs, programList, Shorten, SMALL, tsh} = Shell;
+const {Programs, programList, Shorten, SMALL, tsh} = Shell;
 type ProgramList = Shell.ProgramList;
 type Printed = Shell.Printed;
 type Ready = Shell.Ready;
@@ -36,6 +45,7 @@ const session = (list: ProgramList, storage: Storage) =>
 		const printed = ear<Printed>();
 		const ready = ear<Ready>();
 		runs += 1;
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
@@ -43,7 +53,7 @@ const session = (list: ProgramList, storage: Storage) =>
 			{id: `tsh:trace-${runs}`, storage},
 		).pipe(
 			Effect.provideService(Programs, list),
-			Effect.provideService(JobStorage, storage),
+			Effect.provideService(HostJobs, jobs),
 			Effect.provideService(Shorten, refOf),
 		);
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");

@@ -1,16 +1,17 @@
 import {defineMachine} from "@demlik/tea";
-import {Schema} from "effect";
+import {Schema, SchemaTransformation} from "effect";
+import {runTraceId} from "../program/trace-id.ts";
 
-// tsh's one machine: the job table. It holds what a job is (its line, and for
-// each program in it the program's name, its flags, its run id and how it is
-// wired to the next), never a handle to a running program. Handles live only
-// in the process that started them; the table is kept in storage, so a tsh
-// started again finds every job the last one had, under the same run ids, and
-// can start each again on the same storage.
+// A host's job table (./host-jobs.ts opens it; tsh shows it). It holds what a
+// job is (its line, and for each program in it the program's name, its flags,
+// its run id and how it is wired to the next), never a handle to a running
+// program. Handles live only in the process that started them; the table is
+// kept in storage, so a host started again finds every job the last one had,
+// under the same run ids, and a tsh can start each again on the same storage.
 //
 //   began       a line became a job: every stage started and running
 //   stage_ended one program of a job ended; when the last has, the job leaves the table
-//   detached    tsh left (or came back after a crash): no job of it runs now
+//   detached    its starter left (or the host came back after a crash): no job of it runs now
 //   attached    a detached job was started again under its run ids
 //   foreground  a job running in the background was brought to the foreground, as bash's `fg`
 //   dropped    a detached job was stopped for good: it leaves the table
@@ -35,7 +36,7 @@ export const JobState = Schema.Literals(["running", "detached"]);
 export type JobState = typeof JobState.Type;
 
 export const Job = Schema.Struct({
-	/** The job's number, `%n` on a line: the lowest free one when it began. */
+	/** The job's number, `%n` on a line: the table's `next` when it began, so never one another job had. */
 	n: Schema.Int,
 	text: Schema.String,
 	stages: Schema.NonEmptyArray(StageRecord),
@@ -45,8 +46,35 @@ export const Job = Schema.Struct({
 });
 export type Job = typeof Job.Type;
 
-/** The table: its state's schema, which it is kept and read back through. */
-export const Jobs = Schema.Struct({jobs: Schema.Array(Job)});
+/** The number after every number in `jobs`: 1 for none. */
+const after = (jobs: readonly Job[]): number => Math.max(0, ...jobs.map((job) => job.n)) + 1;
+
+const Table = Schema.Struct({
+	jobs: Schema.Array(Job),
+	/**
+	 * The number the next job gets. It only grows, so a number is never given twice, as WezTerm's
+	 * and tmux's ids are not: a `%2` a person read an hour ago names the same job or none.
+	 */
+	next: Schema.Int,
+});
+
+/**
+ * The table: its state's schema, which it is kept and read back through. A table kept before
+ * `next` was has none, and reads back with `next` after every number in it. The numbers of jobs
+ * that had ended before then are not known, so one of those may come again, once.
+ */
+export const Jobs = Schema.Struct({
+	jobs: Schema.Array(Job),
+	next: Schema.optionalKey(Schema.Int),
+}).pipe(
+	Schema.decodeTo(
+		Table,
+		SchemaTransformation.transform({
+			decode: ({jobs, next}) => ({jobs, next: next ?? after(jobs)}),
+			encode: (table) => table,
+		}),
+	),
+);
 export type Jobs = typeof Jobs.Type;
 
 export type JobsMsg =
@@ -65,17 +93,9 @@ export type JobsMsg =
 	/** A detached job its owner stopped: it will not be started again. */
 	| {readonly type: "dropped"; readonly n: number};
 
-export const EMPTY: Jobs = {jobs: []};
+export const EMPTY: Jobs = {jobs: [], next: 1};
 
 const step = (s: Jobs): [Jobs, []] => [s, []];
-
-/** The lowest number no job in the table has, as a shell gives them: a line that ran and ended frees its number. */
-export const freeNumber = (jobs: readonly Job[]): number => {
-	const taken = new Set(jobs.map((job) => job.n));
-	let n = 1;
-	while (taken.has(n)) n += 1;
-	return n;
-};
 
 /** Each stage changed, and still at least one. */
 const eachStage = (
@@ -96,13 +116,14 @@ export const jobsMachine = defineMachine({
 				jobs: [
 					...s.jobs,
 					{
-						n: freeNumber(s.jobs),
+						n: s.next,
 						text: m.text,
 						stages: m.stages,
 						state: "running",
 						background: m.background,
 					},
 				],
+				next: s.next + 1,
 			}),
 		stage_ended: (s, m) =>
 			step({
@@ -163,3 +184,6 @@ export function jobNamed(jobs: Jobs, word: string): Job | undefined {
 	if (n !== undefined) return jobs.jobs.find((job) => job.n === Number(n));
 	return jobs.jobs.find((job) => job.stages.some((st) => st.run === word));
 }
+
+/** A job's trace id: its first run's (`runTraceId`). Its `JobRecord` is kept under it. */
+export const traceIdOf = (job: Job): string => runTraceId(job.stages[0].run);

@@ -13,6 +13,7 @@ import {programsOf} from "./fabrika-list.ts";
 const {complete, EMPTY} = Shell;
 const list = programsOf(defaultConfig("/tsh"));
 const JOBS: Shell.Jobs = {
+	next: 2,
 	jobs: [
 		{
 			n: 1,
