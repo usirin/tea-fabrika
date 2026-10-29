@@ -53,7 +53,7 @@ function build(steps: readonly BuildStep[]): LayoutTree {
 		if (step.kind === "split")
 			tree = split(tree, target.id, step.orientation, {
 				tile: `t${index + 1}`,
-				container: `s${index + 1}`,
+				container: `c${index + 1}`,
 			});
 		else if (step.kind === "turn") tree = turn(tree, target.id);
 		else if (step.kind === "fold") tree = fold(tree, target.id);

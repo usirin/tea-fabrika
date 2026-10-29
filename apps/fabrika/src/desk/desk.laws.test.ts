@@ -60,7 +60,7 @@ const key = fc.oneof(
 	{arbitrary: fc.constantFrom(" ", "f", "x", "y"), weight: 1},
 );
 /** A strip's node: a tile, or a container, that exists or not. */
-const node = fc.constantFrom("t1", "t2", "t3", "t4", "s1", "s2", "s3", "s4", "s5");
+const node = fc.constantFrom("t1", "t2", "t3", "t4", "c1", "c2", "c3", "c4", "c5");
 
 /** A Cmd's failed answer. The desk's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
@@ -80,7 +80,7 @@ const table: MsgArbitraryTable<Msg> = {
 	key: arbRecordMsg("key", {key, at: fc.nat({max: 3000})}),
 	click: arbRecordMsg("click", {tile}),
 	resize: arbRecordMsg("resize", {
-		container: fc.constantFrom("s1", "s2", "s3", "s4"),
+		container: fc.constantFrom("c1", "c2", "c3", "c4"),
 		sizes: fc.dictionary(tile, fc.double({min: 0, max: 200, noNaN: true})),
 	}),
 	fold: arbRecordMsg("fold", {tile}),

@@ -23,8 +23,8 @@ import {
 // (`settle`): no container of one child, and nested containers alternate orientation. Nothing
 // here imports React, tea or Effect.
 //
-//   const tree = createTree(createContainer("s0", "horizontal", [createTile("t1")]));
-//   split(tree, "t1", "horizontal", {tile: "t2", container: "s2"})   t1 and t2 side by side
+//   const tree = createTree(createContainer("c0", "horizontal", [createTile("t1")]));
+//   split(tree, "t1", "horizontal", {tile: "t2", container: "c2"})   t1 and t2 side by side
 //   findSibling(next, "t2", "left")                                  t1
 //   fold(next, "t2")                                                 t2 a strip, t1 fills the row
 //   fold(folded, "t1")                                               the same tree: t1 is the last open tile

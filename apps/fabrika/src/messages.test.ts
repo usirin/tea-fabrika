@@ -73,11 +73,11 @@ describe("the desk's port", () => {
 		expect(readFromPage({type: "click", tile: "t2"}).kind).toBe("read");
 		expect(readFromPage({type: "click", tile: "../t2"}).kind).toBe("refused");
 		const sizes = {t1: 40, t2: 60};
-		expect(readFromPage({type: "resize", container: "s1", sizes}).kind).toBe("read");
-		expect(readFromPage({type: "resize", stack: "s1", sizes}).kind).toBe("refused");
+		expect(readFromPage({type: "resize", container: "c1", sizes}).kind).toBe("read");
+		expect(readFromPage({type: "resize", stack: "c1", sizes}).kind).toBe("refused");
 		expect(readFromPage({type: "fold", tile: "t2"}).kind).toBe("read");
 		expect(readFromPage({type: "fold", tile: "../t2"}).kind).toBe("refused");
-		expect(readFromPage({type: "unfold", node: "s4"}).kind).toBe("read");
+		expect(readFromPage({type: "unfold", node: "c4"}).kind).toBe("read");
 		expect(readFromPage({type: "open", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "stop", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");

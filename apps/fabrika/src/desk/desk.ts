@@ -54,7 +54,7 @@ import {
 //   Ctrl-B f, or a click on t2's title bar   t2 folds, and focus goes to the next open tile
 //   the last open tile                       does not fold: nothing changes
 //   a click on t2's strip, or focus onto t2  t2 opens again, at the size it had
-//   a click on a folded column's strip       every tile in it opens: {type: "unfold", node: "s4"}
+//   a click on a folded column's strip       every tile in it opens: {type: "unfold", node: "c4"}
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
@@ -246,7 +246,7 @@ export const fresh = (): Open => ({
 
 const blank = (n: number): Workspace => ({
 	id: `w${n}`,
-	layout: createTree(createContainer(`s${n}`, "horizontal", [createTile(`t${n}`)])),
+	layout: createTree(createContainer(`c${n}`, "horizontal", [createTile(`t${n}`)])),
 	focused: `t${n}`,
 });
 
@@ -384,7 +384,7 @@ const act = (s: Open, does: Does): Step => {
 	const ws = activeOf(s);
 	switch (does.kind) {
 		case "split": {
-			const ids = {tile: `t${s.next}`, container: `s${s.next}`};
+			const ids = {tile: `t${s.next}`, container: `c${s.next}`};
 			const layout = split(unzoom(ws.layout), ws.focused, does.orientation, ids);
 			if (layout === ws.layout || findTile(layout, ids.tile) === null) return [s, []];
 			const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};

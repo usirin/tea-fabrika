@@ -10,9 +10,9 @@ import {Predicate} from "effect";
 // (desk.ts); this module never makes one. The one `effect` import is `Predicate.isObject`, a
 // pure guard.
 //
-//   createContainer("s1", "horizontal", [a, b])         a and b side by side
-//   createContainer("s1", "horizontal", [a, folded])    a fills the row, and a strip beside it
-//   isFolded(createContainer("s1", "vertical", [f, g])) true when f and g are both folded
+//   createContainer("c1", "horizontal", [a, b])         a and b side by side
+//   createContainer("c1", "horizontal", [a, folded])    a fills the row, and a strip beside it
+//   isFolded(createContainer("c1", "vertical", [f, g])) true when f and g are both folded
 
 /** A tile's id. The desk mints it. */
 export type TileId = string;

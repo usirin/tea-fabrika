@@ -71,7 +71,7 @@ describe("layout.split", () => {
 	it("turns a single-child container instead of nesting one", () => {
 		const tree = createTree(createContainer("root", "horizontal", [createTile("a")]));
 
-		const next = split(tree, "a", "vertical", ids("a2", "s1"));
+		const next = split(tree, "a", "vertical", ids("a2", "c1"));
 
 		expect(next.root.orientation).toBe("vertical");
 		expect(next.root.children.map((child) => child.id)).toEqual(["a", "a2"]);
@@ -83,11 +83,11 @@ describe("layout.split", () => {
 			createContainer("root", "horizontal", [createTile("a"), createTile("b")]),
 		);
 
-		const next = split(tree, "a", "vertical", ids("a2", "s1"));
+		const next = split(tree, "a", "vertical", ids("a2", "c1"));
 		const nested = next.root.children[0];
 
 		expect(nested?.tag).toBe("container");
-		expect(nested?.id).toBe("s1");
+		expect(nested?.id).toBe("c1");
 		expect(next.root.orientation).toBe("horizontal");
 		expect(checkTree(next)).toEqual([]);
 	});
@@ -97,17 +97,17 @@ describe("layout.split", () => {
 			createContainer("root", "horizontal", [createTile("a"), createTile("b")]),
 		);
 
-		const next = split(tree, "a", "horizontal", ids("a2", "s1"));
+		const next = split(tree, "a", "horizontal", ids("a2", "c1"));
 
 		expect(next.root.children.map((child) => child.id)).toEqual(["a", "a2", "b"]);
 		expect(checkTree(next)).toEqual([]);
 	});
 
 	it("adds to a nested column when the split runs down it, so containers never repeat a direction", () => {
-		const next = split(threeTiles(), "b", "vertical", ids("d", "s2"));
+		const next = split(threeTiles(), "b", "vertical", ids("d", "c2"));
 
 		expect(findContainer(next, "s")?.children.map((child) => child.id)).toEqual(["b", "d", "c"]);
-		expect(findContainer(next, "s2")).toBeNull();
+		expect(findContainer(next, "c2")).toBeNull();
 		expect(checkTree(next)).toEqual([]);
 	});
 
@@ -116,7 +116,7 @@ describe("layout.split", () => {
 			createContainer("root", "horizontal", [createTile("a"), createTile("b")], {a: 60, b: 40}),
 		);
 
-		const next = split(tree, "a", "horizontal", ids("a2", "s1"));
+		const next = split(tree, "a", "horizontal", ids("a2", "c1"));
 
 		expect(next.root.sizes.a).toBeCloseTo(30, 5);
 		expect(next.root.sizes.a2).toBeCloseTo(30, 5);
@@ -133,7 +133,7 @@ describe("layout.split", () => {
 	});
 
 	it("puts a fresh tsh in the new tile, open", () => {
-		const next = split(threeTiles(), "a", "horizontal", ids("d", "s2"));
+		const next = split(threeTiles(), "a", "horizontal", ids("d", "c2"));
 
 		expect(find(next, (tile) => tile.id === "d")).toEqual(createTile("d"));
 	});
@@ -443,7 +443,7 @@ describe("layout.layoutSignature", () => {
 		const tree = threeTiles();
 		const base = layoutSignature(tree);
 
-		expect(layoutSignature(split(tree, "a", "vertical", ids("d", "s2")))).not.toBe(base);
+		expect(layoutSignature(split(tree, "a", "vertical", ids("d", "c2")))).not.toBe(base);
 		expect(layoutSignature(remove(tree, "b"))).not.toBe(base);
 		expect(layoutSignature(resize(tree, "root", {a: 70, s: 30}))).not.toBe(base);
 		expect(layoutSignature(zoom(tree, "a"))).not.toBe(base);

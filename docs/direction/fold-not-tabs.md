@@ -61,14 +61,14 @@ One tree, before and after Ctrl-B f on `t3`, then on `t2`:
 
 ```ts
 // before: the ticket beside a column of the map over the trace
-{tag: "container", id: "s1", orientation: "horizontal", sizes: {t1: 42, s2: 58}, children: [
+{tag: "container", id: "c1", orientation: "horizontal", sizes: {t1: 42, c2: 58}, children: [
   t1,
-  {tag: "container", id: "s2", orientation: "vertical", sizes: {t2: 50, t3: 50}, children: [t2, t3]},
+  {tag: "container", id: "c2", orientation: "vertical", sizes: {t2: 50, t3: 50}, children: [t2, t3]},
 ]}
 // after f on t3: the map fills the column, the trace is a strip under it.
 // t3 is {tag: "tile", id: "t3", folded: true, ...}; no size changed.
-// after f on t2 too: isFolded(s2) is true, so the column draws as one upright strip,
-// "map · trace", and the ticket fills the row. s1's sizes are still {t1: 42, s2: 58}.
+// after f on t2 too: isFolded(c2) is true, so the column draws as one upright strip,
+// "map · trace", and the ticket fills the row. c1's sizes are still {t1: 42, c2: 58}.
 ```
 
 ## Why

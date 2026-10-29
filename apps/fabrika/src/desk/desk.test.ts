@@ -233,7 +233,7 @@ describe("folds", () => {
 			.map((t) => t.id);
 	/** t1, t2 and t3 side by side, focus on t3. */
 	const row = fold([...prefixed("|"), ...prefixed("|", 10)]).s;
-	/** t1 beside a column of t2 over t3, the column s3, focus on t3. */
+	/** t1 beside a column of t2 over t3, the column c3, focus on t3. */
 	const column = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
 
 	it("turns the focused tile's container with Space, horizontal to vertical and back, and saves each", () => {
@@ -283,10 +283,10 @@ describe("folds", () => {
 		const shut = fold([...prefixed("f", 20), ...prefixed("f", 30)], column).s;
 		expect(folded(shut)).toEqual(["t2", "t3"]);
 		expect(focus(shut)).toBe("t1");
-		const {s, cmds} = fold([{type: "unfold", node: "s3"}], shut);
+		const {s, cmds} = fold([{type: "unfold", node: "c3"}], shut);
 		expect([focus(s), folded(s)]).toEqual(["t2", []]);
 		expect(cmds.map((c) => c.type)).toEqual(["save"]);
-		expect(fold([{type: "unfold", node: "s3"}], s).cmds).toEqual([]);
+		expect(fold([{type: "unfold", node: "c3"}], s).cmds).toEqual([]);
 	});
 
 	it("folds a zoomed tile out of its zoom", () => {

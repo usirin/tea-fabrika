@@ -160,9 +160,9 @@ export type ToApp = typeof ToApp.Type;
  *
  *   {type: "press", id: 3, key: "<c-b>"}
  *   {type: "click", tile: "t2"}
- *   {type: "resize", container: "s2", sizes: {t1: 30, t2: 70}}
+ *   {type: "resize", container: "c2", sizes: {t1: 30, t2: 70}}
  *   {type: "fold", tile: "t2"}
- *   {type: "unfold", node: "s4"}
+ *   {type: "unfold", node: "c4"}
  */
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),

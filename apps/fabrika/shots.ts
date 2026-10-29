@@ -64,10 +64,10 @@ const column = (...folded: readonly string[]) => {
 	if (ticket === undefined || map === undefined || trace === undefined)
 		throw new Error("three tiles");
 	return createContainer(
-		"s1",
+		"c1",
 		"horizontal",
-		[ticket, createContainer("s2", "vertical", [map, trace])],
-		{t1: 42, s2: 58},
+		[ticket, createContainer("c2", "vertical", [map, trace])],
+		{t1: 42, c2: 58},
 	);
 };
 
@@ -95,7 +95,7 @@ const deskWith = (root: ContainerNode, focused: string) => {
 const shots = [
 	{
 		name: "ticket",
-		desk: deskWith(createContainer("s1", "horizontal", tilesWith("t2", "t3")), "t1"),
+		desk: deskWith(createContainer("c1", "horizontal", tilesWith("t2", "t3")), "t1"),
 	},
 	{name: "folded-column", desk: deskWith(column("t2", "t3"), "t1")},
 	{name: "folded-trace", desk: deskWith(column("t3"), "t2")},
