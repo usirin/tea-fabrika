@@ -37,7 +37,7 @@ const isFolded = (node: LayoutNode): boolean =>
   (`openShares`), so an unfold puts every size back as it was.
 - **A folded container is worked out.** When every tile in a container is
   folded, it draws as one strip labelled with its tiles' names, such as
-  "map · trace". A click on it unfolds them all.
+  "map · runs". A click on it unfolds them all.
 - **The last open tile cannot fold.** `fold` gives back the same tree when it
   would leave a workspace with only strips, and `checkTree` refuses a saved
   tree with nothing open. Closing the last open tile unfolds the first tile
@@ -61,15 +61,15 @@ focuses the tile, as a click anywhere on it does. A click on a strip opens it.
 One tree, before and after Ctrl-B f on `t3`, then on `t2`:
 
 ```ts
-// before: the ticket beside a column of the map over the trace
+// before: the ticket beside a column of the map over the runs
 {tag: "container", id: "c1", orientation: "horizontal", sizes: {t1: 42, c2: 58}, children: [
   t1,
   {tag: "container", id: "c2", orientation: "vertical", sizes: {t2: 50, t3: 50}, children: [t2, t3]},
 ]}
-// after f on t3: the map fills the column, the trace is a strip under it.
+// after f on t3: the map fills the column, the runs are a strip under it.
 // t3 is {tag: "tile", id: "t3", folded: true, ...}; no size changed.
 // after f on t2 too: isFolded(c2) is true, so the column draws as one upright strip,
-// "map · trace", and the ticket fills the row. c1's sizes are still {t1: 42, c2: 58}.
+// "map · runs", and the ticket fills the row. c1's sizes are still {t1: 42, c2: 58}.
 ```
 
 ## Why

@@ -137,7 +137,7 @@ function Row(props: {
 						}}
 						aria-hidden="true"
 					>
-						<span>one ticket, one trace</span>
+						<span>one ticket, all its runs</span>
 					</span>
 				))}
 			</div>
@@ -275,7 +275,7 @@ export function RunsWindow({view, send}: WindowProps<typeof runs>) {
 					)}
 				</span>
 				<span className="faint">
-					trace {n} · {shown.spans} {shown.spans === 1 ? "run" : "runs"} · {usd(shown.usd)}
+					#{n} · {shown.spans} {shown.spans === 1 ? "run" : "runs"} · {usd(shown.usd)}
 				</span>
 				<span className="legend">
 					<span>
@@ -371,7 +371,7 @@ export function RunsWindow({view, send}: WindowProps<typeof runs>) {
 				<p className="note">
 					Drag the playhead, or focus it and use <span className="kbd">←</span>{" "}
 					<span className="kbd">→</span> to step from fact to fact. <span className="kbd">End</span>{" "}
-					goes back to now. Like Elm's debugger, the trace is replayed from the facts up to that
+					goes back to now. Like Elm's debugger, the runs are replayed from the facts up to that
 					time.
 				</p>
 			</div>

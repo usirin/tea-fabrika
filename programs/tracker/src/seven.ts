@@ -100,7 +100,7 @@ export const SEVEN: readonly Entry[] = [
 
 /**
  * The tracker's state with these facts read and ticket 7 open, at `now`: what the ticket, map and
- * trace programs show, with no ledger. Its machine's own Msgs, replayed.
+ * runs programs show, with no ledger. Its machine's own Msgs, replayed.
  *
  *   trackerAtSeven().open        // 7
  *   trackerAtSeven(SEVEN.slice(0, 3)).tickets[0]?.timeline.length   // 3

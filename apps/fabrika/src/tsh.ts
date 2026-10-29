@@ -58,8 +58,8 @@ import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "
 //     then tsh's line closes, and tsh ends. `ended` says when.
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter, the tracker,
-// one ticket's three windows: `ticket`, `map` and `runs`, and `trace`, one job's record. Every run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with
-// a view is drawn: it tells its tile, shows the view its data on each change, and reads
+// one ticket's three windows: `ticket`, `map` and `runs`, and `trace`, one job's record. Every
+// run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
 // the host's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
