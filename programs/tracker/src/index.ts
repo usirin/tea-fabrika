@@ -1,5 +1,5 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, kind} from "@kampus/fabrika";
+import {defineProgram, input, kind, output} from "@kampus/fabrika";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema, Stream} from "effect";
 import {duplicatesCell} from "./duplicates.ts";
@@ -40,6 +40,13 @@ import {Write} from "./ticket.ts";
 // Once its own filing lands, it asks Jev whether the new ticket is a duplicate of an open one,
 // when the host gave it a `Jev` (./duplicates.ts). A hint at or above the floor goes on the new
 // ticket as `maybe_duplicate`, written as the agent `duplicates`: advice only, it closes nothing.
+//
+// Its one output is the ticket the person picks (opens), sent each time the pick changes, so
+// `tracker | ticket | trace` shows the picked ticket in the next two windows:
+//
+//   {kind: "open", ticket: 7}    sends 7 on `ticket`
+//   {kind: "list"}, then {kind: "open", ticket: 7}   sends nothing: 7 is still the pick
+//   {kind: "open", ticket: 3}    sends 3
 //
 // A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a box for each
 // open ask. Only a person answers: a tracker whose `Author` is an agent refuses the write.
@@ -94,6 +101,17 @@ export const Do = Schema.Union([
 	Write,
 ]);
 export type Do = typeof Do.Type;
+
+/**
+ * The ticket a `do` picks, when it is a new pick: opening a ticket that is not the last one
+ * picked. Going back to the list picks nothing, so the last pick stands, as a selection does.
+ *
+ *   pickOf({kind: "open", ticket: 7}, null)   7
+ *   pickOf({kind: "open", ticket: 7}, 7)      null: no change, nothing to send
+ *   pickOf({kind: "list"}, 7)                 null
+ */
+export const pickOf = (d: Do, last: number | null): number | null =>
+	d.kind === "open" && d.ticket !== last ? d.ticket : null;
 
 /** What the machine is told for one `do`. A write gets its message id here, once. */
 const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
@@ -160,16 +178,32 @@ export const tracker = defineProgram({
 			"What the window does: list, open a ticket, show open, closed or all, find by title, file, comment, answer an ask, close, reopen, or quit.",
 		),
 	},
-	outputs: {},
+	outputs: {
+		ticket: output(
+			TicketNumber,
+			"The ticket the person picks, by its number: sent each time the pick changes, so a pipe carries the latest pick.",
+		),
+	},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: Shown, of: shownOf},
-	main: ({inputs, watch}) =>
+	main: ({inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* watch("tickets", "tickets", runtime);
+			let last: number | null = null;
 			yield* inputs.do.pipe(
 				Stream.takeWhile((d) => d.kind !== "quit"),
-				Stream.runForEach((d) => runtime.dispatch(msgOf(d)).pipe(Effect.orDie)),
+				Stream.runForEach((d) =>
+					Effect.gen(function* () {
+						yield* runtime.dispatch(msgOf(d)).pipe(Effect.orDie);
+						// Sent after the window moved. Down a pipe whose reader has gone, this send fails
+						// and the tracker ends, as a writer on a closed Unix pipe does.
+						const picked = pickOf(d, last);
+						if (picked === null) return;
+						last = picked;
+						yield* send("ticket", picked);
+					}),
+				),
 			);
 			// Quit, or the input was closed: the writes still waiting land before it ends.
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);

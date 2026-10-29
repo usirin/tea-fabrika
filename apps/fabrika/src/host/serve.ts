@@ -179,6 +179,10 @@ export const serve = (options: {
 					return tiles.close(c.tile);
 				case "stop":
 					return tiles.stop(c.tile);
+				case "end":
+					return tiles.end(c.process);
+				case "kill":
+					return tiles.kill(c.process);
 				case "send":
 					return Effect.sync(() => {
 						const heard = screens.get(`tile:${c.tile}`)?.heard({type: "keys", data: c.data});

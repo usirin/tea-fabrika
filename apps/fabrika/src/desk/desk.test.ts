@@ -391,6 +391,15 @@ describe("a line with several windows", () => {
 	const tile = (s: Desk, id: string) => findTile(layout(s), id);
 	/** t1 and t2 side by side, focus on t2, in a workspace this wide. */
 	const beside = (width: number) => fold([{type: "area", width, height: 860}, ...prefixed("|")]).s;
+	/** The line open in t2, t3 and t4, with focus on t3, the ticket's window. */
+	const onTicket = () =>
+		fold(
+			[
+				{type: "covered", tile: "t2", runs: line},
+				{type: "click", tile: "t3"},
+			],
+			beside(1440),
+		).s;
 
 	it("opens in place, beside the tile it was typed in, each window a third of its share", () => {
 		const {s, cmds} = fold([{type: "covered", tile: "t2", runs: line}], beside(1440));
@@ -490,19 +499,42 @@ describe("a line with several windows", () => {
 		expect(tile(done, "t2")?.shows).toEqual({kind: "tsh", run: null});
 	});
 
-	it("closes a window at once on y: it has no tsh, and its run goes on in the line", () => {
-		const s = fold(
-			[
-				{type: "covered", tile: "t2", runs: line},
-				{type: "click", tile: "t3"},
-				...prefixed("x", 10),
-				{type: "key", key: "y", at: 20},
-			],
-			beside(1440),
-		);
+	it("closes a window on y as kill-pane: its one process gets its inputs' end, and the window goes when it ends", () => {
+		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket());
+		// Only the ticket's process is ended; the tile it was typed in, and its tsh, are not touched.
+		expect(s.cmds).toEqual([{type: "end", process: ticket.id}]);
+		expect(opened(s.s).closing).toEqual(["t3"]);
+		expect(ids(s.s)).toEqual(["t1", "t2", "t3", "t4"]);
+		expect(questionOf(opened(s.s), "t3")).toBe("stop t3 now? (y/n)");
+		const {s: after, cmds} = fold([{type: "over", run: ticket.id}], s.s);
+		expect(ids(after)).toEqual(["t1", "t2", "t4"]);
+		expect(opened(after).closing).toEqual([]);
+		expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
+	});
+
+	it("kills a closing window's process on y to stop now, and the window goes at once", () => {
+		const closing = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket()).s;
+		const s = fold([...prefixed("x", 30), {type: "key", key: "y", at: 40}], closing);
 		expect(ids(s.s)).toEqual(["t1", "t2", "t4"]);
 		expect(opened(s.s).closing).toEqual([]);
-		expect(s.cmds).toContainEqual({type: "stop", tile: "t3"});
+		expect(s.cmds).toEqual([
+			{type: "kill", process: ticket.id},
+			{type: "stop", tile: "t3"},
+			{type: "save", desk: savedOf(opened(s.s))},
+		]);
+	});
+
+	it("closes the tile the line was typed in as any busy tile: its tsh, and so every process of the line", () => {
+		const typed = fold(
+			[
+				{type: "covered", tile: "t2", runs: line},
+				{type: "jobs", tile: "t2", running: 1},
+			],
+			beside(1440),
+		).s;
+		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], typed);
+		expect(s.cmds).toEqual([{type: "close", tile: "t2"}]);
+		expect(opened(s.s).closing).toEqual(["t2"]);
 	});
 
 	it("gives each line its own tint, and a run alone none", () => {

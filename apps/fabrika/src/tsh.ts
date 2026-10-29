@@ -108,6 +108,11 @@ export interface WindowScreen extends Screen<ToWindow> {
 	 * it changes nothing: a host stopping leaves jobs to be attached at its next start.
 	 */
 	readonly closed: () => void;
+	/**
+	 * Stop the process now, and wait for its end: a window of a line that did not end on its
+	 * inputs' end, closed with "stop now". Said after it ended, it changes nothing.
+	 */
+	readonly kill: Effect.Effect<void>;
 }
 
 /** In the foreground the run covers tsh's tile and tsh waits; in the background nothing shows it. */
@@ -334,6 +339,7 @@ export const startTsh = (options: {
 						if (over || closing) return;
 						for (const name of Object.keys(r.program.inputs)) running.close(name);
 					},
+					kill: running.stop.pipe(Effect.asVoid),
 				};
 				const placed = placedIn(table(), r.id);
 				shown.set(r.id, {placed});

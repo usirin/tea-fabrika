@@ -142,6 +142,8 @@ describe("an agent drives the app's programs through MCP", () => {
 			"counter_press",
 			"tracker_do",
 			"ticket_do",
+			// A ticket to show: what a pipe from the tracker sends, an agent can send too.
+			"ticket_ticket",
 			"map_in",
 			"runs_in",
 			"trace_do",

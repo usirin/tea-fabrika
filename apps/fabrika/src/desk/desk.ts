@@ -70,6 +70,9 @@ import {
 //   the same in a workspace too small for three  t4 and t5 open folded, t1 keeps the whole share
 //   update(desk, {type: "over", run: "runs:1"})  t5 goes: it was the runs' window, with no tsh
 //   Ctrl-C in t4                                  goes to t1's tsh, where the line was typed
+//   Ctrl-B x, y in t4                             t4 is closing: end {process: "ticket:1"} gives the
+//                                                 ticket the end of its inputs; t4 goes on its `over`
+//   Ctrl-B x, y in t4 again                       "stop t4 now?": kill {process: "ticket:1"}, t4 goes
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
@@ -89,6 +92,8 @@ import {
 //   send {tile, data}    bytes for the tile's tsh, as if typed: Ctrl-B twice, Ctrl-C over a program
 //   save {desk}          the desk changed: keep it for the next start
 //   empty {}             the last tile closed: the window closes, as the last tab's does in Terminal
+//   end {process}        a line's window closed: give its one process the end of its inputs
+//   kill {process}       a closing window asked to stop now: stop its one process
 //
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
@@ -245,6 +250,10 @@ export const send = Cmd.define("send", {
 });
 export const save = Cmd.define("save", {input: Schema.Struct({desk: Saved}), ok: Done, err: []});
 export const empty = Cmd.define("empty", {input: Schema.Struct({}), ok: Done, err: []});
+/** One process, a window of a line: by its id. */
+const Process = Schema.Struct({process: Schema.String});
+export const end = Cmd.define("end", {input: Process, ok: Done, err: []});
+export const kill = Cmd.define("kill", {input: Process, ok: Done, err: []});
 
 export type DeskCmd =
 	| ReturnType<typeof open>
@@ -252,7 +261,9 @@ export type DeskCmd =
 	| ReturnType<typeof stop>
 	| ReturnType<typeof send>
 	| ReturnType<typeof save>
-	| ReturnType<typeof empty>;
+	| ReturnType<typeof empty>
+	| ReturnType<typeof end>
+	| ReturnType<typeof kill>;
 
 type Step = readonly [Desk, readonly DeskCmd[]];
 
@@ -396,16 +407,29 @@ export const questionOf = (s: Open, tile: TileId): string =>
 /**
  * y to the tile's question. A closing tile goes now, stopped. One with nothing running goes at
  * once. One with something running is closing: its programs get the end of their inputs, and it
- * goes when its tsh says it ended.
+ * goes when its tsh says it ended. A line's window holds one process and no tsh: that process is
+ * what closes (`windowYes`).
  */
 const yes = (s: Open, tile: TileId): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
 	if (node === null) return [s, []];
-	// A line's window has no tsh to close: it goes, and its run goes on in the line.
-	if (node.shows.kind === "window" || s.closing.includes(tile) || !busy(s, node))
-		return goneTile(s, tile);
+	if (node.shows.kind === "window") return windowYes(s, tile, node.shows.run.id);
+	if (s.closing.includes(tile) || !busy(s, node)) return goneTile(s, tile);
 	return [{...s, closing: [...s.closing, tile]}, [close({tile})]];
+};
+
+/**
+ * y on a line's window, as tmux's kill-pane on a pane holding one process: the process gets the
+ * end of its inputs, and the window waits for it to end (`over`), as a busy tile waits for its
+ * tsh. Asked again, "stop now?", y kills it and the window goes. Its neighbours in the line
+ * follow the pipes, in the host: the one before fails at its next send, the one after sees its
+ * input end.
+ */
+const windowYes = (s: Open, tile: TileId, process: string): Step => {
+	if (!s.closing.includes(tile)) return [{...s, closing: [...s.closing, tile]}, [end({process})]];
+	const [next, cmds] = goneTile(s, tile);
+	return [next, [kill({process}), ...cmds]];
 };
 
 /** What a key after the prefix does. */
@@ -615,7 +639,7 @@ const closingNow = (s: Open, tile: TileId): Step =>
 
 export const deskMachine = defineMachine({
 	types: {model: {} as Desk, msg: {} as DeskMsg},
-	cmds: [open, close, stop, send, save, empty],
+	cmds: [open, close, stop, send, save, empty, end, kill],
 	init: (loaded) => {
 		if (loaded !== null && loaded.at === "open")
 			return [
@@ -664,6 +688,10 @@ export const deskMachine = defineMachine({
 		save_err: noop,
 		empty_ok: noop,
 		empty_err: noop,
+		end_ok: noop,
+		end_err: noop,
+		kill_ok: noop,
+		kill_err: noop,
 	},
 });
 

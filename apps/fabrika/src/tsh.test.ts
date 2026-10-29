@@ -109,6 +109,7 @@ const session = (
 				show: () => () => {},
 				heard: () => ({kind: "refused", why: `no window for ${run}`}),
 				closed: () => {},
+				kill: Effect.void,
 			};
 		const press = (run: string, value: unknown) =>
 			window(run).heard({type: "msg", msg: {type: "press", value}});
@@ -437,6 +438,97 @@ describe("a program's window", () => {
 		);
 		expect(seen.seen.filter((x) => x.kind !== "running")).toEqual([]);
 		expect(seen.rows[1]).toMatch(/^tsh: /);
+	});
+
+	it("carries the pick down `tracker | ticket | trace`, and one window closed ends its one process", async () => {
+		/** The ticket number the run's window was shown last, once it had read the ledger. */
+		const numberOf = (seen: readonly Seen[], run: string) => {
+			const last = seen.filter((s) => s.kind === "view" && s.run === run).at(-1);
+			const data: unknown = last?.kind === "view" ? last.data : undefined;
+			return typeof data === "object" && data !== null && "number" in data
+				? data.number
+				: undefined;
+		};
+		const got = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("tracker | ticket | trace\r");
+				yield* s.opened(3);
+				// The windows open from the end of the line back: each found by its program.
+				const of = (program: string) =>
+					s.until(`${program}'s window`, () => {
+						const one = s.seen.find((x) => x.kind === "open" && x.program === program);
+						return one?.kind === "open" ? one : undefined;
+					});
+				const [picker, page, trail] = [
+					yield* of("tracker"),
+					yield* of("ticket"),
+					yield* of("trace"),
+				];
+				const pick = (ticket: number) =>
+					s
+						.window(picker.run)
+						.heard({type: "msg", msg: {type: "do", value: {kind: "open", ticket}}});
+				const both = (n: number) =>
+					s.until(`ticket and trace on #${n}`, () =>
+						numberOf(s.seen, page.run) === n && numberOf(s.seen, trail.run) === n
+							? [n, n]
+							: undefined,
+					);
+				// Two tickets to pick from, filed in the tracker's own window.
+				for (const title of ["Login fails", "Logout fails"])
+					s.window(picker.run).heard({
+						type: "msg",
+						msg: {type: "do", value: {kind: "file", title, body: ""}},
+					});
+				const waiting = yield* s.until("ticket and trace shown", () =>
+					numberOf(s.seen, page.run) !== undefined && numberOf(s.seen, trail.run) !== undefined
+						? [numberOf(s.seen, page.run), numberOf(s.seen, trail.run)]
+						: undefined,
+				);
+				pick(1);
+				const first = yield* both(1);
+				pick(2);
+				const second = yield* both(2);
+				// The ticket's window closes: that one process gets the end of its inputs, and ends.
+				s.window(page.run).closed();
+				yield* s.closed(page.run);
+				// Its input from the ticket ended, and the trace goes on showing the last ticket.
+				const kept = numberOf(s.seen, trail.run);
+				const traceOpen = !s.seen.some((x) => x.kind === "close" && x.run === trail.run);
+				// The tracker's next pick goes down a pipe whose reader is gone: the send fails, and it ends.
+				pick(1);
+				yield* s.closed(picker.run);
+				// The last window closed: the line is over, and the prompt is back.
+				s.window(trail.run).closed();
+				yield* s.closed(trail.run);
+				const rows = yield* s.prompts(2);
+				return {
+					programs: [picker.program, page.program, trail.program],
+					waiting,
+					first,
+					second,
+					kept,
+					traceOpen,
+					rows,
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(got).toMatchObject({
+			programs: ["tracker", "ticket", "trace"],
+			// Started with no ticket, each waits on its input.
+			waiting: [null, null],
+			first: [1, 1],
+			second: [2, 2],
+			kept: 2,
+			traceOpen: true,
+		});
+		// The ticket had ended, so the pipe answered `stopped`: tsh says why the tracker failed.
+		expect(got.rows).toEqual([
+			"tsh$ tracker | ticket | trace",
+			"tsh: tracker failed: tracker sent ticket down a pipe that answered stopped",
+			"tsh$",
+		]);
 	});
 
 	it("is the first stage of a pipe: closing it sends the count on", async () => {

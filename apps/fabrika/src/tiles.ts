@@ -25,6 +25,10 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //   // they end, then tsh does:   the desk is told {type: "ended", tile: "t1"}
 //   yield* tiles.stop("t1")       what still runs in t1 stops, its port goes, and the jobs t1
 //                                 started leave the host's table
+//   yield* tiles.end("ticket:9c1d")   one window of a line closed: that process gets the end of its
+//                                 inputs. Its neighbours follow the pipes: the tracker's next send
+//                                 fails and it ends; the trace's input ends, and it shows the last
+//   yield* tiles.kill("ticket:9c1d")  the same window, "stop now": that process stops
 //
 // Closing is tmux's kill-pane, made soft: a tile owns its tsh as a pane owns its shell, and the
 // programs are given the end of their inputs before anything is stopped. The desk says when to
@@ -62,6 +66,14 @@ export interface Tiles {
 	readonly close: (tile: TileId) => Effect.Effect<void>;
 	/** Stop what still runs in the tile, and drop the jobs it started: the tile is gone. A tile not open changes nothing. */
 	readonly stop: (tile: TileId) => Effect.Effect<void>;
+	/**
+	 * Give one process with a view the end of its inputs, as closing its window does: a window of
+	 * a line, closed on its own. Its neighbours in the line follow the pipes' rules. A process not
+	 * running changes nothing.
+	 */
+	readonly end: (process: string) => Effect.Effect<void>;
+	/** Stop one process with a view now, and wait for its end. A process not running changes nothing. */
+	readonly kill: (process: string) => Effect.Effect<void>;
 }
 
 /** A run with a view, as the tiles hold it while it runs. */
@@ -188,6 +200,8 @@ export const startTiles = (options: {
 					// Its scope closed, so the jobs its tsh started are detached in the host's table now.
 					yield* one.host.drop;
 				}),
+			end: (process) => Effect.sync(() => live.get(process)?.screen.closed()),
+			kill: (process) => Effect.suspend(() => live.get(process)?.screen.kill ?? Effect.void),
 		};
 		return tiles;
 	});
