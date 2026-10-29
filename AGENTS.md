@@ -36,8 +36,9 @@ private memory, it is in the wrong place: write it here.
 ## Before you design anything
 
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
-  TypeScript. Parents are written by hand and step their children; there is no
-  pipeline language. See [`docs/direction/elm-first.md`](./docs/direction/elm-first.md).
+  TypeScript. Parents are written by hand and step their children. Exceptions
+  are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
+  with their reason; the first is tsh lines.
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow

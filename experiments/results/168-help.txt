@@ -1,0 +1,219 @@
+tsh$ programs
+say  Says a text once, and ends. tsh's echo.
+seq  Counts from 1 up to a number, one value at a time, and ends.
+double  Doubles each number it is told, and ends when its input closes.
+upper  Says each text it is told in capital letters, and ends when its input closes.
+sleep  Waits, then ends. Stopped before then, it ends stopped.
+true  Ends at once, and well: exit status 0.
+false  Ends at once, and fails: exit status 1.
+tally  Keeps a running total of the numbers it is told, and says it after each one. A number that would carry the total past the safe whole numbers is refused, and the total stays. The total is kept: started again under the same run id, it goes on from it.
+counter  Counts presses of +1 until done, and says the count. It has a window.
+ticket  One ticket, read from the ledger: its title, whose turn it is, its body, its facts, and its properties. Answers its open ask, comments, asks for changes, closes and reopens. It has a window.
+map  The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.
+trace  One ticket's runs laid out in time: a track per step, a clip per run, the waits on a person, the answers, and what each step cost. A playhead replays the facts up to a time. It has a window.
+tracker  Hands out every open ticket, then listens: a ticket a stage sends back is handed out again.
+triage  Sorts a ticket: yes goes on to plan, no is skipped.
+plan  Plans a ticket and asks its owner to approve the plan; an approved plan goes on to build.
+build  Builds a ticket's plan into a commit; a built ticket goes on to review.
+review  Reviews a built ticket; red checks send it back to build, a pass goes on to ship.
+ship  Ships a reviewed ticket: pushes it, opens its pull request and merges it.
+
+tsh$ say --describe
+say: Says a text once, and ends. tsh's echo.
+flags:
+  --text  string  What to say.
+inputs: none
+outputs:
+  >said  string  The text, once.
+machines: none
+say --describe <name> shows one flag, input or output whole.
+
+tsh$ seq --describe
+seq: Counts from 1 up to a number, one value at a time, and ends.
+flags:
+  --to  integer >= 0  The last number it sends.
+inputs: none
+outputs:
+  >n  integer  Each number, in order.
+machines: none
+seq --describe <name> shows one flag, input or output whole.
+
+tsh$ double --describe
+double: Doubles each number it is told, and ends when its input closes.
+flags: none
+inputs:
+  n=  integer  A number to double.
+outputs:
+  >n  integer  The number, doubled.
+machines: none
+double --describe <name> shows one flag, input or output whole.
+
+tsh$ upper --describe
+upper: Says each text it is told in capital letters, and ends when its input closes.
+flags: none
+inputs:
+  text=  string  A text.
+outputs:
+  >text  string  The text in capital letters.
+machines: none
+upper --describe <name> shows one flag, input or output whole.
+
+tsh$ sleep --describe
+sleep: Waits, then ends. Stopped before then, it ends stopped.
+flags:
+  --ms  integer >= 0  How long to wait, in milliseconds.
+inputs: none
+outputs: none
+machines: none
+sleep --describe <name> shows one flag, input or output whole.
+
+tsh$ true --describe
+true: Ends at once, and well: exit status 0.
+flags: none
+inputs: none
+outputs: none
+machines: none
+true --describe <name> shows one flag, input or output whole.
+
+tsh$ false --describe
+false: Ends at once, and fails: exit status 1.
+flags: none
+inputs: none
+outputs: none
+machines: none
+false --describe <name> shows one flag, input or output whole.
+
+tsh$ tally --describe
+tally: Keeps a running total of the numbers it is told, and says it after each one. A number that would carry the total past the safe whole numbers is refused, and the total stays. The total is kept: started again under the same run id, it goes on from it.
+flags: none
+inputs:
+  add=  integer  A number to add.
+outputs:
+  >total  integer  The total, after each number it took.
+  >refused  {n: integer, why: "out_of_range"}  A number it did not take, and why. The total stays as it was.
+machines: count
+status lines: count (one per copy, under the job in jobs)
+tally --describe <name> shows one flag, input or output whole.
+
+tsh$ counter --describe
+counter: Counts presses of +1 until done, and says the count. It has a window.
+flags: none
+inputs:
+  press=  "plus" | "done"  A press: plus counts one, done ends it.
+outputs:
+  >n  integer  The count, once done.
+machines: count
+status lines: count (one per copy, under the job in jobs)
+counter --describe <name> shows one flag, input or output whole.
+
+tsh$ ticket --describe
+ticket: One ticket, read from the ledger: its title, whose turn it is, its body, its facts, and its properties. Answers its open ask, comments, asks for changes, closes and reopens. It has a window.
+flags:
+  --ticket  integer >= 1  The ticket to show, by its number.
+inputs:
+  do=  one of 5 by kind: comment, answer, close, … (5 kinds)  What the window does to the ticket: answer an ask, comment, ask for changes, close, reopen, or quit.
+outputs: none
+machines: tickets
+status lines: tickets (one per copy, under the job in jobs)
+ticket --describe <name> shows one flag, input or output whole.
+
+tsh$ map --describe
+map: The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.
+flags:
+  --ticket  integer >= 1  The ticket whose steps light the map, by its number.
+inputs:
+  in=  {kind: "quit"}  Quit: the map ends. The window sends nothing else.
+outputs: none
+machines: tickets
+status lines: tickets (one per copy, under the job in jobs)
+map --describe <name> shows one flag, input or output whole.
+
+tsh$ trace --describe
+trace: One ticket's runs laid out in time: a track per step, a clip per run, the waits on a person, the answers, and what each step cost. A playhead replays the facts up to a time. It has a window.
+flags:
+  --ticket  integer >= 1  The ticket to lay out, by its number.
+inputs:
+  in=  {kind: "quit"}  Quit: the trace ends. The window sends nothing else.
+outputs: none
+machines: tickets
+status lines: tickets (one per copy, under the job in jobs)
+trace --describe <name> shows one flag, input or output whole.
+
+tsh$ tracker --describe
+tracker: Hands out every open ticket, then listens: a ticket a stage sends back is handed out again.
+flags: none
+inputs: none
+outputs:
+  >ticket  integer >= 1  An open ticket, by its number.
+machines: none
+tracker --describe <name> shows one flag, input or output whole.
+
+tsh$ triage --describe
+triage: Sorts a ticket: yes goes on to plan, no is skipped.
+flags:
+  --ticket  integer >= 1 | null  One ticket to start on, by its number, for a stage that no pipe feeds. (default: null)
+inputs:
+  ticket=  integer >= 1  A ticket to work on, by its number.
+  answer=  {ticket: integer >= 1, pick: "approve" | "no"}  A person's answer to this stage's ask, for one ticket.
+outputs:
+  >ticket  integer >= 1  A ticket this stage is done with: the next stage's work.
+  >said  {id, stage, name, kind, … (5 fields)}  What this stage said of a ticket, in the five verbs.
+machines: ticket
+status lines: ticket (one per copy, under the job in jobs)
+triage --describe <name> shows one flag, input or output whole.
+
+tsh$ plan --describe
+plan: Plans a ticket and asks its owner to approve the plan; an approved plan goes on to build.
+flags:
+  --ticket  integer >= 1 | null  One ticket to start on, by its number, for a stage that no pipe feeds. (default: null)
+inputs:
+  ticket=  integer >= 1  A ticket to work on, by its number.
+  answer=  {ticket: integer >= 1, pick: "approve" | "no"}  A person's answer to this stage's ask, for one ticket.
+outputs:
+  >ticket  integer >= 1  A ticket this stage is done with: the next stage's work.
+  >said  {id, stage, name, kind, … (5 fields)}  What this stage said of a ticket, in the five verbs.
+machines: ticket
+status lines: ticket (one per copy, under the job in jobs)
+plan --describe <name> shows one flag, input or output whole.
+
+tsh$ build --describe
+build: Builds a ticket's plan into a commit; a built ticket goes on to review.
+flags:
+  --ticket  integer >= 1 | null  One ticket to start on, by its number, for a stage that no pipe feeds. (default: null)
+inputs:
+  ticket=  integer >= 1  A ticket to work on, by its number.
+  answer=  {ticket: integer >= 1, pick: "approve" | "no"}  A person's answer to this stage's ask, for one ticket.
+outputs:
+  >ticket  integer >= 1  A ticket this stage is done with: the next stage's work.
+  >said  {id, stage, name, kind, … (5 fields)}  What this stage said of a ticket, in the five verbs.
+machines: ticket
+status lines: ticket (one per copy, under the job in jobs)
+build --describe <name> shows one flag, input or output whole.
+
+tsh$ review --describe
+review: Reviews a built ticket; red checks send it back to build, a pass goes on to ship.
+flags:
+  --ticket  integer >= 1 | null  One ticket to start on, by its number, for a stage that no pipe feeds. (default: null)
+inputs:
+  ticket=  integer >= 1  A ticket to work on, by its number.
+  answer=  {ticket: integer >= 1, pick: "approve" | "no"}  A person's answer to this stage's ask, for one ticket.
+outputs:
+  >ticket  integer >= 1  A ticket this stage is done with: the next stage's work.
+  >said  {id, stage, name, kind, … (5 fields)}  What this stage said of a ticket, in the five verbs.
+machines: ticket
+status lines: ticket (one per copy, under the job in jobs)
+review --describe <name> shows one flag, input or output whole.
+
+tsh$ ship --describe
+ship: Ships a reviewed ticket: pushes it, opens its pull request and merges it.
+flags:
+  --ticket  integer >= 1 | null  One ticket to start on, by its number, for a stage that no pipe feeds. (default: null)
+inputs:
+  ticket=  integer >= 1  A ticket to work on, by its number.
+  answer=  {ticket: integer >= 1, pick: "approve" | "no"}  A person's answer to this stage's ask, for one ticket.
+outputs:
+  >ticket  integer >= 1  A ticket this stage is done with: the next stage's work.
+  >said  {id, stage, name, kind, … (5 fields)}  What this stage said of a ticket, in the five verbs.
+machines: ticket
+status lines: ticket (one per copy, under the job in jobs)
+ship --describe <name> shows one flag, input or output whole.

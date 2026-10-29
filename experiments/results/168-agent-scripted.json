@@ -1,0 +1,508 @@
+{
+	"agent": "scripted",
+	"real": false,
+	"model": null,
+	"rows": [
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 1,
+			"line": "ticket --ticket 7; trace --ticket 7",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "checked, not run: ticket, map and trace need the app's ledger",
+			"ran": null
+		},
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 2,
+			"line": "trace --ticket 7 --run plan",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": false,
+			"right": false,
+			"why": "trace has no flag --run",
+			"ran": null
+		},
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 3,
+			"line": "ticket 7 | trace",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": false,
+			"why": "expected --flag value, input=value, >output or <input, not 7",
+			"ran": null
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 1,
+			"line": "build --ticket 7 | review",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 2,
+			"line": "build ticket=7 | review",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 3,
+			"line": "build --ticket 7 | review | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 1,
+			"line": "tracker | triage | plan | build | review | ship &",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 2,
+			"line": "tracker | triage | plan | build | review | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 3,
+			"line": "triage | plan | build | review | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": []
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 1,
+			"line": "triage --ticket 8",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#8"
+				]
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 2,
+			"line": "triage --ticket 8 | plan",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#8"
+				]
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 3,
+			"line": "triage --ticket #8",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": false,
+			"why": "--ticket needs a value",
+			"ran": null
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 1,
+			"line": "plan --ticket 7 | build",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 2,
+			"line": "plan --ticket 7 && build --ticket 7",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 3,
+			"line": "plan --ticket 7 | build | review",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		},
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 1,
+			"line": "tracker | triage | plan | build | review",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 2,
+			"line": "tracker | triage | plan | build | review | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 3,
+			"line": "",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": false,
+			"why": "no line",
+			"ran": null
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 1,
+			"line": "",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": true,
+			"why": "no line",
+			"ran": null
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 2,
+			"line": "ship --ticket 12",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"ship#12"
+				]
+			}
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 3,
+			"line": "ship --pr 12",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": false,
+			"right": false,
+			"why": "ship has no flag --pr",
+			"ran": null
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 1,
+			"line": "build --ticket 7 | review | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 2,
+			"line": "build --ticket 7 | review ^build | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": false,
+			"why": "expected --flag value, input=value, >output or <input, not ^build",
+			"ran": null
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 3,
+			"line": "review --ticket 7 | build | ship",
+			"said": "scripted",
+			"ms": 0,
+			"tokens": null,
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": false,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"review#7"
+				]
+			}
+		}
+	]
+}
