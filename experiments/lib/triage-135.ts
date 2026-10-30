@@ -148,7 +148,7 @@ export const REPOS = {p: "kamp-us/phoenix", d: "kamp-us/demlik"} as const;
 // ---------------------------------------------------------------- the briefs
 
 /** What phoenix is, as experiment 92b put it. */
-const PHOENIX_NOTE = [
+export const PHOENIX_NOTE = [
 	"The repo is kamp-us/phoenix, a pnpm monorepo:",
 	"- kamp.us: a Turkish-first community site (a link board and a dictionary), one Cloudflare Worker that serves the web app and its backend.",
 	"- fabrika: the agent work pipeline, a Claude Code plugin of skills plus fabrika-cli, its command-line tool. Its home is this repo; other repos use it.",
