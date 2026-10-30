@@ -1,6 +1,6 @@
 import {Ledger, streams} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
-import {Deferred, Effect, Layer} from "effect";
+import {Deferred, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {
 	Comparison,
@@ -8,13 +8,27 @@ import {
 	ExperimentPage,
 	experimentName,
 	fold,
+	RunId,
+	RunLabel,
 	readRow,
+	runIdOf,
 } from "./experiment.ts";
 import {Experiments, experimentsOnLedger} from "./experiments.ts";
 
 // The service on a ledger in memory: what every experiment program reads and writes through.
 
 const OWNER = {kind: "user", id: "owner"} as const;
+
+/** The run ids of keys `run-a`, `run-b`, `run-c` on 170. */
+const A = runIdOf("170", "run-a");
+const B = runIdOf("170", "run-b");
+const C = runIdOf("170", "run-c");
+
+/**
+ * Two keys whose SHA-256 share their first 12 hex characters, `93c55fefa810`: found by hashing
+ * `k0` to `k47999999` once (48 million keys, 32 seconds), so they make one run id.
+ */
+const CLASH = ["k13051066", "k36814461"] as const;
 
 const on = <A, E>(ledger: Ledger["Service"], body: Effect.Effect<A, E, Experiments>) =>
 	Effect.runPromise(
@@ -77,7 +91,7 @@ const twoRuns = Effect.gen(function* () {
 });
 
 describe("Experiments on the ledger", () => {
-	it("numbers runs in order, and lists the latest with its headline metric", async () => {
+	it("gives each run the id its key makes, labels runs in order, and lists the latest", async () => {
 		const ledger = memoryService();
 		const [runs, list] = await on(
 			ledger,
@@ -86,7 +100,8 @@ describe("Experiments on the ledger", () => {
 				return [runs, yield* (yield* Experiments).list()] as const;
 			}),
 		);
-		expect(runs).toEqual(["170-1", "170-2"]);
+		expect(runs).toEqual([A, B]);
+		expect(A).toBe("170.66b1eb530fb7");
 		expect(list).toEqual([
 			{
 				n: "170",
@@ -94,7 +109,8 @@ describe("Experiments on the ledger", () => {
 				date: null,
 				runs: 2,
 				latest: {
-					run: "170-2",
+					run: B,
+					label: "170-2",
 					at: expect.any(Number),
 					status: "finished",
 					headline: {key: "agreed", value: 1},
@@ -116,8 +132,8 @@ describe("Experiments on the ledger", () => {
 			}),
 		);
 		expect(compared).toEqual({
-			a: "170-1",
-			b: "170-2",
+			a: {run: A, label: "170-1"},
+			b: {run: B, label: "170-2"},
 			metrics: [
 				{key: "agreed", a: 0.5, b: 1},
 				{key: "usd", a: 0.02, b: 0.03},
@@ -128,7 +144,9 @@ describe("Experiments on the ledger", () => {
 			],
 			same: 1,
 		});
-		expect(Comparison.toMarkdown(compared)).toContain("## Cases that changed: 2, 1 the same");
+		const md = Comparison.toMarkdown(compared);
+		expect(md).toContain("# 170-1 against 170-2");
+		expect(md).toContain("## Cases that changed: 2, 1 the same");
 	});
 
 	it("lands a write sent again once, and refuses a log on an ended run", async () => {
@@ -160,7 +178,7 @@ describe("Experiments on the ledger", () => {
 				const ex = yield* Experiments;
 				const a = yield* ex.open("404").pipe(Effect.flip);
 				yield* ex.create("170", "The experiments program");
-				const b = yield* ex.cases("170-9").pipe(Effect.flip);
+				const b = yield* ex.cases(runIdOf("170", "never-started")).pipe(Effect.flip);
 				const c = yield* ex.start("171", plan).pipe(Effect.flip);
 				return [a.why, b.why, c.why];
 			}),
@@ -183,13 +201,72 @@ describe("Experiments on the ledger", () => {
 				return [[a, b], again, other.why, yield* ex.runs("170")] as const;
 			}),
 		);
-		expect(runs).toEqual(["170-1", "170-2"]);
-		expect(again).toBe("170-1");
+		expect(runs).toEqual([A, B]);
+		expect(again).toBe(A);
 		expect(other).toBe("key_reused");
-		expect(after.map((r) => [r.run, r.key, r.params])).toEqual([
-			["170-1", "run-a", {model: "jev"}],
-			["170-2", "run-b", {model: "jev"}],
+		expect(after.map((r) => [r.run, r.label, r.key, r.params])).toEqual([
+			[A, "170-1", "run-a", {model: "jev"}],
+			[B, "170-2", "run-b", {model: "jev"}],
 		]);
+	});
+
+	it("points at a run by its id only: a label or a plain string does not type, nor read", () => {
+		const points = (run: RunId) => run;
+		expect(points(A)).toBe(A);
+		// @ts-expect-error: a label is no run id
+		points("170-1");
+		const label: RunLabel = "170-1";
+		// @ts-expect-error: nor is a label from a record
+		points(label);
+		// @ts-expect-error: nor any string a caller holds
+		points(String(A));
+		expect([Schema.is(RunId)("170-1"), Schema.is(RunLabel)(A), Schema.is(RunId)(A)]).toEqual([
+			false,
+			false,
+			true,
+		]);
+	});
+
+	it("refuses a key whose id another key's run has, started after it or at once", async () => {
+		const [first, second] = CLASH.map((key) => ({...plan, key}));
+		if (first === undefined || second === undefined) throw new Error("two keys");
+		expect(runIdOf("170", first.key)).toBe("170.93c55fefa810");
+		expect(runIdOf("170", second.key)).toBe("170.93c55fefa810");
+		const fresh = Effect.gen(function* () {
+			const ex = yield* Experiments;
+			yield* ex.create("170", "The experiments program");
+			return ex;
+		});
+		// One after the other: the second is refused, and the first run stays the first key's.
+		const [again, after, runs] = await on(
+			memoryService(),
+			Effect.gen(function* () {
+				const ex = yield* fresh;
+				yield* ex.start("170", first);
+				const again = yield* ex.start("170", first);
+				const after = yield* ex.start("170", second).pipe(Effect.flip);
+				return [again, after, yield* ex.runs("170")] as const;
+			}),
+		);
+		expect(again).toBe("170.93c55fefa810");
+		expect([after.why, after.says]).toEqual([
+			"id_taken",
+			`run key ${second.key} makes 170.93c55fefa810, which run key ${first.key} has`,
+		]);
+		expect(runs.map((r) => r.key)).toEqual([first.key]);
+		// At once: both read no run, one lands, the other is its `dup` and reads back the first.
+		const raced = await on(
+			racing(memoryService()),
+			Effect.gen(function* () {
+				const ex = yield* fresh;
+				return yield* Effect.all(
+					[first, second].map((p) => Effect.result(ex.start("170", p))),
+					{concurrency: "unbounded"},
+				);
+			}),
+		);
+		const answers = raced.map((r) => (r._tag === "Success" ? r.success : r.failure.why));
+		expect(answers.sort()).toEqual(["170.93c55fefa810", "id_taken"]);
 	});
 
 	it("gives two starts sent at once one run when they share a key, two when they do not", async () => {
@@ -206,10 +283,15 @@ describe("Experiments on the ledger", () => {
 				return [same, two, yield* ex.runs("170")] as const;
 			}),
 		);
-		expect(same).toEqual(["170-1", "170-1"]);
-		// Both land; the ledger's order numbers them, so each has its own number, whichever is first.
-		expect([...two].sort()).toEqual(["170-2", "170-3"]);
-		expect(runs.map((r) => r.key).sort()).toEqual(["run-a", "run-b", "run-c"]);
+		expect(same).toEqual([A, A]);
+		// Both land, each under its own key's id; the ledger's order only picks their labels.
+		expect(two).toEqual([B, C]);
+		expect(runs.map((r) => [r.key, r.run]).sort()).toEqual([
+			["run-a", A],
+			["run-b", B],
+			["run-c", C],
+		]);
+		expect(runs.map((r) => r.label)).toEqual(["170-1", "170-2", "170-3"]);
 	});
 
 	it("takes a log or an end sent again after the run ended, and refuses one that differs", async () => {
@@ -263,7 +345,7 @@ describe("Experiments on the ledger", () => {
 			"",
 			"## What was asked",
 		]);
-		expect(md).toContain("| 170-2 | finished | 0.03 | agreed 1 |");
+		expect(md).toContain(`| 170-2 | ${B} | finished | 0.03 | agreed 1 |`);
 		expect(Experiment.toMarkdown([Experiment.fromPage(page)])).toContain(
 			"| 170 | The experiments program | 2026-10-30 | 2 | 170-2 finished, agreed 1 |",
 		);
@@ -271,42 +353,60 @@ describe("Experiments on the ledger", () => {
 });
 
 describe("the fold", () => {
-	it("keeps out a fact that does not fit, and says why", async () => {
+	type Data = {readonly type: string} & Record<string, unknown>;
+	/** Experiment 170's rows, each fact sent by hand in turn, read back as the service reads them. */
+	const written = async (facts: readonly Data[]) => {
 		const ledger = memoryService();
 		const rows = await Effect.runPromise(
 			Effect.gen(function* () {
 				const name = experimentName("170");
 				yield* ledger.register(name, "user:owner");
-				const send = (id: string, data: {readonly type: string} & Record<string, unknown>) =>
-					ledger.send(streams(name).inbox, id, {kind: data.type, writer: "user:owner", data});
-				yield* send("1", {
-					type: "logged",
-					run: "170-1",
-					what: {kind: "metric", key: "k", value: 1},
-				});
-				yield* send("2", {type: "created", title: "Late"});
-				yield* send("3", {
-					type: "ended",
-					run: "170-1",
-					status: "finished",
-					usd: null,
-					tokens: null,
-				});
-				yield* send("4", {type: "created", title: "Again"});
+				for (const [i, data] of facts.entries())
+					yield* ledger.send(streams(name).inbox, String(i), {
+						kind: data.type,
+						writer: "user:owner",
+						data,
+					});
 				return yield* ledger.readStream(streams(name).inbox, 0, -1);
 			}),
 		);
-		const entries = rows.flatMap((r) => {
-			const read = readRow(r);
-			return read.kind === "entry" ? [read.entry] : [];
-		});
-		const folded = fold(entries);
+		return rows.map(readRow);
+	};
+	const entriesOf = (reads: Awaited<ReturnType<typeof written>>) =>
+		reads.flatMap((read) => (read.kind === "entry" ? [read.entry] : []));
+	const start = (key: string): Data => ({type: "started", key, params: {}, tags: {}, job: null});
+
+	it("keeps out a fact that does not fit, and says why", async () => {
+		const reads = await written([
+			{type: "logged", run: A, what: {kind: "metric", key: "k", value: 1}},
+			{type: "created", title: "Late"},
+			{type: "ended", run: A, status: "finished", usd: null, tokens: null},
+			{type: "created", title: "Again"},
+		]);
+		const folded = fold(entriesOf(reads));
 		expect(folded.experiments.map((k) => k.page.title)).toEqual(["Late"]);
 		// Row 1 is the registration: the ledger counts every row, on every stream.
 		expect(folded.problems).toEqual([
 			"row 2 on 170: logged, but the experiment was never created",
-			"row 4 on 170: run 170-1 ended, but it never started",
+			`row 4 on 170: run ${A} ended, but it never started`,
 			"row 5 on 170: created a second time",
 		]);
+	});
+
+	it("keeps out a second key whose id is taken, and reads a fact that points at a label as broken", async () => {
+		const reads = await written([
+			{type: "created", title: "Clash"},
+			start(CLASH[0]),
+			start(CLASH[1]),
+			{type: "ended", run: "170-1", status: "finished", usd: null, tokens: null},
+		]);
+		const folded = fold(entriesOf(reads));
+		expect(folded.experiments[0]?.page.runs.map((r) => [r.run, r.label, r.key])).toEqual([
+			["170.93c55fefa810", "170-1", CLASH[0]],
+		]);
+		expect(folded.problems).toEqual([
+			`row 4 on 170: run key ${CLASH[1]} makes the id 170.93c55fefa810, which run key ${CLASH[0]} has`,
+		]);
+		expect(reads.at(-1)).toEqual({kind: "broken", why: "row 5 on 170: its data is not a fact"});
 	});
 });

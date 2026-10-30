@@ -13,7 +13,7 @@ import {compare} from "@tea-fabrika/compare";
 
 yield* call(compare, {n: "170", a: undefined, b: undefined});
 // {kind: "called", heard: [
-//   {name: "comparison", value: {a: "170-2", b: "170-3",
+//   {name: "comparison", value: {a: {run: "170.e063cdf36f81", label: "170-2"}, b: {run: "170.2a8c9f051e91", label: "170-3"},
 //     metrics: [{key: "agreed", a: 1, b: 0.67}],
 //     cases: [{item: "t-1", a: {agreed: 1}, b: {agreed: 0}}], same: 2}},
 //   {name: "markdown", value: "# 170-2 against 170-3\n\n| Metric | 170-2 | 170-3 |\n..."}]}
@@ -24,7 +24,12 @@ yield* call(compare, {n: "171", a: undefined, b: undefined});
 
 ```text
 tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
+tsh> compare --n 170 --a 170.ed1e1dcf9719 --b 170-3
 ```
+
+A run is named on the line by its label, `170-1`, as the tables show it, or by its id,
+`170.ed1e1dcf9719`, made from its key. A label is its place among the runs and is read against
+the runs just read; what compare asks the service for is the id.
 
 ## What's in it
 

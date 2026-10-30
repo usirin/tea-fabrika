@@ -1,6 +1,6 @@
 import {call, Ledger} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
-import type {RunId} from "@kampus/pipeline/experiments/experiment";
+import {runIdOf} from "@kampus/pipeline/experiments/experiment";
 import {Experiments, experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {Cause, Effect, Layer, Option} from "effect";
 import {describe, expect, it} from "vitest";
@@ -43,24 +43,25 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 		),
 	);
 
-const run = (id: string) => id as RunId;
-
 describe("compare", () => {
 	it("compares the last two runs when none is named", async () => {
 		const called = await onLedger(call(compare, {n: "170", a: undefined, b: undefined}));
 		if (called.kind !== "called") throw new Error(called.why);
 		const [comparison, markdown] = called.heard;
 		expect(comparison?.name === "comparison" && comparison.value).toMatchObject({
-			a: "170-2",
-			b: "170-3",
+			a: {run: runIdOf("170", "test-2"), label: "170-2"},
+			b: {run: runIdOf("170", "test-3"), label: "170-3"},
 			cases: [{item: "t-1", a: {agreed: 1}, b: {agreed: 0}}],
 			same: 2,
 		});
 		expect(markdown?.value).toContain("# 170-2 against 170-3");
 	});
 
-	it("compares the two runs it is given", async () => {
-		const called = await onLedger(call(compare, {n: "170", a: run("170-1"), b: run("170-3")}));
+	it.each([
+		["labels", "170-1", "170-3"],
+		["ids", runIdOf("170", "test-1"), runIdOf("170", "test-3")],
+	] as const)("compares the two runs it is given by their %s", async (_, a, b) => {
+		const called = await onLedger(call(compare, {n: "170", a, b}));
 		if (called.kind !== "called") throw new Error(called.why);
 		const comparison = called.heard.find((h) => h.name === "comparison");
 		expect(comparison?.name === "comparison" && comparison.value.cases.map((c) => c.item)).toEqual([

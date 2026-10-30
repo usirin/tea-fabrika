@@ -1,5 +1,5 @@
 import {defineProgram, flag, output} from "@kampus/fabrika";
-import {Comparison, ExperimentId, RunId} from "@kampus/pipeline/experiments/experiment";
+import {Comparison, ExperimentId, RunId, RunLabel} from "@kampus/pipeline/experiments/experiment";
 import {Experiments, ExperimentsFailed} from "@kampus/pipeline/experiments/experiments";
 import {Effect, Schema} from "effect";
 
@@ -12,8 +12,13 @@ import {Effect, Schema} from "effect";
 //   markdown # 170-1 against 170-2…         the same, as two tables
 //
 //   tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
+//   tsh> compare --n 170 --a 170.49af0a19b683 --b 170-3     an id where a label may have moved
 //
 //   tsh> compare --n 171                    fails: 171 has fewer than two runs
+
+/** A run as a person names it on the line: its label, as the tables show it, or its id. */
+const Pick = Schema.Union([RunLabel, RunId]);
+type Pick = typeof Pick.Type;
 
 export const compare = defineProgram({
 	name: "compare",
@@ -22,10 +27,13 @@ export const compare = defineProgram({
 	flags: {
 		n: flag(ExperimentId, "The experiment's number."),
 		a: flag(
-			Schema.UndefinedOr(RunId),
-			"The first run, such as 170-1. Left out: the one before the last.",
+			Schema.UndefinedOr(Pick),
+			"The first run: its label, such as 170-1, or its id. Left out: the one before the last.",
 		),
-		b: flag(Schema.UndefinedOr(RunId), "The second run, such as 170-2. Left out: the last."),
+		b: flag(
+			Schema.UndefinedOr(Pick),
+			"The second run: its label, such as 170-2, or its id. Left out: the last.",
+		),
 	},
 	inputs: {},
 	outputs: {
@@ -42,8 +50,10 @@ export const compare = defineProgram({
 		Effect.gen(function* () {
 			const experiments = yield* Experiments;
 			const runs = yield* experiments.runs(flags.n);
-			const pick = (id: string | undefined, back: number) =>
-				id === undefined ? runs.at(-back) : runs.find((r) => r.run === id);
+			// A label is read here, against the runs just read, and turned into a run: what the
+			// service is asked for next is the run's id.
+			const pick = (name: Pick | undefined, back: number) =>
+				name === undefined ? runs.at(-back) : runs.find((r) => r.run === name || r.label === name);
 			const a = pick(flags.a, 2);
 			const b = pick(flags.b, 1);
 			if (a === undefined || b === undefined)

@@ -1,4 +1,4 @@
-import {type Row, TraceId, Writer, writerOf} from "@kampus/fabrika";
+import {type Row, sha256Hex, TraceId, Writer, writerOf} from "@kampus/fabrika";
 import {Equal, Option, Schema} from "effect";
 import {Title} from "../tickets/ticket.ts";
 
@@ -9,13 +9,18 @@ import {Title} from "../tickets/ticket.ts";
 //
 //   experiments/170/inbox   {type: "created", title: "The experiments program"}
 //                           {type: "written", date: "2026-10-30", answer: "...", headline: null, sections: [...]}
-//                           {type: "started", key: "job-7f3a", params: {model: "jev"}, tags: {}, job: null}   run 170-1: the first start
-//                           {type: "logged", run: "170-1", what: {kind: "case", item: "ticket-41", output: "yes", scores: {agreed: 1}}}
-//                           {type: "logged", run: "170-1", what: {kind: "metric", key: "agreed", value: 0.9}}
-//                           {type: "ended", run: "170-1", status: "finished", usd: 0.04, tokens: {input: 9000, output: 300}}
+//                           {type: "started", key: "job-7f3a", params: {model: "jev"}, tags: {}, job: null}   run 170.49af0a19b683, from its key
+//                           {type: "logged", run: "170.49af0a19b683", what: {kind: "case", item: "ticket-41", output: "yes", scores: {agreed: 1}}}
+//                           {type: "logged", run: "170.49af0a19b683", what: {kind: "metric", key: "agreed", value: 0.9}}
+//                           {type: "ended", run: "170.49af0a19b683", status: "finished", usd: 0.04, tokens: {input: 9000, output: 300}}
 //
 //   fold(entries).experiments[0].runs[0]
-//   // {run: "170-1", status: "finished", metrics: {agreed: 0.9}, usd: 0.04, ...}
+//   // {run: "170.49af0a19b683", label: "170-1", status: "finished", metrics: {agreed: 0.9}, ...}
+//
+// A run has two names, as MLflow's run_id and run_name. Its id is made from its key, so it is the
+// same whatever order the starts land in and whatever the fold's rules become: every fact points
+// at it. Its label, `170-1`, is its place among the runs, for people to read; the fold makes it
+// each time it reads, nothing on the ledger holds it, and no method takes one.
 //
 // This file is pure: ./experiments.ts reads and writes the ledger.
 
@@ -23,9 +28,31 @@ import {Title} from "../tickets/ticket.ts";
 export const ExperimentId = Schema.String.check(Schema.isPattern(/^\d{2,3}[a-z]?$/));
 export type ExperimentId = typeof ExperimentId.Type;
 
-/** A run's id: its experiment and its place among that experiment's runs, `170-1`. */
-export const RunId = Schema.String.check(Schema.isPattern(/^\d{2,3}[a-z]?-[1-9]\d*$/));
+/** How many hex characters of the key's SHA-256 a run id keeps: 48 bits. */
+const HEX = 12;
+
+// The two names are two types, told apart by their separator: an id is `${string}.${string}`, a
+// label `${string}-${number}`, and neither is the other's type, nor is a plain string. A brand
+// would say the same, but a program's flags and outputs take only a schema whose two sides are
+// one type (`ShapeSchema` in @kampus/fabrika), and a template literal is one.
+//
+//   experiments.log("170.49af0a19b683", logs)   // types
+//   experiments.log("170-1", logs)              // does not: a label is no run id
+
+/**
+ * A run's lasting id: its experiment, a dot, then the first 12 hex characters of its key's
+ * SHA-256, `170.49af0a19b683`. Made by `runIdOf`, never by counting.
+ */
+export const RunId = Schema.TemplateLiteral([Schema.String, ".", Schema.String]).check(
+	Schema.isPattern(new RegExp(`^\\d{2,3}[a-z]?\\.[0-9a-f]{${HEX}}$`)),
+);
 export type RunId = typeof RunId.Type;
+
+/** A run as people read it: its place among its experiment's runs, `170-3`. */
+export const RunLabel = Schema.TemplateLiteral([Schema.String, "-", Schema.Number]).check(
+	Schema.isPattern(/^\d{2,3}[a-z]?-[1-9]\d*$/),
+);
+export type RunLabel = typeof RunLabel.Type;
 
 /** A metric's or a score's name, in MLflow's rule: letters, digits, `_ - . / :` and spaces. */
 export const Key = Schema.String.check(Schema.isPattern(/^[\w.\-/: ]{1,250}$/));
@@ -87,6 +114,17 @@ export const RunKey = Schema.String.check(
 );
 
 /**
+ * The id of experiment `n`'s run keyed `key`. A hash, not the key itself: a key is up to 256
+ * characters of anything, such as `import/experiments/results/167-duplicate-hint.json`, and an
+ * id goes into message ids and tables. Two keys that share the 12 hex characters are refused, not
+ * merged (`misfit`, and `start` in ./experiments.ts).
+ *
+ *   runIdOf("170", "job-7f3a")   // "170.49af0a19b683", the same in any process, on any platform
+ */
+export const runIdOf = (n: ExperimentId, key: string): RunId =>
+	`${n}.${sha256Hex(key).slice(0, HEX)}`;
+
+/**
  * What a run starts with: its key, its settings, and `job`, the trace id of the job it runs in,
  * when a host runs it. The key is not optional, so a start that could not be sent again safely
  * does not type.
@@ -124,7 +162,7 @@ export type RunEnd = typeof RunEnd.Type;
 export const Fact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("created"), title: Title}),
 	Schema.Struct({type: Schema.Literal("written"), ...WriteUp.fields}),
-	// No run id: the fold numbers a run by its place among the experiment's starts (see `step`).
+	// No run id: it is `runIdOf` the key, so it cannot be written as anything else.
 	Schema.Struct({type: Schema.Literal("started"), ...RunPlan.fields}),
 	Schema.Struct({type: Schema.Literal("logged"), run: RunId, what: RunLog}),
 	Schema.Struct({type: Schema.Literal("ended"), run: RunId, ...RunEnd.fields}),
@@ -135,6 +173,8 @@ export type Fact = typeof Fact.Type;
 export class RunRecord extends Schema.Opaque<RunRecord>()(
 	Schema.Struct({
 		run: RunId,
+		/** Its place among the runs, for people: made by each read, never kept, never pointed at. */
+		label: RunLabel,
 		experiment: ExperimentId,
 		/** The caller's name for it: started again with this key, it is this run. */
 		key: RunKey,
@@ -200,6 +240,7 @@ export type CaseResult = typeof CaseResult.Type;
 /** A run as a list shows it: when, how it stands, and its headline metric. */
 export const Latest = Schema.Struct({
 	run: RunId,
+	label: RunLabel,
 	at: Schema.Finite,
 	status: RunStatus,
 	headline: Schema.NullOr(Schema.Struct({key: Key, value: Schema.Finite})),
@@ -228,6 +269,7 @@ export class Experiment extends Schema.Opaque<Experiment>()(
 					? null
 					: {
 							run: last.run,
+							label: last.label,
 							at: last.at,
 							status: last.status,
 							headline: RunRecord.headline(last, page.writeUp?.headline ?? null),
@@ -246,7 +288,7 @@ export class Experiment extends Schema.Opaque<Experiment>()(
 			const latest =
 				r.latest === null
 					? ""
-					: `${r.latest.run} ${r.latest.status}${r.latest.headline === null ? "" : `, ${r.latest.headline.key} ${r.latest.headline.value}`}`;
+					: `${r.latest.label} ${r.latest.status}${r.latest.headline === null ? "" : `, ${r.latest.headline.key} ${r.latest.headline.value}`}`;
 			return `| ${r.n} | ${cell(r.title)} | ${r.date ?? ""} | ${r.runs} | ${cell(latest)} |`;
 		};
 		return [
@@ -294,11 +336,11 @@ export class ExperimentPage extends Schema.Opaque<ExperimentPage>()(
 				: [
 						"## Runs",
 						"",
-						"| Run | Status | Dollars | Metrics |",
-						"|---|---|---|---|",
+						"| Run | Id | Status | Dollars | Metrics |",
+						"|---|---|---|---|---|",
 						...page.runs.map(
 							(r) =>
-								`| ${r.run} | ${r.status} | ${r.usd ?? ""} | ${cell(
+								`| ${r.label} | ${r.run} | ${r.status} | ${r.usd ?? ""} | ${cell(
 									Object.entries(r.metrics)
 										.map(([k, v]) => `${k} ${v}`)
 										.join(", "),
@@ -329,11 +371,14 @@ const sameScores = (a: Metrics, b: Metrics): boolean => {
 	return [...keys].every((k) => a[k] === b[k]);
 };
 
+/** One run of a comparison: its id, and its label for the tables. */
+const Side = Schema.Struct({run: RunId, label: RunLabel});
+
 /** Two runs side by side: every metric, then the cases whose scores changed. */
 export class Comparison extends Schema.Opaque<Comparison>()(
 	Schema.Struct({
-		a: RunId,
-		b: RunId,
+		a: Side,
+		b: Side,
 		metrics: Schema.Array(MetricChange),
 		cases: Schema.Array(CaseChange),
 		/** How many cases scored the same in both. */
@@ -370,8 +415,8 @@ export class Comparison extends Schema.Opaque<Comparison>()(
 			return sa !== null && sb !== null && sameScores(sa, sb) ? [] : [{item, a: sa, b: sb}];
 		});
 		return {
-			a: a.run,
-			b: b.run,
+			a: {run: a.run, label: a.label},
+			b: {run: b.run, label: b.label},
 			metrics: [...metrics, ...money],
 			cases,
 			same: items.length - cases.length,
@@ -387,10 +432,11 @@ export class Comparison extends Schema.Opaque<Comparison>()(
 				: Object.entries(s)
 						.map(([k, v]) => `${k} ${v}`)
 						.join(", ");
+		const [a, b] = [c.a.label, c.b.label];
 		return [
-			`# ${c.a} against ${c.b}`,
+			`# ${a} against ${b}`,
 			"",
-			`| Metric | ${c.a} | ${c.b} |`,
+			`| Metric | ${a} | ${b} |`,
 			"|---|---|---|",
 			...c.metrics.map((m) => `| ${m.key} | ${num(m.a)} | ${num(m.b)} |`),
 			"",
@@ -399,7 +445,7 @@ export class Comparison extends Schema.Opaque<Comparison>()(
 			...(c.cases.length === 0
 				? []
 				: [
-						`| Case | ${c.a} | ${c.b} |`,
+						`| Case | ${a} | ${b} |`,
 						"|---|---|---|",
 						...c.cases.map((k) => `| ${cell(k.item)} | ${scores(k.a)} | ${scores(k.b)} |`),
 						"",
@@ -419,8 +465,8 @@ export const ROOT = "experiments";
 /** Experiment `n`'s registered name. Its facts go to the name's inbox. */
 export const experimentName = (n: ExperimentId) => `${ROOT}/${n}`;
 
-/** The experiment a run id belongs to: `170` of `170-3`. */
-export const experimentFor = (run: RunId): ExperimentId => run.slice(0, run.lastIndexOf("-"));
+/** The experiment a run id belongs to: `170` of `170.49af0a19b683`. */
+export const experimentFor = (run: RunId): ExperimentId => run.slice(0, run.indexOf("."));
 
 const INBOX = /^experiments\/(\d{2,3}[a-z]?)\/inbox$/;
 const decodeFact = Schema.decodeUnknownOption(Schema.fromJsonString(Fact));
@@ -472,10 +518,16 @@ export interface Folded {
 /** Why a run fact does not fit the runs before it, or `null` when it fits. */
 const misfit = (kept: Kept, fact: Fact): string | null => {
 	if (fact.type === "created" || fact.type === "written") return null;
-	if (fact.type === "started")
-		return kept.page.runs.some((r) => r.key === fact.key)
+	if (fact.type === "started") {
+		const id = runIdOf(kept.page.n, fact.key);
+		const taken = kept.page.runs.find((r) => r.run === id);
+		if (taken === undefined) return null;
+		// One key always makes one id, so a run with this id and another key is two keys whose
+		// hashes share 12 hex characters: the later start is refused, never merged into the run.
+		return taken.key === fact.key
 			? `run key ${fact.key} started a second time`
-			: null;
+			: `run key ${fact.key} makes the id ${id}, which run key ${taken.key} has`;
+	}
 	const run = kept.page.runs.find((r) => r.run === fact.run);
 	if (run === undefined) return `run ${fact.run} ${fact.type}, but it never started`;
 	if (run.status !== "running") return `run ${fact.run} ${fact.type} after it ended`;
@@ -527,13 +579,12 @@ const step = (kept: Kept | undefined, entry: Entry): Kept | string => {
 			return {...kept, page: {...kept.page, writeUp}};
 		}
 		case "started": {
-			// A run's number is its place among the experiment's starts that fit, in the ledger's
-			// order: the third start is `170-3`. The start's message id is its key, so a start sent
-			// again is the ledger's `dup` and takes no number; two keys sent at once both land, and
-			// the ledger's order numbers them. Nobody picks a number, so two starts cannot pick the
-			// same one. The cost: a run's id is known only once its start has landed and been read.
+			// The id is made from the key, so a caller knows it before the start lands, and no change
+			// to which starts fit can move it. The label is the run's place among the starts that
+			// fit, in the ledger's order: the third is `170-3`. It may move; nothing points at it.
 			const run: RunRecord = {
-				run: `${entry.experiment}-${kept.page.runs.length + 1}`,
+				run: runIdOf(entry.experiment, fact.key),
+				label: `${entry.experiment}-${kept.page.runs.length + 1}`,
 				experiment: entry.experiment,
 				key: fact.key,
 				at: entry.at,

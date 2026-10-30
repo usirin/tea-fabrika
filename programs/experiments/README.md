@@ -12,7 +12,7 @@ import {experiments} from "@tea-fabrika/experiments";
 yield* call(experiments, {});
 // {kind: "called", heard: [
 //   {name: "row", value: {n: "170", title: "The experiments program", date: "2026-10-30", runs: 1,
-//     latest: {run: "170-1", status: "finished", headline: {key: "agreed", value: 0.5}}}},
+//     latest: {run: "170.ed1e1dcf9719", label: "170-1", status: "finished", headline: {key: "agreed", value: 0.5}}}},
 //   {name: "markdown", value: "# Experiments\n\n| # | Title | Date | Runs | Latest |\n..."}]}
 ```
 

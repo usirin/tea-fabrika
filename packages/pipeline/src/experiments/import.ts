@@ -409,8 +409,9 @@ export function transform(files: {
 		runs.push({
 			n,
 			plan: {
-				// One results file is one run, so its path names the run: a second import starts no
-				// new one. A file read another way next time has another plan, and is refused.
+				// One results file is one run, so its path is the run's key and makes the run's id: a
+				// second import finds that run and starts no new one. A file read another way next
+				// time has another plan, and is refused.
 				key: `import/${source}`,
 				params: result.params,
 				tags: {source, ...(date ? {date} : {})},

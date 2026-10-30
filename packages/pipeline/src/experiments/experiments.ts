@@ -20,6 +20,7 @@ import {
 	RunPlan,
 	RunRecord,
 	readRow,
+	runIdOf,
 	type WriteUp,
 } from "./experiment.ts";
 
@@ -30,25 +31,26 @@ import {
 //   const experiments = yield* Experiments;
 //   yield* experiments.create("170", "The experiments program");
 //   const plan = {key: "job-7f3a", params: {model: "jev"}, tags: {}, job: null};
-//   const run = yield* experiments.start("170", plan);                  // "170-1"
-//   yield* experiments.start("170", plan);                              // "170-1" again: the same key
+//   const run = yield* experiments.start("170", plan);                  // "170.49af0a19b683", from the key
+//   yield* experiments.start("170", plan);                              // the same id again: the same key
 //   yield* experiments.start("170", {...plan, params: {model: "gpt"}});  // fails: key_reused
 //   yield* experiments.log(run, [
 //     {kind: "case", item: "ticket-41", output: "yes", scores: {agreed: 1}},
 //     {kind: "metric", key: "agreed", value: 1},
 //   ]);
 //   yield* experiments.end(run, {status: "finished", usd: 0.01, tokens: {input: 900, output: 30}});
-//   (yield* experiments.list())[0].latest      // {run: "170-1", status: "finished", headline: {key: "agreed", value: 1}}
+//   (yield* experiments.list())[0].latest      // {run: "170.49af0a19b683", label: "170-1", status: "finished", ...}
 //
 // Each write goes to the experiment's inbox under its own message id, so a write sent again after
-// a crash lands once: `created`, `written/<hash of the write-up>`, `started/<key>`,
-// `metric/<run>/<key>`, `case/<run>/<item>`, `artifact/<run>/<path>`, `ended/<run>`. A start's key
-// comes from its caller, as Stripe's idempotency key does: a job's trace id, an import's results
-// file. A caller with none, a person starting a fresh run, makes one once before its first try
-// and keeps it for its retries. The same key with another plan is refused, as Stripe refuses a
-// key reused with other parameters: returning the first run would log the second plan's results
-// under the first plan's params. A metric is logged once per run: MLflow keeps a history of steps
-// for one key, this keeps one value.
+// a crash lands once: `created`, `written/<hash of the write-up>`, `started/<run>`,
+// `metric/<run>/<key>`, `case/<run>/<item>`, `artifact/<run>/<path>`, `ended/<run>`, where `<run>`
+// is the run's id, made from its key (`runIdOf`). A start's key comes from its caller, as
+// Stripe's idempotency key does: a job's trace id, an import's results file. A caller with none,
+// a person starting a fresh run, makes one once before its first try and keeps it for its retries.
+// The same key with another plan is refused, as Stripe refuses a key reused with other
+// parameters: returning the first run would log the second plan's results under the first plan's
+// params. Another key whose id is taken is refused too, `id_taken`. A metric is logged once per
+// run: MLflow keeps a history of steps for one key, this keeps one value.
 
 /** Why a read or a write did not go through. */
 export const Why = Schema.Literals([
@@ -62,6 +64,8 @@ export const Why = Schema.Literals([
 	"ended",
 	/** The run key started a run with another plan already. */
 	"key_reused",
+	/** Another run key has this key's run id: their hashes share their first 12 hex characters. */
+	"id_taken",
 	/** The ledger refused the write. */
 	"refused",
 	/** The fact does not fit its schema. */
@@ -91,8 +95,9 @@ export class Experiments extends Context.Service<
 		/** One experiment: its write-up, as data, and its runs. */
 		readonly open: (n: ExperimentId) => Call<ExperimentPage>;
 		/**
-		 * Start a run: its id, `170-1`, `170-2`, in the order starts land. Started again with the
-		 * same key, it is the same run; with the same key and another plan, `key_reused`.
+		 * Start a run: its id, made from its key, `170.49af0a19b683`. Started again with the same
+		 * key, it is the same run; with the same key and another plan, `key_reused`; with a key
+		 * whose id another key's run has, `id_taken`.
 		 */
 		readonly start: (n: ExperimentId, plan: RunPlan) => Call<RunId>;
 		/**
@@ -220,25 +225,33 @@ export const experimentsOnLedger = (writer: Writer): Layer.Layer<Experiments, ne
 				open: (n) => one(n).pipe(Effect.map((k) => k.page)),
 				start: (n, plan) =>
 					Effect.gen(function* () {
-						// The key is the message id, and the fold numbers runs by the order their starts
-						// land (`step` in ./experiment.ts). Two starts with one key at once: the ledger
-						// keeps the first, the second is its `dup`, and both read back the same run.
-						const keyed = (kept: Kept) => kept.page.runs.find((r) => r.key === plan.key);
+						// The id is the message id. Two starts with one key at once: the ledger keeps the
+						// first, the second is its `dup`, and both read back the same run. Two keys with
+						// one id at once: the same, and the second reads back the first key's run.
+						const run = runIdOf(n, plan.key);
+						const found = (kept: Kept) => kept.page.runs.find((r) => r.run === run);
 						const record =
-							keyed(yield* one(n)) ??
-							(yield* send(n, `started/${plan.key}`, {type: "started", ...plan}).pipe(
+							found(yield* one(n)) ??
+							(yield* send(n, `started/${run}`, {type: "started", ...plan}).pipe(
 								Effect.andThen(one(n)),
-								Effect.map(keyed),
+								Effect.map(found),
 							));
 						if (record === undefined)
 							return yield* Effect.fail(
 								failed("bad_fact", `the start ${plan.key} on ${n} did not fold into a run`),
 							);
+						if (record.key !== plan.key)
+							return yield* Effect.fail(
+								failed(
+									"id_taken",
+									`run key ${plan.key} makes ${run}, which run key ${record.key} has`,
+								),
+							);
 						if (!RunRecord.startedWith(record, yield* keptPlan(plan)))
 							return yield* Effect.fail(
-								failed("key_reused", `run key ${plan.key} started ${record.run} with another plan`),
+								failed("key_reused", `run key ${plan.key} started ${run} with another plan`),
 							);
-						return record.run;
+						return run;
 					}),
 				log: (run, what) =>
 					Effect.gen(function* () {

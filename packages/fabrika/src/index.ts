@@ -88,8 +88,9 @@ export * from "./program/storage.ts";
 // `StorageStale`. Its tag is still "Stale" (experiment 114).
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
-// A run's trace id: what names its job's record (`Traces.read`).
-export {runTraceId} from "./program/trace-id.ts";
+// A run's trace id: what names its job's record (`Traces.read`). `sha256Hex` is the hash under it,
+// at once and on any platform, for an id made from a key (an experiment's run id).
+export {runTraceId, sha256Hex} from "./program/trace-id.ts";
 export * from "./program/view.ts";
 // sandbox: the sandbox a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
 export * as Sandbox from "./sandbox/sandbox.ts";

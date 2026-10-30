@@ -2,6 +2,7 @@ import {Ledger} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import {runIdOf} from "./experiment.ts";
 import {Experiments, experimentsOnLedger} from "./experiments.ts";
 import {load, transform} from "./import.ts";
 
@@ -113,9 +114,12 @@ describe("load", () => {
 			["01", 2],
 			["02", 1],
 		]);
-		expect(runs.map((r) => [r.run, r.key, r.status, r.usd, r.metrics.agreed])).toEqual([
-			["01-1", "import/experiments/results/01-a.json", "finished", 0.25, 0.5],
-			["01-2", "import/experiments/results/shared.json", "finished", null, 0.75],
+		// Each run's id is made from its key, the results file's path, so a second import finds it.
+		const a = "import/experiments/results/01-a.json";
+		const shared = "import/experiments/results/shared.json";
+		expect(runs.map((r) => [r.run, r.label, r.key, r.status, r.usd, r.metrics.agreed])).toEqual([
+			[runIdOf("01", a), "01-1", a, "finished", 0.25, 0.5],
+			[runIdOf("01", shared), "01-2", shared, "finished", null, 0.75],
 		]);
 		// Every write and every start sent again is the ledger's `dup`: the same list, no new row.
 		expect(again).toEqual(listed);

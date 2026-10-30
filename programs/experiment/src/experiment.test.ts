@@ -36,10 +36,9 @@ describe("experiment", () => {
 		const called = await onLedger(call(experiment, {n: "170"}));
 		if (called.kind !== "called") throw new Error(called.why);
 		const [page, markdown] = called.heard;
-		expect(page?.name === "page" && [page.value.title, page.value.runs.map((r) => r.run)]).toEqual([
-			"The experiments program",
-			["170-1"],
-		]);
+		expect(
+			page?.name === "page" && [page.value.title, page.value.runs.map((r) => [r.run, r.label])],
+		).toEqual(["The experiments program", [["170.ed1e1dcf9719", "170-1"]]]);
 		expect(
 			typeof markdown?.value === "string" && markdown.value.split("\n").filter((l) => l !== ""),
 		).toEqual([
@@ -49,9 +48,9 @@ describe("experiment", () => {
 			"## What we did",
 			"Read the old log.",
 			"## Runs",
-			"| Run | Status | Dollars | Metrics |",
-			"|---|---|---|---|",
-			"| 170-1 | finished | 0 | agreed 1 |",
+			"| Run | Id | Status | Dollars | Metrics |",
+			"|---|---|---|---|---|",
+			"| 170-1 | 170.ed1e1dcf9719 | finished | 0 | agreed 1 |",
 		]);
 	});
 

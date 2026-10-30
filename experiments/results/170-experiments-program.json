@@ -1,54 +1,54 @@
 {
 	"date": "2026-10-30",
 	"counts": {
-		"writeUps": 163,
-		"experiments": 163,
+		"writeUps": 167,
+		"experiments": 167,
 		"sharedNumbers": 0,
-		"inIndex": 160,
-		"withDate": 161,
-		"withAnswer": 160,
+		"inIndex": 164,
+		"withDate": 165,
+		"withAnswer": 164,
 		"titleFromName": 0,
-		"results": 175,
+		"results": 180,
 		"notJson": 0,
-		"numbered": 117,
+		"numbered": 122,
 		"noNumber": 58,
 		"placedByIndex": 0,
 		"placedByScript": 37,
 		"manyScripts": 3,
 		"unplaced": 21,
 		"noWriteUp": 1,
-		"fit": 144,
+		"fit": 148,
 		"noNumbers": 4,
-		"withCases": 108,
+		"withCases": 110,
 		"withUsd": 39,
 		"withTokens": 1,
-		"metrics": 4624,
-		"cases": 7349,
+		"metrics": 4690,
+		"cases": 7379,
 		"metricsCut": 20845,
 		"costNames": 24,
-		"tokenNames": 28
+		"tokenNames": 29
 	},
-	"ledgerRows": 12896,
+	"ledgerRows": 13016,
 	"newRowsOnASecondLoad": 0,
-	"listed": 164,
-	"runs": 144,
-	"twoRunsOrMore": 19,
-	"lastTwoShareAMetric": 6,
+	"listed": 168,
+	"runs": 148,
+	"twoRunsOrMore": 20,
+	"lastTwoShareAMetric": 7,
 	"ms": {
-		"transform": 283,
-		"load": 359,
-		"loadAgain": 573
+		"transform": 298,
+		"load": 430,
+		"loadAgain": 659
 	},
 	"programs": [
 		{
 			"name": "experiments",
-			"values": 165,
-			"ms": 108
+			"values": 169,
+			"ms": 125
 		},
 		{
 			"name": "experiment --n 167",
 			"values": 2,
-			"ms": 21
+			"ms": 29
 		},
 		{
 			"name": "compare --n 77b",
