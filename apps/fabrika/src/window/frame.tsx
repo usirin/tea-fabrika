@@ -1,4 +1,4 @@
-import {type ReactNode, useCallback, useLayoutEffect} from "react";
+import {type ReactNode, useCallback, useEffect, useLayoutEffect, useState} from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import type {Group} from "../desk/keys.ts";
@@ -14,6 +14,9 @@ import {
 	hereWord,
 	hostWord,
 	INFO,
+	type JobItem,
+	jobItem,
+	jobsList,
 	ledgerWord,
 	lineIn,
 	matching,
@@ -31,14 +34,19 @@ import {type Cap, capsOf, type Hint, type Row, sentence} from "./pop.ts";
 import {Menu, Palette, Panel, useTip} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
-// asks list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
+// asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
 // them out. Every item is a button with a tooltip (its name and keys, pop.tsx) and, in info mode,
 // a line of plain words (`data-info`). No item has a background: plain words, ` · ` between them.
 // The bars stay monospace, as a terminal's status line; what opens over the desk is drawn by
 // pop.tsx, in the program windows' own font (docs/direction/popovers.md).
 
 /** The element id of each thing that opens over the desk: its opener names it in `aria-controls`. */
-const POP = {asks: "pop-asks", lines: "pop-lines", palette: "pop-palette"} as const;
+const POP = {
+	asks: "pop-asks",
+	jobs: "pop-jobs",
+	lines: "pop-lines",
+	palette: "pop-palette",
+} as const;
 
 /** What the frame is drawn from, and how it sends. */
 export interface FrameProps {
@@ -260,7 +268,7 @@ export function TopBar(props: FrameProps): ReactNode {
 	);
 }
 
-/** What lies over the desk now: the asks list, an item's lines, or the palette. Shown with the bars hidden too. */
+/** What lies over the desk now: the asks list, the jobs list, an item's lines, or the palette. Shown with the bars hidden too. */
 export function Over(props: FrameProps): ReactNode {
 	const {over} = props.frame;
 	switch (over.kind) {
@@ -268,6 +276,8 @@ export function Over(props: FrameProps): ReactNode {
 			return null;
 		case "asks":
 			return props.asks === null ? null : <AsksList {...props} asks={props.asks} />;
+		case "jobs":
+			return props.desk === null ? null : <JobsMenu {...props} desk={props.desk} />;
 		case "item":
 			return <ItemLines {...props} what={over.what} />;
 		case "palette":
@@ -326,12 +336,57 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		<Menu
 			id={POP.asks}
 			label="Asks"
+			from="top"
 			count={asks.asks.length}
 			sections={asksSections(asks, desk, tickets, Date.now())}
 			foot={ASKS_FOOT}
 			empty={{title: "Nothing waits on you", sub: "A new ask shows here and in the top bar."}}
 			onAct={open}
 			onSecond={aside}
+			onClose={close}
+		/>
+	);
+}
+
+/** The jobs list's footer: its rows have no second thing, so Enter is the one action. */
+const JOBS_FOOT: readonly Hint[] = [
+	{caps: ["↑", "↓"], name: "Move"},
+	{caps: ["↵"], name: "Go to tile"},
+	{caps: ["Esc"], name: "Close"},
+];
+
+/**
+ * The jobs list, a menu over the bottom line's job item, as tsh's `jobs` prints the host's table:
+ * the focused tile's jobs, its last to end, then each other tile's (frame.ts, `jobsList`). Enter
+ * on a row focuses the tile it runs in; on one of this tile's, that is only the list closing and
+ * focus going back to the tile. There is no trace to open for a job yet.
+ */
+function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
+	const {desk, step, toHost} = props;
+	const now = useNow(() => true);
+	const list = jobsList(desk, now);
+	const here = focusedOf(desk)?.id;
+	const close = useCallback(() => step({type: "close"}), [step]);
+	const go = (row: Row) => {
+		const tile = list.tiles.get(row.id);
+		if (tile !== undefined && tile !== here) toHost({type: "go", tile});
+		close();
+	};
+	return (
+		<Menu
+			id={POP.jobs}
+			label="Jobs"
+			from="bottom"
+			count={list.running}
+			sections={list.sections}
+			foot={JOBS_FOOT}
+			empty={{
+				title: here === undefined ? "Nothing runs" : `Nothing runs in ${here}`,
+				sub: "A job you start in tsh shows here and on the bottom line.",
+			}}
+			onAct={go}
+			// No job row has a second thing (`second: null`), so H does nothing here.
+			onSecond={() => undefined}
 			onClose={close}
 		/>
 	);
@@ -456,6 +511,10 @@ function HostLines(props: {
 export function BottomLine(props: FrameProps): ReactNode {
 	const {desk, frame, armed} = props;
 	const question = desk === null ? null : questionWord(desk);
+	const here = desk === null ? null : focusedOf(desk);
+	const jobs = desk === null || here === null ? undefined : desk.jobs[here.id];
+	const now = useNow((t) => jobItem(jobs, t) !== null);
+	const job = jobItem(jobs, now);
 	const left = (): ReactNode => {
 		if (question !== null)
 			return (
@@ -485,9 +544,17 @@ export function BottomLine(props: FrameProps): ReactNode {
 			);
 		if (desk === null) return null;
 		return (
-			<span className="here" data-info={INFO.here}>
-				{hereWord(desk, props.shapes, props.tickets)}
-			</span>
+			<>
+				<span className="here" data-info={INFO.here}>
+					{hereWord(desk, props.shapes, props.tickets)}
+				</span>
+				{job !== null && (
+					<>
+						<Sep />
+						<JobWord {...props} job={job} />
+					</>
+				)}
+			</>
 		);
 	};
 	const right = (): ReactNode => {
@@ -531,6 +598,45 @@ export function BottomLine(props: FrameProps): ReactNode {
 			<div className="left">{left()}</div>
 			<div className="right">{right()}</div>
 		</footer>
+	);
+}
+
+/** How often the page reads its clock again while a job's time is on screen, in ms. */
+const TICK_MS = 1000;
+
+/**
+ * The time now, by the page's clock, read again each second while `moving` says the time on
+ * screen moves at that time: a job runs, or one just ended and will clear. Elm's `Time.every`.
+ */
+const useNow = (moving: (now: number) => boolean): number => {
+	const [now, setNow] = useState(Date.now);
+	const on = moving(now);
+	useEffect(() => {
+		if (!on) return;
+		setNow(Date.now());
+		const timer = setInterval(() => setNow(Date.now()), TICK_MS);
+		return () => clearInterval(timer);
+	}, [on]);
+	return now;
+};
+
+/** The job item: `%3 seq --to 9 | tally 2m +1`. A click lists the jobs, as C-b J does. */
+function JobWord(props: FrameProps & {readonly job: JobItem}): ReactNode {
+	const {job, frame} = props;
+	return (
+		<Item
+			name="jobs"
+			caps={capsFor(props, "jobs")}
+			quiet={quietOf(frame)}
+			info={INFO.job}
+			className="job"
+			opens={{popup: "menu", id: POP.jobs, open: frame.over.kind === "jobs"}}
+			onClick={() => props.step({type: "show", what: "jobs"})}
+		>
+			<b>%{job.n}</b> <span className="job-line">{job.text}</span>{" "}
+			<span className="took">{job.said}</span>
+			{job.more > 0 && <span className="took"> +{job.more}</span>}
+		</Item>
 	);
 }
 

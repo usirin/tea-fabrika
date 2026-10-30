@@ -24,7 +24,7 @@ export const REPEAT_MS = 500;
  * list, every key, the info mode, or the two bars hidden and back. The desk only says so; the
  * page draws it, as tmux's server runs `list-keys` and the client that pressed shows it.
  */
-export const SHOWS = ["asks", "keys", "info", "bars"] as const;
+export const SHOWS = ["asks", "jobs", "keys", "info", "bars"] as const;
 export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does. */
@@ -89,6 +89,8 @@ export const BINDINGS: readonly Binding[] = [
 	...PICKS,
 	// The frame's own: not a bare `?` or `i`, which would go into tsh.
 	once("a", "asks", {kind: "show", what: "asks"}),
+	// `J`, as `N` and `B`: the bare `j` is focus down.
+	once("J", "jobs", {kind: "show", what: "jobs"}),
 	once("?", "keys", {kind: "show", what: "keys"}),
 	once("i", "info", {kind: "show", what: "info"}),
 	once("B", "bars", {kind: "show", what: "bars"}),

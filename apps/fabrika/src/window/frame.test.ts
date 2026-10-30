@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {whenOf} from "@tea-fabrika/tracker/window";
 import {describe, expect, it} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
@@ -10,15 +11,19 @@ import {
 	type Open,
 } from "../desk/desk.ts";
 import {BINDINGS, PREFIX} from "../desk/keys.ts";
+import type {JobEnded} from "../tile-jobs.ts";
 import {
 	asksSections,
 	asksWord,
 	commandsOf,
+	ENDED_SHOWN_MS,
 	FRAME,
 	type Frame,
 	frameUpdate,
 	hereWord,
 	hostWord,
+	jobItem,
+	jobsList,
 	keyGoesTo,
 	keyWord,
 	ledgerWord,
@@ -30,6 +35,7 @@ import {
 	questionWord,
 	ticketsShown,
 	tileOfTicket,
+	tookWord,
 	workspaceName,
 } from "./frame.ts";
 
@@ -127,6 +133,7 @@ describe("the frame's keys", () => {
 			"next workspace",
 			"workspace 1",
 			"asks",
+			"jobs",
 			"keys",
 			"info",
 			"bars",
@@ -293,7 +300,8 @@ describe("keys while something lies over the desk", () => {
 	});
 
 	it("never lets an arrow, Enter or a letter reach a tile while a popover is open", () => {
-		for (const over of [asks, palette, {kind: "item", what: "host"} as const])
+		const jobs: Frame["over"] = {kind: "jobs"};
+		for (const over of [asks, jobs, palette, {kind: "item", what: "host"} as const])
 			for (const key of ["<arrowdown>", "<arrowup>", "<arrowleft>", "<enter>", "h", "j", "x", " "])
 				expect(keyGoesTo(over, key, PREFIX, quiet)).toBe("over");
 	});
@@ -302,11 +310,174 @@ describe("keys while something lies over the desk", () => {
 		expect(keyGoesTo(asks, PREFIX, PREFIX, quiet)).toBe("desk");
 		expect(keyGoesTo(asks, "a", PREFIX, {armed: true, asking: false})).toBe("desk");
 		expect(keyGoesTo(asks, "y", PREFIX, {armed: false, asking: true})).toBe("desk");
+		expect(keyGoesTo({kind: "jobs"}, "J", PREFIX, {armed: true, asking: false})).toBe("desk");
 	});
 
 	it("keeps every key in the palette, a modal dialog, even Ctrl-B", () => {
 		expect(keyGoesTo(palette, PREFIX, PREFIX, quiet)).toBe("over");
 		expect(keyGoesTo(palette, "a", PREFIX, {armed: true, asking: true})).toBe("over");
+	});
+});
+
+describe("the job item and the jobs list", () => {
+	const job = (n: number, text: string, since: number, foreground = false) => ({
+		n,
+		text,
+		since,
+		foreground,
+	});
+	const ended = (over: Partial<JobEnded> = {}): JobEnded => ({
+		n: 3,
+		text: "seq --to 9 | tally",
+		how: "done",
+		since: 0,
+		at: 60_000,
+		foreground: true,
+		...over,
+	});
+
+	it("says how long, calmly: seconds in the first minute, then minutes, then hours", () => {
+		expect(tookWord(-5)).toBe("0s");
+		expect(tookWord(14_999)).toBe("14s");
+		expect(tookWord(134_000)).toBe("2m");
+		expect(tookWord(3_600_000)).toBe("1h");
+		expect(tookWord(3_900_000)).toBe("1h 5m");
+	});
+
+	it("names the job tsh waits for, else the newest, with how many more run; nothing when none runs", () => {
+		const jobs = {
+			running: [
+				job(1, "counter", 0),
+				job(2, "tracker | ticket", 1000, true),
+				job(4, "tally", 2000),
+			],
+			ended: null,
+		};
+		expect(jobItem(jobs, 135_000)).toEqual({
+			n: 2,
+			text: "tracker | ticket",
+			said: "2m",
+			ended: false,
+			more: 2,
+		});
+		const background = {running: [job(1, "counter", 0), job(4, "tally", 2000)], ended: null};
+		expect(jobItem(background, 16_000)).toMatchObject({n: 4, said: "14s", more: 1});
+		expect(jobItem({running: [], ended: null}, 0)).toBeNull();
+		expect(jobItem(undefined, 0)).toBeNull();
+	});
+
+	it("says an end plainly for a short while, then clears; a quick one in the foreground not at all", () => {
+		const done = {running: [], ended: ended()};
+		expect(jobItem(done, 60_000)).toEqual({
+			n: 3,
+			text: "seq --to 9 | tally",
+			said: "done in 1m",
+			ended: true,
+			more: 0,
+		});
+		expect(jobItem(done, 60_000 + ENDED_SHOWN_MS)).toBeNull();
+		const failed = {running: [job(1, "counter", 0)], ended: ended({how: "failed", since: 46_000})};
+		expect(jobItem(failed, 61_000)).toMatchObject({said: "failed after 14s", more: 1});
+		// Seen happen: tsh printed it in the tile, and the bottom line names what still runs.
+		const quick = {running: [job(1, "counter", 0)], ended: ended({since: 59_000})};
+		expect(jobItem(quick, 60_000)).toMatchObject({n: 1, ended: false});
+		// In the background it ended out of sight, however quick.
+		const behind = {running: [], ended: ended({since: 59_000, foreground: false, how: "stopped"})};
+		expect(jobItem(behind, 60_000)?.said).toBe("stopped after 1s");
+		const instant = {running: [], ended: ended({since: 59_400, foreground: false, how: "failed"})};
+		expect(jobItem(instant, 60_000)?.said).toBe("failed at once");
+	});
+
+	it("lists the focused tile's jobs first and its last end, then each other tile's", () => {
+		const desk: Open = {
+			...lined,
+			jobs: {
+				t1: {running: [job(1, "counter", 0)], ended: null},
+				t2: {running: [job(2, "tally", 0), job(5, "sleep --ms 9000", 0, true)], ended: ended()},
+			},
+		};
+		const list = jobsList(desk, 120_000);
+		const typed = (text: string) => ({text, typed: true});
+		const plain = (text: string) => ({text, typed: false});
+		expect(list.running).toBe(3);
+		expect(list.sections).toEqual([
+			{
+				id: "here",
+				title: null,
+				fold: false,
+				rows: [
+					{
+						id: "t2/%5",
+						icon: "running",
+						title: [typed("sleep --ms 9000")],
+						sub: [typed("%5"), plain(" · t2")],
+						side: "2m",
+						second: null,
+					},
+					{
+						id: "t2/%2",
+						icon: "running",
+						title: [typed("tally")],
+						sub: [typed("%2"), plain(" · t2")],
+						side: "2m",
+						second: null,
+					},
+				],
+			},
+			{
+				id: "ended",
+				title: "Last ended",
+				fold: false,
+				rows: [
+					{
+						id: "t2/ended",
+						icon: "done",
+						title: [typed("seq --to 9 | tally")],
+						sub: [typed("%3"), plain(" · t2 · done in 1m")],
+						side: whenOf(60_000, 120_000),
+						second: null,
+					},
+				],
+			},
+			{
+				id: "others",
+				title: "Other tiles",
+				fold: false,
+				rows: [
+					{
+						id: "t1/%1",
+						icon: "running",
+						title: [typed("counter")],
+						sub: [typed("%1"), plain(" · t1")],
+						side: "2m",
+						second: null,
+					},
+				],
+			},
+		]);
+		// Enter on a row focuses the tile it runs in.
+		expect(list.tiles.get("t1/%1")).toBe("t1");
+		expect(list.tiles.get("t2/ended")).toBe("t2");
+	});
+
+	it("keeps the jobs list's own part when this tile runs nothing, so its calm line shows", () => {
+		const desk: Open = {...lined, jobs: {t1: {running: [job(1, "counter", 0)], ended: null}}};
+		const {sections, running} = jobsList(desk, 1000);
+		expect(running).toBe(1);
+		expect(sections.map((s) => [s.id, s.rows.length])).toEqual([
+			["here", 0],
+			["others", 1],
+		]);
+		expect(jobsList({...lined, jobs: {}}, 0).sections).toEqual([
+			{id: "here", title: null, fold: false, rows: []},
+		]);
+	});
+
+	it("opens and closes the jobs list as a menu, by its key", () => {
+		const open = frameUpdate(FRAME, {type: "show", what: "jobs"});
+		expect(open.over).toEqual({kind: "jobs"});
+		expect(frameUpdate(open, {type: "show", what: "jobs"}).over).toEqual({kind: "none"});
+		expect(TABLE.find((b) => b.name === "jobs")?.key).toBe("J");
 	});
 });
 

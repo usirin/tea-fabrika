@@ -6,7 +6,8 @@ import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} fro
 import {bindingOf, type Group, groupOf, type Show} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {LinkNow, ToWindow} from "../messages.ts";
-import {type Cap, capsOf, type Row, type Section, sentence} from "./pop.ts";
+import type {JobEnded, TileJobs} from "../tile-jobs.ts";
+import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./pop.ts";
 
 // The window's frame, in words: what the top bar, the bottom line, the asks list and the palette
 // say, worked out from what the host sent (the desk, the keys, the programs, the asks) and what
@@ -15,11 +16,16 @@ import {type Cap, capsOf, type Row, type Section, sentence} from "./pop.ts";
 //
 //   top      1 #7  2 tsh   tracker | ticket | runs                                    2 ask you •
 //   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
+//   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
 //   Ctrl-B x close t2? (y/n)                                                 y closes · n keeps it
 //
 // The top bar is the whole desk; the bottom line is the tile you are in and the key you just
-// pressed (the frame's research, rule 1). Only "asks you" takes the accent, and only a broken part
+// pressed (the frame's research, rule 1). Its job item names the job the tile runs, by the host's
+// table: `%3`, its line, how long it has run, and `+1` for each other job there. A job that just
+// ended says so for a short while (`done in 4s`), then the item clears; with nothing running it
+// says nothing. A click, or C-b J, lists the jobs: there is no trace to open for a job yet (the
+// app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you" takes the accent, and only a broken part
 // takes the warning color, each with its word (rules 2 and 11). A part that works says nothing:
 // the host and the ledger show up in the top bar only when something is wrong with them. An
 // agent's ask is never on the bottom line: that line is yours.
@@ -354,10 +360,172 @@ export const hereWord = (desk: Open, shapes: Shapes, tickets: TicketsShown): str
 		const said = near.filter(Boolean).join(" ");
 		if (said !== "") parts.push(said);
 	}
-	const running = desk.running[tile.id] ?? 0;
-	if (running > 0) parts.push(`${running} running`);
 	if (ws.layout.zoomed === tile.id) parts.push("zoomed");
 	return parts.join(" · ");
+};
+
+// ---------------------------------------------------------------- the job item
+
+/**
+ * How long, said calmly: `14s` under a minute, `2m` under an hour, then `1h 5m`. Seconds only
+ * while they are most of it, so the line ticks each second for the first minute, then once a
+ * minute: Ghostty writes durations as `1h30m` and `45s`, and tmux shows none at all, so nothing
+ * ticks seconds on a job that has run for an hour.
+ */
+export const tookWord = (ms: number): string => {
+	const s = Math.max(0, Math.floor(ms / 1000));
+	if (s < 60) return `${s}s`;
+	const m = Math.floor(s / 60);
+	if (m < 60) return `${m}m`;
+	const h = Math.floor(m / 60);
+	return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
+};
+
+/** How long an ended job stays on the bottom line, in ms: a short while, then it clears. */
+export const ENDED_SHOWN_MS = 5000;
+
+/**
+ * A job in the foreground that ran less than this, in ms, ended under the person's eyes: tsh
+ * printed how in the tile, so the bottom line says nothing of it. Ghostty's and kitty's "command
+ * finished" notices wait for the same 5 seconds.
+ */
+export const QUICK_MS = 5000;
+
+/**
+ * How a job's end reads: `done in 14s`, `failed after 2m`, `stopped after 1h 5m`, and
+ * `failed at once` for one that ended within its first second, where `after 0s` reads oddly.
+ */
+export const endWord = (ended: JobEnded): string => {
+	const ms = ended.at - ended.since;
+	if (ms < 1000) return `${ended.how} at once`;
+	const took = tookWord(ms);
+	return ended.how === "done" ? `done in ${took}` : `${ended.how} after ${took}`;
+};
+
+/** Is this end still news at `now`: said a short while after, and only when it was not seen happen. */
+const fresh = (ended: JobEnded | null, now: number): ended is JobEnded =>
+	ended !== null &&
+	now - ended.at < ENDED_SHOWN_MS &&
+	(!ended.foreground || ended.at - ended.since >= QUICK_MS);
+
+/** The job the bottom line names: its `%n` and line, how long or how it ended, and how many more run. */
+export interface JobItem {
+	readonly n: number;
+	readonly text: string;
+	/** `2m` while it runs; `done in 2m` once it ended. */
+	readonly said: string;
+	readonly ended: boolean;
+	/** The tile's other jobs that run: `+2`. */
+	readonly more: number;
+}
+
+/**
+ * The focused tile's job item at `now`: a job that just ended, for a short while; else the job tsh
+ * waits for, as tmux's status line names a pane's foreground command; else the newest, as bash's
+ * current job `%+`. `null` when nothing runs and nothing just ended: the line says nothing.
+ */
+export const jobItem = (jobs: TileJobs | undefined, now: number): JobItem | null => {
+	if (jobs === undefined) return null;
+	const {running, ended} = jobs;
+	if (fresh(ended, now))
+		return {n: ended.n, text: ended.text, said: endWord(ended), ended: true, more: running.length};
+	const shown = running.findLast((j) => j.foreground) ?? running.at(-1);
+	if (shown === undefined) return null;
+	return {
+		n: shown.n,
+		text: shown.text,
+		said: tookWord(now - shown.since),
+		ended: false,
+		more: running.length - 1,
+	};
+};
+
+/** A job's `%n` and its tile, as a row's muted line says them: `%3 · t2`, the `%3` typed. */
+const whereOf = (n: number, tile: TileId, more = ""): readonly Piece[] => [
+	{text: `%${n}`, typed: true},
+	{text: ` · ${tile}${more}`, typed: false},
+];
+
+/** A running job as a row: its line as typed, `%n` and its tile under it, how long at the right. */
+const runningRow = (tile: TileId, job: TileJobs["running"][number], now: number): Row => ({
+	id: `${tile}/%${job.n}`,
+	icon: "running",
+	title: [{text: job.text, typed: true}],
+	sub: whereOf(job.n, tile),
+	side: tookWord(now - job.since),
+	second: null,
+});
+
+/** The jobs list: its sections, the tile each row's Enter focuses, and how many jobs run. */
+export interface JobsList {
+	readonly sections: readonly Section[];
+	readonly tiles: ReadonlyMap<string, TileId>;
+	/** On the whole desk: the count at the list's head. */
+	readonly running: number;
+}
+
+/**
+ * The jobs list, as tsh's `jobs` lists the host's table: the focused tile's jobs, the one the
+ * bottom line names first; then its last to end, however long ago, so the list still says it once
+ * the bottom line has cleared; then each other tile's, by tile. Enter on a row focuses its tile.
+ *
+ *   Jobs 2
+ *   ◐ sleep --ms 9000                 2m
+ *     %5 · t2
+ *   Last ended
+ *   ✓ seq --to 9 | tally              14:26
+ *     %3 · t2 · done in 1m
+ *   Other tiles
+ *   ◐ counter                         2m
+ *     %1 · t1
+ */
+export const jobsList = (desk: Open, now: number): JobsList => {
+	const here = focusedOf(desk)?.id;
+	const tiles = new Map<string, TileId>();
+	const at = (tile: TileId, row: Row): Row => {
+		tiles.set(row.id, tile);
+		return row;
+	};
+	const mine = here === undefined ? undefined : desk.jobs[here];
+	const hereRows: Row[] = [];
+	const endedRows: Row[] = [];
+	if (here !== undefined && mine !== undefined) {
+		const first = jobItem({running: mine.running, ended: null}, now)?.n;
+		const lead = mine.running.filter((j) => j.n === first);
+		for (const j of [...lead, ...mine.running.filter((j) => j.n !== first)])
+			hereRows.push(at(here, runningRow(here, j, now)));
+		const {ended} = mine;
+		if (ended !== null)
+			endedRows.push(
+				at(here, {
+					id: `${here}/ended`,
+					icon: ended.how,
+					title: [{text: ended.text, typed: true}],
+					sub: whereOf(ended.n, here, ` · ${endWord(ended)}`),
+					side: whenOf(ended.at, now),
+					second: null,
+				}),
+			);
+	}
+	const otherRows = Object.keys(desk.jobs)
+		.filter((tile) => tile !== here)
+		.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))
+		.flatMap((tile) =>
+			(desk.jobs[tile]?.running ?? []).map((j) => at(tile, runningRow(tile, j, now))),
+		);
+	return {
+		sections: [
+			{id: "here", title: null, fold: false, rows: hereRows},
+			...(endedRows.length === 0
+				? []
+				: [{id: "ended", title: "Last ended", fold: false, rows: endedRows}]),
+			...(otherRows.length === 0
+				? []
+				: [{id: "others", title: "Other tiles", fold: false, rows: otherRows}]),
+		],
+		tiles,
+		running: Object.values(desk.jobs).reduce((n, j) => n + j.running.length, 0),
+	};
 };
 
 /** The question you asked with a key, said where you look: the bottom line. */
@@ -377,6 +545,7 @@ export const INFO = {
 		"try again: the app stopped reaching for the host after five minutes. A click starts it reaching again.",
 	drag: "an empty stretch to move the window by. A double-click zooms the window, as macOS does.",
 	here: "the tile you are in: what it takes in, what it sends out, and its neighbors in its line.",
+	job: "a job in this tile: its number, its line, and how long it has run. +2 is two more. A job that ended says how, for a few seconds. A click lists them, as tsh's jobs does.",
 	keys: "keys: press Ctrl-B, then one key. C-b ? lists them all. Cmd-K finds any command by name.",
 	info: "info: explains whatever the pointer is over, here. C-b i turns it off.",
 	titlebar:
@@ -387,12 +556,13 @@ export const INFO = {
 // ---------------------------------------------------------------- the page's own frame state
 
 /**
- * What lies over the desk: the asks list, the palette, or one item's few lines. One value, so
- * two can never be open at once (Apple's HIG: one popover at a time).
+ * What lies over the desk: the asks list, the jobs list, the palette, or one item's few lines.
+ * One value, so two can never be open at once (Apple's HIG: one popover at a time).
  */
 export type Over =
 	| {readonly kind: "none"}
 	| {readonly kind: "asks"}
+	| {readonly kind: "jobs"}
 	| {
 			readonly kind: "palette";
 			readonly title: "commands" | "keys";
@@ -442,11 +612,13 @@ export type FrameMsg =
 const toggle = (f: Frame, over: Over): Frame =>
 	f.over.kind === over.kind ? {...f, over: {kind: "none"}} : {...f, over};
 
-/** What a key after Ctrl-B shows: the asks list, every key, the info mode, or no bars. */
+/** What a key after Ctrl-B shows: the asks list, the jobs list, every key, the info mode, or no bars. */
 const shown = (f: Frame, what: Show): Frame => {
 	switch (what) {
 		case "asks":
 			return toggle(f, {kind: "asks"});
+		case "jobs":
+			return toggle(f, {kind: "jobs"});
 		case "keys":
 			return {...f, over: {kind: "palette", title: "keys", query: "", at: 0}};
 		case "info":

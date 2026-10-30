@@ -132,7 +132,7 @@ const deskWith = (root: ContainerNode, focused: string) => {
 			active: "1",
 			prefix: {armed: false},
 			ask: null,
-			running: {},
+			jobs: {},
 			closing: [],
 			next: 6,
 			area: null,

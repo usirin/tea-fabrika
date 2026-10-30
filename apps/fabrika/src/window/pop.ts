@@ -61,8 +61,24 @@ export const sentence = (text: string): string =>
 
 // ---------------------------------------------------------------- a menu's rows
 
-/** What a row's icon says. Never color alone: each is its own shape too. */
-export type Icon = "ask" | "stuck" | "later";
+/**
+ * What a row's icon says. Never color alone: each is its own shape too. An ask, a stuck run, an
+ * ask set aside; a job that runs, and how one ended.
+ */
+export type Icon = "ask" | "stuck" | "later" | "running" | "done" | "failed" | "stopped";
+
+/** A run of a row's words. `typed`: what a person types (a command, `%1`), drawn in mono. */
+export interface Piece {
+	readonly text: string;
+	readonly typed: boolean;
+}
+
+/** A row's words: plain text, or pieces of it, some typed. */
+export type Words = string | readonly Piece[];
+
+/** Words as one plain string: what a typed letter jumps by. */
+export const textOf = (words: Words): string =>
+	typeof words === "string" ? words : words.map((p) => p.text).join("");
 
 /** A row's second thing, shown on the active row, with its own key. */
 export interface Second {
@@ -75,10 +91,10 @@ export interface Row {
 	/** Its key, the same on every draw. */
 	readonly id: string;
 	readonly icon: Icon | null;
-	/** Sentence case. */
-	readonly title: string;
+	/** Sentence case, unless it is typed: a command is as it was typed. */
+	readonly title: Words;
 	/** One muted line under the title. */
-	readonly sub: string | null;
+	readonly sub: Words | null;
 	/** At the right: a time. The active row shows its second thing there instead. */
 	readonly side: string | null;
 	readonly second: Second | null;
@@ -87,7 +103,7 @@ export interface Row {
 /** A section of rows. `fold`: its heading folds and unfolds it, and is a stop of its own. */
 export interface Section {
 	readonly id: string;
-	/** `null`: the menu's own rows, under its header. */
+	/** `null`: the menu's own rows, under its header. A title is drawn as the section's heading. */
 	readonly title: string | null;
 	readonly fold: boolean;
 	readonly rows: readonly Row[];
@@ -158,7 +174,8 @@ export interface MenuPress {
 }
 
 /** The title a stop is found by when a letter is typed. */
-const titleOf = (s: Stop): string => (s.kind === "row" ? s.row.title : (s.section.title ?? ""));
+const titleOf = (s: Stop): string =>
+	s.kind === "row" ? textOf(s.row.title) : (s.section.title ?? "");
 
 /**
  * What a key does in a menu, by WAI-ARIA's menu pattern and Linear's Inbox: the arrows (and J,

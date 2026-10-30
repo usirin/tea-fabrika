@@ -163,7 +163,9 @@ describe("the host", () => {
 				const first = app.page().map((m) => m.type);
 				const ports = app.got.flatMap((m) => (m.type === "port" ? [m.port] : []));
 				app.type("t1", "counter &\r");
-				yield* until("the job", () => (app.desk()?.running.t1 === 1 ? true : undefined));
+				yield* until("the job", () =>
+					app.desk()?.jobs.t1?.running.length === 1 ? true : undefined,
+				);
 				yield* app.leave;
 				// The app went: the job runs on, and the next app is shown the same desk.
 				const again = yield* appOn(paths.sock);
@@ -183,7 +185,12 @@ describe("the host", () => {
 		]);
 		expect(seen.first).toContain("asks");
 		expect(seen.ports).toEqual(["tile:t1"]);
-		expect(seen.after.running).toEqual({t1: 1});
+		expect(
+			Object.entries(seen.after.jobs).map(([tile, jobs]) => [
+				tile,
+				jobs.running.map((j) => j.text),
+			]),
+		).toEqual([["t1", ["counter"]]]);
 		expect(tileIds(seen.after)).toEqual(["t1"]);
 	});
 

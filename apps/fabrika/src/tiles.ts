@@ -150,7 +150,7 @@ export const startTiles = (options: {
 						},
 						line: (runs) => cover(tile, runs),
 						ended: over,
-						running: (count) => edge.tell({type: "jobs", tile, running: count}),
+						jobs: (jobs) => edge.tell({type: "jobs", tile, jobs}),
 					},
 				}).pipe(
 					Scope.provide(scope),

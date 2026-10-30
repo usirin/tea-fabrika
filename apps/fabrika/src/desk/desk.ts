@@ -1,6 +1,7 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
+import {TileJobs} from "../tile-jobs.ts";
 import {bindingOf, type Does, PREFIX, REPEAT_MS, SHOWS} from "./keys.ts";
 import {
 	type Area,
@@ -79,7 +80,7 @@ import {
 // It runs in the host process (host/serve.ts), as tmux's server holds its windows and panes: a
 // page only draws the desk it is sent, and sends its keys and clicks. What it is told, besides
 // keys and clicks, comes from the tiles beside it (tiles.ts): a run with a view is in a tile's
-// foreground (`covered`), a run ended (`over`), a tile's running jobs (`jobs`), a tile's tsh
+// foreground (`covered`), a run ended (`over`), a tile's jobs (`jobs`), a tile's tsh
 // ended (`ended`). `closing` is no longer said by anyone: it was for a page loaded again, and the
 // desk no longer lives in the page. A run started with `&` is a job in the background, as in
 // bash, and the desk hears nothing of it until `attach` brings it to the foreground.
@@ -133,8 +134,8 @@ export interface Open {
 	 * (`questionOf`): "close t2?", or "stop t2 now?" once it is closing.
 	 */
 	readonly ask: TileId | null;
-	/** How many jobs run in each tile's tsh, as its tsh says. A tile not named runs none. */
-	readonly running: Readonly<Record<TileId, number>>;
+	/** Each tile's jobs, as its tsh says them (tile-jobs.ts). A tile not named runs none. */
+	readonly jobs: Readonly<Record<TileId, TileJobs>>;
 	/** The tiles closing: their programs have been given the end of their inputs, and the tile waits for their end. */
 	readonly closing: readonly TileId[];
 	/** The next number to mint: every id is `t<n>`, `s<n>` or `w<n>` for one `n`, spent once. */
@@ -173,8 +174,8 @@ export type DeskMsg =
 	| {readonly type: "area"; readonly width: number; readonly height: number}
 	/** A run with a view ended. */
 	| {readonly type: "over"; readonly run: string}
-	/** How many jobs run in a tile's tsh now. */
-	| {readonly type: "jobs"; readonly tile: TileId; readonly running: number}
+	/** A tile's jobs now: the ones running in its tsh, and the last to end. */
+	| {readonly type: "jobs"; readonly tile: TileId; readonly jobs: TileJobs}
 	/** A tile is closing: its programs were given their inputs' end. Said by no one since the desk moved to the host. */
 	| {readonly type: "closing"; readonly tile: TileId}
 	/** A tile's tsh ended: `exit`, Ctrl-D on an empty line, or its programs ended after a close. */
@@ -229,7 +230,7 @@ export const DeskSchema = Schema.Union([
 		active: Schema.String,
 		prefix: PrefixSchema,
 		ask: Schema.NullOr(TileIdSchema),
-		running: Schema.Record(Schema.String, Schema.Int),
+		jobs: Schema.Record(Schema.String, TileJobs),
 		closing: Schema.Array(TileIdSchema),
 		next: Schema.Int,
 		area: Schema.NullOr(Schema.Struct({width: Schema.Number, height: Schema.Number})),
@@ -298,7 +299,7 @@ export const fresh = (): Open => ({
 	active: "w1",
 	prefix: DISARMED,
 	ask: null,
-	running: {},
+	jobs: {},
 	closing: [],
 	next: 2,
 	area: null,
@@ -354,8 +355,8 @@ const keep = (s: Open): readonly DeskCmd[] => [save({desk: savedOf(s)})];
 const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 	const all = tilesOf(ws).map((t) => t.id);
 	const left = all.filter((id) => !doomed.includes(id));
-	const running = Object.fromEntries(
-		Object.entries(s.running).filter(([tile]) => !doomed.includes(tile)),
+	const jobs = Object.fromEntries(
+		Object.entries(s.jobs).filter(([tile]) => !doomed.includes(tile)),
 	);
 	const closing = s.closing.filter((tile) => !doomed.includes(tile));
 	const ask = s.ask !== null && doomed.includes(s.ask) ? null : s.ask;
@@ -366,11 +367,11 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 		const workspaces: Open["workspaces"] = [first, ...rest];
 		const active =
 			s.active !== ws.id ? s.active : (workspaces[Math.min(at, workspaces.length - 1)] ?? first).id;
-		return {...s, workspaces, active, running, closing, ask};
+		return {...s, workspaces, active, jobs, closing, ask};
 	}
 	const layout = doomed.reduce(remove, ws.layout);
 	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, openIn(layout), ws.focused);
-	return {...withWorkspace(s, {...ws, layout, focused}), running, closing, ask};
+	return {...withWorkspace(s, {...ws, layout, focused}), jobs, closing, ask};
 };
 
 /** The open tiles of a layout, in reading order. */
@@ -420,7 +421,7 @@ const goneTile = (s: Open, tile: TileId): Step => {
 
 /** Does something run in this tile: a job in its tsh, or a run covering it? */
 const busy = (s: Open, tile: TileNode): boolean =>
-	(s.running[tile.id] ?? 0) > 0 || tile.shows.run !== null;
+	(s.jobs[tile.id]?.running.length ?? 0) > 0 || tile.shows.run !== null;
 
 /** The question a tile asks, as tmux's confirm-before puts it: close it, or, once it is closing, stop it now. */
 export const questionOf = (s: Open, tile: TileId): string =>
@@ -736,7 +737,7 @@ export const deskMachine = defineMachine({
 		jobs: onOpen((s, m) =>
 			whereIs(s, m.tile) === undefined
 				? [s, []]
-				: [{...s, running: {...s.running, [m.tile]: Math.max(0, m.running)}}, []],
+				: [{...s, jobs: {...s.jobs, [m.tile]: m.jobs}}, []],
 		),
 		closing: onOpen((s, m) => closingNow(s, m.tile)),
 		ended: onOpen((s, m) => goneTile(s, m.tile)),
@@ -806,7 +807,7 @@ export const restore = (raw: unknown): Open | null => {
 		active,
 		prefix: DISARMED,
 		ask: null,
-		running: {},
+		jobs: {},
 		closing: [],
 		next: Math.max(saved.next, top + 1),
 		area: null,

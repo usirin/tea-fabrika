@@ -104,8 +104,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
-| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
-| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
+| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, the tile's jobs, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
+| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It tells its tile its jobs (`src/tile-jobs.ts`): each job of the host's table it started that still runs, with when it began by the host's clock, and the last to end, with how (`done`, `failed`, `stopped`, read off its runs' ends). The table keeps neither. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
@@ -133,6 +133,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `1` to `9` | go to that workspace |
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
 | `a` | open the asks list, or close it |
+| `J` | open the jobs list, or close it |
 | `?` | every key, with its name |
 | `i` | info mode: the bottom line explains whatever the pointer is over; again to stop |
 | `B` | hide both bars; again to show them |
@@ -190,11 +191,27 @@ When something is wrong, its word joins the top bar's right end, in red where it
   failed, as `ledger unreachable`; a click says why. The asks it last read stay, drawn faint
   while the host is down.
 - **The bottom line is where you are:** the focused tile, what it takes and sends, its
-  neighbors in its line, and its running jobs. What it takes is the data a pipe can feed it,
+  neighbors in its line, and its job. What it takes is the data a pipe can feed it,
   by tsh's own rule (`Shell.fedBy`: an input some program's output fits), never its commands:
   the ticket takes `ticket`, not `close` or `quit`. After Ctrl-B it lists the keys (`PREFIX`); your
   own close question is asked here (and in the tile's title bar), as tmux asks it. An agent's
   ask never shows here.
+- **The job item names the job the tile runs,** from the host's table: `%3 seq --to 9 | tally
+  2m`, and `+2` when two more run there. It is the job tsh waits for, as tmux's status line names
+  a pane's foreground command, or else the newest one, as bash's current job. How long it has
+  run is said calmly: seconds in the first minute (`14s`), then minutes (`2m`), then `1h 5m`.
+  A job that ended says so for 5 seconds (`done in 2m`, `failed after 14s`, `stopped after 1s`,
+  or `failed at once` within its first second), in plain words and never in red, then the item clears; one that ended in the foreground in
+  under 5 seconds is not said, as tsh printed how under the cursor. With nothing running there
+  is no item. There is no clock: the system's menu bar has one.
+- **A click on the job item, or `C-b J`, lists the jobs,** as tsh's `jobs` lists the table: a
+  menu over the bottom line, with focus in it. The tile's own jobs come first, then its last to
+  end (under Last ended), then each other tile's (under Other tiles). A row is the job's line as
+  typed, its `%n` and tile under it, and how long it has run (or when it ended) at the right.
+  `↑` `↓` or `J` `K` move, `↵` focuses the tile the job runs in, `Esc` or a click outside closes
+  it and gives focus back. With nothing running here, it says so in one calm line. There is no
+  trace to open for a job yet: the app's `trace` reads only records held in memory, until the
+  host keeps each job's record.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
   each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
   and the asks list all read that one value. A click on the count, or `C-b a`, opens the list,
@@ -465,9 +482,11 @@ Left for later, from Tuval's keys and the build:
 - **The frame's own gaps,** each a tracker ticket, built as its own change once it has a real
   source: the outbox count, `N to send` (ticket 101); answering from the asks list (ticket
   102); the agents item, today's cost, and keys and tsh words for the frame's items (ticket
-  103); the job and clock items in the bottom line (ticket 104).
+  103).
 - **Later and seen are kept per home, not per person.** The same person on two machines sets an
   ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
+- **The job item opening the job's trace,** once the host keeps each job's record
+  (`packages/fabrika/src/host/traces.ts`) and the app's `trace` reads it. Today it lists the jobs.
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.

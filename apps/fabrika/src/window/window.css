@@ -702,11 +702,31 @@ kbd {
 	color: var(--text-secondary);
 }
 
+/* The job item: its number and line in the bottom line's own color, its time quieter. A failed
+   job is said in words, never in red: only a broken part of the app takes the warning color. */
+.bottomline .job b {
+	color: inherit;
+	font-weight: 400;
+}
+
+.bottomline .job .job-line {
+	display: inline-block;
+	max-width: 48ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: bottom;
+}
+
+.bottomline .job .took {
+	color: var(--wire);
+}
+
 /*
- * What opens over the desk (pop.tsx): the asks list, an item's few lines, the palette, a tooltip.
- * The product's own UI, so the program windows' own font, sizes and colors; the bars around the
- * desk stay monospace, as a terminal's status line. Monospace inside only for typed things: a
- * program's name, a build, an error as the system wrote it (docs/direction/popovers.md).
+ * What opens over the desk (pop.tsx): the asks list, the jobs list, an item's few lines, the
+ * palette, a tooltip. The product's own UI, so the program windows' own font, sizes and colors;
+ * the bars around the desk stay monospace, as a terminal's status line. Monospace inside only for
+ * typed things: a program's name, a command, a job's `%n`, a build, an error as the system wrote
+ * it (docs/direction/popovers.md).
  */
 .pop,
 .tip {
@@ -790,6 +810,15 @@ kbd {
 	width: 360px;
 	max-height: calc(100% - 76px);
 	overflow: auto;
+}
+
+/* A menu from the bottom line: over its left end, where the job item is, growing upward. */
+.pop.menu.from-bottom {
+	top: auto;
+	right: auto;
+	bottom: 34px;
+	left: var(--s-2);
+	transform-origin: bottom left;
 }
 
 .pop-head {
@@ -910,7 +939,14 @@ kbd {
 	color: var(--text-faint);
 }
 
-.ic-done {
+/* A job, and how one ended: in gray, as the bottom line says them, never in red. The shape says which. */
+.ic-running {
+	color: var(--text-secondary);
+}
+
+.ic-done,
+.ic-failed,
+.ic-stopped {
 	color: var(--text-muted);
 }
 
@@ -1105,6 +1141,11 @@ kbd {
 	color: var(--text-faint);
 	font-size: var(--fs-small);
 	font-weight: 500;
+}
+
+/* In a menu, a section's heading that does not fold lines up with the rows under it. */
+.pop.menu .pop-group {
+	padding: 0 8px;
 }
 
 .pop-cmd {

@@ -24,13 +24,14 @@ import {
 	sentence,
 	stopsOf,
 	tipWait,
+	type Words,
 } from "./pop.ts";
 
 // What opens over the desk, drawn: one raised box of rows for every popover, in the program
 // windows' own font and sizes (docs/direction/popovers.md). Its rules are pop.ts's; this file
 // lays them out and wires the keys, focus and pointer.
 //
-//   <Menu id="pop-asks" label="Asks" count={2} sections={...} foot={...} empty={...}
+//   <Menu id="pop-asks" label="Asks" from="top" count={2} sections={...} foot={...} empty={...}
 //         onAct={open} onSecond={later} onClose={close} />        a menu: rows that each do something
 //   <Palette id="pop-palette" label="Commands" chip="t2 · ticket #1" ... />   a combobox in a modal dialog
 //   <Panel id="pop-lines" label="The host">...</Panel>             a few lines and a button
@@ -54,7 +55,7 @@ export function Caps(props: {readonly caps: readonly Cap[]}): ReactNode {
 }
 
 /** A row's state, as a shape and a color: never color alone. */
-function IconOf(props: {readonly icon: Icon | "done"}): ReactNode {
+function IconOf(props: {readonly icon: Icon}): ReactNode {
 	const ring = (extra: ReactNode, dashed = false) => (
 		<svg
 			className={`ic ic-${props.icon}`}
@@ -87,6 +88,22 @@ function IconOf(props: {readonly icon: Icon | "done"}): ReactNode {
 			);
 		case "later":
 			return ring(null, true);
+		// Half full, as Linear draws a thing in progress.
+		case "running":
+			return ring(<path d="M8 4.25a3.75 3.75 0 0 1 0 7.5z" fill="currentColor" />);
+		case "failed":
+			return ring(
+				<path
+					d="M6 6l4 4M10 6l-4 4"
+					stroke="currentColor"
+					strokeWidth="1.5"
+					strokeLinecap="round"
+				/>,
+			);
+		case "stopped":
+			return ring(
+				<rect x="5.75" y="5.75" width="4.5" height="4.5" rx="0.75" fill="currentColor" />,
+			);
 		case "done":
 			return ring(
 				<path
@@ -162,6 +179,11 @@ export interface MenuProps {
 	readonly id: string;
 	/** Its name, said by a screen reader and shown at its head: `Asks`. */
 	readonly label: string;
+	/**
+	 * Where the item that opens it is: under the top bar's right end (the asks list), or over the
+	 * bottom line's left end (the jobs list). It opens beside its item.
+	 */
+	readonly from: "top" | "bottom";
 	/** Shown beside the label, muted: `Asks 2`. */
 	readonly count: number | null;
 	readonly sections: readonly Section[];
@@ -232,7 +254,7 @@ export function Menu(props: MenuProps): ReactNode {
 			<div
 				ref={box}
 				id={props.id}
-				className="pop menu"
+				className={`pop menu from-${props.from}`}
 				role="dialog"
 				aria-label={props.label}
 				tabIndex={-1}
@@ -250,7 +272,7 @@ export function Menu(props: MenuProps): ReactNode {
 		<div
 			ref={box}
 			id={props.id}
-			className="pop menu"
+			className={`pop menu from-${props.from}`}
 			role="menu"
 			aria-label={props.label}
 			aria-activedescendant={active === undefined ? undefined : domId(active.id)}
@@ -305,6 +327,12 @@ export function Menu(props: MenuProps): ReactNode {
 								<span className="n">{section.rows.length}</span>
 							</div>
 						)}
+						{/* A heading that does not fold is words only: the group's label says it. */}
+						{!section.fold && section.title !== null && (
+							<div className="pop-group" aria-hidden="true">
+								{section.title}
+							</div>
+						)}
 						{!folded.has(section.id) &&
 							section.rows.map((row) => (
 								<MenuRow
@@ -336,6 +364,16 @@ function EmptyLine(props: {readonly empty: Empty}): ReactNode {
 	);
 }
 
+/** A row's words: the typed pieces in mono (`<code>`), the rest in the UI's own font. */
+function WordsOf(props: {readonly words: Words}): ReactNode {
+	const {words} = props;
+	if (typeof words === "string") return words;
+	// A row's pieces never move: their place is their key.
+	return words.map((p, k) =>
+		p.typed ? <code key={k}>{p.text}</code> : <span key={k}>{p.text}</span>,
+	);
+}
+
 /** One row of a menu: its icon, its title and the line under it, and its time or second thing. */
 function MenuRow(props: {
 	readonly id: string;
@@ -361,8 +399,14 @@ function MenuRow(props: {
 		>
 			<span className="lead">{row.icon !== null && <IconOf icon={row.icon} />}</span>
 			<span className="text">
-				<span className="t">{row.title}</span>
-				{row.sub !== null && <span className="s">{row.sub}</span>}
+				<span className="t">
+					<WordsOf words={row.title} />
+				</span>
+				{row.sub !== null && (
+					<span className="s">
+						<WordsOf words={row.sub} />
+					</span>
+				)}
 			</span>
 			{on && row.second !== null ? (
 				// The pointer's way to the row's second thing; the keyboard's is its key, said by
