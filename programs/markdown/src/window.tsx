@@ -79,7 +79,7 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: the page takes the q key, as less does.
 			tabIndex={0}
 			onKeyDown={(e) => {
-				if (e.key === "q") send({type: "do", value: {kind: "quit"}});
+				if (e.key === "q") send({type: "quit", value: {}});
 			}}
 		>
 			{keyed(view.children, (b) => JSON.stringify(b)).map((k) => (

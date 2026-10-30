@@ -79,7 +79,7 @@ describe("markdown", () => {
 				);
 				yield* tell(started.run, "text", "- a\n- b");
 				const lists = yield* Fiber.join(seen);
-				yield* tell(started.run, "do", {kind: "quit"});
+				yield* tell(started.run, "quit", {});
 				const ended = yield* started.run.ended;
 				return {lists, ended: ended.kind};
 			}).pipe(Effect.scoped),
@@ -88,8 +88,8 @@ describe("markdown", () => {
 	});
 
 	it("takes quit from its window and refuses what it does not know", () => {
-		expect(readInput(markdown, {type: "do", value: {kind: "quit"}}).kind).toBe("read");
-		expect(readInput(markdown, {type: "do", value: {kind: "scroll"}}).kind).toBe("refused");
+		expect(readInput(markdown, {type: "quit", value: {}}).kind).toBe("read");
+		expect(readInput(markdown, {type: "scroll", value: {}}).kind).toBe("refused");
 	});
 });
 

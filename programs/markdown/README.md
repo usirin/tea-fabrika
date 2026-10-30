@@ -23,7 +23,7 @@ tsh> experiment --n 170 | markdown        the page, drawn
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/markdown` | `src/index.ts` | `markdown`, the program: flag `text`, inputs `text` and `do` (`quit`), one machine `page`, and its `view`, the blocks. No React. |
+| `@tea-fabrika/markdown` | `src/index.ts` | `markdown`, the program: flag `text`, inputs `text` and `quit`, one machine `page`, and its `view`, the blocks. No React. |
 | `@tea-fabrika/markdown/root` | `src/root.ts` | `Root` and `Block`: markdown read into blocks, in mdast's names (the syntax tree remark uses). |
 | `@tea-fabrika/markdown/window` | `src/window.tsx` | `MarkdownWindow`, its window: each block as one HTML element. The `q` key sends quit. |
 

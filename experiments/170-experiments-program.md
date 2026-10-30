@@ -47,7 +47,8 @@ starts an agent or spends money: that is part 2, after tracker #88, #89, #90 and
   `markdown`'s one machine, and one app test that lists the new inputs agents can drive.
 - `markdown` reads its inputs through the one mailbox (pull request
   [#195](https://github.com/usirin/tea-fabrika/pull/195)): `serve` with a handler for `text` and
-  one for `do`, a quit is `end`, and `until: ["do"]`, so a pipe's end does not end the window.
+  one for `quit` (an input is named by its command's verb), which is `end`, and
+  `until: ["quit"]`, so a pipe's end does not end the window.
 - The fabrika app lists all four programs and knows `markdown`'s window. The three that read
   experiments get the service over the app's own ledger, read-only.
 
