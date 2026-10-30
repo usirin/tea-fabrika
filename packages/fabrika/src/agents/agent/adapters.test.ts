@@ -8,7 +8,7 @@ import {Effect, PlatformError, Schema, Stream} from "effect";
 import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {codexHomeOf, codexSystem} from "../acp/harness.ts";
+import {codexHomeOf, codexSystem, type FolderAccess} from "../acp/harness.ts";
 import {
 	type ClaudeAdapterConfig,
 	claudeAdapter,
@@ -18,7 +18,14 @@ import {
 import {type DraftRun, type Open, openLive} from "../claude/draft.ts";
 import {AGENTS_MD} from "../claude/rules.ts";
 import {jsonSchema} from "../claude/schema.ts";
-import {codexAdapter, codexEnvOf, flagsOf, rawOfLine, strictOk} from "../codex/adapter.ts";
+import {
+	type CodexAdapterConfig,
+	codexAdapter,
+	codexEnvOf,
+	flagsOf,
+	rawOfLine,
+	strictOk,
+} from "../codex/adapter.ts";
 import {makeAgents} from "./core.ts";
 import {agentRunner} from "./draft.ts";
 import {fakeAdapter, saying} from "./fake.ts";
@@ -381,7 +388,7 @@ describe("codex: the system prompt", () => {
 	};
 
 	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: SystemPrompt, access?: "write" | "read") => {
+	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
 		const home = madeUpHome();
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
@@ -396,7 +403,7 @@ describe("codex: the system prompt", () => {
 				const adapter = yield* codexAdapter({
 					codex: "/nowhere/codex",
 					parent,
-					...(access === undefined ? {} : {access}),
+					access,
 				});
 				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
 			}).pipe(
@@ -425,14 +432,14 @@ describe("codex: the system prompt", () => {
 
 	it("hands the stage's line on as developer instructions, on top of Codex's own", async () => {
 		const text = 'You plan; you change no file; hand back one "PlanDraft".';
-		const {flags} = await startedWith({_tag: "append", text});
+		const {flags} = await startedWith({_tag: "append", text}, "read");
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
 		expect(named).toEqual([`developer_instructions=${JSON.stringify(text)}`]);
 	});
 
 	it("hands the stage's own text on as Codex's whole instructions, in a file in its own home", async () => {
 		const text = "You sort one ticket.\nNo tools.";
-		const {flags, home} = await startedWith({_tag: "replace", text: NonBlank.make(text)});
+		const {flags, home} = await startedWith({_tag: "replace", text: NonBlank.make(text)}, "read");
 		const named = flags.filter((f) => /^(developer_instructions|model_instructions_file)=/.test(f));
 		const file = codexSystem({_tag: "replace", text: NonBlank.make(text)}, home).file?.path ?? "";
 		expect(file.startsWith(`${home}/system-`)).toBe(true);
@@ -448,7 +455,7 @@ describe("codex: the system prompt", () => {
 				.find((f) => f.startsWith("permissions.fenced.filesystem="))
 				?.match(/"\/work\/copy"=("\w+")/)?.[1],
 		});
-		expect(box((await startedWith({_tag: "append", text: ""})).flags)).toEqual({
+		expect(box((await startedWith({_tag: "append", text: ""}, "write")).flags)).toEqual({
 			base: 'permissions.fenced.extends=":workspace"',
 			folder: '"write"',
 		});
@@ -456,6 +463,14 @@ describe("codex: the system prompt", () => {
 			base: 'permissions.fenced.extends=":read-only"',
 			folder: '"read"',
 		});
+	});
+
+	it("cannot be made without saying what the folder allows", () => {
+		// No default: a turn that only reads must not get a writable folder because `access` was left out.
+		// @ts-expect-error `access` is required.
+		const left: CodexAdapterConfig = {codex: "/nowhere/codex"};
+		const said: CodexAdapterConfig = {codex: "/nowhere/codex", access: "read"};
+		expect([left.access, said.access]).toEqual([undefined, "read"]);
 	});
 });
 

@@ -6,7 +6,7 @@ import {Effect, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {type AdapterTurn, NonBlank, type SystemPrompt} from "../agent/turn.ts";
 import {acpAdapter, claudeMetaOf} from "./adapter.ts";
-import {codexHomeOf, harnessOf, withSystem} from "./harness.ts";
+import {codexHomeOf, type FolderAccess, harnessOf, withSystem} from "./harness.ts";
 
 // A turn's system prompt on each ACP row. ACP has no field for one, so each
 // row is told in its own adapter's way. Claude's and Codex's rows are checked
@@ -47,7 +47,12 @@ describe("codex's row", () => {
 
 	const told = (system: SystemPrompt) => {
 		const {parent, folder, codex} = madeUp();
-		const h = withSystem(harnessOf("codex", folder, null, parent), system, folder, parent);
+		const h = withSystem(
+			harnessOf({name: "codex", access: "write"}, folder, null, parent),
+			system,
+			folder,
+			parent,
+		);
 		return {h, codex, config: JSON.parse(h.env.CODEX_CONFIG ?? "{}") as Record<string, unknown>};
 	};
 
@@ -69,17 +74,17 @@ describe("codex's row", () => {
 
 	it("keeps the first session's prompt when a second session on the same folder prepares", async () => {
 		const {parent, folder} = madeUp();
-		const tell = (text: string) =>
+		const tell = (text: string, access: FolderAccess) =>
 			withSystem(
-				harnessOf("codex", folder, null, parent),
+				harnessOf({name: "codex", access}, folder, null, parent),
 				{_tag: "replace", text: NonBlank.make(text)},
 				folder,
 				parent,
 			);
 		const prepare = (h: ReturnType<typeof tell>) =>
 			Effect.runPromise((h.prepare ?? Effect.void).pipe(Effect.provide(nodeServices)));
-		const reviewer = tell("You only review. Never edit.");
-		const builder = tell("You build. Edit the code.");
+		const reviewer = tell("You only review. Never edit.", "read");
+		const builder = tell("You build. Edit the code.", "write");
 		await prepare(reviewer);
 		// The reviewer's Codex has started but not yet read its file.
 		await prepare(builder);

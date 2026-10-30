@@ -58,7 +58,8 @@ import type {Spawnable} from "./client.ts";
 //     outside its own home.
 //   - mode `read-only` or `workspace-write`, never `agent` (a model of
 //     Codex's own answers the asks) and never full access. Set with
-//     `INITIAL_AGENT_MODE`; an ask comes to us, refused unless the line says.
+//     `INITIAL_AGENT_MODE`, from the row's `access`, which every caller
+//     names: there is no default. An ask comes to us, refused unless the line says.
 //   - `CODEX_CONFIG`, merged into every session's config (`codexConfig`): the
 //     shell gets only the core variables and no login shell, no web search,
 //     Codex's features that reach past the folder off, and a permission
@@ -73,8 +74,7 @@ import type {Spawnable} from "./client.ts";
 export const AGENTS = ["claude", "codex", "fake"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
-export interface Harness extends Spawnable {
-	readonly name: AgentName;
+interface Started extends Spawnable {
 	/** `_meta` for session/new, load and resume. */
 	readonly meta: Readonly<Record<string, unknown>> | undefined;
 	/** The script the command runs: it must be there. */
@@ -82,6 +82,21 @@ export interface Harness extends Spawnable {
 	/** What must be made before the command starts, when the harness needs anything. */
 	readonly prepare?: Effect.Effect<void, string, FileSystem.FileSystem>;
 }
+
+/** A row, ready to start. Codex's keeps the access it was made with, so its config can be made again (`withSystem`). */
+export type Harness =
+	| (Started & {readonly name: "claude" | "fake"})
+	| (Started & {readonly name: "codex"; readonly access: FolderAccess});
+
+/**
+ * A row of the table, as a caller asks for it. Codex's names what its folder
+ * allows, with no default: a turn that only reads cannot get a writable
+ * folder because its author forgot to say.
+ */
+export type Row = "claude" | "fake" | {readonly name: "codex"; readonly access: FolderAccess};
+
+/** The row's name. */
+export const rowName = (row: Row): AgentName => (typeof row === "string" ? row : row.name);
 
 const at = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -105,18 +120,25 @@ export const CODEX_MODES = ["read-only", "workspace-write"] as const;
 /** What a contained Codex may do in its folder: change it, or only read it. */
 export type FolderAccess = "write" | "read";
 
+/** The mode a Codex row starts in, by its access. */
+const MODE_OF = {
+	write: "workspace-write",
+	read: "read-only",
+} as const satisfies Record<FolderAccess, (typeof CODEX_MODES)[number]>;
+
 /**
  * Merged into every Codex session's config by the adapter (`CODEX_CONFIG`).
  * The permission profile is the builder's `filesOf` for reads: home denied
  * but for the folder and the toolchain, and the adapters' own folder, where
- * the Codex that runs inside the box is. The folder is writable, or only
- * readable for a turn that reads code and changes nothing (`access: "read"`).
+ * the Codex that runs inside the box is. The folder is writable
+ * (`access: "write"`), or only readable for a turn that reads code and
+ * changes nothing (`access: "read"`). There is no default: every caller says.
  */
 export const codexConfig = (
 	folder: string,
 	tools: readonly string[],
 	home: string,
-	access: FolderAccess = "write",
+	access: FolderAccess,
 ) => ({
 	shell_environment_policy: {inherit: "core"},
 	allow_login_shell: false,
@@ -206,11 +228,11 @@ export const codexHome = (home: string, login: string) =>
 		yield* fs.symlink(login, link).pipe(Effect.mapError(String));
 	});
 
-/** The Codex adapter's whole environment: a program's, its home, its mode and config. */
+/** The Codex adapter's whole environment: a program's, its home, its mode and config, both by `access`. */
 export const codexEnv = (
 	parent: Env,
 	folder: string,
-	mode: (typeof CODEX_MODES)[number],
+	access: FolderAccess,
 	tools: readonly string[] = toolchain(parent),
 	/** More config on top, as a turn's system prompt (`codexSystem`). */
 	more: Readonly<Record<string, unknown>> = {},
@@ -222,13 +244,13 @@ export const codexEnv = (
 		HOME: home,
 		CODEX_HOME: home,
 		NO_BROWSER: "1",
-		INITIAL_AGENT_MODE: mode,
-		CODEX_CONFIG: JSON.stringify({...codexConfig(folder, tools, parent.HOME ?? home), ...more}),
+		INITIAL_AGENT_MODE: MODE_OF[access],
+		CODEX_CONFIG: JSON.stringify({
+			...codexConfig(folder, tools, parent.HOME ?? home, access),
+			...more,
+		}),
 	};
 };
-
-/** The mode the codex row runs in. */
-const CODEX_ROW_MODE = "workspace-write" satisfies (typeof CODEX_MODES)[number];
 
 // ---------------------------------------------------------------- a turn's system prompt, in each maker's way
 
@@ -311,7 +333,7 @@ export const withSystem = (
 			const prepare = harness.prepare ?? Effect.void;
 			return {
 				...harness,
-				env: codexEnv(parent, folder, CODEX_ROW_MODE, toolchain(parent), config),
+				env: codexEnv(parent, folder, harness.access, toolchain(parent), config),
 				prepare: Effect.andThen(prepare, writeSystem(file)),
 			};
 		}
@@ -346,30 +368,31 @@ const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
 });
 
 export function harnessOf(
-	name: AgentName,
+	row: Row,
 	folder: string,
 	budget: number | null,
 	parent: Env = process.env,
 ): Harness {
-	switch (name) {
+	if (typeof row !== "string")
+		return {
+			name: row.name,
+			access: row.access,
+			...node(CODEX),
+			env: codexEnv(parent, folder, row.access),
+			script: CODEX,
+			meta: undefined,
+			prepare: codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
+		};
+	switch (row) {
 		case "claude":
 			return {
-				name,
+				name: row,
 				...node(CLAUDE),
 				env: fencedEnv(agentEnv(parent)),
 				script: CLAUDE,
 				meta: {claudeCode: {options: claudeOptions(folder, budget)}},
 			};
-		case "codex":
-			return {
-				name,
-				...node(CODEX),
-				env: codexEnv(parent, folder, CODEX_ROW_MODE),
-				script: CODEX,
-				meta: undefined,
-				prepare: codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
-			};
 		case "fake":
-			return {name, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined};
+			return {name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined};
 	}
 }

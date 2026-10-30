@@ -250,8 +250,9 @@ const service = Effect.gen(function* () {
 		adapters: {
 			claude: claudeAdapter({open: watchedOpen}),
 			"acp-claude": yield* acpAdapter("claude"),
-			codex: yield* codexAdapter({codex: CODEX}),
-			"acp-codex": yield* acpAdapter("codex"),
+			// The format-bytes job fixes the copy, so both Codex rows may change their folder.
+			codex: yield* codexAdapter({codex: CODEX, access: "write"}),
+			"acp-codex": yield* acpAdapter({name: "codex", access: "write"}),
 		},
 		sessions,
 		reaper: psReaper,

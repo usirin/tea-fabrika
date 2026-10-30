@@ -12,7 +12,7 @@ import {
 import type {Env} from "../claude/env.ts";
 import {TOOLS} from "../claude/sandbox.ts";
 import {connect, type Heard} from "./client.ts";
-import {type AgentName, claudeOptions, claudeSystem, harnessOf, withSystem} from "./harness.ts";
+import {claudeOptions, claudeSystem, harnessOf, type Row, rowName, withSystem} from "./harness.ts";
 
 // Any harness that speaks ACP, as an adapter of the interface
 // (../agent/turn.ts): our ACP client (./client.ts) on a row of the harness
@@ -89,18 +89,20 @@ export const claudeMetaOf = (turn: Pick<AdapterTurn, "folder" | "usd" | "system"
 	},
 });
 
+/** `row`: `"claude"`, `"fake"`, or `{name: "codex", access}`, where every turn may change its folder or only read it. */
 export const acpAdapter = (
-	row: Exclude<AgentName, "fake"> | "fake",
+	row: Row,
 	parent: Env = process.env,
 ): Effect.Effect<Adapter, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem> =>
 	Effect.gen(function* () {
+		const name = rowName(row);
 		const context = yield* Effect.context<
 			ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
 		>();
 		return {
-			name: `acp-${row}`,
+			name: `acp-${name}`,
 			// Claude's row holds a dollar cap (`maxBudgetUsd` in its options); ACP has no schema field.
-			holds: {usd: row === "claude", schema: false},
+			holds: {usd: name === "claude", schema: false},
 			start: (turn) =>
 				Effect.gen(function* () {
 					// ACP has no system prompt field: each row is told the turn's in its own way (`withSystem`).
@@ -149,7 +151,7 @@ export const acpAdapter = (
 						for (const r of raws) Queue.offerUnsafe(queue, r);
 					};
 					const c = yield* connect(harness, turn.folder, heard, {
-						methods: row === "claude" ? ["_claude/sdkMessage"] : [],
+						methods: name === "claude" ? ["_claude/sdkMessage"] : [],
 						heard: (_method, params) => {
 							claude.result = claudeResultOf(params) ?? claude.result;
 						},
@@ -157,7 +159,7 @@ export const acpAdapter = (
 						Scope.provide(scope),
 						Effect.mapError((e) => failed("start", `${e.method}: ${e.message}`)),
 					);
-					const meta = row === "claude" ? claudeMetaOf(turn) : harness.meta;
+					const meta = name === "claude" ? claudeMetaOf(turn) : harness.meta;
 					const how = turn.resume === null ? "new" : c.can("resume") ? "resume" : "load";
 					let opened = yield* c
 						.open(how, turn.resume, turn.folder, meta)
@@ -173,7 +175,7 @@ export const acpAdapter = (
 					opened = yield* set("thought_level", turn.effort, true);
 					// Claude: never the owner's own default. ACP offers no `dontAsk`; `acceptEdits` runs edits,
 					// the sandbox lets the shell run, and any other ask comes here and is refused.
-					if (row === "claude") opened = yield* set("mode", "acceptEdits");
+					if (name === "claude") opened = yield* set("mode", "acceptEdits");
 					// A load replays the old turns: what came before this prompt is not this turn's.
 					said.text = "";
 					Queue.offerUnsafe(queue, {_tag: "opened", own: opened.id});

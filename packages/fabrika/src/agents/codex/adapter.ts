@@ -42,8 +42,8 @@ import {toolchain} from "../claude/sandbox.ts";
 export interface CodexAdapterConfig {
 	readonly codex: string;
 	readonly parent?: Env;
-	/** What every turn may do in its folder; `write` when left out. `read`: a turn that only reads code. */
-	readonly access?: FolderAccess;
+	/** What every turn may do in its folder, with no default: `write` to change it, `read` for a turn that only reads code. */
+	readonly access: FolderAccess;
 }
 
 /** A config value as TOML, for `-c key=value`. Objects with plain keys become dotted keys. */

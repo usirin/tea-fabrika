@@ -596,7 +596,8 @@ const MODEL = "gpt-6.1-sol";
 
 const agentService = Effect.gen(function* () {
 	return Agent.makeAgents({
-		adapters: {codex: yield* codexAdapter({codex: CODEX})},
+		// The agent hands back tsh lines as text, in an empty folder: it changes no file.
+		adapters: {codex: yield* codexAdapter({codex: CODEX, access: "read"})},
 		sessions: Agent.memorySessions(),
 		reaper: psReaper,
 	});

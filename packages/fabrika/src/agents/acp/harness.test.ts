@@ -15,7 +15,7 @@ import {ear} from "../../program/ear.ts";
 import {start} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {temps} from "../claude/sandbox.ts";
-import {codexHome, codexHomeOf, harnessOf} from "./harness.ts";
+import {codexConfig, codexHome, codexHomeOf, harnessOf, type Row, withSystem} from "./harness.ts";
 import {acpProgram} from "./program.ts";
 
 // The codex row (experiment 153): what the adapter is handed, and the Codex home it is given.
@@ -45,7 +45,7 @@ describe("the codex row", () => {
 	it("hands the adapter a keep-list: its own home, workspace-write, no key", () => {
 		const home = fakeHome();
 		const folder = join(tmpdir(), "a-scratch-folder");
-		const h = harnessOf("codex", folder, null, parentOf(home));
+		const h = harnessOf({name: "codex", access: "write"}, folder, null, parentOf(home));
 		const codex = codexHomeOf(folder, parentOf(home));
 		expect(Object.keys(h.env).sort()).toEqual(
 			[
@@ -85,7 +85,8 @@ describe("the codex row", () => {
 		const home = fakeHome();
 		const folder = join(tmpdir(), "a-scratch-folder");
 		const config = JSON.parse(
-			harnessOf("codex", folder, null, parentOf(home)).env.CODEX_CONFIG ?? "",
+			harnessOf({name: "codex", access: "write"}, folder, null, parentOf(home)).env.CODEX_CONFIG ??
+				"",
 		);
 		expect(config.default_permissions).toBe("fenced");
 		const fs = config.permissions.fenced.filesystem as Record<string, string>;
@@ -96,6 +97,31 @@ describe("the codex row", () => {
 		expect(config.web_search).toBe("disabled");
 		for (const feature of ["apps", "plugins", "browser_use", "computer_use", "multi_agent"])
 			expect(config.features[feature]).toBe(false);
+	});
+
+	it("starts a read row read-only, its folder only readable, and keeps that through a system prompt", () => {
+		const home = fakeHome();
+		const folder = join(tmpdir(), "a-scratch-folder");
+		const parent = parentOf(home);
+		const row = harnessOf({name: "codex", access: "read"}, folder, null, parent);
+		const told = withSystem(row, {_tag: "append", text: "Only look."}, folder, parent);
+		for (const h of [row, told]) {
+			expect(h.env.INITIAL_AGENT_MODE).toBe("read-only");
+			const config = JSON.parse(h.env.CODEX_CONFIG ?? "");
+			expect(config.permissions.fenced.extends).toBe(":read-only");
+			expect(config.permissions.fenced.filesystem[folder]).toBe("read");
+		}
+	});
+
+	it("cannot be asked for without saying what the folder allows", () => {
+		// No default: a turn that only reads must not get a writable folder because `access` was left out.
+		// @ts-expect-error the codex row needs `access`.
+		const bare: Row = "codex";
+		// @ts-expect-error the same, as an object.
+		const nameOnly: Row = {name: "codex"};
+		// @ts-expect-error `codexConfig` takes it too.
+		const config = codexConfig("/f", [], "/h");
+		expect([bare, nameOnly, typeof config]).toEqual(["codex", {name: "codex"}, "object"]);
 	});
 });
 
@@ -163,10 +189,11 @@ describe("the Codex home", () => {
 });
 
 describe("acp --agent codex", () => {
-	it.effect("refuses a mode where a model answers the asks, or there is no sandbox", () =>
+	it.effect("refuses a mode where a model answers the asks, no sandbox, or no mode at all", () =>
 		Effect.gen(function* () {
 			const folder = realpathSync(mkdtempSync(join(tmpdir(), "acp-codex-")));
-			for (const mode of ["agent", "agent-full-access"]) {
+			// Left out, codex's mode would say nothing about whether its folder may change.
+			for (const mode of ["agent", "agent-full-access", undefined]) {
 				const opened = ear<unknown>();
 				const started = yield* start(
 					acpProgram,
