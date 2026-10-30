@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Entry, type JobsOnHost, Ledger, Shell} from "@kampus/fabrika";
+import {type Entry, type JobsOnHost, Ledger, Shell, Traces} from "@kampus/fabrika";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
@@ -255,7 +255,9 @@ export const serve = (options: {
 			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
 		};
 		const ledger = yield* Ledger;
-		const programs = programsOf(appPrograms(ledger, yield* Author, yield* PullRequests));
+		const programs = programsOf(
+			appPrograms(ledger, yield* Author, yield* PullRequests, yield* Traces),
+		);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
 		// loads, and to every page as an agent attaches or goes. Each agent on the socket is one

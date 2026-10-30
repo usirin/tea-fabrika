@@ -1,6 +1,6 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {fit, input, output, type StandardShape} from "./shape.ts";
+import {anyInput, fit, input, output, type StandardShape} from "./shape.ts";
 
 // Fit is exact and reads only the shape. A shape only checks, and says why not.
 
@@ -84,6 +84,23 @@ describe("fit", () => {
 		const loose = output(anyString, "A string, checked by hand.");
 		expect(fit(loose, input(anyString, "A string."))).toBe("cannot_tell");
 		expect(fit(loose, heard)).toBe("cannot_tell");
+	});
+
+	it("an input that takes anything takes every output, and says so apart from a fit", () => {
+		const sink = anyInput("Anything, let go.");
+		expect(fit(handoff, sink)).toBe("takes_any");
+		expect(fit(announced, sink)).toBe("takes_any");
+		// Even one whose JSON Schema nobody can read: it is taken unread.
+		expect(fit(output(anyString, "A string, checked by hand."), sink)).toBe("takes_any");
+		// An output of any value fits it exactly: a fit, as two same shapes are.
+		expect(fit(output(Schema.Unknown, "Anything."), sink)).toBe("fits");
+	});
+
+	it("a plain input of any value takes no output by accident: only `anyInput` does", () => {
+		const plain = input(Schema.Unknown, "Any value, by its shape alone.");
+		expect(plain.any).toBeUndefined();
+		expect(fit(handoff, plain)).toBe("does_not_fit");
+		expect(fit(output(Schema.Unknown, "Anything."), plain)).toBe("fits");
 	});
 });
 

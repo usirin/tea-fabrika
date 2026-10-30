@@ -45,7 +45,10 @@ const table: MsgArbitraryTable<Msg> = {
 		background: fc.boolean(),
 		owner,
 	}),
-	stage_ended: arbRecordMsg("stage_ended", {run}),
+	stage_ended: arbRecordMsg("stage_ended", {
+		run,
+		how: fc.constantFrom("done", "failed", "stopped"),
+	}),
 	detached: arbRecordMsg("detached", {n: fc.option(n, {nil: null})}),
 	attached: arbRecordMsg("attached", {n, background: fc.boolean(), owner}),
 	foreground: arbRecordMsg("foreground", {n}),

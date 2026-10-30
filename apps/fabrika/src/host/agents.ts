@@ -1,4 +1,4 @@
-import {Ledger, Shell} from "@kampus/fabrika";
+import {Ledger, Shell, Traces} from "@kampus/fabrika";
 import {type InTile, serveAgent} from "@kampus/fabrika/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, type Scope} from "effect";
@@ -49,10 +49,11 @@ export const serveAgents = (
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
+		const traces = yield* Traces;
 		return yield* server.run((socket) =>
 			serveAgent(socket, {
 				person: person.id,
-				programsFor: (who) => Shell.programList(appPrograms(ledger, who, pullRequests)),
+				programsFor: (who) => Shell.programList(appPrograms(ledger, who, pullRequests, traces)),
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
 				attached: (who) => attached(who.id),
 			}).pipe(

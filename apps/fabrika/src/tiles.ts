@@ -1,4 +1,4 @@
-import {type JobsOnHost, Ledger} from "@kampus/fabrika";
+import {type JobsOnHost, Ledger, Traces} from "@kampus/fabrika";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Exit, Scope} from "effect";
 import type {DeskMsg} from "./desk/desk.ts";
@@ -114,6 +114,7 @@ export const startTiles = (options: {
 		const ledger = yield* Ledger;
 		const author = yield* Author;
 		const pullRequests = yield* PullRequests;
+		const traces = yield* Traces;
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
 
@@ -169,6 +170,7 @@ export const startTiles = (options: {
 					Effect.provideService(Ledger, ledger),
 					Effect.provideService(Author, author),
 					Effect.provideService(PullRequests, pullRequests),
+					Effect.provideService(Traces, traces),
 				);
 				open.set(tile, {host, scope, state: "open"});
 				// tsh ended: `exit`, Ctrl-D, or after `close`. The desk takes the tile away, and asks to stop it here.

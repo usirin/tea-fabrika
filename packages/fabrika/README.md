@@ -99,6 +99,7 @@ runs TypeScript as it is.
 | `@kampus/fabrika` | Programs (`defineProgram`, `start`, `tell`, `call`, shapes, `Storage` with `memoryStorage`, traces), the host (`Ledger`, `serve`, `Self`, `cast`, `supervisor`, `tail`, `whereis`, dead letters), the Elm modules `Call` and `Monitor`, and `Shell`: tsh's program list (`programList`, `Programs`, `SMALL`) and its parts |
 | `@kampus/fabrika/memory` | `layerMemory`: a `Ledger` in plain memory, for tests |
 | `@kampus/fabrika/sqlite` | `layerSqlite`: a `Ledger` on a node:sqlite file |
+| `@kampus/fabrika/records` | `sqliteRecords`: a host's job records, one node:sqlite file per job, what `trace` reads |
 | `@kampus/fabrika/http` | `layerHttp`: a `Ledger` over HTTP to any running ledger, through its door with a token; `doorOf`: the door's login, invite and remove steps |
 | `@kampus/fabrika/local` | `layerLocal`: the ledger as a Durable Object in a Miniflare child, `layerAttach` to join one another process started, `layerInside` past the door for tests, and `ledgerOptions` |
 | `@kampus/fabrika/storage/node` | `fileStorage(dir)`: a program's `Storage` in a folder |
