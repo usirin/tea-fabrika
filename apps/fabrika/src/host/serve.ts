@@ -304,8 +304,8 @@ export const serve = (options: {
 				case "pick":
 					if (step({type: "pick", workspace: m.workspace})) shout();
 					return;
-				case "do":
-					if (step({type: "do", key: m.key}, client)) shout();
+				case "run":
+					if (step({type: "run", key: m.key}, client)) shout();
 					return;
 				case "later":
 				case "back":

@@ -140,6 +140,10 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 
 `Cmd-K` (no prefix) opens the palette: every command by name, its key and its tsh word. Type to
 narrow it, Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
+This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
+commands; programs' inputs join it later, from the same list that makes the agent tools.
+Ghostty's own palette opens with Cmd-Shift-P and takes user entries (`command-palette-entry`);
+ours opens with Cmd-K, as Linear's does.
 
 - **The host decides keys.** It sends the page the Ctrl-B table, and with every desk the keys
   the desk takes now. The page reads keys first, in the keydown capture phase. A key the desk
