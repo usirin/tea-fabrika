@@ -1,0 +1,184 @@
+{
+	"order": {
+		"n": 50,
+		"meant": {
+			"now": "1:cancelled 2:end_turn",
+			"numbered": "1:cancelled 2:end_turn",
+			"late_now": "1:end_turn (2 hangs)",
+			"late_numbered": "1:end_turn (2 hangs)"
+		},
+		"out": {
+			"claude now": {
+				"nothing ended": 50
+			},
+			"claude numbered": {
+				"1:cancelled 2:end_turn": 50
+			},
+			"claude late_now": {
+				"1:end_turn 2:cancelled": 50
+			},
+			"claude late_numbered": {
+				"1:end_turn": 50
+			},
+			"codex now": {
+				"nothing ended": 50
+			},
+			"codex numbered": {
+				"1:cancelled 2:end_turn": 50
+			},
+			"codex late_now": {
+				"1:end_turn 2:cancelled": 50
+			},
+			"codex late_numbered": {
+				"1:end_turn": 50
+			}
+		}
+	},
+	"cost": {
+		"n": 300,
+		"ms": {
+			"claude direct": {
+				"p50": 0.135,
+				"p95": 0.228
+			},
+			"claude program": {
+				"p50": 1.006,
+				"p95": 1.968
+			},
+			"claude child": {
+				"p50": 0.892,
+				"p95": 1.769
+			},
+			"codex direct": {
+				"p50": 0.079,
+				"p95": 0.096
+			},
+			"codex program": {
+				"p50": 0.884,
+				"p95": 1.609
+			},
+			"codex child": {
+				"p50": 0.829,
+				"p95": 1.56
+			}
+		},
+		"note": "fake makers, memory storage, one process; a turn that ends at once"
+	},
+	"live": {
+		"when": "2026-10-30",
+		"prompt": "What is 2 + 3? Use no tool. Answer with the JSON object only.",
+		"out": {
+			"claude": {
+				"ms": 3525,
+				"settings": {
+					"model": "haiku",
+					"effort": "low",
+					"usd": 0.1,
+					"seconds": 120
+				},
+				"heard": [
+					{
+						"name": "started",
+						"value": {
+							"maker": "claude",
+							"session": "exp169/claude/1793341533770",
+							"resumed": false,
+							"resent": 0
+						}
+					},
+					{
+						"name": "said",
+						"value": {
+							"turn": 1,
+							"text": "{\"sum\": 5}"
+						}
+					},
+					{
+						"name": "tool",
+						"value": {
+							"turn": 1,
+							"id": "toolu_013dwC9Xsu9kGn6gmgQkujQp",
+							"title": "StructuredOutput",
+							"status": "pending"
+						}
+					},
+					{
+						"name": "tool",
+						"value": {
+							"turn": 1,
+							"id": "toolu_013dwC9Xsu9kGn6gmgQkujQp",
+							"title": "",
+							"status": "completed"
+						}
+					},
+					{
+						"name": "ended",
+						"value": {
+							"turn": 1,
+							"stop": "end_turn",
+							"answer": {
+								"sum": 5
+							},
+							"tokens": {
+								"input": 20809,
+								"cached": 7488,
+								"output": 62
+							},
+							"counted": "turn",
+							"usd": 0.0028959800000000003,
+							"requests": 3,
+							"ms": 3508,
+							"error": null
+						}
+					}
+				]
+			},
+			"codex": {
+				"ms": 3920,
+				"settings": {
+					"model": "gpt-6-luna",
+					"effort": "low",
+					"seconds": 120
+				},
+				"heard": [
+					{
+						"name": "started",
+						"value": {
+							"maker": "codex",
+							"session": "exp169/codex/1793341537295",
+							"resumed": false,
+							"resent": 0
+						}
+					},
+					{
+						"name": "said",
+						"value": {
+							"turn": 1,
+							"text": "{\"sum\":5}"
+						}
+					},
+					{
+						"name": "ended",
+						"value": {
+							"turn": 1,
+							"stop": "end_turn",
+							"answer": {
+								"sum": 5
+							},
+							"tokens": {
+								"input": 9915,
+								"cached": 0,
+								"output": 15
+							},
+							"counted": "turn",
+							"usd": null,
+							"requests": null,
+							"ms": 3916,
+							"error": null
+						}
+					}
+				]
+			}
+		}
+	}
+}
