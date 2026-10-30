@@ -1,0 +1,1443 @@
+{
+	"bytes": {
+		"deploy": {
+			"ms": 296,
+			"hash": "a607dbd70afa23efb7fc857a8d112948ca95184dc868c51b8a77b37dca5773e1",
+			"files": [
+				{
+					"path": "durable-object.js",
+					"bytes": 268897,
+					"sha256": "4c99ce22030f2258d6922f893fce19d7aece8fbe05257d9c581c353a889321bc"
+				},
+				{
+					"path": "durable-object.js.map",
+					"bytes": 3531324,
+					"sha256": "e59a2cb2538f0d6ede8281059c0f0c25d0eb35ed9cbbb65e598acf6ac4381f2f"
+				}
+			]
+		},
+		"local": {
+			"ms": 93,
+			"hash": "a607dbd70afa23efb7fc857a8d112948ca95184dc868c51b8a77b37dca5773e1",
+			"files": [
+				{
+					"path": "durable-object.js",
+					"bytes": 268897,
+					"sha256": "4c99ce22030f2258d6922f893fce19d7aece8fbe05257d9c581c353a889321bc"
+				},
+				{
+					"path": "durable-object.js.map",
+					"bytes": 3531324,
+					"sha256": "e59a2cb2538f0d6ede8281059c0f0c25d0eb35ed9cbbb65e598acf6ac4381f2f"
+				}
+			]
+		},
+		"prebuilt": {
+			"ms": 3,
+			"hash": "bc0ebaadf0855cc144104b7f06fb689d9eab4ea4450e05450feeb5ce46e2ae30",
+			"files": [
+				{
+					"path": "durable-object.js",
+					"bytes": 268897,
+					"sha256": "4c99ce22030f2258d6922f893fce19d7aece8fbe05257d9c581c353a889321bc"
+				}
+			]
+		},
+		"entry": "durable-object.js",
+		"today": {
+			"ms": 65,
+			"files": [
+				{
+					"path": "(one module)",
+					"bytes": 978829,
+					"sha256": "453f08d60acf7663937c2a2616602c4c9ded746b591d3e667e01eb24305437d7"
+				}
+			]
+		}
+	},
+	"tree": {
+		"source": {
+			"url": "http://localhost:<port>",
+			"samePort": true,
+			"readyMs": 1138,
+			"importMs": 1045,
+			"shape": [
+				{
+					"name": "node",
+					"depth": 0,
+					"group": "root's",
+					"rssMb": 615.8,
+					"stat": "SNs"
+				},
+				{
+					"name": "workerd",
+					"depth": 1,
+					"group": "root's",
+					"rssMb": 46,
+					"stat": "SN"
+				}
+			],
+			"wrote": {
+				"registered": {
+					"created": true,
+					"pos": 1,
+					"rev": 1
+				},
+				"wrote": 5
+			},
+			"read": {
+				"rows": 5,
+				"sha256": "cc547ce78fa56be8"
+			},
+			"noCredential": 401,
+			"net": [
+				"127.0.0.1:63831"
+			],
+			"childSockets": [
+				"127.0.0.1:<port>"
+			],
+			"workerdGot": [
+				{
+					"name": "durable-object.js",
+					"bytes": 268897,
+					"sha256": "4c99ce22030f2258d6922f893fce19d7aece8fbe05257d9c581c353a889321bc"
+				}
+			],
+			"alchemyFolder": [
+				"bundles/",
+				"bundles/fabrika-tf-exp-171-local-Ledger/",
+				"bundles/fabrika-tf-exp-171-local-Ledger/durable-object.js (268897 B)",
+				"bundles/fabrika-tf-exp-171-local-Ledger/durable-object.js.map (3544166 B)",
+				"local/",
+				"local/cache/",
+				"local/cache/tf-exp-171/",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite (4096 B)",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite-shm (32768 B)",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite-wal (8272 B)",
+				"local/email/",
+				"local/tf-exp-171-JobRecord/",
+				"local/tf-exp-171-JobRecord/metadata.sqlite (4096 B)",
+				"local/tf-exp-171-JobRecord/metadata.sqlite-shm (32768 B)",
+				"local/tf-exp-171-JobRecord/metadata.sqlite-wal (8272 B)",
+				"local/tf-exp-171-Ledger/",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite (4096 B)",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-shm (32768 B)",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-wal (197792 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite (4096 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite-shm (32768 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite-wal (8272 B)",
+				"state/",
+				"state/fabrika-tf-exp-171/",
+				"state/fabrika-tf-exp-171/local/",
+				"state/fabrika-tf-exp-171/local/Ledger.json (2964 B)",
+				"state/fabrika-tf-exp-171/local/__stack_output__.json (37 B)"
+			],
+			"left": []
+		},
+		"prebuilt": {
+			"url": "http://localhost:<port>",
+			"samePort": true,
+			"readyMs": 1104,
+			"importMs": 1031,
+			"shape": [
+				{
+					"name": "node",
+					"depth": 0,
+					"group": "root's",
+					"rssMb": 398.3,
+					"stat": "SNs"
+				},
+				{
+					"name": "workerd",
+					"depth": 1,
+					"group": "root's",
+					"rssMb": 47.3,
+					"stat": "SN"
+				}
+			],
+			"wrote": {
+				"registered": {
+					"created": true,
+					"pos": 1,
+					"rev": 1
+				},
+				"wrote": 5
+			},
+			"read": {
+				"rows": 5,
+				"sha256": "cc547ce78fa56be8"
+			},
+			"noCredential": 401,
+			"net": [
+				"127.0.0.1:63848"
+			],
+			"childSockets": [
+				"127.0.0.1:<port>"
+			],
+			"workerdGot": [
+				{
+					"name": "durable-object.js",
+					"bytes": 268897,
+					"sha256": "4c99ce22030f2258d6922f893fce19d7aece8fbe05257d9c581c353a889321bc"
+				}
+			],
+			"alchemyFolder": [
+				"local/",
+				"local/cache/",
+				"local/cache/tf-exp-171/",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite (4096 B)",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite-shm (32768 B)",
+				"local/cache/tf-exp-171/cloudflare-runtime-CacheObject/metadata.sqlite-wal (8272 B)",
+				"local/email/",
+				"local/tf-exp-171-JobRecord/",
+				"local/tf-exp-171-JobRecord/metadata.sqlite (4096 B)",
+				"local/tf-exp-171-JobRecord/metadata.sqlite-shm (32768 B)",
+				"local/tf-exp-171-JobRecord/metadata.sqlite-wal (8272 B)",
+				"local/tf-exp-171-Ledger/",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite (4096 B)",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-shm (32768 B)",
+				"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-wal (197792 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite (4096 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite-shm (32768 B)",
+				"local/tf-exp-171-Ledger/metadata.sqlite-wal (8272 B)",
+				"state/",
+				"state/fabrika-tf-exp-171/",
+				"state/fabrika-tf-exp-171/local/",
+				"state/fabrika-tf-exp-171/local/Ledger.json (2937 B)",
+				"state/fabrika-tf-exp-171/local/__stack_output__.json (37 B)"
+			],
+			"left": []
+		},
+		"server": {
+			"readyMs": 1123,
+			"defaultPort": "1337",
+			"noCredentialStatus": 401,
+			"bindings": [
+				"ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+				"ALCHEMY_PHASE",
+				"ALCHEMY_STACK_NAME",
+				"ALCHEMY_STAGE",
+				"ALCHEMY_WORKER_NAME",
+				"DOOR",
+				"EXPIRY_GRACE_MS",
+				"FOUNDER",
+				"JOB_RECORD",
+				"KEYS",
+				"LEDGER"
+			],
+			"net": [
+				"127.0.0.1:63866"
+			],
+			"childSockets": [
+				"[::1]:<port>",
+				"127.0.0.1:<port>"
+			]
+		}
+	},
+	"supervise": {
+		"first": {
+			"readyMs": 1154,
+			"workerdMb": 53.5,
+			"facts": {
+				"rows": 10,
+				"sha256": "e27ce195cefb6ff9"
+			}
+		},
+		"stopStart": {
+			"stopMs": 0,
+			"left": [],
+			"restartMs": 1438,
+			"sameUrl": true,
+			"facts": {
+				"rows": 10,
+				"sha256": "e27ce195cefb6ff9"
+			}
+		},
+		"crash": {
+			"leftAfterNodeKilled": [
+				"workerd"
+			],
+			"orphans": [
+				{
+					"name": "workerd",
+					"ppid": "launchd (1)"
+				}
+			],
+			"stillAnswering": 0,
+			"leftAfterGroupKill": [],
+			"restartMs": 1255,
+			"sameUrl": true,
+			"factsBefore": {
+				"rows": 15,
+				"sha256": "db9f8baba132f528"
+			},
+			"factsAfter": {
+				"rows": 15,
+				"sha256": "db9f8baba132f528"
+			}
+		},
+		"workerd_SIGKILL": {
+			"workerdMbBefore": 53.5,
+			"nodeAlive": true,
+			"newWorkerd": true,
+			"answersAgainMs": 292,
+			"meanwhile": [
+				502,
+				401
+			],
+			"workerdMbAfter": 53.2,
+			"oldGone": true,
+			"facts": {
+				"rows": 15,
+				"sha256": "db9f8baba132f528"
+			}
+		},
+		"workerd_SIGTERM": {
+			"workerdMbBefore": 53.9,
+			"nodeAlive": true,
+			"newWorkerd": true,
+			"answersAgainMs": 539,
+			"meanwhile": [
+				502,
+				401
+			],
+			"workerdMbAfter": 52.9,
+			"oldGone": true,
+			"facts": {
+				"rows": 15,
+				"sha256": "db9f8baba132f528"
+			}
+		},
+		"capGroupRestart": {
+			"capMb": 1,
+			"workerdMb": 53.4,
+			"restarted": true,
+			"restartMs": 1743,
+			"firstAnswerAfterReadyMs": 350,
+			"sameUrl": true,
+			"facts": {
+				"rows": 15,
+				"sha256": "db9f8baba132f528"
+			}
+		},
+		"alchemyFolder": [
+			"bundles/",
+			"bundles/fabrika-tf-exp-171-local-Ledger/",
+			"bundles/fabrika-tf-exp-171-local-Ledger/durable-object.js (268897 B)",
+			"bundles/fabrika-tf-exp-171-local-Ledger/durable-object.js.map (3544166 B)",
+			"local/",
+			"local/email/",
+			"local/tf-exp-171-JobRecord/",
+			"local/tf-exp-171-JobRecord/metadata.sqlite (4096 B)",
+			"local/tf-exp-171-JobRecord/metadata.sqlite-shm (32768 B)",
+			"local/tf-exp-171-JobRecord/metadata.sqlite-wal (8272 B)",
+			"local/tf-exp-171-Ledger/",
+			"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite (4096 B)",
+			"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-shm (32768 B)",
+			"local/tf-exp-171-Ledger/c676e46f152037a1af6ac4efe905bb28f7950d71ae0b4074445b3b000e75e71b.sqlite-wal (321392 B)",
+			"local/tf-exp-171-Ledger/metadata.sqlite (4096 B)",
+			"local/tf-exp-171-Ledger/metadata.sqlite-shm (32768 B)",
+			"local/tf-exp-171-Ledger/metadata.sqlite-wal (8272 B)",
+			"state/",
+			"state/fabrika-tf-exp-171/",
+			"state/fabrika-tf-exp-171/local/",
+			"state/fabrika-tf-exp-171/local/Ledger.json (2964 B)",
+			"state/fabrika-tf-exp-171/local/__stack_output__.json (37 B)"
+		],
+		"parentKilled_guard_off": {
+			"tree": [
+				"node",
+				"workerd"
+			],
+			"leftAfter3s": [
+				"node",
+				"workerd"
+			],
+			"goneMs": null,
+			"stillAnswering": 401
+		},
+		"parentKilled_guard_on": {
+			"tree": [
+				"node",
+				"workerd"
+			],
+			"leftAfter3s": [],
+			"goneMs": 306,
+			"stillAnswering": 0
+		}
+	},
+	"timing": {
+		"built": {
+			"twin": {
+				"ms": 22,
+				"mb": 0.1,
+				"external": [
+					"alchemy",
+					"alchemy/*",
+					"@alchemy.run/*",
+					"effect",
+					"effect/*",
+					"@effect/*"
+				],
+				"inputs": 25
+			},
+			"daemon": {
+				"ms": 47,
+				"mb": 0.4,
+				"external": [
+					"miniflare",
+					"esbuild"
+				],
+				"inputs": 228
+			}
+		},
+		"rows": [
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 1203,
+				"firstAnswerMs": 1565,
+				"answered": 401,
+				"groupMb": 660,
+				"byProcess": [
+					"node 608",
+					"workerd 52"
+				],
+				"ping": {
+					"p50": 0.59,
+					"p90": 0.75,
+					"p99": 2.16
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 1198,
+				"firstAnswerMs": 1541,
+				"answered": 401,
+				"groupMb": 672,
+				"byProcess": [
+					"node 620",
+					"workerd 51"
+				],
+				"ping": {
+					"p50": 0.56,
+					"p90": 0.74,
+					"p99": 1.71
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 1215,
+				"firstAnswerMs": 1561,
+				"answered": 401,
+				"groupMb": 668,
+				"byProcess": [
+					"node 615",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.56,
+					"p90": 0.77,
+					"p99": 2.32
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 1224,
+				"firstAnswerMs": 1576,
+				"answered": 401,
+				"groupMb": 674,
+				"byProcess": [
+					"node 622",
+					"workerd 52"
+				],
+				"ping": {
+					"p50": 0.58,
+					"p90": 0.83,
+					"p99": 2.33
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 1223,
+				"firstAnswerMs": 1590,
+				"answered": 401,
+				"groupMb": 670,
+				"byProcess": [
+					"node 617",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.57,
+					"p90": 0.72,
+					"p99": 2.28
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 1215,
+				"firstAnswerMs": 1575,
+				"answered": 401,
+				"groupMb": 670,
+				"byProcess": [
+					"node 615",
+					"workerd 55"
+				],
+				"ping": {
+					"p50": 0.53,
+					"p90": 0.67,
+					"p99": 2.18
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 403,
+				"firstAnswerMs": 407,
+				"answered": 401,
+				"groupMb": 410,
+				"byProcess": [
+					"node 234",
+					"esbuild 111",
+					"workerd 65"
+				],
+				"ping": {
+					"p50": 0.37,
+					"p90": 0.5,
+					"p99": 1.67
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 442,
+				"firstAnswerMs": 448,
+				"answered": 401,
+				"groupMb": 406,
+				"byProcess": [
+					"node 229",
+					"esbuild 116",
+					"workerd 60"
+				],
+				"ping": {
+					"p50": 0.34,
+					"p90": 0.53,
+					"p99": 1.78
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 411,
+				"firstAnswerMs": 416,
+				"answered": 401,
+				"groupMb": 412,
+				"byProcess": [
+					"node 231",
+					"esbuild 120",
+					"workerd 61"
+				],
+				"ping": {
+					"p50": 0.35,
+					"p90": 0.57,
+					"p99": 1.76
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 414,
+				"firstAnswerMs": 417,
+				"answered": 401,
+				"groupMb": 403,
+				"byProcess": [
+					"node 230",
+					"esbuild 113",
+					"workerd 60"
+				],
+				"ping": {
+					"p50": 0.36,
+					"p90": 0.48,
+					"p99": 1.73
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 430,
+				"firstAnswerMs": 435,
+				"answered": 401,
+				"groupMb": 411,
+				"byProcess": [
+					"node 229",
+					"esbuild 119",
+					"workerd 63"
+				],
+				"ping": {
+					"p50": 0.33,
+					"p90": 0.59,
+					"p99": 1.63
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "source",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 531,
+				"firstAnswerMs": 534,
+				"answered": 401,
+				"groupMb": 407,
+				"byProcess": [
+					"node 225",
+					"esbuild 119",
+					"workerd 63"
+				],
+				"ping": {
+					"p50": 0.37,
+					"p90": 0.55,
+					"p99": 1.88
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 1158,
+				"firstAnswerMs": 1238,
+				"answered": 401,
+				"groupMb": 392,
+				"byProcess": [
+					"node 339",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.65,
+					"p90": 1.02,
+					"p99": 2.32
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 1215,
+				"firstAnswerMs": 1289,
+				"answered": 401,
+				"groupMb": 398,
+				"byProcess": [
+					"node 344",
+					"workerd 54"
+				],
+				"ping": {
+					"p50": 0.74,
+					"p90": 1.05,
+					"p99": 2.38
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 1264,
+				"firstAnswerMs": 1345,
+				"answered": 401,
+				"groupMb": 392,
+				"byProcess": [
+					"node 339",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.71,
+					"p90": 1.2,
+					"p99": 2.65
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 1231,
+				"firstAnswerMs": 1306,
+				"answered": 401,
+				"groupMb": 393,
+				"byProcess": [
+					"node 339",
+					"workerd 54"
+				],
+				"ping": {
+					"p50": 0.65,
+					"p90": 1.06,
+					"p99": 1.93
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 1231,
+				"firstAnswerMs": 1309,
+				"answered": 401,
+				"groupMb": 393,
+				"byProcess": [
+					"node 338",
+					"workerd 56"
+				],
+				"ping": {
+					"p50": 0.63,
+					"p90": 0.81,
+					"p99": 2.54
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 1206,
+				"firstAnswerMs": 1279,
+				"answered": 401,
+				"groupMb": 394,
+				"byProcess": [
+					"node 341",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.74,
+					"p90": 1.17,
+					"p99": 3.18
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 324,
+				"firstAnswerMs": 329,
+				"answered": 401,
+				"groupMb": 293,
+				"byProcess": [
+					"node 178",
+					"esbuild 50",
+					"workerd 66"
+				],
+				"ping": {
+					"p50": 0.44,
+					"p90": 0.69,
+					"p99": 1.99
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 313,
+				"firstAnswerMs": 316,
+				"answered": 401,
+				"groupMb": 289,
+				"byProcess": [
+					"node 176",
+					"esbuild 50",
+					"workerd 64"
+				],
+				"ping": {
+					"p50": 0.43,
+					"p90": 0.62,
+					"p99": 1.96
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 318,
+				"firstAnswerMs": 324,
+				"answered": 401,
+				"groupMb": 284,
+				"byProcess": [
+					"node 175",
+					"esbuild 48",
+					"workerd 61"
+				],
+				"ping": {
+					"p50": 0.43,
+					"p90": 0.59,
+					"p99": 1.96
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 319,
+				"firstAnswerMs": 323,
+				"answered": 401,
+				"groupMb": 286,
+				"byProcess": [
+					"node 177",
+					"esbuild 50",
+					"workerd 60"
+				],
+				"ping": {
+					"p50": 0.41,
+					"p90": 0.56,
+					"p99": 1.96
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 312,
+				"firstAnswerMs": 317,
+				"answered": 401,
+				"groupMb": 288,
+				"byProcess": [
+					"node 178",
+					"esbuild 50",
+					"workerd 60"
+				],
+				"ping": {
+					"p50": 0.43,
+					"p90": 0.58,
+					"p99": 2.09
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "node",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 347,
+				"firstAnswerMs": 350,
+				"answered": 401,
+				"groupMb": 289,
+				"byProcess": [
+					"node 178",
+					"esbuild 50",
+					"workerd 61"
+				],
+				"ping": {
+					"p50": 0.44,
+					"p90": 0.56,
+					"p99": 2.08
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 1198,
+				"firstAnswerMs": 1554,
+				"answered": 401,
+				"groupMb": 643,
+				"byProcess": [
+					"Electron 590",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.59,
+					"p90": 0.71,
+					"p99": 1.73
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 1136,
+				"firstAnswerMs": 1471,
+				"answered": 401,
+				"groupMb": 644,
+				"byProcess": [
+					"Electron 591",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.57,
+					"p90": 0.77,
+					"p99": 2.11
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 1160,
+				"firstAnswerMs": 1545,
+				"answered": 401,
+				"groupMb": 634,
+				"byProcess": [
+					"Electron 580",
+					"workerd 54"
+				],
+				"ping": {
+					"p50": 0.57,
+					"p90": 0.73,
+					"p99": 1.74
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 1174,
+				"firstAnswerMs": 1511,
+				"answered": 401,
+				"groupMb": 643,
+				"byProcess": [
+					"Electron 591",
+					"workerd 52"
+				],
+				"ping": {
+					"p50": 0.6,
+					"p90": 0.8,
+					"p99": 1.63
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 1169,
+				"firstAnswerMs": 1512,
+				"answered": 401,
+				"groupMb": 639,
+				"byProcess": [
+					"Electron 586",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.58,
+					"p90": 0.79,
+					"p99": 1.92
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 1163,
+				"firstAnswerMs": 1513,
+				"answered": 401,
+				"groupMb": 645,
+				"byProcess": [
+					"Electron 592",
+					"workerd 53"
+				],
+				"ping": {
+					"p50": 0.54,
+					"p90": 0.73,
+					"p99": 1.73
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 476,
+				"firstAnswerMs": 481,
+				"answered": 401,
+				"groupMb": 386,
+				"byProcess": [
+					"Electron 203",
+					"esbuild 124",
+					"workerd 59"
+				],
+				"ping": {
+					"p50": 0.36,
+					"p90": 0.5,
+					"p99": 1.8
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 489,
+				"firstAnswerMs": 492,
+				"answered": 401,
+				"groupMb": 383,
+				"byProcess": [
+					"Electron 203",
+					"esbuild 117",
+					"workerd 63"
+				],
+				"ping": {
+					"p50": 0.41,
+					"p90": 0.75,
+					"p99": 2.86
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 550,
+				"firstAnswerMs": 556,
+				"answered": 401,
+				"groupMb": 380,
+				"byProcess": [
+					"Electron 202",
+					"esbuild 119",
+					"workerd 59"
+				],
+				"ping": {
+					"p50": 0.41,
+					"p90": 0.57,
+					"p99": 1.76
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 502,
+				"firstAnswerMs": 506,
+				"answered": 401,
+				"groupMb": 388,
+				"byProcess": [
+					"Electron 203",
+					"esbuild 122",
+					"workerd 64"
+				],
+				"ping": {
+					"p50": 0.56,
+					"p90": 1.15,
+					"p99": 3.15
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 743,
+				"firstAnswerMs": 749,
+				"answered": 401,
+				"groupMb": 378,
+				"byProcess": [
+					"Electron 204",
+					"esbuild 117",
+					"workerd 57"
+				],
+				"ping": {
+					"p50": 0.99,
+					"p90": 2.92,
+					"p99": 13.23
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "source",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 711,
+				"firstAnswerMs": 717,
+				"answered": 401,
+				"groupMb": 382,
+				"byProcess": [
+					"Electron 203",
+					"esbuild 117",
+					"workerd 63"
+				],
+				"ping": {
+					"p50": 0.39,
+					"p90": 0.67,
+					"p99": 1.86
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 1670,
+				"firstAnswerMs": 1757,
+				"answered": 401,
+				"groupMb": 400,
+				"byProcess": [
+					"Electron 344",
+					"workerd 56"
+				],
+				"ping": {
+					"p50": 0.75,
+					"p90": 2.65,
+					"p99": 9.09
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 1875,
+				"firstAnswerMs": 1969,
+				"answered": 401,
+				"groupMb": 399,
+				"byProcess": [
+					"Electron 342",
+					"workerd 57"
+				],
+				"ping": {
+					"p50": 0.6,
+					"p90": 1.09,
+					"p99": 2.41
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 1749,
+				"firstAnswerMs": 1839,
+				"answered": 401,
+				"groupMb": 421,
+				"byProcess": [
+					"Electron 363",
+					"workerd 58"
+				],
+				"ping": {
+					"p50": 0.93,
+					"p90": 2.25,
+					"p99": 5.37
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 1463,
+				"firstAnswerMs": 1546,
+				"answered": 401,
+				"groupMb": 411,
+				"byProcess": [
+					"Electron 357",
+					"workerd 54"
+				],
+				"ping": {
+					"p50": 0.67,
+					"p90": 1.1,
+					"p99": 2.45
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 1150,
+				"firstAnswerMs": 1230,
+				"answered": 401,
+				"groupMb": 402,
+				"byProcess": [
+					"Electron 347",
+					"workerd 55"
+				],
+				"ping": {
+					"p50": 0.62,
+					"p90": 0.82,
+					"p99": 2.69
+				}
+			},
+			{
+				"twin": "alchemy",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 1168,
+				"firstAnswerMs": 1234,
+				"answered": 401,
+				"groupMb": 396,
+				"byProcess": [
+					"Electron 343",
+					"workerd 54"
+				],
+				"ping": {
+					"p50": 0.65,
+					"p90": 0.95,
+					"p99": 2.34
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 1,
+				"readyMs": 365,
+				"firstAnswerMs": 370,
+				"answered": 401,
+				"groupMb": 273,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 61"
+				],
+				"ping": {
+					"p50": 0.38,
+					"p90": 0.62,
+					"p99": 1.93
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 1,
+				"readyMs": 375,
+				"firstAnswerMs": 379,
+				"answered": 401,
+				"groupMb": 277,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 64"
+				],
+				"ping": {
+					"p50": 0.44,
+					"p90": 0.69,
+					"p99": 2.22
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 2,
+				"readyMs": 379,
+				"firstAnswerMs": 384,
+				"answered": 401,
+				"groupMb": 279,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 65"
+				],
+				"ping": {
+					"p50": 0.42,
+					"p90": 0.58,
+					"p99": 1.92
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 2,
+				"readyMs": 363,
+				"firstAnswerMs": 367,
+				"answered": 401,
+				"groupMb": 275,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 62"
+				],
+				"ping": {
+					"p50": 0.37,
+					"p90": 0.56,
+					"p99": 1.76
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "cold",
+				"round": 3,
+				"readyMs": 394,
+				"firstAnswerMs": 399,
+				"answered": 401,
+				"groupMb": 279,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 66"
+				],
+				"ping": {
+					"p50": 0.74,
+					"p90": 2.14,
+					"p99": 11.3
+				}
+			},
+			{
+				"twin": "today",
+				"runtime": "electron",
+				"from": "bundle",
+				"kind": "warm",
+				"round": 3,
+				"readyMs": 355,
+				"firstAnswerMs": 358,
+				"answered": 401,
+				"groupMb": 277,
+				"byProcess": [
+					"Electron 163",
+					"esbuild 50",
+					"workerd 64"
+				],
+				"ping": {
+					"p50": 0.38,
+					"p90": 0.91,
+					"p99": 2.86
+				}
+			}
+		]
+	},
+	"tests": {
+		"miniflare": [
+			200,
+			143,
+			143,
+			134,
+			143
+		],
+		"alchemy": {
+			"samePort": [
+				{
+					"upMs": 76,
+					"answerMs": 159,
+					"downMs": 23,
+					"workerdAfterClose": 0,
+					"portAfterClose": 0
+				},
+				{
+					"failed": "ConfigError: Could not bind to port 19540 (already in use)."
+				},
+				{
+					"failed": "ConfigError: Could not bind to port 19540 (already in use)."
+				}
+			],
+			"newPort": [
+				{
+					"upMs": 21,
+					"answerMs": 92,
+					"downMs": 23,
+					"workerdAfterClose": 0,
+					"portAfterClose": 0
+				},
+				{
+					"upMs": 23,
+					"answerMs": 94,
+					"downMs": 25,
+					"workerdAfterClose": 0,
+					"portAfterClose": 0
+				},
+				{
+					"upMs": 20,
+					"answerMs": 87,
+					"downMs": 22,
+					"workerdAfterClose": 0,
+					"portAfterClose": 0
+				}
+			],
+			"workerdAtEnd": 0
+		},
+		"two": {
+			"upMs": 33,
+			"rows": {
+				"x": 3,
+				"y": 7
+			},
+			"distinctUrls": true
+		},
+		"processWallMs": 4352,
+		"workerdOrEsbuildLeft": 0
+	}
+}

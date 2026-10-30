@@ -421,6 +421,49 @@ importers:
         specifier: 'catalog:'
         version: 1.64.1
 
+  experiments/171-alchemy-local-twin:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@22.20.5)(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.0.6)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)(typescript@7.0.2)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      '@kampus/ledger-server':
+        specifier: workspace:*
+        version: link:../../packages/ledger-server
+      alchemy:
+        specifier: 'catalog:'
+        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.0.6)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260730.0
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
+      workerd:
+        specifier: 1.20261012.1
+        version: 1.20261012.1
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      electron:
+        specifier: 'catalog:'
+        version: 45.0.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   legacy:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -5391,7 +5434,7 @@ snapshots:
 
   '@img/sharp-wasm32@0.35.2':
     dependencies:
-      '@emnapi/runtime': 1.11.2
+      '@emnapi/runtime': 1.11.3
     optional: true
 
   '@img/sharp-wasm32@0.35.5':
