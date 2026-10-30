@@ -93,7 +93,8 @@ export type DRun = typeof DRun.Type;
 
 const service = Effect.gen(function* () {
 	return Agent.makeAgents({
-		adapters: {codex: yield* codexAdapter({codex: CODEX})},
+		// Triage sorts a ticket and changes no file: the folder is only read.
+		adapters: {codex: yield* codexAdapter({codex: CODEX, access: "read"})},
 		sessions: Agent.memorySessions(),
 		reaper: psReaper,
 	});

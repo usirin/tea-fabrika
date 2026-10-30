@@ -318,7 +318,8 @@ interface Options {
 /** Start the codex row in `copy`, open a session, and hand it to `body`. The adapter is stopped when `body` ends. */
 const drive = <A>(copy: string, options: Options, body: (d: Driven) => Effect.Effect<A, unknown>) =>
 	Effect.gen(function* () {
-		const row = harnessOf("codex", copy, null);
+		// The probes check that a write in the copy goes through and every other write does not.
+		const row = harnessOf({name: "codex", access: "write"}, copy, null);
 		if (row.prepare !== undefined) yield* row.prepare;
 		const harness = options.harness === undefined ? row : options.harness(row);
 		const log: Log[] = [];

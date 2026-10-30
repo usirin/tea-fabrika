@@ -9,7 +9,7 @@ import {flag, input, output} from "../../program/shape.ts";
 import {runTraced} from "../../program/trace.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {connect, type Heard, type Opened, type PendingAsk} from "./client.ts";
-import {AGENTS, CODEX_MODES, harnessOf} from "./harness.ts";
+import {AGENTS, CODEX_MODES, harnessOf, type Row} from "./harness.ts";
 import {Session, session, type Waiting} from "./session.ts";
 import {type AcpEvents, acpEvents} from "./spans.ts";
 import {
@@ -166,7 +166,7 @@ export const acpProgram = defineProgram({
 		),
 		mode: flag(
 			Schema.UndefinedOr(Schema.String),
-			"The harness's permission mode. Left out: the harness's default.",
+			"The harness's permission mode. Left out: the harness's default. Codex has none: read-only or workspace-write, which also says whether its folder may change.",
 		),
 		permissions: flag(
 			Schema.UndefinedOr(Schema.Literals(["refuse", "ask"])),
@@ -227,14 +227,21 @@ export const acpProgram = defineProgram({
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const folder = yield* scratchFolder(flags.folder);
-			// A mode codex may not run in is refused first, whether or not the adapter is installed.
-			if (
-				flags.agent === "codex" &&
-				flags.mode !== undefined &&
-				!(CODEX_MODES as readonly string[]).includes(flags.mode)
-			)
-				return yield* refused(`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode}`);
-			const harness = harnessOf(flags.agent, folder, flags.budget ?? null);
+			// Codex's mode is its folder's access, so it must be named: a mode codex may not run in, or
+			// none, is refused first, whether or not the adapter is installed.
+			const row: Row | null =
+				flags.agent !== "codex"
+					? flags.agent
+					: flags.mode === "read-only"
+						? {name: "codex", access: "read"}
+						: flags.mode === "workspace-write"
+							? {name: "codex", access: "write"}
+							: null;
+			if (row === null)
+				return yield* refused(
+					`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode ?? "a mode left out"}`,
+				);
+			const harness = harnessOf(row, folder, flags.budget ?? null);
 			if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
 				return yield* refused(
 					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
