@@ -29,6 +29,10 @@ import type {At} from "./words.ts";
 //
 //   seq --to 3 | double         seq's output n (integer) fits double's input n (integer): wired n → n
 //   seq --to 3 | upper          refused at the |: seq's outputs fit no input of upper
+//   tally | trace               tally's outputs fit no typed input of trace, and trace's `any`
+//                               takes any value (`anyInput`): wired total → any, tally's first
+//                               output, as a Unix pipe carries stdout and not stderr
+//   runs | trace                runs' id fits trace's input id: a typed fit wins over `any`
 //   ship --mdoe read            refused at --mdoe: ship has no flag --mdoe. Did you mean --mode?
 
 /** Where a value comes from: the line, or the output of a `$( )` that runs first. */
@@ -247,16 +251,21 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 /**
  * The inputs of `program` a pipe from a program on `list` can feed: each one an output there
  * fits, the pairs `wireOf` picks from when a line names no `>out` or `<in`. A command a person
- * clicks or types (`close`, `quit`) takes a shape no output sends, and is not one.
+ * clicks or types (`close`, `quit`) takes a shape no output sends, and is not one. An input
+ * made by `anyInput` is one whenever the list has any output at all.
  *
- *   fedBy(ticket, [tracker, ticket, runs, trace])   ["ticket"]   (tracker's output ticket fits)
- *   fedBy(tracker, [tracker, ticket, runs, trace])  []           (file, close, quit: no output fits)
+ *   fedBy(ticket, [tracker, ticket, runs, trace])   ["ticket"]     (tracker's output ticket fits)
+ *   fedBy(tracker, [tracker, ticket, runs, trace])  []             (file, close, quit: no output fits)
+ *   fedBy(trace, [tracker, ticket, runs, trace])    ["id", "any"]  (runs' id fits; `any` takes the rest)
  */
 export const fedBy = (program: Entry["program"], list: readonly Entry[]): readonly string[] =>
 	Object.keys(program.inputs).filter((input) =>
 		list.some((from) =>
 			Object.keys(from.program.outputs).some(
-				(output) => fit(from.program.outputs[output], program.inputs[input]) === "fits",
+				(output) => {
+					const answer = fit(from.program.outputs[output], program.inputs[input]);
+					return answer === "fits" || answer === "takes_any";
+				},
 			),
 		),
 	);
@@ -272,7 +281,11 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 			fit: fit(a.program.outputs[output], b.program.inputs[input]),
 		})),
 	);
-	const fitting = pairs.filter((p) => p.fit === "fits");
+	// A typed fit first; only when none, an input that takes any value (`anyInput`), fed the first
+	// output, as a Unix pipe carries fd 1 and leaves fd 2 alone.
+	const typed = pairs.filter((p) => p.fit === "fits");
+	const fitting =
+		typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit === "takes_any"));
 	const named = from.out !== null && to.into !== null;
 	const chosen =
 		fitting.length === 1
@@ -296,6 +309,19 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 			`does not fit: ${a.program.name}'s ${from.out === null ? "outputs" : "output"} (${show(a.program, "outputs", outs)}) fit no ${to.into === null ? "input" : "such input"} of ${b.program.name} (${show(b.program, "inputs", ins)}). Nothing was started`,
 		),
 	);
+}
+
+/**
+ * The pairs of the first output among them, in the order the program declares its outputs: what
+ * an input that takes anything is fed when several outputs could go. A program's first output is
+ * its main one, as stdout is fd 1. Two inputs that take anything, both fed, are still two ways.
+ *
+ *   firstOutput([{output: "total", input: "any"}, {output: "refused", input: "any"}])
+ *   // [{output: "total", input: "any"}]
+ */
+function firstOutput<P extends {readonly output: string}>(pairs: readonly P[]): readonly P[] {
+	const first = pairs[0]?.output;
+	return pairs.filter((p) => p.output === first);
 }
 
 /** The one name given, checked, or every name declared. */
@@ -335,7 +361,7 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 			);
 		if (seen.has(given.name)) return stop(no(given.at.start, `--${given.name} is given twice`));
 		seen.add(given.name);
-		const source = sourceOf(given, flag.shape, `--${given.name}`, list, text);
+		const source = sourceOf(given, flag, `--${given.name}`, list, text);
 		return {name: given.name, source};
 	});
 	for (const name of declared) {
@@ -375,17 +401,19 @@ function toldOf(
 			return stop(
 				no(given.at.start, `${given.name} is fed by the pipe: give it values on one or the other`),
 			);
-		return {name: given.name, source: sourceOf(given, into.shape, given.name, list, text)};
+		return {name: given.name, source: sourceOf(given, into, given.name, list, text)};
 	});
 }
 
+/** Where a flag's or an input's value comes from. `target`: the flag or input, with its shape. */
 function sourceOf(
 	given: Given,
-	shape: Shape<unknown>,
+	target: {readonly shape: Shape<unknown>; readonly any?: true},
 	label: string,
 	list: ProgramList,
 	text: string,
 ): Source {
+	const {shape} = target;
 	const value: Value = given.value;
 	if (value.kind === "text") {
 		const read = readValue(shape, value.text);
@@ -405,8 +433,12 @@ function sourceOf(
 		value.pipeline.commands[value.pipeline.commands.length - 1] ?? value.pipeline.commands[0];
 	const {program} = last.entry;
 	const outs = namedOr(command.out, program.outputs, program.name, "output");
-	const target = {shape};
-	const fitting = outs.filter((o) => fit(program.outputs[o], target) === "fits");
+	// A typed fit first; only when none, an input that takes any value takes the first output.
+	const typed = outs.filter((o) => fit(program.outputs[o], target) === "fits");
+	const fitting =
+		typed.length > 0
+			? typed
+			: outs.filter((o) => fit(program.outputs[o], target) === "takes_any").slice(0, 1);
 	const named =
 		command.out !== null && fit(program.outputs[command.out.name], target) === "cannot_tell";
 	const output = fitting.length === 1 ? fitting[0] : named ? command.out?.name : undefined;

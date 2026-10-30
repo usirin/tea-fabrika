@@ -1,7 +1,10 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {openJobs} from "@kampus/fabrika";
+import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika";
+import {recordTracing} from "@kampus/fabrika/otel";
+import {sqliteRecords} from "@kampus/fabrika/records";
 import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
+import {Author} from "@tea-fabrika/tracker";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
@@ -28,6 +31,8 @@ import {pathsOf, reach} from "./socket.ts";
 //   storage/jobs/        the host's one job table and its jobs' runs, for every tile's tsh, as
 //                        the terminal tsh's host keeps them. A storage/tiles/<t>/ folder left
 //                        by an older build (one table per tile) is not read, and not removed
+//   records/<trace>.sqlite  one job's record each (`sqliteRecords`): its start and end, its
+//                        spans and its steps, what `trace` shows
 //   history              the line editor's history, one for every tile
 //   ledger.sqlite        the ledger, when the home is connected to no server
 //   ledger.json          the ledger server it is connected to, if any (connection.ts)
@@ -110,8 +115,18 @@ export const runHost = (options: {
 				),
 			),
 		);
+		// Each job's record, kept as the person who runs the host: the table writes its start and
+		// end, the runs' storage its steps, the tracer its spans. `trace` reads them.
+		const records = yield* sqliteRecords({
+			dir: at("records"),
+			by: writerText(Context.get(ledger, Author)),
+		});
 		// One job table for the host process, for every tile's tsh, open until the host stops.
-		const jobs = yield* openJobs(fileStorage(at("storage", "jobs")));
+		const jobs = keepJobs(
+			yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
+			records,
+			"laptop",
+		);
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		return yield* serve({
 			history,
@@ -147,5 +162,6 @@ export const runHost = (options: {
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),
 			Effect.provideContext(ledger),
+			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),
 		);
 	});

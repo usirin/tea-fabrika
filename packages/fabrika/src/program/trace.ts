@@ -9,7 +9,7 @@ import {
 	run,
 	type SubscribeServices,
 } from "@demlik/tea/effect";
-import {Clock, Effect, Exit, type Scope, Stream, Tracer} from "effect";
+import {Clock, Effect, Exit, Option, type Scope, Stream, Tracer} from "effect";
 import {runTraceId} from "./trace-id.ts";
 
 // Tracing, in Effect's own terms: spans, events, links. Nothing here knows
@@ -89,6 +89,29 @@ export const traceOf = (key: string): Tracer.ExternalSpan =>
 		spanId: traceParentIdOf(key),
 		sampled: true,
 	});
+
+const TRACE_ID = /^[0-9a-f]{32}$/;
+
+/**
+ * The trace id of the job this runs in: the trace of the span around it, as OpenTelemetry passes
+ * a trace's context to whatever runs under it. A run in a tsh line is in its line's trace, and a
+ * run started alone is in the one its id names (`traceOf`), so this is the key of its job's
+ * record. A span made with the tracer off (`Effect.withTracerEnabled(false)`) has no trace id of
+ * its own: its parents are asked, up to the one `traceOf` made. `null`: no span holds one.
+ *
+ *   tsh> seq --to 3 | tally | trace     inside trace's `main`: runTraceId(seq's run id)
+ */
+export const jobTraceId: Effect.Effect<string | null> = Effect.map(
+	Effect.option(Effect.currentParentSpan),
+	(found) => {
+		let at: Tracer.AnySpan | undefined = Option.getOrUndefined(found);
+		for (let depth = 0; at !== undefined && depth < 64; depth++) {
+			if (TRACE_ID.test(at.traceId)) return at.traceId;
+			at = at._tag === "Span" ? Option.getOrUndefined(at.parent) : undefined;
+		}
+		return null;
+	},
+);
 
 /** The current time on Effect's clock, as a span takes it. */
 export const nowNanos = Clock.clockWith((clock) => Effect.succeed(clock.currentTimeNanosUnsafe()));

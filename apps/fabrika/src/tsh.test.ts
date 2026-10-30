@@ -1,9 +1,19 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, openJobs, Shell, type Storage, streams} from "@kampus/fabrika";
+import {
+	Ledger,
+	memoryStorage,
+	openJobs,
+	runTraceId,
+	Shell,
+	type Storage,
+	streams,
+	Traces,
+} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
+import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
 import {Effect, FileSystem, Layer, Schema} from "effect";
@@ -26,6 +36,13 @@ type Seen =
 	| {readonly kind: "close"; readonly run: string}
 	| {readonly kind: "running"; readonly count: number; readonly jobs: TileJobs};
 
+/** Records nobody wrote: every trace id reads as an empty record. */
+const noTraces = Effect.runSync(
+	Effect.gen(function* () {
+		return yield* Traces;
+	}).pipe(Effect.provide(memoryTraces([]))),
+);
+
 const session = (
 	opts: {
 		/** Where the host keeps its job table, kept between hosts as the home's folder is. */
@@ -35,6 +52,8 @@ const session = (
 		/** Shared with another host, as two tiles share it. */
 		readonly shared?: SharedHistory;
 		readonly ledger?: Ledger["Service"];
+		/** The jobs' records `trace` reads. None written, unless a test hands its own. */
+		readonly traces?: Layer.Layer<Traces>;
 	} = {},
 ) =>
 	Effect.gen(function* () {
@@ -59,9 +78,10 @@ const session = (
 			jobs: (jobs) => seen.push({kind: "running", count: jobs.running.length, jobs}),
 		};
 		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
+		const jobs = yield* openJobs(opts.jobs ?? memoryStorage());
 		const host = yield* startTsh({
 			tile: "t1",
-			jobs: yield* openJobs(opts.jobs ?? memoryStorage()),
+			jobs,
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
 		}).pipe(
@@ -69,6 +89,7 @@ const session = (
 			Effect.provideService(Author, {kind: "user", id: "owner"}),
 			// No pull requests: no test reads GitHub.
 			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
+			Effect.provide(opts.traces ?? memoryTraces([])),
 		);
 		let bytes = "";
 		host.terminal.show((m) => {
@@ -115,7 +136,7 @@ const session = (
 			};
 		const press = (run: string, value: unknown) =>
 			window(run).heard({type: "msg", msg: {type: "press", value}});
-		return {host, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
+		return {host, jobs, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
 	});
 
 /** Ticket 7 on `ledger`, as a lane left it (@tea-fabrika/tracker/seven). */
@@ -616,12 +637,14 @@ describe("a program's window", () => {
 				const picked = s
 					.window(of("runs"))
 					.heard({type: "msg", msg: {type: "choose", value: {run: "r-2"}}});
+				// Before the pick, trace shows its own line's job; the pick replaces it.
 				const read = yield* s.until("trace read #7's record", () =>
 					s.seen.find(
 						(x) =>
 							x.kind === "view" &&
 							x.run === of("trace") &&
-							(x.data as {read?: string; id?: string}).read === "read",
+							(x.data as {read?: string; id?: string}).read === "read" &&
+							(x.data as {id?: string}).id === SEVEN_TRACE,
 					),
 				);
 				s.window(of("runs")).closed();
@@ -640,6 +663,36 @@ describe("a program's window", () => {
 		expect(seen.picked).toEqual({kind: "read"});
 		expect((seen.read as {data: {id: string}}).data.id).toBe(SEVEN_TRACE);
 	});
+
+	it("ends `seq --to 3 | tally | trace` on trace's window, showing that line's own job", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("seq --to 3 | tally | trace\r");
+				yield* s.opened(1);
+				const open = s.seen.find((x) => x.kind === "open");
+				if (open?.kind !== "open") return yield* Effect.die("trace did not open");
+				const read = yield* s.until("trace read its job's record", () =>
+					s.seen.find(
+						(x) =>
+							x.kind === "view" &&
+							x.run === open.run &&
+							(x.data as {read?: string}).read === "read",
+					),
+				);
+				const job = s.jobs.table.getState().jobs[0];
+				s.window(open.run).closed();
+				yield* s.prompts(2);
+				return {open, read, job};
+			}).pipe(Effect.scoped),
+		);
+		expect([seen.open.program, seen.open.placed]).toEqual(["trace", "foreground"]);
+		// tally's total fits no typed input of trace, so it went to `any`: the line is one job.
+		expect(seen.job?.stages.map((st) => st.program)).toEqual(["seq", "tally", "trace"]);
+		// Its trace id is its first run's, seq's: the record trace follows is the line's own.
+		const first = seen.job?.stages[0].run ?? "";
+		expect((seen.read as {data: {id: string}}).data.id).toBe(runTraceId(first));
+	});
 });
 
 describe("what a pipe can feed", () => {
@@ -647,6 +700,7 @@ describe("what a pipe can feed", () => {
 		memoryService(),
 		{kind: "user", id: "owner"},
 		{open: Effect.succeed([])},
+		noTraces,
 	);
 	const list = tshList(apps);
 	const takes = (name: string) => {
@@ -659,7 +713,8 @@ describe("what a pipe can feed", () => {
 		expect(takes("tracker")).toEqual([]);
 		expect(takes("ticket")).toEqual(["ticket"]);
 		expect(takes("runs")).toEqual(["ticket"]);
-		expect(takes("trace")).toEqual(["id"]);
+		// `any` takes whatever no typed input does (`anyInput`): a pipe feeds it from anything.
+		expect(takes("trace")).toEqual(["id", "any"]);
 		expect(takes("map")).toEqual([]);
 	});
 

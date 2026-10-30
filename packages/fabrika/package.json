@@ -15,6 +15,7 @@
 		".": "./src/index.ts",
 		"./memory": "./src/host/memory.ts",
 		"./sqlite": "./src/host/sqlite.ts",
+		"./records": "./src/host/sqlite-records.ts",
 		"./http": "./src/host/http.ts",
 		"./local": "./src/local.ts",
 		"./laws": "./src/host/laws.ts",
@@ -43,6 +44,10 @@
 			"./sqlite": {
 				"types": "./dist/host/sqlite.d.ts",
 				"default": "./dist/host/sqlite.js"
+			},
+			"./records": {
+				"types": "./dist/host/sqlite-records.d.ts",
+				"default": "./dist/host/sqlite-records.js"
 			},
 			"./http": {
 				"types": "./dist/host/http.d.ts",

@@ -1,25 +1,32 @@
-import {defineMachine} from "@demlik/tea";
-import {Cmd} from "@demlik/tea/effect";
+import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {JobTrace, TraceId} from "@kampus/fabrika";
 import {Schema} from "effect";
 import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 
 // The trace's machine: one job's record as last read, which of its rows are open, and which one
 // is chosen. Elm's debugger and Redux DevTools hold the same: the history, and where you look in
-// it. Pure: the record is reached through its one Cmd, whose cell is in ./index.ts.
+// it. Pure: the record is followed through its one Sub, whose runner is in ./index.ts.
 //
-//   look     read the job's record (`read`): from the flag at the start, then from each id told
-//            on `id`. A newer id replaces the record shown, its open rows and its detail; the
-//            same id again changes nothing, unless it could not be read; an answer for an id it
-//            replaced is dropped
+//   look     follow the job's record (`follow`): its own line's job at the start, or the flag's,
+//            then each id told on `id`. A newer id replaces the record shown, its open rows and
+//            its detail; the same id again changes nothing, unless it could not be read
+//   got      the record, read again: the first shows the job's row open, a later one keeps the
+//            rows open and the detail chosen. One for an id it no longer follows is dropped
+//   lost     the record could not be read: before the first read it says why, after it the last
+//            record read stays shown
 //   toggle   open a row that groups others, or close it: a job, a run, a machine run, a round,
 //            an agent's turns. A row that groups nothing, or is not in the record, changes nothing
 //   choose   show one row's detail: a span's tags and events, or a step's Msg, the state before
 //            and after, and its Cmds. `null` closes the detail
 //
 //   replay(trace, {ctx: undefined, msgs: [{type: "look", id: TALLY_ID}]})
-//   // state.read {at: "reading", id}, cmds [read {id}]
-//   // then read_ok: state.read {at: "read", trace}, open ["job"]: the job's row shows its runs
+//   // state.read {at: "reading", id}; subs [follow {id}]
+//   // then got: state.read {at: "read", trace}, open ["job"]: the job's row shows its runs
+//   // then got again, with one more span: the same rows open, the new span in its place
+//
+// Elm's answer for a value that changes on its own is a Sub, not a Cmd asked again: `Time.every`,
+// a websocket. The record changes while its job runs, so the machine follows it for as long as
+// it shows one; the runner reads it again each time it changes.
 //
 // Open rows are state, as Elm keeps them in the Model: a reload, a second window or another
 // client of the same run shows the same rows open.
@@ -29,14 +36,10 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
  * leaves the process as the record's wire writes it. The record's reader has decoded it already.
  */
 export const Kept = Schema.toType(JobTrace);
+type Kept = typeof Kept.Type;
 
-/** Read one job's record, by its trace id. */
-export const read = Cmd.define("read", {
-	input: Schema.Struct({id: TraceId}),
-	ok: Kept,
-	err: ["unread"],
-});
-type ReadCmd = ReturnType<typeof read>;
+/** Follow one job's record, by its trace id: each read of it comes back as `got`. */
+export type FollowSub = Sub<"follow", {readonly id: string}>;
 
 /** A row of the tree, by its key (./tree.ts): what `toggle` and `choose` name. */
 export const RowKey = Schema.String.check(Schema.isMaxLength(512));
@@ -61,10 +64,12 @@ export type Model = typeof Model.Type;
 
 export type TraceMsg =
 	| {readonly type: "look"; readonly id: string}
+	| {readonly type: "got"; readonly trace: Kept}
+	| {readonly type: "lost"; readonly id: string; readonly why: string}
 	| {readonly type: "toggle"; readonly row: string}
 	| {readonly type: "choose"; readonly row: string | null};
 
-type Step = readonly [Model, readonly ReadCmd[]];
+type Step = readonly [Model, readonly never[]];
 
 const start: Model = {read: {at: "waiting"}, open: [], chosen: null};
 
@@ -80,28 +85,55 @@ export const idOf = (r: Read): string | null => {
 	}
 };
 
-const why = (error: {readonly _tag: string; readonly [detail: string]: unknown}) =>
-	typeof error.why === "string" ? error.why : error._tag;
+/** The record it follows: the one it reads or shows. None while waiting, or once it is lost. */
+export const followed = (s: Model): {readonly id: string} | null =>
+	s.read.at === "reading"
+		? {id: s.read.id}
+		: s.read.at === "read"
+			? {id: s.read.trace.trace}
+			: null;
+
+/** The rows a record first shows open: the job's, when anything is under it. */
+export const firstOpen = (trace: Kept): readonly string[] =>
+	groupsOf(treeOf(trace)).has(JOB) ? [JOB] : [];
+
+/**
+ * A newer read of the record shown: the rows open stay open, and the detail stays, where they
+ * still are. A record that had nothing under its job yet (a job just begun, its spans not in)
+ * showed no row to open or close, so the first read with something in it opens the job's row,
+ * as a first read does.
+ */
+const again = (s: Model, trace: Kept): Model => {
+	const tree = treeOf(trace);
+	const groups = groupsOf(tree);
+	const shown = s.read.at === "read" && groupsOf(treeOf(s.read.trace)).has(JOB);
+	return {
+		read: {at: "read", trace},
+		open: shown ? s.open.filter((k) => groups.has(k)) : firstOpen(trace),
+		chosen: s.chosen !== null && findOf(tree, s.chosen) !== undefined ? s.chosen : null,
+	};
+};
 
 export const trace = defineMachine({
-	types: {model: {} as Model, msg: {} as TraceMsg, ctx: undefined},
-	cmds: [read],
+	types: {model: {} as Model, msg: {} as TraceMsg, sub: {} as FollowSub, ctx: undefined},
+	cmds: [],
 	init: (): Step => [start, []],
 	update: {
 		// A newer id replaces the record shown, with its rows and its detail. The same id again
-		// changes nothing, unless its record could not be read: then it is asked again. An answer
-		// for an id it replaced is dropped below.
+		// changes nothing, unless its record could not be read: then it is followed again.
 		look: (s, m): Step =>
 			idOf(s.read) === m.id && s.read.at !== "unread"
 				? [s, []]
-				: [{read: {at: "reading", id: m.id}, open: [], chosen: null}, [read({id: m.id})]],
-		read_ok: (s, m): Step =>
-			s.read.at === "reading" && s.read.id === m.cmd.id
-				? [{read: {at: "read", trace: m.value}, open: [JOB], chosen: null}, []]
-				: [s, []],
-		read_err: (s, m): Step =>
-			s.read.at === "reading" && s.read.id === m.cmd.id
-				? [{...s, read: {at: "unread", id: m.cmd.id, why: why(m.error)}}, []]
+				: [{read: {at: "reading", id: m.id}, open: [], chosen: null}, []],
+		got: (s, m): Step => {
+			if (idOf(s.read) !== m.trace.trace) return [s, []];
+			if (s.read.at === "reading")
+				return [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: null}, []];
+			return s.read.at === "read" ? [again(s, m.trace), []] : [s, []];
+		},
+		lost: (s, m): Step =>
+			s.read.at === "reading" && s.read.id === m.id
+				? [{...s, read: {at: "unread", id: m.id, why: m.why}}, []]
 				: [s, []],
 		toggle: (s, m): Step => {
 			if (s.read.at !== "read" || !groupsOf(treeOf(s.read.trace)).has(m.row)) return [s, []];
@@ -114,6 +146,7 @@ export const trace = defineMachine({
 			return [{...s, chosen: m.row}, []];
 		},
 	},
+	subs: [{type: "follow", deps: followed} satisfies DepKeyedSub<Model, FollowSub>],
 });
 
 /** Its status line, for a host's list of runs. */

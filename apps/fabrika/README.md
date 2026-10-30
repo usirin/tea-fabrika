@@ -212,9 +212,9 @@ When something is wrong, its word joins the top bar's right end, in red where it
   so a tile that runs nothing opens straight on Other tiles. `↑` `↓` or `J` `K` move, `↵`
   focuses the tile the job runs in, `Esc` or a click outside closes it and gives focus back.
   With nothing running anywhere, the head has no count and one calm line says so, with tsh's
-  `jobs` and `attach %n`. There is no
-  trace to open for a job yet: the app's `trace` reads only records held in memory, until the
-  host keeps each job's record.
+  `jobs` and `attach %n`. The host keeps each
+  job's record now, and `trace` at the end of a line follows its own, but a row here does not
+  open a job's trace yet: that is a change of its own.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
   each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
   and the asks list all read that one value. A click on the count, or `C-b a`, opens the list,

@@ -24,8 +24,9 @@ import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./
 // pressed (the frame's research, rule 1). Its job item names the job the tile runs, by the host's
 // table: `%3`, its line, how long it has run, and `+1` for each other job there. A job that just
 // ended says so for a short while (`done in 4s`), then the item clears; with nothing running it
-// says nothing. A click, or C-b J, lists the jobs: there is no trace to open for a job yet (the
-// app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you" takes the accent, and only a broken part
+// says nothing. A click, or C-b J, lists the jobs: a row does not open its job's trace yet (the
+// host keeps the record; opening it from here is a change of its own), so it does what tsh's
+// `jobs` does. Only "asks you" takes the accent, and only a broken part
 // takes the warning color, each with its word (rules 2 and 11). A part that works says nothing:
 // the host and the ledger show up in the top bar only when something is wrong with them. An
 // agent's ask is never on the bottom line: that line is yours.
