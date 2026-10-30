@@ -1,7 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, flag, input, kind} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {defineProgram, end, flag, input, kind} from "@kampus/fabrika";
+import {Effect, Schema} from "effect";
 import {Root} from "./root.ts";
 
 // Any markdown, drawn, as `glow` or `less` draws it in a terminal: in a tile of its own
@@ -57,17 +57,14 @@ export const markdown = defineProgram({
 		}),
 	},
 	view: {machine: "page", data: Root, of: (s) => s.root},
-	main: ({flags, inputs, watch}) =>
+	main: ({flags, serve, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(page, options)).ready;
 			const show = (text: string) => runtime.dispatch({type: "show", text}).pipe(Effect.orDie);
 			if (flags.text !== undefined) yield* show(flags.text);
 			yield* watch("page", "page", runtime);
-			// Each text told, for as long as the run is: a pipe's end does not end the window.
-			yield* inputs.text.pipe(Stream.runForEach(show), Effect.forkScoped);
-			yield* inputs.do.pipe(
-				Stream.takeWhile((d) => d.kind !== "quit"),
-				Stream.runDrain,
-			);
+			// Each text told, in order with the window's quit: a pipe's end does not end the window.
+			// A quit, or `do` closed, does.
+			yield* serve({text: show, do: () => end}, {until: ["do"]});
 		}).pipe(Effect.scoped),
 });
