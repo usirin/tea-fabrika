@@ -40,11 +40,40 @@ export interface Shown {
 	readonly program: string;
 }
 
+/** One colour of the line palette (window.css, `--line-0` to `--line-5`). */
+export type Tint = 0 | 1 | 2 | 3 | 4 | 5;
+
+/** Every tint, in the order a new line takes the first one free. */
+export const TINTS: readonly Tint[] = [0, 1, 2, 3, 4, 5];
+
 /**
- * What a tile shows: always its own tsh. A run with a view in its foreground covers it while it
- * runs. A run started with `&` shows nowhere, as a job in bash's background, until `attach`.
+ * A tsh line whose windows opened together, as `tracker | ticket | runs`: its id (its first
+ * window's run), the tile it was typed in, and its tint. Only a line of two windows or more has
+ * one: a run alone gets no tint.
  */
-export type Shows = {readonly kind: "tsh"; readonly run: Shown | null};
+export interface Line {
+	readonly id: string;
+	readonly from: TileId;
+	readonly tint: Tint;
+}
+
+/**
+ * What a tile shows.
+ *
+ * - `tsh`: its own tsh. A run with a view in its foreground covers it while it runs. A run
+ *   started with `&` shows nowhere, as a job in bash's background, until `attach`.
+ * - `line`: its own tsh, covered by the first window of a line typed in it.
+ * - `window`: one more window of a line typed in another tile. It has no tsh of its own, and it
+ *   goes when its run ends.
+ */
+export type Shows =
+	| {readonly kind: "tsh"; readonly run: Shown | null}
+	| {readonly kind: "line"; readonly run: Shown; readonly line: Line}
+	| {readonly kind: "window"; readonly run: Shown; readonly line: Line};
+
+/** The line a tile shows a window of, or none. */
+export const lineOf = (node: LayoutNode): Line | null =>
+	node.tag === "tile" && node.shows.kind !== "tsh" ? node.shows.line : null;
 
 /**
  * A tile. `folded`: drawn as a thin strip along its parent's direction, in its own place. Its
@@ -115,9 +144,18 @@ export const isFolded = (node: LayoutNode): boolean =>
 const isShown = (value: unknown): value is Shown =>
 	Predicate.isObject(value) && typeof value.id === "string" && typeof value.program === "string";
 
+const isLine = (value: unknown): value is Line =>
+	Predicate.isObject(value) &&
+	typeof value.id === "string" &&
+	typeof value.from === "string" &&
+	(TINTS as readonly unknown[]).includes(value.tint);
+
 export function isShows(value: unknown): value is Shows {
-	if (!Predicate.isObject(value) || value.kind !== "tsh") return false;
-	return value.run === null || isShown(value.run);
+	if (!Predicate.isObject(value)) return false;
+	if (value.kind === "tsh") return value.run === null || isShown(value.run);
+	return (
+		(value.kind === "line" || value.kind === "window") && isShown(value.run) && isLine(value.line)
+	);
 }
 
 export function isTileNode(value: unknown): value is TileNode {
@@ -198,6 +236,69 @@ export function resolveSizes(
 		resolved[child.id] = total > 0 ? ((raw[index] ?? 0) * 100) / total : even;
 	});
 	return resolved;
+}
+
+/** The tiles of `container`, its own children, that show a window of this line. */
+const membersOf = (container: ContainerNode, line: string): readonly TileNode[] =>
+	container.children.flatMap((child) =>
+		child.tag === "tile" && lineOf(child)?.id === line ? [child] : [],
+	);
+
+/** `sizes` with these tiles' shares scaled to add up to `total`: by their own shares, or evenly if they have none. */
+const scaled = (
+	sizes: Record<NodeId, number>,
+	tiles: readonly TileNode[],
+	total: number,
+): Record<NodeId, number> => {
+	const now = tiles.reduce((sum, tile) => sum + (sizes[tile.id] ?? 0), 0);
+	for (const tile of tiles)
+		sizes[tile.id] = now > 0 ? ((sizes[tile.id] ?? 0) * total) / now : total / tiles.length;
+	return sizes;
+};
+
+/**
+ * The line's windows in `container` share their space among themselves, after the tile `id` of
+ * that line folded or opened: the open ones split the line's total, the folded ones hold none.
+ * A tile that opens takes an even share from the line's other open windows, never from an
+ * unrelated tile; one that folds hands its share to them. The line's total stays the same, so
+ * the other children keep theirs. With every window of the line folded nothing moves, and the
+ * last one folded keeps the total for the next to open. A tile in no line, or alone in its line
+ * here, changes nothing.
+ */
+export function shareLine(container: ContainerNode, id: TileId): ContainerNode {
+	const tile = container.children.find((child) => child.id === id);
+	const line = tile === undefined ? null : lineOf(tile);
+	if (tile?.tag !== "tile" || line === null) return container;
+	const members = membersOf(container, line.id);
+	const open = members.filter((member) => !member.folded);
+	if (members.length < 2 || open.length === 0) return container;
+	const total = members.reduce((sum, member) => sum + (container.sizes[member.id] ?? 0), 0);
+	const sizes: Record<NodeId, number> = {...container.sizes};
+	for (const member of members) if (member.folded) sizes[member.id] = 0;
+	if (tile.folded) return {...container, sizes: scaled(sizes, open, total)};
+	const share = total / open.length;
+	sizes[id] = share;
+	const rest = open.filter((member) => member.id !== id);
+	return {...container, sizes: rest.length === 0 ? sizes : scaled(sizes, rest, total - share)};
+}
+
+/**
+ * `container` with the tile `id`'s share handed to its line's other windows here, as it goes:
+ * to the open ones, by their shares, or else to the first of them. The tile is left with none.
+ * A tile in no line, or alone in its line here, changes nothing.
+ */
+export function freeShare(container: ContainerNode, id: TileId): ContainerNode {
+	const tile = container.children.find((child) => child.id === id);
+	const line = tile === undefined ? null : lineOf(tile);
+	if (line === null) return container;
+	const others = membersOf(container, line.id).filter((member) => member.id !== id);
+	const open = others.filter((member) => !member.folded);
+	const heirs = open.length > 0 ? open : others.slice(0, 1);
+	if (heirs.length === 0) return container;
+	const total =
+		heirs.reduce((sum, heir) => sum + (container.sizes[heir.id] ?? 0), 0) +
+		(container.sizes[id] ?? 0);
+	return {...container, sizes: scaled({...container.sizes, [id]: 0}, heirs, total)};
 }
 
 /**

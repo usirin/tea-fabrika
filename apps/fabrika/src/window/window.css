@@ -63,6 +63,15 @@
 	--svc-3: oklch(0.72 0.075 340);
 	--svc-4: oklch(0.72 0.075 120);
 	--svc-5: oklch(0.72 0.075 60);
+	/* One colour per tsh line, as a Chrome tab group's: amber, blue, teal, violet, rose, green.
+	   A line's tiles and strips mix it in at --line-strength (window.css, [data-tint]). */
+	--line-0: oklch(0.78 0.12 80);
+	--line-1: oklch(0.72 0.11 250);
+	--line-2: oklch(0.76 0.1 185);
+	--line-3: oklch(0.72 0.12 300);
+	--line-4: oklch(0.74 0.12 15);
+	--line-5: oklch(0.76 0.11 145);
+	--line-strength: 30%;
 
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -303,6 +312,57 @@ body,
 
 .tile.focused .titlebar {
 	color: var(--text-secondary);
+}
+
+/*
+ * A line's tiles and strips: its tint mixed into the edge at --line-strength, and into the
+ * ground at a sixth of that, a strip's at a third. Only a line of two windows or more has one.
+ */
+[data-tint="0"] {
+	--tint: var(--line-0);
+}
+
+[data-tint="1"] {
+	--tint: var(--line-1);
+}
+
+[data-tint="2"] {
+	--tint: var(--line-2);
+}
+
+[data-tint="3"] {
+	--tint: var(--line-3);
+}
+
+[data-tint="4"] {
+	--tint: var(--line-4);
+}
+
+[data-tint="5"] {
+	--tint: var(--line-5);
+}
+
+.tile[data-tint] {
+	--surface: color-mix(in oklch, var(--tint) calc(var(--line-strength) / 6), var(--n-2));
+	--ground: var(--surface);
+	--border-faint: color-mix(in oklch, var(--tint) var(--line-strength), var(--n-5));
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+.tile[data-tint].focused {
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklch, var(--tint) var(--line-strength), var(--tile-focus));
+}
+
+.tile[data-tint].closing {
+	box-shadow: none;
+}
+
+.strip[data-tint] {
+	background: color-mix(in oklch, var(--tint) calc(var(--line-strength) / 3), var(--surface));
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklch, var(--tint) var(--line-strength), var(--border-faint));
 }
 
 /* A tile's terminal fills its slot, under its title bar, with a small margin, as a terminal app's does. */

@@ -3,6 +3,7 @@ import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {bindingOf, type Does, PREFIX, REPEAT_MS} from "./keys.ts";
 import {
+	type Area,
 	checkTree,
 	createContainer,
 	createTile,
@@ -11,9 +12,13 @@ import {
 	findSibling,
 	findTile,
 	fold,
+	freeTint,
 	isLayoutTree,
 	type LayoutTree,
 	type NodeId,
+	type Orientation,
+	openLine,
+	quiet,
 	remove,
 	resize,
 	type Shown,
@@ -56,6 +61,15 @@ import {
 //   the last open tile                             does not fold: nothing changes
 //   a click on t2's strip, or focus onto t2        t2 opens again, at the size it had
 //   a click on a folded column's strip             every tile in it opens: {type: "unfold", node: "c4"}
+//
+// A line with several windows opens in place, in the tile it was typed in (layout/line.ts):
+//
+//   update(desk, {type: "covered", tile: "t1", runs: [tracker, ticket, runs]})
+//                  t1 shows the tracker over its tsh; t4 and t5, new, show the ticket and the
+//                  runs beside it, one tint for the three; save
+//   the same in a workspace too small for three  t4 and t5 open folded, t1 keeps the whole share
+//   update(desk, {type: "over", run: "runs:1"})  t5 goes: it was the runs' window, with no tsh
+//   Ctrl-C in t4                                  goes to t1's tsh, where the line was typed
 //
 // No timer anywhere: a closing tile waits for its programs, or for the person to say stop.
 //
@@ -111,7 +125,12 @@ export interface Open {
 	readonly closing: readonly TileId[];
 	/** The next number to mint: every id is `t<n>`, `s<n>` or `w<n>` for one `n`, spent once. */
 	readonly next: number;
+	/** The workspace's size in px, as the page last said, or `null` before any page has. */
+	readonly area: Area | null;
 }
+
+/** Which way a line's windows run, for now always: left to right, as a pipe reads. */
+export const LINE: Orientation = "horizontal";
 
 /** The desk: open, or over once its last tile closed. */
 export type Desk = Open | {readonly at: "over"};
@@ -131,8 +150,13 @@ export type DeskMsg =
 	| {readonly type: "fold"; readonly tile: TileId}
 	/** A strip was clicked: open the folded tile, or every tile of the folded container, it stands for. */
 	| {readonly type: "unfold"; readonly node: NodeId}
-	/** A run with a view is in a tile's foreground, started there or attached: it covers the tile's tsh. */
-	| {readonly type: "covered"; readonly tile: TileId; readonly run: Shown}
+	/**
+	 * A line's runs with a view are in a tile's foreground, started there or attached, in the
+	 * line's order. One covers the tile's tsh; several open in place (`openLine`).
+	 */
+	| {readonly type: "covered"; readonly tile: TileId; readonly runs: readonly [Shown, ...Shown[]]}
+	/** The page drew the workspace at this size, in px. */
+	| {readonly type: "area"; readonly width: number; readonly height: number}
 	/** A run with a view ended. */
 	| {readonly type: "over"; readonly run: string}
 	/** How many jobs run in a tile's tsh now. */
@@ -188,6 +212,7 @@ export const DeskSchema = Schema.Union([
 		running: Schema.Record(Schema.String, Schema.Int),
 		closing: Schema.Array(TileIdSchema),
 		next: Schema.Int,
+		area: Schema.NullOr(Schema.Struct({width: Schema.Number, height: Schema.Number})),
 	}),
 	Schema.Struct({at: Schema.Literal("over")}),
 ]);
@@ -243,6 +268,7 @@ export const fresh = (): Open => ({
 	running: {},
 	closing: [],
 	next: 2,
+	area: null,
 });
 
 const blank = (n: number): Workspace => ({
@@ -376,7 +402,9 @@ const yes = (s: Open, tile: TileId): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
 	if (node === null) return [s, []];
-	if (s.closing.includes(tile) || !busy(s, node)) return goneTile(s, tile);
+	// A line's window has no tsh to close: it goes, and its run goes on in the line.
+	if (node.shows.kind === "window" || s.closing.includes(tile) || !busy(s, node))
+		return goneTile(s, tile);
 	return [{...s, closing: [...s.closing, tile]}, [close({tile})]];
 };
 
@@ -450,13 +478,18 @@ const desk = (step: Step): Routed => ({kind: "desk", step});
 const CTRL_B = "\x02";
 const CTRL_C = "\x03";
 
+/** The tile whose tsh runs what this tile shows: its own, or the one its line was typed in. */
+export const tshOf = (tile: TileNode): TileId =>
+	tile.shows.kind === "window" ? tile.shows.line.from : tile.id;
+
 /** A key with the prefix not armed: Ctrl-B arms it; Ctrl-C over a program goes to its tile's tsh. */
 const unarmed = (s: Open, key: string): Routed => {
 	if (key === PREFIX) return desk([{...s, prefix: {armed: true, until: null}}, []]);
 	const tile = focusedOf(s);
-	// The program covers the terminal, so its tsh would never see Ctrl-C: the desk hands it on.
+	// The program covers the terminal, so its tsh would never see Ctrl-C: the desk hands it on, to
+	// the tsh the line was typed in when the tile is one of its windows.
 	if (key === "<c-c>" && tile !== null && tile.shows.run !== null)
-		return desk([s, [send({tile: tile.id, data: CTRL_C})]]);
+		return desk([s, [send({tile: tshOf(tile), data: CTRL_C})]]);
 	return {kind: "tile"};
 };
 
@@ -530,22 +563,48 @@ const clicked = (s: Open, tile: TileId): Step => {
 	return [next, keep(next)];
 };
 
-const covered = (s: Open, tile: TileId, run: Shown): Step => {
+/**
+ * A line is in a tile's foreground. One run covers the tile, and nothing is kept: a kept desk
+ * shows no run. Several open in place (`openLine`), each window after the first in a tile minted
+ * here, and the desk is kept, as its tiles changed. A line typed into a tile that is gone, or
+ * that is a window with no tsh of its own, changes nothing.
+ */
+const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (ws === undefined || node === null) return [s, []];
-	return [withWorkspace(s, {...ws, layout: setShows(ws.layout, tile, {kind: "tsh", run})}), []];
+	if (ws === undefined || node === null || node.shows.kind === "window") return [s, []];
+	const more = runs.length - 1;
+	const layout = openLine(ws.layout, tile, {
+		runs,
+		tint: freeTint(s.workspaces.map((w) => w.layout)),
+		orientation: LINE,
+		ids: {tiles: Array.from({length: more}, (_, k) => `t${s.next + k}`), container: `c${s.next}`},
+		area: s.area,
+	});
+	if (layout === ws.layout) return [s, []];
+	if (more === 0) return [withWorkspace(s, {...ws, layout}), []];
+	const next = {...withWorkspace(s, {...ws, layout}), next: s.next + more};
+	return [next, keep(next)];
 };
 
-/** A run ended: each tile it covered shows its tsh again. */
+/**
+ * A run ended: each tile it covered shows its tsh again, and each window of a line it was goes,
+ * its space back to the line. The last tile going empties the desk.
+ */
 const over = (s: Open, run: string): Step => {
-	let next = s;
+	let next: Desk = s;
+	const cmds: DeskCmd[] = [];
 	for (const {tile} of showing(s, run)) {
+		if (next.at !== "open") break;
 		const ws = whereIs(next, tile.id);
-		if (ws !== undefined)
-			next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
+		if (ws === undefined) continue;
+		if (tile.shows.kind === "window") {
+			next = drop(next, ws, [tile.id]);
+			cmds.push(stop({tile: tile.id}));
+		} else next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
 	}
-	return next === s ? [s, []] : [next, keep(next)];
+	if (next === s) return [s, []];
+	return [next, [...cmds, ...(next.at === "over" ? [empty({})] : keep(next))]];
 };
 
 /** A tile the main process says is closing: its question is "stop it now?" from here on. */
@@ -561,7 +620,9 @@ export const deskMachine = defineMachine({
 		if (loaded !== null && loaded.at === "open")
 			return [
 				loaded,
-				loaded.workspaces.flatMap((ws) => tilesOf(ws).map((t) => open({tile: t.id}))),
+				loaded.workspaces.flatMap((ws) =>
+					tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [] : [open({tile: t.id})])),
+				),
 			];
 		const s = fresh();
 		return [s, [open({tile: "t1"}), ...keep(s)]];
@@ -581,7 +642,8 @@ export const deskMachine = defineMachine({
 		}),
 		fold: onOpen((s, m) => folded(s, activeOf(s), m.tile)),
 		unfold: onOpen((s, m) => unfolded(s, m.node)),
-		covered: onOpen((s, m) => covered(s, m.tile, m.run)),
+		covered: onOpen((s, m) => covered(s, m.tile, m.runs)),
+		area: onOpen((s, m) => [{...s, area: {width: m.width, height: m.height}}, []]),
 		over: onOpen((s, m) => over(s, m.run)),
 		jobs: onOpen((s, m) =>
 			whereIs(s, m.tile) === undefined
@@ -611,7 +673,8 @@ const decodeSaved = Schema.decodeUnknownOption(Saved);
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the
  * desk. The host reads it as it starts. A tile covered by a run shows its tsh again: after the
- * host stopped nothing runs, and `attach` brings the run back. The prefix is not armed, nothing
+ * host stopped nothing runs, and `attach` brings the run back; a line's other windows go, their
+ * space back to the tile it was typed in (`quiet`). The prefix is not armed, nothing
  * is asked, and nothing is closing.
  */
 export const restore = (raw: unknown): Open | null => {
@@ -622,11 +685,9 @@ export const restore = (raw: unknown): Open | null => {
 	let top = 0;
 	const workspaces: Workspace[] = [];
 	for (const ws of saved.workspaces) {
-		let layout = ws.layout;
-		for (const t of [...tiles(layout.root)])
-			if (t.shows.run !== null) layout = setShows(layout, t.id, TSH);
+		if (checkTree(ws.layout).length > 0) return null;
+		const layout = quiet(ws.layout);
 		const left = [...tiles(layout.root)];
-		if (checkTree(layout).length > 0) return null;
 		for (const t of left) {
 			const n = TILE_ID.exec(t.id);
 			if (n === null || seen.has(t.id)) return null;
@@ -651,5 +712,6 @@ export const restore = (raw: unknown): Open | null => {
 		running: {},
 		closing: [],
 		next: Math.max(saved.next, top + 1),
+		area: null,
 	};
 };

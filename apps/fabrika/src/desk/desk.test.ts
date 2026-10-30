@@ -142,7 +142,7 @@ describe("the desk", () => {
 	it("asks a closing tile to stop now, and y stops it", () => {
 		const covered = fold([
 			...prefixed("|"),
-			{type: "covered", tile: "t2", run: counter},
+			{type: "covered", tile: "t2", runs: [counter]},
 			...prefixed("x", 10),
 			{type: "key", key: "y", at: 20},
 		]).s;
@@ -171,7 +171,7 @@ describe("the desk", () => {
 	});
 
 	it("covers a tile with a foreground run, hands Ctrl-C to its tsh, and shows tsh again when it ends", () => {
-		const covered = fold([{type: "covered", tile: "t1", run: counter}]).s;
+		const covered = fold([{type: "covered", tile: "t1", runs: [counter]}]).s;
 		expect(findTile(activeOf(opened(covered)).layout, "t1")?.shows).toEqual({
 			kind: "tsh",
 			run: counter,
@@ -334,7 +334,7 @@ describe("a kept desk", () => {
 	it("drops what ran: a covered tile shows tsh, and nothing is closing", () => {
 		const ran = fold([
 			...prefixed("|"),
-			{type: "covered", tile: "t1", run: counter},
+			{type: "covered", tile: "t1", runs: [counter]},
 			{type: "closing", tile: "t2"},
 		]).s;
 		const back = restore(savedOf(opened(ran)));
@@ -373,6 +373,161 @@ describe("a kept desk", () => {
 			})),
 		};
 		expect(restore(old)).toBeNull();
+	});
+});
+
+describe("a line with several windows", () => {
+	const tracker = {id: "tracker:1", program: "tracker"};
+	const ticket = {id: "ticket:1", program: "ticket"};
+	const runs = {id: "runs:1", program: "runs"};
+	const line = [tracker, ticket, runs] as const;
+	const layout = (s: Desk) => activeOf(opened(s)).layout;
+	const sizes = (s: Desk) => layout(s).root.sizes;
+	/** The same keys, each share within a hundredth of a percent. */
+	const near = (got: Readonly<Record<string, number>>, want: Readonly<Record<string, number>>) => {
+		expect(Object.keys(got).sort()).toEqual(Object.keys(want).sort());
+		for (const [id, size] of Object.entries(want)) expect(got[id]).toBeCloseTo(size);
+	};
+	const tile = (s: Desk, id: string) => findTile(layout(s), id);
+	/** t1 and t2 side by side, focus on t2, in a workspace this wide. */
+	const beside = (width: number) => fold([{type: "area", width, height: 860}, ...prefixed("|")]).s;
+
+	it("opens in place, beside the tile it was typed in, each window a third of its share", () => {
+		const {s, cmds} = fold([{type: "covered", tile: "t2", runs: line}], beside(1440));
+		expect(ids(s)).toEqual(["t1", "t2", "t3", "t4"]);
+		expect(layout(s).root.orientation).toBe("horizontal");
+		expect(sizes(s).t1).toBeCloseTo(50);
+		for (const id of ["t2", "t3", "t4"]) expect(sizes(s)[id]).toBeCloseTo(50 / 3);
+		const own = {id: "tracker:1", from: "t2", tint: 0};
+		expect(tile(s, "t2")?.shows).toEqual({kind: "line", run: tracker, line: own});
+		expect(tile(s, "t3")?.shows).toEqual({kind: "window", run: ticket, line: own});
+		expect(tile(s, "t4")?.shows).toEqual({kind: "window", run: runs, line: own});
+		expect(layout(s).root.children.every((c) => c.tag === "tile" && !c.folded)).toBe(true);
+		// Focus stays where the line was typed, and only t2 has a tsh to open.
+		expect(focus(s)).toBe("t2");
+		expect(cmds.map((c) => c.type)).toEqual(["save"]);
+		expect(opened(s).next).toBe(5);
+	});
+
+	it("opens the windows after the first folded when they would be smaller than 220px", () => {
+		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(900)).s;
+		expect(tile(s, "t2")?.folded).toBe(false);
+		expect(tile(s, "t3")?.folded).toBe(true);
+		expect(tile(s, "t4")?.folded).toBe(true);
+		// The first window keeps the tile's whole share; the strips hold none.
+		near(sizes(s), {t1: 50, t2: 50, t3: 0, t4: 0});
+	});
+
+	it("unfolds a window with a share of the line's own space, never an unrelated tile's", () => {
+		const tight = fold([{type: "covered", tile: "t2", runs: line}], beside(900)).s;
+		const one = fold([{type: "unfold", node: "t3"}], tight).s;
+		near(sizes(one), {t1: 50, t2: 25, t3: 25, t4: 0});
+		expect(focus(one)).toBe("t3");
+		const both = fold([{type: "unfold", node: "t4"}], one).s;
+		expect(sizes(both).t1).toBeCloseTo(50);
+		for (const id of ["t2", "t3", "t4"]) expect(sizes(both)[id]).toBeCloseTo(50 / 3);
+		// Folding one again hands its share back to the line's other open windows.
+		const back = fold([{type: "fold", tile: "t4"}], both).s;
+		expect(sizes(back).t1).toBeCloseTo(50);
+		expect(sizes(back).t2).toBeCloseTo(25);
+		expect(sizes(back).t3).toBeCloseTo(25);
+	});
+
+	it("nests the line in the tile's place when it runs across the tile's container", () => {
+		const s = fold(
+			[
+				{type: "area", width: 1440, height: 860},
+				...prefixed("-"),
+				{type: "covered", tile: "t2", runs: line},
+			],
+			start,
+		).s;
+		const root = layout(s).root;
+		expect(root.orientation).toBe("vertical");
+		const [top, row] = root.children;
+		expect(top?.id).toBe("t1");
+		expect(row?.tag === "container" ? [row.id, row.orientation] : null).toEqual([
+			"c3",
+			"horizontal",
+		]);
+		expect(row?.tag === "container" ? row.children.map((c) => c.id) : null).toEqual([
+			"t2",
+			"t3",
+			"t4",
+		]);
+		expect(root.sizes).toEqual({t1: 50, c3: 50});
+	});
+
+	it("hands Ctrl-C in a window to the tsh the line was typed in", () => {
+		const s = fold(
+			[
+				{type: "covered", tile: "t2", runs: line},
+				{type: "click", tile: "t4"},
+			],
+			beside(1440),
+		).s;
+		expect(fold([{type: "key", key: "<c-c>", at: 0}], s).cmds).toEqual([
+			{type: "send", tile: "t2", data: "\x03"},
+		]);
+	});
+
+	it("takes a window away when its run ends, its space back to the line", () => {
+		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(1440)).s;
+		const {s: after, cmds} = fold([{type: "over", run: runs.id}], s);
+		expect(ids(after)).toEqual(["t1", "t2", "t3"]);
+		expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
+		expect(sizes(after).t1).toBeCloseTo(50);
+		expect(sizes(after).t2).toBeCloseTo(25);
+		const done = fold(
+			[
+				{type: "over", run: ticket.id},
+				{type: "over", run: tracker.id},
+			],
+			after,
+		).s;
+		expect(ids(done)).toEqual(["t1", "t2"]);
+		expect(sizes(done).t2).toBeCloseTo(50);
+		expect(tile(done, "t2")?.shows).toEqual({kind: "tsh", run: null});
+	});
+
+	it("closes a window at once on y: it has no tsh, and its run goes on in the line", () => {
+		const s = fold(
+			[
+				{type: "covered", tile: "t2", runs: line},
+				{type: "click", tile: "t3"},
+				...prefixed("x", 10),
+				{type: "key", key: "y", at: 20},
+			],
+			beside(1440),
+		);
+		expect(ids(s.s)).toEqual(["t1", "t2", "t4"]);
+		expect(opened(s.s).closing).toEqual([]);
+		expect(s.cmds).toContainEqual({type: "stop", tile: "t3"});
+	});
+
+	it("gives each line its own tint, and a run alone none", () => {
+		const one = fold([{type: "covered", tile: "t2", runs: line}], beside(2400)).s;
+		const two = fold(
+			[
+				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, runs]},
+				{type: "covered", tile: "t4", runs: [counter]},
+			],
+			one,
+		).s;
+		const t1 = tile(two, "t1")?.shows;
+		expect(t1?.kind === "line" ? t1.line.tint : null).toBe(1);
+		expect(tile(two, "t4")?.shows.kind).toBe("window");
+		const alone = fold([{type: "covered", tile: "t1", runs: [counter]}], beside(1440)).s;
+		expect(tile(alone, "t1")?.shows).toEqual({kind: "tsh", run: counter});
+	});
+
+	it("is not kept: a desk read back has the tile it was typed in, at its whole share", () => {
+		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(1440)).s;
+		const back = restore(JSON.parse(JSON.stringify(savedOf(opened(s)))));
+		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+		expect(back === null ? null : sizes(back).t2).toBeCloseTo(50);
+		const [, cmds] = deskMachine.init(back, undefined);
+		expect(cmds.map((c) => (c.type === "open" ? c.tile : c.type))).toEqual(["t1", "t2"]);
 	});
 });
 
