@@ -13,9 +13,10 @@ export class Experiments extends Context.Service<Experiments, {
 	readonly list: () => Effect.Effect<readonly Experiment[]>;
 	readonly open: (n: ExperimentId) => Effect.Effect<ExperimentPage>;   // the write-up, as data, and its runs
 	readonly start: (n: ExperimentId, run: RunPlan) => Effect.Effect<RunId>;
-	readonly log: (run: RunId, what: RunLog) => Effect.Effect<void>;     // a metric, a score, an artifact
+	readonly log: (run: RunId, what: RunLog) => Effect.Effect<void>;     // a metric, a case's result, an artifact
 	readonly end: (run: RunId, how: RunEnd) => Effect.Effect<void>;
 	readonly runs: (n: ExperimentId) => Effect.Effect<readonly RunRecord[]>; // what compare reads
+	readonly cases: (run: RunId) => Effect.Effect<readonly CaseResult[]>;   // and, case by case, this
 }>()("Experiments") {}
 
 // One run's record: what field/runs.jsonl holds by hand today, as one shape.
@@ -28,9 +29,18 @@ const RunRecord = Schema.Struct({
 	job: TraceId,                                           // the run's job: its trace and its agents' content
 });
 
+// One case's result in a run: Langfuse's dataset run item and its scores.
+const CaseResult = Schema.Struct({
+	run: RunId,
+	item: Schema.String,                                    // the case: "ticket-41", "pr-44"
+	output: Schema.Unknown,                                 // what came back; a big one goes in Blobs, by hash
+	scores: Schema.Record(Schema.String, Schema.Number),    // agreed: 1, ms: 840
+});
+
 // tsh> experiment 170 --run --cases 5     estimate $0.40 for 5 of 120 cases; ask the owner
-// owner answers yes                        5 cases run as one job; their scores land as metrics
-// tsh> compare 170                         this run against the last, metric by metric
+// owner answers yes                        5 cases run as one job; each case logs its result
+// tsh> compare 170                         this run against the last, metric by metric,
+//                                          then the cases whose scores changed
 ```
 
 ## The three goals of experiment 170
@@ -62,7 +72,7 @@ const RunRecord = Schema.Struct({
 |---|---|
 | `experiments` | the list: number, title, latest run, its headline metric |
 | `experiment 170` | one experiment: its write-up drawn from data, its runs |
-| `compare 170` | two runs, metric by metric |
+| `compare 170` | two runs, metric by metric, then case by case |
 | `markdown` | draws any markdown it is given, like `glow` or `less`; not only for experiments |
 | a run | a job that starts the `claude` and `codex` programs (agents are programs, proposed in [PR 190](https://github.com/usirin/tea-fabrika/pull/190)) |
 
@@ -88,6 +98,19 @@ const RunRecord = Schema.Struct({
 - The run's job keeps its trace in its own JobRecord, as every job does
   ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md)).
   The run record points at it by trace id.
+
+## Each case keeps its own result
+
+- Most of our experiments ask a question case by case: did Jev agree with
+  the agent on ticket 41, did a check raise a false alarm on PR 44. A run's
+  metrics are totals, so they show that agreement moved, not on which cases.
+- So a run holds one `CaseResult` per case: the case, what came back, and its
+  scores. This is Langfuse's dataset run item with its scores
+  ([data model](https://langfuse.com/docs/evaluation/experiments/data-model)).
+  MLflow keeps the same thing as an evaluation table on the run.
+- `compare` reads both: the totals first, then the cases whose scores changed.
+- A run's metrics can be worked out from its cases; a run without cases
+  (a flood test, a timing) logs its metrics directly.
 
 ## Money: estimate, try a few, then the rest
 
@@ -123,7 +146,11 @@ spawn   5 cases first; the owner looks; then the rest, under the same limit
   doubt: whether a run record with free-form `params` and `metrics` is
   enough for every old experiment. The survey found 6 names for cost and 58
   result files with no number; most old ones would stay read-only
-  write-ups.
+  write-ups. New experiments are written to it, with one result per case,
+  so for them the doubt is smaller.
+- **75% on one result per case.** The doubt: whether a case's output is
+  often too big for a row. Blobs takes the big ones; how often that happens
+  shows in the first runs.
 - **60% on MLflow's and Langfuse's words over a shape of our own.** They fit
   the run record well. The doubt is whether "dataset" fits our cases, which
   are often tickets read from the ledger.
