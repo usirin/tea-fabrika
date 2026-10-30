@@ -39,6 +39,7 @@
 //   STEP=examtest the exam step on a made-up set of the real set's shape, one case of each of its
 //                 8 kinds, through the real command with FAKE=1: $0
 //   STEP=decide FRESH=<set> also prints every finished exam on that set against 163-exam-bar.json
+//   STEP=field FRESH=<set> one field/runs.jsonl row per exam answer
 //
 // Node at the edge, said out loud: `node:fs` for the data and cache files, as 162 does;
 // `node:child_process` for `git` on the clone and to run this script in the exam test.
@@ -892,8 +893,16 @@ if (STEP === "examtest") {
 // ---------------------------------------------------------------- around: field rows
 
 if (STEP === "field") {
-	// PART=3: only the answers of briefs that read code, part 3's own.
-	const rows = process.env.PART === "3" ? records.filter((r) => r.code !== undefined) : records;
+	// PART=3: only the answers of briefs that read code, part 3's own. FRESH=<set>: the exam's answers.
+	const fresh = process.env.FRESH;
+	const examCases = fresh === undefined ? [] : readJson(fresh, ExamSet).cases;
+	const rows =
+		fresh !== undefined
+			? book.records
+			: process.env.PART === "3"
+				? records.filter((r) => r.code !== undefined)
+				: records;
+	const rightOf = (id: string) => [...set.cases, ...examCases].find((c) => c.id === id)?.right;
 	for (const r of rows)
 		console.log(
 			JSON.stringify({
@@ -903,7 +912,7 @@ if (STEP === "field") {
 				model: r.modelId,
 				effort: r.model === "sol" ? "medium" : null,
 				outcome: r.said === null ? "stopped" : "pass",
-				why: `experiment 163: brief ${r.brief} (${r.hash}) on the ${r.half} half, first title and body, ${r.code === undefined ? "no tools" : `reading the code at ${r.code.at.slice(0, 12)}`} (run ${r.run}); said ${r.said}${r.rule === null ? "" : ` (${r.rule})`}, really ${set.cases.find((c) => c.id === r.case)?.right}; posted nothing`,
+				why: `experiment 163: brief ${r.brief} (${r.hash}) ${r.half === "exam" ? "on the fresh exam" : `on the ${r.half} half`}, first title and body, ${r.code === undefined ? "no tools" : `reading the code at ${r.code.at.slice(0, 12)}`} (run ${r.run}); said ${r.said}${r.rule === null ? "" : ` (${r.rule})`}, really ${rightOf(r.case)}; posted nothing`,
 				// The conversation's size at its last turn where known (opus reading code); else the call's total.
 				tokens: r.code?.context ?? r.tokens.input + r.tokens.output,
 				tools: r.code?.reads ?? null,
