@@ -1,5 +1,14 @@
 import {describe, expect, it} from "@effect/vitest";
-import {Agent, call, ear, memoryStorage, type Storage, start, tell} from "@kampus/fabrika";
+import {
+	Agent,
+	CAPACITY,
+	call,
+	ear,
+	memoryStorage,
+	type Storage,
+	start,
+	tell,
+} from "@kampus/fabrika";
 import {type AgentFlags, fakeProviders, type Story} from "@kampus/fabrika/agents/program";
 import {Duration, Effect, Schema} from "effect";
 import {codex} from "./index.ts";
@@ -148,6 +157,50 @@ describe("codex", () => {
 		}),
 	);
 
+	it.live("a cancel is taken while a turn runs, with the mailbox full of prompts behind it", () =>
+		Effect.gen(function* () {
+			const w = world();
+			const ended = ear<{readonly turn: number; readonly stop: string}>();
+			const said = ear<unknown>();
+			const started = yield* start(
+				codex,
+				flags(),
+				{ended: ended.hear, said: said.hear},
+				{id: "codex:busy", storage: memoryStorage()},
+			).pipe(Effect.provideService(Agent.Agents, w.agents));
+			if (started.kind !== "running") return yield* Effect.die("not started");
+			yield* tell(started.run, "prompt", "hang");
+			// Turn 1 runs: every prompt told now waits in the mailbox, until it is full.
+			yield* until(() => said.values.length > 0);
+			const words: Record<string, number> = {};
+			for (let i = 0; i <= CAPACITY; i++) {
+				const word = yield* tell(started.run, "prompt", "sort #7").pipe(
+					Effect.catchTag("MailboxFull", (full) => Effect.succeed(full._tag)),
+				);
+				words[word] = (words[word] ?? 0) + 1;
+			}
+			const behind = started.run.mailbox();
+			const told = yield* tell(started.run, "cancel", "now");
+			const [first] = yield* ended.upTo(1);
+			yield* started.stop;
+			const none = {length: 0, waiting: 0};
+			expect({words, behind, told, first: [first?.turn, first?.stop]}).toEqual({
+				words: {queued: CAPACITY, MailboxFull: 1},
+				behind: {
+					length: CAPACITY,
+					inputs: {
+						prompt: {length: CAPACITY, waiting: 0},
+						allow: none,
+						refuse: none,
+						cancel: none,
+					},
+				},
+				told: "queued",
+				first: [1, "cancelled"],
+			});
+		}),
+	);
+
 	it.live("a dollar cap: Codex cannot hold one, so the turn fails at start, and says why", () =>
 		Effect.gen(function* () {
 			const heard = yield* once("sort #7", {usd: 0.5});
@@ -176,49 +229,55 @@ describe("codex", () => {
 		}),
 	);
 
-	it.live(
-		"a start after a stop mid-turn keeps the conversation and sends the cut-off turn again",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				const storage: Storage = memoryStorage();
-				const first = yield* Effect.scoped(
-					Effect.gen(function* () {
-						const said = ear<unknown>();
-						const started = yield* start(
-							codex,
-							flags(),
-							{said: said.hear},
-							{id: "codex:kept", storage},
-						).pipe(Effect.provideService(Agent.Agents, w.agents));
-						if (started.kind !== "running") return yield* Effect.die("not started");
-						yield* tell(started.run, "prompt", "hang once");
-						yield* until(() => said.values.length > 0);
-						return started.run.machines.conversation.state();
-					}),
-				);
-				expect(first).toMatchObject({told: 1, turns: [{n: 1, prompt: "hang once", end: null}]});
-				const hears = ear<{readonly resent?: number; readonly stop?: string}>();
-				yield* Effect.scoped(
-					Effect.gen(function* () {
-						const started = yield* start(
-							codex,
-							flags(),
-							{started: hears.hear, ended: hears.hear},
-							{id: "codex:kept", storage},
-						).pipe(Effect.provideService(Agent.Agents, w.agents));
-						if (started.kind !== "running") return yield* Effect.die("not started");
-						yield* until(() => hears.values.length > 0);
-						// Sent again: the provider carries the session on, and the turn hangs again until cancelled.
-						yield* until(() => w.fake.seen.started.length === 2);
-						yield* tell(started.run, "cancel", "now");
-						yield* until(() => hears.values.length === 2);
-					}),
-				);
-				expect(hears.values).toMatchObject([{resent: 1}, {stop: "cancelled"}]);
-				expect(w.fake.seen.started.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
-			}),
-	);
+	// `prompt` closed at the second start: `serve` returns at once, and the cancel must still reach the resent turn.
+	for (const closed of [false, true])
+		it.live(
+			`a start after a stop mid-turn keeps the conversation and sends the cut-off turn again (prompt ${closed ? "closed" : "open"})`,
+			() =>
+				Effect.gen(function* () {
+					const w = world();
+					const storage: Storage = memoryStorage();
+					const first = yield* Effect.scoped(
+						Effect.gen(function* () {
+							const said = ear<unknown>();
+							const started = yield* start(
+								codex,
+								flags(),
+								{said: said.hear},
+								{id: "codex:kept", storage},
+							).pipe(Effect.provideService(Agent.Agents, w.agents));
+							if (started.kind !== "running") return yield* Effect.die("not started");
+							yield* tell(started.run, "prompt", "hang once");
+							yield* until(() => said.values.length > 0);
+							return started.run.machines.conversation.state();
+						}),
+					);
+					expect(first).toMatchObject({told: 1, turns: [{n: 1, prompt: "hang once", end: null}]});
+					const hears = ear<{readonly resent?: number; readonly stop?: string}>();
+					const after = yield* Effect.scoped(
+						Effect.gen(function* () {
+							const started = yield* start(
+								codex,
+								flags(),
+								{started: hears.hear, ended: hears.hear},
+								{id: "codex:kept", storage},
+							).pipe(Effect.provideService(Agent.Agents, w.agents));
+							if (started.kind !== "running") return yield* Effect.die("not started");
+							if (closed) started.close("prompt");
+							yield* until(() => hears.values.length > 0);
+							// Sent again: the provider carries the session on, and the turn hangs again until cancelled.
+							yield* until(() => w.fake.seen.started.length === 2);
+							yield* tell(started.run, "cancel", "now");
+							yield* until(() => hears.values.length === 2);
+							// Closed: the run ends once the resent turn has. Open: it waits for the next prompt.
+							return closed ? (yield* started.run.ended).kind : "still running";
+						}),
+					);
+					expect(after).toBe(closed ? "ended" : "still running");
+					expect(hears.values).toMatchObject([{resent: 1}, {stop: "cancelled"}]);
+					expect(w.fake.seen.started.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
+				}),
+		);
 
 	it.live("the answer is plain JSON: --schema holds the label, and loses the ticket's check", () =>
 		Effect.gen(function* () {
