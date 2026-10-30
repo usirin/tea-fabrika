@@ -6,6 +6,17 @@ scorer? Part 1 builds every piece and proves the harness on 5 cases. It does
 not score the brief. [Part 2](#part-2-tune-and-lock) tunes the brief on the
 open half and scores it once on the locked half. [Part 3](#part-3-triage-reads-the-code)
 lets triage read the code and gets a brief ready for a fresh exam.
+[Part 4](#part-4-triage-in-two-close-on-a-fact-ask-on-worth) splits triage in
+two: close on a fact, ask the owner on worth.
+
+**Part 4's answer: wrong closes drop, and asks take their place.** Brief v6
+closes only on a fact it shows and asks the owner on worth and on every
+security ticket, with the pull requests open at filing in reach. On the 63
+exam tickets GPT sol closed 1 of 32 built tickets (v5: 4) and opus 2 of 27
+(v5: 10 of 32). But 48% to 66% of answers are asks: about 105 to 190 a week at
+phoenix's filing rate. 12 of 15 sampled asks could be answered from the trace
+alone. Neither set is blind any more; v6 ran once, as written. Opus $11.49
+(stopped by the $12 cap at 51 of 63).
 
 **Part 3's answer: reading the code helps, and v5 is ready for the exam.**
 With read-only access to phoenix's code as it was on the day each ticket was
@@ -875,6 +886,267 @@ After the exam:
   tickets. It may be how each reads "harm small", or how far each reads.
 - **Another day.** One run of each, one model id each, codex-cli 0.165.0.
 
+## Part 4: triage in two (close on a fact, ask on worth)
+
+Run on 2026-10-30, after the owner split triage in two: the model checks facts
+in the code and closes only on a clear fact; when a real fault turns on worth,
+it asks the owner, with its trace.
+
+**Answer: wrong closes drop a lot, and the price is asks.** With brief v6,
+written once and run as written, GPT sol closed 1 of 32 built exam tickets
+(v5: 4) and opus 2 of the 27 it answered (v5: 10 of 32). Both models now ask
+on #4208 and #4313, and cite the open pull requests that hold the code. But
+48% to 66% of all answers are asks. At phoenix's filing rate that is about 105
+to 190 asks a week. 12 of 15 sampled asks could be answered from the trace
+alone.
+
+```ts
+// Part 4's shape: three answers, each with its trace, and the open pull requests in the copy.
+type Triage =
+  | { answer: "close"; why: "duplicate" | "fixed" | "absent" | "churn"; of: number | null; trace: string }
+  | { answer: "keep";  why: "fault" | "feature"; trace: string }
+  | { answer: "ask";   why: "worth" | "security" | "unclear"; trace: string; question: string };
+
+const tree = treePool({ ..., extra: (c) => ({ key: `t${c.n}`, files: diffsOpenAt(c) }) });
+// one answer from the exam, GPT sol, #4313 (a security ticket phoenix built):
+{ answer: "ask", why: "security",
+  trace: "comment.react broadcasts toComment(r.comment) unchanged at apps/web/worker/features/pano/mutations.ts:666-667 ... PR #4310 adds owner-scoped sandboxed to that read and shaper without stripping this broadcast",
+  question: "Should the owner-scoped flag be stripped from comment.react broadcasts as latent privacy hardening: build or close?" }
+```
+
+### Neither set is blind any more
+
+- **The 119** were tuned on in parts 2 and 3.
+- **The 63** were seen once, in part 3's exam. Their answers and part 3's
+  misses (#4208, #4313, the 5 owner-closed security gaps) shaped what the
+  owner asked for in part 4.
+- **So no tuning used them.** v6 was written once, from the owner's three
+  answers and v5's fact rules, before any v6 answer came back. It ran once on
+  each set, as written: a measure, not a tune. Two GPT sol answers on #4208 and
+  #4313 were a harness check before the full run; they count as run 1 of those
+  two tickets.
+
+### What changed from part 3
+
+- **Brief v6** (`163-briefs/triage-v6.md`, hash `35e71e146b92`, written fresh
+  from the writing guide). Four steps: trace the claim to a live caller; check
+  the open pull requests; pick the answer (a security ticket is always ask,
+  then each close fact, then keep, then ask); write the trace so someone who
+  has not read the code can check it.
+  - **close** only on a fact: a duplicate (`of` names it), already fixed (file
+    and line, or a merged PR), absent (the code the claim names does not exist
+    and no open PR adds it), or churn (v5's factual rule).
+  - **keep** a confirmed fault on a normal path with clear serious harm, or a
+    feature with no fact against it.
+  - **ask** on worth (a confirmed small or unseen fault), on every security
+    ticket, and when the trace does not settle it. `question` ends in "build or
+    close?".
+- **The code copy now carries the pull requests open at filing.** Main at
+  filing is kept, so a built ticket's own fix never shows. Next to it:
+  - every PR whose `createdAt` is before the filing and that was still open
+    then (from `gh pr list`, read-only; median 8 a ticket, at most 24);
+  - each one at its newest own commit written before the filing (author date,
+    because agents rebase and a rebase resets the committer date), its diff
+    from the parent of its oldest own commit, so main's later work stays out;
+  - the list in the prompt (number, title, files); each diff as a file in the
+    copy, under `open-pull-requests-at-filing/`, cut at 3,000 lines.
+  - Each case gets its own copy (`treePool`'s new `extra`). 593 PR heads were
+    fetched into the clone copy (push off). 379 of 1,716 listings had no own
+    commit from before the filing (a dependency bump, a release PR, or one
+    rewritten later); those show the title only.
+- **The check on #4208 and #4313 holds.** #4208's list has #4204 ("a path-only
+  §CP answer can no longer read as not control plane", 11 files); #4313's has
+  #4310 ("thread the owner-scoped sandboxed flag onto the Comment wire", 14
+  files). Both models cite them in their traces and ask; in part 3 opus closed
+  both as "not there".
+
+### The numbers
+
+GPT sol: 2 runs a ticket on both sets. Opus: 1 run on the 63, stopped by the
+$12 cap at 51 tickets; the calls ran in a seeded order, so the 51 are a random
+draw of the 63. "Tickets" counts a ticket once if any run gave that answer.
+
+| | GPT sol, 63 | GPT sol, 119 | Opus, 51 of 63 |
+|---|---|---|---|
+| answers | 126 | 238 | 51 |
+| wrong closes (built ticket closed) | 1 of 32 tickets, 2 answers | 6 of 78 tickets, 9 answers | 2 of 27 tickets, 2 answers |
+| by fact | churn 2 | duplicate 5, absent 4 | fixed 1, churn 1 |
+| wrong keeps (closed ticket kept) | 4 of 31 tickets, 7 answers | 0 of 41 | 1 of 24 tickets |
+| right closes (answers) | 20 | 45 | 10 |
+| asks | 83 (66%) | 114 (48%) | 32 (63%) |
+| asks by why | worth 46, security 35, unclear 2 | worth 73, security 38, unclear 3 | worth 20, security 11, unclear 1 |
+| asks, really built / closed | 48 / 35 | 77 / 37 | 19 / 13 |
+| same answer both runs | 60 of 63 | 113 of 119 | (1 run) |
+
+- **The wrong closes, by ticket:**
+  - [#5643](https://github.com/kamp-us/phoenix/issues/5643), both models, churn:
+    an agent-filed glossary rewrite phoenix built anyway. Same as part 3. By
+    v6's own rule this is a right churn close; the label says otherwise.
+  - [#3361](https://github.com/kamp-us/phoenix/issues/3361), opus, fixed: a
+    security ticket. The trace is right (the file already used a safe random),
+    but v6 says to always ask on security. One break of that rule in 13 opus
+    security answers; GPT sol asked on all 50 of its own.
+  - The 119 on GPT sol: duplicates #5416 (both runs, as in parts 2 and 3),
+    #6003 and #3682 (both runs); absent #6314, #5092 and #8731. On those three
+    the code the ticket names was on no PR listed: #6314's names are not in the
+    one-PR epic run #6313 either. The work likely sat on a branch with no PR,
+    or the ticket's premise was wrong and phoenix built something else.
+- **The wrong keeps:** on the 63, GPT sol kept #3367 (a duplicate, as a
+  feature, both runs), #6476 (a planning step a decision record asks for, as
+  a feature), #6529 and #6542 (each with a real run going wrong, as faults,
+  both runs). Opus kept #6476. On the 119, no wrong keep at all.
+- **Security, always ask:** GPT sol asked on every security ticket (30 answers
+  on the 63, 20 on the 119). Opus asked on 12 of 13 and closed #3361.
+- **Asks split nearly evenly on what really happened.** Of GPT sol's 83 asks on
+  the 63, phoenix built 48 and closed 35. That is the point of asking: the
+  model cannot tell these apart, and phoenix did not decide them the same way
+  either.
+
+Against part 3's v5 on the same 63 tickets:
+
+- GPT sol: wrong closes 4 tickets to 1; closed tickets kept 15 to 4; right
+  closes 32 answers of 126 to 20 of 126.
+- Opus: wrong closes 10 of 32 to 2 of 27; closed tickets kept 11 to 1; right
+  closes 42 of 126 answers (33%) to 10 of 51 (20%).
+- The rest became asks. v6 gives up some right closes to stop wrong ones.
+
+### The ask load
+
+`STEP=load`: GitHub's search counts 2,468 phoenix issues filed in the 60 days
+to 2026-10-30, about 288 a week. In a read of the newest 1,000, 158 (16%) are
+epics, decision tickets, spikes, grilling sessions, maps or main alarms, which
+triage may skip.
+
+| Run | Ask share | Asks a week at 288 |
+|---|---|---|
+| GPT sol, 63 | 66% | about 190 |
+| GPT sol, 119 | 48% | about 138 |
+| Opus, 51 of 63 | 63% | about 181 |
+| GPT sol, random built tickets only (24 + 60 answers) | 50% and 47% | about 134 to 144 |
+| Opus, random built tickets only | 36% | about 105 |
+
+- **Both sets lean hard.** Half the 63 are code-read safety tickets, a sixth
+  security. The random built tickets are the nearest thing to phoenix's real
+  mix on the keep side, and they still ask 36% to 50% of the time.
+- **So about 100 to 190 asks a week, 15 to 27 a day.** At 30 seconds each,
+  that is about 50 to 95 minutes of the owner's week.
+
+### Can the owner answer an ask from its trace?
+
+15 asks, drawn with seed 1634 from all 229 asks across both models and sets
+(`STEP=sample`). I read each trace and question with only the ticket's title,
+and asked one thing: could the owner say "build" or "close" now, without
+opening the code or the ticket? Yes needs all three: the trace says what the
+code does and where (file and line, or the PR); it says the harm or what is
+missing; and the question is one yes-or-no call.
+
+- **Yes, 12 of 15:** #7952, #10139, #8479 (both models), #8672, #6471, #9623,
+  #6330, #10066, #10138, #1810 (GPT sol), #9826.
+- **No, 3 of 15:**
+  - #1810 on opus: right and complete, but the question offers three fixes
+    (a karma gate, inert votes or a rate limit). A real design call; not
+    seconds.
+  - #9983 on GPT sol: the diff was cut before the code it needed, and the
+    question asks to "run the two-account spike". It needs work first.
+  - #8057 on GPT sol, `unclear`: the trace could not confirm the fault. The
+    owner would have to look.
+- **Worth knowing:** 7 of the 15 questions lean on the answer ("despite no
+  observed failure", "a hypothetical wrong-path merge"). That framing may
+  push the owner to close. The owner's real answers on these 15 were 7 built,
+  8 closed.
+- **How sure:** one reader, me, and the reader also wrote the brief. A second
+  reader, or the owner timing a real batch, would settle it.
+
+### Proposed bar (needs the owner)
+
+The old bar had two answers. These lines fit three. **Proposed, not
+approved;** the owner sets the numbers.
+
+| Line | Proposed | v6 now | Why |
+|---|---|---|---|
+| wrong closes, built tickets | at most 1 in 30 (about 3%) | GPT sol 1 of 32, opus 2 of 27 | a wrong close is work nobody sees again; with asks as the way out, a close should be a fact |
+| security closed | 0 | GPT sol 0, opus 1 (#3361) | the owner decides every security ticket |
+| wrong keeps, closed tickets | at most 10% | GPT sol 4 of 31 (13%), opus 1 of 24 | a wrong keep costs a build, cheaper than a wrong close |
+| ask load | a weekly budget the owner names, for example 50 | about 105 to 190 | this is the owner's time |
+| answerable asks | at least 12 of 15 sampled | 12 of 15 | an ask that needs digging is not a seconds call |
+
+- **Why these numbers:** 3% is v6 on GPT sol, rounded up, so the line says
+  "no worse than now"; 10% keeps today's cheap-error room; 50 a week is about
+  7 a day. Confidence 60%: none of these is measured against what the owner
+  will put up with. The ask budget is the line that decides if v6 is usable,
+  and only the owner can set it.
+- **v6 fails the ask line by 2 to 4 times at any budget near 50.** The next
+  move is not a tighter close rule. It is to make asks cheaper (a batch view,
+  "build or close?" one tap each) or fewer (let the owner rule a class once,
+  such as "missing tests for working code: close", and turn that ruling into a
+  close fact).
+
+### What it cost
+
+| Run | Answers | Dollars | Input tokens (cached) | Output tokens |
+|---|---|---|---|---|
+| GPT sol, 63 and 119 | 364 | plan | 40,190,985 (30,302,080) | 256,214 |
+| Opus, 63 (stopped at 51) | 51 | $11.49 | 4,475,507 (3,407,713) | 109,996 |
+
+- Opus mean $0.23 an answer, median 8 reads and 18 s. DRY=1 said $9.32 for
+  all 63 at part 3's mean ($0.148); v6 also reads diffs, so it cost 52% more an
+  answer, and the cap stopped it at 51. Part 4's opus spend is $11.49 of $12.
+- GPT sol median about 23 s and 4 reads an answer.
+- `field/runs.jsonl` has a row per answer (415); `field/notes.jsonl` notes
+  2026-10-30-11 to 13.
+
+### Who did what
+
+- **This repo's harness:** brief v6, the open-PR read (`STEP=prs`), the code
+  copies with each case's diffs, the run, the numbers and the sample, in
+  `163-triage-ask.ts` and `lib/triage-ask.ts`. The live turns in
+  `lib/brief-eval-live.ts` now take any answer's shape.
+- **Opus:** the Claude Agent SDK on its own login, `claude-opus-5-5`, Read,
+  Grep and Glob in a read-only copy, the brief as its system prompt.
+- **GPT sol:** `gpt-6.1-sol`, effort medium, through this repo's Codex adapter
+  with the folder read-only, on the ChatGPT plan, no OpenAI key.
+- **The labels are part 1 to 3's:** today's fabrika's for the 119, and what
+  really happened (a merged PR or a person's close) for the 63. Phoenix was
+  only read: the PR list and PR heads through `gh` and `git fetch`. Nothing
+  was written to phoenix. Names in the saved traces are masked as `[name]`
+  (none came up); two traces named phoenix's preview host, masked as `[a
+  Cloudflare host]`.
+
+### What part 4 means
+
+1. **Keep the split.** Closing only on a shown fact removes most wrong closes
+   on both models, and the two models no longer land on opposite sides.
+   Confidence 80%: the drop is large (4 to 1, 10 to 2) but on sets that are no
+   longer blind.
+2. **The open pull request list was worth adding.** It fixed the two cases
+   part 3 named, and models used it unprompted on other tickets (#6471,
+   #10066, #8672 trace into PR diffs). Confidence 75%; work on a branch with no
+   PR still looks absent (#6314, #5092, #8731).
+3. **The ask load is the new problem, and it is the owner's.** 105 to 190 a
+   week is too many for one person to answer well. Make asks cheap or rule
+   classes once; that is a product question, not a brief edit.
+4. **Fix "always ask on security" in code, not in words.** Opus broke it once.
+   A Check after the Draft can turn any non-ask answer on a security ticket
+   into an ask, if security is known; here it comes from the label, which
+   triage will not have. Confidence 70% that a small Judge (is this a security
+   ticket?) can do it; untested.
+
+### What part 4 cannot tell us
+
+- **A blind number.** Both sets have been seen; v6 is untuned, but the owner's
+  ask for v6 came from the 63's misses.
+- **Opus on all 63, or twice.** The cap stopped it at 51 and one run gives no
+  agreement.
+- **How long a real ask takes the owner.** The 15-ask judgment is mine, by
+  hand, from text. A timed batch with the owner would settle it.
+- **Whether the owner would answer asks the way phoenix went.** Phoenix's
+  outcomes were not consistent on small faults; the owner's live answers may
+  not match them either.
+- **The real filing mix.** The load uses one 60-day count and the sets' ask
+  shares, and the sets are not a random sample of phoenix.
+- **Work on a branch with no pull request.** The copy cannot show it.
+- **Another day.** One run, one model id each, one Codex version.
+
 ## Run it
 
 ```
@@ -898,6 +1170,13 @@ STEP=exam FRESH=<set.json> MODEL=sol BRIEF=triage-v5 node experiments/163-triage
 STEP=exam FRESH=experiments/163-exam-set.json MODEL=opus BRIEF=triage-v5 MAX_USD=30 node experiments/163-triage-brief-eval.ts   # the exam as run; both pairs are done, so it now refuses
 STEP=field PART=3 node experiments/163-triage-brief-eval.ts   # part 3's rows only
 STEP=field FRESH=experiments/163-exam-set.json node experiments/163-triage-brief-eval.ts   # the exam's rows
+STEP=prs node experiments/163-triage-ask.ts                # part 4: the PRs open at each filing, through gh, read-only; their heads fetched into the clone (push off)
+STEP=check ONLY=4208,4313 node experiments/163-triage-ask.ts   # part 4: the open PR list as the model sees it
+STEP=run SET=exam MODEL=sol RUNS=2 node experiments/163-triage-ask.ts   # part 4: SET=tuning for the 119; MODEL=opus RUNS=1 MAX_USD=12, DRY=1 first
+STEP=report node experiments/163-triage-ask.ts             # part 4: the numbers; WHY=1 adds every trace
+STEP=load node experiments/163-triage-ask.ts               # part 4: phoenix's filing rate over 60 days, and asks a week
+STEP=sample node experiments/163-triage-ask.ts             # part 4: 15 asks, seed 1634, for the by-hand judgment
+STEP=field node experiments/163-triage-ask.ts              # part 4: field/runs.jsonl rows
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
