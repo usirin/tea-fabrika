@@ -1,7 +1,7 @@
 {
-	"status": "proposed",
-	"approved": null,
-	"note": "Experiment 163's proposed pass bar for a triage brief, per model, on the locked half. Each line is read on the point share, not its interval: on 40 built tickets no interval is narrow enough to prove a share. The owner approves it before the locked half runs.",
+	"status": "approved",
+	"approved": { "by": "owner", "on": "2026-10-30" },
+	"note": "Experiment 163's pass bar for a triage brief, per model, on the locked half. Each line is read on the point share, not its interval: on 40 built tickets no interval is narrow enough to prove a share. The owner approves it before the locked half runs.",
 	"lines": [
 		{
 			"metric": "badClose",
