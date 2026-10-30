@@ -2,7 +2,14 @@ import {realpathSync} from "node:fs";
 import {dirname} from "node:path";
 import {Effect, FileSystem, Option, Schema, Stream} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
-import {codexConfig, codexHome, codexHomeOf, codexSystem, writeSystem} from "../acp/harness.ts";
+import {
+	codexConfig,
+	codexHome,
+	codexHomeOf,
+	codexSystem,
+	type FolderAccess,
+	writeSystem,
+} from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
 import {type Env, runEnv} from "../claude/env.ts";
@@ -35,6 +42,8 @@ import {toolchain} from "../claude/sandbox.ts";
 export interface CodexAdapterConfig {
 	readonly codex: string;
 	readonly parent?: Env;
+	/** What every turn may do in its folder; `write` when left out. `read`: a turn that only reads code. */
+	readonly access?: FolderAccess;
 }
 
 /** A config value as TOML, for `-c key=value`. Objects with plain keys become dotted keys. */
@@ -213,7 +222,7 @@ export const codexAdapter = (
 						...(turn.effort === null ? [] : ["-c", `model_reasoning_effort=${toml(turn.effort)}`]),
 						"-c",
 						'approval_policy="never"',
-						...flagsOf(codexConfig(turn.folder, tools, owner)),
+						...flagsOf(codexConfig(turn.folder, tools, owner, config.access)),
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),

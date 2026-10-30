@@ -381,7 +381,7 @@ describe("codex: the system prompt", () => {
 	};
 
 	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: SystemPrompt) => {
+	const startedWith = async (system: SystemPrompt, access?: "write" | "read") => {
 		const home = madeUpHome();
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
@@ -393,7 +393,11 @@ describe("codex: the system prompt", () => {
 		});
 		const why = await Effect.runPromise(
 			Effect.gen(function* () {
-				const adapter = yield* codexAdapter({codex: "/nowhere/codex", parent});
+				const adapter = yield* codexAdapter({
+					codex: "/nowhere/codex",
+					parent,
+					...(access === undefined ? {} : {access}),
+				});
 				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
@@ -434,6 +438,24 @@ describe("codex: the system prompt", () => {
 		expect(file.startsWith(`${home}/system-`)).toBe(true);
 		expect(named).toEqual([`model_instructions_file=${JSON.stringify(file)}`]);
 		expect(readFileSync(file, "utf8")).toBe(text);
+	});
+
+	it("leaves the folder writable, or only readable for a turn that reads code", async () => {
+		// Both lines matter: `:workspace` makes the folder writable whatever its own line says.
+		const box = (flags: readonly string[]) => ({
+			base: flags.find((f) => f.startsWith("permissions.fenced.extends=")),
+			folder: flags
+				.find((f) => f.startsWith("permissions.fenced.filesystem="))
+				?.match(/"\/work\/copy"=("\w+")/)?.[1],
+		});
+		expect(box((await startedWith({_tag: "append", text: ""})).flags)).toEqual({
+			base: 'permissions.fenced.extends=":workspace"',
+			folder: '"write"',
+		});
+		expect(box((await startedWith({_tag: "append", text: ""}, "read")).flags)).toEqual({
+			base: 'permissions.fenced.extends=":read-only"',
+			folder: '"read"',
+		});
 	});
 });
 

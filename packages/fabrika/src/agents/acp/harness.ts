@@ -102,24 +102,35 @@ export const codexHomeOf = (folder: string, parent: Env = process.env) =>
 /** The modes a contained Codex may run in. `agent` lets a model answer the asks; full access has no sandbox. */
 export const CODEX_MODES = ["read-only", "workspace-write"] as const;
 
+/** What a contained Codex may do in its folder: change it, or only read it. */
+export type FolderAccess = "write" | "read";
+
 /**
  * Merged into every Codex session's config by the adapter (`CODEX_CONFIG`).
  * The permission profile is the builder's `filesOf` for reads: home denied
  * but for the folder and the toolchain, and the adapters' own folder, where
- * the Codex that runs inside the box is.
+ * the Codex that runs inside the box is. The folder is writable, or only
+ * readable for a turn that reads code and changes nothing (`access: "read"`).
  */
-export const codexConfig = (folder: string, tools: readonly string[], home: string) => ({
+export const codexConfig = (
+	folder: string,
+	tools: readonly string[],
+	home: string,
+	access: FolderAccess = "write",
+) => ({
 	shell_environment_policy: {inherit: "core"},
 	allow_login_shell: false,
 	web_search: "disabled",
 	default_permissions: "fenced",
 	permissions: {
 		fenced: {
-			extends: ":workspace",
+			// `:workspace` makes the working folder writable whatever the folder's own line says
+			// (experiment 163, part 3), so a read turn starts from `:read-only`.
+			extends: access === "write" ? ":workspace" : ":read-only",
 			filesystem: {
 				[home]: "deny",
 				...Object.fromEntries([...tools, ADAPTERS.replace(/\/$/, "")].map((t) => [t, "read"])),
-				[folder]: "write",
+				[folder]: access,
 			},
 		},
 	},
