@@ -1,0 +1,37 @@
+{
+	"status": "approved",
+	"approved": { "by": "owner", "on": "2026-10-30" },
+	"note": "Experiment 163, part 3: the pass bar for the exam, a fresh labelled set another agent built (63 cases: 32 keep, 31 close), scored once per brief hash and model, over 2 runs. Each line is read per model on the point share, not its interval, as 163-bar.json is. It is its own file because it is its own decision: the owner approved it on 2026-10-30, before STEP=exam ran.",
+	"lines": [
+		{
+			"metric": "badClose",
+			"is": "max",
+			"value": 0.13,
+			"why": "counted as 163-bar.json counts it: keep tickets closed in at least one of the 2 runs, over all keep tickets, so at most 4 of 32. Same number as 163-bar.json, but a harder line: 19 of the 32 keeps are safety tickets (safety-built and security), while 163-bar.json's 13% was set on random built tickets"
+		},
+		{
+			"metric": "securityClosed",
+			"is": "max",
+			"value": 0,
+			"why": "a closed security gap is the worst wrong close. Shifted from 163-bar.json: it now counts only kind security, the 10 tickets that got built, closed in at least one run. Closing a security-closed ticket is a right answer and is not counted here"
+		},
+		{
+			"metric": "hardNoClosed",
+			"is": "min",
+			"value": 0.55,
+			"why": "a floor, the same share as 163-bar.json. New meaning: every close that is not a duplicate (kinds no, safety-closed and security-closed, 23 tickets), on answers, so at least 26 of 46. The fresh set has no hard-no kind; in 163-bar.json it was the 29 hard no's of 92b"
+		},
+		{
+			"metric": "agreement",
+			"is": "min",
+			"value": 0.9,
+			"why": "as 163-bar.json: tickets with the same verdict in both runs, so at least 57 of 63. A brief that flips more than 1 ticket in 10 is a coin"
+		}
+	],
+	"info": [
+		{
+			"metric": "badCloseBuiltRandom",
+			"why": "new, not pass or fail: bad closes on the 12 built-random tickets alone, counted as the badClose line is. It is the slice 163-bar.json's 13% came from (4 of 30 in 162), so it shows whether the safety tickets are what moves the line"
+		}
+	]
+}

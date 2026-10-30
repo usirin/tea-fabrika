@@ -65,6 +65,12 @@ const TRIES = 2;
  */
 const NO_TOOLS =
 	"Everything you need is in this message. Do not run any command or read any file: answer from the text alone.";
+/**
+ * A turn that reads code (experiment 163, part 3): the folder holds the code, Codex may read it with
+ * commands that change nothing, and the box makes the folder read-only (`access: "read"`).
+ */
+const READ_CODE =
+	"Your working folder holds the project's code. You may read it with commands that change nothing, such as rg, ls, cat or sed -n. The folder is read-only and you have no network. Your whole answer is the data asked for at the end.";
 
 // ---------------------------------------------------------------- the calls
 
@@ -91,14 +97,14 @@ type Try = typeof Try.Type;
 const DRun = Schema.Struct({tries: Schema.Array(Try)});
 export type DRun = typeof DRun.Type;
 
-const service = Effect.gen(function* () {
-	return Agent.makeAgents({
-		// Triage sorts a ticket and changes no file: the folder is only read.
-		adapters: {codex: yield* codexAdapter({codex: CODEX, access: "read"})},
-		sessions: Agent.memorySessions(),
-		reaper: psReaper,
-	});
-}).pipe(Effect.provide(nodeServices));
+const serviceOf = (access: "write" | "read") =>
+	Effect.gen(function* () {
+		return Agent.makeAgents({
+			adapters: {codex: yield* codexAdapter({codex: CODEX, access})},
+			sessions: Agent.memorySessions(),
+			reaper: psReaper,
+		});
+	}).pipe(Effect.provide(nodeServices));
 
 /** The text of a failure, with the home folder cut out, so no local path lands in a result. */
 const scrub = (text: string) => text.replaceAll(homedir(), "~").slice(0, 400);
@@ -106,14 +112,17 @@ const scrub = (text: string) => text.replaceAll(homedir(), "~").slice(0, 400);
 let turns = 0;
 /**
  * One Codex turn through the adapter: a new session each time, so no turn sees another. The
- * session's Codex home is removed after the turn; the login it links to is not touched.
+ * session's Codex home is removed after the turn; the login it links to is not touched. A turn
+ * that reads code (`at.reads`) runs in a read-only folder and also hands back the commands it ran.
  */
 export async function codexTurn<A>(
 	prompt: string,
 	answer: Schema.Codec<A, unknown>,
 	at: Where,
-): Promise<{answer: A | null} & Omit<PRun, "answer">> {
-	const agents = await Effect.runPromise(service);
+): Promise<{answer: A | null; commands: readonly string[]} & Omit<PRun, "answer">> {
+	const reads = at.reads === "code";
+	// Triage changes no file, so every turn's folder is read-only, even one that reads no code.
+	const agents = await Effect.runPromise(serviceOf("read"));
 	turns += 1;
 	const session = `${at.name}/${process.pid}/${turns}`;
 	const started = Date.now();
@@ -124,7 +133,7 @@ export async function codexTurn<A>(
 					provider: "codex",
 					session,
 					folder: at.folder,
-					prompt: `${NO_TOOLS}\n\n${prompt}`,
+					prompt: `${reads ? READ_CODE : NO_TOOLS}\n\n${prompt}`,
 					// Codex's own instructions and nothing added: the brief stays in the prompt, as it was
 					// before a turn had to name its system prompt (v1 slice 2, #154). Without it every turn
 					// failed at once, as experiment 163's part 2 found.
@@ -132,7 +141,7 @@ export async function codexTurn<A>(
 					answer,
 					model: MODEL,
 					effort: at.effort,
-					limits: {...Agent.NO_LIMITS, seconds: 300},
+					limits: {...Agent.NO_LIMITS, seconds: reads ? 600 : 300},
 				}),
 			),
 		),
@@ -140,7 +149,7 @@ export async function codexTurn<A>(
 	rmSync(codexHomeOf(`session:${session}`), {recursive: true, force: true});
 	const heard = Exit.isSuccess(exit) ? [...exit.value] : [];
 	const end = heard.find((h): h is Agent.Ended<A> => h._tag === "ended") ?? null;
-	const tools = new Set(heard.flatMap((h) => (h._tag === "tool" ? [h.id] : []))).size;
+	const used = new Map(heard.flatMap((h) => (h._tag === "tool" ? [[h.id, h.title] as const] : [])));
 	return {
 		answer: end?.answer ?? null,
 		error: Exit.isFailure(exit)
@@ -152,16 +161,19 @@ export async function codexTurn<A>(
 		effort: at.effort,
 		ms: Date.now() - started,
 		tokens: end?.tokens ?? {input: 0, cached: 0, output: 0},
-		tools,
+		tools: used.size,
+		commands: [...used.values()].map(scrub),
 		stop: end?.stop ?? null,
 	};
 }
 
-/** Where a turn runs: the experiment's name for its sessions, the empty folder, the effort. */
+/** Where a turn runs: the experiment's name for its sessions, the folder, the effort. */
 export interface Where {
 	readonly name: string;
 	readonly folder: string;
 	readonly effort: string;
+	/** `code`: the folder holds code to read, and is read-only. Left out: an empty folder, no tool. */
+	readonly reads?: "code";
 }
 
 /**

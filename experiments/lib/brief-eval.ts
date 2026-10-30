@@ -9,6 +9,8 @@
 //   Sorter              the service that answers one case under one brief on one model; a fake
 //                       gives fixed answers, so a program over it costs $0
 //   score, summarize    many cases through the Sorter, then the numbers, with 95% intervals
+//   ExamSet, ExamBar    part 3's fresh set, in its own kinds, and its own bar; `exam` scores a
+//                       brief on it once per brief hash and model
 //
 // Node at the edge, said out loud: `node:crypto` for the brief's hash.
 import {createHash} from "node:crypto";
@@ -48,6 +50,8 @@ export const Case = Schema.Struct({
 	why: Schema.String,
 });
 export type Case = typeof Case.Type;
+/** What asking and scoring read of a case: the ticket, and its right answer. Both sets' cases fit. */
+export type Asked = Pick<Case, "id" | "repo" | "n" | "right">;
 
 export const LabelledSet = Schema.Struct({
 	note: Schema.String,
@@ -57,7 +61,8 @@ export const LabelledSet = Schema.Struct({
 });
 export type LabelledSet = typeof LabelledSet.Type;
 
-export const Half = Schema.Literals(["open", "locked"]);
+/** `exam`: a fresh set, scored once per brief and model (part 3). */
+export const Half = Schema.Literals(["open", "locked", "exam"]);
 export type Half = typeof Half.Type;
 
 export const Split = Schema.Struct({
@@ -97,18 +102,32 @@ export const Brief = Schema.Struct({
 	text: Schema.String,
 	/** The close rules, from its `## close: <rule>` headings, in order. */
 	rules: Schema.Array(Schema.String),
+	/** `read`: the model gets the code at the ticket's commit, read-only. `none`: the text alone. */
+	code: Schema.Literals(["none", "read"]),
 });
 export type Brief = typeof Brief.Type;
 
-/** A brief file: `---\nid: <id>\n---` then the text. Pure. */
+/**
+ * A brief file: `---\nid: <id>\n---` then the text, with an optional `code: read` line after the id.
+ * The hash covers the text and the code line, so the same text with code is a new version. Pure.
+ */
 export function briefOf(file: string): Brief {
-	const m = /^---\nid: ([\w.-]+)\n---\n([\s\S]*)$/.exec(file);
-	if (m === null) throw new Error("a brief starts with ---, id: <id>, ---");
-	const [, id = "", body = ""] = m;
+	const m = /^---\nid: ([\w.-]+)\n(?:code: (read)\n)?---\n([\s\S]*)$/.exec(file);
+	if (m === null) throw new Error("a brief starts with ---, id: <id>, an optional code: read, ---");
+	const [, id = "", read, body = ""] = m;
 	const text = body.trim();
+	const code = read === "read" ? "read" : "none";
 	const rules = [...text.matchAll(/^## close: ([\w-]+)$/gm)].map((r) => r[1] ?? "");
 	if (rules.length === 0) throw new Error(`brief ${id} has no "## close: <rule>" heading`);
-	return {id, hash: createHash("sha256").update(text).digest("hex").slice(0, 12), text, rules};
+	// A brief with no code line hashes its text alone, as v1 to v3 did, so their saved answers still match.
+	const hashed = code === "none" ? text : `code: read\n${text}`;
+	return {
+		id,
+		hash: createHash("sha256").update(hashed).digest("hex").slice(0, 12),
+		text,
+		rules,
+		code,
+	};
 }
 
 /** The answer a brief asks for: a close names one of the brief's own rules. */
@@ -169,6 +188,17 @@ export const RunRecord = Schema.Struct({
 	tokens: Tokens,
 	error: Schema.NullOr(Schema.String),
 	at: Schema.String,
+	/**
+	 * A brief that reads code: the commit read, how many reads and searches it made, and on opus the
+	 * conversation's size at its last turn (`tokens` counts every turn's input again).
+	 */
+	code: Schema.optional(
+		Schema.Struct({
+			at: Schema.String,
+			reads: Schema.Number,
+			context: Schema.optional(Schema.Number),
+		}),
+	),
 });
 export type RunRecord = typeof RunRecord.Type;
 
@@ -180,12 +210,13 @@ export interface Said {
 	readonly ms: number;
 	readonly tokens: typeof Tokens.Type;
 	readonly error: string | null;
+	readonly code?: {readonly at: string; readonly reads: number; readonly context?: number};
 }
 
 /** Answers one case under one brief on one model. The live one calls a model; the fake does not. */
 export class Sorter extends Context.Service<
 	Sorter,
-	{readonly sort: (brief: Brief, model: Model, c: Case) => Effect.Effect<Said>}
+	{readonly sort: (brief: Brief, model: Model, c: Asked) => Effect.Effect<Said>}
 >()("exp-163/Sorter") {}
 
 /** A Sorter that answers from a table and calls no model: for tests and for a program's dry run. */
@@ -211,7 +242,7 @@ export const fakeSorter = (
 
 /** One Sorter answer as a record. Pure but for `at`, which the caller passes. */
 export function recordOf(
-	c: Case,
+	c: Asked,
 	half: Half,
 	brief: Brief,
 	model: Model,
@@ -238,13 +269,14 @@ export function recordOf(
 		tokens: s.tokens,
 		error: s.error,
 		at,
+		...(s.code === undefined ? {} : {code: s.code}),
 	};
 }
 
 export interface Job {
 	readonly brief: Brief;
 	readonly model: Model;
-	readonly cases: readonly Case[];
+	readonly cases: readonly Asked[];
 	readonly half: Half;
 	/** Answers wanted per case. */
 	readonly runs: number;
@@ -397,10 +429,289 @@ export const Bar = Schema.Struct({
 });
 export type Bar = typeof Bar.Type;
 
+/** A bar line over the counts named `M`: the tuning bar's lines, and the exam bar's. */
+interface LineOf<M extends string> {
+	readonly metric: M;
+	readonly is: "max" | "min";
+	readonly value: number;
+	readonly why: string;
+}
+
 /** Each bar line against a summary: its share and whether it passes. Pure. */
-export const verdictOf = (bar: Bar, s: Summary) =>
+export const verdictOf = <M extends string>(
+	bar: {readonly lines: readonly LineOf<M>[]},
+	s: {readonly [K in M]: Count},
+) =>
 	bar.lines.map((l) => {
 		const c = s[l.metric];
 		const share = c.n === 0 ? Number.NaN : c.k / c.n;
 		return {...l, share, pass: c.n > 0 && (l.is === "max" ? share <= l.value : share >= l.value)};
+	});
+
+// ---------------------------------------------------------------- the exam (part 3)
+
+/**
+ * The fresh set's kinds and each one's right answer. Its own list: another agent built the fresh
+ * set, and its kinds are not the tuning set's. A case whose answer is not its kind's is refused.
+ */
+export const EXAM_KINDS = [
+	"built-random",
+	"hard-yes",
+	"safety-built",
+	"security",
+	"duplicate",
+	"no",
+	"safety-closed",
+	"security-closed",
+] as const;
+export const ExamKind = Schema.Literals(EXAM_KINDS);
+export type ExamKind = typeof ExamKind.Type;
+export const EXAM_RIGHT: {readonly [K in ExamKind]: Verdict} = {
+	"built-random": "keep",
+	"hard-yes": "keep",
+	"safety-built": "keep",
+	security: "keep",
+	duplicate: "close",
+	no: "close",
+	"safety-closed": "close",
+	"security-closed": "close",
+};
+
+/**
+ * One fresh case. The scorer reads its ticket, kind and right answer; the rest the set carries as
+ * it is, so the set's id covers every field.
+ */
+export const ExamCase = Schema.Struct({
+	id: Schema.String,
+	repo: Schema.String,
+	n: Schema.Int,
+	kind: ExamKind,
+	right: Verdict,
+	closed: Schema.Unknown,
+	fact: Schema.Unknown,
+	filed: Schema.Unknown,
+	of: Schema.Unknown,
+	reopened: Schema.Unknown,
+	safety: Schema.Unknown,
+	security: Schema.Unknown,
+	sha: Schema.Unknown,
+	source: Schema.Unknown,
+	who: Schema.Unknown,
+	why: Schema.Unknown,
+}).check(
+	Schema.makeFilter(
+		(c) =>
+			EXAM_RIGHT[c.kind] === c.right ||
+			`${c.id} is ${c.kind}, so its right answer is ${EXAM_RIGHT[c.kind]}, not ${c.right}`,
+	),
+);
+export type ExamCase = typeof ExamCase.Type;
+
+export const ExamSet = Schema.Struct({note: Schema.String, cases: Schema.Array(ExamCase)});
+export type ExamSet = typeof ExamSet.Type;
+
+/** The exam's numbers on one model, each on the point share the owner's rulings name. */
+export const ExamSummary = Schema.Struct({
+	/** Keep tickets closed at least once, on tickets: 163-bar.json's way of counting. */
+	badClose: Count,
+	/** The same on the built-random tickets alone: an info line, not pass or fail. */
+	badCloseBuiltRandom: Count,
+	/** Tickets of kind `security` (built) closed at least once. Closing a `security-closed` is right. */
+	securityClosed: Count,
+	/** Every close that is not a duplicate (no, safety-closed, security-closed): answers that closed. */
+	hardNoClosed: Count,
+	/** Tickets with two or more answers that gave the same verdict every time. */
+	agreement: Count,
+	/** Answers with no verdict. */
+	none: Schema.Int,
+	usd: Schema.Number,
+});
+export type ExamSummary = typeof ExamSummary.Type;
+export const EXAM_METRICS = [
+	"badClose",
+	"badCloseBuiltRandom",
+	"securityClosed",
+	"hardNoClosed",
+	"agreement",
+] as const;
+
+/** The exam's numbers of one brief and model over the fresh cases, from its records. Pure. */
+export function examSummarize(
+	cases: readonly ExamCase[],
+	records: readonly RunRecord[],
+): ExamSummary {
+	const answered = (c: ExamCase) => records.filter((r) => r.case === c.id && r.said !== null);
+	const ran = cases.filter((c) => answered(c).length > 0);
+	const closedOnce = (cs: readonly ExamCase[]) =>
+		countOf(cs.filter((c) => answered(c).some((r) => r.said === "close")).length, cs.length);
+	const keep = ran.filter((c) => c.right === "keep");
+	const hard = ran.filter((c) => c.right === "close" && c.kind !== "duplicate");
+	const hardAnswers = hard.flatMap(answered);
+	const twice = ran.filter((c) => answered(c).length > 1);
+	const mine = records.filter((r) => cases.some((c) => c.id === r.case));
+	return {
+		badClose: closedOnce(keep),
+		badCloseBuiltRandom: closedOnce(keep.filter((c) => c.kind === "built-random")),
+		securityClosed: closedOnce(keep.filter((c) => c.kind === "security")),
+		hardNoClosed: countOf(hardAnswers.filter((r) => r.said === "close").length, hardAnswers.length),
+		agreement: countOf(
+			twice.filter((c) => new Set(answered(c).map((r) => r.said)).size === 1).length,
+			twice.length,
+		),
+		none: mine.filter((r) => r.said === null).length,
+		usd: mine.reduce((s, r) => s + (r.usd ?? 0), 0),
+	};
+}
+
+/**
+ * The exam's bar: pass-or-fail lines, and info lines that are printed with their count and never
+ * pass or fail. Only an approved bar lets the exam run.
+ */
+export const ExamBar = Schema.Struct({
+	status: Schema.Literals(["proposed", "approved"]),
+	approved: Schema.NullOr(Schema.Struct({by: Schema.String, on: Schema.String})),
+	note: Schema.String,
+	lines: Schema.Array(
+		Schema.Struct({
+			metric: Schema.Literals(EXAM_METRICS),
+			is: Schema.Literals(["max", "min"]),
+			value: Schema.Number,
+			why: Schema.String,
+		}),
+	),
+	info: Schema.Array(Schema.Struct({metric: Schema.Literals(EXAM_METRICS), why: Schema.String})),
+});
+export type ExamBar = typeof ExamBar.Type;
+
+/** A fresh set's id: the first 12 hex digits of its cases' sha256. Pure. */
+export const setHashOf = (set: ExamSet): string =>
+	createHash("sha256")
+		.update(JSON.stringify(Schema.encodeSync(ExamSet)(set).cases))
+		.digest("hex")
+		.slice(0, 12);
+
+/** One brief hash and model on the exam: the set it started on, and when it finished. */
+export const ExamEntry = Schema.Struct({
+	brief: Schema.String,
+	hash: Schema.String,
+	model: Model,
+	set: Schema.String,
+	started: Schema.String,
+	/** null while it runs or after it stopped part way: it may go on, on the same set only. */
+	done: Schema.NullOr(Schema.String),
+});
+export type ExamEntry = typeof ExamEntry.Type;
+
+/** Every exam taken: who took it, and every answer. One file, kept apart from tuning's. */
+export const ExamBook = Schema.Struct({
+	entries: Schema.Array(ExamEntry),
+	records: Schema.Array(RunRecord),
+});
+export type ExamBook = typeof ExamBook.Type;
+
+/**
+ * Whether one brief hash and model may sit the exam on this set. Each gets one shot: a finished
+ * exam is never run again, on any set. A run that stopped part way goes on, on the same set. Pure.
+ */
+export function examGate(
+	book: ExamBook,
+	bar: Pick<ExamBar, "status">,
+	brief: Brief,
+	model: Model,
+	set: string,
+): {readonly go: "start" | "resume"} | {readonly go: "refuse"; readonly why: string} {
+	if (bar.status !== "approved") return {go: "refuse", why: "the exam's bar is not approved"};
+	const mine = book.entries.find(
+		(e) => e.brief === brief.id && e.hash === brief.hash && e.model === model,
+	);
+	if (mine === undefined) return {go: "start"};
+	if (mine.done !== null)
+		return {
+			go: "refuse",
+			why: `${brief.id} (${brief.hash}) on ${model} sat the exam on ${mine.done.slice(0, 10)}: it is scored once`,
+		};
+	if (mine.set !== set)
+		return {
+			go: "refuse",
+			why: `${brief.id} (${brief.hash}) on ${model} started on set ${mine.set}, not ${set}`,
+		};
+	return {go: "resume"};
+}
+
+export interface ExamJob {
+	readonly book: ExamBook;
+	readonly bar: ExamBar;
+	readonly brief: Brief;
+	readonly model: Model;
+	readonly set: ExamSet;
+	readonly runs: number;
+	readonly concurrency: number;
+	/** Called with the whole book after each change, to save it. */
+	readonly save: (book: ExamBook) => Effect.Effect<void>;
+	readonly stop: () => boolean;
+	readonly now: () => string;
+}
+
+/**
+ * One brief on one model, once, on a fresh set, against its own bar. It refuses as `examGate` says,
+ * saves every answer as it comes, marks the entry done only when every case has its runs, and then
+ * scores. A stopped exam gives `verdict: null` and may go on later.
+ */
+export const exam = (job: ExamJob) =>
+	Effect.gen(function* () {
+		const set = setHashOf(job.set);
+		const gate = examGate(job.book, job.bar, job.brief, job.model, set);
+		if (gate.go === "refuse") return {refused: gate.why, verdict: null, summary: null} as const;
+		let book: ExamBook =
+			gate.go === "start"
+				? {
+						...job.book,
+						entries: [
+							...job.book.entries,
+							{
+								brief: job.brief.id,
+								hash: job.brief.hash,
+								model: job.model,
+								set,
+								started: job.now(),
+								done: null,
+							},
+						],
+					}
+				: job.book;
+		yield* job.save(book);
+		const mine = (r: RunRecord) =>
+			r.brief === job.brief.id && r.hash === job.brief.hash && r.model === job.model;
+		yield* score({
+			brief: job.brief,
+			model: job.model,
+			cases: job.set.cases,
+			half: "exam",
+			runs: job.runs,
+			// A call with no answer is kept in the book but asked again, so one failed call cannot sink the exam.
+			have: book.records.filter((r) => mine(r) && r.said !== null),
+			concurrency: job.concurrency,
+			kept: (r) =>
+				Effect.suspend(() => {
+					book = {...book, records: [...book.records, r]};
+					return job.save(book);
+				}),
+			stop: job.stop,
+		});
+		const records = book.records.filter(mine);
+		const complete = job.set.cases.every(
+			(c) => records.filter((r) => r.case === c.id && r.said !== null).length >= job.runs,
+		);
+		if (!complete) return {refused: null, verdict: null, summary: null} as const;
+		book = {
+			...book,
+			entries: book.entries.map((e) =>
+				e.brief === job.brief.id && e.hash === job.brief.hash && e.model === job.model
+					? {...e, done: job.now()}
+					: e,
+			),
+		};
+		yield* job.save(book);
+		const summary = examSummarize(job.set.cases, records);
+		return {refused: null, verdict: verdictOf(job.bar, summary), summary} as const;
 	});
