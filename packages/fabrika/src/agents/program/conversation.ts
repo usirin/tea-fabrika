@@ -1,27 +1,28 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
 import {Counted, Stop, Tokens, ToolStatus, type Update} from "../agent/turn.ts";
+import type {Spend} from "../claude/draft.ts";
 
-// What one `claude` or `codex` run keeps (experiment 169): the maker, our
+// What one `claude` or `codex` run keeps (experiment 169): the provider, our
 // session id, and every turn, each with what was said, the tools it called,
 // the asks it made and how it ended. It is kept, so a person who attaches
 // later, or a start after a kill, sees the whole conversation, and a turn a
 // kill cut off is sent again: nobody types it twice. It is the window's view
 // too: a chat window draws this and nothing else.
 //
-//   opened claude claude/7       maker: "claude", session: "claude/7"
+//   opened claude claude/7       provider: "claude", session: "claude/7"
 //   told "what is 2+3?"          turns: [{n: 1, prompt: "what is 2+3?", end: null}]
 //   began 1                      turn 1 starts (again): what it said so far is dropped
 //   heard 1 said "5"             turns: [{n: 1, said: ["5"], ...}]
 //   ended 1 {stop: "end_turn"}   turns: [{n: 1, ..., end: {stop: "end_turn", answer: {n: 5}}}]
 //
-// The same for both makers: it folds the `Agents` service's updates
-// (../agent/turn.ts), never a maker's own events.
+// The same for both providers: it folds the `Agents` service's updates
+// (../agent/turn.ts), never a provider's own events.
 
-/** The makers this program is built for, together. */
-export const MAKERS = ["claude", "codex"] as const;
-export const Maker = Schema.Literals(MAKERS);
-export type Maker = typeof Maker.Type;
+/** The providers this program is built for, together. */
+export const PROVIDERS = ["claude", "codex"] as const;
+export const Provider = Schema.Literals(PROVIDERS);
+export type Provider = typeof Provider.Type;
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -36,20 +37,32 @@ export const ToolSeen = Schema.Struct({
 });
 export const AskSeen = Schema.Struct({id: Schema.String, title: Schema.String});
 
-/** A turn's end, the same for both makers. `usd` and `requests` are `null` where the maker does not say. */
-export const End = Schema.Struct({
-	stop: EndStop,
-	/** The answer, read by the turn's schema. `null`: it did not fit, or the turn did not end on its own. */
-	answer: Schema.NullOr(Schema.Unknown),
-	tokens: Tokens,
-	counted: Counted,
-	usd: Schema.NullOr(Schema.Finite),
-	requests: Schema.NullOr(Count),
-	ms: Count,
-	/** Why the service failed the turn, in its words: `why: message`. */
-	error: Schema.NullOr(Schema.String),
-});
-export type End = typeof End.Type;
+/** A turn's end, the same for both providers. `usd` and `requests` are `null` where the provider does not say. */
+export class End extends Schema.Opaque<End>()(
+	Schema.Struct({
+		stop: EndStop,
+		/** The answer, read by the turn's schema. `null`: it did not fit, or the turn did not end on its own. */
+		answer: Schema.NullOr(Schema.Unknown),
+		tokens: Tokens,
+		counted: Counted,
+		usd: Schema.NullOr(Schema.Finite),
+		requests: Schema.NullOr(Count),
+		ms: Count,
+		/** Why the service failed the turn, in its words: `why: message`. */
+		error: Schema.NullOr(Schema.String),
+	}),
+) {
+	/** What a Draft counts as spent. Tokens are input and output; a provider that gives no dollars spent none. */
+	static toSpend(end: End): Spend {
+		return {
+			costUsd: end.usd ?? 0,
+			tokens: end.tokens.input + end.tokens.output,
+			context: 0,
+			turns: end.requests ?? 0,
+			minutes: end.ms / 60_000,
+		};
+	}
+}
 
 export const TurnSeen = Schema.Struct({
 	n: Count,
@@ -62,29 +75,37 @@ export const TurnSeen = Schema.Struct({
 });
 export type TurnSeen = typeof TurnSeen.Type;
 
-export const Conversation = Schema.Struct({
-	/** The maker it was opened on: a run cannot move to the other one. */
-	maker: Schema.NullOr(Maker),
-	/** Ours, never the maker's: the service maps it to the maker's own (../agent/sessions.ts). */
-	session: Schema.NullOr(Schema.String),
-	/** Prompts told so far: the next one is `told + 1`. */
-	told: Count,
-	turns: Schema.Array(TurnSeen),
-});
-export type Conversation = typeof Conversation.Type;
+export class Conversation extends Schema.Opaque<Conversation>()(
+	Schema.Struct({
+		/** The provider it was opened on: a run cannot move to the other one. */
+		provider: Schema.NullOr(Provider),
+		/** Ours, never the provider's: the service maps it to the provider's own (../agent/sessions.ts). */
+		session: Schema.NullOr(Schema.String),
+		/** Prompts told so far: the next one is `told + 1`. */
+		told: Count,
+		turns: Schema.Array(TurnSeen),
+	}),
+) {
+	/** The turns told and not ended: the first is the one running, or next. */
+	static waiting(s: Conversation): readonly TurnSeen[] {
+		return s.turns.filter((t) => t.end === null);
+	}
+
+	/** The status line: which provider, how many turns ended, how many wait. */
+	static status(s: Conversation): string {
+		const waiting = Conversation.waiting(s).length;
+		return `${s.provider ?? "no session yet"} · ${s.turns.length - waiting} turns · ${waiting} waiting`;
+	}
+}
 
 export type ConversationMsg =
-	| {readonly type: "opened"; readonly maker: Maker; readonly session: string}
+	| {readonly type: "opened"; readonly provider: Provider; readonly session: string}
 	| {readonly type: "told"; readonly prompt: string}
 	| {readonly type: "began"; readonly n: number}
 	| {readonly type: "heard"; readonly n: number; readonly update: Update}
 	| {readonly type: "ended"; readonly n: number; readonly end: End};
 
-export const NONE: Conversation = {maker: null, session: null, told: 0, turns: []};
-
-/** The turns told and not ended: the first is the one running, or next. */
-export const waitingOf = (s: Conversation): readonly TurnSeen[] =>
-	s.turns.filter((t) => t.end === null);
+export const NONE: Conversation = {provider: null, session: null, told: 0, turns: []};
 
 const onTurn = (s: Conversation, n: number, change: (t: TurnSeen) => TurnSeen): Conversation => ({
 	...s,
@@ -124,8 +145,11 @@ export const conversation = defineMachine({
 	cmds: [],
 	init: (loaded) => [loaded ?? NONE, []],
 	update: {
-		// Once only: a run never moves to another maker or another session.
-		opened: (s, m) => [s.session === null ? {...s, maker: m.maker, session: m.session} : s, []],
+		// Once only: a run never moves to another provider or another session.
+		opened: (s, m) => [
+			s.session === null ? {...s, provider: m.provider, session: m.session} : s,
+			[],
+		],
 		told: (s, m) => [
 			{
 				...s,
@@ -142,9 +166,3 @@ export const conversation = defineMachine({
 		ended: (s, m) => [onTurn(s, m.n, (t) => ({...t, end: m.end})), []],
 	},
 });
-
-/** The status line: which maker, how many turns ended, how many wait. */
-export const statusOf = (s: Conversation): string => {
-	const waiting = waitingOf(s).length;
-	return `${s.maker ?? "no session yet"} · ${s.turns.length - waiting} turns · ${waiting} waiting`;
-};

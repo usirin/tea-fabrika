@@ -2,7 +2,7 @@
 // (packages/fabrika/src/agents/program/). Three steps:
 //
 //   P='env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 15'
-//   $P node experiments/169-agents-are-programs.ts order [n]   # prompt and cancel told at once, n times; fake makers, $0
+//   $P node experiments/169-agents-are-programs.ts order [n]   # prompt and cancel told at once, n times; fake providers, $0
 //   $P node experiments/169-agents-are-programs.ts cost [n]    # one turn: Agents.run, a program call, a Draft's child run; fake, $0
 //   $P node experiments/169-agents-are-programs.ts live        # one tiny prompt each: claude on haiku, codex on gpt-6-luna
 //   node experiments/169-agents-are-programs.ts report         # no model: the saved numbers
@@ -26,8 +26,8 @@ import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
 import {
 	type AgentFlags,
 	agentProgram,
-	fakeMakers,
-	type Maker,
+	fakeProviders,
+	type Provider,
 	programRunner,
 	typedAgentProgram,
 } from "@kampus/fabrika/agents/program";
@@ -36,7 +36,7 @@ import {Duration, Effect, Schema, Stream} from "effect";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RESULTS = join(HERE, "results", "169-agents-are-programs.json");
 const CODEX = process.env.CODEX ?? join(homedir(), ".local", "bin", "codex");
-const MAKERS: readonly Maker[] = ["claude", "codex"];
+const PROVIDERS: readonly Provider[] = ["claude", "codex"];
 
 type Results = Record<string, unknown>;
 const saved = (): Results => {
@@ -53,7 +53,7 @@ const save = (key: string, value: unknown) => {
 
 const Answer = Schema.Struct({sum: Schema.Int});
 
-const flagsOf = (folder: string, more: Partial<AgentFlags> = {}): AgentFlags => ({
+const flags = (folder: string, more: Partial<AgentFlags> = {}): AgentFlags => ({
 	folder,
 	session: undefined,
 	model: undefined,
@@ -65,9 +65,9 @@ const flagsOf = (folder: string, more: Partial<AgentFlags> = {}): AgentFlags => 
 	...more,
 });
 
-/** Fake makers: a prompt with "hang" never ends on its own; any other ends at once with {sum: 5}. */
+/** Fake providers: a prompt with "hang" never ends on its own; any other ends at once with {sum: 5}. */
 const fakeWorld = () => {
-	const fakes = fakeMakers((turn) => ({
+	const fakes = fakeProviders((turn) => ({
 		said: "ok",
 		answer: {sum: 5},
 		hang: turn.prompt.includes("hang"),
@@ -96,15 +96,15 @@ const CASES: readonly Case[] = ["now", "numbered", "late_now", "late_numbered"];
  * reaches a busy program late; meant: nothing cancelled, turn 2 goes on.
  * The answer is what the turns ended in, 300 ms after the last tell.
  */
-const trial = (maker: Maker, c: Case) =>
+const trial = (provider: Provider, c: Case) =>
 	Effect.gen(function* () {
 		const agents = fakeWorld();
 		const ended = ear<{readonly turn: number; readonly stop: string}>();
 		const started = yield* start(
-			agentProgram(maker),
-			{...flagsOf("/work/copy"), answer: undefined},
+			agentProgram(provider),
+			{...flags("/work/copy"), answer: undefined},
 			{ended: ended.hear},
-			{id: `order:${maker}`, storage: memoryStorage()},
+			{id: `order:${provider}`, storage: memoryStorage()},
 		).pipe(Effect.provideService(Agent.Agents, agents));
 		if (started.kind !== "running") return "refused";
 		const run = started.run;
@@ -126,15 +126,15 @@ const trial = (maker: Maker, c: Case) =>
 const order = (n: number) =>
 	Effect.gen(function* () {
 		const out: Record<string, Record<string, number>> = {};
-		for (const maker of MAKERS)
+		for (const provider of PROVIDERS)
 			for (const c of CASES) {
 				const counts: Record<string, number> = {};
 				for (let i = 0; i < n; i++) {
-					const got = yield* trial(maker, c);
+					const got = yield* trial(provider, c);
 					counts[got] = (counts[got] ?? 0) + 1;
 				}
-				out[`${maker} ${c}`] = counts;
-				console.log(maker, c, counts);
+				out[`${provider} ${c}`] = counts;
+				console.log(provider, c, counts);
 			}
 		save("order", {
 			n,
@@ -161,15 +161,15 @@ const RUN: DraftRun = {
 
 const cost = (n: number) =>
 	Effect.gen(function* () {
-		const typed = (maker: Maker) => typedAgentProgram(maker, Answer, `${maker}-sum`);
+		const typed = (provider: Provider) => typedAgentProgram(provider, Answer, `${provider}-sum`);
 		const out: Record<string, {readonly p50: number; readonly p95: number}> = {};
-		for (const maker of MAKERS) {
+		for (const provider of PROVIDERS) {
 			const ways: Record<string, (i: number) => Effect.Effect<unknown>> = {
 				direct: (i) => {
 					const agents = fakeWorld();
 					return Stream.runDrain(
 						agents.run({
-							provider: maker,
+							provider,
 							session: `s${i}`,
 							folder: "/work/copy",
 							prompt: "add",
@@ -182,17 +182,17 @@ const cost = (n: number) =>
 					).pipe(Effect.orDie);
 				},
 				program: (i) =>
-					call(typed(maker), flagsOf("/work/copy", {session: `s${i}`}), {
+					call(typed(provider), flags("/work/copy", {session: `s${i}`}), {
 						told: {prompt: ["add"]},
 						keeping: {id: `p${i}`, storage: memoryStorage()},
 					}).pipe(Effect.provideService(Agent.Agents, fakeWorld())),
 				child: (i) => {
 					const runner = programRunner({
 						name: "sum",
-						program: typed(maker),
+						program: typed(provider),
 						agents: fakeWorld(),
-						flagsOf: () => flagsOf("/work/copy", {session: `s${i}`}),
-						keepingOf: () => ({id: `c${i}`, storage: memoryStorage()}),
+						flags: () => flags("/work/copy", {session: `s${i}`}),
+						keeping: () => ({id: `c${i}`, storage: memoryStorage()}),
 					});
 					return Stream.runDrain(runner(RUN));
 				},
@@ -205,20 +205,20 @@ const cost = (n: number) =>
 					yield* once(i);
 					ms.push(performance.now() - t0);
 				}
-				out[`${maker} ${way}`] = {p50: pct(ms, 50), p95: pct(ms, 95)};
-				console.log(maker, way, out[`${maker} ${way}`]);
+				out[`${provider} ${way}`] = {p50: pct(ms, 50), p95: pct(ms, 95)};
+				console.log(provider, way, out[`${provider} ${way}`]);
 			}
 		}
 		save("cost", {
 			n,
 			ms: out,
-			note: "fake makers, memory storage, one process; a turn that ends at once",
+			note: "fake providers, memory storage, one process; a turn that ends at once",
 		});
 	});
 
 // ---------------------------------------------------------------- live
 
-const LIVE: Record<Maker, Partial<AgentFlags>> = {
+const LIVE: Record<Provider, Partial<AgentFlags>> = {
 	claude: {model: "haiku", effort: "low", usd: 0.1, seconds: 120},
 	codex: {model: "gpt-6-luna", effort: "low", seconds: 120},
 };
@@ -232,25 +232,25 @@ const live = Effect.gen(function* () {
 		reaper: psReaper,
 	});
 	const out: Record<string, unknown> = {};
-	for (const maker of MAKERS) {
-		const folder = realpathSync(mkdtempSync(join(tmpdir(), `exp169-${maker}-`)));
-		const session = `exp169/${maker}/${Date.now()}`;
+	for (const provider of PROVIDERS) {
+		const folder = realpathSync(mkdtempSync(join(tmpdir(), `exp169-${provider}-`)));
+		const session = `exp169/${provider}/${Date.now()}`;
 		const t0 = performance.now();
 		const called = yield* call(
-			typedAgentProgram(maker, Answer, `${maker}-sum`),
-			flagsOf(folder, {session, ...LIVE[maker]}),
+			typedAgentProgram(provider, Answer, `${provider}-sum`),
+			flags(folder, {session, ...LIVE[provider]}),
 			{
 				told: {prompt: [PROMPT]},
-				keeping: {id: `live:${maker}`, storage: memoryStorage()},
+				keeping: {id: `live:${provider}`, storage: memoryStorage()},
 			},
 		).pipe(Effect.provideService(Agent.Agents, agents));
 		const ms = Math.round(performance.now() - t0);
 		const heard =
 			called.kind === "called" ? called.heard.map((h) => ({name: h.name, value: h.value})) : called;
-		out[maker] = {ms, settings: LIVE[maker], heard};
-		console.log(maker, ms, JSON.stringify(heard));
+		out[provider] = {ms, settings: LIVE[provider], heard};
+		console.log(provider, ms, JSON.stringify(heard));
 		rmSync(folder, {recursive: true, force: true});
-		if (maker === "codex")
+		if (provider === "codex")
 			rmSync(codexHomeOf(`session:${session}`, process.env), {recursive: true, force: true});
 	}
 	rmSync(sessionsDir, {recursive: true, force: true});
