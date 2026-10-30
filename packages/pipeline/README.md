@@ -91,6 +91,7 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `setup.ts` | What tsh needs before a live stage runs: rubrics, a clone, the agent's login |
 | `trace/viewing.ts` | The pipeline's trace view rules. An agent's spans are fabrika's, on `@kampus/fabrika-old/agents/trace` |
 | `primitives.ts`, `combos.ts` | The six moves (Gather, Act, Listen, Draft, Check, Judge) and the combos built from them |
+| `decoder.ts` | A stage's answer schema for an agent program (`claude`, `codex`): the JSON Schema it hands on `--schema`, and the decode of the plain answer when it arrives; a misfit is a failed draft. Experiment 169 |
 | `schema.ts`, `refine.ts` | `zodCmd`, the zod slot of a Cmd; the draft-and-vet child |
 | `draft-scripted.ts` | A scripted stand-in for the Agent SDK's stream, for tests |
 | `services.ts` | The services the stages talk to |

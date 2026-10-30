@@ -1,5 +1,11 @@
-// Experiment 169: `claude` and `codex` as tea programs, built together
-// (packages/fabrika/src/agents/program/). Three steps:
+// Experiment 169: `claude` and `codex` as tea programs, one package each
+// (programs/claude, programs/codex), on the parts they share in
+// `@kampus/fabrika/agents/program`. Each stage that wants a typed answer hands
+// the program a JSON Schema on `--schema` and decodes the plain answer with
+// its own Effect schema (`decoder` in `@kampus/pipeline/decoder`). The saved
+// numbers in results/169-agents-are-programs.json were measured on the first
+// shape, one function that made both programs; the turn loop they time is the
+// same code. Three steps:
 //
 //   P='env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 15'
 //   $P node experiments/169-agents-are-programs.ts order [n]   # prompt and cancel told at once, n times; fake providers, $0
@@ -25,18 +31,20 @@ import {claudeAdapter, type DraftRun} from "@kampus/fabrika/agents/claude";
 import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
 import {
 	type AgentFlags,
-	agentProgram,
 	fakeProviders,
 	type Provider,
 	programRunner,
-	typedAgentProgram,
 } from "@kampus/fabrika/agents/program";
-import {Duration, Effect, Schema, Stream} from "effect";
+import {decoder} from "@kampus/pipeline/decoder";
+import {claude} from "@tea-fabrika/claude";
+import {codex} from "@tea-fabrika/codex";
+import {Duration, Effect, Result, Schema, Stream} from "effect";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RESULTS = join(HERE, "results", "169-agents-are-programs.json");
 const CODEX = process.env.CODEX ?? join(homedir(), ".local", "bin", "codex");
 const PROVIDERS: readonly Provider[] = ["claude", "codex"];
+const PROGRAMS = {claude, codex};
 
 type Results = Record<string, unknown>;
 const saved = (): Results => {
@@ -52,6 +60,8 @@ const save = (key: string, value: unknown) => {
 };
 
 const Answer = Schema.Struct({sum: Schema.Int});
+/** The stage's side: the JSON Schema it hands the program, and its decode of what comes back. */
+const summed = decoder(Answer);
 
 const flags = (folder: string, more: Partial<AgentFlags> = {}): AgentFlags => ({
 	folder,
@@ -62,6 +72,7 @@ const flags = (folder: string, more: Partial<AgentFlags> = {}): AgentFlags => ({
 	usd: undefined,
 	tools: undefined,
 	seconds: undefined,
+	schema: undefined,
 	...more,
 });
 
@@ -101,8 +112,8 @@ const trial = (provider: Provider, c: Case) =>
 		const agents = fakeWorld();
 		const ended = ear<{readonly turn: number; readonly stop: string}>();
 		const started = yield* start(
-			agentProgram(provider),
-			{...flags("/work/copy"), answer: undefined},
+			PROGRAMS[provider],
+			flags("/work/copy"),
 			{ended: ended.hear},
 			{id: `order:${provider}`, storage: memoryStorage()},
 		).pipe(Effect.provideService(Agent.Agents, agents));
@@ -161,7 +172,6 @@ const RUN: DraftRun = {
 
 const cost = (n: number) =>
 	Effect.gen(function* () {
-		const typed = (provider: Provider) => typedAgentProgram(provider, Answer, `${provider}-sum`);
 		const out: Record<string, {readonly p50: number; readonly p95: number}> = {};
 		for (const provider of PROVIDERS) {
 			const ways: Record<string, (i: number) => Effect.Effect<unknown>> = {
@@ -182,19 +192,19 @@ const cost = (n: number) =>
 					).pipe(Effect.orDie);
 				},
 				program: (i) =>
-					call(typed(provider), flags("/work/copy", {session: `s${i}`}), {
+					call(PROGRAMS[provider], flags("/work/copy", {session: `s${i}`, schema: summed.schema}), {
 						told: {prompt: ["add"]},
 						keeping: {id: `p${i}`, storage: memoryStorage()},
 					}).pipe(Effect.provideService(Agent.Agents, fakeWorld())),
 				child: (i) => {
 					const runner = programRunner({
 						name: "sum",
-						program: typed(provider),
+						program: PROGRAMS[provider],
 						agents: fakeWorld(),
-						flags: () => flags("/work/copy", {session: `s${i}`}),
+						flags: () => flags("/work/copy", {session: `s${i}`, schema: summed.schema}),
 						keeping: () => ({id: `c${i}`, storage: memoryStorage()}),
 					});
-					return Stream.runDrain(runner(RUN));
+					return Stream.runDrain(runner(RUN).pipe(Stream.map(summed.decode)));
 				},
 			};
 			for (const [way, once] of Object.entries(ways)) {
@@ -237,8 +247,8 @@ const live = Effect.gen(function* () {
 		const session = `exp169/${provider}/${Date.now()}`;
 		const t0 = performance.now();
 		const called = yield* call(
-			typedAgentProgram(provider, Answer, `${provider}-sum`),
-			flags(folder, {session, ...LIVE[provider]}),
+			PROGRAMS[provider],
+			flags(folder, {session, schema: summed.schema, ...LIVE[provider]}),
 			{
 				told: {prompt: [PROMPT]},
 				keeping: {id: `live:${provider}`, storage: memoryStorage()},
@@ -247,8 +257,14 @@ const live = Effect.gen(function* () {
 		const ms = Math.round(performance.now() - t0);
 		const heard =
 			called.kind === "called" ? called.heard.map((h) => ({name: h.name, value: h.value})) : called;
-		out[provider] = {ms, settings: LIVE[provider], heard};
-		console.log(provider, ms, JSON.stringify(heard));
+		// The stage's side: the plain answer, decoded by the stage's own schema.
+		const end = called.kind === "called" ? called.heard.find((h) => h.name === "ended") : undefined;
+		const read = Schema.decodeUnknownResult(Answer)(
+			end?.name === "ended" ? end.value.answer : null,
+		);
+		const decoded = Result.isSuccess(read) ? read.success : `misfit: ${read.failure.message}`;
+		out[provider] = {ms, settings: LIVE[provider], heard, decoded};
+		console.log(provider, ms, JSON.stringify(heard), JSON.stringify(decoded));
 		rmSync(folder, {recursive: true, force: true});
 		if (provider === "codex")
 			rmSync(codexHomeOf(`session:${session}`, process.env), {recursive: true, force: true});
