@@ -15,12 +15,12 @@ where they clash, and adds what a ticket shows at a glance. Tracker ticket 64.
 //   tsh> board --under 70     the same 18 slices as cards, one column per state
 //
 // The first thing on a ticket's page is one sentence: what the person must do, if anything.
-glanceOf(ticket, prs, now);
+Glance.fromTicket(ticket, prs, now);
 // {_tag: "review", pr: "https://github.com/usirin/tea-fabrika/pull/155", checks: {passed: 4, of: 4}}
 // "Ready for your review: PR #155, 4 of 4 checks passed"
 
 // Status is worked out from facts. Nobody writes "done".
-columnOf(timeline, now); // "in_review": a linked PR is open
+Column.fromTimeline(timeline, now); // "in_review": a linked PR is open
 
 // A program's inputs: one per command, each writing one fact, and one `query` that writes none.
 yield* tell(run, "comment", {ticket: 43, body: "Looks good."}); // a fact
@@ -64,6 +64,7 @@ tracker/ticket/43/inbox
 
 headOf(timeline, now)   // {_tag: "next", stage: "triage"}
 lineOf(head)            // "next: triage"
+// Today's names. The Schema.Opaque sweep renames them Head.fromTimeline and Head.toLine.
 ```
 
 - **The facts it needs are in the prose.** A run started at 05:01. PR 155 was
@@ -167,7 +168,7 @@ What this says for us:
   owner and links in a fixed place, and the timeline below.
 - **An agent's run is one live thing that updates in place,** not a stream of
   comments.
-- **Checks read as a count and a colour,** with failures first.
+- **Checks read as a count and a color,** with failures first.
 
 ## 3. The Elm answer first
 
@@ -226,7 +227,7 @@ const update = (s: Board, m: BoardMsg) => {
 
 | Question | 135 said | 153 said | Here |
 |---|---|---|---|
-| Is status a fact? | no, `statusOf` is a fold; a `moved` fact would let someone write done | `moved` exists, but cannot spell done; the column is a fold | both: status is a fold, and `moved` holds only open states. 135's worry cannot happen. |
+| Is status a fact? | no, status is a fold; a `moved` fact would let someone write done | `moved` exists, but cannot spell done; the column is a fold | both: status is a fold, and `moved` holds only open states. 135's worry cannot happen. |
 | Which open states? | none written; triage and started only | backlog, todo, in progress, in review | **todo, in progress, in review.** No backlog: a "later" pile clashes with [sort answers yes or no](./sort-answers-yes-or-no.md), which has no "later". |
 | Who writes a parent? | a person only (`parented`) | anyone (`nested`), so a plan stage can | **anyone on the ledger**, named `nested`. The first real use is an agent: plan-v1 filed the 18 slices. No stage reads it to decide. Question 1. |
 | One word, two things | `linked` = a PR's URL | `linked` = a ticket relation | `linked` is the PR link (the plan's "link fact"). A ticket relation is `related`. |
@@ -328,9 +329,9 @@ const whose = (g: Glance, driven: boolean): "you" | "agent" | "ci" | "nobody" =>
 - **Idle goes into the row, not the line.** "Idle since 14:02" said nobody is
   driving it, which `nobody` and `gone` now say better. The time since the
   last fact shows small under the line.
-- **Colour only for state.** The line takes the colour of whose turn it is:
-  one colour for you, one for working, one for failed, quiet grey for nobody.
-  Nothing else on the page is coloured.
+- **Color only for state.** The line takes the color of whose turn it is:
+  one color for you, one for working, one for failed, quiet gray for nobody.
+  Nothing else on the page is colored.
 
 ### 5.2 The properties panel
 
@@ -338,7 +339,7 @@ One block of name and value pairs, as Linear's sidebar. Every value is a fold.
 
 | Property | From | Shows |
 |---|---|---|
-| State | `columnOf` (section 8) | Todo, In progress, In review, Done, Closed |
+| State | `Column.fromTimeline` (section 8) | Todo, In progress, In review, Done, Closed |
 | Assignee | `to` on `filed`, then `assigned` (slice 4) | a person; until slice 4, the person the filer writes for |
 | Agent | the last `started` and its `ended` | its name, hand run or lane, running time, cost and turns, or "cost not reported" |
 | PR | `linked`, then GitHub's state through `CodeHost` | `#155 open`, one dot per check, the review result |
@@ -357,12 +358,12 @@ One block of name and value pairs, as Linear's sidebar. Every value is a fold.
 
 Only on a ticket that has `nested` children. One row per child: its number,
 title, column and short status line. Above them a bar: done, in review, in
-progress, todo, each its own colour, and "2 of 18 done".
+progress, todo, each its own color, and "2 of 18 done".
 
 ```ts
 // A sketch. The parent's progress is a count of its children's columns. A fold, never stored.
-const progressOf = (children: readonly Ticket[], now: number) =>
-	Object.groupBy(children, (t) => columnOf(t.timeline, now)); // {in_review: [43, 44], ...}
+const progress = (children: readonly Ticket[], now: number) =>
+	Object.groupBy(children, (t) => Column.fromTimeline(t.timeline, now)); // {in_review: [43, 44], ...}
 ```
 
 ### 5.4 The live agent panel
@@ -415,7 +416,7 @@ yield* tickets.write(43, {type: "ended", run: "h-43-1", stage: "build",
 - **`linked` names the PR, never its state.** The view reads the PR's state,
   checks and reviews through the tracker's `CodeHost` door, the way the list
   already reads open PRs (`programs/tracker/src/github.ts`). So a check's
-  colour is GitHub's word, never an agent's, as the decided notes require.
+  color is GitHub's word, never an agent's, as the decided notes require.
 - **`pr` stays the watcher's** ([a ticket runs from the app](./a-ticket-runs-from-the-app.md),
   section 3). Until slice 7 runs, nothing writes `pr`, so a merged PR shows
   "merged" in the panel but the ticket is not done until the watcher writes
@@ -535,7 +536,7 @@ inputs: {
 | `ticket` | `--ticket 43` | that ticket, its parent's title, each child's column and line, its PRs from `CodeHost` | comment, answer, close, reopen, link, nest, move |
 | `board` | `--under 70` | every child: its column and short line | move, close |
 | `list` | `--under`, `--show`, `--find`, `--group` | today's list, grouped, children nested | file |
-| `triage`, `timeline`, `cycle` | later | | |
+| `triage`, `cycle`, a project roadmap (Linear's Timeline view; `timeline` is the program that lays out one ticket's jobs) | later | | |
 
 - **Today's `tracker` program becomes `list`.** Same window, same writes.
 - **Inside a view, going somewhere is a `query`.** A child clicked on
@@ -575,10 +576,11 @@ where an open ticket is, and the latest wins, as Linear's GitHub link moves an
 issue when its PR moves:
 
 ```ts
-// A sketch. Pure, built on headOf.
-type Column = typeof OpenState.Type | "done" | "closed";
+// A sketch, column.ts, imported as `* as Column` (a union of literals, so a module, not a
+// class). Pure, built on headOf.
+export type Column = typeof OpenState.Type | "done" | "closed";
 
-const columnOf = (timeline: readonly Entry[], now: number): Column => {
+export const fromTimeline = (timeline: readonly Entry[], now: number): Column => {
 	const head = headOf(timeline, now);
 	if (head._tag === "done") return "done"; // a merged PR, or a person's close once answered
 	if (head._tag === "closed") return "closed";
@@ -642,13 +644,13 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 
 | Step | What | Done when |
 |---|---|---|
-| 1 | `glanceOf`, and "next" only for a driven ticket | ticket 43 no longer says "next: triage"; laws: an open ask still always wins, done only from a merge or a person's close |
+| 1 | `Glance.fromTicket`, and "next" only for a driven ticket | ticket 43 no longer says "next: triage"; laws: an open ask still always wins, done only from a merge or a person's close |
 | 2 | `linked`, the PR panel from `CodeHost`, `fabrika post` learns `started`, `link`, `ended` | a hand-run agent's three posts make ticket 43 say "Ready for your review: PR #155, 4 of 4 checks passed"; an agent cannot post checks |
 | 3 | the ticket page in six parts (section 5) | the page shows the line, properties, activity and folded comments, with no prose open by default |
 | 4 | one input per command, one `query`, `quit` (section 7) | every `do` is gone; `query` alone cannot write a fact; an agent's list has no `answer` |
 | 5 | `nested`, sub-issues and progress | 43 to 60 show under the parent with "0 of 18 done"; a loop and a missing parent are refused |
 | 6 | `feed` taken out; `ticket` its own program | `ticket --ticket 70` in a tile shows the same page; three views at once measured for start time and memory |
-| 7 | `moved`, `columnOf`, `board` | `board --under 70` shows the slices by column; a drag writes `moved`; Done takes no drop |
+| 7 | `moved`, `Column.fromTimeline`, `board` | `board --under 70` shows the slices by column; a drag writes `moved`; Done takes no drop |
 | 8 | the `open` output, heard by the desk | Enter on a card opens #43 beside the board |
 | 9 | then, as planned or asked: assignee (v1 slice 4), the live panel from beats, relations, edits, priority and labels, an inbox, saved views | each its own done-when |
 
@@ -666,7 +668,7 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 - **Why:** the owner's three questions (what is each agent doing, is CI green,
   am I needed) are all answered by one line and one panel. Linear's sidebar
   and GitHub's merge box are the known shapes.
-- **Cost:** `glanceOf` with laws, a page rebuilt in six parts, and a `CodeHost`
+- **Cost:** `Glance.fromTicket` with laws, a page rebuilt in six parts, and a `CodeHost`
   read per open ticket with a PR.
 - **How sure: 80%.**
 
