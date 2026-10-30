@@ -45,6 +45,8 @@ const securityRule = (t: Triage, security: boolean): Triage =>
   B on one area at a time and count wasted pull requests.
 - **Asks get cheaper.** A batch view or a precedent hint beside each ask
   (experiment 163 part 6) lowers the cost of A without changing the pick.
+  Part 6 found the hint right first on 7 of 20 asks at 0.9, on a question
+  fitted to that set. It is parked until live asks can test it fresh.
 - **Security without the label.** The rule reads a label triage will not
   have. Its numbers are an upper bound until triage has its own security
   check.
