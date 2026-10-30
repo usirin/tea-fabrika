@@ -1,6 +1,6 @@
 import type {Job} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
-import type {Copy, InputQueue} from "../program/program.ts";
+import type {Copy, Mailbox} from "../program/program.ts";
 
 // The rows `jobs` prints under a job: each copy of each machine its programs
 // run, with the status line the program declared for it. Read from the run's
@@ -38,38 +38,33 @@ export function shownCopies(copies: readonly Copy[]): {
 const cut = (row: string) => (row.length > WIDTH ? `${row.slice(0, WIDTH - 1)}…` : row);
 
 /**
- * The rows under one job for a full line (experiment 79): a stage whose
- * input is full with a writer waiting on it, and the stage before it, whose
- * pipe is that writer. Like a full Unix pipe, neither is an error: the
- * reader is slow or stopped, and the writer sleeps until it makes room. They
- * go once room comes.
+ * The rows under one job for a full mailbox (experiment 79): a stage whose
+ * mailbox is full with a writer waiting on one of its inputs, and the stage
+ * before it, whose pipe is that writer. Like a full Unix pipe, neither is an
+ * error: the reader is slow or stopped, and the writer sleeps until it makes
+ * room. They go once room comes.
  *
  *   [1] running   seq --to 3000 | lazy
- *         seq   waiting for room: lazy's input n is full
- *         lazy  input n full: 1000 unread, 1 waiting
+ *         seq   waiting for room: lazy's mailbox is full
+ *         lazy  mailbox full: 1000 unread, 1 waiting on n
  *
  * A waiting writer on the first stage is tsh itself, offering a script's or
- * stdin's lines: only the full line shows.
+ * stdin's lines: only the full mailbox shows.
  */
 export function fullRows(job: Job, live: ReadonlyMap<string, AnyRunning>): readonly string[] {
 	if (job.state === "detached") return [];
 	const rows = job.stages.flatMap((stage, i) => {
-		const queues: Readonly<Record<string, InputQueue>> = live.get(stage.run)?.run.queues() ?? {};
-		const full = Object.entries(queues).filter(([, queue]) => queue.waiting > 0);
+		const mailbox: Mailbox | undefined = live.get(stage.run)?.run.mailbox();
+		const full = Object.entries(mailbox?.inputs ?? {}).filter(([, queue]) => queue.waiting > 0);
 		const before = i === 0 ? undefined : job.stages[i - 1];
 		const fed = full.find(([input]) => before?.wire?.input === input);
 		return [
 			...(before === undefined || fed === undefined
 				? []
-				: [
-						{
-							tag: before.program,
-							text: `waiting for room: ${stage.program}'s input ${fed[0]} is full`,
-						},
-					]),
+				: [{tag: before.program, text: `waiting for room: ${stage.program}'s mailbox is full`}]),
 			...full.map(([input, queue]) => ({
 				tag: stage.program,
-				text: `input ${input} full: ${queue.length} unread, ${queue.waiting} waiting`,
+				text: `mailbox full: ${mailbox?.length ?? 0} unread, ${queue.waiting} waiting on ${input}`,
 			})),
 		];
 	});

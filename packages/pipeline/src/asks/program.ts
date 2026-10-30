@@ -1,5 +1,5 @@
 import {defineProgram, flag, input, output} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 import {PlanId, planOf, readTicketId, TaskId, TicketId, ticketOf} from "../ids.ts";
 import {Revision, revisionOfDraft} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
@@ -105,10 +105,6 @@ const idOf = (fact: Fact): {readonly id?: string} => {
 	}
 };
 
-type Told =
-	| {readonly on: "fact"; readonly fact: Fact}
-	| {readonly on: "answer"; readonly answer: Answer};
-
 /**
  * A plan the plan stage wrote, as a fact: the plan named by its ticket.
  * `null`: no plan, a ticket that is not one, or a story whose name is not a
@@ -172,7 +168,7 @@ export const asksProgram = defineProgram({
 		built: output(Built, "Each build as it finishes, for whoever holds builds to look at."),
 		ship: output(BuildRef, "A build nothing holds: it ships."),
 	},
-	main: ({inputs, send, flags}) =>
+	main: ({serve, send, flags}) =>
 		Effect.gen(function* () {
 			const folded = Effect.map(readFacts, foldLedger);
 			// Each fact the core writes, under the message id that makes it once, where it has one: sent
@@ -205,68 +201,59 @@ export const asksProgram = defineProgram({
 				});
 			yield* said(null, yield* folded);
 			yield* ship;
-			const told = Stream.mergeAll(
-				[
-					inputs.planned.pipe(
-						Stream.map(factOf),
-						Stream.filter((fact): fact is Fact => fact !== null),
-					),
-					inputs.revised.pipe(
-						Stream.map(
-							(r): Fact => ({
-								type: "planned",
-								plan: r.plan,
-								tickets: [ticketOf(r.plan)],
-								data: r.data,
-								problems: [],
-							}),
-						),
-					),
-					inputs.reviewed.pipe(Stream.map((r): Fact => ({type: "reviewed", ...r}))),
-					inputs.ruling.pipe(Stream.map((r): Fact => ({type: "ruling_needed", ...r}))),
-					inputs.build.pipe(Stream.map((b): Fact => ({type: "built", ...b, holds: flags.holds}))),
-					inputs.cleared.pipe(Stream.map((c): Fact => ({type: "cleared", ...c}))),
-					inputs.raise.pipe(Stream.map((r): Fact => ({type: "check_raised", ...r}))),
-				].map((facts) => facts.pipe(Stream.map((fact): Told => ({on: "fact", fact})))),
-				{concurrency: "unbounded"},
-			).pipe(
-				Stream.merge(inputs.answer.pipe(Stream.map((answer): Told => ({on: "answer", answer})))),
-			);
-			yield* told.pipe(
-				Stream.runForEach((item) =>
-					Effect.gen(function* () {
-						const before = yield* folded;
-						if (item.on === "fact") {
-							const {fact} = item;
-							yield* keep(fact);
-							const after = yield* folded;
-							if (fact.type === "built") {
-								const build = [...after.builds.values()]
-									.filter((b) => b.plan === fact.plan && b.task === fact.task)
-									.at(-1);
-								if (build !== undefined)
-									yield* send("built", {
-										plan: fact.plan,
-										task: fact.task,
-										changes: fact.changes,
-										build: build.build,
-									});
-							}
-							yield* said(before, after);
-							return yield* ship;
-						}
-						const {answer} = item;
-						const problem = problemWith(before, answer);
-						const ask = before.asks.get(answer.id);
-						const next = ask === undefined ? null : nextOf(ask, answer.answer);
-						if (problem !== null || ask === undefined || next === null)
-							return yield* send("refused", {id: answer.id, why: problem ?? "it does not fit"});
-						yield* keep({type: "answered", id: answer.id, answer: answer.answer});
-						yield* send("settled", {ask, answer: answer.answer, next});
-						yield* said(before, yield* folded);
-						yield* ship;
+			// One function for a fact, one for an answer, and one handler per input: each value is
+			// handled in the order told, across every input, so an answer told right after the ask it
+			// answers is never read before that ask.
+			const fact = (fact: Fact | null) =>
+				Effect.gen(function* () {
+					if (fact === null) return;
+					const before = yield* folded;
+					yield* keep(fact);
+					const after = yield* folded;
+					if (fact.type === "built") {
+						const build = [...after.builds.values()]
+							.filter((b) => b.plan === fact.plan && b.task === fact.task)
+							.at(-1);
+						if (build !== undefined)
+							yield* send("built", {
+								plan: fact.plan,
+								task: fact.task,
+								changes: fact.changes,
+								build: build.build,
+							});
+					}
+					yield* said(before, after);
+					yield* ship;
+				});
+			const answer = (answer: Answer) =>
+				Effect.gen(function* () {
+					const before = yield* folded;
+					const problem = problemWith(before, answer);
+					const ask = before.asks.get(answer.id);
+					const next = ask === undefined ? null : nextOf(ask, answer.answer);
+					if (problem !== null || ask === undefined || next === null)
+						return yield* send("refused", {id: answer.id, why: problem ?? "it does not fit"});
+					yield* keep({type: "answered", id: answer.id, answer: answer.answer});
+					yield* send("settled", {ask, answer: answer.answer, next});
+					yield* said(before, yield* folded);
+					yield* ship;
+				});
+			yield* serve({
+				planned: (p) => fact(factOf(p)),
+				revised: (r) =>
+					fact({
+						type: "planned",
+						plan: r.plan,
+						tickets: [ticketOf(r.plan)],
+						data: r.data,
+						problems: [],
 					}),
-				),
-			);
+				reviewed: (r) => fact({type: "reviewed", ...r}),
+				ruling: (r) => fact({type: "ruling_needed", ...r}),
+				answer,
+				build: (b) => fact({type: "built", ...b, holds: flags.holds}),
+				cleared: (c) => fact({type: "cleared", ...c}),
+				raise: (r) => fact({type: "check_raised", ...r}),
+			});
 		}),
 });

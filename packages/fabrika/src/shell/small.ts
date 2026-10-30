@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Layer, Schema, Stream} from "effect";
+import {Duration, Effect, Layer, Schema} from "effect";
 import {type Entry, listed} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
@@ -49,7 +49,7 @@ export const double = defineProgram({
 	description: "Doubles each number it is told, and ends when its input closes.",
 	inputs: {n: input(Schema.Int, "A number to double.")},
 	outputs: {n: output(Schema.Int, "The number, doubled.")},
-	main: ({inputs, send}) => inputs.n.pipe(Stream.runForEach((n) => send("n", n * 2))),
+	main: ({serve, send}) => serve({n: (n) => send("n", n * 2)}),
 });
 
 export const upper = defineProgram({
@@ -57,8 +57,7 @@ export const upper = defineProgram({
 	description: "Says each text it is told in capital letters, and ends when its input closes.",
 	inputs: {text: input(Schema.String, "A text.")},
 	outputs: {text: output(Schema.String, "The text in capital letters.")},
-	main: ({inputs, send}) =>
-		inputs.text.pipe(Stream.runForEach((text) => send("text", text.toUpperCase()))),
+	main: ({serve, send}) => serve({text: (text) => send("text", text.toUpperCase())}),
 });
 
 export const sleep = defineProgram({
@@ -146,13 +145,13 @@ export const tally = defineProgram({
 			status: (s) => `total ${s.total}`,
 		}),
 	},
-	main: ({inputs, send, machines}) =>
+	main: ({serve, send, machines}) =>
 		Effect.gen(function* () {
 			// Kept for as long as the run is: the total is the run's, and it is never over. Nothing goes
 			// first: the total stands as it was kept, or at 0.
 			const counter = yield* machines.count.get("total").start();
-			yield* inputs.add.pipe(
-				Stream.runForEach((n) => {
+			yield* serve({
+				add: (n) => {
 					// The machine's own rule, asked first: a refused add is said to the caller and never
 					// told to the machine, so nothing is saved for it.
 					const added = addTo(counter.getState().total, n);
@@ -161,8 +160,8 @@ export const tally = defineProgram({
 						Effect.orDie,
 						Effect.andThen(() => send("total", counter.getState().total)),
 					);
-				}),
-			);
+				},
+			});
 		}).pipe(Effect.scoped),
 });
 

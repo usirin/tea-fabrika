@@ -202,7 +202,7 @@ const review = defineProgram({
 	description: "A stand-in for the review stage: passes on each pull request it is told.",
 	inputs: {pr: input(PullRequestUrl, "A pull request to review.")},
 	outputs: {passed: output(PullRequestUrl, "A pull request that passed review, ready to ship.")},
-	main: ({inputs, send}) => inputs.pr.pipe(Stream.runForEach((pr) => send("passed", pr))),
+	main: ({serve, send}) => serve({pr: (pr) => send("passed", pr)}),
 });
 
 describe("review | ship: the user's job", () => {

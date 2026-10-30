@@ -456,12 +456,13 @@ export const startTsh = (options: {
 			ctx: {programs, history: lines},
 			interpret: {
 				write: (c) => Effect.sync(() => write(c.data)).pipe(Effect.as(null)),
-				// Offered, not told: a line a person typed is never dropped, even on a full input.
+				// Offered, not told: a line a person typed is never dropped, even on a full mailbox.
 				line: (c) => offer(started.run, "line", c.text).pipe(Effect.as(null)),
-				// A full `signal` line already holds an interrupt tsh has not read: this one is let go.
+				// `signal` is a control input with its own small bound: when that is full, interrupts tsh
+				// has not handled are already waiting, and this one is let go.
 				interrupt: () =>
 					tell(started.run, "signal", "interrupt").pipe(
-						Effect.catchTag("Full", () => Effect.void),
+						Effect.catchTag("MailboxFull", () => Effect.void),
 						Effect.as(null),
 					),
 				close: () => Effect.sync(() => started.close("line")).pipe(Effect.as(null)),

@@ -2,7 +2,7 @@
 // The book keeps every line, once each.
 import {defineMachine} from "@demlik/tea";
 import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika";
-import {Console, Effect, Schedule, Schema, Stream} from "effect";
+import {Console, Effect, Schedule, Schema} from "effect";
 import {write} from "./agent.ts";
 
 // ------------------------------------------------------------------ the poet
@@ -38,14 +38,14 @@ export const poetProgram = defineProgram({
 	description: "Asks an agent for one line per guest and sends it to the book.",
 	inputs: {inbox: input(envelope(Order), "One order: an id and a guest.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const run = yield* self.run(poet, {schema: Poet, cursor: (s) => s.cursor}, {ctx: undefined});
 			const machine = yield* run.ready;
 			const book = streams("book").inbox;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) =>
+			yield* serve({
+				inbox: (e) =>
 					Effect.gen(function* () {
 						yield* Console.log(`${self.holder}  poet    asking for ${e.body.guest} (${e.body.id})`);
 						// The slow part, and the paid one. If this host dies here, the next host asks again.
@@ -68,8 +68,7 @@ export const poetProgram = defineProgram({
 						if (sent.how !== "sent") return yield* Effect.interrupt;
 						yield* machine.dispatch({type: "written", rev: e.rev, usd: w.usd});
 					}),
-				),
-			);
+			});
 		}).pipe(Effect.scoped),
 });
 
@@ -109,15 +108,14 @@ export const bookProgram = defineProgram({
 	description: "Keeps every line the poet sends, once each, in order.",
 	inputs: {inbox: input(envelope(Line), "One line, from the poet.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const run = yield* self.run(book, {schema: Book, cursor: (s) => s.cursor}, {ctx: undefined});
 			const machine = yield* run.ready;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) =>
+			yield* serve({
+				inbox: (e) =>
 					machine.dispatch({type: "kept", rev: e.rev, guest: e.body.guest, line: e.body.line}),
-				),
-			);
+			});
 		}).pipe(Effect.scoped),
 });

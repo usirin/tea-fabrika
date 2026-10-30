@@ -64,32 +64,35 @@ export const mustBeGiven = (declared: Flag<unknown>): boolean =>
 	declared.default === undefined && declared.shape.problem(undefined) !== undefined;
 /**
  * When a value told to an input counts as taken: AMQP's two acknowledgement
- * modes. `auto`: once `main` reads it off the line. `manual`: once `main`
- * says so, after it has saved the value; a pipe into it keeps the value in
+ * modes. `auto`: once `serve` takes it out of the mailbox. `manual`: once its
+ * handler says so, after it has saved the value; a pipe into it keeps the value in
  * its sender's outbox until then (./outbox.ts).
  */
 export type Ack = "auto" | "manual";
 /** A value a running program can be told at any time, like a line on stdin. */
-export interface Input<T, A extends Ack = Ack> extends Declared<"input", T> {
+export interface Input<T, A extends Ack = Ack, C extends boolean = boolean>
+	extends Declared<"input", T> {
 	readonly ack: A;
 	/**
-	 * How many values its line holds that `main` has not read yet, from every
-	 * writer: Akka's `mailbox-capacity`. A `tell` past it fails `Full`; `offer`,
-	 * a pipe and `call` wait for room. A whole number, 1 or more.
+	 * A control input, like Akka's `ControlMessage`: a Ctrl-C, a cancel. Its
+	 * values skip the run's mailbox. `main` handles each at once, beside the
+	 * order, with a `fork` handler, and they count against a small bound of
+	 * their own, so a full mailbox never refuses one. `false`: an ordinary
+	 * input, whose values wait their turn in the mailbox.
 	 */
-	readonly capacity: number;
+	readonly control: C;
 }
 
 /**
- * An input's capacity when its program does not say one: the default
+ * A program's mailbox capacity when it says none: the default
  * `mailbox-capacity` of Akka's bounded mailbox (experiment 79).
  */
 export const CAPACITY = 1000;
 
-/** `capacity`, if it is one a line can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
+/** `capacity`, if it is one a mailbox can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
 export function capacityOf(capacity: number): number {
 	if (!Number.isInteger(capacity) || capacity < 1)
-		throw new Error(`an input's capacity is a whole number, 1 or more, not ${capacity}`);
+		throw new Error(`a mailbox's capacity is a whole number, 1 or more, not ${capacity}`);
 	return capacity;
 }
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
@@ -195,24 +198,24 @@ export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
 
 /**
  * Declare an input: a value a running program can be told at any time.
- * `{ack: "manual"}`: `main` reads each value with the way to say it is saved
- * (a `Delivery`), and says so once it is. `{capacity}`: how many unread
- * values its line holds, `CAPACITY` when left out; one that is not a whole
- * number, 1 or more, is refused here.
+ * `{ack: "manual"}`: `main` is handed each value with the way to say it is
+ * saved (a `Delivery`), and says so once it is. `{control: true}`: a control
+ * input, handled at once beside the order ({@link Input}'s `control`).
  *
- *   input(Line, "A line typed at the prompt.", {capacity: 16})   // the 17th unread tell fails `Full`
+ *   input(Line, "A line typed at the prompt.")                      // waits its turn in the mailbox
+ *   input(Signal, "Ctrl-C: stops the foreground job.", {control: true})   // never waits behind a line
  */
-export const input = <T, const A extends Ack = "auto">(
+export const input = <T, const A extends Ack = "auto", const C extends boolean = false>(
 	schema: ShapeSchema<T>,
 	description: string,
-	options?: {readonly ack?: A; readonly capacity?: number},
-): Input<T, A> => ({
+	options?: {readonly ack?: A; readonly control?: C},
+): Input<T, A, C> => ({
 	direction: "input",
 	description: described(description),
 	shape: shapeOf(schema),
-	// Left out, `A` is its default, "auto".
+	// Left out, `A` is its default, "auto", and `C` is `false`.
 	ack: options?.ack ?? ("auto" as A),
-	capacity: capacityOf(options?.capacity ?? CAPACITY),
+	control: options?.control ?? (false as C),
 });
 
 /** Declare an output: a value the program sends while it runs, to anyone who listens. */

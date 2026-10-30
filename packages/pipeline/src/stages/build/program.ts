@@ -178,10 +178,12 @@ export const buildProgram = defineProgram({
 	// by the queue at its next start (../queue.ts).
 	machines: BUILD_KINDS,
 	main: (io) =>
-		workQueue(
-			io.machines.queue,
-			io.inputs.ticket,
-			(ticket) => builtOne(ticket, io),
-			(ticket) => io.machines.build.get(idOf(ticket)).clear,
-		),
+		Effect.gen(function* () {
+			const queue = yield* workQueue(
+				io.machines.queue,
+				(ticket) => builtOne(ticket, io),
+				(ticket) => io.machines.build.get(idOf(ticket)).clear,
+			);
+			yield* queue.drained(io.serve({ticket: queue.told}));
+		}).pipe(Effect.scoped),
 });

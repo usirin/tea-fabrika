@@ -305,7 +305,7 @@ const upstream = defineProgram({
 	description: "A stand-in for what feeds review: passes on each pull request it is told.",
 	inputs: {pr: input(ReviewTarget, "A pull request that is ready for review.")},
 	outputs: {pr: output(ReviewTarget, "The same pull request, for review.")},
-	main: ({inputs, send}) => inputs.pr.pipe(Stream.runForEach((pr) => send("pr", pr))),
+	main: ({serve, send}) => serve({pr: (pr) => send("pr", pr)}),
 });
 
 describe("upstream | review | ship: the user's job", () => {

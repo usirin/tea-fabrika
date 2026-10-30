@@ -1,14 +1,5 @@
-import {
-	type Delivery,
-	defineProgram,
-	flag,
-	input,
-	kind,
-	output,
-	type RefsOf,
-	type Send,
-} from "@kampus/fabrika";
-import {Effect, Exit, Schema, Stream} from "effect";
+import {defineProgram, flag, input, kind, output, type RefsOf, type Send} from "@kampus/fabrika";
+import {Effect, Exit, Schema} from "effect";
 import {nameOf} from "../outcome.ts";
 import {drop, queueKind, workQueue} from "../queue.ts";
 import {shipLine} from "../status.ts";
@@ -251,76 +242,71 @@ export const createShipProgram = (machine = ship) =>
 		},
 		outputs: OUTPUTS,
 		machines: {queue: queueKind, ship: shipKind(machine)},
-		main: ({flags, inputs, send, machines}) => {
-			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
-			// and an ask not yet read goes unanswered. Its asker hears the run end.
-			const told: Stream.Stream<Delivery<Item>> = Stream.merge(
+		main: ({flags, serve, send, machines}) =>
+			Effect.gen(function* () {
+				// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds
+				// and ends, and an ask not yet handed on goes unanswered. Its asker hears the run end.
 				// A bare pull request has no id to catch a repeat by, so its run is dropped once it is over.
 				// One at a head is kept under the url of that commit, so the same head told again is caught.
-				inputs.pr.pipe(
-					Stream.map(
-						({value, ack}): Delivery<Item> => ({
-							value:
-								typeof value === "string"
-									? {id: `pr/${value}`, pr: value, kept: false}
-									: {id: keyOf(value), pr: value.pr, kept: true},
-							ack,
-						}),
-					),
-				),
-				// An ask is told by its asker, who asks again under its id: it waits on no ack.
-				inputs.ask.pipe(
-					Stream.map(
-						({id, pr}): Delivery<Item> => ({value: {id, pr, kept: true}, ack: Effect.void}),
-					),
-				),
-				{haltStrategy: "left"},
-			);
-			// Read mode keeps nothing, so it has nothing to forget, and a value is taken once read.
-			if (flags.mode === "read")
-				return told.pipe(
-					Stream.runForEach(({value, ack}) =>
-						ack.pipe(
-							Effect.andThen(look(value.pr)),
-							Effect.flatMap((found) => send("found", found)),
+				const toItem = (value: typeof Told.Type): Item =>
+					typeof value === "string"
+						? {id: `pr/${value}`, pr: value, kept: false}
+						: {id: keyOf(value), pr: value.pr, kept: true};
+				const found = (pr: string) => look(pr).pipe(Effect.flatMap((f) => send("found", f)));
+				// Read mode keeps nothing, so it has nothing to forget, and a value is taken once handed on.
+				if (flags.mode === "read")
+					return yield* serve(
+						{
+							pr: ({value, ack}) => ack.pipe(Effect.andThen(found(toItem(value).pr))),
+							ask: ({pr}) => found(pr),
+							forget: () => Effect.void,
+						},
+						{until: ["pr"]},
+					);
+
+				// Each pull request goes on the kept queue first, so a start after a kill carries every one
+				// told and not finished, in order (../queue.ts). An ask again under an id already answered
+				// starts a run kept over: it is answered from what was kept, and nothing ships twice.
+				const queue = yield* workQueue(
+					machines.queue,
+					(text) =>
+						itemOf(text).pipe(
+							Effect.orDie,
+							Effect.flatMap((item) => shipped(machines.ship, item, send)),
 						),
+					(text) =>
+						itemOf(text).pipe(
+							Effect.orDie,
+							Effect.flatMap((item) =>
+								item.kept ? Effect.void : machines.ship.get(item.id).clear,
+							),
+						),
+				);
+				yield* queue.drained(
+					serve(
+						{
+							pr: ({value, ack}) => queue.told({value: textOf(toItem(value)), ack}),
+							// An ask is told by its asker, who asks again under its id: it waits on no ack.
+							ask: ({id, pr}) =>
+								queue.told({value: textOf({id, pr, kept: true}), ack: Effect.void}),
+							// A forget is handled in its turn, after an ask told before it, never before it, and
+							// it is not forked: its handler waits only on the queue's saves, never on another
+							// asker's pull request in the merge queue. Only an answered ask is forgotten, so no
+							// run still going is dropped. An answered ask a kill left on the queue is taken off
+							// it first, so its work does not start again on the run dropped under it.
+							forget: ({id}) =>
+								drop(machines.queue, (text) => {
+									const item = readItem(text);
+									return Exit.isSuccess(item) && item.value.kept && item.value.id === id;
+								}).pipe(
+									Effect.andThen(machines.ship.get(id).clear),
+									Effect.andThen(send("forgot", {id})),
+								),
+						},
+						{until: ["pr"]},
 					),
 				);
-
-			// Each pull request goes on the kept queue first, so a start after a kill carries every one
-			// told and not finished, in order (../queue.ts). An ask again under an id already answered
-			// starts a run kept over: it is answered from what was kept, and nothing ships twice.
-			const working = workQueue(
-				machines.queue,
-				told.pipe(Stream.map(({value, ack}) => ({value: textOf(value), ack}))),
-				(text) =>
-					itemOf(text).pipe(
-						Effect.orDie,
-						Effect.flatMap((item) => shipped(machines.ship, item, send)),
-					),
-				(text) =>
-					itemOf(text).pipe(
-						Effect.orDie,
-						Effect.flatMap((item) => (item.kept ? Effect.void : machines.ship.get(item.id).clear)),
-					),
-			);
-			// A forget is done beside the queue, not after it: an asker waits on its `forgot`, and must not
-			// wait behind another asker's pull request in the merge queue. Only an answered ask is forgotten,
-			// so no run still going is dropped. An answered ask a kill left on the queue is taken off it
-			// first, so its work does not start again on the run dropped under it. The queue's end is the run's.
-			const forgotten = inputs.forget.pipe(
-				Stream.runForEach(({id}) =>
-					drop(machines.queue, (text) => {
-						const item = readItem(text);
-						return Exit.isSuccess(item) && item.value.kept && item.value.id === id;
-					}).pipe(
-						Effect.andThen(machines.ship.get(id).clear),
-						Effect.andThen(send("forgot", {id})),
-					),
-				),
-			);
-			return working.pipe(Effect.raceFirst(forgotten.pipe(Effect.andThen(Effect.never))));
-		},
+			}).pipe(Effect.scoped),
 	});
 
 /** The ship program, on a ship machine with every setting at its default. */

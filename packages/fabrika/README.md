@@ -56,14 +56,15 @@ collects what it says.
 
 ```ts
 import {call, defineProgram, input, output} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 
 const double = defineProgram({
 	name: "double",
 	description: "Doubles each number it is told, and ends when its input closes.",
 	inputs: {n: input(Schema.Int, "A number to double.")},
 	outputs: {n: output(Schema.Int, "The number, doubled.")},
-	main: ({inputs, send}) => inputs.n.pipe(Stream.runForEach((n) => send("n", n * 2))),
+	// One handler per input, each value in the order told; serving ends once `n` closes.
+	main: ({serve, send}) => serve({n: (n) => send("n", n * 2)}),
 });
 
 const answer = await Effect.runPromise(call(double, {}, {told: {n: [1, 2, 3]}}));

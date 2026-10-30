@@ -1,10 +1,10 @@
-import {Deferred, Effect, Schema, Stream} from "effect";
+import {Deferred, Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {call, defineProgram, type Ended, start, tell} from "./program.ts";
+import {call, defineProgram, type Ended, end, start, tell} from "./program.ts";
 import {input, output} from "./shape.ts";
 
-// What a run's end says about the values still on its inputs' lines: told,
-// queued, and never read by `main`. Nothing reads them after the end, and a
+// What a run's end says about the values still in its mailbox: told, queued,
+// and never handled by `main`, counted per input. Nothing reads them after the end, and a
 // host told them with no ack, so the end names how many, per input, instead of
 // dropping them without a word (experiment 80). A pipe into a `manual` input
 // still holds its own in the sender's outbox and sends them again; they are
@@ -18,11 +18,7 @@ const firstOnly = defineProgram({
 	description: "Says the first word it is told, then ends.",
 	inputs: {word: input(Schema.String, "A word.")},
 	outputs: {said: output(Schema.String, "The first word.")},
-	main: ({inputs, send}) =>
-		inputs.word.pipe(
-			Stream.take(1),
-			Stream.runForEach((w) => send("said", w)),
-		),
+	main: ({serve, send}) => serve({word: (w) => send("said", w).pipe(Effect.andThen(end))}),
 });
 
 /** Reads every word to the end. */
@@ -31,7 +27,7 @@ const all = defineProgram({
 	description: "Says every word it is told.",
 	inputs: {word: input(Schema.String, "A word.")},
 	outputs: {said: output(Schema.String, "Each word.")},
-	main: ({inputs, send}) => inputs.word.pipe(Stream.runForEach((w) => send("said", w))),
+	main: ({serve, send}) => serve({word: (w) => send("said", w)}),
 });
 
 describe("a run's end names what it never read", () => {
@@ -79,12 +75,7 @@ describe("a run's end names what it never read", () => {
 			description: "Reads one word and fails.",
 			inputs: {word: input(Schema.String, "A word.")},
 			outputs: {},
-			main: ({inputs}) =>
-				inputs.word.pipe(
-					Stream.take(1),
-					Stream.runDrain,
-					Effect.andThen(Effect.fail("broke" as const)),
-				),
+			main: ({serve}) => serve({word: () => Effect.fail("broke" as const)}),
 		});
 		const called = await Effect.runPromise(call(failing, {}, {told: {word: words(3)}}));
 		if (called.kind !== "called") throw new Error(called.why);

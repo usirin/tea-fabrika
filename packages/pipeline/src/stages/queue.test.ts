@@ -1,5 +1,5 @@
 import {call, defineProgram, input, memoryStorage} from "@kampus/fabrika";
-import {Cause, Effect, Schema, Stream} from "effect";
+import {Cause, Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {queueKind, workQueue} from "./queue.ts";
 
@@ -8,21 +8,19 @@ import {queueKind, workQueue} from "./queue.ts";
 // a run is dropped from storage only once no start of it is live, since a
 // live copy's next save would keep it again.
 
-/** A program that works `told` through its queue, doing `work` for each value. */
-const queued = (told: readonly string[], work: (item: string) => Effect.Effect<void>) =>
+/** A program that works each value told to `item` through its queue, doing `work` for each. */
+const queued = (work: (item: string) => Effect.Effect<void>) =>
 	defineProgram({
 		name: "queued",
 		description: "Works each value through its kept queue.",
-		inputs: {},
+		inputs: {item: input(Schema.String, "A value to work, acked once kept.", {ack: "manual"})},
 		outputs: {},
 		machines: {queue: queueKind},
-		main: ({machines}) =>
-			workQueue(
-				machines.queue,
-				Stream.fromIterable(told).pipe(Stream.map((value) => ({value, ack: Effect.void}))),
-				work,
-				() => Effect.void,
-			),
+		main: ({serve, machines}) =>
+			Effect.gen(function* () {
+				const queue = yield* workQueue(machines.queue, work, () => Effect.void);
+				yield* queue.drained(serve({item: queue.told}));
+			}).pipe(Effect.scoped),
 	});
 
 describe("a kept queue reads only an input that acks", () => {
@@ -36,25 +34,21 @@ describe("a kept queue reads only an input that acks", () => {
 			},
 			outputs: {},
 			machines: {queue: queueKind},
-			main: ({inputs, machines}) =>
-				Effect.all(
-					[
-						workQueue(
-							machines.queue,
-							inputs.acking,
-							() => Effect.void,
-							() => Effect.void,
-						),
-						workQueue(
-							machines.queue,
+			main: ({serve, machines}) =>
+				Effect.gen(function* () {
+					const queue = yield* workQueue(
+						machines.queue,
+						() => Effect.void,
+						() => Effect.void,
+					);
+					yield* queue.drained(
+						serve({
+							acking: queue.told,
 							// @ts-expect-error: a value the queue has not kept yet would be lost to a kill
-							inputs.plain,
-							() => Effect.void,
-							() => Effect.void,
-						),
-					],
-					{concurrency: "unbounded", discard: true},
-				),
+							plain: queue.told,
+						}),
+					);
+				}).pipe(Effect.scoped),
 		});
 		expect(program.inputs.acking.ack).toBe("manual");
 	});
@@ -66,9 +60,9 @@ describe("the kept queue", () => {
 		const worked: string[] = [];
 		await Effect.runPromise(
 			call(
-				queued(["a", "b", "c"], (item) => Effect.sync(() => worked.push(item))),
+				queued((item) => Effect.sync(() => worked.push(item))),
 				{},
-				{keeping: {id: "queued:1", storage}},
+				{told: {item: ["a", "b", "c"]}, keeping: {id: "queued:1", storage}},
 			),
 		);
 		const now = (await Effect.runPromise(storage.record("queued:1")))?.machines;

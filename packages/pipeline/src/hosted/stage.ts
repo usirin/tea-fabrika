@@ -14,7 +14,7 @@
 //                name exits `normal`. A stage taken over after its outcome row exits at once.
 import type {EffectBootingRuntime} from "@demlik/tea/effect";
 import {defineProgram, envelope, input, Ledger, type Limits, Self} from "@kampus/fabrika";
-import {Duration, Effect, Exit, Schema, type Scope, Stream} from "effect";
+import {Duration, Effect, Exit, Schema, type Scope} from "effect";
 import {steady, steadyCall} from "../asks/ledger.ts";
 import {agentOf} from "./agent.ts";
 import {gate, Idempotency, type WriteNote} from "./idempotency.ts";
@@ -81,7 +81,7 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 		description: `The ${stage.kind} stage's machine, run under a registered name on tea-host.`,
 		inputs: {inbox: input(envelope(Schema.Unknown), "The job, and EXITs from its agent child.")},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
 				const ledger = yield* Ledger;
@@ -127,7 +127,7 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 					.boot(self)
 					.pipe(Effect.provideService(Idempotency, idempotency));
 				const runtime = yield* booting.ready.pipe(Effect.orDie);
-				yield* inputs.inbox.pipe(Stream.runDrain, Effect.forkScoped);
+				yield* serve({inbox: () => Effect.void}).pipe(Effect.forkScoped);
 				const now = runtime.getState();
 				if (!stage.over(now)) {
 					const first = stage.idle(now) ? stage.start(job, name) : stage.resume;

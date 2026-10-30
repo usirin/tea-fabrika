@@ -1,5 +1,5 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, flag, input, output} from "@kampus/fabrika";
+import {defineProgram, end, flag, input, output} from "@kampus/fabrika";
 import {Text} from "@kampus/pipeline/tickets/approval";
 import {Asks, Body, Id, Said, TicketNumber, Title} from "@kampus/pipeline/tickets/ticket";
 import {
@@ -9,7 +9,7 @@ import {
 	ticketsOptions,
 	type Write,
 } from "@tea-fabrika/tracker";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 import {Shown, shownOf} from "./view.ts";
 
 // One ticket, in a tile of its own: its title, whose turn it is, its body, a row per fact that
@@ -117,7 +117,7 @@ export const ticket = defineProgram({
 	},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: Shown, of: shownOf},
-	main: ({flags, inputs, send, watch}) =>
+	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* watch("tickets", "tickets", runtime);
@@ -134,19 +134,21 @@ export const ticket = defineProgram({
 					yield* send("ticket", n);
 				});
 			if (flags.ticket !== undefined) yield* show(flags.ticket);
-			// The picks, until their input ends; then the last one stays. A failed send ends the run.
-			const picks = inputs.ticket.pipe(Stream.runForEach(show), Effect.andThen(Effect.never));
-			const writes = inputs.do.pipe(
-				Stream.takeWhile((d) => d.kind !== "quit"),
-				// The predicate narrows: past it, `d` is never a quit.
-				Stream.runForEach((d) => {
-					const write = writeOf(shown, d);
-					return write === null
-						? Effect.logWarning(`ticket: a write to #${d.ticket}, never shown here, is dropped`)
-						: runtime.dispatch(msgOf(write)).pipe(Effect.orDie);
-				}),
+			// The picks and the writes, in the order told, until a quit or until `do` is closed. Once
+			// `ticket` is closed the last pick stays. A failed send ends the run.
+			yield* serve(
+				{
+					ticket: show,
+					do: (d) => {
+						if (d.kind === "quit") return end;
+						const write = writeOf(shown, d);
+						return write === null
+							? Effect.logWarning(`ticket: a write to #${d.ticket}, never shown here, is dropped`)
+							: runtime.dispatch(msgOf(write)).pipe(Effect.orDie);
+					},
+				},
+				{until: ["do"]},
 			);
-			yield* Effect.raceFirst(writes, picks);
 			// Quit, or the input was closed: the writes still waiting land before it ends.
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();

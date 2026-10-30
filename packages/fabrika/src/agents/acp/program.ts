@@ -2,7 +2,7 @@ import type * as acp from "@agentclientprotocol/sdk";
 import type {AgentEvent} from "@demlik/tea/agent";
 import type {AgentSpans} from "@demlik/tea/otel";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Clock, Deferred, Effect, FileSystem, Path, Queue, Schema, Stream} from "effect";
+import {Clock, Deferred, Effect, FileSystem, Path, Queue, Schema} from "effect";
 import {type Entry, listed} from "../../program/listed.ts";
 import {defineProgram, kind} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
@@ -223,7 +223,7 @@ export const acpProgram = defineProgram({
 			status: statusLine,
 		}),
 	},
-	main: ({flags, inputs, send, watch, machines}) =>
+	main: ({flags, serve, send, watch, machines}) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const folder = yield* scratchFolder(flags.folder);
@@ -379,53 +379,44 @@ export const acpProgram = defineProgram({
 
 			// ---------------------------------------------------------------- answers and cancels
 			const byId = (ask: string) => pending.get(ask);
-			yield* Effect.forkScoped(
-				inputs.allow.pipe(
-					Stream.runForEach((ask) => {
-						const found = byId(ask);
-						return found === undefined ? Effect.void : answer(found, true);
-					}),
-				),
-			);
-			yield* Effect.forkScoped(
-				inputs.refuse.pipe(
-					Stream.runForEach((ask) => {
-						const found = byId(ask);
-						return found === undefined ? Effect.void : answer(found, false);
-					}),
-				),
-			);
-			yield* Effect.forkScoped(
-				inputs.cancel.pipe(
-					Stream.runForEach(() =>
-						Effect.gen(function* () {
-							if (turn === null) return;
-							yield* fold({type: "cancelling"});
-							// ACP: a client that cancels answers every ask still open with `cancelled`.
-							for (const ask of [...pending.values()]) {
-								pending.delete(ask.id);
-								ask.answer({outcome: {outcome: "cancelled"}});
-								yield* fold({type: "answered", ask: ask.id, answer: "cancelled"});
-								yield* send("ask", shown(ask, "cancelled"));
-							}
-							yield* c.cancel(id).pipe(Effect.ignore);
-						}),
-					),
-				),
-			);
-
 			// ---------------------------------------------------------------- the turns, one after another
 			const todo = yield* Queue.unbounded<Waiting | null>();
 			for (const waiting of was.waiting) Queue.offerUnsafe(todo, waiting);
+			// Every handler is quick: a prompt only joins the turns waiting, so an answer or a cancel
+			// told while a turn runs is handled at once, in the order told.
+			const handlers = {
+				prompt: (prompt: string) =>
+					Effect.gen(function* () {
+						yield* kept.dispatch({type: "told", prompt});
+						Queue.offerUnsafe(todo, {n: kept.getState().told, prompt});
+					}),
+				allow: (ask: string) => {
+					const found = byId(ask);
+					return found === undefined ? Effect.void : answer(found, true);
+				},
+				refuse: (ask: string) => {
+					const found = byId(ask);
+					return found === undefined ? Effect.void : answer(found, false);
+				},
+				cancel: () =>
+					Effect.gen(function* () {
+						if (turn === null) return;
+						yield* fold({type: "cancelling"});
+						// ACP: a client that cancels answers every ask still open with `cancelled`.
+						for (const ask of [...pending.values()]) {
+							pending.delete(ask.id);
+							ask.answer({outcome: {outcome: "cancelled"}});
+							yield* fold({type: "answered", ask: ask.id, answer: "cancelled"});
+							yield* send("ask", shown(ask, "cancelled"));
+						}
+						yield* c.cancel(id).pipe(Effect.ignore);
+					}),
+			};
+			// Once `prompt` closes, the last turns still run, and their asks are still answered.
 			yield* Effect.forkScoped(
-				inputs.prompt.pipe(
-					Stream.runForEach((prompt) =>
-						Effect.gen(function* () {
-							yield* kept.dispatch({type: "told", prompt});
-							Queue.offerUnsafe(todo, {n: kept.getState().told, prompt});
-						}),
-					),
+				serve(handlers, {until: ["prompt"]}).pipe(
 					Effect.andThen(Queue.offer(todo, null)),
+					Effect.andThen(serve(handlers)),
 				),
 			);
 

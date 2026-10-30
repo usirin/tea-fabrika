@@ -19,7 +19,6 @@ import {
 	PubSub,
 	Schema,
 	Scope,
-	Stream,
 } from "effect";
 import {type Ask, type Next, Refused, Settled, titleOf, Waiting} from "../asks/ask.ts";
 import {demoFacts} from "../asks/demo.ts";
@@ -319,11 +318,11 @@ export const deskProgram = defineProgram({
 		),
 	},
 	outputs: {line: Line},
-	main: ({inputs, send}) =>
+	main: ({serve, send}) =>
 		Effect.gen(function* () {
 			const desk = yield* Desk;
 			const running = yield* desk.open(false);
-			yield* inputs.planned.pipe(Stream.runForEach((planned) => tellPlanned(running, planned)));
+			yield* serve({planned: (planned) => tellPlanned(running, planned)});
 			yield* sendAll(send)(linesOf(running));
 		}),
 });
@@ -363,10 +362,10 @@ const reply = (running: Running, id: string, text: string) =>
 		yield* reader.running.run
 			.tell(reader.pack.shell.typed, {id: ask.id, text})
 			.pipe(
-				Effect.catchTag("Full", (full) =>
+				Effect.catchTag("MailboxFull", (full) =>
 					Effect.fail(
 						refusedWith(
-							`the reading pack's ${full.input} holds ${full.capacity} replies it has not read: try again`,
+							`the reading pack's mailbox holds ${full.capacity} values it has not read: try again`,
 						),
 					),
 				),

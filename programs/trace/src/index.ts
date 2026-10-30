@@ -1,6 +1,6 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, flag, input, kind, TraceId, Traces} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {defineProgram, end, flag, input, kind, TraceId, Traces} from "@kampus/fabrika";
+import {Effect, Schema} from "effect";
 import {
 	Model,
 	RowKey,
@@ -76,18 +76,20 @@ export const trace = defineProgram({
 	outputs: {},
 	machines: {trace: traceKind},
 	view: {machine: "trace", data: Shown, of: shownOf},
-	main: ({flags, inputs, watch}) =>
+	main: ({flags, serve, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(traceMachine, traceOptions)).ready;
 			const look = (id: string) => runtime.dispatch({type: "look", id}).pipe(Effect.orDie);
 			if (flags.id !== undefined) yield* look(flags.id);
 			yield* watch("trace", "trace", runtime);
-			// Each id told, for as long as the run is: a pipe's end does not end the window.
-			yield* inputs.id.pipe(Stream.runForEach(look), Effect.forkScoped);
-			yield* inputs.do.pipe(
-				Stream.takeWhile((d) => d.kind !== "quit"),
-				// The predicate narrows: past it, `d` is never a quit.
-				Stream.runForEach((d) => runtime.dispatch(msgOf(d)).pipe(Effect.orDie)),
+			// Each id told, in order with the window's writes: a pipe's end does not end the window. A
+			// quit, or `do` closed, does.
+			yield* serve(
+				{
+					id: look,
+					do: (d) => (d.kind === "quit" ? end : runtime.dispatch(msgOf(d)).pipe(Effect.orDie)),
+				},
+				{until: ["do"]},
 			);
 		}).pipe(Effect.scoped),
 });

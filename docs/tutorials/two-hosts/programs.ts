@@ -1,7 +1,7 @@
 // Two programs. The kettle brews each order and pours it into the glass. The glass counts pours.
 import {defineMachine} from "@demlik/tea";
 import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 
 // ------------------------------------------------------------------ the kettle
 
@@ -34,7 +34,7 @@ export const kettleProgram = defineProgram({
 	description: "Brews each order once and pours it into the glass.",
 	inputs: {inbox: input(envelope(Order), "One order: an id and a guest.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const run = yield* self.run(
@@ -44,8 +44,8 @@ export const kettleProgram = defineProgram({
 			);
 			const machine = yield* run.ready;
 			const glass = streams("glass").inbox;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) =>
+			yield* serve({
+				inbox: (e) =>
 					Effect.gen(function* () {
 						// Pour first, under a key made from the order's id. If this host dies before the
 						// save below, the next host pours again under the same key, and the ledger
@@ -55,8 +55,7 @@ export const kettleProgram = defineProgram({
 						if (poured.how !== "sent") return yield* Effect.interrupt;
 						yield* machine.dispatch({type: "brewed", rev: e.rev, guest: e.body.guest});
 					}),
-				),
-			);
+			});
 		}).pipe(Effect.scoped),
 });
 
@@ -90,7 +89,7 @@ export const glassProgram = defineProgram({
 	description: "Counts every glass poured, once each.",
 	inputs: {inbox: input(envelope(Pour), "One pour, from the kettle.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const run = yield* self.run(
@@ -99,10 +98,8 @@ export const glassProgram = defineProgram({
 				{ctx: undefined},
 			);
 			const machine = yield* run.ready;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) =>
-					machine.dispatch({type: "poured", rev: e.rev, guest: e.body.guest}),
-				),
-			);
+			yield* serve({
+				inbox: (e) => machine.dispatch({type: "poured", rev: e.rev, guest: e.body.guest}),
+			});
 		}).pipe(Effect.scoped),
 });

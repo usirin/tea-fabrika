@@ -2,7 +2,7 @@ import {type Cause, Deferred, Effect, Fiber, PubSub, Queue, Schema, Stream} from
 import {HostJobs, TABLE} from "../host/host-jobs.ts";
 import {Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
-import {defineProgram, kind} from "../program/program.ts";
+import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
@@ -81,9 +81,11 @@ export const tsh = defineProgram({
 			Schema.String,
 			"One line, typed or read from a script: statements parted by ; or &. Closing it is Ctrl-D: tsh ends.",
 		),
+		// A control input: lines waiting behind a slow one never hold it up, and a full mailbox never refuses it.
 		signal: input(
 			Schema.Literals(["interrupt"]),
 			"Ctrl-C: stops what runs in the foreground, with its starter's stop. With nothing there, nothing happens.",
+			{control: true},
 		),
 	},
 	outputs: {
@@ -105,7 +107,7 @@ export const tsh = defineProgram({
 			status: tableLine,
 		}),
 	},
-	main: ({flags, inputs, send, watch}) =>
+	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const list = yield* Programs;
 			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
@@ -134,10 +136,6 @@ export const tsh = defineProgram({
 			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();
-			yield* inputs.signal.pipe(
-				Stream.runForEach((s) => PubSub.publish(signals, s)),
-				Effect.forkScoped,
-			);
 
 			const shell: Shell = {
 				list,
@@ -192,13 +190,19 @@ export const tsh = defineProgram({
 					return said;
 				});
 
-			yield* Stream.runForEachWhile(inputs.line, (text) =>
-				oneLine(text).pipe(
-					Effect.map((said) => {
-						Queue.offerUnsafe(spoken, {kind: "ready", ready: {status: said.status}});
-						return !said.exit;
-					}),
-				),
+			// `line` in order, `signal` beside it. `line` is the lifeline, as stdin is: its close is Ctrl-D.
+			yield* serve(
+				{
+					line: (text) =>
+						oneLine(text).pipe(
+							Effect.flatMap((said) => {
+								Queue.offerUnsafe(spoken, {kind: "ready", ready: {status: said.status}});
+								return said.exit ? end : Effect.void;
+							}),
+						),
+					signal: fork((s) => PubSub.publish(signals, s)),
+				},
+				{until: ["line"]},
 			);
 
 			// A job whose last program just ended may still be saying so: let it finish, so its end is

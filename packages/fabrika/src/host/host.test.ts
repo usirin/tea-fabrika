@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Exit, Schema, Scope, Stream} from "effect";
+import {Duration, Effect, Exit, Schema, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import {defineProgram} from "../program/program.ts";
 import {input} from "../program/shape.ts";
@@ -35,7 +35,7 @@ const counterProgram = defineProgram({
 	description: "Counts the messages in its inbox, once each.",
 	inputs: {inbox: input(envelope(Schema.Struct({})), "One message.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const handle = yield* self.run(
@@ -44,9 +44,7 @@ const counterProgram = defineProgram({
 				{ctx: undefined},
 			);
 			const machine = yield* handle.ready;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) => machine.dispatch({type: "inc", id: e.id, rev: e.rev})),
-			);
+			yield* serve({inbox: (e) => machine.dispatch({type: "inc", id: e.id, rev: e.rev})});
 		}).pipe(Effect.scoped),
 });
 

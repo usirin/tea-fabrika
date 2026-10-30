@@ -2,7 +2,7 @@ import {defineProgram, input, output} from "@kampus/fabrika";
 import type {Attachment} from "@kampus/pipeline/asks/ask";
 import type {Pack} from "@kampus/pipeline/asks/packs";
 import {Built, Cleared, Raise} from "@kampus/pipeline/asks/program";
-import {Context, Effect, Layer, Schema, Stream} from "effect";
+import {Context, Effect, Layer, Schema} from "effect";
 
 // A pack for repos whose work changes what a user sees
 // (docs/direction/packs-are-programs.md, "Example: a ui-verification pack").
@@ -60,12 +60,12 @@ export const uiProgram = defineProgram({
 		cleared: output(Cleared, "A build nothing a user sees changed in."),
 		raise: output(Raise, "A build that changes what a user sees, to check."),
 	},
-	main: ({inputs, send}) =>
+	main: ({serve, send}) =>
 		Effect.gen(function* () {
 			const shots = yield* Shots;
 			const {patterns} = yield* Seen;
-			yield* inputs.built.pipe(
-				Stream.runForEach((b) =>
+			yield* serve({
+				built: (b) =>
 					Effect.gen(function* () {
 						const ref = {plan: b.plan, task: b.task, build: b.build, by: BY};
 						const seen = visibleOf(b.changes, patterns);
@@ -76,8 +76,7 @@ export const uiProgram = defineProgram({
 							attachments: yield* shots.of(b),
 						});
 					}),
-				),
-			);
+			});
 		}),
 });
 

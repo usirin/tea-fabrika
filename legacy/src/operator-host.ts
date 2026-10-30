@@ -1,7 +1,7 @@
 import {join} from "node:path";
 import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {type Full, type RunOf, tell, type Word} from "@kampus/fabrika";
+import {type MailboxFull, type RunOf, tell, type Word} from "@kampus/fabrika";
 import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika/agents/claude";
 import {shellEnv} from "@kampus/fabrika/agents/sandbox";
 import {type RepliesDeps, Thread} from "@kampus/pipeline/combos";
@@ -123,12 +123,12 @@ export type ShipRun = RunOf<typeof shipProgram>;
  * the program ends before it answers, so a Cmd in flight never waits on a run
  * that is gone.
  */
-/** Whether the ship program took a told value at once: a full line, like any word but `queued`, is a no. */
-const tookNow = (told: Effect.Effect<Word, Full>): boolean =>
+/** Whether the ship program took a told value at once: a full mailbox, like any word but `queued`, is a no. */
+const tookNow = (told: Effect.Effect<Word, MailboxFull>): boolean =>
 	Effect.runSync(
 		told.pipe(
 			Effect.map((word) => word === "queued"),
-			Effect.catchTag("Full", () => Effect.succeed(false)),
+			Effect.catchTag("MailboxFull", () => Effect.succeed(false)),
 		),
 	);
 

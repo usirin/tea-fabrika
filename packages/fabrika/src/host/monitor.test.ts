@@ -1,7 +1,7 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {Duration, Effect, Exit, Schema, Scope, Stream} from "effect";
+import {Duration, Effect, Exit, Schema, Scope} from "effect";
 import {describe, expect, it} from "vitest";
-import {defineProgram} from "../program/program.ts";
+import {defineProgram, end} from "../program/program.ts";
 import {input} from "../program/shape.ts";
 import {cast, envelope, Self, savedState, serve} from "./host.ts";
 import {DownMessage, Ledger} from "./ledger.ts";
@@ -77,7 +77,7 @@ const watcherProgram = (targets: readonly string[]) =>
 		description: "Keeps a monitor on each target and counts the DOWNs.",
 		inputs: {inbox: input(envelope(Schema.Unknown), "A DOWN.")},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
 				const handle = yield* self.run(
@@ -104,14 +104,14 @@ const watcherProgram = (targets: readonly string[]) =>
 				const machine = yield* handle.ready;
 				yield* machine.dispatch({type: "resume"});
 				for (const target of targets) yield* machine.dispatch({type: "watch", target});
-				yield* inputs.inbox.pipe(
-					Stream.runForEach((e) => {
+				yield* serve({
+					inbox: (e) => {
 						const d = e.kind === "DOWN" ? decodeDown(e.body) : null;
 						return d !== null && Exit.isSuccess(d)
 							? machine.dispatch({type: "down", rev: e.rev, ...d.value})
 							: Effect.void;
-					}),
-				);
+					},
+				});
 			}).pipe(Effect.scoped),
 	});
 
@@ -131,7 +131,7 @@ const target = defineProgram({
 	description: "Counts; crashes after a crash message; returns after a stop message.",
 	inputs: {inbox: input(envelope(Body), "One message.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const handle = yield* self.run(
@@ -140,18 +140,15 @@ const target = defineProgram({
 				{ctx: undefined},
 			);
 			const machine = yield* handle.ready;
-			yield* inputs.inbox.pipe(
-				Stream.mapEffect((e) =>
+			yield* serve({
+				inbox: (e) =>
 					machine
 						.dispatch({type: "inc", rev: e.rev})
 						.pipe(
 							Effect.andThen(e.body.crash === true ? Effect.die("planted defect") : Effect.void),
-							Effect.as(e.body.stop === true),
+							Effect.andThen(e.body.stop === true ? end : Effect.void),
 						),
-				),
-				Stream.takeUntil((stop) => stop),
-				Stream.runDrain,
-			);
+			});
 		}).pipe(Effect.scoped),
 });
 
