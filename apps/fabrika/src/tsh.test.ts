@@ -60,6 +60,7 @@ const session = (
 		};
 		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
 		const host = yield* startTsh({
+			tile: "t1",
 			jobs: yield* openJobs(opts.jobs ?? memoryStorage()),
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,

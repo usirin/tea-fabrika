@@ -35,9 +35,10 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 // stop: after the tile's tsh ended, or when the person asks to stop now. Nothing here waits on a
 // clock.
 //
-// The host's table is kept in the home, so the next start of the host finds every job "from an
-// earlier tsh, not running", for `attach` in any tile. Stopping a tile drops the jobs its tsh
-// started, and no other tile's. Stopping the host keeps them all: the scope every tile is in
+// The host's table is kept in the home, and each job in it names its tile, so the next start of
+// the host finds every job "from an earlier tsh, not running": each tile's tsh says so of its own,
+// and `attach` in any tile starts one again, which makes it that tile's. Stopping a tile drops the
+// jobs it owns, and no other tile's. Stopping the host keeps them all: the scope every tile is in
 // closes, which stops each tsh. Quitting the app stops nothing here: the app is only a client of
 // the host.
 
@@ -134,6 +135,7 @@ export const startTiles = (options: {
 			Effect.gen(function* () {
 				const scope = yield* Scope.fork(parent);
 				const host = yield* startTsh({
+					tile,
 					jobs,
 					history,
 					runs: {

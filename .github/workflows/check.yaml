@@ -57,6 +57,48 @@ jobs:
       # packages. Nothing above needs them.
       - run: pnpm build
 
+  # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
+  # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
+  # the window back), so it runs on a macOS runner; on Linux those rules are not there to check.
+  # Every pull request and every push to main runs it: off CI, main went red and nobody saw.
+  # No secret and no key: the API keys are never set here. The one download beyond what the other
+  # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
+  e2e:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.0
+          cache: pnpm
+
+      # Electron fetches its binary the first time it is asked for its path, into this folder.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
+
+      - run: pnpm install --frozen-lockfile
+      # Each run makes its own fresh FABRIKA_HOME in the temp folder, and stops the hosts it started.
+      - name: e2e
+        env:
+          SHOTS: ${{ runner.temp }}/e2e-shots
+        run: pnpm --filter @kampus/fabrika-app e2e
+      # What the window showed at each step, to see a red run without running it again.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shots
+          path: ${{ runner.temp }}/e2e-shots
+          if-no-files-found: ignore
+
   # The tests, split by file over three machines (vitest's `--shard`): they were
   # 5 min 40 s of a 7 min check on one.
   test:

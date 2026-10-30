@@ -887,6 +887,7 @@ const job: Shell.Jobs = {
 			stages: [{program: "sleep", flags: {ms: 9}, run: "r1", wire: null, ended: false}],
 			state: "running",
 			background: true,
+			owner: "t1",
 		},
 	],
 };

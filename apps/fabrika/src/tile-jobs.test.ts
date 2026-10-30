@@ -14,6 +14,7 @@ const job = (n: number, text: string, runs: readonly string[], over: Partial<She
 		stages: [stage(first), ...rest.map(stage)] as const,
 		state: "running" as const,
 		background: false,
+		owner: null,
 		...over,
 	};
 };

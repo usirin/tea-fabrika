@@ -24,6 +24,8 @@ const desk = (storage = memoryStorage()) =>
 		const jobs = yield* openJobs(storage);
 		/** The host's table now: each job's number and state. */
 		const table = () => jobs.table.getState().jobs.map((job) => [job.n, job.state] as const);
+		/** Whose each job in the host's table is: its number and its tile. */
+		const owners = () => jobs.table.getState().jobs.map((job) => [job.n, job.owner] as const);
 		const tiles = yield* startTiles({
 			history: yield* sharedHistory(memoryHistory()),
 			jobs,
@@ -62,7 +64,7 @@ const desk = (storage = memoryStorage()) =>
 			});
 		const heard = (check: (m: TileNews) => boolean) =>
 			until("a message for the desk", () => told.find(check));
-		return {tiles, told, gone, table, views, rows, type, until, prompts, heard};
+		return {tiles, told, gone, table, owners, views, rows, type, until, prompts, heard};
 	});
 
 const go = <A, E>(test: Effect.Effect<A, E>) => Effect.runPromise(test);
@@ -299,7 +301,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 		expect(seen.rows[0]).toBe("tsh$ counter");
 	});
 
-	it("keep the host's jobs when the host stops, for the next start's `attach` in any tile", async () => {
+	it("keep the host's jobs when the host stops: the next start says each to the tile that ran it, and `attach` takes it in any tile", async () => {
 		const storage = memoryStorage();
 		const found = await go(
 			Effect.gen(function* () {
@@ -309,16 +311,60 @@ describe("the tiles", {timeout: 20_000}, () => {
 					d.type("t1", "counter &\r");
 					yield* d.heard((m) => m.type === "jobs" && m.jobs.running.length === 1);
 				}).pipe(Effect.scoped);
-				// The next start, on the same storage, and another tile.
+				// The next start, on the same storage: the tile that ran it, and another.
 				const d = yield* desk(storage);
+				yield* d.tiles.open("t1");
 				yield* d.tiles.open("t2");
 				const row = yield* d.until("the earlier job", () =>
-					d.rows("t2").find((r) => r.startsWith("tsh: 1 job")),
+					d.rows("t1").find((r) => r.startsWith("tsh: 1 job")),
 				);
-				return {row, table: d.table()};
+				const fresh = yield* d.prompts("t2", 1);
+				const before = {table: d.table(), owners: d.owners()};
+				d.type("t2", "jobs\r");
+				const listed = yield* d.prompts("t2", 2);
+				d.type("t2", "attach %1 &\r");
+				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.jobs.running.length === 1);
+				return {row, fresh, before, listed, table: d.table(), owners: d.owners()};
 			}).pipe(Effect.scoped),
 		);
 		expect(found.row).toMatch(/^tsh: 1 job from an earlier tsh, not running: %1\./);
-		expect(found.table).toEqual([[1, "detached"]]);
+		expect(found.before).toEqual({table: [[1, "detached"]], owners: [[1, "t1"]]});
+		// t2 never ran it: its tsh starts on a bare prompt, and `jobs` still lists every job.
+		expect(found.fresh).toEqual(["tsh$"]);
+		expect(found.listed).toEqual(["tsh$ jobs", "[1] detached  counter", "tsh$"]);
+		// Attached in t2, it is t2's now.
+		expect(found.table).toEqual([[1, "running"]]);
+		expect(found.owners).toEqual([[1, "t2"]]);
+	});
+
+	it("drop a tile's jobs from an earlier host when it goes, though its tsh never ran them", async () => {
+		const storage = memoryStorage();
+		const table = await go(
+			Effect.gen(function* () {
+				yield* Effect.gen(function* () {
+					const d = yield* desk(storage);
+					yield* d.tiles.open("t1");
+					yield* d.tiles.open("t2");
+					d.type("t1", "counter &\r");
+					yield* d.heard(
+						(m) => m.type === "jobs" && m.tile === "t1" && m.jobs.running.length === 1,
+					);
+					d.type("t2", "tally &\r");
+					yield* d.heard(
+						(m) => m.type === "jobs" && m.tile === "t2" && m.jobs.running.length === 1,
+					);
+				}).pipe(Effect.scoped);
+				const d = yield* desk(storage);
+				yield* d.tiles.open("t1");
+				yield* d.tiles.open("t2");
+				yield* d.prompts("t1", 1);
+				yield* d.tiles.close("t1");
+				yield* d.heard((m) => m.type === "ended" && m.tile === "t1");
+				yield* d.tiles.stop("t1");
+				return d.owners();
+			}).pipe(Effect.scoped),
+		);
+		// t1's counter left the table with t1; t2's tally waits there still.
+		expect(table).toEqual([[2, "t2"]]);
 	});
 });

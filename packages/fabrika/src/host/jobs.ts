@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Schema, SchemaTransformation} from "effect";
+import {Effect, Schema, SchemaTransformation} from "effect";
 import {runTraceId} from "../program/trace-id.ts";
 
 // A host's job table (./host-jobs.ts opens it; tsh shows it). It holds what a
@@ -35,6 +35,14 @@ export type StageRecord = typeof StageRecord.Type;
 export const JobState = Schema.Literals(["running", "detached"]);
 export type JobState = typeof JobState.Type;
 
+/**
+ * Whom a job is a tsh's for: the name its host gave that tsh, as tmux gives each pane's shell its
+ * `TMUX_PANE`. In the app, a tile: `"t2"`. `null`: a tsh with no name, such as the one a terminal
+ * runs on its own, whose jobs are all its own.
+ */
+export const Owner = Schema.NullOr(Schema.String);
+export type Owner = typeof Owner.Type;
+
 export const Job = Schema.Struct({
 	/** The job's number, `%n` on a line: the table's `next` when it began, so never one another job had. */
 	n: Schema.Int,
@@ -43,6 +51,11 @@ export const Job = Schema.Struct({
 	state: JobState,
 	/** Started with `&`: the prompt came back while it ran. */
 	background: Schema.Boolean,
+	/**
+	 * The tsh that began it, or last attached it. A table kept before jobs had an owner reads back
+	 * with `null`: whose it was is not known.
+	 */
+	owner: Owner.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type Job = typeof Job.Type;
 
@@ -50,7 +63,8 @@ export type Job = typeof Job.Type;
 const after = (jobs: readonly Job[]): number => Math.max(0, ...jobs.map((job) => job.n)) + 1;
 
 const Table = Schema.Struct({
-	jobs: Schema.Array(Job),
+	// Each job as decoded already: the outer `jobs` read every owner, or its `null`.
+	jobs: Schema.Array(Schema.toType(Job)),
 	/**
 	 * The number the next job gets. It only grows, so a number is never given twice, as WezTerm's
 	 * and tmux's ids are not: a `%2` a person read an hour ago names the same job or none.
@@ -83,11 +97,18 @@ export type JobsMsg =
 			readonly text: string;
 			readonly stages: readonly [StageRecord, ...StageRecord[]];
 			readonly background: boolean;
+			readonly owner: Owner;
 	  }
 	| {readonly type: "stage_ended"; readonly run: string}
 	/** `n`: one job, whose start again did not go; `null`: every job. */
 	| {readonly type: "detached"; readonly n: number | null}
-	| {readonly type: "attached"; readonly n: number; readonly background: boolean}
+	/** Started again by `owner`'s tsh: the job is that tsh's from now on, wherever it began. */
+	| {
+			readonly type: "attached";
+			readonly n: number;
+			readonly background: boolean;
+			readonly owner: Owner;
+	  }
 	/** A running job tsh now waits for, as bash's `fg`: the prompt waits for its end. */
 	| {readonly type: "foreground"; readonly n: number}
 	/** A detached job its owner stopped: it will not be started again. */
@@ -121,6 +142,7 @@ export const jobsMachine = defineMachine({
 						stages: m.stages,
 						state: "running",
 						background: m.background,
+						owner: m.owner,
 					},
 				],
 				next: s.next + 1,
@@ -153,6 +175,7 @@ export const jobsMachine = defineMachine({
 								...job,
 								state: "running" as const,
 								background: m.background,
+								owner: m.owner,
 								stages: eachStage(job.stages, (st) => ({...st, ended: false})),
 							}
 						: job,
@@ -177,6 +200,27 @@ export const tableLine = (s: Jobs): string => {
 	const detached = s.jobs.length - running;
 	return `${s.jobs.length} job${s.jobs.length === 1 ? "" : "s"}: ${running} running, ${detached} detached`;
 };
+
+/**
+ * The jobs of `owner`'s tsh: those it began or last attached. A tsh with no name owns them all,
+ * as a lone shell does. Every tsh still lists the whole table with `jobs`.
+ *
+ *   ownedBy({jobs: [t1's %1, t2's %2], next: 3}, "t2")   // [%2]
+ *   ownedBy({jobs: [t1's %1, t2's %2], next: 3}, null)   // [%1, %2]
+ */
+export const ownedBy = (jobs: Jobs, owner: Owner): readonly Job[] =>
+	owner === null ? jobs.jobs : jobs.jobs.filter((job) => job.owner === owner);
+
+/**
+ * The jobs from before a tsh started that it says are waiting: the detached ones it owns, and
+ * any whose owner is not known (kept by older code), so none is hidden from everyone. Another
+ * tsh's are not said: in the app, a tile is not told of a job it never ran.
+ */
+export const earlierFor = (jobs: Jobs, owner: Owner): readonly Job[] =>
+	jobs.jobs.filter(
+		(job) =>
+			job.state === "detached" && (owner === null || job.owner === null || job.owner === owner),
+	);
 
 /** The job a word names: `%n`, `n`, or the run id of any of its programs. */
 export function jobNamed(jobs: Jobs, word: string): Job | undefined {

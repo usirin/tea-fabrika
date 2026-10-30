@@ -115,7 +115,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | runs` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
 
@@ -238,9 +238,11 @@ When something is wrong, its word joins the top bar's right end, in red where it
 
 ## Tiles
 
-- **Every new tile runs a tsh of its own,** with its own job table, in
-  `storage/tiles/<tile>/` in the app home. History is one file, shared: a line typed in one tile
-  is the next tile's Up.
+- **Every new tile runs a tsh of its own,** on the host's one job table, in `storage/jobs/` in
+  the app home: a job is the same `%n` in every tile, and names the tile that began it, or last
+  attached it. After a host restart each tile's tsh says only its own jobs are waiting; `jobs`
+  lists every one, and `attach %n` works in any tile. History is one file, shared: a line typed
+  in one tile is the next tile's Up.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
 - **A line with several windows opens in place,** in the tile it was typed in
@@ -441,7 +443,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `asks.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
+  `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, the one-copy lock, and the
   host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.

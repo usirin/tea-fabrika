@@ -325,7 +325,9 @@ describe("Tab", () => {
 	it("puts in a job by its number, from tsh's table", () => {
 		const run1 = {program: "counter", flags: {}, run: "counter:1a2b", wire: null, ended: false};
 		const jobs: Shell.Jobs = {
-			jobs: [{n: 1, text: "counter &", stages: [run1], state: "running", background: true}],
+			jobs: [
+				{n: 1, text: "counter &", stages: [run1], state: "running", background: true, owner: "t1"},
+			],
 			next: 2,
 		};
 		expect(seen([{type: "jobs", jobs}, keys("stop %\t")])).toEqual(["tsh$ stop %1 |"]);

@@ -19,6 +19,7 @@ const TALLY: Jobs = {
 			stages: [{program: "tally", flags: {}, run: "tally:0a1b2c3d", wire: null, ended: false}],
 			state: "running",
 			background: true,
+			owner: null,
 		},
 	],
 };
