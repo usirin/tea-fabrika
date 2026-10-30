@@ -45,7 +45,7 @@ opus: sortOnce(n, pPrompt(all, t), cwd, "opus")           // Agent SDK, SYSTEM a
   Narrow the two rules it reads too tightly first, then measure again.
 - **Cost:** opus $4.71 for 80 sorts (the estimate was $5.45 at list price,
   $8.80 at 135's $0.11 a sort; the cap was $10). GPT sol ran on the ChatGPT
-  plan, which gives no price.
+  plan; at OpenAI's list price its 80 sorts would cost $1.72.
 
 ## Who did what
 
@@ -223,7 +223,12 @@ answer on them.
 
 - **GPT sol:** median 7.0 s a sort, slowest 13.7 s. Median 17.9k input
   tokens (8.4k cached) and 97 output a sort, 1.44M in all. No tool ran, no
-  answer was missing.
+  answer was missing. **$1.72 at list price** for the 80 sorts, $0.021 a
+  sort: 1.43M input tokens (0.65M cached) and 8.9k output, at OpenAI's
+  standard price for `gpt-6.1-sol` (short context: $2.00 input, $0.10 cached
+  input, $10.00 output per 1M; read 2026-10-30 from
+  https://developers.openai.com/api/docs/pricing). The plan itself bills no
+  call. Added on 2026-10-30; the field rows carry it as `listUsd`.
 - **Opus:** median 6.2 s and 12.5k tokens a sort, 1.04M in all. $4.71 for
   80 sorts: a first sort cost $0.10 (median), a second about a tenth of
   that, as 135 found.
@@ -246,7 +251,7 @@ answer on them.
      reopens a fix that did not hold is not a duplicate." That is #4087,
      #6585, #8018.
    Then GPT sol on these 40 and on 161's 29 hard no's, to see the closes
-   kept. Cost: about 140 sorts on the plan, no dollars. Confidence 65% that
+   kept. Cost: about 140 sorts, about $3 at list price. Confidence 65% that
    it brings GPT sol level with opus without losing many real no's: the
    duplicate line may also keep some real duplicates.
 3. **Keep the security line.** On 10 security tickets it was not written
@@ -277,7 +282,8 @@ answer on them.
   read is in `162-truth.json`, but the read was by hand. It is 10 tickets,
   not 12, and two (#2013, #8179) are borderline. The title words miss gaps
   whose title says nothing about security.
-- **The cost of GPT sol.** The plan gives no price.
+- **What the plan really charges for GPT sol.** The dollars here are list
+  price for the same tokens; the plan bills no call.
 - **Another day.** One Codex version, one model id, one SDK version, one
   plan.
 

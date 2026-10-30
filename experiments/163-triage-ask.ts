@@ -12,6 +12,9 @@
 //   STEP=sample  a seeded sample of asks, with their ticket title, for the by-hand judgment
 //   STEP=load    phoenix's filing rate over the last 60 days, from GitHub, and asks per week
 //   STEP=field   one field/runs.jsonl row per answer
+//   STEP=listprice  GPT sol's dollars at OpenAI's list price (lib/list-price.ts) for every GPT sol
+//                triage answer of experiments 159 to 163: a new `listUsd` on its field/runs.jsonl
+//                row, from the tokens its results file saved; every other line is left as it was
 //
 // Node at the edge, said out loud: `node:fs` for the data and cache files and `node:child_process`
 // for `git` on the clone and `gh` reads, as part 3 does.
@@ -31,6 +34,7 @@ import {
 	treePool,
 	type World,
 } from "./lib/brief-eval-live.ts";
+import {SOL, type Used, usdAt} from "./lib/list-price.ts";
 import {shuffled} from "./lib/review-rounds.ts";
 import {Cache} from "./lib/sort.ts";
 import {PHOENIX_NOTE} from "./lib/triage-135.ts";
@@ -73,6 +77,98 @@ const writeJson = (file: string, value: unknown) =>
 	writeFileSync(file, `${JSON.stringify(value, null, "\t")}\n`);
 const git = (...args: string[]) =>
 	execFileSync("git", ["-C", CLONE, ...args], {encoding: "utf8", maxBuffer: 1 << 28});
+
+// ---------------------------------------------------------------- GPT sol at list price
+
+if (STEP === "listprice") {
+	type Saved = {readonly used: Used; taken: boolean};
+	const isUsed = (x: unknown): x is Used =>
+		typeof x === "object" &&
+		x !== null &&
+		["input", "cached", "output"].every(
+			(k) => typeof (x as Record<string, unknown>)[k] === "number",
+		);
+	const sum = (xs: readonly Used[]): Used => ({
+		input: xs.reduce((s, x) => s + x.input, 0),
+		cached: xs.reduce((s, x) => s + x.cached, 0),
+		output: xs.reduce((s, x) => s + x.output, 0),
+	});
+	// Every saved call, by experiment and lane. A sort that took tries also counts as their sum.
+	const saved = new Map<string, Saved[]>();
+	const keep = (exp: string, lane: string, used: Used) =>
+		saved.set(`${exp}|${lane}`, [...(saved.get(`${exp}|${lane}`) ?? []), {used, taken: false}]);
+	const callsOf = (o: unknown): Used[] => {
+		if (Array.isArray(o)) return o.flatMap(callsOf);
+		if (typeof o !== "object" || o === null) return [];
+		const r = o as Record<string, unknown>;
+		if (isUsed(r.tokens)) return [r.tokens];
+		if (Array.isArray(r.tries)) {
+			const tries = r.tries.flatMap(callsOf);
+			return tries.length > 1 ? [...tries, sum(tries)] : tries;
+		}
+		return [];
+	};
+	const old = [
+		["159", "159-triage-on-codex.json"],
+		["161", "161-triage-security-line.json"],
+		["162", "162-triage-random-built.json"],
+	] as const;
+	for (const [exp, file] of old) {
+		const j = JSON.parse(readFileSync(join(here, "results", file), "utf8")) as {
+			configs: Record<string, Record<"p" | "d", Record<string, unknown>>>;
+		};
+		for (const config of Object.values(j.configs))
+			for (const [group, repo] of [
+				["p", "kamp-us/phoenix"],
+				["d", "kamp-us/demlik"],
+			] as const)
+				for (const [n, runs] of Object.entries(config[group] ?? {}))
+					for (const run of Array.isArray(runs) ? runs : [runs])
+						for (const used of callsOf(run)) keep(exp, `${repo}#${n}`, used);
+	}
+	for (const file of ["163-triage-brief-eval.json", "163-exam.json", "163-triage-ask.json"]) {
+		const j = JSON.parse(readFileSync(join(here, "results", file), "utf8")) as {
+			records: {case: string; model: string; tokens: Used}[];
+		};
+		for (const r of j.records) if (r.model === "sol") keep("163", r.case, r.tokens);
+	}
+	const RUNS = join(here, "..", "field", "runs.jsonl");
+	const lines = readFileSync(RUNS, "utf8").split("\n");
+	const totals: Record<string, {rows: number; usd: number; missed: number}> = {};
+	const out = lines.map((line) => {
+		if (!line.includes('"gpt-6.1-sol"')) return line;
+		const row = JSON.parse(line) as Record<string, unknown>;
+		const exp = /^experiment (159|161|162|163)\b/.exec(String(row.why ?? ""))?.[1];
+		if (row.role !== "triager" || exp === undefined || "listUsd" in row) return line;
+		const t = totals[exp] ?? {rows: 0, usd: 0, missed: 0};
+		totals[exp] = t;
+		const found = (saved.get(`${exp}|${row.lane}`) ?? []).find(
+			(s) => !s.taken && s.used.input + s.used.output === row.billed,
+		);
+		if (found === undefined) {
+			t.missed += 1;
+			return line;
+		}
+		found.taken = true;
+		const usd = usdAt(SOL, found.used);
+		t.rows += 1;
+		t.usd += usd;
+		const next: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(row)) {
+			next[k] = v;
+			if (k === "costUsd") next.listUsd = +usd.toFixed(4);
+		}
+		if (!("listUsd" in next)) next.listUsd = +usd.toFixed(4);
+		if (JSON.stringify(row) !== line) throw new Error(`a row would change shape: ${line}`);
+		return JSON.stringify(next);
+	});
+	writeFileSync(RUNS, out.join("\n"));
+	for (const [exp, t] of Object.entries(totals))
+		console.log(
+			`experiment ${exp}: ${t.rows} rows priced, $${t.usd.toFixed(2)} at ${SOL.source} (${SOL.read}); ${t.missed} rows with no saved tokens to match`,
+		);
+	process.exit(0);
+}
 
 // ---------------------------------------------------------------- the two sets, as items
 

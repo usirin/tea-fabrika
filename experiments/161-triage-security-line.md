@@ -138,7 +138,12 @@ count wrong answers.
 - **Median 7.5 s a sort**, slowest 14.9 s (159: 8.3 s and 19.3 s).
 - **Median 17.5k input tokens (8.4k cached) and 109 output a sort,** 2.10M in
   all for the 114 sorts, on the plan's allowance. No limit was hit.
-- **No dollar figure:** the plan does not price a call, as in 159.
+- **$2.75 at list price** for the 114 sorts, $0.024 a sort: 2.09M input
+  tokens (0.83M cached) and 13.9k output, at OpenAI's standard price for
+  `gpt-6.1-sol` (short context: $2.00 input, $0.10 cached input, $10.00
+  output per 1M; read 2026-10-30 from
+  https://developers.openai.com/api/docs/pricing). The plan itself bills no
+  call. Added on 2026-10-30, as in 159; the field rows carry it as `listUsd`.
 - No tool ran, no second try was needed, every sort gave an answer that fit.
 
 ## What this means
@@ -176,7 +181,8 @@ count wrong answers.
   bar has no hardening clause.
 - **Whether the fold result is more than noise.** 18 tickets, a change of one
   or two answers each way.
-- **The cost in money.** The plan gives no price.
+- **What the plan really charges.** The dollars here are list price for the
+  same tokens; the plan bills no call.
 - **Another day.** One Codex version, one model id, one plan.
 
 ## Run it

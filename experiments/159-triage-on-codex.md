@@ -174,14 +174,18 @@ count wrong answers.
 | Median seconds a sort | 8.3 | 10.7 | 6.9 |
 | Slowest sort | 19.3 s | 23.8 s | not kept |
 | Median tokens a sort | 17.5k in (8.4k of it cached), 110 out | 17.6k in, 185 out | 12.4k |
-| Dollars | the ChatGPT plan, no figure | the plan | $0.11 a ticket's first sort |
+| Dollars at list price | $4.89 for 174 sorts, $0.028 a sort | $0.32 for 12 sorts | $0.11 a ticket's first sort |
 
-- **No dollar figure.** Codex runs on the owner's ChatGPT plan, and the plan
-  does not price a call. The adapter reports `usd: null`. No API price for
-  `gpt-6.1-sol` is written in this repo, so there is no list-price estimate
-  either; with one, a sort is about 9k fresh input, 8.4k cached input and 110
-  output tokens. The 186 sorts used 3.48M tokens of the plan's allowance in
-  all, and no limit was hit.
+- **Dollars at list price.** Codex runs on the owner's ChatGPT plan, which
+  does not price a call, and the adapter reports `usd: null`. The dollars
+  above are what the same tokens cost at OpenAI's standard API price for
+  `gpt-6.1-sol` (short context: $2.00 input, $0.10 cached input, $10.00
+  output per 1M tokens; read 2026-10-30 from
+  https://developers.openai.com/api/docs/pricing; `lib/list-price.ts`).
+  All 186 sorts: 3.46M input tokens (1.03M cached) and 24k output, **$5.21**.
+  A median sort is about 9k fresh input, 8.4k cached input and 110 output
+  tokens, about $0.02. No limit of the plan was hit. Added on 2026-10-30;
+  the field rows got the dollars in a new `listUsd` field.
 - **Output tokens include the thinking.** A Codex rollout counts reasoning
   inside `output_tokens` (25 of 88 in one sort checked).
 - Every sort is one Codex process; experiment 156 put its start at about 1 s.
@@ -196,7 +200,7 @@ count wrong answers.
    says what to close in words, and GPT sol follows the words; so the fix is
    the words, not the model. Cost: one line, and one rerun of the 10 built
    phoenix tickets and the 29 misses on GPT sol (about 80 sorts, 15 minutes,
-   on the plan). Confidence 65%. The doubt: only 10 built tickets, and 5 of
+   about $2.25 at list price). Confidence 65%. The doubt: only 10 built tickets, and 5 of
    them were picked for being closed. What would settle it: that rerun, plus
    30 or more built phoenix tickets drawn at random.
 2. **Run it at medium effort.** High gave the same answers on 12 tickets and
@@ -217,9 +221,9 @@ count wrong answers.
 - **Wrong "no" rates on built work.** 10 built tickets is small, and 5 were
   picked because sonnet closed them.
 - **What high effort does on the full set.** Only 12 tickets ran at high.
-- **The cost in money.** The plan gives no price, and the repo holds no list
-  price for the model. How much of the plan's allowance a day of triage takes
-  is not known either.
+- **What the plan really charges.** The dollars here are list price for the
+  same tokens; the plan bills no call. How much of the plan's allowance a day
+  of triage takes is not known.
 - **A fair harness match.** 135 used the Agent SDK with no tools and a system
   prompt. Here Codex had a shell it did not use and the system line led the
   prompt. That is part of the change being tested, but it is a second change
