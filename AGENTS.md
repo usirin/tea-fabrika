@@ -103,8 +103,11 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 above needs it; CI runs it too (experiment 108).
 
 `pnpm lint:dead` lists exports nobody uses that `unreachable-ledger.json` does
-not name yet. It only advises: most of what it finds today is wrong
+not name yet. It only advises. With code-graph 0.12.0, about 0% of what it
+finds is wrong: 4 findings, all right
 ([Sweep the core](./docs/direction/sweep-the-core-rebuild-the-pipeline.md)).
+Blocking needs about 0% false alarms (Google CACM 2018); advising tolerates
+up to 10%. Whether it blocks is the owner's call.
 Run it after a change that removes or renames exports. Check each finding by
 hand. If it is right, fix it: delete the code, or drop its `export`. If it is
 wrong, leave it for the owner. The ledger only shrinks: commit what the run

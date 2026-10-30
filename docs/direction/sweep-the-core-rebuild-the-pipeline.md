@@ -40,7 +40,7 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   rounds or more bugs.
 - **The checks come from `@demlik/code-graph`, not knip** (2026-10-22). It is
   already this repo's layer and boundary lint. Where it lacks a check, the
-  check is added there. The repo pins 0.11.0 (2026-10-29):
+  check is added there. The repo pins 0.12.0 (2026-10-29):
 
   ```sh
   pnpm lint:dead   # code-graph . --unreachable --ci, against unreachable-ledger.json
@@ -48,9 +48,9 @@ the old one   stays as a map of which jobs exist        deleted once the new one
 
   ```json
   {
-    "id": "packages/fabrika/src/shell/execute.ts:inWords",
-    "kind": "dead",
-    "reason": "Wrong (2026-10-29): it is called in its own file, so only its `export` is unused. ...",
+    "id": "apps/fabrika/src/editor/grid.ts:gridOf",
+    "kind": "only-called-from-tests",
+    "reason": "Right (2026-10-29): only tests call it. It is kept for them.",
     "scope": "."
   }
   ```
@@ -58,31 +58,34 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   - dead code: code-graph gates it since 0.11.0
     (https://github.com/kamp-us/demlik/issues/729), but here it only
     advises. It is not in `pnpm lint`, and its CI step cannot turn the check
-    red. Measured on 2026-10-29, the ledger's start:
+    red. Measured on 2026-10-29, first with 0.11.0, then with 0.12.0:
 
-    | What code-graph said | Found | Right | Wrong |
+    | Version | Found | Right | Wrong |
     |---|---|---|---|
-    | `dead`: nothing reaches it | 24 | 1 (`Canvas`, in the finished video) | 23: called in their own file |
-    | `only-called-from-tests` | 12 | 3 (`gridOf`, `memoryHistory`, `modelAnswersOf`) | 9: also called in their own file, by code outside the tests |
-    | All | 36 | 4 | 32 (89%) |
+    | 0.11.0 | 36 | 4 | 32 (89%) |
+    | 0.12.0 | 4 | 4 (`Canvas`, in the finished video; `gridOf`, `memoryHistory`, `modelAnswersOf`, only tests call them) | 0 (0%) |
 
-    Every wrong one is the same miss: code-graph does not see a call to an
-    exported function from inside its own file
+    With 0.11.0, every wrong one was the same miss: code-graph did not see a
+    call to an exported function from inside its own file. 0.12.0 fixes it
     (https://github.com/kamp-us/demlik/issues/751,
-    https://github.com/kamp-us/demlik/issues/733). Read more kindly, as
-    "this `export` has no reader in another file", 23 of the 32 still point
-    at an `export` nobody needs, and the wrong ones fall to 9 of 36 (25%).
-    Either way it is far from the near 0% a blocking check needs. When those
-    two issues are fixed, measure again; at near 0% it moves into `pnpm lint`.
-    Each ledger entry says which kind it is. How sure that it should advise:
-    90%; the count was done by hand, one search per name;
+    https://github.com/kamp-us/demlik/issues/733), and the run pruned all 32
+    wrong entries. The 4 left were searched for again across the whole tree,
+    and are still right. False alarms are now about 0%. Blocking needs about
+    0% false alarms (Google CACM 2018); advising tolerates up to 10%. So it
+    could now move into `pnpm lint`. That is the owner's call, and it still
+    advises until then. One thing is lost: 23 of the 32 old findings pointed
+    at an `export` nobody needs outside its own file. 0.12.0 no longer
+    reports those, so an unneeded `export` is no longer found. How sure that
+    the count is right: 90%; it is one tree on one day, and the count was
+    done by hand, one search per name;
   - the `somethingOf` sweep
     ([Schema.Opaque, no `somethingOf`](./schema-classes-not-of-helpers.md))
     is where it helps. A sweep pull request that leaves an old exported
     helper with no caller gets a right finding. One that renames a helper in
     the ledger to another exported name gets the old entry pruned and the new
-    name found again, wrong in the same way (both tried on 2026-10-29, with
-    `tshOf` and a planted export). The run prunes the ledger as `Of` names
+    name found again, wrong in the same way (both tried on 2026-10-29 with
+    0.11.0, with `tshOf` and a planted export; not tried again with 0.12.0).
+    The run prunes the ledger as `Of` names
     go, and that pruned ledger is committed with the sweep pull request.
     code-graph lists exported names, so a helper moved onto a class as a
     static likely leaves its sight, used or not; not tried, as no

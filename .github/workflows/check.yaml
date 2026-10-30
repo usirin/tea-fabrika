@@ -34,8 +34,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      # Dead exports advise and never turn the check red: 32 of the 36 code-graph found
-      # on 2026-10-29 were wrong (sweep-the-core-rebuild-the-pipeline.md). A new finding,
+      # Dead exports advise and never turn the check red. With code-graph 0.12.0, 0 of
+      # its 4 findings on 2026-10-29 were wrong; with 0.11.0, 32 of 36. Whether it blocks
+      # is the owner's call (sweep-the-core-rebuild-the-pipeline.md). A new finding,
       # or a pruned ledger left uncommitted, marks this step failed and the job goes on.
       - name: dead exports (advise)
         continue-on-error: true
