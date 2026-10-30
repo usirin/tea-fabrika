@@ -10,13 +10,22 @@ import type {Direction, Orientation} from "./layout/index.ts";
 //   bindingOf("|")                                              {key: "|", does: {kind: "split", ...}}
 //
 // Left out of Tuval's table for now, and listed in the README as later: `w` (pick a tile),
-// `a` (focus the list), `:` (a command line), `r` (reload the config), `p` (the process board).
+// `:` (a command line), `r` (reload the config), `p` (the process board). Tuval's `a` focused its
+// list; here it opens the asks list, the frame's nearest thing to it.
 
 /** The key that arms the desk, as tmux's `prefix`. */
 export const PREFIX = "<c-b>";
 
 /** How long a repeatable key leaves the prefix armed, as tmux's `repeat-time`, in milliseconds. */
 export const REPEAT_MS = 500;
+
+/**
+ * What the window's frame shows, for the page that pressed the key (window/frame.ts): the asks
+ * list, every key, the info mode, or the two bars hidden and back. The desk only says so; the
+ * page draws it, as tmux's server runs `list-keys` and the client that pressed shows it.
+ */
+export const SHOWS = ["asks", "keys", "info", "bars"] as const;
+export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does. */
 export type Does =
@@ -29,37 +38,60 @@ export type Does =
 	| {readonly kind: "zoom"}
 	| {readonly kind: "close"}
 	| {readonly kind: "new"}
-	| {readonly kind: "step"; readonly to: "previous" | "next"};
+	| {readonly kind: "step"; readonly to: "previous" | "next"}
+	/** The workspace in this place, from 1, as tmux's `select-window -t 1`. */
+	| {readonly kind: "pick"; readonly at: number}
+	| {readonly kind: "show"; readonly what: Show};
 
-/** One binding: the key after the prefix, what it does, and whether it repeats (tmux's `bind -r`). */
+/**
+ * One binding: the key after the prefix, what it does, whether it repeats (tmux's `bind -r`), and
+ * its name: the one word the frame, the palette and a tooltip call it by.
+ */
 export interface Binding {
 	readonly key: string;
 	readonly does: Does;
 	readonly repeats: boolean;
+	readonly name: string;
 }
 
-const once = (key: string, does: Does): Binding => ({key, does, repeats: false});
+const once = (key: string, name: string, does: Does): Binding => ({
+	key,
+	does,
+	repeats: false,
+	name,
+});
+
+/** `C-b 1` to `C-b 9`: the workspace in that place. */
+const PICKS: readonly Binding[] = Array.from({length: 9}, (_, i) =>
+	once(String(i + 1), `workspace ${i + 1}`, {kind: "pick", at: i + 1}),
+);
 
 export const BINDINGS: readonly Binding[] = [
 	// `|` puts the two side by side: a row, "horizontal" in the tree. `-` puts one over the other.
-	once("|", {kind: "split", orientation: "horizontal"}),
-	once("-", {kind: "split", orientation: "vertical"}),
-	once("h", {kind: "focus", to: "left"}),
-	once("j", {kind: "focus", to: "down"}),
-	once("k", {kind: "focus", to: "up"}),
-	once("l", {kind: "focus", to: "right"}),
-	once("<arrowleft>", {kind: "focus", to: "left"}),
-	once("<arrowdown>", {kind: "focus", to: "down"}),
-	once("<arrowup>", {kind: "focus", to: "up"}),
-	once("<arrowright>", {kind: "focus", to: "right"}),
+	once("|", "split", {kind: "split", orientation: "horizontal"}),
+	once("-", "split down", {kind: "split", orientation: "vertical"}),
+	once("h", "focus left", {kind: "focus", to: "left"}),
+	once("j", "focus down", {kind: "focus", to: "down"}),
+	once("k", "focus up", {kind: "focus", to: "up"}),
+	once("l", "focus right", {kind: "focus", to: "right"}),
+	once("<arrowleft>", "focus left", {kind: "focus", to: "left"}),
+	once("<arrowdown>", "focus down", {kind: "focus", to: "down"}),
+	once("<arrowup>", "focus up", {kind: "focus", to: "up"}),
+	once("<arrowright>", "focus right", {kind: "focus", to: "right"}),
 	// Space turns the container, as AeroSpace's `layout horizontal vertical`. `f` folds the tile.
-	once(" ", {kind: "turn"}),
-	once("f", {kind: "fold"}),
-	once("z", {kind: "zoom"}),
-	once("x", {kind: "close"}),
-	once("N", {kind: "new"}),
-	{key: "<c-h>", does: {kind: "step", to: "previous"}, repeats: true},
-	{key: "<c-l>", does: {kind: "step", to: "next"}, repeats: true},
+	once(" ", "turn", {kind: "turn"}),
+	once("f", "fold", {kind: "fold"}),
+	once("z", "zoom", {kind: "zoom"}),
+	once("x", "close", {kind: "close"}),
+	once("N", "new", {kind: "new"}),
+	{key: "<c-h>", does: {kind: "step", to: "previous"}, repeats: true, name: "previous workspace"},
+	{key: "<c-l>", does: {kind: "step", to: "next"}, repeats: true, name: "next workspace"},
+	...PICKS,
+	// The frame's own: not a bare `?` or `i`, which would go into tsh.
+	once("a", "asks", {kind: "show", what: "asks"}),
+	once("?", "keys", {kind: "show", what: "keys"}),
+	once("i", "info", {kind: "show", what: "info"}),
+	once("B", "bars", {kind: "show", what: "bars"}),
 ];
 
 export const bindingOf = (key: string): Binding | undefined => BINDINGS.find((b) => b.key === key);

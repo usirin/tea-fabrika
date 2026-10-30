@@ -29,6 +29,7 @@ import {
 	save,
 	savedOf,
 	send,
+	show,
 	stop,
 	takenNow,
 	tilesOf,
@@ -78,7 +79,7 @@ const node = fc.constantFrom("t1", "t2", "t3", "t4", "c1", "c2", "c3", "c4", "c5
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
 
-const [opening, closing, stopping, sending, saving, emptying, ending, killing] = [
+const [opening, closing, stopping, sending, saving, emptying, ending, killing, showing] = [
 	open({tile: "t1"}),
 	close({tile: "t1"}),
 	stop({tile: "t1"}),
@@ -87,6 +88,7 @@ const [opening, closing, stopping, sending, saving, emptying, ending, killing] =
 	empty({}),
 	end({process: "ticket:1"}),
 	kill({process: "ticket:1"}),
+	show({what: "asks"}),
 ] as const;
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
@@ -108,6 +110,11 @@ const table: MsgArbitraryTable<Msg> = {
 	jobs: arbRecordMsg("jobs", {tile, running: fc.nat({max: 2})}),
 	closing: arbRecordMsg("closing", {tile}),
 	ended: arbRecordMsg("ended", {tile}),
+	go: arbRecordMsg("go", {tile}),
+	pick: arbRecordMsg("pick", {workspace: fc.constantFrom("w1", "w2", "w3", "w9")}),
+	do: arbRecordMsg("do", {key: fc.constantFrom(...after, "1", "2", "a", "?", "q")}),
+	show_ok: fc.constant(show.ok(showing, null, 0)),
+	show_err: failed(show.errType, showing),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
 	open_err: failed(open.errType, opening),
 	close_ok: fc.constant(close.ok(closing, null, 0)),
@@ -587,7 +594,9 @@ describe("the desk's laws", () => {
 			grabsA: [takesWhatItSays.name],
 			wakesUp: [takesWhatItSays.name, overStays.name],
 			closesSilently: [emptiesAtTheEnd.name],
-			yesIsNo: [savesChanges.name, yesCloses.name],
+			// The saves law caught it too, by chance, until the frame's Msgs (go, pick, do) changed which
+			// lists seed 1 makes; the law about y catches it on any list.
+			yesIsNo: [yesCloses.name],
 			// The tile the line was typed in is asked to close with no question of its own.
 			closesTheLine: [closesOnce.name, yesCloses.name],
 			deafToEnded: [endedGoes.name],

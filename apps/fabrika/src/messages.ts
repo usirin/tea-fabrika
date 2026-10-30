@@ -1,11 +1,14 @@
 import {Cause, Exit, Schema} from "effect";
+import {AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
+import {SHOWS} from "./desk/keys.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
 // each has its own two message types, on a port of its own. They are the protocol: the page's
 // MessagePort and the host's socket (link.ts) are only what carries them, and the app's main
-// process relays them unread. Only Try again (`ToApp`) is main's own, and goes no further. No
+// process relays them unread, but for the asks, which it reads for the Dock badge on the way
+// (`readAsks`). Only Try again (`ToApp`) is main's own, and goes no further. No
 // platform here: the window imports this file too.
 //
 // A tile's terminal is a terminal and nothing more, as a terminal emulator is to a pty: it
@@ -68,6 +71,12 @@ const KeyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64
 /** A number the page gives each key it sends the host, so the answer names the key it is for. */
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
+/** What waits on the person, as the host folded it (asks.ts): on the desk's port, to every app. */
+export const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
+
+/** An ask's key (asks.ts): short, on one line. */
+const AskKey = Schema.String.check(Schema.isPattern(/^\S{1,300}$/));
+
 /** A size on the page, in whole px: no screen is wider than this. */
 const Pixels = Schema.Int.check(
 	Schema.isGreaterThanOrEqualTo(0),
@@ -122,18 +131,43 @@ export type LinkNow = typeof LinkNow.Type;
  * `link` is the app's own, not the host's: what the window shows of the link `now`
  * (reconnect.ts), sent each time that changes, and again as a page loads.
  *
- *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false}, ...]}
+ *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false, name: "split"}, ...]}
  *   {type: "desk", desk: {at: "open", ...}, takes: {all: false, keys: ["<c-b>"]}}
  *   {type: "answer", id: 3, took: true}
  *   {type: "link", now: {kind: "reconnecting", why: "The link to the host ended: the other side closed."}}
  *   {type: "link", now: {kind: "version", theirs: 1, ours: 2}}
+ *
+ * For the window's frame (window/frame.tsx): `programs` is what each program takes and sends,
+ * by its inputs' and outputs' names, sent once as the page loads. `asks` is what waits on the
+ * person (asks.ts), sent each time it changes, to every app attached, with a page or not: the
+ * app's main reads it for the Dock badge. `show` is what a key the page sent asks the frame to
+ * show (desk.ts, `show`), sent to that page alone, before its answer.
+ *
+ *   {type: "programs", programs: [{name: "ticket", takes: ["ticket"], sends: ["ticket"]}]}
+ *   {type: "asks", now: {asks: [{key: "7/a-1", ticket: 7, what: "approve plan", ...}], ...}}
+ *   {type: "show", what: "keys"}
  */
 export const ToPage = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("keys"),
 		prefix: KeyName,
-		table: Schema.Array(Schema.Struct({key: KeyName, repeats: Schema.Boolean})),
+		/** `name`: the one word the frame calls the binding by (desk/keys.ts). */
+		table: Schema.Array(
+			Schema.Struct({key: KeyName, repeats: Schema.Boolean, name: Schema.String}),
+		),
 	}),
+	Schema.Struct({
+		type: Schema.Literal("programs"),
+		programs: Schema.Array(
+			Schema.Struct({
+				name: Schema.String,
+				takes: Schema.Array(Schema.String),
+				sends: Schema.Array(Schema.String),
+			}),
+		),
+	}),
+	AsksMessage,
+	Schema.Struct({type: Schema.Literal("show"), what: Schema.Literals(SHOWS)}),
 	Schema.Struct({
 		type: Schema.Literal("desk"),
 		desk: DeskSchema,
@@ -170,6 +204,15 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "fold", tile: "t2"}
  *   {type: "unfold", node: "c4"}
  *   {type: "area", width: 1432, height: 868}     the workspace was drawn at this size, in px
+ *
+ * And from the window's frame (window/frame.tsx), with no key pressed:
+ *
+ *   {type: "go", tile: "t7"}          an ask picked in the asks list: its tile, wherever it is
+ *   {type: "pick", workspace: "w2"}   a workspace clicked in the top bar
+ *   {type: "do", key: "z"}            the palette ran a binding, as Ctrl-B and that key
+ *   {type: "later", key: "7/a-1"}     an ask set aside: out of the count, at the list's foot
+ *   {type: "back", key: "7/a-1"}      and counted again
+ *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
@@ -182,6 +225,12 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("fold"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("unfold"), node: Schema.String}),
 	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
+	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
+	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
+	Schema.Struct({type: Schema.Literal("do"), key: KeyName}),
+	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
+	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
+	Schema.Struct({type: Schema.Literal("seen")}),
 ]);
 export type FromPage = typeof FromPage.Type;
 
@@ -215,3 +264,5 @@ export const readFromPage = reader(FromPage);
 export const readToPage = reader(ToPage);
 /** What main reads from the page, on the desk's port, before it passes the rest on to the host. */
 export const readToApp = reader(ToApp);
+/** What main reads of the host's messages on the desk's port: the asks, for the Dock badge. */
+export const readAsks = reader(AsksMessage);

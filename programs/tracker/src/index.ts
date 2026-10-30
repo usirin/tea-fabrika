@@ -73,7 +73,7 @@ export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 /** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
 export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 export {Hint, hintsOn} from "./duplicates.ts";
-export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits} from "./head.ts";
+export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words} from "./head.ts";
 export {Author} from "./ledger.ts";
 export {
 	Failed,

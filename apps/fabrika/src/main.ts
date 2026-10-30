@@ -12,10 +12,12 @@ import {
 	ipcMain,
 	MessageChannelMain,
 	type MessagePortMain,
+	Notification,
 	protocol,
 	session,
 	shell,
 } from "electron";
+import {type AsksNow, keysOf, newAsks, noticeOf} from "./asks.ts";
 import {attach, NoHello, NoHost, restart} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
@@ -23,7 +25,7 @@ import {pathsOf} from "./host/socket.ts";
 import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
-import {type LinkNow, readToApp, type ToPage} from "./messages.ts";
+import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {startHost} from "./start-host.ts";
@@ -85,6 +87,15 @@ import {Unattached, type Wire} from "./wire.ts";
 //   Cmd-Q           Electron's default app menu, kept for it, quits the app, and only the app: the
 //                   host runs on, with every tile's tsh and every job. The next start attaches to
 //                   it and draws the same desk
+//
+// The window's frame and the asks:
+//
+//   frame           on macOS no title bar: the page's top bar is the frame, with the system's
+//                   three buttons set in it (`FRAME`). Elsewhere, the system's own frame
+//   Dock badge      the count of asks the host sends the page, read on the way (`readAsks`), so
+//                   the badge and the top bar say the same number
+//   notification    a new ask, while the window is not in front: the system's own, so its own
+//                   settings turn it off. Never on a quiet start, and nothing is focused by it
 //
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
 // A test sets it, to run on a fresh one. The host is started on the same home, by name, always.
@@ -156,6 +167,16 @@ const guard = () => {
 };
 
 /**
+ * The window's frame on macOS: no title bar of its own, the page's top bar in its place, and the
+ * system's three buttons kept, set in that bar, as Linear and Finder set theirs. The page keeps
+ * their space clear (window/frame.ts, `LIGHTS`). Other platforms keep the system's frame, as it is.
+ */
+const FRAME =
+	process.platform === "darwin"
+		? ({titleBarStyle: "hiddenInset", trafficLightPosition: {x: 14, y: 11}} as const)
+		: {};
+
+/**
  * The one window, with the same safe settings the app's windows always had. Quiet, it is made
  * hidden and drawn anyway, then shown without taking focus.
  */
@@ -166,6 +187,7 @@ const deskWindow = (preload: string, launch: Launch) => {
 		height: 760,
 		title: "fabrika",
 		backgroundColor: "#0a0b0c",
+		...FRAME,
 		show: !quiet,
 		paintWhenInitiallyHidden: true,
 		webPreferences: {
@@ -301,6 +323,33 @@ const main = Effect.gen(function* () {
 	/** A port whose messages go to the host, under its name. */
 	const relay = (name: string) => ports.push(name, onTo(name));
 	const toPage = (m: ToPage) => ports.post("desk", m);
+	/** The ask keys known since this link came up; `null` before its first count. */
+	let known: ReadonlySet<string> | null = null;
+	/** Notifications shown, held so their click is still heard. */
+	const notices = new Set<Notification>();
+	/**
+	 * The host's count of asks (asks.ts), read on its way to the page: the Dock's badge shows the
+	 * same number as the top bar. A new ask is told by the system's notification only when the
+	 * window is not in front, and never on a quiet start. Nothing is focused or opened by it; a
+	 * click on it brings the window and opens the asks list.
+	 */
+	const heardAsks = (now: AsksNow) => {
+		app.setBadgeCount(now.asks.length);
+		const fresh = newAsks(known, now);
+		known = keysOf(now);
+		const [first, ...rest] = fresh;
+		if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) return;
+		if (!Notification.isSupported()) return;
+		const notice = new Notification(noticeOf([first, ...rest]));
+		notices.add(notice);
+		notice.on("close", () => notices.delete(notice));
+		notice.on("click", () => {
+			notices.delete(notice);
+			showWindow();
+			toPage({type: "show", what: "asks"});
+		});
+		notice.show();
+	};
 	const fromHost = (m: Down) => {
 		switch (m.type) {
 			case "hello":
@@ -309,8 +358,13 @@ const main = Effect.gen(function* () {
 			case "port":
 				if (m.port !== "desk") relay(m.port);
 				return;
-			case "to":
+			case "to": {
+				if (m.port === "desk") {
+					const asks = readAsks(m.m);
+					if (asks.kind === "read") heardAsks(asks.msg.now);
+				}
 				return ports.post(m.port, m.m);
+			}
 			case "gone":
 				return ports.gone(m.port);
 			case "close":
@@ -347,6 +401,8 @@ const main = Effect.gen(function* () {
 				return triedOf(Cause.squash(exit.cause));
 			}
 			held = {wire: exit.value.wire, scope: link};
+			// A new link's first count tells of no ask: those were known, or are old news.
+			known = null;
 			if (paged) exit.value.wire.send({type: "page"});
 			return exit.value.found satisfies Tried;
 		});
