@@ -1,13 +1,13 @@
 # 169: `claude` and `codex` as tea programs
 
 **Answer: yes, and they are one definition with two entries.** One function
-makes both programs on the `Agents` service; the maker is the program's name.
-Both ran the same tests on fake makers, and one tiny live prompt each
+makes both programs on the `Agents` service; the provider is the program's name.
+Both ran the same tests on fake providers, and one tiny live prompt each
 answered `{sum: 5}` for about $0.003 in all. A pipeline stage (the real sort
 machine, unchanged) started the program as a child run and heard its typed
 answer as the same Draft Msg it hears today. A program costs about 0.8 ms a
-turn over `Agents.run` on fake makers. Two gaps showed up, the same on both
-makers: nobody can answer a permission ask, and a turn cannot run without an
+turn over `Agents.run` on fake providers. Two gaps showed up, the same on both
+providers: nobody can answer a permission ask, and a turn cannot run without an
 answer schema.
 
 ```ts
@@ -16,19 +16,19 @@ const claude = typedAgentProgram("claude", SortReply, "claude-sort");
 const codex = typedAgentProgram("codex", SortReply, "codex-sort");
 
 // inputs:  prompt (text), allow / refuse (an ask id), cancel (a turn number, or "now")
-// outputs: started {maker, session, resumed, resent}
+// outputs: started {provider, session, resumed, resent}
 //          said {turn, text}   tool {turn, id, title, status}   ask {turn, id, title, answer}
 //          ended {turn, stop, answer: SortReply | null, tokens, counted, usd, requests, ms, error}
 
 // A stage starts it as a child run; the stage hears sort_tool, sort_finished, sort_failed.
-const runner = programRunner({name: "sort", program: claude, agents, flagsOf, keepingOf});
+const runner = programRunner({name: "sort", program: claude, agents, flags, keeping});
 run(sort, {interpret, subscribe: {sort_run: (sub) => runner(sub.deps.run)}, terminal});
 ```
 
 ## Who did what
 
 - **This repo's code:** the program, its kept conversation, the two fake
-  makers, the child-run runner (`packages/fabrika/src/agents/program/`), the
+  providers, the child-run runner (`packages/fabrika/src/agents/program/`), the
   tests, the conversation's laws (it is kept, and an ended turn never
   changes), the stage test (`packages/pipeline/src/agent-program.test.ts`) and
   the script. No real stage changed.
@@ -50,7 +50,7 @@ parent machine does not change. Only the line that makes its runner does:
 // before (156)
 const runner = agentRunner("sort", agents, turnOf);
 // after (169)
-const runner = programRunner({name: "sort", program: typedAgentProgram(maker, SortReply), agents, flagsOf, keepingOf});
+const runner = programRunner({name: "sort", program: typedAgentProgram(provider, SortReply), agents, flags, keeping});
 // both: (run: DraftRun) => Stream<sort_tool | sort_finished | sort_failed>
 ```
 
@@ -63,7 +63,7 @@ is that state. Its main reads inputs and runs one turn per prompt.
 
 ```ts
 interface TurnSeen { n: number; prompt: string; said: string[]; tools: Tool[]; asks: Ask[]; end: End | null }
-interface Conversation { maker: "claude" | "codex"; session: string; told: number; turns: TurnSeen[] }
+interface Conversation { provider: "claude" | "codex"; session: string; told: number; turns: TurnSeen[] }
 // Msgs: opened, told, began, heard (one Update from the service), ended
 ```
 
@@ -77,13 +77,13 @@ interface Conversation { maker: "claude" | "codex"; session: string; told: numbe
   stops turn 2 now if it runs, or when it comes up. Cancel by id is how LSP
   does it (`$/cancelRequest`,
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest).
-- **The maker is the name.** BusyBox is one binary that acts by the name it is
+- **The provider is the name.** BusyBox is one binary that acts by the name it is
   started under (https://busybox.net/about.html). Here one `build` function
   makes `claude` and `codex`, so neither is shaped around the other.
 
 ## 3. Parity
 
-Every difference between the two programs, from the tests on the fake makers
+Every difference between the two programs, from the tests on the fake providers
 (which say a turn the way each real adapter does) and the live run. **Hidden**
 means the program shows both the same way. **Shown** means a person or a stage
 sees the difference.
@@ -115,14 +115,14 @@ One turn each, `What is 2 + 3?` with the answer `{sum: Int}`:
 
 ## 5. The typed answer across the boundary
 
-Three ways, each tested on both makers with three answers: a right one, one
+Three ways, each tested on both providers with three answers: a right one, one
 with a wrong label, and one with a ticket that does not start with `#` (a
 check JSON Schema cannot say).
 
 ```ts
 // A: no schema. The program hands on the agent's last JSON value; the stage checks it.
 agentProgram("claude")
-// B: a JSON Schema as a flag. The maker is held to it, and the program reads by it.
+// B: a JSON Schema as a flag. The provider is held to it, and the program reads by it.
 agentProgram("claude"), flags: {answer: JSON.stringify(jsonSchemaOf(Reply))}
 // C: the stage's own Effect schema, at definition. `ended.answer` is `Reply | null`.
 typedAgentProgram("claude", Reply)
@@ -143,10 +143,10 @@ typedAgentProgram("claude", Reply)
 
 Draft PR 166 (experiment 164) fixes this in tea with one mailbox. It is not
 merged, and this spike does not build it. What the spike found: a cancel that
-names its turn needs no mailbox for these cases. 50 trials per case per maker,
-fake makers:
+names its turn needs no mailbox for these cases. 50 trials per case per provider,
+fake providers:
 
-| Case | Meant | Got (both makers, 50 of 50) |
+| Case | Meant | Got (both providers, 50 of 50) |
 |---|---|---|
 | `now`: a turn that hangs, `cancel now`, a second prompt, told at once | 1 cancelled, 2 runs | **nothing ended**: the cancel was read before turn 1 began, and turn 1 hangs |
 | `numbered`: the same with `cancel 1` | 1 cancelled, 2 runs | right |
@@ -162,7 +162,7 @@ fake makers:
 
 One turn that ends at once, n = 300, memory storage, one process, ms:
 
-| Maker | `Agents.run` p50 / p95 | program call p50 / p95 | child run from a Draft p50 / p95 |
+| Provider | `Agents.run` p50 / p95 | program call p50 / p95 | child run from a Draft p50 / p95 |
 |---|---|---|---|
 | claude | 0.135 / 0.228 | 1.006 / 1.968 | 0.892 / 1.769 |
 | codex | 0.079 / 0.096 | 0.884 / 1.609 | 0.829 / 1.56 |
@@ -183,7 +183,7 @@ One turn that ends at once, n = 300, memory storage, one process, ms:
   label and a close, and ends `done`.
 - Two child runs, `sort:12/1` and `sort:12/2`. The second resumes the first
   one's session (`fake-own-1`).
-- The same on both makers.
+- The same on both providers.
 
 ## 9. Does a person watch? The isatty question
 
@@ -216,26 +216,26 @@ interface Started { readonly tty: boolean }
 
 ## 10. Recommendation
 
-**One definition, two entries: `build({maker, ...})` makes `claude` and
-`codex`, with the maker as the name.**
+**One definition, two entries: `build({provider, ...})` makes `claude` and
+`codex`, with the provider as the name.**
 
 - **Why:** the differences in 3 are all data (what the service holds, what
-  usage a maker reports), not shape. Two programs would drift; one function
-  keeps them at parity by construction, and the fake makers keep the tests
+  usage a provider reports), not shape. Two programs would drift; one function
+  keeps them at parity by construction, and the fake providers keep the tests
   honest for both.
 - **Cost:** about 520 lines for the program and runner, 150 for the
-  conversation, 80 for the fakes. 0.8 ms a turn. A new maker is a row in
-  `MAKERS` plus its adapter.
+  conversation, 80 for the fakes. 0.8 ms a turn. A new provider is a row in
+  `PROVIDERS` plus its adapter.
 - **How sure:** 75%. The doubts, and what would settle each:
   - The host side (the `tty` bit, children in the job table, attach) is not
     built. Building it in tsh would show whether a child tile is really
     cheap.
-  - Warm sessions: each turn here is a fresh maker process. A chat tile may
+  - Warm sessions: each turn here is a fresh provider process. A chat tile may
     want one process kept warm across turns, which is the ACP program's shape.
     A run where a person chats ten turns would show if it matters.
   - Ledger storage per turn is not measured (7).
 
-Two gaps to fix in the service, not in the program, the same on both makers:
+Two gaps to fix in the service, not in the program, the same on both providers:
 
 - **No permission asks.** Neither adapter ever sends `asked`, and the service
   has no path to answer one. `allow` and `refuse` are wired but dead.
@@ -245,12 +245,12 @@ Two gaps to fix in the service, not in the program, the same on both makers:
 
 ## What this cannot tell us
 
-- One live prompt per maker. It shows the wiring, not quality or cost at
-  scale. A real stage turn with tools was run only on the fake makers.
-- The fake makers are written from the adapters' pure parts; a maker that
+- One live prompt per provider. It shows the wiring, not quality or cost at
+  scale. A real stage turn with tools was run only on the fake providers.
+- The fake providers are written from the adapters' pure parts; a provider that
   changes its events would not show here.
 - Nothing about a person using a chat tile: no tile was drawn.
-- Cancel was tested on fake makers. A real maker's stop is 156's, untested
+- Cancel was tested on fake providers. A real provider's stop is 156's, untested
   again here.
 - The order cases are four. A cancel told before its prompt (by number, for a
   turn not yet told) is tested once, not 50 times.
@@ -260,6 +260,6 @@ Two gaps to fix in the service, not in the program, the same on both makers:
 
 - Live: claude $0.0029, codex $0 on the ChatGPT plan (9,930 tokens). About
   $0.003 in all.
-- Everything else: fake makers, $0.
+- Everything else: fake providers, $0.
 - Left behind: nothing. The temp folders, the Codex home and the one Claude
   Code session record the live run made were removed.

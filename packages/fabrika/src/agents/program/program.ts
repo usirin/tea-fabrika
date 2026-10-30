@@ -28,12 +28,10 @@ import type {Reads} from "../claude/schema.ts";
 import {
 	Conversation,
 	conversation,
-	type End,
+	End,
 	EndStop,
-	type Maker,
-	statusOf,
+	type Provider,
 	type TurnSeen,
-	waitingOf,
 } from "./conversation.ts";
 
 // `claude` and `codex` as tea programs (experiment 169), made by one function
@@ -47,7 +45,7 @@ import {
 //   tell %1 cancel now                                whatever turn runs now
 //
 // One definition, two entries, the way BusyBox is one binary that acts by the
-// name it is started under (https://busybox.net/about.html). The maker is the
+// name it is started under (https://busybox.net/about.html). The provider is the
 // program's name, not a flag: a person types `claude` or `codex`, as in a
 // terminal.
 //
@@ -59,10 +57,10 @@ import {
 // isatty section).
 //
 // The typed answer, three ways (the write-up measures them):
-//   A  `agentProgram(maker)`, no `answer` flag: the agent's last JSON value, checked by the stage.
-//   B  `agentProgram(maker)` with `--answer <JSON Schema>`: the maker is held to it, and the
+//   A  `agentProgram(provider)`, no `answer` flag: the agent's last JSON value, checked by the stage.
+//   B  `agentProgram(provider)` with `--answer <JSON Schema>`: the provider is held to it, and the
 //      program reads by it. A check JSON Schema cannot say is lost on the way.
-//   C  `typedAgentProgram(maker, Schema)`: the stage's own schema, at definition. `ended`'s shape
+//   C  `typedAgentProgram(provider, Schema)`: the stage's own schema, at definition. `ended`'s shape
 //      is `A | null`, so a value that does not fit cannot be sent, and a pipe checks it by `fit`.
 
 /** Why the program would not go on. */
@@ -85,15 +83,18 @@ const FLAGS = {
 		Schema.UndefinedOr(Schema.String),
 		"Our session id. Left out: a new one, kept with the run. The same id carries on a session.",
 	),
-	model: flag(Schema.UndefinedOr(Schema.String), "The model, by the maker's own name."),
-	effort: flag(Schema.UndefinedOr(Schema.String), "How hard it thinks, by the maker's own value."),
+	model: flag(Schema.UndefinedOr(Schema.String), "The model, by the provider's own name."),
+	effort: flag(
+		Schema.UndefinedOr(Schema.String),
+		"How hard it thinks, by the provider's own value.",
+	),
 	system: flag(
 		Schema.UndefinedOr(Schema.String),
-		"Text added after the maker's own coding prompt.",
+		"Text added after the provider's own coding prompt.",
 	),
 	usd: flag(
 		Schema.UndefinedOr(Positive),
-		"Dollars one turn may cost. Only a maker that holds a cap takes it; the other fails the turn at start.",
+		"Dollars one turn may cost. Only a provider that holds a cap takes it; the other fails the turn at start.",
 	),
 	tools: flag(
 		Schema.UndefinedOr(Schema.Int.check(Schema.isGreaterThan(0))),
@@ -110,9 +111,9 @@ const INPUTS = {
 };
 
 const Started = Schema.Struct({
-	maker: Schema.Literals(["claude", "codex"]),
+	provider: Schema.Literals(["claude", "codex"]),
 	session: Schema.String,
-	/** The service knew the session already: the maker carries it on. */
+	/** The service knew the session already: the provider carries it on. */
 	resumed: Schema.Boolean,
 	/** Turns a kill cut off, sent again now. */
 	resent: Count,
@@ -134,7 +135,7 @@ const AskOut = Schema.Struct({
 });
 
 /** The `ended` output, its answer typed by `answer`. */
-const endedOf = <A>(answer: Schema.Codec<A, A>) =>
+const endedOutput = <A>(answer: Schema.Codec<A, A>) =>
 	Schema.Struct({
 		turn: Count,
 		stop: EndStop,
@@ -164,19 +165,6 @@ const readsFrom = (json: Readonly<Record<string, Schema.Json>>) =>
 			}) as AgentRefused,
 	});
 
-const spendOf = (end: {
-	readonly usd: number | null;
-	readonly tokens: Tokens;
-	readonly requests: number | null;
-	readonly ms: number;
-}): Spend => ({
-	costUsd: end.usd ?? 0,
-	tokens: end.tokens.input + end.tokens.output,
-	context: 0,
-	turns: end.requests ?? 0,
-	minutes: end.ms / 60_000,
-});
-
 const NO_END = {
 	tokens: {input: 0, cached: 0, output: 0},
 	counted: "none",
@@ -184,28 +172,31 @@ const NO_END = {
 	requests: null,
 } as const;
 
-/** The program, for one maker, its answer read by what `readsOf` gives. */
+/** The program, for one provider, its answer read by what `reads` gives. */
 function build<A, X extends typeof FLAGS>(config: {
-	readonly maker: Maker;
+	readonly provider: Provider;
 	readonly name: string;
 	readonly description: string;
 	readonly flags: X;
 	readonly answer: Schema.Codec<A, A>;
-	readonly readsOf: (flags: Given<X>) => Effect.Effect<Reads<A>, AgentRefused>;
+	readonly reads: (flags: Given<X>) => Effect.Effect<Reads<A>, AgentRefused>;
 }) {
-	const {maker} = config;
+	const {provider} = config;
 	return defineProgram({
 		name: config.name,
 		description: config.description,
 		flags: config.flags,
 		inputs: INPUTS,
 		outputs: {
-			started: output(Started, "Once per start: our session, and whether the maker carries it on."),
+			started: output(
+				Started,
+				"Once per start: our session, and whether the provider carries it on.",
+			),
 			said: output(Said, "One whole message the agent said in a turn."),
 			tool: output(Tool, "A tool call, as it starts and as it ends."),
 			ask: output(AskOut, "A permission ask, and how it was answered."),
 			ended: output(
-				endedOf(config.answer),
+				endedOutput(config.answer),
 				"Each turn's end: why it stopped, its typed answer or null, its tokens and dollars.",
 			),
 		},
@@ -215,8 +206,8 @@ function build<A, X extends typeof FLAGS>(config: {
 				state: Conversation,
 				parent: "main",
 				options: () => ({ctx: undefined}),
-				drawing: () => ({name: `${maker} conversation`, steps: {}}),
-				status: statusOf,
+				drawing: () => ({name: `${provider} conversation`, steps: {}}),
+				status: Conversation.status,
 			}),
 		},
 		view: {machine: "conversation", data: Conversation, of: (s: Conversation) => s},
@@ -225,27 +216,27 @@ function build<A, X extends typeof FLAGS>(config: {
 				const agents = yield* Agents;
 				if (!flags.folder.startsWith("/"))
 					return yield* refused("--folder must be an absolute path");
-				const answer = yield* config.readsOf(flags);
+				const answer = yield* config.reads(flags);
 
 				const kept = yield* machines.conversation.get("conversation").start();
 				const was = kept.getState();
-				if (was.maker !== null && was.maker !== maker)
+				if (was.provider !== null && was.provider !== provider)
 					return yield* refused(
-						`this run's session is on ${was.maker}: it cannot move to ${maker}`,
+						`this run's session is on ${was.provider}: it cannot move to ${provider}`,
 					);
-				const session = was.session ?? flags.session ?? `${maker}/${crypto.randomUUID()}`;
-				if (was.session === null) yield* kept.dispatch({type: "opened", maker, session});
+				const session = was.session ?? flags.session ?? `${provider}/${crypto.randomUUID()}`;
+				if (was.session === null) yield* kept.dispatch({type: "opened", provider, session});
 				const resumed = (yield* agents.knows(session)) !== null;
-				const cutOff = waitingOf(was);
-				yield* send("started", {maker, session, resumed, resent: cutOff.length});
+				const cutOff = Conversation.waiting(was);
+				yield* send("started", {provider, session, resumed, resent: cutOff.length});
 
 				const limits: Limits = {
 					usd: flags.usd ?? null,
 					tools: flags.tools ?? null,
 					seconds: flags.seconds ?? null,
 				};
-				const turnOf = (prompt: string): Turn<A> => ({
-					provider: maker,
+				const turn = (prompt: string): Turn<A> => ({
+					provider,
 					session,
 					folder: flags.folder,
 					prompt,
@@ -271,9 +262,9 @@ function build<A, X extends typeof FLAGS>(config: {
 									return;
 								}
 								if (now?.n === c) return yield* Effect.forkScoped(Fiber.interrupt(now.fiber));
-								const turn = kept.getState().turns.find((t) => t.n === c);
+								const seen = kept.getState().turns.find((t) => t.n === c);
 								// A turn not told yet, or told and not ended: it is cancelled when it comes up.
-								if (turn === undefined || turn.end === null) cancelled.add(c);
+								if (seen === undefined || seen.end === null) cancelled.add(c);
 							}),
 						),
 					),
@@ -343,7 +334,7 @@ function build<A, X extends typeof FLAGS>(config: {
 						yield* kept.dispatch({type: "began", n: t.n});
 						const last: {ended: Ended<A> | null} = {ended: null};
 						const fiber = yield* Effect.forkScoped(
-							agents.run(turnOf(t.prompt)).pipe(Stream.runForEach((h) => onHeard(t.n, h, last))),
+							agents.run(turn(t.prompt)).pipe(Stream.runForEach((h) => onHeard(t.n, h, last))),
 						);
 						running = {n: t.n, fiber};
 						const exit = yield* Fiber.await(fiber);
@@ -373,7 +364,7 @@ function build<A, X extends typeof FLAGS>(config: {
 						const why = Exit.isFailure(exit) ? Cause.squash(exit.cause) : "no end";
 						const error = why instanceof AgentFailed ? `${why.why}: ${why.message}` : String(why);
 						return yield* finish(t.n, {...NO_END, stop: "failed", answer: null, ms, error});
-					}).pipe(Effect.withSpan(`${maker} turn`, {attributes: {"agent.turn": t.n}}));
+					}).pipe(Effect.withSpan(`${provider} turn`, {attributes: {"agent.turn": t.n}}));
 
 				for (;;) {
 					const next = yield* Queue.take(todo);
@@ -384,7 +375,7 @@ function build<A, X extends typeof FLAGS>(config: {
 	});
 }
 
-const DESCRIPTION: Record<Maker, string> = {
+const DESCRIPTION: Record<Provider, string> = {
 	claude:
 		"Claude Code as a program: each prompt is a turn on one session, through the Agents service.",
 	codex: "Codex as a program: each prompt is a turn on one session, through the Agents service.",
@@ -395,11 +386,11 @@ const DESCRIPTION: Record<Maker, string> = {
  * is any JSON the agent ends with, or, with `--answer`, what that JSON Schema
  * reads.
  */
-export const agentProgram = (maker: Maker) =>
+export const agentProgram = (provider: Provider) =>
 	build({
-		maker,
-		name: maker,
-		description: `${DESCRIPTION[maker]} With --answer, each turn ends with a JSON value that fits that JSON Schema, or null.`,
+		provider,
+		name: provider,
+		description: `${DESCRIPTION[provider]} With --answer, each turn ends with a JSON value that fits that JSON Schema, or null.`,
 		flags: {
 			...FLAGS,
 			answer: flag(
@@ -408,7 +399,7 @@ export const agentProgram = (maker: Maker) =>
 			),
 		},
 		answer: Schema.Json,
-		readsOf: (flags) =>
+		reads: (flags) =>
 			flags.answer === undefined
 				? Effect.succeed(Schema.Json)
 				: // The importer answers a schema of any type; the shape check on `ended` is what holds it to JSON.
@@ -421,17 +412,17 @@ export const agentProgram = (maker: Maker) =>
  * and the stage needs no second check. Not for tsh: a schema is code, not a flag.
  */
 export const typedAgentProgram = <A>(
-	maker: Maker,
+	provider: Provider,
 	answer: Schema.Codec<A, A>,
-	name: string = maker,
+	name: string = provider,
 ) =>
 	build({
-		maker,
+		provider,
 		name,
-		description: `${DESCRIPTION[maker]} Each turn ends with an answer of the stage's schema, or null.`,
+		description: `${DESCRIPTION[provider]} Each turn ends with an answer of the stage's schema, or null.`,
 		flags: FLAGS,
 		answer,
-		readsOf: () => Effect.succeed(answer),
+		reads: () => Effect.succeed(answer),
 	});
 
 export const claudeProgram = agentProgram("claude");
@@ -456,9 +447,9 @@ export const programRunner =
 		readonly name: N;
 		readonly program: TypedAgentProgram<A>;
 		readonly agents: typeof Agents.Service;
-		readonly flagsOf: (run: DraftRun) => AgentFlags;
+		readonly flags: (run: DraftRun) => AgentFlags;
 		/** Where the child run keeps its conversation: under the parent's, in a host. */
-		readonly keepingOf: (run: DraftRun) => Kept;
+		readonly keeping: (run: DraftRun) => Kept;
 	}) =>
 	(run: DraftRun): Stream.Stream<DraftMsg<N, A>> => {
 		const {name} = config;
@@ -473,7 +464,7 @@ export const programRunner =
 				const tools = new Set<string>();
 				const started = yield* start(
 					config.program,
-					config.flagsOf(run),
+					config.flags(run),
 					{
 						// One Msg per tool call, at its first update, as `agentRunner` does.
 						tool: (t) => {
@@ -482,7 +473,7 @@ export const programRunner =
 							Queue.offerUnsafe(out, {type: `${name}_tool`, key, id, tool: t.title} as Msg);
 						},
 						ended: (e) => {
-							const spend = spendOf(e);
+							const spend = End.toSpend(e);
 							Queue.offerUnsafe(
 								out,
 								e.stop === "end_turn"
@@ -498,7 +489,7 @@ export const programRunner =
 							);
 						},
 					},
-					config.keepingOf(run),
+					config.keeping(run),
 				).pipe(Effect.provideService(Agents, config.agents));
 				if (started.kind !== "running")
 					return Stream.make(

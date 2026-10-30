@@ -2,8 +2,8 @@ import {run} from "@demlik/tea/effect";
 import {Agent, memoryStorage} from "@kampus/fabrika";
 import type {DraftRun} from "@kampus/fabrika/agents/claude";
 import {
-	fakeMakers,
-	type Maker,
+	fakeProviders,
+	type Provider,
 	programRunner,
 	typedAgentProgram,
 } from "@kampus/fabrika/agents/program";
@@ -21,7 +21,7 @@ import type {Settings, SortContext, SortTicket} from "./stages/sort/services.ts"
 
 // One stage end to end with the agent as a program (experiment 169): the real sort machine,
 // unchanged, its `sort_run` Sub answered by a child run of `claude` or `codex`, on the fake
-// makers. The stage hears the same three Msgs it hears from `agentRunner` today, so nothing in it
+// providers. The stage hears the same three Msgs it hears from `agentRunner` today, so nothing in it
 // changes; only the line that makes its runner does.
 
 const URL = "https://github.com/acme/widgets/issues/12";
@@ -45,10 +45,10 @@ const answerFor = (n: number) => ({
 	sort: {answer: "duplicate", of: n === 1 ? 40 : 4, why: "Same bug."},
 });
 
-const drive = (maker: Maker) =>
+const drive = (provider: Provider) =>
 	Effect.gen(function* () {
 		let turns = 0;
-		const fakes = fakeMakers(() => {
+		const fakes = fakeProviders(() => {
 			turns += 1;
 			return {
 				tool: {id: `t${turns}`, title: "Read"},
@@ -65,9 +65,9 @@ const drive = (maker: Maker) =>
 		const children: string[] = [];
 		const runner = programRunner({
 			name: "sort",
-			program: typedAgentProgram(maker, SortReply, `${maker}-sort`),
+			program: typedAgentProgram(provider, SortReply, `${provider}-sort`),
 			agents,
-			flagsOf: (r: DraftRun) => ({
+			flags: (r: DraftRun) => ({
 				folder: "/work/copy",
 				session: r.session.id,
 				model: SETTINGS.model,
@@ -77,7 +77,7 @@ const drive = (maker: Maker) =>
 				tools: undefined,
 				seconds: undefined,
 			}),
-			keepingOf: (r: DraftRun) => {
+			keeping: (r: DraftRun) => {
 				children.push(r.id);
 				return {id: `child:${r.id}`, storage};
 			},
@@ -109,9 +109,9 @@ const drive = (maker: Maker) =>
 	}).pipe(Effect.scoped);
 
 describe("a stage that starts the agent program as a child run", () => {
-	for (const maker of ["claude", "codex"] as const)
-		it(`sort on ${maker}: the typed answer comes back as the Draft's Msg, through two child runs`, async () => {
-			const {end, wrote, children, fakes} = await Effect.runPromise(drive(maker));
+	for (const provider of ["claude", "codex"] as const)
+		it(`sort on ${provider}: the typed answer comes back as the Draft's Msg, through two child runs`, async () => {
+			const {end, wrote, children, fakes} = await Effect.runPromise(drive(provider));
 			expect(end).toMatchObject({
 				phase: "over",
 				outcome: {kind: "done", closed: "duplicate"},
@@ -120,7 +120,7 @@ describe("a stage that starts the agent program as a child run", () => {
 			expect(wrote).toEqual(["comment", "label", "close"]);
 			// One child run per Draft run, each its own program run; the second carries the session on.
 			expect(children).toEqual(["sort:12/1", "sort:12/2"]);
-			const seen = fakes[maker].seen.started;
+			const seen = fakes[provider].seen.started;
 			expect(seen.map((t) => t.session)).toEqual([seen[0]?.session, seen[0]?.session]);
 			expect(seen.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
 		});

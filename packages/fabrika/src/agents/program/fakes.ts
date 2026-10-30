@@ -1,18 +1,18 @@
 import {type FakeScript, fakeAdapter} from "../agent/fake.ts";
 import type {Adapter, AdapterTurn, Raw} from "../agent/turn.ts";
 
-// Two fake providers for the agent programs (experiment 169), one per maker,
-// each holding what its real adapter holds and saying a turn the way its
-// maker does: Claude with its dollars, its request count and a typed answer
+// Two fake providers for the agent programs (experiment 169), one per real
+// one, each holding what its real adapter holds and saying a turn the way its
+// provider does: Claude with its dollars, its request count and a typed answer
 // field; Codex with neither, and the answer only in its last message. The
-// raws are what each real adapter's pure part makes of its maker's events
+// raws are what each real adapter's pure part makes of its provider's events
 // (`rawOf` in ../claude/adapter.ts, `rawOfLine` in ../codex/adapter.ts),
-// written out here so this file starts no maker and imports no SDK.
+// written out here so this file starts no agent and imports no SDK.
 //
-//   const {claude, codex} = fakeMakers((turn) => story(turn));
+//   const {claude, codex} = fakeProviders((turn) => story(turn));
 //   makeAgents({adapters: {claude, codex}, sessions: memorySessions(), reaper: noReaper})
 
-/** One turn, as both makers would tell it. `answer`: the JSON the agent ends with. `hang`: it never ends. */
+/** One turn, as both providers would tell it. `answer`: the JSON the agent ends with. `hang`: it never ends. */
 export interface Story {
 	readonly tool?: {readonly id: string; readonly title: string};
 	readonly said: string;
@@ -72,8 +72,8 @@ const script =
 		return {raws: raws(s), hang: s.hang === true};
 	};
 
-/** Both fake makers, on one story. Each holds what its real adapter holds. */
-export const fakeMakers = (story: (turn: AdapterTurn) => Story) => {
+/** Both fake providers, on one story. Each holds what its real adapter holds. */
+export const fakeProviders = (story: (turn: AdapterTurn) => Story) => {
 	const claude = fakeAdapter(script(claudeRaws, story), {usd: true, schema: true});
 	const codex = fakeAdapter(script(codexRaws, story), {usd: false, schema: true});
 	return {claude, codex} satisfies Record<string, Adapter>;
