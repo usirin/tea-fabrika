@@ -4,6 +4,7 @@
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
+# experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
 packages:
   - apps/*
   - packages/*
@@ -13,6 +14,7 @@ packages:
   - wip
   - legacy
   - experiments/142-web-terminals
+  - experiments/171-alchemy-local-twin
 
 catalog:
   '@agentclientprotocol/sdk': 1.6.1

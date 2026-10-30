@@ -1,0 +1,24 @@
+{
+	"name": "@tea-fabrika/exp-171-alchemy-local-twin",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 171's harness: the ledger server's own Alchemy stack, run at its local stage as the app host's twin, beside today's Miniflare twin. Only the experiment uses it.",
+	"dependencies": {
+		"@alchemy.run/cloudflare": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@kampus/ledger-server": "workspace:*",
+		"alchemy": "catalog:",
+		"effect": "catalog:",
+		"esbuild": "catalog:",
+		"miniflare": "catalog:",
+		"rolldown": "1.2.13",
+		"workerd": "1.20261012.1"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"electron": "catalog:",
+		"typescript": "catalog:"
+	}
+}
