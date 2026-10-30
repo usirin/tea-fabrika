@@ -2,7 +2,19 @@ import {applyCell} from "@demlik/tea";
 import type {MsgOf} from "@kampus/fabrika";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
-import {type Asks, asksMachine, asksNow, keysOf, load, newAsks, noticeOf} from "./asks.ts";
+import {
+	type Asks,
+	asksMachine,
+	asksNow,
+	keysOf,
+	load,
+	type Marks,
+	marksOf,
+	NO_MARKS,
+	newAsks,
+	noticeOf,
+	readMarks,
+} from "./asks.ts";
 
 // The asks count, folded from the ledger's facts as the tracker folds them: what waits on the
 // person, what was set aside, and what was seen.
@@ -36,9 +48,12 @@ const ended = (ticket: number, run: string, outcome: Extract<Fact, {type: "ended
 		{type: "ended", run, stage: "build", outcome, usd: 0.25, input: 1, output: 1, turns: 1},
 	] as const;
 
-/** The machine after its first load came back with these entries, and the clock's first tick. */
-const loaded = (entries: readonly Entry[]): Asks => {
-	const [start, first] = asksMachine.init(null, undefined);
+/**
+ * The machine, on the marks kept from before, after its first load came back with these entries,
+ * and the clock's first tick.
+ */
+const loaded = (entries: readonly Entry[], kept: Marks = NO_MARKS): Asks => {
+	const [start, first] = asksMachine.init(null, kept);
 	const cmd = first[0];
 	if (cmd === undefined) throw new Error("the machine starts with a load");
 	const [read] = step(start, load.ok(cmd, {entries, last: entries.length}, 0));
@@ -130,6 +145,43 @@ describe("the asks", () => {
 			title: "2 new asks",
 			body: "#7 approve plan\n#8 stuck: read failed",
 		});
+	});
+
+	it("starts on the marks kept from before: later and seen as they were", () => {
+		const now = asksNow(loaded(facts, {later: ["8/stuck/r-1"], seen: ["7/a-1", "8/stuck/r-1"]}));
+		expect(now.asks.map((a) => [a.key, a.seen])).toEqual([["7/a-1", true]]);
+		expect(now.later.map((a) => a.key)).toEqual(["8/stuck/r-1"]);
+	});
+
+	it("drops a kept mark at the first read once its ask waits no more: answered, or closed", () => {
+		const kept = {later: ["9/a-1", "7/a-1", "10/a-1"], seen: ["9/a-1", "8/stuck/r-1"]};
+		const [start] = asksMachine.init(null, kept);
+		// Before the ledger is read, nothing is known to be gone: the marks stay.
+		expect(marksOf(start)).toEqual(kept);
+		const now = loaded(facts, kept);
+		expect(marksOf(now)).toEqual({later: ["7/a-1"], seen: ["8/stuck/r-1"]});
+		expect(asksNow(now).later.map((a) => a.key)).toEqual(["7/a-1"]);
+	});
+
+	it("sets aside only an ask that waits: one answered since the list was drawn is gone", () => {
+		const s = loaded(facts);
+		const [same] = step(s, {type: "later", key: "9/a-1"});
+		expect(same).toBe(s);
+		const [back] = step(s, {type: "back", key: "7/a-1"});
+		expect(back).toBe(s);
+	});
+
+	it("reads kept marks back, and refuses a broken or older file with why", () => {
+		expect(readMarks(null)).toEqual({kind: "none"});
+		expect(readMarks('{"later":["7/a-1"],"seen":[]}')).toEqual({
+			kind: "read",
+			marks: {later: ["7/a-1"], seen: []},
+		});
+		for (const text of ["", "{", '{"later":["7/a-1"]}', '{"later":[],"seen":[],"open":[]}', "[]"]) {
+			const read = readMarks(text);
+			expect(read.kind, text).toBe("refused");
+			expect(read.kind === "refused" && read.why.length > 0, text).toBe(true);
+		}
 	});
 
 	it("says the ledger failed, and keeps the count it had", () => {

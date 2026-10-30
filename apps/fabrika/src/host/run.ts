@@ -18,11 +18,13 @@ import {pathsOf, reach} from "./socket.ts";
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
 //   // removed; <home>/host/sock listened on, mode 0600; on a home with its own ledger file,
 //   // <home>/host/mcp too, the agents' socket (host/agents.ts), mode 0600; the pid written; the
-//   // lock let go of; the desk read back from desk.json; until the scope closes
+//   // lock let go of; the desk read back from desk.json, the asks' marks from asks.json; until
+//   // the scope closes
 //
 // In the home, beside the host's own folder (host/socket.ts):
 //
 //   desk.json            the desk's tiles, kept on each change, for the next start
+//   asks.json            the person's later and seen on the asks, kept on each change (asks.ts)
 //   storage/jobs/        the host's one job table and its jobs' runs, for every tile's tsh, as
 //                        the terminal tsh's host keeps them. A storage/tiles/<t>/ folder left
 //                        by an older build (one table per tile) is not read, and not removed
@@ -95,6 +97,19 @@ export const runHost = (options: {
 			Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
 			Effect.orElseSucceed((): unknown => null),
 		);
+		// The asks' marks, as written; serve.ts reads them, and says so when they do not read.
+		const marks = yield* fs.readFileString(at("asks.json")).pipe(
+			Effect.catchIf(
+				(e) => e.reason._tag === "NotFound",
+				() => Effect.succeed(null),
+			),
+			Effect.catch((e) =>
+				Effect.as(
+					Effect.logWarning(`fabrika host: could not read the asks' later and seen: ${e.message}`),
+					null,
+				),
+			),
+		);
 		// One job table for the host process, for every tile's tsh, open until the host stops.
 		const jobs = yield* openJobs(fileStorage(at("storage", "jobs")));
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
@@ -115,6 +130,19 @@ export const runHost = (options: {
 							),
 						),
 				forget: fs.remove(at("desk.json")).pipe(Effect.ignore),
+			},
+			asks: {
+				kept: marks,
+				// Written beside, then moved over: a host stopped mid-write leaves the last whole file.
+				save: (saved) =>
+					fs.writeFileString(at("asks.json.new"), JSON.stringify(saved)).pipe(
+						Effect.andThen(fs.rename(at("asks.json.new"), at("asks.json"))),
+						Effect.catch((e) =>
+							Effect.logError(
+								`fabrika host: could not keep the asks' later and seen: ${e.message}`,
+							),
+						),
+					),
 			},
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),

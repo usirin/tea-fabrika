@@ -11,7 +11,7 @@ import {
 	Title,
 } from "@kampus/pipeline/tickets/ticket";
 import {headOf, words} from "@tea-fabrika/tracker";
-import {Clock, Duration, Effect, Schema, Stream} from "effect";
+import {Cause, Clock, Duration, Effect, Exit, Schema, Stream} from "effect";
 
 // The asks: every ask on the ledger that waits on the person, folded in the host, once, for
 // every place that shows a count of them: the window's top bar, the Dock badge and the asks list
@@ -19,21 +19,31 @@ import {Clock, Duration, Effect, Schema, Stream} from "effect";
 // badge and sidebar did (the frame's research, rule 4). A tea machine, pure: the ledger is reached
 // through its one Cmd and its Sub, whose cells are below.
 //
-//   [asks] = init(null)                  load {after: 0}
+//   [asks] = init(null, {later: ["9/a-1"], seen: []})   load {after: 0}; the marks kept from before
 //   load_ok {entries: [#7 filed, #7 asked a-1 "approve plan"], last: 2}
+//                                        9/a-1 waits no more: its later is dropped
 //   asksNow(asks)                        {asks: [{key: "7/a-1", ticket: 7, what: "approve plan", kind: "ask", ...}], ...}
 //   {type: "later", key: "7/a-1"}        the ask leaves the count, and shows at the list's foot
 //   {type: "back", key: "7/a-1"}         and is counted again
 //   {type: "seen"}                       the list was opened: no ask is new any more
+//   marksOf(asks)                        {later: [], seen: ["7/a-1"]}: what the host keeps
 //
 // What waits on the person is the tracker's own word for it (`headOf`, programs/tracker): a
 // ticket whose head is `asks` waits on each open ask, and one whose head is `stuck` waits once,
 // on its stuck run. A closed or done ticket waits on nothing, whatever ask it still holds. So the
 // tracker's list and this count agree by construction.
 //
-// "Later" and "seen" are the person's, not the ledger's: no fact says them. They live here, in
-// the host, so every window shows the same, and are lost when the host stops. A later lost brings
-// its ask back into the count: the count errs toward more, never toward less.
+// "Later" and "seen" are the person's, not the ledger's: no fact says them, as no fact says what
+// one person has read. They live here, in the host, so every window shows the same, and the host
+// keeps them in the person's own home (`Marks`, asks.json, host/run.ts), so they outlive a
+// restart. Two people on one shared ledger each have their own home and host, so each keeps their
+// own. They come in as the machine's flags, as an Elm app's do from its storage, and the host
+// writes them after each change that moves them, as Elm's TodoMVC saves after each update.
+//
+// A mark is keyed by its ask's own name on the ledger (`7/a-1`), and each read of the ledger
+// drops every mark whose ask no longer waits: an answered ask's later is gone at the first read,
+// never shown. A mark that does not read back (a broken or older file) is none: every ask counts
+// and is new. The count errs toward more, never toward less.
 
 /** One thing that waits on the person: an open ask, or a stuck run. */
 export const Ask = Schema.Struct({
@@ -66,6 +76,42 @@ export const AsksNow = Schema.Struct({
 	why: Schema.NullOr(Schema.String),
 });
 export type AsksNow = typeof AsksNow.Type;
+
+/** An ask's key, as a page sends it back and the host keeps it: short, on one line. */
+export const AskKey = Schema.String.check(Schema.isPattern(/^\S{1,300}$/));
+
+/** The person's own marks on the asks, kept between starts of the host: asks.json in the home. */
+export const Marks = Schema.Struct({
+	/** The keys set aside. */
+	later: Schema.Array(AskKey),
+	/** The keys seen in the list. */
+	seen: Schema.Array(AskKey),
+});
+export type Marks = typeof Marks.Type;
+
+/** No marks: every ask counts, and every ask is new. */
+export const NO_MARKS: Marks = {later: [], seen: []};
+
+/**
+ * The marks kept from before, read back from the file's text as the host starts: `none` when
+ * there was no file, `refused` with why when it does not read, as a broken file or one an older
+ * build wrote. Either way the host starts with `NO_MARKS`.
+ */
+export type KeptMarks =
+	| {readonly kind: "read"; readonly marks: Marks}
+	| {readonly kind: "none"}
+	| {readonly kind: "refused"; readonly why: string};
+
+const decodeMarks = Schema.decodeUnknownExit(Schema.fromJsonString(Marks));
+
+/** Read back the marks a host kept, from the file's text, or `null`: there is no file. */
+export const readMarks = (text: string | null): KeptMarks => {
+	if (text === null) return {kind: "none"};
+	const exit = decodeMarks(text, {onExcessProperty: "error"});
+	if (Exit.isSuccess(exit)) return {kind: "read", marks: exit.value};
+	const failure = Cause.squash(exit.cause);
+	return {kind: "refused", why: failure instanceof Error ? failure.message : String(failure)};
+};
 
 /** The asks machine's state. */
 export interface Asks {
@@ -130,15 +176,27 @@ const settled = (s: Asks): Step =>
 		? [{...s, load: "busy"}, [load({after: s.after})]]
 		: [{...s, load: "idle"}, []];
 
+/** The keys of what waits now. */
+const waitingKeys = (s: Asks): ReadonlySet<string> =>
+	new Set(waitingOf(s.tickets, s.now).map((a) => a.key));
+
+/** Only the keys that wait: the same list when every one does. */
+const only = (keys: readonly string[], waiting: ReadonlySet<string>): readonly string[] =>
+	keys.every((k) => waiting.has(k)) ? keys : keys.filter((k) => waiting.has(k));
+
 export const asksMachine = defineMachine({
 	types: {
 		model: {} as Asks,
 		msg: {} as AsksMsg,
 		sub: {} as PollSub | ClockSub,
-		ctx: undefined,
+		/** The flags: the marks kept from before (`readMarks`), or `NO_MARKS`. */
+		ctx: {} as Marks,
 	},
 	cmds: [load],
-	init: (): Step => [START, [load({after: 0})]],
+	init: (_loaded, kept): Step => [
+		{...START, later: kept.later, seen: kept.seen},
+		[load({after: 0})],
+	],
 	update: {
 		moved: (s): Step =>
 			s.load === "idle"
@@ -146,23 +204,30 @@ export const asksMachine = defineMachine({
 				: [{...s, load: "again"}, []],
 		failed: (s, m): Step => [{...s, reach: "failed", why: m.why}, []],
 		tick: (s, m): Step => [{...s, now: m.now}, []],
+		// Only an ask that waits is set aside: one answered since the list was drawn is gone.
 		later: (s, m): Step =>
-			s.later.includes(m.key) ? [s, []] : [{...s, later: [...s.later, m.key]}, []],
-		back: (s, m): Step => [{...s, later: s.later.filter((k) => k !== m.key)}, []],
+			s.later.includes(m.key) || !waitingKeys(s).has(m.key)
+				? [s, []]
+				: [{...s, later: [...s.later, m.key]}, []],
+		back: (s, m): Step =>
+			s.later.includes(m.key) ? [{...s, later: s.later.filter((k) => k !== m.key)}, []] : [s, []],
 		seen: (s): Step => {
 			const keys = waitingOf(s.tickets, s.now).map((a) => a.key);
 			const fresh = keys.filter((k) => !s.seen.includes(k));
 			return fresh.length === 0 ? [s, []] : [{...s, seen: [...s.seen, ...fresh]}, []];
 		},
+		// The ledger as read so far, whole: a mark whose ask waits no more is dropped.
 		load_ok: (s, m): Step => {
 			const folded = fold(s.tickets, m.value.entries);
-			return settled({
+			const read: Asks = {
 				...s,
 				tickets: folded.tickets,
 				after: Math.max(s.after, m.value.last),
 				reach: "ok",
 				why: null,
-			});
+			};
+			const waiting = waitingKeys(read);
+			return settled({...read, later: only(s.later, waiting), seen: only(s.seen, waiting)});
 		},
 		load_err: (s, m): Step => settled({...s, reach: "failed", why: whyOf(m.error)}),
 	},
@@ -220,6 +285,9 @@ export const asksNow = (s: Asks): AsksNow => {
 		why: s.why,
 	};
 };
+
+/** What the host keeps of the machine: the person's marks. */
+export const marksOf = (s: Asks): Marks => ({later: s.later, seen: s.seen});
 
 /**
  * The asks to tell the person of, as the app's notification does: the live ones whose keys were
@@ -301,9 +369,9 @@ export const clockRunner = (_sub: ClockSub) =>
 		Stream.map((now): AsksMsg => ({type: "tick", now})),
 	);
 
-/** How the machine runs: its cell and Subs, on the `Ledger` service. */
-export const asksOptions = {
-	ctx: undefined,
+/** How the machine runs: on the marks kept from before, with its cell and Subs, on the `Ledger` service. */
+export const asksOptions = (kept: Marks) => ({
+	ctx: kept,
 	interpret: {load: loadCell},
 	subscribe: {poll: pollRunner, clock: clockRunner},
-};
+});
