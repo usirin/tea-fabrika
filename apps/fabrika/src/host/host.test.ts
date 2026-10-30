@@ -170,7 +170,13 @@ describe("the host", () => {
 			}),
 		);
 		expect(tileIds(seen.desk)).toEqual(["t1"]);
-		expect(seen.first.slice(0, 2)).toEqual(["keys", "desk"]);
+		// The asks go to every app, a page or not, as the ledger is read: so leave them out of the order.
+		expect(seen.first.filter((t) => t !== "asks").slice(0, 3)).toEqual([
+			"keys",
+			"programs",
+			"desk",
+		]);
+		expect(seen.first).toContain("asks");
 		expect(seen.ports).toEqual(["tile:t1"]);
 		expect(seen.after.running).toEqual({t1: 1});
 		expect(tileIds(seen.after)).toEqual(["t1"]);

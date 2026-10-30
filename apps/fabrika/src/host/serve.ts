@@ -1,7 +1,10 @@
 import {applyCell} from "@demlik/tea";
-import type {JobsOnHost} from "@kampus/fabrika";
+import {run} from "@demlik/tea/effect";
+import {type Entry, type JobsOnHost, Ledger} from "@kampus/fabrika";
+import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
+import {type AsksMsg, asksMachine, asksNow, asksOptions} from "../asks.ts";
 import {BUILD} from "../build-id.ts";
 import {
 	claims,
@@ -18,7 +21,7 @@ import type {SharedHistory} from "../editor/history.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
 import {startTiles} from "../tiles.ts";
-import type {Screen} from "../tsh.ts";
+import {appPrograms, type Screen} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import {serveAgents} from "./agents.ts";
 
@@ -66,12 +69,29 @@ interface Client {
 	readonly shown: Map<string, () => void>;
 }
 
-/** What the page is sent first: the desk's Ctrl-B table. */
+/** What the page is sent first: the desk's Ctrl-B table, each key with its name. */
 const KEYS: ToPage = {
 	type: "keys",
 	prefix: PREFIX,
-	table: BINDINGS.map((b) => ({key: b.key, repeats: b.repeats})),
+	table: BINDINGS.map((b) => ({key: b.key, repeats: b.repeats, name: b.name})),
 };
+
+/**
+ * Each program tsh runs here, with the inputs a pipe can fill and the outputs it sends, for the
+ * frame's bottom line (`takes ticket · sends ticket`). `do` is left out: every program here takes
+ * its window's clicks on it, and no pipe fills it.
+ */
+const programsOf = (entries: readonly Entry[]): ToPage => ({
+	type: "programs",
+	programs: entries.map(({program}) => ({
+		name: program.name,
+		takes: Object.keys(program.inputs).filter((name) => name !== "do"),
+		sends: Object.keys(program.outputs),
+	})),
+});
+
+/** The same value, said once: the clock's tick changes no asks, and is not sent again. */
+const same = (a: ToPage, b: ToPage): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export const serve = (options: {
 	readonly history: SharedHistory;
@@ -87,9 +107,19 @@ export const serve = (options: {
 	readonly build?: string | null | undefined;
 	/** The agents' socket (host/agents.ts), on a home that keeps its own ledger; none elsewhere. */
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
+	/** The ledger is a server's, not a file in the home: the frame says whether it is in sync. */
+	readonly shared?: boolean | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, jobs, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
+		const {
+			history,
+			jobs,
+			desk: home,
+			ours = PROTOCOL,
+			build = BUILD,
+			agents,
+			shared = false,
+		} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -116,7 +146,7 @@ export const serve = (options: {
 		const toPage = (client: Client, m: ToPage) => client.send({type: "to", port: "desk", m});
 
 		// The desk, and its Cmds, carried out one after another.
-		const asks = yield* Queue.unbounded<DeskCmd>();
+		const queue = yield* Queue.unbounded<DeskCmd>();
 		let desk: Desk = {at: "over"};
 		const deskNow = (): ToPage => ({
 			type: "desk",
@@ -127,18 +157,42 @@ export const serve = (options: {
 			const now = deskNow();
 			for (const client of clients) if (client.page) toPage(client, now);
 		};
-		const step = (msg: DeskMsg) => {
+		/**
+		 * Step the desk. A `show` is said to the page whose key asked for it (`from`), at once, as
+		 * tmux's `list-keys` shows on the client that pressed: it changes nothing on the host.
+		 */
+		const step = (msg: DeskMsg, from?: Client) => {
 			const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg);
 			const changed = next !== desk;
 			desk = next;
-			for (const c of cmds) Queue.offerUnsafe(asks, c);
+			for (const c of cmds) {
+				if (c.type !== "show") Queue.offerUnsafe(queue, c);
+				else if (from?.page === true) toPage(from, {type: "show", what: c.what});
+			}
 			return changed;
 		};
 		const begin = (kept: unknown) => {
 			const [first, cmds] = deskMachine.init(restore(kept), undefined);
 			desk = first;
-			for (const c of cmds) Queue.offerUnsafe(asks, c);
+			for (const c of cmds) Queue.offerUnsafe(queue, c);
 		};
+
+		// The asks (asks.ts): one count, read off the ledger, said to every app, page or not, so
+		// the app's Dock badge counts the same as the window's top bar.
+		const asks = yield* (yield* run(asksMachine, asksOptions)).ready;
+		const asksNowMsg = (): ToPage => ({type: "asks", now: asksNow(asks.getState(), shared)});
+		let saidAsks = asksNowMsg();
+		asks.observe(() => {
+			const now = asksNowMsg();
+			if (same(now, saidAsks)) return;
+			saidAsks = now;
+			for (const client of clients) toPage(client, now);
+		});
+		const toAsks = (msg: AsksMsg) => {
+			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
+		};
+		const ledger = yield* Ledger;
+		const programs = programsOf(appPrograms(ledger, yield* Author, yield* PullRequests));
 
 		/** A screen to show: on every page now, and on each page that loads after. The same screen again changes nothing. */
 		const add = (name: string, screen: Screen<unknown>) => {
@@ -190,6 +244,9 @@ export const serve = (options: {
 					});
 				case "save":
 					return home.save(c.desk);
+				case "show":
+					// Said to the page that pressed, in `step`: never queued.
+					return Effect.void;
 				case "empty":
 					// The last tile closed: every window closes, and the desk begins again on one fresh tile.
 					return home.forget.pipe(
@@ -204,7 +261,7 @@ export const serve = (options: {
 			}
 		};
 		begin(home.kept);
-		yield* Queue.take(asks).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
+		yield* Queue.take(queue).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
 		if (agents !== undefined)
 			yield* serveAgents(agents, () => screens.keys()).pipe(
 				Effect.catchCause((cause) =>
@@ -219,7 +276,7 @@ export const serve = (options: {
 				case "press": {
 					const at = clock.currentTimeMillisUnsafe();
 					const took = claims(desk, m.key, at);
-					if (took) step({type: "key", key: m.key, at});
+					if (took) step({type: "key", key: m.key, at}, client);
 					// The desk first, so the page knows what the desk takes before it lets the next key go.
 					shout();
 					toPage(client, {type: "answer", id: m.id, took});
@@ -241,6 +298,22 @@ export const serve = (options: {
 					// Nothing to draw: the size only says where the next line's windows fit.
 					step({type: "area", width: m.width, height: m.height});
 					return;
+				case "go":
+					if (step({type: "go", tile: m.tile})) shout();
+					return;
+				case "pick":
+					if (step({type: "pick", workspace: m.workspace})) shout();
+					return;
+				case "do":
+					if (step({type: "do", key: m.key}, client)) shout();
+					return;
+				case "later":
+				case "back":
+					toAsks({type: m.type, key: m.key});
+					return;
+				case "seen":
+					toAsks({type: "seen"});
+					return;
 			}
 		};
 
@@ -253,6 +326,8 @@ export const serve = (options: {
 					hide(client);
 					client.page = true;
 					toPage(client, KEYS);
+					toPage(client, programs);
+					toPage(client, saidAsks);
 					toPage(client, deskNow());
 					for (const [name, screen] of screens) showTo(client, name, screen);
 					return;

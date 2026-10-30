@@ -225,6 +225,49 @@ describe("the desk", () => {
 	});
 });
 
+describe("the desk, moved by the window's frame", () => {
+	it("picks a workspace by its place with Ctrl-B 1 to 9, or by a click on its name", () => {
+		const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
+		expect(opened(fold(prefixed("1", 20), three).s).active).toBe("w1");
+		expect(opened(fold(prefixed("9", 20), three).s).active).toBe("w3");
+		const {s, cmds} = fold([{type: "pick", workspace: "w2"}], three);
+		expect(opened(s).active).toBe("w2");
+		expect(cmds.map((c) => c.type)).toEqual(["save"]);
+		expect(fold([{type: "pick", workspace: "w9"}], three).s).toBe(three);
+	});
+
+	it("goes to a tile in another workspace, as an ask picked in the list does, and unzooms another", () => {
+		const zoomed = fold([...prefixed("|"), ...prefixed("z", 10), ...prefixed("N", 20)]).s;
+		expect(opened(zoomed).active).not.toBe("w1");
+		const {s} = fold([{type: "go", tile: "t1"}], zoomed);
+		expect(opened(s).active).toBe("w1");
+		expect(focus(s)).toBe("t1");
+		expect(activeOf(opened(s)).layout.zoomed).toBeNull();
+		expect(fold([{type: "go", tile: "t9"}], zoomed).s).toBe(zoomed);
+	});
+
+	it("runs a key's command from the palette as Ctrl-B and that key would", () => {
+		const viaPalette = fold([{type: "do", key: "|"}]);
+		const viaKeys = fold(prefixed("|"));
+		expect(viaPalette.s).toEqual(viaKeys.s);
+		expect(viaPalette.cmds).toEqual(viaKeys.cmds);
+		expect(fold([{type: "do", key: "q"}]).s).toBe(start);
+	});
+
+	it("asks the frame to show the asks, the keys and the info mode, and changes nothing else", () => {
+		for (const [key, what] of [
+			["a", "asks"],
+			["?", "keys"],
+			["i", "info"],
+			["B", "bars"],
+		] as const) {
+			const {s, cmds} = fold(prefixed(key));
+			expect(cmds).toEqual([{type: "show", what}]);
+			expect(savedOf(opened(s))).toEqual(savedOf(opened(start)));
+		}
+	});
+});
+
 describe("folds", () => {
 	const layout = (s: Desk) => activeOf(opened(s)).layout;
 	const folded = (s: Desk) =>

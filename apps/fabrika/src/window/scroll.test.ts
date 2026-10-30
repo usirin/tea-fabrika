@@ -5,7 +5,9 @@ import {describe, expect, it} from "vitest";
 // One box scrolls in a tile: a program's view, the frame's one child. Two nested boxes that both
 // scroll drew two scrollbars side by side in the ticket's tile, and squeezed the tracker's
 // timeline to a sliver with a bar of its own. No layout runs here, so this reads the stylesheet:
-// the frame clips, and the rule for its child is the only one that lets anything scroll.
+// the frame clips, and the rule for its child is the only one in a tile that lets anything
+// scroll. Over the desk, the window's frame opens a list or the palette; each scrolls once, the
+// palette by its list alone.
 
 const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
 
@@ -32,10 +34,12 @@ const scrollersOf = (css: string) =>
 		.map((r) => r.selector);
 
 describe("a tile's scroll", () => {
-	it("is the view's alone: the frame clips, and no other rule lets a box scroll", () => {
-		expect(scrollersOf(CSS)).toEqual(["main.program > *"]);
+	it("is the view's alone: the frame clips, and only the frame's lists over the desk scroll too", () => {
+		expect(scrollersOf(CSS)).toEqual(["main.program > *", ".over", ".palette ul"]);
 		const frame = rulesOf(CSS).filter((r) => r.selector === "main.program");
 		expect(frame.map((r) => r.says.get("overflow"))).toEqual(["clip"]);
+		const palette = rulesOf(CSS).filter((r) => r.selector === ".palette");
+		expect(palette.map((r) => r.says.get("overflow"))).toEqual(["clip"]);
 	});
 
 	it("catches a box that scrolls inside a view, on either axis, in a query too", () => {
