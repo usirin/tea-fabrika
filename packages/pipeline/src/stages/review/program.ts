@@ -229,20 +229,22 @@ export const createReviewProgram = (machine = review) =>
 		// and not finished, in order, from where it stood: a reviewer that had answered is not run
 		// again (../queue.ts). A review is dropped once it is over: nobody can ask about it again.
 		machines: {queue: queueKind, review: reviewKind(machine)},
-		main: ({flags, inputs, send, machines}) =>
-			workQueue(
-				machines.queue,
-				inputs.pr,
-				(url) =>
-					reviewed(
-						machines.review,
-						`review/${url}`,
-						askOf(url, flags.rubrics),
-						{model: flags.model, effort: flags.effort, budget: flags.budget},
-						send,
-					),
-				(url) => machines.review.get(`review/${url}`).clear,
-			),
+		main: ({flags, serve, send, machines}) =>
+			Effect.gen(function* () {
+				const queue = yield* workQueue(
+					machines.queue,
+					(url) =>
+						reviewed(
+							machines.review,
+							`review/${url}`,
+							askOf(url, flags.rubrics),
+							{model: flags.model, effort: flags.effort, budget: flags.budget},
+							send,
+						),
+					(url) => machines.review.get(`review/${url}`).clear,
+				);
+				yield* queue.drained(serve({pr: queue.told}));
+			}).pipe(Effect.scoped),
 	});
 
 /** The review program, on a review machine with every limit at its default. */

@@ -1,8 +1,8 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, flag, input} from "@kampus/fabrika";
+import {defineProgram, end, flag, input} from "@kampus/fabrika";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {One, oneOf, tickets, ticketsKind, ticketsOptions} from "@tea-fabrika/tracker";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 
 // The map of today's programs, in a tile of its own (./window.tsx): each program a box with its
 // real inputs and outputs, the wires that exist in code, the `Ledger` calls dotted, and the
@@ -27,12 +27,12 @@ export const map = defineProgram({
 	outputs: {},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: One, of: oneOf},
-	main: ({flags, inputs, watch}) =>
+	main: ({flags, serve, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* runtime.dispatch({type: "open", ticket: flags.ticket}).pipe(Effect.orDie);
 			yield* watch("tickets", "tickets", runtime);
-			yield* inputs.in.pipe(Stream.take(1), Stream.runDrain);
+			yield* serve({in: () => end});
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();
 		}).pipe(Effect.scoped),

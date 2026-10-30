@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Effect, Layer, Schema, Stream} from "effect";
+import {Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {HostJobs, openJobs} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
@@ -46,9 +46,9 @@ const win = defineProgram({
 	outputs,
 	machines,
 	view: {machine: "idle", data: Schema.Struct({open: Schema.Boolean}), of: (s) => s},
-	main: ({inputs, send}) =>
+	main: ({serve, send}) =>
 		send("said", "open").pipe(
-			Effect.andThen(inputs.n.pipe(Stream.runDrain)),
+			Effect.andThen(serve({n: () => Effect.void})),
 			Effect.andThen(send("said", "closed")),
 		),
 });
@@ -59,9 +59,9 @@ const bare = defineProgram({
 	inputs,
 	outputs,
 	machines,
-	main: ({inputs, send}) =>
+	main: ({serve, send}) =>
 		send("said", "open").pipe(
-			Effect.andThen(inputs.n.pipe(Stream.runDrain)),
+			Effect.andThen(serve({n: () => Effect.void})),
 			Effect.andThen(send("said", "closed")),
 		),
 });

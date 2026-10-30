@@ -1,7 +1,7 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, kind, output} from "@kampus/fabrika";
+import {defineProgram, end, input, kind, output} from "@kampus/fabrika";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 import {duplicatesCell} from "./duplicates.ts";
 import {clockRunner, loadCell, pollRunner, saveCell, saveHintsCell} from "./ledger.ts";
 import {
@@ -186,25 +186,25 @@ export const tracker = defineProgram({
 	},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: Shown, of: shownOf},
-	main: ({inputs, send, watch}) =>
+	main: ({serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* watch("tickets", "tickets", runtime);
 			let last: number | null = null;
-			yield* inputs.do.pipe(
-				Stream.takeWhile((d) => d.kind !== "quit"),
-				Stream.runForEach((d) =>
-					Effect.gen(function* () {
-						yield* runtime.dispatch(msgOf(d)).pipe(Effect.orDie);
-						// Sent after the window moved. Down a pipe whose reader has gone, this send fails
-						// and the tracker ends, as a writer on a closed Unix pipe does.
-						const picked = pickOf(d, last);
-						if (picked === null) return;
-						last = picked;
-						yield* send("ticket", picked);
-					}),
-				),
-			);
+			yield* serve({
+				do: (d) =>
+					d.kind === "quit"
+						? end
+						: Effect.gen(function* () {
+								yield* runtime.dispatch(msgOf(d)).pipe(Effect.orDie);
+								// Sent after the window moved. Down a pipe whose reader has gone, this send fails
+								// and the tracker ends, as a writer on a closed Unix pipe does.
+								const picked = pickOf(d, last);
+								if (picked === null) return;
+								last = picked;
+								yield* send("ticket", picked);
+							}),
+			});
 			// Quit, or the input was closed: the writes still waiting land before it ends.
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();

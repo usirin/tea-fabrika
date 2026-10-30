@@ -9,7 +9,7 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {defineProgram, flag, input, output} from "@kampus/fabrika";
 import {hostEnv} from "@kampus/fabrika/agents/sandbox";
-import {Duration, Effect, Layer, Random, Schema, Stream} from "effect";
+import {Duration, Effect, Layer, Random, Schema} from "effect";
 import {gitHubCodeHost} from "../code-host-github.ts";
 import type {LocalCheck} from "../code-host-local.ts";
 import {planOf, readTicketId} from "../ids.ts";
@@ -82,9 +82,9 @@ export const deliverProgram = defineProgram({
 	outputs: {
 		delivered: output(Delivered, "Once per plan: how its lane ended."),
 	},
-	main: ({flags, inputs, send}) =>
-		inputs.plan.pipe(
-			Stream.runForEach((url) =>
+	main: ({flags, serve, send}) =>
+		serve({
+			plan: (url) =>
 				Effect.gen(function* () {
 					const ticket = readTicketId(url);
 					if (ticket === null) return yield* Effect.die(`not a ticket: ${url}`);
@@ -115,8 +115,7 @@ export const deliverProgram = defineProgram({
 							: {plan, outcome: null, name: null},
 					);
 				}),
-			),
-		),
+		}),
 });
 
 /**

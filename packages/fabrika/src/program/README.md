@@ -6,14 +6,14 @@ A program is a thing you start: a name, a description, typed flags, inputs and o
 
 ```ts
 import {call, defineProgram, input, output} from "@kampus/fabrika";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 
 const double = defineProgram({
 	name: "double",
 	description: "Doubles each number it is told, and ends when its input closes.",
 	inputs: {n: input(Schema.Int, "A number to double.")},
 	outputs: {n: output(Schema.Int, "The number, doubled.")},
-	main: ({inputs, send}) => inputs.n.pipe(Stream.runForEach((n) => send("n", n * 2))),
+	main: ({serve, send}) => serve({n: (n) => send("n", n * 2)}),
 });
 
 yield* call(double, {}, {told: {n: [1, 2, 3]}});
@@ -37,8 +37,8 @@ Everything but Node's storage is on the top level, `@kampus/fabrika`. Each file,
 
 | Import | File | What it gives |
 |---|---|---|
-| `@kampus/fabrika` | `program.ts` | `defineProgram`, `kind`, `start`, `tell`, `offer`, `pipe`, `call`, `readFlags`, `withDefaults`, `listing`, `CAPACITY`, the `Full` error, and the run types (`Run`, `Running`, `Ended`, ...) |
-| `@kampus/fabrika` | `shape.ts` | `flag`, `input` (with its `capacity`), `output`, `defaulted`, and `fit`, the check that one output fits another program's input |
+| `@kampus/fabrika` | `program.ts` | `defineProgram`, `kind`, `start`, `tell`, `offer`, `pipe`, `call`, `readFlags`, `withDefaults`, `listing`, `fork` and `end` for `serve`, the `MailboxFull` error, and the run types (`Run`, `Running`, `Ended`, `Mailbox`, ...) |
+| `@kampus/fabrika` | `shape.ts` | `flag`, `input` (with its `ack` and `control`), `output`, `defaulted`, `CAPACITY`, and `fit`, the check that one output fits another program's input |
 | `@kampus/fabrika` | `listed.ts` | `listed(program, layer)`: a program packed with the services it asks for, as one entry a host can start |
 | `@kampus/fabrika` | `storage.ts` | `Storage`, where runs keep what must outlive the process: `memoryStorage`, `storageOf`, `folderStorage` |
 | `@kampus/fabrika/storage/node` | `storage-node.ts` | `fileStorage(dir)`: storage in a folder, over Node's file system |
@@ -63,14 +63,16 @@ The rules of a run are in the comment at the top of `program.ts`:
 - Services come from Effect's context. The caller provides them.
 - `start` takes listeners typed from the outputs and puts them in place before `main` begins. It answers `bad_shape`, or at once a run handle with the starter's own `close` and `stop` beside it.
 - The run handle has a stable id, `ended`, `listen` from now on, and each machine's state, changes and copies by name.
-- Each input's line holds at most its `capacity` values `main` has not read: `input(schema, description, {capacity: 16})`, or `CAPACITY` (1000) when left out. A capacity that is not a whole number, 1 or more, is refused where the input is declared.
-- `tell` is an Effect that never waits. It answers `queued`, `closed`, `stopped`, `bad_shape` or `no_cell`. On a full line it fails with `Full` (`{input, capacity}`), so a caller that does not handle it fails too; one that expects a full line says so with `Effect.catchTag("Full", ...)`. `offer` waits for room instead of failing.
+- A run has one mailbox. Every value told to any input, and every close, goes in, and `main` handles them in the order told with `serve(handlers, {until?})`: one handler per input, typed from its schema. Serving stops once each input in `until` has closed (every input when left out), or when a handler answers `end`; what is left is counted unread.
+- A control input, `input(schema, description, {control: true})`, takes a `fork(handler)`: each value is handled at once, beside the order, on a small bound of its own (16), so a full mailbox never refuses a Ctrl-C.
+- The mailbox holds at most the program's `capacity` values `serve` has not taken: `defineProgram({capacity: 16, ...})`, or `CAPACITY` (1000) when left out. A capacity that is not a whole number, 1 or more, is refused when the program is defined. `run.mailbox()` shows its length and, per input, how many wait in it and how many offers wait for room.
+- `tell` is an Effect that never waits. It answers `queued`, `closed`, `stopped`, `bad_shape` or `no_cell`. On a full mailbox it fails with `MailboxFull` (`{input, capacity}`), so a caller that does not handle it fails too; one that expects a full mailbox says so with `Effect.catchTag("MailboxFull", ...)`. `offer` waits for room instead of failing.
 - A bare `tell(...)` or `offer(...)` statement makes the Effect and drops it, so nothing is told. `pnpm lint` refuses one (`biome-plugins/no-bare-tell.grit`).
 
 ```ts
-const word = yield* tell(run, "n", 7);   // "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; fails Full
+const word = yield* tell(run, "n", 7);   // "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; fails MailboxFull
 const again = yield* tell(run, "n", 8).pipe(
-	Effect.catchTag("Full", () => offer(run, "n", 8)),   // wait for room instead
+	Effect.catchTag("MailboxFull", () => offer(run, "n", 8)),   // wait for room instead
 );
 ```
 - Each machine kind names its state's Effect Schema as `state`. Every save is encoded through it, and a save that does not fit is a bug: the run dies, and the old value stays.

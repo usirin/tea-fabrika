@@ -16,7 +16,7 @@ answerOf("/no not now: nobody needs this yet"); // {kind: "no", why: "not now: n
 answerOf("approve");                           // null: not an answer
 
 // Told to the desk's run, it goes out on `answer`, and the core checks it against the ask.
-yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a full line fails Full
+yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a full mailbox fails MailboxFull
 ```
 
 ## Where it sits

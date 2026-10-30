@@ -71,13 +71,13 @@ const greeter = defineProgram({
 			status: (s) => `greeted ${s.greeted}`,
 		}),
 	},
-	main: ({flags, inputs, send, watch}) =>
+	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const clock = yield* Clock;
 			const counter = yield* (yield* runMachine(tally, {ctx: undefined, interpret: {}})).ready;
 			yield* watch("tally", "tally", counter);
-			yield* inputs.name.pipe(
-				Stream.runForEach((name) =>
+			yield* serve({
+				name: (name) =>
 					Effect.gen(function* () {
 						const text = `${flags.salute}, ${name}`;
 						yield* send("greeting", {
@@ -87,8 +87,7 @@ const greeter = defineProgram({
 						yield* counter.dispatch({type: "greeted"});
 						yield* send("count", counter.getState().greeted);
 					}),
-				),
-			);
+			});
 		}).pipe(Effect.scoped),
 });
 type Greeter = typeof greeter;
@@ -217,16 +216,15 @@ describe("a running program", () => {
 			description: "Sends as many numbered values as it is told, and waits for the next number.",
 			inputs: {times: input(Schema.Int, "How many values to send.")},
 			outputs: {each: output(Schema.Struct({n: Schema.Int}), "One numbered value.")},
-			main: ({inputs, send}) =>
-				inputs.times.pipe(
-					Stream.runForEach((times) =>
+			main: ({serve, send}) =>
+				serve({
+					times: (times) =>
 						Effect.forEach(
 							Array.from({length: times}, (_, n) => n),
 							(n) => send("each", {n}),
 							{discard: true, concurrency: 1},
 						),
-					),
-				),
+				}),
 		});
 		// The listener holds each value only weakly, so whatever keeps one alive is the program.
 		const refs: WeakRef<object>[] = [];
@@ -355,15 +353,14 @@ describe("closing an input, like the end of stdin", () => {
 			description: "Says back each line it is told, once a gate opens.",
 			inputs: {line: input(Schema.String, "A line.")},
 			outputs: {said: output(Schema.String, "The same line.")},
-			main: ({inputs, send}) =>
-				inputs.line.pipe(
-					Stream.runForEach((line) =>
+			main: ({serve, send}) =>
+				serve({
+					line: (line) =>
 						Deferred.succeed(picked, undefined).pipe(
 							Effect.andThen(Deferred.await(gate)),
 							Effect.andThen(send("said", line)),
 						),
-					),
-				),
+				}),
 		});
 		const said = ear<string>();
 		const seen = await Effect.runPromise(
@@ -415,7 +412,7 @@ describe("many writers on one input, like a Unix pipe", () => {
 		description: "Says back each line it is told.",
 		inputs: {line: input(Schema.String, "A line.")},
 		outputs: {said: output(Schema.String, "The same line.")},
-		main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("said", line))),
+		main: ({serve, send}) => serve({line: (line) => send("said", line)}),
 	});
 	/** Sends each line it is told on, and ends when its own input closes. */
 	const relay = defineProgram({
@@ -423,7 +420,7 @@ describe("many writers on one input, like a Unix pipe", () => {
 		description: "Sends on each line it is told.",
 		inputs: {line: input(Schema.String, "A line.")},
 		outputs: {line: output(Schema.String, "The same line.")},
-		main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("line", line))),
+		main: ({serve, send}) => serve({line: (line) => send("line", line)}),
 	});
 
 	it("the input closes when its last writer ends, and the starter's close still closes it at once", async () => {
@@ -470,7 +467,7 @@ describe("pipe: one program's output into another's input", () => {
 		description: "Says back each line it is told.",
 		inputs: {line: input(Schema.String, "A line.")},
 		outputs: {said: output(Schema.String, "The same line.")},
-		main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("said", line))),
+		main: ({serve, send}) => serve({line: (line) => send("said", line)}),
 	});
 	const lines = defineProgram({
 		name: "lines",
@@ -548,7 +545,7 @@ describe("pipe: one program's output into another's input", () => {
 			description: "Reads each whole number it is told.",
 			inputs: {n: input(Schema.Int, "A whole number.")},
 			outputs: {},
-			main: ({inputs}) => inputs.n.pipe(Stream.runDrain),
+			main: ({serve}) => serve({n: () => Effect.void}),
 		});
 		const sends = defineProgram({
 			name: "sends",
@@ -624,17 +621,16 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 					description: "Takes numbers, and acks them only once it is let go.",
 					inputs: {n: input(Schema.Int, "A number.", {ack: "manual"})},
 					outputs: {},
-					main: ({inputs}) =>
-						inputs.n.pipe(
-							Stream.runForEach(({value, ack}) =>
+					main: ({serve}) =>
+						serve({
+							n: ({value, ack}) =>
 								Effect.gen(function* () {
 									got.push(value);
 									const counted = ack.pipe(Effect.andThen(Effect.sync(() => acked++)));
 									if (yield* Deferred.isDone(go)) yield* counted;
 									else held.push(counted);
 								}),
-							),
-						),
+						}),
 				});
 				const seen = yield* Effect.gen(function* () {
 					const target = yield* start(slow, {});
@@ -689,11 +685,9 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 					description: "Reads numbers once it is let go.",
 					inputs: {n: input(Schema.Int, "A number.")},
 					outputs: {},
-					main: ({inputs}) =>
+					main: ({serve}) =>
 						Deferred.await(go).pipe(
-							Effect.andThen(
-								inputs.n.pipe(Stream.runForEach((n) => Effect.sync(() => got.push(n)))),
-							),
+							Effect.andThen(serve({n: (n) => Effect.sync(() => got.push(n))})),
 						),
 				});
 				const seen = yield* Effect.gen(function* () {
@@ -826,7 +820,7 @@ describe("flags", () => {
 			description: "Says back each line it is told.",
 			inputs: {line: input(Schema.String, "A line.")},
 			outputs: {said: output(Schema.String, "The same line.")},
-			main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("said", line))),
+			main: ({serve, send}) => serve({line: (line) => send("said", line)}),
 		});
 		const said = ear<string>();
 		const heard = await Effect.runPromise(
@@ -906,15 +900,15 @@ describe("call: a program run like a command", () => {
 			sum: output(Schema.Int, "Each number, added to."),
 			count: output(Schema.Int, "How many it was told, at its end."),
 		},
-		main: ({flags, inputs, send}) =>
+		main: ({flags, serve, send}) =>
 			Effect.gen(function* () {
 				let count = 0;
-				yield* inputs.n.pipe(
-					Stream.runForEach((n) => {
+				yield* serve({
+					n: (n) => {
 						count += 1;
 						return send("sum", n + flags.by);
-					}),
-				);
+					},
+				});
 				yield* send("count", count);
 			}),
 	});

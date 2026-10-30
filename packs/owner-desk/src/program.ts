@@ -1,7 +1,7 @@
 import {defineProgram, input, output} from "@kampus/fabrika";
 import {Answer, Refused, Settled, Waiting} from "@kampus/pipeline/asks/ask";
 import {Typed} from "@kampus/pipeline/asks/packs";
-import {Effect, Ref, Stream} from "effect";
+import {Effect, Ref} from "effect";
 import {type DeskMsg, deskKind, pagesOf} from "./inbox.ts";
 import {typedAnswerOf} from "./reply.ts";
 import {DeskView} from "./view.ts";
@@ -19,11 +19,6 @@ import {DeskView} from "./view.ts";
 // imports the core's ask and answer types, as a JavaScript port handler knows
 // the Elm app's port values; the core imports nothing of it.
 
-type Heard =
-	| {readonly on: "msg"; readonly msg: DeskMsg}
-	| {readonly on: "reply"; readonly reply: Answer}
-	| {readonly on: "typed"; readonly typed: Typed};
-
 export const deskProgram = defineProgram({
 	name: "owner-desk",
 	description:
@@ -40,7 +35,7 @@ export const deskProgram = defineProgram({
 		unread: output(Refused, "A typed reply that is not an answer. Nothing was handed on."),
 	},
 	machines: {desk: deskKind},
-	main: ({inputs, send, machines}) =>
+	main: ({serve, send, machines}) =>
 		Effect.gen(function* () {
 			const view = yield* DeskView;
 			const desk = yield* machines.desk.get("desk").start();
@@ -57,24 +52,7 @@ export const deskProgram = defineProgram({
 				yield* Ref.set(shown, after);
 			});
 			yield* show;
-			const heard: Stream.Stream<Heard> = Stream.mergeAll(
-				[
-					inputs.waiting.pipe(
-						Stream.map(({asks}): Heard => ({on: "msg", msg: {type: "waiting", asks}})),
-					),
-					inputs.settled.pipe(
-						Stream.map(
-							({ask, answer}): Heard => ({on: "msg", msg: {type: "settled", ask, answer}}),
-						),
-					),
-					inputs.refused.pipe(
-						Stream.map(({id, why}): Heard => ({on: "msg", msg: {type: "refused", id, why}})),
-					),
-					inputs.reply.pipe(Stream.map((reply): Heard => ({on: "reply", reply}))),
-					inputs.typed.pipe(Stream.map((typed): Heard => ({on: "typed", typed}))),
-				],
-				{concurrency: "unbounded"},
-			);
+			const msg = (msg: DeskMsg) => desk.dispatch(msg).pipe(Effect.andThen(show));
 			const read = ({id, text}: Typed) => {
 				const answer = typedAnswerOf(text);
 				return answer === null
@@ -84,14 +62,13 @@ export const deskProgram = defineProgram({
 						})
 					: send("answer", {id, answer});
 			};
-			yield* heard.pipe(
-				Stream.runForEach((item) =>
-					item.on === "reply"
-						? send("answer", item.reply)
-						: item.on === "typed"
-							? read(item.typed)
-							: desk.dispatch(item.msg).pipe(Effect.andThen(show)),
-				),
-			);
+			// Each value in the order told, across every input.
+			yield* serve({
+				waiting: ({asks}) => msg({type: "waiting", asks}),
+				settled: ({ask, answer}) => msg({type: "settled", ask, answer}),
+				refused: ({id, why}) => msg({type: "refused", id, why}),
+				reply: (reply) => send("answer", reply),
+				typed: read,
+			});
 		}).pipe(Effect.scoped),
 });

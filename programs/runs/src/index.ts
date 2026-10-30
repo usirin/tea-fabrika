@@ -1,8 +1,8 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, flag, input, output, TraceId} from "@kampus/fabrika";
+import {defineProgram, end, flag, input, output, TraceId} from "@kampus/fabrika";
 import {type Entry, Id, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {One, oneOf, tickets, ticketsKind, ticketsOptions} from "@tea-fabrika/tracker";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 
 // One ticket's runs in time, in a tile of its own (./window.tsx), laid out like tracks in a music
 // editor: a track per step, a clip per run, the waits on a person striped, the answers marked on
@@ -66,23 +66,26 @@ export const runs = defineProgram({
 	},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: One, of: oneOf},
-	main: ({flags, inputs, send, watch}) =>
+	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			const open = (ticket: number) => runtime.dispatch({type: "open", ticket}).pipe(Effect.orDie);
 			if (flags.ticket !== undefined) yield* open(flags.ticket);
 			yield* watch("tickets", "tickets", runtime);
-			const window = inputs.in.pipe(
-				Stream.takeWhile((d) => d.kind !== "quit"),
-				Stream.runForEach((d) => {
-					if (d.kind !== "choose") return Effect.void;
-					const id = traceIdOf(oneOf(runtime.getState()).ticket?.timeline ?? [], d.run);
-					return id === null ? Effect.void : send("id", id);
-				}),
+			// The picks and the window's choices, in the order told. Once `ticket` is closed the last
+			// pick stays, until a quit or until `in` is closed.
+			yield* serve(
+				{
+					ticket: open,
+					in: (d) => {
+						if (d.kind === "quit") return end;
+						if (d.kind !== "choose") return Effect.void;
+						const id = traceIdOf(oneOf(runtime.getState()).ticket?.timeline ?? [], d.run);
+						return id === null ? Effect.void : send("id", id);
+					},
+				},
+				{until: ["in"]},
 			);
-			// The picks, until their input ends; then the last one stays, until `in` ends.
-			const picks = inputs.ticket.pipe(Stream.runForEach(open), Effect.andThen(Effect.never));
-			yield* Effect.raceFirst(window, picks);
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();
 		}).pipe(Effect.scoped),

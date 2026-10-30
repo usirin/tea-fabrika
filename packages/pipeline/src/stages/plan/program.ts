@@ -1,5 +1,5 @@
 import {defineProgram, flag, input, kind, output, type RefsOf} from "@kampus/fabrika";
-import {Clock, Effect, Random, Schema, Stream} from "effect";
+import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
 import {TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
@@ -117,9 +117,9 @@ export const planProgram = defineProgram({
 		),
 	},
 	machines: {plan: planKind},
-	main: ({flags, inputs, send, machines}) =>
-		inputs.ticket.pipe(
-			Stream.runForEach((ticket) =>
+	main: ({flags, serve, send, machines}) =>
+		serve({
+			ticket: (ticket) =>
 				Effect.gen(function* () {
 					const ask: PlanAsk = {ticket, tries: flags.tries};
 					const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
@@ -133,6 +133,5 @@ export const planProgram = defineProgram({
 					});
 					yield* machines.plan.get(id).clear;
 				}),
-			),
-		),
+		}),
 });

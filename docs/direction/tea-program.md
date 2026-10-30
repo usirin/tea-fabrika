@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times) and 2026-10-19. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -11,7 +11,8 @@ const shipProgram = defineProgram({
   name: "ship",
   description: "Puts pull requests in the merge queue, one after another, as it is told them.",
   flags:    { mode: flag(Mode, "read or write, for the whole run.") },          // argv
-  inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin; holds 1000 unread, or {capacity: n}
+  inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin; every input shares the run's one mailbox
+  capacity: 1000,                             // that mailbox's bound, across all inputs; 1000 when left out
   outputs:  { outcome: output(Shipped, "How one pull request ended.") },
   machines: {                                 // one declaration per kind of machine run it keeps
     queue: queueKind,                         // the pull requests told and not finished, kept
@@ -24,10 +25,18 @@ const shipProgram = defineProgram({
       status: (s) => `${ref(s.pr)}: ${words(s)}`,   // one line per copy, typed by ship's state: `#8: in the merge queue`
     }),
   },
-  main: ({ flags, inputs, send, machines }) =>   // an Effect: a ship run per pull request, through the kept queue
-    workQueue(machines.queue, inputs.pr, (pr) => shipOne(machines.ship.get(`pr/${pr}`), pr, send),
-      (pr) => machines.ship.get(`pr/${pr}`).clear),
+  main: ({ flags, serve, send, machines }) =>    // an Effect: a ship run per pull request, through the kept queue
+    Effect.gen(function* () {
+      const queue = yield* workQueue(machines.queue, (pr) => shipOne(machines.ship.get(`pr/${pr}`), pr, send),
+        (pr) => machines.ship.get(`pr/${pr}`).clear);
+      yield* queue.drained(serve({ pr: queue.told }));   // one handler per input, each value in the order told
+    }).pipe(Effect.scoped),
 });
+
+// serve: the run's mailbox, handled one value at a time, in the order told across every input
+yield* serve({ line: (text) => run(text), signal: fork((s) => interrupt(s)) },  // fork: a control input, beside the order
+  { until: ["line"] });                       // stop once these have closed; left out, once every input has
+// a handler that answers `end` stops serving; what is left is counted unread
 
 // inside main: a ref per run, by id (Durable Objects' get, Temporal's handle)
 const ref = machines.ship.get(id);            // nothing read, nothing started
@@ -42,8 +51,9 @@ listing(shipProgram);                         // name, description, flags, input
 const started = yield* start(shipProgram, { mode: "write" }, { outcome: show },
   { id: "ship:desk-1", storage: fileStorage(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
 const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
-yield* tell(run, "pr", url);                  // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; a full line fails Full
-yield* offer(run, "pr", url);                 // the same, but waits for room on a full line
+yield* tell(run, "pr", url);                  // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; a full mailbox fails MailboxFull
+yield* offer(run, "pr", url);                 // the same, but waits for room in a full mailbox
+run.mailbox();                                // { length: 3, inputs: { pr: { length: 3, waiting: 0 } } }: told, not yet taken
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
 run.machines.ship.changes;                    // what a late viewer reads: the machine's state now, then every change
 run.machines.ship.copies();                   // every copy this start showed: [{ id, line: "#8: in the merge queue", live }]
@@ -97,19 +107,49 @@ Three layers, each with one job.
   `bad_shape` with its name and the schema's reason, and nothing runs.
 - **Inputs are stdin.** A running program is told on an input at any time with
   `tell`, an Effect that never waits and answers one of five words. `main`
-  reads each input as a `Stream`.
-- **Each input's line has a size limit, its `capacity`** (2026-10-19). An
-  Effect bounded `Queue` of the input's capacity: 1000 (`CAPACITY`, Akka's
-  default mailbox) unless the program says another where it declares the
-  input, `input(Line, "...", {capacity: 16})`. A program fact, not a host
-  setting. One that is not a whole number, 1 or more, is refused when the
-  program is defined. A `tell` past it never waits and fails with a tagged
-  error, `Full` (`{input, capacity}`), not a word: a caller that does not
-  handle it fails, and its type says `Full`. One that expects a full line
-  says so with `Effect.catchTag("Full", ...)`. `offer` waits for room, and a
-  pipe, its outbox's resend and `call` use it. No dropping or sliding line
-  yet. Because `tell` is an Effect, a bare `tell(...)` statement would be
-  made and dropped; `pnpm lint` refuses one.
+  handles them with `serve` (2026-10-30, below).
+- **A run has one mailbox, and `main` serves it** (2026-10-30, shape B of
+  experiment 164, kept in [#166](https://github.com/usirin/tea-fabrika/pull/166)). Every value told
+  to any input, and every close, goes into one mailbox, and `serve` handles
+  them one at a time in the order told. Like an actor's mailbox (Akka,
+  Erlang).
+  - `serve(handlers, {until?})` takes one handler per input. Every input needs
+    one; a name that is no input does not compile; each handler's value type
+    comes from its input's schema, and an input that acks hands its
+    `Delivery`. The handlers' errors and services are `serve`'s.
+  - `until` is a list of input names: serving stops once all of them have
+    closed. Left out, once every input has. A handler that answers `end` stops
+    it at once, and what is still in the mailbox is counted unread.
+  - **One bound per run, its `capacity`.** 1000 (`CAPACITY`, Akka's default
+    `mailbox-capacity`) unless the program says another,
+    `defineProgram({capacity: 16, ...})`. A program fact, not a host setting.
+    One that is not a whole number, 1 or more, is refused when the program is
+    defined. It counts values told and not yet taken by `serve`; a close takes
+    no room. A `tell` past it never waits and fails with the tagged error
+    `MailboxFull` (`{input, capacity}`, the name Effect's cluster uses), not a
+    word: a caller that does not handle it fails, and its type says so. One
+    that expects a full mailbox says so with `Effect.catchTag("MailboxFull",
+    ...)`. `offer` waits for room, and a pipe, its outbox's resend and `call`
+    use it. A tell never passes an offer already waiting. No dropping or
+    sliding mailbox yet. Because `tell` is an Effect, a bare `tell(...)`
+    statement would be made and dropped; `pnpm lint` refuses one.
+  - **A control input goes beside the order.** `input(Signal, "...",
+    {control: true})` (Akka's `ControlMessage`), and its handler is
+    `fork(handler)` (Effect RPC's `Rpc.fork`): each value is handled at once,
+    while the value before it in the order still runs. The types and `serve`
+    both refuse a fork on an ordinary input and a plain handler on a control
+    one. tsh's Ctrl-C `signal` is the first.
+  - **A control input has its own small bound, 16 values not yet handled.**
+    This is our own rule. Akka's control-aware mailbox and Erlang's priority
+    messages (EEP 76) let urgent messages go first, but they share the
+    mailbox's one bound. The closest precedent is the terminal: Ctrl-C becomes
+    a signal and skips the input buffer. Without it, 1000 lines behind a slow
+    line fill tsh's mailbox and Ctrl-C is refused, as experiment 164's spike
+    found. The test: with 999 lines, or a full mailbox, waiting behind a slow
+    line in tsh, Ctrl-C is taken and stops the foreground job with 130
+    (`packages/fabrika/src/shell/ctrl-c.test.ts`).
+  - `run.mailbox()` shows how full it is: its length, and per input how many
+    values wait in it and how many offers wait for room.
 - **A program declares its `limits`; its host enforces them** (decided
   2026-10-20). A container's `resources.limits` and the cgroup that enforces
   them, for tea programs: dollars or tokens, wall time (Kubernetes'
@@ -123,14 +163,15 @@ Three layers, each with one job.
   - **Going over ends the run, like `OOMKilled`,** with exit reason
     `limit:<kind>`. Its supervisor does not restart a limit exit; it goes to the
     program's dead-letter stream, so the desk shows it to raise or drop.
-  - Same shape as an input's `capacity`: a program fact, enforced by the host,
+  - Same shape as the mailbox's `capacity`: a program fact, enforced by the host,
     answered with a typed reason. This replaces fabrika's own supervisor as the
     one that says no ([helpers](./helpers-and-the-supervisor.md)).
   - Open: soft limits (warn before the end), as cgroups have.
-- **Only the starter closes an input, like stdin's end.** The stream ends after
-  the values told before the close, so a `main` that reads it to its end
-  finishes what it holds and returns, and the run ends `ended`. Close is not
-  stop. A `tell` on a closed input answers `closed`; `stopped` still means the
+- **Only the starter closes an input, like stdin's end.** The close goes into
+  the mailbox after the values told before it, so `serve` handles those first
+  and then returns, `main` returns, and the run ends `ended`. A close is
+  kept on the run's record: a run started again under the same id finds that
+  input closed. Close is not stop. A `tell` on a closed input answers `closed`; `stopped` still means the
   run is gone. Never closed, an input stays open until the run is stopped.
 - **Outputs are events, one-way, like Elm's outgoing ports.** `main` sends,
   whoever listens at that moment hears, nothing comes back, nothing is kept
@@ -311,7 +352,7 @@ given:
 - ~~**No size limit on an input, and no "full" answer** (2026-10-15). A sender
   never waits. A host that wants a bound, like Tuval, builds its own.~~
   *Superseded 2026-10-19* by the next item.
-- **Experiment 79's input limit holds, per input, and a full line is an
+- ~~**Experiment 79's input limit holds, per input, and a full line is an
   error** (2026-10-19). Each input is an Effect bounded `Queue`. `tell`
   never waits; `offer` waits for room. The limit is the input's `capacity`,
   declared where the program declares the input, optional, 1000 when left
@@ -320,7 +361,23 @@ given:
   fails with the tagged error `Full`, carrying the input's name, so a full
   line nobody handles fails the caller and shows in its type. No dropping or
   sliding strategy yet. This settles the conflict the 2026-10-15 item had with
-  experiment 79.
+  experiment 79.~~ *Replaced 2026-10-30* by the next item: the bound is per
+  run, not per input, and `Full` is `MailboxFull`.
+- **One mailbox per run, served in the order told** (2026-10-30, shape B of
+  experiment 164, [#166](https://github.com/usirin/tea-fabrika/pull/166)).
+  Every value told to any input goes in and is handled in the order told:
+  `main` calls `serve(handlers, {until?})`, one handler per input, every input
+  needs one, a name that is no input does not compile, value types come from
+  each input's schema. `until` stays a list of input names; serving stops once
+  all of them have closed, and left out, once every input has. `fork(handler)`
+  handles a control input at once, beside the order (tsh's Ctrl-C `signal`).
+  One bound per run, the program's `capacity`, 1000 when left out, still
+  checked when the program is defined. Control inputs have their own small
+  bound of 16, our own rule, proven by the Ctrl-C test
+  (`packages/fabrika/src/shell/ctrl-c.test.ts`). A full mailbox fails
+  `MailboxFull`, carrying the input's name and the bound. Otherwise
+  experiment 79's laws still hold: `tell` never waits, `offer` waits for
+  room, memory stays flat under a flood.
 - **Outputs are events** (2026-10-17), as in the rule above.
 - **Storage** (2026-10-17): renamed from "shelf" and reshaped in the same
   step, not only renamed; atomic and fenced writes; one record per run; a run
@@ -339,7 +396,7 @@ given:
   the program's `permission` input, and `main` hands it to the machine. Handing
   a machine a Msg directly would break the program's boundary: a view could
   send a Msg only the system should send (a made-up "tool finished"), and it
-  would skip the input's schema, capacity and `Full`. This is Elm's answer:
+  would skip the input's schema, the mailbox's bound and `MailboxFull`. This is Elm's answer:
   outside code reaches a program only through ports. Tuval's chat window sends
   raw Msgs in three places (permission answer, paging, keys); each becomes a
   declared input.

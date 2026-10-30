@@ -51,14 +51,15 @@ type Said =
 type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly kind: "running"}>;
 
 /**
- * Ctrl-C, told at Node's edge, never waiting. A `signal` line that is full
- * already holds an interrupt tsh has not read, so this one is let go.
+ * Ctrl-C, told at Node's edge, never waiting. `signal` is a control input, so
+ * lines waiting in the mailbox never refuse it; one that is full already
+ * holds interrupts tsh has not handled, so this one is let go.
  */
 const interruptOf = (started: Started) => () =>
 	Effect.runSync(
 		started.run.tell("signal", "interrupt").pipe(
 			Effect.asVoid,
-			Effect.catchTag("Full", () => Effect.void),
+			Effect.catchTag("MailboxFull", () => Effect.void),
 		),
 	);
 
@@ -138,8 +139,8 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 		const interrupt = interruptOf(started);
 		process.on("SIGINT", interrupt);
 		if (source.kind === "stdin") {
-			// Node at the edge: readline. A line the shell's input cannot hold yet (its tell fails
-			// `Full`) is offered, and stdin waits paused until every offered line is in, so a long
+			// Node at the edge: readline. A line the shell's mailbox cannot hold yet (its tell fails
+			// `MailboxFull`) is offered, and stdin waits paused until every offered line is in, so a long
 			// piped script is neither dropped nor held whole in memory. Lines keep their order: once
 			// one waits, the rest wait behind it, and the close comes after the last.
 			const rl = readline.createInterface({input: process.stdin, terminal: false});
@@ -152,7 +153,7 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 				Effect.runSync(
 					started.run.tell("line", line).pipe(
 						Effect.as(true),
-						Effect.catchTag("Full", () => Effect.succeed(false)),
+						Effect.catchTag("MailboxFull", () => Effect.succeed(false)),
 					),
 				);
 			rl.on("line", (line) => {

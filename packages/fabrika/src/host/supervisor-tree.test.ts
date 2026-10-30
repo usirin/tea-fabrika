@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Exit, Schema, Stream} from "effect";
+import {Duration, Effect, Exit, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {defineProgram} from "../program/program.ts";
 import {input} from "../program/shape.ts";
@@ -457,7 +457,7 @@ const worker = (trap: "no" | "graceful" | "ignore") =>
 			"Counts its inbox; crashes after crashAfter; ends or not on its parent's shutdown.",
 		inputs: {inbox: input(envelope(Schema.Unknown), "One message.")},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
 				if (bootCrash.has(self.name)) return yield* Effect.die("planted boot crash");
@@ -468,8 +468,8 @@ const worker = (trap: "no" | "graceful" | "ignore") =>
 					{ctx: undefined},
 				);
 				const machine = yield* handle.ready;
-				yield* inputs.inbox.pipe(
-					Stream.runForEach((e) => {
+				yield* serve({
+					inbox: (e) => {
 						const count = machine.dispatch({type: "inc", rev: e.rev, poison: false});
 						if (e.kind === "EXIT" && e.from === "ledger") {
 							const x = decodeExit(e.body);
@@ -481,8 +481,8 @@ const worker = (trap: "no" | "graceful" | "ignore") =>
 						return Exit.isSuccess(b) && b.value.crashAfter === true
 							? count.pipe(Effect.andThen(Effect.die("planted crash")))
 							: count;
-					}),
-				);
+					},
+				});
 			}).pipe(Effect.scoped),
 	});
 
@@ -716,7 +716,7 @@ describe("dead letters", () => {
 			description: "Counts its inbox; its reducer throws on a poison message while the bug is in.",
 			inputs: {inbox: input(envelope(Schema.Unknown), "One message.")},
 			outputs: {},
-			main: ({inputs}) =>
+			main: ({serve}) =>
 				Effect.gen(function* () {
 					const self = yield* Self;
 					const handle = yield* self.run(
@@ -725,8 +725,8 @@ describe("dead letters", () => {
 						{ctx: undefined},
 					);
 					const machine = yield* handle.ready;
-					yield* inputs.inbox.pipe(
-						Stream.runForEach((e) => {
+					yield* serve({
+						inbox: (e) => {
 							// The bug: a poison body crashes the reducer, while the flag says the bug is in.
 							const poison =
 								typeof e.body === "object" &&
@@ -734,8 +734,8 @@ describe("dead letters", () => {
 								"poison" in e.body &&
 								poisoned.has("on");
 							return machine.dispatch({type: "inc", rev: e.rev, poison});
-						}),
-					);
+						},
+					});
 				}).pipe(Effect.scoped),
 		});
 		const out = await Effect.runPromise(

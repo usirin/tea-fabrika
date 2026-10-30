@@ -238,8 +238,8 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 					const word = yield* started.run
 						.tell(name, value)
 						.pipe(
-							Effect.catchTag("Full", (full) =>
-								Effect.succeed(`full: it holds ${full.capacity} values`),
+							Effect.catchTag("MailboxFull", (full) =>
+								Effect.succeed(`full: its mailbox holds ${full.capacity} values`),
 							),
 						);
 					if (word !== "queued")
