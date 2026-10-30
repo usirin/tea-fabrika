@@ -10,6 +10,18 @@ lets triage read the code and gets a brief ready for a fresh exam.
 two: close on a fact, ask the owner on worth.
 [Part 5](#part-5-fewer-asks-without-looser-closes) tries three ways to ask
 less, offline, on part 4's asks.
+[Part 6](#part-6-can-jev-attach-a-precedent-to-an-ask) asks Jev to show a
+past ruling beside an ask, as advice only.
+
+**Part 6's answer: not with the shipped question, and only half with a new
+one.** With the duplicate hint's filter, question shape and floor, Jev shows
+no precedent at 0.7 or 0.8: 0 of 20 asks with one, and 1 false hint in 84
+without one at 0.7. A
+question rewritten for "the same kind of fault, settled elsewhere" puts the
+right precedent first on 12 of 20, but its scores barely split the two groups.
+At 0.9 it shows the right one on 7 of 20 with a false hint on 2 of 84; at 0.8,
+7 of 20 with 16 false. On the one reversed ruling, the newer ruling never
+ranks first. Three questions, $0.52 in all.
 
 **Part 5's answer: none of the three gets near 50 asks a week without breaking
 another line.** A code rule that sends every security ticket to the owner
@@ -1421,6 +1433,177 @@ checked against those weeks. The security rule is the next piece to build. See
   an upper bound.
 - **Another day.** One run of each matcher.
 
+## Part 6: can Jev attach a precedent to an ask?
+
+Run on 2026-10-30. The owner picked more asks with clean builds (see
+[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md)),
+so each ask should be quick to answer. Part 5 tried precedents as verdicts and
+found almost none. Here a precedent is only advice: "the owner settled #N like
+this", shown beside the ask. It never answers, closes or builds anything.
+
+**Answer: not with the shipped question, and only half with a new one.** The
+duplicate hint as it ships, pointed at settled tickets, shows no right
+precedent at 0.7 or 0.8. A question rewritten for "the same kind of fault, settled elsewhere"
+ranks well but scores high on almost everything. At 0.9 it is within the
+advice line (2 false hints in 84, about 2%) and shows the right precedent on 7
+of 20. It also put a reversed ruling above the newer one. Do not ship it yet.
+
+```ts
+// Part 6's shape: the duplicate hint of experiment 167, with a different pool and question.
+const pool = settledBefore(ask.filed);                // phoenix tickets closed before the ask was filed
+const shortlist = candidatesOf(ask, pool, 20);        // the shipped word filter, unchanged
+const scores = yield* Effect.forEach(shortlist, (c) =>
+  siblingJudge.judge(model, {new: textOf(ask), earlier: textOf(withSettling(c))}));
+const hints = hintsOf(scores, 0.9, 3);                // the shipped ranking; advice, never an answer
+
+// #2550 "Comment vote path lacks the self-vote guard posts/definitions have"
+// [{of: 2216, yes: 0.93}]  "Self-vote is allowed, should be blocked (founder-confirmed)", built
+// #6374 "A killed operator seat strands its lane claim ..." (built later)
+// [{of: 4118, yes: 0.90}]  a closed design ticket; #6062 (closed, the reversed ruling) 0.86 next;
+//                          #6068 (built the day before, the newer ruling) never in the top three
+```
+
+### The labels, written before any call
+
+- **Who:** one reader, from `STEP=list`: for each of the 104 asked tickets,
+  the settled tickets its body names, part 5's matcher citations, part 5's
+  three best text matches and the shipped filter's top five. Committed in
+  `163-precedent-hint.ts` before the first Jev call.
+- **A precedent** is an earlier settled ticket that is the same request, or
+  the same kind of request on the same part for the same reason, and whose
+  settling points the way the ask was really settled.
+- **20 of 104 asks have one** (15 sure, 5 a call either way). Most are the
+  same rule broken in a new place: a sandbox mask missing on another read path
+  (#1811, #3724, #4313, #6467), the same exit-1 collision on a sibling verb
+  (#4736), the same `--help` clean-up (#9928, #9935), an owner-only check
+  fooled by an agent's comment (#10591).
+- **The reversed ruling is a case.** #6374 is labelled with #6068 and #5795
+  (built the day before it was filed) as right, and #6062 and #5752 (the
+  class ruling, later reversed) as wrong. A hint to a wrong one counts as
+  misled unless a right one ranks above it. #8992 is labelled the same way:
+  #6616 right, #6269 (part 5's wrong close) wrong.
+- **Six asks without a precedent** have a like ticket settled the other way
+  (for example #8524 and #7761: the same "reports delivered for a dropped
+  payload", built there, closed here). A hint there is false and misleading.
+- **This bar is lower than part 5's.** Part 5 needed a ruling that decides
+  the ticket, and found almost none. Advice only needs a like ticket the owner
+  would want to see. That is why 20 asks qualify here.
+
+### The numbers
+
+The pool is every phoenix ticket closed before the ask was filed, with its
+first body (fetched read-only for this part; part 5 had titles only), how it
+was settled, and its closing note. The shipped filter keeps 20. Its recall: a
+labelled precedent is among the 20 on 19 of 20 asks (#4236's is cut), first on
+11.
+
+| Way | Right first, of 20 | Right in top 3 | Misled | False hints, of 84 |
+|---|---|---|---|---|
+| shipped duplicate question, at 0.7 / 0.8 | 0 / 0 | 0 / 0 | 0 / 0 | 1 / 0 |
+| precedent question, at 0.7 / 0.8 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| sibling question, at 0.7 / 0.8 | 10 / 7 | 13 / 10 | 1 / 1 | 41 / 16 |
+| sibling question, at 0.9 | 7 | 7 | 0 | 2 |
+| sibling question, ranking only (no floor) | 12 | 18 | 2 | 84 |
+| the free filter alone, its top 3 | 11 | 17 | 0 | 84 |
+| part 5 haiku (verdict matcher) | 0 | 0 | 1 | 0 |
+| part 5 sonnet (verdict matcher) | 1 | 1 | 1 | 0 |
+| part 5 text match at 0.3 / 0.4 | 2 / 1 | 2 / 1 | 1 / 0 | 1 / 0 |
+
+- **The shipped question and the precedent question score precedents low.**
+  The median best score on a true precedent is 0.13 and 0.16. Their "no"
+  says "a different fault, even in the same feature", which fits most
+  precedents here: the same rule broken in another place. Their ranking with
+  no floor (8 and 9 right first) is no better than the free filter (11).
+- **The sibling question fixes the ranking, not the floor.** Median best score
+  on a true precedent 0.80, but the best score on asks without one runs 0.91,
+  0.90, 0.89, 0.88, 0.87. Only 5 of 20 precedents score above every ask
+  without one. 0.9 is the one floor under the 10% advice line.
+- **At 0.9, the 7 right:** #2550, #3724, #4736, #9890, #9928, #9935, #10591.
+  **The 2 false:** #6556 shows #5207, closed, the same "passes over nothing"
+  kind, which points the right way (a class likeness the labels did not
+  count); #9391 shows #7688, built, which points the wrong way.
+- **The reversed ruling fails on every question that shows anything.** On
+  #6374 the newer ruling (#6068) scores 0.10 on the precedent question and is
+  not in the sibling question's top three. The sibling question shows #4118
+  (closed, 0.90) and #6062 (the reversed ruling, 0.86). At 0.9 only #4118
+  shows: not labelled wrong, but it points to a close the owner did not make.
+- **Against part 5:** the verdict matchers and the text match find 0 to 2
+  with a misled case each. The sibling question at 0.9 finds 7 with none
+  misled by the labels. It is the only way here that shows a precedent on
+  more than a tenth of the asks that have one.
+
+### What it cost
+
+| Question | Calls | Input tokens | Output tokens | Dollars |
+|---|---|---|---|---|
+| precedent | 2,080 | 4,132,991 | 41,600 | $0.1753 |
+| shipped duplicate | 2,080 | 4,049,791 | 41,600 | $0.1718 |
+| sibling | 2,080 | 4,108,031 | 41,600 | $0.1743 |
+| all | 6,240 | 12,290,813 | 124,800 | $0.5214 |
+
+- Each question ran a handful of asks first (6 to 8), the answers were read,
+  then the rest. Part 5's verdict matchers cost $0.25 (haiku) and $3.97
+  (sonnet) for one pass.
+- **Wrong estimate, kept:** `STEP=plan` said $0.142 a question, from four
+  characters a token and 250 tokens a call for the question. Real: $0.175,
+  about 1.23 times. About 1,990 tokens a call, against 732 in experiment 167:
+  phoenix bodies are longer.
+- `field/runs.jsonl` has one row per question.
+
+### Wrong guesses, kept
+
+- **"The shipped question carries over."** Experiment 167 put 24 of 25 true
+  duplicates above 0.7. Here no true precedent reached 0.7 on it. A precedent
+  is not a duplicate, and the question's own "no" rules most of them out.
+- **"0.7 or 0.8 is the floor."** On the sibling question, 0.7 shows a false
+  hint on about half the asks without a precedent, and 0.8 on about a fifth.
+- **The sibling question was written after the first two came back.** Labels
+  were fixed before any call, but the question is one rewrite fitted to this
+  set. Its numbers are not blind.
+
+### Who did what
+
+- **This repo's harness:** the pool, the labels, the scoring and the steps in
+  `163-precedent-hint.ts`. The filter (`candidatesOf`), the text Jev reads
+  (`textOf`), the ranking (`hintsOf`), the question shape
+  (`createYesNoJudge`) and the live Jev with its cap and receipts
+  (`jevFromConfig`) are the shipped ones, imported by package name.
+- **Jev** (`jev-latest`, TypeSafe's API) answered every pair. No agent ran.
+- **Part 4's asks and part 5's matcher answers** are inputs. Phoenix was only
+  read, through `gh`; nothing was written there. Today's fabrika took no part.
+
+### What part 6 means
+
+1. **Do not ship the precedent hint on the shipped question.** At the shipped
+   floor it is silent. Confidence 90%.
+2. **The sibling question at 0.9 is worth a fresh test, not a build.** It
+   shows the right precedent on about a third of the asks that have one, with
+   about 2% false hints, within the 10% advice line (Google CACM 2018). It was
+   fitted on this set. Confidence 55% that it holds: the doubt is the fit and
+   20 positives labelled by one reader. A fresh batch of asks from live weeks,
+   labelled before the run, would settle it.
+3. **A hint needs dates before it can show a ruling.** The one reversed ruling
+   ranked above the newer one, and Jev cannot know a ruling was reversed.
+   A sketch, untested: show each hint's settle date, and when two hints point
+   opposite ways, show the newer first. Confidence 70% that some rule like
+   this is needed; which rule is untested.
+4. **The free filter already finds the precedent.** It has the right ticket
+   in its top 3 on 17 of 20. What Jev adds is knowing when to stay quiet, and
+   that is the part that does not hold yet.
+
+### What part 6 cannot tell us
+
+- **A blind number.** Same 104 asks as parts 4 and 5, and the sibling question
+  was written after seeing two runs.
+- **Whether a hint makes an ask quicker.** Nobody answered asks with and
+  without hints. That needs the owner timed on a real batch.
+- **A second reader's labels.** 20 positives, one reader; five are a call
+  either way, and the two false hints at 0.9 show a class likeness the labels
+  did not count.
+- **How the hint handles rulings beyond one reversal.** One reversed case is a
+  single example.
+- **Another day.** One run of each question.
+
 ## Run it
 
 ```
@@ -1457,7 +1640,14 @@ STEP=match MODEL=haiku DRY=1 node experiments/163-fewer-asks.ts   # part 5: the 
 STEP=groups node experiments/163-fewer-asks.ts             # part 5: ten seeded bundles for the hand check
 STEP=report node experiments/163-fewer-asks.ts             # part 5: every scenario against the bar; writes results/163-fewer-asks.json
 STEP=field node experiments/163-fewer-asks.ts              # part 5: field/runs.jsonl rows, one per matcher call
+STEP=bodies node experiments/163-precedent-hint.ts         # part 6: every phoenix issue's first body and last comments, through gh, read-only
+STEP=list node experiments/163-precedent-hint.ts           # part 6: what the hand labels were written from
+STEP=plan QUESTION=sibling node experiments/163-precedent-hint.ts   # part 6: pairs and the cost estimate, no call; SHOW=1 prints one pair
+STEP=run QUESTION=sibling ONLY=2550,6374 node experiments/163-precedent-hint.ts   # part 6: QUESTION=precedent|duplicate|sibling; drop ONLY for all; MAX_USD=0.5, refuses past $2
+STEP=report node experiments/163-precedent-hint.ts         # part 6: every way against the labels; writes results/163-precedent-hint.json
+STEP=field node experiments/163-precedent-hint.ts          # part 6: field/runs.jsonl rows, one per question
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
-the live Sorter refuses to start with any of them set.
+the live Sorter refuses to start with any of them set. Part 6's `STEP=run` is
+the one exception: it calls Jev, so it needs `TYPESAFE_API_KEY` and nothing else.

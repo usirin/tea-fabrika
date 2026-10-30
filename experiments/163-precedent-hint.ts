@@ -26,6 +26,7 @@ import {createYesNoJudge} from "@kampus/pipeline/primitives";
 import {
 	type Candidate,
 	candidatesOf,
+	duplicateJudge,
 	hintsOf,
 	MAX_CANDIDATES,
 	type Scored,
@@ -42,7 +43,18 @@ const here = import.meta.dirname;
 const STEP = process.env.STEP ?? "report";
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-163-cache");
 const BODIES_FILE = join(CACHE, "bodies.json");
-const RESULTS = join(here, "results", "163-precedent-hint.json");
+/**
+ * Which question Jev is asked: `precedent` (the default, below); `duplicate`, the shipped
+ * duplicate question word for word, with the earlier ticket as `existing`; or `sibling`, written
+ * after the first two came back low, whose "no" no longer covers a like fault in another place.
+ * Each has its own results file.
+ */
+const QUESTIONS = ["precedent", "duplicate", "sibling"] as const;
+type Question = (typeof QUESTIONS)[number];
+const QUESTION: Question = QUESTIONS.find((q) => q === process.env.QUESTION) ?? "precedent";
+const resultsOf = (q: string) =>
+	join(here, "results", `163-precedent-hint${q === "precedent" ? "" : `-${q}`}.json`);
+const RESULTS = resultsOf(QUESTION);
 const PART5 = join(here, "results", "163-fewer-asks.json");
 const FLOORS = [0.5, 0.6, 0.7, 0.8, 0.9] as const;
 
@@ -165,8 +177,13 @@ const filedOf = (n: number) => {
 	const t = ticketOf(n);
 	return {title: t.title, body: t.body};
 };
-/** The shipped filter over that pool: at most 20, the rarest shared words first. */
-const shortlistOf = (n: number) => candidatesOf(filedOf(n), poolOf(n), MAX_CANDIDATES);
+/** The shipped filter over that pool: at most 20, the rarest shared words first. Kept once read. */
+const shortlists = new Map<number, readonly Candidate[]>();
+const shortlistOf = (n: number): readonly Candidate[] => {
+	const got = shortlists.get(n) ?? candidatesOf(filedOf(n), poolOf(n), MAX_CANDIDATES);
+	shortlists.set(n, got);
+	return got;
+};
 
 /** An earlier ticket as Jev reads it: how it was settled, first, so the body cut cannot drop it. */
 const earlierText = (c: Candidate, before: string) => {
@@ -187,6 +204,21 @@ const precedentJudge = createYesNoJudge({
 		true: "The same request, or the same kind of request on the same part for the same reason: the owner's answer on `earlier` answers `new` too",
 		false:
 			"A different fault or request, even in the same file, feature or subject; or `new` raises something the settling of `earlier` does not answer",
+	},
+});
+
+/**
+ * The third question. The precedent question's "no" says "a different fault, even in the same
+ * feature", which also fits most labelled precedents: the same rule broken in another place.
+ */
+const siblingJudge = createYesNoJudge({
+	name: "sibling",
+	instructions:
+		"`new` is a ticket just filed, which the owner is asked about. `earlier` is a ticket settled before it: built, or closed unbuilt, as its first line says. Each is its title, then its body. Did the owner already settle the same kind of problem `new` raises, so the same answer likely holds?",
+	criteria: {
+		true: "`earlier` fixes or declines the same kind of fault or request as `new`: the same rule broken in another place, the same gap in a sibling path, or the same change asked again",
+		false:
+			"`earlier` is about a different kind of fault or request, even in the same file or feature; sharing a subject or a module is not enough",
 	},
 });
 
@@ -371,3 +403,388 @@ const CONTRARY: Readonly<Record<number, readonly number[]>> = {
 	9623: [7886],
 	10418: [9223],
 };
+
+// The labels must name asked tickets and earlier tickets settled before each was filed.
+for (const [k, l] of Object.entries({...LABELS, ...mapValues(CONTRARY)})) {
+	const n = Number(k);
+	if (!asked.some((a) => a.n === n)) throw new Error(`label #${n} is not an asked ticket`);
+	for (const e of [...l.right, ...(l.wrong ?? [])]) {
+		const p = ruledOf.get(e);
+		if (p?.closedAt == null || p.closedAt >= ticketOf(n).createdAt)
+			throw new Error(`label #${n}: #${e} was not settled before it was filed`);
+	}
+}
+function mapValues(xs: Readonly<Record<number, readonly number[]>>): Record<number, Label> {
+	return Object.fromEntries(
+		Object.entries(xs).map(([k, v]) => [k, {right: [], wrong: v, sure: true, why: "contrary"}]),
+	);
+}
+
+// ---------------------------------------------------------------- the pairs
+
+interface Pair {
+	readonly key: string;
+	readonly n: number;
+	readonly of: number;
+	/** Where the filter put `of` among the candidates, from 1. */
+	readonly rank: number;
+	readonly texts: {readonly new: string; readonly earlier: string};
+}
+const pairsOf = (n: number): Pair[] => {
+	const t = ticketOf(n);
+	return shortlistOf(n).map((c, i) => ({
+		key: `${n}>${c.number}`,
+		n,
+		of: c.number,
+		rank: i + 1,
+		texts: {new: textOf(filedOf(n)), earlier: earlierText(c, t.createdAt)},
+	}));
+};
+
+const Answered = Schema.Struct({
+	key: Schema.String,
+	n: Schema.Int,
+	of: Schema.Int,
+	rank: Schema.Int,
+	yes: Schema.Finite,
+});
+type Answered = typeof Answered.Type;
+const SpentRow = Schema.Struct({
+	at: Schema.String,
+	calls: Schema.Int,
+	input: Schema.Int,
+	output: Schema.Int,
+	usd: Schema.Finite,
+	ms: Schema.Finite,
+});
+const Results = Schema.Struct({
+	model: Schema.String,
+	answers: Schema.Array(Answered),
+	runs: Schema.Array(SpentRow),
+	/** Where the filter put each labelled precedent: its best rank among the 20, or null if cut. */
+	recall: Schema.optional(Schema.Unknown),
+	report: Schema.optional(Schema.Unknown),
+});
+type Results = typeof Results.Type;
+const loadFrom = (file: string): Results =>
+	existsSync(file) ? readJson(file, Results) : {model: DEFAULT_JEV_MODEL, answers: [], runs: []};
+const load = () => loadFrom(RESULTS);
+
+const only = process.env.ONLY?.split(",").map(Number);
+const allPairs = () =>
+	asked.filter((a) => only === undefined || only.includes(a.n)).flatMap((a) => pairsOf(a.n));
+
+/** About four characters a token, plus the question and its criteria (about 250 tokens) a call. */
+const estimate = (pairs: readonly Pair[]) => {
+	const chars = pairs.reduce((s, p) => s + p.texts.new.length + p.texts.earlier.length, 0);
+	const tokens = chars / 4 + pairs.length * 250;
+	return {tokens: Math.round(tokens), usd: tokens * 0.042e-6};
+};
+
+if (STEP === "plan") {
+	const pairs = allPairs();
+	const e = estimate(pairs);
+	console.log(
+		`${pairs.length} pairs over ${new Set(pairs.map((p) => p.n)).size} asked tickets: about ${e.tokens} tokens in, about $${e.usd.toFixed(3)}`,
+	);
+	for (const [k, l] of Object.entries(LABELS)) {
+		const ranks = pairsOf(Number(k))
+			.filter((p) => l.right.includes(p.of))
+			.map((p) => p.rank);
+		console.log(
+			`  #${k}: precedent at filter rank ${ranks.length === 0 ? "cut" : Math.min(...ranks)}`,
+		);
+	}
+	const first = pairs[0];
+	if (first !== undefined && process.env.SHOW === "1")
+		console.log(`\n--- ${first.key}\nnew:\n${first.texts.new}\n\nearlier:\n${first.texts.earlier}`);
+	process.exit(0);
+}
+
+if (STEP === "run") {
+	const results = load();
+	const done = new Set(results.answers.map((a) => a.key));
+	const todo = allPairs().filter((p) => !done.has(p.key));
+	const e = estimate(todo);
+	const cap = Number(process.env.MAX_USD ?? 0.5);
+	console.log(`${todo.length} pairs to ask, about $${e.usd.toFixed(3)}; cap $${cap}`);
+	if (e.usd > 2) throw new Error("the estimate passes $2: stop and report");
+	const ask = (p: Pair) =>
+		(QUESTION === "duplicate"
+			? duplicateJudge.judge(results.model, {new: p.texts.new, existing: p.texts.earlier})
+			: (QUESTION === "sibling" ? siblingJudge : precedentJudge).judge(results.model, p.texts)
+		).pipe(
+			Effect.retry({times: 3, schedule: Schedule.exponential("1 second")}),
+			Effect.map(({yes}): Answered => ({key: p.key, n: p.n, of: p.of, rank: p.rank, yes})),
+		);
+	const program = Effect.gen(function* () {
+		const got = yield* Effect.forEach(todo, (p) => Effect.option(ask(p)), {concurrency: 8});
+		const spent = yield* (yield* JevReceipts).spent;
+		return {got, spent};
+	});
+	const {got, spent} = await Effect.runPromise(
+		program.pipe(
+			Effect.provide(Layer.provide(jevFromConfig({calls: 4_000, usd: cap}), FetchHttpClient.layer)),
+		),
+	);
+	const answers = got.flatMap((a) => (a._tag === "Some" ? [a.value] : []));
+	writeJson(RESULTS, {
+		...results,
+		answers: [...results.answers, ...answers],
+		runs: [...results.runs, {at: new Date().toISOString(), ...spent}],
+	});
+	console.log(`${answers.length} of ${todo.length} answered`);
+	console.log(receiptLine(spent));
+	for (const a of answers.toSorted((x, y) => y.yes - x.yes).slice(0, 12))
+		console.log(
+			`  ${a.yes.toFixed(2)} ${a.key} ${LABELS[a.n]?.right.includes(a.of) ? "precedent" : ""}`,
+		);
+	process.exit(0);
+}
+
+const results = load();
+
+if (STEP === "field") {
+	const s = results.runs.reduce(
+		(t, r) => ({
+			calls: t.calls + r.calls,
+			input: t.input + r.input,
+			output: t.output + r.output,
+			usd: t.usd + r.usd,
+			ms: t.ms + r.ms,
+		}),
+		spentOf([]),
+	);
+	console.log(
+		JSON.stringify({
+			date: (results.runs.at(-1)?.at ?? "").slice(0, 10),
+			lane: null,
+			role: "hand",
+			model: results.model,
+			effort: null,
+			outcome: "pass",
+			why: `experiment 163 part 6: the precedent hint (${QUESTION === "duplicate" ? "the shipped duplicate question word for word" : `the ${QUESTION} question`}), the shipped duplicate-hint filter over phoenix tickets settled before each of part 4's ${asked.length} asked tickets, ${s.calls} calls through the live Jev Layer in ${results.runs.length} runs, no agent; tokens is one call's mean size, billed is every token (${s.input} input, ${s.output} output), costUsd from the Layer's receipts; posted nothing`,
+			tokens: Math.round((s.input + s.output) / Math.max(1, s.calls)),
+			tools: null,
+			minutes: null,
+			note: null,
+			costUsd: +s.usd.toFixed(4),
+			billed: s.input + s.output,
+			jev: s.calls,
+		}),
+	);
+	process.exit(0);
+}
+
+if (STEP !== "report") {
+	console.error(`unknown STEP ${STEP}`);
+	process.exit(1);
+}
+
+// ---------------------------------------------------------------- the report
+
+/** What one way of hinting shows on one ask: the earlier tickets, best first. */
+type Shown = readonly number[];
+interface Tally {
+	readonly withPrecedent: number;
+	readonly top1: number;
+	readonly top3: number;
+	/** A wrong (reversed or contrary) ruling shown above every right one. */
+	readonly misled: number;
+	readonly without: number;
+	/** Asks without a precedent that got any hint. */
+	readonly falseHint: number;
+	/** Of those, the ones whose hint is a like ticket settled the other way. */
+	readonly contrary: number;
+	readonly hits: readonly number[];
+	readonly falses: readonly number[];
+}
+const tally = (shownOf: (n: number) => Shown | null, sureOnly = false): Tally => {
+	const ns = asked.map((a) => a.n).filter((n) => shownOf(n) !== null);
+	const withP = ns.filter((n) => LABELS[n] !== undefined && (!sureOnly || LABELS[n]?.sure));
+	const without = ns.filter((n) => LABELS[n] === undefined);
+	const rightAt = (n: number) => {
+		const l = LABELS[n] as Label;
+		return (shownOf(n) as Shown).findIndex((x) => l.right.includes(x));
+	};
+	const wrongAt = (n: number) => {
+		const l = LABELS[n] as Label;
+		return (shownOf(n) as Shown).findIndex((x) => (l.wrong ?? []).includes(x));
+	};
+	const hits = withP.filter((n) => rightAt(n) === 0);
+	const falses = without.filter((n) => (shownOf(n) as Shown).length > 0);
+	return {
+		withPrecedent: withP.length,
+		top1: hits.length,
+		top3: withP.filter((n) => rightAt(n) >= 0 && rightAt(n) < 3).length,
+		misled: withP.filter((n) => wrongAt(n) >= 0 && (rightAt(n) < 0 || wrongAt(n) < rightAt(n)))
+			.length,
+		without: without.length,
+		falseHint: falses.length,
+		contrary: falses.filter((n) => (shownOf(n) as Shown).some((x) => CONTRARY[n]?.includes(x)))
+			.length,
+		hits,
+		falses,
+	};
+};
+
+const scoresBy = Map.groupBy(results.answers, (a) => a.n);
+/** Every question that has answers, with its run and its scores by asked ticket. */
+const asks = QUESTIONS.map((q) => {
+	const run = q === "precedent" ? results : loadFrom(resultsOf(q));
+	return {q, run, by: Map.groupBy(run.answers, (a) => a.n)};
+}).filter((x) => x.run.answers.length > 0);
+/**
+ * Jev's hints on an ask, or null when some of its pairs were never answered. A floor below 0
+ * shows Jev's top three whatever they scored: its ranking alone.
+ */
+const jevShown =
+	(floor: number, by = scoresBy) =>
+	(n: number) => {
+		const xs = by.get(n) ?? [];
+		if (xs.length === 0 || xs.length < shortlistOf(n).length) return null;
+		return hintsOf(
+			xs.map((a): Scored => ({of: a.of as Scored["of"], yes: a.yes})),
+			floor,
+			TOP,
+		).map((h) => h.of);
+	};
+
+// Part 5's three, on the same labels: each shows at most one earlier ticket.
+const Part5 = Schema.Struct({
+	match: Schema.Array(
+		Schema.Struct({
+			n: Schema.Int,
+			model: Schema.String,
+			shown: Schema.Array(Schema.Struct({n: Schema.Int, score: Schema.Number})),
+			kind: Schema.NullOr(Schema.String),
+			cites: Schema.NullOr(Schema.Int),
+		}),
+	),
+});
+const part5 = readJson(PART5, Part5).match;
+const matcherShown = (model: string) => (n: number) => {
+	const m = part5.find((x) => x.n === n && x.model === model);
+	return m === undefined ? null : m.cites === null ? [] : [m.cites];
+};
+const lexicalShown = (floor: number) => (n: number) => {
+	const top = part5.find((x) => x.n === n)?.shown[0];
+	return top === undefined ? null : top.score >= floor ? [top.n] : [];
+};
+/** The shipped filter alone, no Jev: its top three. Shows something on every ask. */
+const filterShown = (n: number) =>
+	shortlistOf(n)
+		.slice(0, 3)
+		.map((c) => c.number);
+
+const ways: Record<string, (n: number) => Shown | null> = {
+	...Object.fromEntries(
+		asks.flatMap(({q, by}) => [
+			...FLOORS.map((f) => [`${q} question at ${f}`, jevShown(f, by)] as const),
+			[`${q} question ranking, no floor`, jevShown(-1, by)] as const,
+		]),
+	),
+	"part 5 haiku": matcherShown("haiku"),
+	"part 5 sonnet": matcherShown("sonnet"),
+	"part 5 text match at 0.3": lexicalShown(0.3),
+	"part 5 text match at 0.4": lexicalShown(0.4),
+	"filter alone, top 3": filterShown,
+};
+const table: Record<string, Tally & {sure: Pick<Tally, "withPrecedent" | "top1" | "top3">}> = {};
+for (const [name, f] of Object.entries(ways)) {
+	const t = tally(f);
+	const s = tally(f, true);
+	table[name] = {...t, sure: {withPrecedent: s.withPrecedent, top1: s.top1, top3: s.top3}};
+	console.log(
+		`${name}: with a precedent ${t.withPrecedent}: top 1 ${t.top1}, top 3 ${t.top3}, misled ${t.misled} (sure only ${s.top1}/${s.top3} of ${s.withPrecedent}); without ${t.without}: a false hint on ${t.falseHint} (${t.contrary} pointing the other way)`,
+	);
+}
+
+// Where the filter put each labelled precedent, and what Jev scored it.
+const recall = Object.entries(LABELS).map(([k, l]) => {
+	const n = Number(k);
+	const pairs = pairsOf(n).filter((p) => l.right.includes(p.of));
+	const scored = (scoresBy.get(n) ?? []).toSorted((a, b) => b.yes - a.yes);
+	const best = scored.find((a) => l.right.includes(a.of));
+	const wrong = scored.find((a) => (l.wrong ?? []).includes(a.of));
+	return {
+		n,
+		sure: l.sure,
+		rank: pairs.length === 0 ? null : Math.min(...pairs.map((p) => p.rank)),
+		yes: best === undefined ? null : +best.yes.toFixed(3),
+		place: best === undefined ? null : scored.indexOf(best) + 1,
+		wrongYes: wrong === undefined ? null : +wrong.yes.toFixed(3),
+		top: scored[0] === undefined ? null : {of: scored[0].of, yes: +scored[0].yes.toFixed(3)},
+	};
+});
+console.log("\nthe labelled asks: filter rank, Jev's best score on a precedent, and its place");
+for (const r of recall)
+	console.log(
+		`  #${r.n}${r.sure ? "" : " (unsure)"}: filter rank ${r.rank ?? "cut"}, yes ${r.yes ?? "-"}, place ${r.place ?? "-"}${r.wrongYes === null ? "" : `, wrong ruling ${r.wrongYes}`}; Jev's top #${r.top?.of} at ${r.top?.yes}`,
+	);
+console.log("\nthe surest hints on asks without a precedent:");
+for (const a of results.answers
+	.filter((x) => LABELS[x.n] === undefined)
+	.toSorted((x, y) => y.yes - x.yes)
+	.slice(0, 15))
+	console.log(
+		`  ${a.yes.toFixed(2)} #${a.n} > #${a.of}${CONTRARY[a.n]?.includes(a.of) ? " (settled the other way)" : ""}: ${titleOf.get(a.n)?.slice(0, 70)} / ${titleOf.get(a.of)?.slice(0, 70)}`,
+	);
+
+/**
+ * Is there any floor that would work? The best score on an ask without a precedent sets the
+ * lowest floor with no false hint; count the asks whose precedent scores above it.
+ */
+const separation = (by: Map<number, readonly Answered[]>) => {
+	const topOf = (n: number) => Math.max(0, ...(by.get(n) ?? []).map((a) => a.yes));
+	const noneTop = asked
+		.filter((a) => LABELS[a.n] === undefined)
+		.map((a) => topOf(a.n))
+		.toSorted((a, b) => b - a);
+	const rightTop = Object.entries(LABELS).map(([k, l]) =>
+		Math.max(
+			0,
+			...(by.get(Number(k)) ?? []).filter((a) => l.right.includes(a.of)).map((a) => a.yes),
+		),
+	);
+	const floor = noneTop[0] ?? 0;
+	return {
+		noneTop: noneTop.slice(0, 5).map((x) => +x.toFixed(3)),
+		rightMedian: +(
+			rightTop.toSorted((a, b) => a - b)[Math.floor(rightTop.length / 2)] ?? 0
+		).toFixed(3),
+		aboveEveryNone: rightTop.filter((x) => x > floor).length,
+	};
+};
+const separations = Object.fromEntries(asks.map(({q, by}) => [q, separation(by)]));
+for (const [q, s] of Object.entries(separations))
+	console.log(
+		`\n${q} question: best scores on asks without a precedent ${s.noneTop.join(", ")}; a precedent's best score, median ${s.rightMedian}; precedents above every ask without one: ${s.aboveEveryNone} of ${Object.keys(LABELS).length}`,
+	);
+
+const spentOfRuns = (rs: Results) =>
+	rs.runs.reduce(
+		(t, r) => ({
+			calls: t.calls + r.calls,
+			input: t.input + r.input,
+			output: t.output + r.output,
+			usd: t.usd + r.usd,
+			ms: t.ms + r.ms,
+		}),
+		spentOf([]),
+	);
+const spent = Object.fromEntries(asks.map(({q, run}) => [q, spentOfRuns(run)]));
+for (const [q, s] of Object.entries(spent)) console.log(`${q}: ${receiptLine(s)}`);
+writeJson(RESULTS, {
+	...results,
+	recall,
+	report: {
+		note: "Experiment 163, part 6. Jev's yes on each pair (an asked ticket of part 4, an earlier phoenix ticket settled before it was filed, picked by the shipped duplicate-hint filter), and every way of hinting against the hand labels in 163-precedent-hint.ts. The duplicate and sibling questions' answers are in 163-precedent-hint-duplicate.json and 163-precedent-hint-sibling.json.",
+		labelled: Object.keys(LABELS).length,
+		asked: asked.length,
+		ways: table,
+		separations,
+		spent,
+	},
+});
+console.log(`wrote ${RESULTS}`);
