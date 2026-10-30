@@ -1,0 +1,42 @@
+{
+	"name": "@tea-fabrika/markdown",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program with a window: any markdown it is told, drawn, as glow or less draws it. Each text told replaces the one shown; it ends on quit.",
+	"exports": {
+		".": "./src/index.ts",
+		"./root": "./src/root.ts",
+		"./window": "./src/window.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@pierre/highlights": "catalog:",
+		"effect": "catalog:",
+		"mdast-util-from-markdown": "catalog:",
+		"mdast-util-gfm": "catalog:",
+		"micromark-extension-gfm": "catalog:"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"devDependencies": {
+		"@kampus/pipeline": "workspace:*",
+		"@tea-fabrika/compare": "workspace:*",
+		"@tea-fabrika/experiment": "workspace:*",
+		"@tea-fabrika/experiments": "workspace:*",
+		"@types/mdast": "catalog:",
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"fast-check": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

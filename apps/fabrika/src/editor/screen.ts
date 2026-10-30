@@ -1,3 +1,4 @@
+import {Shell} from "@kampus/fabrika";
 import {cells, spot} from "./cells.ts";
 
 // The bytes the line editor writes to the terminal: text, and a few VT100 cursor moves. Pure, so
@@ -95,6 +96,31 @@ export const shown = (text: string): string =>
 			return c;
 		})
 		.join("");
+
+/**
+ * How the app's terminal draws a table's tones, in its own palette (window/window.css), as 24-bit
+ * color: strong is the first ink and bold, muted the faint text, faint the wire's gray, accent the
+ * "your turn" blue, warning the amber. Plain text keeps the terminal's own ink, the second.
+ */
+const PALETTE: Shell.Palette = {
+	strong: "1;38;2;235;235;236", // --n-12, --text-primary
+	muted: "38;2;134;136;138", // --n-9, --text-faint
+	faint: "38;2;93;95;98", // between --n-8 and --n-9: a header is read, but last
+	accent: "38;2;164;189;245", // --a-11, --turn
+	warning: "38;2;229;190;119", // --running
+};
+
+/**
+ * A table tsh printed, laid out at `cols` and painted in the app's palette. Every text goes
+ * through `shown` first, so a cell can no more move the cursor than a printed line can; the only
+ * escapes in it are the colors put here.
+ */
+export const table = (t: Shell.Table, cols: number): string =>
+	Shell.paint(
+		Shell.tableLines(t, cols).map((line) => line.map((s) => ({...s, text: shown(s.text)}))),
+		PALETTE,
+		NEWLINE,
+	);
 
 /**
  * Candidates in columns, down then across, as readline lists them on a second Tab. Each row ends

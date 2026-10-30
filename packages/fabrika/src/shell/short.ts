@@ -96,5 +96,9 @@ export function shortOf(value: unknown, width = WIDTH): string {
 /** How tsh prints a value: short for a person, or the JSON whole for a script. */
 export type Show = "short" | "json";
 
+/**
+ * A value as tsh prints it when its output declares no form for a person (../program/person.ts):
+ * short, or the JSON whole for a script.
+ */
 export const shown = (value: unknown, show: Show): string =>
 	show === "json" ? (typeof value === "string" ? value : JSON.stringify(value)) : shortOf(value);

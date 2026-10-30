@@ -12,7 +12,7 @@ import {type At, type Token, words} from "./words.ts";
 //   statement  builtin word* ['&']  |  pipeline ['&']
 //   pipeline   command ('|' command)*
 //   command    program part*
-//   part       --flag value | --flag=value | input=value | >output | <input
+//   part       --flag value | --flag=value | input=value | >output | <input | --all
 //   value      word | $( pipeline )
 //   help       program word* (--help | -h) [name] word*
 //
@@ -29,6 +29,10 @@ import {type At, type Token, words} from "./words.ts";
 // asks of `--help`: every other word of that command is left unread, so a
 // half-typed line still answers. The word right after it, if any, names the
 // one flag, input or output to show whole.
+//
+// `--all` is tsh's too, as `--help` is, and takes no value: a program that
+// prints a table for a person shows every row of it, not one screen
+// (./table.ts). Which programs print one is ./check.ts's.
 
 export type Value =
 	| {readonly kind: "text"; readonly text: string; readonly at: At}
@@ -54,11 +58,16 @@ export interface Command {
 	readonly into: Named | null;
 	/** `--help [name]` or `-h [name]`: show the program's help, or one flag, input or output of it whole, and run nothing. */
 	readonly help: {readonly at: At; readonly name: Named | null} | null;
+	/** `--all`: print every row of the program's table for a person, not one screen. */
+	readonly all: At | null;
 	readonly at: At;
 }
 
 /** The words that ask a program for its help, as on any Unix tool. */
 export const HELP_WORDS: ReadonlySet<string> = new Set(["--help", "-h"]);
+
+/** The word that asks for every row of a table, as `gh pr list --limit` asks for more. */
+export const ALL_WORD = "--all";
 
 export interface Pipeline {
 	readonly commands: readonly [Command, ...Command[]];
@@ -184,12 +193,14 @@ export function parse(line: string): Parsed {
 				out: null,
 				into: null,
 				help: help.help,
+				all: null,
 				at: {start: first.start, end: help.end},
 			};
 		const flags: Given[] = [];
 		const told: Given[] = [];
 		let out: Named | null = null;
 		let into: Named | null = null;
+		let all: At | null = null;
 		let end = first.end;
 		for (let t = peek(); t !== undefined; t = peek()) {
 			if (t.kind === "op") {
@@ -205,7 +216,10 @@ export function parse(line: string): Parsed {
 				if (rest === "") return stopAt(t.end, `${name} needs a value after =`);
 				return {kind: "text", text: rest, at: {start: t.end - rest.length, end: t.end}};
 			};
-			if (text.startsWith("--")) {
+			if (text === ALL_WORD) {
+				if (all !== null) stopAt(t.start, `${ALL_WORD} is given twice`);
+				all = at;
+			} else if (text.startsWith("--")) {
 				const eq = text.indexOf("=");
 				const name = eq === -1 ? text.slice(2) : text.slice(2, eq);
 				if (name === "") stopAt(t.start, "a flag needs a name after --");
@@ -235,7 +249,7 @@ export function parse(line: string): Parsed {
 				);
 			end = tokens[i - 1]?.end ?? end;
 		}
-		return {program, flags, told, out, into, help: null, at: {start: first.start, end}};
+		return {program, flags, told, out, into, help: null, all, at: {start: first.start, end}};
 	};
 
 	/**

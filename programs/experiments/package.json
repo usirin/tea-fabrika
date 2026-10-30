@@ -1,0 +1,23 @@
+{
+	"name": "@tea-fabrika/experiments",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program: every experiment on the ledger, one row each with its number, title, run count and latest run's headline metric, and the list as markdown.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

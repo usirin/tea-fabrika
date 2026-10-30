@@ -248,6 +248,12 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     program with a window. It counts presses of +1 until done.
   - [`programs/tracker`](./programs/tracker/README.md), `@tea-fabrika/tracker`: tickets on the
     ledger, one stream of facts each, and a window to work them.
+  - [`programs/experiments`](./programs/experiments/README.md),
+    [`programs/experiment`](./programs/experiment/README.md) and
+    [`programs/compare`](./programs/compare/README.md): experiments on the ledger, the list, one
+    page, and two runs side by side (experiment 170).
+  - [`programs/markdown`](./programs/markdown/README.md), `@tea-fabrika/markdown`: draws any
+    markdown it is told, in a window, as `glow` or `less` does.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.

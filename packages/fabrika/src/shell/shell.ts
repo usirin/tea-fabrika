@@ -10,6 +10,7 @@ import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
 import {helpOf, partsHelp} from "./help.ts";
 import {Programs} from "./programs.ts";
+import {Table} from "./table.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a view
 // on its host's job table. Like bash is a program that runs programs, and psql
@@ -21,6 +22,7 @@ import {Programs} from "./programs.ts";
 //   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), storage: memoryStorage()}).pipe(Effect.provideService(HostJobs, jobs));
 //   yield* tell(started.run, "line", "seq --to 3 | double");   // printed 2, 4, 6; then ready {status: 0}
 //   yield* tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
+//   yield* tell(started.run, "line", "experiments");           // table {title: "Experiments", total: 171, rows: [20 rows]}
 //   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
@@ -53,9 +55,10 @@ export type Ready = typeof Ready.Type;
 export const TABLE_REFUSED =
 	"tsh: the job table was saved by older code, can't open it. Jobs started now are not kept.";
 
-/** What tsh says, in the order it says it: a line, or that a line is done. */
+/** What tsh says, in the order it says it: a line, a table, or that a line is done. */
 type Spoken =
 	| {readonly kind: "printed"; readonly printed: Printed}
+	| {readonly kind: "table"; readonly table: Table}
 	| {readonly kind: "ready"; readonly ready: Ready};
 
 /** A refusal as a shell shows it: why, the guess, and a caret under where. */
@@ -90,6 +93,10 @@ export const tsh = defineProgram({
 	},
 	outputs: {
 		printed: output(Printed, "A line to show, on out or err."),
+		table: output(
+			Table,
+			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts).",
+		),
 		ready: output(
 			Ready,
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
@@ -127,12 +134,19 @@ export const tsh = defineProgram({
 			const spoken = yield* Queue.unbounded<Spoken, Cause.Done>();
 			const speaker = yield* Stream.fromQueue(spoken).pipe(
 				Stream.runForEach((s) =>
-					s.kind === "printed" ? send("printed", s.printed) : send("ready", s.ready),
+					s.kind === "printed"
+						? send("printed", s.printed)
+						: s.kind === "table"
+							? send("table", s.table)
+							: send("ready", s.ready),
 				),
 				Effect.forkScoped,
 			);
 			const print = (to: "out" | "err", text: string) => {
 				Queue.offerUnsafe(spoken, {kind: "printed", printed: {to, text}});
+			};
+			const printTable = (table: Table) => {
+				Queue.offerUnsafe(spoken, {kind: "table", table});
 			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();
@@ -142,6 +156,7 @@ export const tsh = defineProgram({
 				storage,
 				table,
 				print,
+				printTable,
 				show: flags.show,
 				signals,
 				live: new Map<string, AnyRunning>(),

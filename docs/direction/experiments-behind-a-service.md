@@ -12,7 +12,7 @@ Weights & Biases) can be a second one later, the way GitHub sits behind
 export class Experiments extends Context.Service<Experiments, {
 	readonly list: () => Effect.Effect<readonly Experiment[]>;
 	readonly open: (n: ExperimentId) => Effect.Effect<ExperimentPage>;   // the write-up, as data, and its runs
-	readonly start: (n: ExperimentId, run: RunPlan) => Effect.Effect<RunId>;
+	readonly start: (n: ExperimentId, run: RunPlan) => Effect.Effect<RunId>;  // "170.49af0a19b683", made from run.key
 	readonly log: (run: RunId, what: RunLog) => Effect.Effect<void>;     // a metric, a case's result, an artifact
 	readonly end: (run: RunId, how: RunEnd) => Effect.Effect<void>;
 	readonly runs: (n: ExperimentId) => Effect.Effect<readonly RunRecord[]>; // what compare reads
@@ -21,7 +21,8 @@ export class Experiments extends Context.Service<Experiments, {
 
 // One run's record: what field/runs.jsonl holds by hand today, as one shape.
 const RunRecord = Schema.Struct({
-	run: RunId, experiment: ExperimentId, at: Schema.Number,
+	run: RunId, experiment: ExperimentId, at: Schema.Number,  // facts point at run, never at a label
+	label: RunLabel,                                        // "170-3": its place among the runs, for people
 	params: Schema.Record(Schema.String, Schema.Unknown),   // model, effort, prompt version, case set
 	metrics: Schema.Record(Schema.String, Schema.Number),   // agreement, false alarms, ms
 	usd: Schema.Number, tokens: Tokens,                     // one name each, never six

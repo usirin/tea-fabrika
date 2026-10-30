@@ -2,12 +2,14 @@ import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effe
 import type {JobTable} from "../host/host-jobs.ts";
 import type {Job, JobsMsg, StageRecord} from "../host/jobs.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
+import type {TableView} from "../program/person.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
 import {StateRefused, type Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
+import {type Table, tableOf} from "./table.ts";
 import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 
 // What tsh does with a checked line: start its programs, wire them, tell them
@@ -34,6 +36,8 @@ export interface Shell {
 	/** The host's job table: tsh reads it and sends it Msgs, and never keeps a copy. */
 	readonly table: JobTable;
 	readonly print: (to: "out" | "err", text: string) => void;
+	/** A table for a person, on out: its terminal lays it out (./table.ts). */
+	readonly printTable: (table: Table) => void;
 	/** How a value a program sends is printed: short for a person, or its JSON whole. */
 	readonly show: Show;
 	/** Ctrl-C, as it comes. Heard by the foreground wait only. */
@@ -169,25 +173,75 @@ const valuesOf = (shell: Shell, stage: Stage) =>
 		return {ok: true as const, flags, told};
 	});
 
-/** Who prints a stage's outputs: every output but the one a pipe or a `$( )` takes. */
+/** Who prints a stage's outputs, and the tables it holds until the stage's run ends. */
+interface Printers {
+	readonly listeners: Listeners<any>;
+	/**
+	 * Print each table its values filled, once the run has ended. `ok`: it ended well, so a table
+	 * with no rows is printed too, and says 0; a run that failed before its first row prints none.
+	 */
+	readonly flush: (ok: boolean) => void;
+}
+
+/** Where a stage prints: its job, and the command as typed, for a table's hint. */
+interface PrintAt {
+	readonly n: number;
+	readonly background: boolean;
+	readonly stages: number;
+	/** `--all`: a table shows every row. */
+	readonly all: boolean;
+	readonly typed: string;
+}
+
+/**
+ * Who prints a stage's outputs: every output but the one a pipe or a `$( )` takes, each as its
+ * declaration says a person reads it (../program/person.ts):
+ *
+ *   no person form    tsh's short form, after the output's name when the program has several
+ *   a line            the program's own line, and nothing before it but a background job's [n]
+ *   a table           its rows held, and printed as one table when the run ends
+ *   "none"            nothing: it is for a pipe or a window
+ *
+ * A line or a table is the program's answer in a person's form: when a pipe or a `$( )` takes
+ * another output of the run, the answer went there, and neither is printed. On `tsh --json` every
+ * output is printed whole, as before, whatever its person form.
+ */
 function printers(
 	shell: Shell,
 	entry: Entry,
-	at: {readonly n: number; readonly background: boolean; readonly stages: number},
+	at: PrintAt,
 	skip: string | null,
 	taken: ((value: unknown) => void) | null,
-): Listeners<any> {
-	const outputs = Object.keys(entry.program.outputs);
+): Printers {
+	const {outputs} = entry.program;
+	const names = Object.keys(outputs);
+	const job = at.background ? `[${at.n}] ` : "";
 	const prefix = (output: string) =>
-		`${at.background ? `[${at.n}] ` : ""}${at.stages > 1 ? `${entry.program.name} ` : ""}${outputs.length > 1 ? `${output} ` : ""}`;
-	return Object.fromEntries(
-		outputs.map((output) => [
-			output,
-			output === skip
-				? (value: unknown) => taken?.(value)
-				: (value: unknown) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`),
-		]),
-	);
+		`${job}${at.stages > 1 ? `${entry.program.name} ` : ""}${names.length > 1 ? `${output} ` : ""}`;
+	const tables: {readonly view: TableView<unknown>; rows: unknown[]}[] = [];
+	const listenerOf = (output: string): ((value: unknown) => void) => {
+		if (output === skip) return (value) => taken?.(value);
+		const person = outputs[output]?.person;
+		if (shell.show === "json" || person === undefined)
+			return (value) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`);
+		if (person === "none" || skip !== null) return () => {};
+		if ("line" in person) return (value) => shell.print("out", `${job}${person.line(value)}`);
+		const table = {view: person.table, rows: [] as unknown[]};
+		tables.push(table);
+		return (value) => table.rows.push(value);
+	};
+	return {
+		listeners: Object.fromEntries(names.map((output) => [output, listenerOf(output)])),
+		flush: (ok) => {
+			for (const table of tables) {
+				if (ok || table.rows.length > 0)
+					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}));
+				// Printed once: a second end said of the same run prints nothing more.
+				table.rows = [];
+			}
+			tables.length = 0;
+		},
+	};
 }
 
 /** One stage to start: its entry, record, values, and whether its inputs close once told. */
@@ -197,7 +251,14 @@ interface Starting {
 	readonly told: Readonly<Record<string, readonly unknown[]>>;
 	readonly fed: string | null;
 	readonly listeners: Listeners<any>;
+	readonly flush: Printers["flush"];
 }
+
+/** Print the tables of a job's stages, each once its run has ended. */
+const flushAll = (stages: readonly Starting[], ends: readonly Ended<unknown>[]) =>
+	Effect.sync(() => {
+		for (const [i, stage] of stages.entries()) stage.flush(ends[i]?.kind === "ended");
+	});
 
 /**
  * Start the stages of a job, the last first, so each pipe has its downstream
@@ -465,21 +526,23 @@ const runStages = (
 		const values: unknown[] = [];
 		const capture = mode.kind === "capture" ? mode.output : null;
 		const last = line.stages.length - 1;
-		const starting = line.stages.map(
-			(stage, i): Starting => ({
+		const starting = line.stages.map((stage, i): Starting => {
+			const printing = printers(
+				shell,
+				stage.entry,
+				{n, background, stages: line.stages.length, all: stage.all, typed: stage.text},
+				i === last ? capture : (stage.wire?.output ?? null),
+				i === last ? (value) => values.push(value) : null,
+			);
+			return {
 				entry: stage.entry,
 				record: records[i] ?? head,
 				told: read[i]?.told ?? {},
 				fed: stage.fed,
-				listeners: printers(
-					shell,
-					stage.entry,
-					{n, background, stages: line.stages.length},
-					i === last ? capture : (stage.wire?.output ?? null),
-					i === last ? (value) => values.push(value) : null,
-				),
-			}),
-		);
+				listeners: printing.listeners,
+				flush: printing.flush,
+			};
+		});
 		const [only] = starting;
 		// `call` closes every input at once: not for a program whose window tells them.
 		if (
@@ -506,6 +569,7 @@ const runStages = (
 				);
 				return {status: 2, values: []};
 			}
+			only.flush(called.ended.kind === "ended");
 			sayEnd(shell, line.text, [called.ended], [only.entry.program.name]);
 			return {status: statusOf(called.ended), values};
 		}
@@ -522,7 +586,11 @@ const runStages = (
 		for (const r of started.runs) shell.live.set(r.run.id, r);
 		const names = line.stages.map((s) => s.entry.program.name);
 		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
-			background ? sayJobEnd(shell, n, line.text, started.runs, ends) : Effect.void,
+			flushAll(starting, ends).pipe(
+				Effect.andThen(
+					background ? sayJobEnd(shell, n, line.text, started.runs, ends) : Effect.void,
+				),
+			),
 		);
 		if (background) {
 			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`);
@@ -574,18 +642,22 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 		const starting = job.stages.map((record, i): Starting => {
 			const entry = shell.list.get(record.program) as Entry;
 			const before = job.stages[i - 1];
+			// The job keeps no `--all`: started again, a table shows one screen, and its hint says how
+			// to see the rest.
+			const printing = printers(
+				shell,
+				entry,
+				{n: job.n, background, stages: job.stages.length, all: false, typed: record.program},
+				record.wire?.output ?? null,
+				null,
+			);
 			return {
 				entry,
 				record,
 				told: {},
 				fed: before?.wire?.input ?? null,
-				listeners: printers(
-					shell,
-					entry,
-					{n: job.n, background, stages: job.stages.length},
-					record.wire?.output ?? null,
-					null,
-				),
+				listeners: printing.listeners,
+				flush: printing.flush,
 			};
 		});
 		const jobScope = yield* Scope.fork(shell.scope);
@@ -601,7 +673,9 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 		// Attached in the foreground or not, the job says why it ended: one that ended on its own
 		// leaves the table, and must not leave it in silence.
 		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
-			sayJobEnd(shell, job.n, job.text, started.runs, ends),
+			flushAll(starting, ends).pipe(
+				Effect.andThen(sayJobEnd(shell, job.n, job.text, started.runs, ends)),
+			),
 		);
 		if (background) {
 			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`);

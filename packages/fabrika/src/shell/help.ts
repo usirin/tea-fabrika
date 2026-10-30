@@ -1,7 +1,7 @@
 import type {Entry} from "../program/listed.ts";
 import {type Listed, listing} from "../program/program.ts";
 import {type Flag, fit, type Input, mustBeGiven, type Output} from "../program/shape.ts";
-import type {Part} from "./check.ts";
+import {hasTable, type Part} from "./check.ts";
 import {shapeLines, typeOf} from "./decode.ts";
 import type {ProgramList} from "./programs.ts";
 
@@ -181,6 +181,12 @@ function pipes(entry: Entry, list: ProgramList): readonly string[] {
 	];
 }
 
+/** The `--all` row of a program that shows a person a table: tsh's word, as `--help` is. */
+const allRow = (entry: Entry): readonly Row[] =>
+	hasTable(entry)
+		? [{name: "--all", shape: "", text: "Every row of its table, not one screen of them."}]
+		: [];
+
 /** The help row every program has, its text naming one of the program's own parts. */
 function helpRow(entry: Entry): Row {
 	const page = listing(entry.program);
@@ -214,7 +220,7 @@ export function helpOf(entry: Entry, list?: ProgramList): readonly string[] {
 		shape: typeOf(d.schema),
 		text: told(d),
 	});
-	const flags = [...page.flags.map(row("flag")), helpRow(entry)];
+	const flags = [...page.flags.map(row("flag")), ...allRow(entry), helpRow(entry)];
 	const section = (title: string, rows: readonly Row[]) =>
 		rows.length === 0 ? [] : ["", title, ...columns(rows)];
 	const examples = list === undefined ? [] : pipes(entry, list);

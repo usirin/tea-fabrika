@@ -220,6 +220,9 @@ describe("an agent drives the app's programs through MCP", () => {
 			"trace_choose",
 			"trace_quit",
 			"trace_id",
+			// The experiments programs take no input; markdown takes a text and a quit.
+			"markdown_text",
+			"markdown_quit",
 		]);
 		// The tool is the input: its description and its fields are the tracker's own `file`.
 		expect(seen.fileTool?.description).toMatch(/^File a new ticket/);

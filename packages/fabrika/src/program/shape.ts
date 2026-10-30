@@ -1,5 +1,6 @@
 import {structuralHash} from "@demlik/tea";
 import {Cause, Effect, Exit, Schema, SchemaAST} from "effect";
+import {type Person, personOf} from "./person.ts";
 
 // A shape: what a program's input or output carries. It only says yes or no,
 // and why not. It never hands on a converted value: the value that passes is
@@ -103,7 +104,14 @@ export function capacityOf(capacity: number): number {
 	return capacity;
 }
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
-export type Output<T> = Declared<"output", T>;
+export interface Output<T> extends Declared<"output", T> {
+	/**
+	 * How tsh shows its values to a person at a terminal (./person.ts): one line each, one table,
+	 * or nothing, as Rust's `Display` is to its `Debug`. Left out, tsh prints its short form
+	 * (`shortOf`), which knows only the value's fields. A pipe, `$( )` and `tsh --json` never use it.
+	 */
+	readonly person?: Person<T>;
+}
 
 /** The payload type a declaration carries. */
 export type PayloadOf<D> = D extends {readonly shape: Shape<infer T>} ? T : never;
@@ -235,11 +243,22 @@ export const input = <T, const A extends Ack = "auto", const C extends boolean =
 	personOnly: options?.personOnly ?? false,
 });
 
-/** Declare an output: a value the program sends while it runs, to anyone who listens. */
-export const output = <T>(schema: ShapeSchema<T>, description: string): Output<T> => ({
+/**
+ * Declare an output: a value the program sends while it runs, to anyone who listens.
+ * `{person}`: how tsh shows its values to a person ({@link Output}'s `person`, ./person.ts).
+ *
+ *   output(Comparison, "Two runs.", {person: {line: Comparison.toLine}})   // 77b-5 against 77b-6: …
+ *   output(Schema.String, "The page as markdown.", {person: "none"})       // for a pipe or a window
+ */
+export const output = <T, const H extends string = never>(
+	schema: ShapeSchema<T>,
+	description: string,
+	options?: {readonly person?: Person<T, H>},
+): Output<T> => ({
 	direction: "output",
 	description: described(description),
 	shape: shapeOf(schema),
+	...(options?.person === undefined ? {} : {person: personOf(options.person)}),
 });
 
 /** What fit answers. */

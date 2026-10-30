@@ -939,6 +939,236 @@ button:focus-visible {
 }
 
 /*
+ * The markdown window (programs/markdown/src/window.tsx): a page to read, as a Linear document
+ * is. One column of the app's sans type, at a reading width, centered in the tile; quiet headings;
+ * code and tables on a raised ground. Links are the page's brightest text, underlined, never the
+ * accent: the accent means "your turn" and nothing else. Here, before the windows that style a
+ * th or a pre more closely, so their rules still win.
+ */
+/* The page is the view, so it is the one box that scrolls (`main.program > *` above). */
+.markdown {
+	display: flex;
+	flex-direction: column;
+	background: var(--ground);
+	color: var(--ink);
+	font: 400 var(--fs-prose) / 1.65 var(--font);
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+	overflow-wrap: break-word;
+}
+
+.markdown:focus {
+	outline: none;
+}
+
+/* The text grows the page, so the keys' line sits at the foot of a short one. */
+.markdown-body {
+	flex: 1 0 auto;
+	padding: 24px 28px 32px;
+}
+
+.markdown-page {
+	width: 100%;
+	max-width: 760px;
+	margin: 0 auto;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+	color: var(--text-primary);
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+	margin: 1.6em 0 0.5em;
+}
+
+.markdown h1 {
+	font-size: var(--fs-title);
+	margin: 0 0 0.4em;
+}
+
+.markdown h2 {
+	font-size: var(--fs-head);
+}
+
+.markdown h3,
+.markdown h4 {
+	font-size: var(--fs-prose);
+}
+
+.markdown strong {
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.markdown em {
+	color: var(--soft);
+}
+
+.markdown a {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--wire);
+	text-underline-offset: 3px;
+}
+
+.markdown a:hover {
+	text-decoration-color: var(--text-primary);
+}
+
+.markdown a:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 2px;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+	margin: 0 0 0.9em;
+}
+
+.markdown ul,
+.markdown ol {
+	padding-left: 1.4em;
+}
+
+.markdown li + li {
+	margin-top: 0.25em;
+}
+
+.markdown li::marker {
+	color: var(--faint);
+}
+
+.markdown hr {
+	margin: 1.6em 0;
+	border: 0;
+	border-top: 1px solid var(--border-faint);
+}
+
+.markdown code,
+.markdown pre {
+	font-family: var(--mono);
+	font-size: 0.85em;
+}
+
+.markdown :not(pre) > code {
+	padding: 1px 4px;
+	border-radius: var(--r-sm);
+	background: var(--raised);
+	color: var(--text-primary);
+}
+
+.markdown pre {
+	padding: 12px 14px;
+	border: 1px solid var(--border-faint);
+	background: var(--surface-sunken);
+	border-radius: var(--r);
+	line-height: 1.5;
+	/* This repo indents with tabs: four columns, as an editor shows them, not the browser's eight. */
+	tab-size: 4;
+	/* A long line wraps, as the page does: nothing inside the page scrolls on its own. */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.markdown blockquote {
+	padding-left: 12px;
+	border-left: 2px solid var(--line);
+	color: var(--soft);
+}
+
+.markdown blockquote > :last-child {
+	margin-bottom: 0;
+}
+
+/* Nothing inside the page scrolls on its own: a wide table wraps its cells to the column. */
+.markdown table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-body);
+}
+
+.markdown th,
+.markdown td {
+	padding: 6px 12px 6px 0;
+	border-bottom: 1px solid var(--border-faint);
+	text-align: left;
+	vertical-align: top;
+}
+
+.markdown th:last-child,
+.markdown td:last-child {
+	padding-right: 0;
+}
+
+/* The first column is the row's key, a number or a run label like 165-1: it never wraps. */
+.markdown td:first-child {
+	white-space: nowrap;
+}
+
+.markdown th {
+	color: var(--soft);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.markdown tbody tr:hover {
+	background: var(--surface-hover);
+}
+
+/* A task list's box sits where the bullet was, and the item's text lines up after it. */
+.markdown li.markdown-task {
+	list-style: none;
+	margin-left: -1.4em;
+}
+
+.markdown-box {
+	margin: 0 0.5em 0 0;
+	vertical-align: -1px;
+}
+
+.markdown-empty {
+	color: var(--faint);
+}
+
+/* The keys, as less shows its prompt: one quiet line at the foot of the tile, under the text. */
+.markdown-keys {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	flex: none;
+	background: var(--ground);
+	gap: 6px;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 5px 16px;
+	border-top: 1px solid var(--border-faint);
+	color: var(--faint);
+	font-size: var(--fs-micro);
+}
+
+.markdown-key {
+	min-width: 1.4em;
+	padding: 0 4px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: var(--raised);
+	font: inherit;
+	text-align: center;
+}
+
+.markdown-key + .markdown-key {
+	margin-left: -2px;
+}
+
+/*
  * The tracker's window (programs/tracker/src/window.tsx). Its colours are the app's tokens, at the
  * top of this file: a program has no theme of its own. Calm on purpose: one column, the app's
  * sans type, and colour only where it says something (a ticket's state, the focus).

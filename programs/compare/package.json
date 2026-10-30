@@ -1,0 +1,23 @@
+{
+	"name": "@tea-fabrika/compare",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program: two runs of one experiment, metric by metric, then the cases whose scores changed, and the same as markdown.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

@@ -79,6 +79,7 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `stages/operate/` | The operate loop and the `operate` program |
 | `stages/queue.ts`, `status.ts`, `traced.ts`, `rules.ts` | Shared by the stages: the kept work queue, status lines, trace drawings, the repo's agent rules |
 | `tickets/` | A ticket's facts and the fold (`ticket.ts`: the tracker's four, a lane's nine), what an approval covers and what takes it back (`approval.ts`), and `Tickets`, the service a lane reads and writes a ticket through, on the ledger or in memory (`tickets.ts`). The tracker imports these |
+| `experiments/` | An experiment's facts and the fold, its runs, their metrics and cases, a comparison of two runs, each drawn as markdown (`experiment.ts`); `Experiments`, the service they are read and written through, on the ledger (`experiments.ts`); the importer for the old write-ups and results files (`import.ts`). The `experiments`, `experiment` and `compare` programs import these. Experiment 170 |
 | `asks/` | The `asks` core program: what waits on the owner, kept in a ledger. `packs.ts` wires add-on packs to it. `demo.ts` is the demo ledger |
 | `hosted/` | The stages run as programs on a tea host, and the lane over them |
 | `criteria/` | A plan's criteria, each under an id it keeps, and where verdicts are kept |

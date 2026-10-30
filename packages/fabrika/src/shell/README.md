@@ -103,8 +103,56 @@ tsh$ attach %1 &
 [1] it stays in the table, detached; stop %1 drops it
 ```
 
-`Shell.Printed` and `Shell.Ready` are the schemas of tsh's two outputs, for an app that builds
-its own schemas on them.
+`Shell.Printed` and `Shell.Ready` are the schemas of two of tsh's outputs, for an app that
+builds its own schemas on them. The third, `table`, sends a `Shell.Table`: `Shell.tableLines`
+and `Shell.paint` lay it out and draw it, for an app that draws its own terminal.
+
+## What a person sees
+
+An output may say how a person reads its values, beside the value itself (`person` on
+`output`, `../program/person.ts`). A pipe, a `$( )` and `tsh --json` always get the value whole.
+
+```ts
+row: output(Experiment, "One experiment.", {person: {table: {
+	title: "Experiments", note: "newest first",
+	columns: [
+		{header: "#", cell: (row) => row.n, muted: true},
+		{header: "Title", cell: (row) => row.title},
+		{header: "Runs", cell: (row) => String(row.runs), align: "right", muted: true},
+	],
+	cut: "Title", // the one column cut with … to fit; a header above, or it does not type
+}}}),
+page: output(ExperimentPage, "One experiment.", {person: {line: ExperimentPage.toLine}}),
+markdown: output(Schema.String, "The page as markdown.", {person: "none"}),
+```
+
+| Form | What tsh prints, with nothing piped |
+|---|---|
+| `{table}` | One table once the run has ended, on tsh's `table` output: the terminal lays it out at its own width (`table.ts`). About one screen of rows, 20, then how many are left; `--all` prints every row |
+| `{line}` | The line, with no output's name before it |
+| `"none"` | Nothing: the output is for a pipe or a window |
+| left out | Its short form by its fields (`short.ts`), with the output's name when the program has several |
+
+- When a pipe or a `$( )` takes another output of the same run, a line or a table is not
+  printed: the person asked for the answer in that other form. `experiments | markdown` draws
+  the list in a window and prints no table under it.
+- The table is laid out as `gh pr list` lays one out on a terminal (cli/cli's
+  `internal/tableprinter`): a title line with the count, a header in capitals, muted secondary
+  columns, one column cut, and what to type for the rest. Not on a terminal, `runTsh` prints it
+  plain at 100 columns; on one, in the 16 colors, or none with `NO_COLOR` set. The fabrika app
+  draws it in its own colors, at the tile's width.
+
+```text
+tsh> experiments
+
+Experiments  171 · newest first
+
+  #     TITLE                                                         RUNS   UPDATED
+  171   Can the app host run the ledger as Alchemy's local runtime?      1   Oct 30
+  ...
+
+151 more.  experiments --all for every row, experiment --n 171 | markdown to read one.
+```
 
 ## Where it sits
 
@@ -136,15 +184,17 @@ The trace files are on `@kampus/fabrika/otel`.
 | `main.ts` | `runTsh(options)`: the launcher. A terminal, `-c '<lines>'`, a script file, or stdin |
 | `programs.ts` | `programList`, the `Programs` service, exit status from how a run ended |
 | `small.ts` | The small programs: `say`, `seq`, `double`, `upper`, `sleep`, `true`, `false`, `tally` |
-| `shell.ts` | `tsh` as a program: lines in, printed values out, no terminal in it |
+| `shell.ts` | `tsh` as a program: lines in, printed values and tables out, no terminal in it |
 | `grammar.ts` | The line grammar: statements, `;` `&` `&&` `\|\|`, pipes, `--flag value`, `input=value`, `$( )` |
 | `check.ts` | A parsed line checked against the program list before anything starts; `fedBy`, the inputs of a program a pipe can feed |
 | `decode.ts` | A word on a line read as a value of a program's own shape |
 | `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit` |
-| `help.ts` | What `<program> --help` prints, whole or one part, from the program's declaration || `complete.ts` | Tab completion, from the line typed so far |
+| `help.ts` | What `<program> --help` prints, whole or one part, from the program's declaration |
+| `complete.ts` | Tab completion, from the line typed so far |
 | `search.ts` | Ctrl-R history search |
 | `launch.ts` | Command line and environment reading: `--json`, `-c`, `TSH_HOME`, `TSH_TRACE` |
 | `short.ts` | A sent value as one short line |
+| `table.ts` | A table for a person: made from an output's table view, laid out at a width, drawn plain or in color |
 | `title.ts` | What a typed line is called in a trace |
 | `trace/otel.ts` | Spans out over OTLP/HTTP. On `@kampus/fabrika/otel` |
 | `trace/view.ts` | What a trace viewer is shown. On `@kampus/fabrika/otel` |
