@@ -343,10 +343,28 @@ main.program {
 	display: flex;
 	flex-direction: column;
 	box-sizing: border-box;
-	padding: 16px;
 	background: var(--surface);
-	overflow: auto;
+	overflow: clip;
 	outline: none;
+}
+
+/*
+ * One box scrolls in a tile: the frame above clips and never scrolls, not even for a focus, and
+ * its one child, the program's view, owns the scroll, as a VS Code pane does. One rule for every
+ * program, so a new view cannot forget it, and nothing inside a view scrolls on its own
+ * (scroll.test.ts). The view holds what is placed absolutely in it, so that scrolls with it too.
+ * The frame has no padding, so the view's scrollbar sits at the tile's edge; a view pads itself.
+ */
+main.program > * {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+/* What the frame says in place of a view, when it has none for the program: off the tile's edge. */
+main.program > [role="alert"] {
+	margin: 16px;
 }
 
 /* A tile's frame stays drawn over its view: the view sits one pixel in. */
@@ -492,12 +510,13 @@ kbd {
 	color: var(--faint);
 }
 
+/* Centred while it fits; in a short tile it starts at the top, so its scroll reaches all of it. */
 .counter {
-	flex: 1;
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: center;
+	align-items: safe center;
+	justify-content: safe center;
+	padding: 16px;
 	gap: 24px;
 }
 
@@ -546,6 +565,7 @@ button:focus-visible {
 	-webkit-font-smoothing: antialiased;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: `main.program > *` above is the view itself, and this is only what is inside one, so the two never style the same box. */
 .view *,
 .view *::before,
 .view *::after {
@@ -599,10 +619,6 @@ button:focus-visible {
  * sans type, and colour only where it says something (a ticket's state, the focus).
  */
 
-main.program:has(> .tracker) {
-	padding: 0;
-}
-
 .tracker {
 	flex: 1;
 	min-height: 0;
@@ -614,12 +630,11 @@ main.program:has(> .tracker) {
 	font-size: 13px;
 	line-height: 1.45;
 	-webkit-font-smoothing: antialiased;
-	overflow: auto;
 }
 
+/* The column fills the tile and grows with what it holds; the tracker scrolls, nothing in it does. */
 .tracker-column {
-	flex: 1;
-	min-height: 0;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
@@ -631,8 +646,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker-page {
-	flex: 1;
-	min-height: 0;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
@@ -751,8 +765,10 @@ main.program:has(> .tracker) {
 	font-weight: 400;
 }
 
+/* It narrows with a narrow tile rather than push the tracker sideways. */
 .tracker-find {
 	flex: 1;
+	min-width: 0;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -835,9 +851,7 @@ main.program:has(> .tracker) {
 
 /* The lists: tickets, then the open pull requests. */
 .tracker-lists {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 20px;
@@ -1047,10 +1061,9 @@ main.program:has(> .tracker) {
 	height: 14px;
 }
 
+/* At its full height, the first body (the ticket as filed) too: the page scrolls, not the timeline. */
 .tracker-timeline {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
@@ -1199,7 +1212,6 @@ main.program:has(> .tracker) {
  */
 
 main.program:has(> .view) {
-	padding: 0;
 	container: main / inline-size;
 }
 
@@ -1483,10 +1495,6 @@ main.program:has(> .view) {
 }
 
 /* 1. The ticket: a page, as Linear draws an issue. */
-
-.ticket-view {
-	overflow: auto;
-}
 
 .ticket-view .tkv {
 	display: grid;
@@ -2323,10 +2331,6 @@ main.program:has(> .view) {
 
 /* 3. The runs: an arrangement, a track per step and a clip per run. */
 
-.runs-view {
-	overflow: auto;
-}
-
 .runs-view .legend .swatch {
 	position: static;
 	display: inline-block;
@@ -2623,10 +2627,6 @@ main.program:has(> .view) {
 }
 
 /* 4. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
-
-.trace-view {
-	overflow: auto;
-}
 
 .trace-view .legend .swatch {
 	display: inline-block;
