@@ -308,8 +308,8 @@ const rowsIn = (grid: Element | null): HTMLElement[] =>
 
 export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 	const chosen = view.chosen?.key ?? null;
-	const toggle = (row: string) => send({type: "do", value: {kind: "toggle", row}});
-	const choose = (row: string | null) => send({type: "do", value: {kind: "choose", row}});
+	const toggle = (row: string) => send({type: "toggle", value: {row}});
+	const choose = (row: string | null) => send({type: "choose", value: {row}});
 	/** A click, or Enter or Space: a grouped row opens or closes, and shows its detail. */
 	const press = (row: Row) => {
 		if (row.opens) {

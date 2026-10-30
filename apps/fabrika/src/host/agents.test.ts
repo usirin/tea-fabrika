@@ -212,10 +212,13 @@ describe("an agent drives the app's programs through MCP", () => {
 			"ticket_quit",
 			// A ticket to show: what a pipe from the tracker sends, an agent can send too.
 			"ticket_ticket",
-			"map_in",
-			"runs_in",
+			"map_quit",
+			"runs_choose",
+			"runs_quit",
 			"runs_ticket",
-			"trace_do",
+			"trace_toggle",
+			"trace_choose",
+			"trace_quit",
 			"trace_id",
 		]);
 		// The tool is the input: its description and its fields are the tracker's own `file`.

@@ -336,7 +336,7 @@ Written once here, and named by site in the rows.
 |---|---|---|---|---|
 | `ticket --ticket 7` / `map --ticket 7` / `trace --ticket 7` | the ticket, by number | `gh issue view 7` (positional) | differs | a positional argument, `ticket 7`. 60%: needs tsh to take positional args |
 | ticket input `do` / `Do` (`comment`, `answer`, `close`, `reopen`, `quit`) / `writeOf` | what the ticket view does | as the tracker's `Do` | two-words | Done 2026-10-30 ([PR 164](https://github.com/usirin/tea-fabrika/pull/164)): inputs `comment`, `answer`, `close`, `reopen`, `quit`, by the tracker's names and structs; `writeOf` stays. |
-| map, trace input `in` (`kind: "quit"`) | quit | none | two-words | the others say `do`. `do`. 65% |
+| map input `in` (`kind: "quit"`); trace input `do` (`toggle`, `choose`, `quit`); runs input `in` (`choose`, `quit`) | what the window sends | as the tracker's `Do` | two-words | ~~the others say `do`. `do`. 65%~~ Wrong: the owner rejects `do` (2026-10-28). Done 2026-10-30 ([PR 205](https://github.com/usirin/tea-fabrika/pull/205)): one input per command, by its verb. map: `quit`. trace: `toggle {row}`, `choose {row}`, `quit`. runs: `choose {run}`, `quit`. |
 | ticket `Plan` (`version`, `tasks`) | the newest plan's version and tasks | none | collides | `Plan` is the pipeline's plan. `PlanLine` or `LatestPlan`. 75% |
 | ticket `Pr` (`url`, `state`, `checks`) | the newest PR fact | pull request | ok | |
 | ticket `Page` (`opened`, `body`, `filed`, `steps`, `plan`, `pr`, `usd`) / `pageOf` | the ticket's page | issue page | two-ideas | see the tracker's `Page`. `TicketPage` and fold `Opened` into it. 60% |

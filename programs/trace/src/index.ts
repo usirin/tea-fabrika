@@ -18,9 +18,9 @@ import {Shown, shownOf} from "./view.ts";
 // for the steps, Jaeger's span detail for the spans.
 //
 //   tsh> trace --id 6c0f…e3a1           its window takes over the tile
-//   {kind: "toggle", row: "job"}         on `do`: the job's row closes; again, it opens
-//   {kind: "choose", row: "step:…"}      the step's detail shows
-//   {kind: "quit"}                       it ends
+//   toggle {row: "job"}                  the job's row closes; again, it opens
+//   choose {row: "step:…"}               the step's detail shows
+//   quit null                            it ends
 //
 //   tsh> runs --ticket 7 | trace         no flag: it says "pick a run" until an id comes on `id`
 //   // a run picked in runs' window: runs sends its trace id, and this one reads that record.
@@ -29,16 +29,13 @@ import {Shown, shownOf} from "./view.ts";
 // The record holds no ticket. A trace that belongs to a ticket is opened from that ticket's
 // facts, as `runs` does; the trace never draws another program's view.
 
-/** What the window does: open or close a row, show one row's detail, or quit. */
-export const Do = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("toggle"), row: RowKey}),
-	Schema.Struct({kind: Schema.Literal("choose"), row: Schema.NullOr(RowKey)}),
-	Schema.Struct({kind: Schema.Literal("quit")}),
-]);
-export type Do = typeof Do.Type;
+/** A row to open or close. */
+export const Toggle = Schema.Struct({row: RowKey});
+/** The row whose detail shows, or `null` for none. */
+export const Choose = Schema.Struct({row: Schema.NullOr(RowKey)});
 
-const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TraceMsg =>
-	d.kind === "toggle" ? {type: "toggle", row: d.row} : {type: "choose", row: d.row};
+/** The window's own inputs: closing them all ends the program, as a quit does. */
+const WINDOW = ["toggle", "choose", "quit"] as const;
 
 /** The record's one read, through `Traces`. */
 const readCell = (cmd: ReturnType<typeof read>) =>
@@ -70,7 +67,9 @@ export const trace = defineProgram({
 		),
 	},
 	inputs: {
-		do: input(Do, "What the window does: open or close a row, show a row's detail, or quit."),
+		toggle: input(Toggle, "Open or close a row that groups others."),
+		choose: input(Choose, "Show one row's detail, or none with `null`."),
+		quit: input(Schema.Null, "Stop."),
 		id: input(TraceId, "A job's trace id: its record replaces the one shown, as `runs` sends."),
 	},
 	outputs: {},
@@ -82,14 +81,17 @@ export const trace = defineProgram({
 			const look = (id: string) => runtime.dispatch({type: "look", id}).pipe(Effect.orDie);
 			if (flags.id !== undefined) yield* look(flags.id);
 			yield* watch("trace", "trace", runtime);
-			// Each id told, in order with the window's writes: a pipe's end does not end the window. A
-			// quit, or `do` closed, does.
+			const step = (msg: TraceMsg) => runtime.dispatch(msg).pipe(Effect.orDie);
+			// Each id told, in order with the window's inputs: a pipe's end does not end the window. A
+			// quit, or the window's inputs closed, does.
 			yield* serve(
 				{
 					id: look,
-					do: (d) => (d.kind === "quit" ? end : runtime.dispatch(msgOf(d)).pipe(Effect.orDie)),
+					toggle: ({row}) => step({type: "toggle", row}),
+					choose: ({row}) => step({type: "choose", row}),
+					quit: () => end,
 				},
-				{until: ["do"]},
+				{until: WINDOW},
 			);
 		}).pipe(Effect.scoped),
 });

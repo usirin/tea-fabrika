@@ -1,7 +1,15 @@
-import {type JobTrace, memoryStorage, offer, readInput, start, type Word} from "@kampus/fabrika";
+import {
+	type JobTrace,
+	memoryStorage,
+	offer,
+	type PayloadOf,
+	readInput,
+	start,
+	type Word,
+} from "@kampus/fabrika";
 import {Effect, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Do, trace} from "./index.ts";
+import {trace} from "./index.ts";
 import {memoryTraces} from "./memory.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {nodesOf, treeOf} from "./tree.ts";
@@ -10,6 +18,8 @@ import {type Shown, shownOf} from "./view.ts";
 // The trace program with no window, on the `seq --to 3 | tally` record held in memory. Told what
 // its window sends, it opens the rows named, down to one step, and shows that step's Msg, the
 // state before and after, and its Cmds: the done-when of the trace tile (#74).
+
+type Inputs = (typeof trace)["inputs"];
 
 /** The key of the row named `name` in a record's tree. */
 const keyOf = (record: JobTrace, name: string): string => {
@@ -23,7 +33,10 @@ const session = (records: readonly JobTrace[], id: string | undefined) =>
 		const started = yield* start(trace, {id}, {}, {id: "trace:test", storage: memoryStorage()});
 		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
 		const {run} = started;
-		const say = (d: Do): Effect.Effect<Word> => offer(run, "do", d);
+		const say = <K extends keyof Inputs & string>(
+			input: K,
+			value: PayloadOf<Inputs[K]>,
+		): Effect.Effect<Word> => offer(run, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>
 			run.machines.trace.changes.pipe(
 				Stream.filter((s) => s !== null),
@@ -44,11 +57,11 @@ describe("the trace program", () => {
 			Effect.gen(function* () {
 				const {run, say, until} = yield* session([TALLY_TRACE], TALLY_ID);
 				const first = yield* until((s) => s.read === "read");
-				yield* say({kind: "toggle", row: tally});
-				yield* say({kind: "toggle", row: count});
-				yield* say({kind: "choose", row: add2});
+				yield* say("toggle", {row: tally});
+				yield* say("toggle", {row: count});
+				yield* say("choose", {row: add2});
 				const opened = yield* until((s) => s.chosen !== null);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				return {first, opened, ended: (yield* run.ended).kind};
 			}).pipe(Effect.scoped),
 		);
@@ -94,7 +107,7 @@ describe("the trace program", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session([TALLY_TRACE], TALLY_ID);
 				yield* until((s) => s.read === "read");
-				yield* say({kind: "choose", row: add1});
+				yield* say("choose", {row: add1});
 				return (yield* until((s) => s.chosen !== null)).chosen;
 			}).pipe(Effect.scoped),
 		);
@@ -110,9 +123,9 @@ describe("the trace program", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session([TALLY_TRACE], TALLY_ID);
 				yield* until((s) => s.read === "read");
-				yield* say({kind: "toggle", row: "span:ffffffffffffffff"});
-				yield* say({kind: "choose", row: "span:ffffffffffffffff"});
-				yield* say({kind: "toggle", row: "job"});
+				yield* say("toggle", {row: "span:ffffffffffffffff"});
+				yield* say("choose", {row: "span:ffffffffffffffff"});
+				yield* say("toggle", {row: "job"});
 				return yield* until((s) => s.rows.length === 1);
 			}).pipe(Effect.scoped),
 		);
@@ -128,7 +141,7 @@ describe("the trace program", () => {
 				const waiting = yield* until(() => true);
 				yield* offer(run, "id", TALLY_ID);
 				const first = yield* until((s) => s.read === "read");
-				yield* say({kind: "toggle", row: keyOf(TALLY_TRACE, "tally")});
+				yield* say("toggle", {row: keyOf(TALLY_TRACE, "tally")});
 				yield* until((s) => s.rows.length === 4);
 				yield* offer(run, "id", other);
 				const next = yield* until((s) => s.read === "read" && s.id === other);
@@ -174,8 +187,13 @@ describe("the trace program", () => {
 	});
 
 	it("reads what its window sends, and refuses a row it does not know the shape of", () => {
-		expect(readInput(trace, {type: "do", value: {kind: "toggle", row: "job"}}).kind).toBe("read");
-		expect(readInput(trace, {type: "do", value: {kind: "open", row: "job"}}).kind).toBe("refused");
+		expect(readInput(trace, {type: "toggle", value: {row: "job"}}).kind).toBe("read");
+		expect(readInput(trace, {type: "choose", value: {row: null}}).kind).toBe("read");
+		expect(readInput(trace, {type: "quit", value: null}).kind).toBe("read");
+		expect(readInput(trace, {type: "toggle", value: {row: 7}}).kind).toBe("refused");
+		expect(readInput(trace, {type: "do", value: {kind: "toggle", row: "job"}}).kind).toBe(
+			"refused",
+		);
 		expect(readInput(trace, {type: "id", value: TALLY_ID}).kind).toBe("read");
 		expect(readInput(trace, {type: "id", value: "not-a-trace"}).kind).toBe("refused");
 	});
