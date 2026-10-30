@@ -36,7 +36,9 @@
 //   STEP=exam     FRESH=<labelled set file>: one brief on one model, once, against 163-exam-bar.json
 //                 (EXAM_BAR); answers in results/163-exam.json. Refuses a second exam of a brief
 //                 hash and model on any set; a stopped exam goes on, on its own set only
-//   STEP=examtest the exam step on a tiny made-up set, through the real command with FAKE=1: $0
+//   STEP=examtest the exam step on a made-up set of the real set's shape, one case of each of its
+//                 8 kinds, through the real command with FAKE=1: $0
+//   STEP=decide FRESH=<set> also prints every finished exam on that set against 163-exam-bar.json
 //
 // Node at the edge, said out loud: `node:fs` for the data and cache files, as 162 does;
 // `node:child_process` for `git` on the clone and to run this script in the exam test.
@@ -55,13 +57,22 @@ import {join} from "node:path";
 import {Effect, Schema} from "effect";
 import {
 	type Answer,
+	type Asked,
 	Bar,
 	type Brief,
 	briefOf,
 	type Case,
+	EXAM_KINDS,
+	EXAM_RIGHT,
+	ExamBar,
 	ExamBook,
+	type ExamCase,
+	type ExamKind,
+	ExamSet,
+	type ExamSummary,
 	exam,
 	examGate,
+	examSummarize,
 	fakeSorter,
 	type Half,
 	KINDS,
@@ -119,7 +130,7 @@ const LEFT = [
 	"AGENTS.md",
 	"CLAUDE.md",
 ];
-const EXAM_FILE = join(here, "results", "163-exam.json");
+const EXAM_FILE = process.env.EXAM_FILE ?? join(here, "results", "163-exam.json");
 const EXAM_BAR = process.env.EXAM_BAR ?? join(here, "163-exam-bar.json");
 
 const readJson = <T>(file: string, schema: Schema.Codec<T, unknown>): T =>
@@ -430,7 +441,7 @@ const worldOf = (cache: typeof Cache.Type, at: Record<string, string>): World =>
 function estimateOf(
 	b: Brief,
 	world: World,
-	cases: readonly Case[],
+	cases: readonly Asked[],
 	runs: number,
 	calls: number,
 ): number {
@@ -539,7 +550,7 @@ if (STEP === "tune" || STEP === "lock") {
 // ---------------------------------------------------------------- the exam (part 3)
 
 /** A fake Sorter's answers for a set: right on every case but the first keep, which it closes. */
-const fakeAnswersOf = (cases: readonly Case[]): Record<string, Answer["triage"]> => {
+const fakeAnswersOf = (cases: readonly Asked[]): Record<string, Answer["triage"]> => {
 	const wrong = cases.find((c) => c.right === "keep")?.id;
 	return Object.fromEntries(
 		cases.map((c) => [
@@ -557,14 +568,11 @@ if (STEP === "exam") {
 		console.error("FRESH=<path to the fresh labelled set> is needed");
 		process.exit(1);
 	}
-	const examSet = readJson(fresh, LabelledSet);
-	const examBar = readJson(EXAM_BAR, Bar);
+	const examSet = readJson(fresh, ExamSet);
+	const examBar = readJson(EXAM_BAR, ExamBar);
 	const model = Schema.decodeUnknownSync(Model)(process.env.MODEL);
 	const fake = process.env.FAKE === "1";
-	const examFile = process.env.EXAM_FILE ?? EXAM_FILE;
-	const held: ExamBook = existsSync(examFile)
-		? readJson(examFile, ExamBook)
-		: {entries: [], records: []};
+	const held = book;
 	const runs = Number(process.env.RUNS ?? 2);
 	const setId = setHashOf(examSet);
 	const gate = examGate(held, examBar, brief, model, setId);
@@ -572,6 +580,9 @@ if (STEP === "exam") {
 		`exam: ${brief.id} (${brief.hash}) on ${model}, set ${setId} (${examSet.cases.length} cases x ${runs}): ${gate.go === "refuse" ? `refused: ${gate.why}` : gate.go}`,
 	);
 	if (gate.go === "refuse") process.exit(1);
+	console.log(
+		`  kinds: ${EXAM_KINDS.map((k) => `${k} ${examSet.cases.filter((c) => c.kind === k).length}`).join(", ")}`,
+	);
 	let world: World | null = null;
 	if (!fake) {
 		// The fresh cases' text, the issue list and their commits, read-only, into the cache.
@@ -609,8 +620,8 @@ if (STEP === "exam") {
 			save: (b) =>
 				Effect.sync(() => {
 					const kept = {...b, records: b.records.map(plain)};
-					if (!fake) book = kept;
-					writeJson(examFile, Schema.encodeSync(ExamBook)(kept));
+					book = kept;
+					writeJson(EXAM_FILE, Schema.encodeSync(ExamBook)(kept));
 				}),
 			stop: () =>
 				!fake &&
@@ -626,12 +637,7 @@ if (STEP === "exam") {
 		console.log("  stopped before every case had its runs: run again to go on, on the same set");
 		process.exit(2);
 	}
-	console.log(`  ${got.verdict.every((x) => x.pass) ? "PASS" : "FAIL"}`);
-	for (const x of got.verdict)
-		console.log(
-			`  ${x.pass ? "pass" : "FAIL"} ${x.metric} ${(100 * x.share).toFixed(0)}% (${x.is} ${(100 * x.value).toFixed(0)}%)`,
-		);
-	if (got.summary !== null) printSummary(got.summary);
+	if (got.summary !== null) printExam(examBar, got.summary);
 	process.exit(0);
 }
 
@@ -682,14 +688,33 @@ if (STEP === "examtest") {
 	// The exam step on a tiny made-up set, through the real command with FAKE=1, then the gate's
 	// cases in process. No model, no network, $0. Nothing outside a temp folder is written.
 	const dir = mkdtempSync(join(tmpdir(), "exp-163-examtest-"));
-	const pick = (k: Kind) => set.cases.find((c) => c.kind === k) as Case;
-	const tiny: LabelledSet = {
-		note: "a made-up exam set for the test",
-		left: [],
-		cases: [pick("hard-no"), pick("duplicate"), pick("built-random"), pick("security")],
+	// One made-up case of each kind, in the real set's shape. Built-random comes first, so it is the
+	// keep the fake closes.
+	const fakeCase = (kind: ExamKind, i: number): ExamCase => ({
+		id: `fake/exam#${i + 1}`,
+		repo: "fake/exam",
+		n: i + 1,
+		kind,
+		right: EXAM_RIGHT[kind],
+		closed: EXAM_RIGHT[kind] === "close" ? "2026-10-01" : null,
+		fact: "made up",
+		filed: "2026-09-01",
+		of: kind === "duplicate" ? 1 : null,
+		reopened: false,
+		safety: kind.startsWith("safety"),
+		security: kind.startsWith("security"),
+		sha: "0".repeat(40),
+		source: "examtest",
+		who: "test",
+		why: "made up",
+	});
+	const tiny: ExamSet = {note: "a made-up exam set for the test", cases: EXAM_KINDS.map(fakeCase)};
+	const other: ExamSet = {...tiny, cases: tiny.cases.slice(0, 4)};
+	const approved: ExamBar = {
+		...readJson(EXAM_BAR, ExamBar),
+		status: "approved",
+		approved: {by: "test", on: "2026-10-30"},
 	};
-	const other: LabelledSet = {...tiny, cases: [pick("easy-no"), pick("built")]};
-	const approved: Bar = {...bar, status: "approved", approved: {by: "test", on: "2026-10-30"}};
 	const files = {
 		set: join(dir, "set.json"),
 		other: join(dir, "other.json"),
@@ -697,8 +722,8 @@ if (STEP === "examtest") {
 		proposed: join(dir, "proposed.json"),
 		book: join(dir, "exam.json"),
 	};
-	writeJson(files.set, Schema.encodeSync(LabelledSet)(tiny));
-	writeJson(files.other, Schema.encodeSync(LabelledSet)(other));
+	writeJson(files.set, Schema.encodeSync(ExamSet)(tiny));
+	writeJson(files.other, Schema.encodeSync(ExamSet)(other));
 	writeJson(files.bar, approved);
 	writeJson(files.proposed, {...approved, status: "proposed", approved: null});
 	const cli = (env: Record<string, string>) => {
@@ -720,7 +745,20 @@ if (STEP === "examtest") {
 	const elsewhere = cli({...v, MODEL: "sol", FRESH: files.other});
 	const opus = cli({...v, MODEL: "opus"});
 	const unapproved = cli({...v, MODEL: "opus", EXAM_BAR: files.proposed, BRIEF: "triage-v1"});
+	const decided = cli({...v, STEP: "decide"});
 	const kept = readJson(files.book, ExamBook);
+	// A security ticket marked close is not a case the exam takes.
+	const wrongRight = (() => {
+		try {
+			Schema.decodeUnknownSync(ExamSet)({
+				...tiny,
+				cases: [{...fakeCase("security", 0), right: "close"}],
+			});
+			return false;
+		} catch {
+			return true;
+		}
+	})();
 	// In process: an exam stopped part way goes on on its own set only.
 	const stopAfter = (n: number) => {
 		let seen = 0;
@@ -734,7 +772,7 @@ if (STEP === "examtest") {
 		concurrency: 1,
 		now: () => "2026-10-30T00:00:00Z",
 	};
-	const run = (b: ExamBook, s: LabelledSet, stop: () => boolean) => {
+	const run = (b: ExamBook, s: ExamSet, stop: () => boolean) => {
 		let last = b;
 		return Effect.runPromise(
 			exam({
@@ -761,6 +799,11 @@ if (STEP === "examtest") {
 			stop: () => false,
 			save: () => Effect.void,
 		}).pipe(Effect.provide(fakeSorter({}))),
+	);
+	const s = rest.r.summary;
+	const verdict = rest.r.verdict ?? [];
+	const securityClosedRecords = rest.book.records.filter(
+		(r) => tiny.cases.find((c) => c.id === r.case)?.kind === "security-closed",
 	);
 	const expect: [string, boolean][] = [
 		["the first exam runs and scores", first.code === 0 && /FAIL|PASS/.test(first.out)],
@@ -797,6 +840,49 @@ if (STEP === "examtest") {
 		],
 		["a call with no answer leaves the exam open", failing.verdict === null],
 		["two sets have two ids", setHashOf(tiny) !== setHashOf(other)],
+		// The owner's lines on a set of the real shape: one case of each of the 8 kinds.
+		["a case whose answer is not its kind's is refused", wrongRight],
+		[
+			"bad closes count keep tickets closed at least once: 1 of 4",
+			s?.badClose.k === 1 && s.badClose.n === 4,
+		],
+		[
+			"the info line counts built-random alone: 1 of 1",
+			s?.badCloseBuiltRandom.k === 1 && s.badCloseBuiltRandom.n === 1,
+		],
+		[
+			"security closed counts kind security only: 0 of 1",
+			s?.securityClosed.k === 0 && s.securityClosed.n === 1,
+		],
+		[
+			"closing a security-closed ticket is right",
+			securityClosedRecords.length === 2 &&
+				securityClosedRecords.every((r) => r.said === "close" && r.right === true),
+		],
+		[
+			"hard no's closed: no, safety-closed, security-closed, 6 of 6 answers, the duplicate left out",
+			s?.hardNoClosed.k === 6 && s.hardNoClosed.n === 6,
+		],
+		["agreement: 8 of 8", s?.agreement.k === 8 && s.agreement.n === 8],
+		[
+			"the verdict: bad closes FAIL, the other three lines pass",
+			verdict.length === 4 && verdict.every((x) => x.pass === (x.metric !== "badClose")),
+		],
+		[
+			"the exam prints each line and the info line, which neither passes nor fails",
+			/FAIL badClose 1\/4/.test(first.out) &&
+				/pass securityClosed 0\/1/.test(first.out) &&
+				/pass hardNoClosed 6\/6/.test(first.out) &&
+				/pass agreement 8\/8/.test(first.out) &&
+				/info badCloseBuiltRandom: 1\/1/.test(first.out) &&
+				!/(pass|FAIL) badCloseBuiltRandom/.test(first.out),
+		],
+		[
+			"decide prints both finished exams on the set, against the exam bar",
+			decided.code === 0 &&
+				(decided.out.match(/^exam: /gm) ?? []).length === 2 &&
+				/FAIL badClose 1\/4/.test(decided.out),
+		],
 	];
 	rmSync(dir, {recursive: true, force: true});
 	for (const [what, ok] of expect) console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
@@ -852,6 +938,17 @@ function printSummary(s: Summary): void {
 	console.log(line("agreement, tickets with the same verdict every run", s.agreement));
 	console.log(`  no answer: ${s.none}; $${s.usd.toFixed(2)}`);
 }
+/** The exam against its bar: each line passes or fails on its point share; an info line never does. */
+function printExam(examBar: ExamBar, s: ExamSummary): void {
+	const v = verdictOf(examBar, s);
+	console.log(`  ${v.every((x) => x.pass) ? "PASS" : "FAIL"}`);
+	for (const x of v)
+		console.log(
+			`  ${x.pass ? "pass" : "FAIL"} ${x.metric} ${s[x.metric].k}/${s[x.metric].n} ${pct(x.share)} (${x.is} ${pct(x.value)})`,
+		);
+	for (const i of examBar.info) console.log(`  info ${line(i.metric, s[i.metric]).trim()}`);
+	console.log(`  no answer: ${s.none}; $${s.usd.toFixed(2)}`);
+}
 const groups = [...new Set(records.map((r) => `${r.brief}|${r.hash}|${r.model}|${r.half}`))];
 
 if (STEP === "decide") {
@@ -871,6 +968,19 @@ if (STEP === "decide") {
 			console.log(
 				`  ${x.pass ? "pass" : "FAIL"} ${x.metric} ${pct(x.share)} (${x.is} ${pct(x.value)})`,
 			);
+	}
+	// FRESH=<set>: every finished exam on that set, against the exam's own bar.
+	if (process.env.FRESH !== undefined) {
+		const examSet = readJson(process.env.FRESH, ExamSet);
+		const examBar = readJson(EXAM_BAR, ExamBar);
+		const id = setHashOf(examSet);
+		for (const e of book.entries.filter((x) => x.set === id && x.done !== null)) {
+			console.log(`exam: ${e.brief} (${e.hash}) on ${e.model}, set ${id}:`);
+			const rs = book.records.filter(
+				(r) => r.brief === e.brief && r.hash === e.hash && r.model === e.model,
+			);
+			printExam(examBar, examSummarize(examSet.cases, rs));
+		}
 	}
 	process.exit(0);
 }

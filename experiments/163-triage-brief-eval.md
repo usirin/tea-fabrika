@@ -461,8 +461,8 @@ GPT sol, but only as a tuned score. v5 on all 119 cases, two runs: 6 of 78
 built tickets closed (8%), 0 of 10 security, 53 of 58 hard no's closed (91%),
 118 of 119 the same both runs. The old locked half is spent: v4 and v5 were
 written from misses on all 119. A fresh labelled set (another agent builds it)
-is the real test. The exam step is built and tested on a fake set, and it
-waits for the owner to approve its bar.**
+is the real test. The exam step is built and tested on a fake set, and the
+owner approved its bar on 2026-10-30.**
 
 ```ts
 // Part 3's shape: the same scorer, a code copy per case, and a one-shot exam.
@@ -541,9 +541,18 @@ least 90%. Two of the three allowed rounds were used.
 ### The exam step
 
 `STEP=exam FRESH=<path> MODEL=<opus|sol> BRIEF=triage-v5` scores one brief on
-a fresh labelled set against `163-exam-bar.json`. The same four lines as
-`163-bar.json`, status `proposed`: it refuses to run until the owner approves
-it.
+a fresh labelled set against `163-exam-bar.json`. It refuses to run on a bar
+that is not approved.
+
+The owner approved the exam bar on 2026-10-30, per model, on the point share
+over 2 runs, with four shifts from `163-bar.json`: security closed now counts
+only the 10 `security` tickets that got built (closing a `security-closed`
+ticket is right); hard no's closed now means every close that is not a
+duplicate (no, safety-closed, security-closed: at least 26 of 46 answers); bad
+closes keep 13% and 163-bar.json's count (keep tickets closed in at least one
+run, so at most 4 of 32), a harder line since 19 of the 32 keeps are safety
+tickets; and a new info line, never pass or fail, gives bad closes on the 12
+built-random tickets alone. Agreement stays at 90%, at least 57 of 63.
 
 - **One shot per brief hash and model.** The exam book
   (`results/163-exam.json`) records each start. A finished pair refuses again.
@@ -554,10 +563,13 @@ it.
   at their filing). `DRY=1` prints the opus estimate and stops.
 - **The opus cap counts all of part 3**, tuning included: `MAX_USD`, default
   $25. It stops before a call that could cross it.
-- **Tested on a fake set only:** `STEP=examtest`, 14 checks on a fake Sorter
-  and a 3-case fake set (unapproved bar refused, done refused, other set
-  refused, resume, retry, verdict). All 14 pass. The real fresh set was not
-  opened, looked for or built in this run.
+- **Tested on a fake set only:** `STEP=examtest`, 24 checks on a fake Sorter
+  and a fake set in the real set's shape, one case of each of its 8 kinds
+  (unapproved bar refused, done refused, other set refused, resume, retry, a
+  case whose answer is not its kind's refused, each bar line's count, a
+  security-closed close counted right, the duplicate kept out of hard no's,
+  the info line printed without pass or fail, `STEP=decide FRESH=<set>`). All
+  24 pass. The real fresh set was not opened, looked for or built in this run.
 
 **Estimate for about 60 cases x 2 runs:**
 
@@ -636,8 +648,8 @@ STEP=field node experiments/163-triage-brief-eval.ts      # field/runs.jsonl row
 STEP=trees node experiments/163-triage-brief-eval.ts      # part 3: each case's main commit at filing, from a phoenix clone in runs/exp-163-cache (push off)
 STEP=probe BRIEF=triage-v5 node experiments/163-triage-brief-eval.ts     # part 3: one GPT sol turn: the brief arrives, the folder stays read-only
 STEP=tune ALL=1 MODEL=sol BRIEF=triage-v5 RUNS=2 node experiments/163-triage-brief-eval.ts   # part 3: all 119 cases with the code; MODEL=opus with DRY=1 first
-STEP=examtest node experiments/163-triage-brief-eval.ts   # part 3: the exam step on a 3-case fake set, 14 checks, $0
-STEP=exam FRESH=<set.json> MODEL=sol BRIEF=triage-v5 node experiments/163-triage-brief-eval.ts   # refuses until 163-exam-bar.json is approved; once per brief hash and model; DRY=1, MAX_USD=25
+STEP=examtest node experiments/163-triage-brief-eval.ts   # part 3: the exam step on a fake set in the real set's shape, 24 checks, $0
+STEP=exam FRESH=<set.json> MODEL=sol BRIEF=triage-v5 node experiments/163-triage-brief-eval.ts   # against 163-exam-bar.json (approved 2026-10-30); once per brief hash and model; DRY=1, MAX_USD=25; STEP=decide FRESH=<set.json> prints finished exams
 STEP=field PART=3 node experiments/163-triage-brief-eval.ts   # part 3's rows only
 ```
 

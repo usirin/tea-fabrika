@@ -20,7 +20,7 @@ import {type Options, query} from "@anthropic-ai/claude-agent-sdk";
 import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
 import {agentEnv, guardHook} from "@kampus/fabrika/agents/sandbox";
 import {Effect, Layer, Option, type Scope} from "effect";
-import {type Answer, answerOf, type Brief, type Case, type Said, Sorter} from "./brief-eval.ts";
+import {type Answer, type Asked, answerOf, type Brief, type Said, Sorter} from "./brief-eval.ts";
 import {type Earlier, fenced, type Ticket} from "./sort.ts";
 import {codexTurn} from "./triage-codex.ts";
 
@@ -34,7 +34,7 @@ export interface World {
 	 * For a brief that reads code (part 3): the code at the commit on main before the case was filed,
 	 * as a plain read-only copy held for the scope. Left out: such a brief cannot run.
 	 */
-	readonly tree?: (c: Case) => Effect.Effect<Tree, string, Scope.Scope>;
+	readonly tree?: (c: Asked) => Effect.Effect<Tree, string, Scope.Scope>;
 }
 
 /** A copy of the code at one commit. */
@@ -51,10 +51,10 @@ export interface Tree {
 export function treePool(o: {
 	readonly clone: string;
 	readonly root: string;
-	readonly atOf: (c: Case) => string | undefined;
+	readonly atOf: (c: Asked) => string | undefined;
 	readonly keep: number;
 	readonly left: readonly string[];
-}): (c: Case) => Effect.Effect<Tree, string, Scope.Scope> {
+}): (c: Asked) => Effect.Effect<Tree, string, Scope.Scope> {
 	const held = new Map<string, {users: number; used: number}>();
 	const pathOf = (at: string) => join(o.root, at, "code");
 	const drop = (at: string) => {
@@ -113,7 +113,7 @@ export function treePool(o: {
 const WINDOW = 200;
 
 /** The case as the model reads it: the repo, the ticket as filed, the earlier titles. Pure. */
-export function casePrompt(world: World, c: Case): string {
+export function casePrompt(world: World, c: Asked): string {
 	const t = world.tickets.find((x) => x.n === c.n);
 	if (t === undefined) throw new Error(`${c.id} is not in the cache: run STEP=fetch`);
 	const earlier = world.all
@@ -284,7 +284,7 @@ export const liveSorter = (world: World): Layer.Layer<Sorter> =>
 				tokens: {input: 0, cached: 0, output: 0},
 				error: String(cause).replaceAll(homedir(), "~").slice(0, 400),
 			});
-			const ask = (brief: Brief, model: string, c: Case, tree: Tree | null) =>
+			const ask = (brief: Brief, model: string, c: Asked, tree: Tree | null) =>
 				Effect.tryPromise({
 					try: () =>
 						model === "opus"

@@ -9,6 +9,8 @@
 //   Sorter              the service that answers one case under one brief on one model; a fake
 //                       gives fixed answers, so a program over it costs $0
 //   score, summarize    many cases through the Sorter, then the numbers, with 95% intervals
+//   ExamSet, ExamBar    part 3's fresh set, in its own kinds, and its own bar; `exam` scores a
+//                       brief on it once per brief hash and model
 //
 // Node at the edge, said out loud: `node:crypto` for the brief's hash.
 import {createHash} from "node:crypto";
@@ -48,6 +50,8 @@ export const Case = Schema.Struct({
 	why: Schema.String,
 });
 export type Case = typeof Case.Type;
+/** What asking and scoring read of a case: the ticket, and its right answer. Both sets' cases fit. */
+export type Asked = Pick<Case, "id" | "repo" | "n" | "right">;
 
 export const LabelledSet = Schema.Struct({
 	note: Schema.String,
@@ -212,7 +216,7 @@ export interface Said {
 /** Answers one case under one brief on one model. The live one calls a model; the fake does not. */
 export class Sorter extends Context.Service<
 	Sorter,
-	{readonly sort: (brief: Brief, model: Model, c: Case) => Effect.Effect<Said>}
+	{readonly sort: (brief: Brief, model: Model, c: Asked) => Effect.Effect<Said>}
 >()("exp-163/Sorter") {}
 
 /** A Sorter that answers from a table and calls no model: for tests and for a program's dry run. */
@@ -238,7 +242,7 @@ export const fakeSorter = (
 
 /** One Sorter answer as a record. Pure but for `at`, which the caller passes. */
 export function recordOf(
-	c: Case,
+	c: Asked,
 	half: Half,
 	brief: Brief,
 	model: Model,
@@ -272,7 +276,7 @@ export function recordOf(
 export interface Job {
 	readonly brief: Brief;
 	readonly model: Model;
-	readonly cases: readonly Case[];
+	readonly cases: readonly Asked[];
 	readonly half: Half;
 	/** Answers wanted per case. */
 	readonly runs: number;
@@ -425,8 +429,19 @@ export const Bar = Schema.Struct({
 });
 export type Bar = typeof Bar.Type;
 
+/** A bar line over the counts named `M`: the tuning bar's lines, and the exam bar's. */
+interface LineOf<M extends string> {
+	readonly metric: M;
+	readonly is: "max" | "min";
+	readonly value: number;
+	readonly why: string;
+}
+
 /** Each bar line against a summary: its share and whether it passes. Pure. */
-export const verdictOf = (bar: Bar, s: Summary) =>
+export const verdictOf = <M extends string>(
+	bar: {readonly lines: readonly LineOf<M>[]},
+	s: {readonly [K in M]: Count},
+) =>
 	bar.lines.map((l) => {
 		const c = s[l.metric];
 		const share = c.n === 0 ? Number.NaN : c.k / c.n;
@@ -435,10 +450,143 @@ export const verdictOf = (bar: Bar, s: Summary) =>
 
 // ---------------------------------------------------------------- the exam (part 3)
 
-/** A labelled set's id: the first 12 hex digits of its cases' sha256. Pure. */
-export const setHashOf = (set: LabelledSet): string =>
+/**
+ * The fresh set's kinds and each one's right answer. Its own list: another agent built the fresh
+ * set, and its kinds are not the tuning set's. A case whose answer is not its kind's is refused.
+ */
+export const EXAM_KINDS = [
+	"built-random",
+	"hard-yes",
+	"safety-built",
+	"security",
+	"duplicate",
+	"no",
+	"safety-closed",
+	"security-closed",
+] as const;
+export const ExamKind = Schema.Literals(EXAM_KINDS);
+export type ExamKind = typeof ExamKind.Type;
+export const EXAM_RIGHT: {readonly [K in ExamKind]: Verdict} = {
+	"built-random": "keep",
+	"hard-yes": "keep",
+	"safety-built": "keep",
+	security: "keep",
+	duplicate: "close",
+	no: "close",
+	"safety-closed": "close",
+	"security-closed": "close",
+};
+
+/**
+ * One fresh case. The scorer reads its ticket, kind and right answer; the rest the set carries as
+ * it is, so the set's id covers every field.
+ */
+export const ExamCase = Schema.Struct({
+	id: Schema.String,
+	repo: Schema.String,
+	n: Schema.Int,
+	kind: ExamKind,
+	right: Verdict,
+	closed: Schema.Unknown,
+	fact: Schema.Unknown,
+	filed: Schema.Unknown,
+	of: Schema.Unknown,
+	reopened: Schema.Unknown,
+	safety: Schema.Unknown,
+	security: Schema.Unknown,
+	sha: Schema.Unknown,
+	source: Schema.Unknown,
+	who: Schema.Unknown,
+	why: Schema.Unknown,
+}).check(
+	Schema.makeFilter(
+		(c) =>
+			EXAM_RIGHT[c.kind] === c.right ||
+			`${c.id} is ${c.kind}, so its right answer is ${EXAM_RIGHT[c.kind]}, not ${c.right}`,
+	),
+);
+export type ExamCase = typeof ExamCase.Type;
+
+export const ExamSet = Schema.Struct({note: Schema.String, cases: Schema.Array(ExamCase)});
+export type ExamSet = typeof ExamSet.Type;
+
+/** The exam's numbers on one model, each on the point share the owner's rulings name. */
+export const ExamSummary = Schema.Struct({
+	/** Keep tickets closed at least once, on tickets: 163-bar.json's way of counting. */
+	badClose: Count,
+	/** The same on the built-random tickets alone: an info line, not pass or fail. */
+	badCloseBuiltRandom: Count,
+	/** Tickets of kind `security` (built) closed at least once. Closing a `security-closed` is right. */
+	securityClosed: Count,
+	/** Every close that is not a duplicate (no, safety-closed, security-closed): answers that closed. */
+	hardNoClosed: Count,
+	/** Tickets with two or more answers that gave the same verdict every time. */
+	agreement: Count,
+	/** Answers with no verdict. */
+	none: Schema.Int,
+	usd: Schema.Number,
+});
+export type ExamSummary = typeof ExamSummary.Type;
+export const EXAM_METRICS = [
+	"badClose",
+	"badCloseBuiltRandom",
+	"securityClosed",
+	"hardNoClosed",
+	"agreement",
+] as const;
+
+/** The exam's numbers of one brief and model over the fresh cases, from its records. Pure. */
+export function examSummarize(
+	cases: readonly ExamCase[],
+	records: readonly RunRecord[],
+): ExamSummary {
+	const answered = (c: ExamCase) => records.filter((r) => r.case === c.id && r.said !== null);
+	const ran = cases.filter((c) => answered(c).length > 0);
+	const closedOnce = (cs: readonly ExamCase[]) =>
+		countOf(cs.filter((c) => answered(c).some((r) => r.said === "close")).length, cs.length);
+	const keep = ran.filter((c) => c.right === "keep");
+	const hard = ran.filter((c) => c.right === "close" && c.kind !== "duplicate");
+	const hardAnswers = hard.flatMap(answered);
+	const twice = ran.filter((c) => answered(c).length > 1);
+	const mine = records.filter((r) => cases.some((c) => c.id === r.case));
+	return {
+		badClose: closedOnce(keep),
+		badCloseBuiltRandom: closedOnce(keep.filter((c) => c.kind === "built-random")),
+		securityClosed: closedOnce(keep.filter((c) => c.kind === "security")),
+		hardNoClosed: countOf(hardAnswers.filter((r) => r.said === "close").length, hardAnswers.length),
+		agreement: countOf(
+			twice.filter((c) => new Set(answered(c).map((r) => r.said)).size === 1).length,
+			twice.length,
+		),
+		none: mine.filter((r) => r.said === null).length,
+		usd: mine.reduce((s, r) => s + (r.usd ?? 0), 0),
+	};
+}
+
+/**
+ * The exam's bar: pass-or-fail lines, and info lines that are printed with their count and never
+ * pass or fail. Only an approved bar lets the exam run.
+ */
+export const ExamBar = Schema.Struct({
+	status: Schema.Literals(["proposed", "approved"]),
+	approved: Schema.NullOr(Schema.Struct({by: Schema.String, on: Schema.String})),
+	note: Schema.String,
+	lines: Schema.Array(
+		Schema.Struct({
+			metric: Schema.Literals(EXAM_METRICS),
+			is: Schema.Literals(["max", "min"]),
+			value: Schema.Number,
+			why: Schema.String,
+		}),
+	),
+	info: Schema.Array(Schema.Struct({metric: Schema.Literals(EXAM_METRICS), why: Schema.String})),
+});
+export type ExamBar = typeof ExamBar.Type;
+
+/** A fresh set's id: the first 12 hex digits of its cases' sha256. Pure. */
+export const setHashOf = (set: ExamSet): string =>
 	createHash("sha256")
-		.update(JSON.stringify(Schema.encodeSync(LabelledSet)(set).cases))
+		.update(JSON.stringify(Schema.encodeSync(ExamSet)(set).cases))
 		.digest("hex")
 		.slice(0, 12);
 
@@ -467,7 +615,7 @@ export type ExamBook = typeof ExamBook.Type;
  */
 export function examGate(
 	book: ExamBook,
-	bar: Bar,
+	bar: Pick<ExamBar, "status">,
 	brief: Brief,
 	model: Model,
 	set: string,
@@ -492,10 +640,10 @@ export function examGate(
 
 export interface ExamJob {
 	readonly book: ExamBook;
-	readonly bar: Bar;
+	readonly bar: ExamBar;
 	readonly brief: Brief;
 	readonly model: Model;
-	readonly set: LabelledSet;
+	readonly set: ExamSet;
 	readonly runs: number;
 	readonly concurrency: number;
 	/** Called with the whole book after each change, to save it. */
@@ -564,6 +712,6 @@ export const exam = (job: ExamJob) =>
 			),
 		};
 		yield* job.save(book);
-		const summary = summarize(job.set.cases, records);
+		const summary = examSummarize(job.set.cases, records);
 		return {refused: null, verdict: verdictOf(job.bar, summary), summary} as const;
 	});
