@@ -177,3 +177,21 @@ Write-ups are read by busy people, some of them not native English speakers.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same
   checkout.
+
+## Changing the product
+
+- **No rough first versions.** A change to the product (`apps`, `programs`,
+  `packages`) lands finished and thought through: all it shows works, with no
+  stub, dead button or "(not yet)". A piece that waits on other work stays out
+  of the window until it is real. `experiments/` is the lab and may be rough.
+- **Ask how Linear would do it.** Before building any screen (a program's
+  window, the app's frame, a mockup), ask how Linear would build it as their
+  new product. The PR says, per screen, what Linear would do, and where we
+  differ and why. Tuval and tmux stay the defaults for tiling; where they clash
+  with Linear's answer, name the clash for the owner to pick.
+- **Show it running.** A PR that adds or changes a program's window carries
+  screenshots from the real built app, saved in that program's `docs/` folder
+  and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
+  app: Playwright on Electron, with `FABRIKA_HOME` set to a test home of its
+  own in a temp folder, never your real one. Look at each shot, and say in the
+  PR what looks broken, empty or wrong.
