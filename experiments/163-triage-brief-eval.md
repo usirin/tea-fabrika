@@ -212,6 +212,8 @@ each, once per model. `STEP=tune SMOKE=1`.
 2. **Approve the bar, or change it, before part 2.** The four lines and their
    counts are above. My lean is to keep them as written. Confidence 70%; the
    doubt is the hard-yes tickets inside the bad-close count.
+   **Approved as written by the owner on 2026-10-30** (`163-bar.json`). The
+   locked half may now run once per brief hash.
 3. **Do not read anything into the 5 cases.** They prove the harness, not the
    brief. One GPT sol miss on 2 built tickets says nothing about its rate.
 
