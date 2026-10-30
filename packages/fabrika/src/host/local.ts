@@ -4,8 +4,11 @@
 //   - workerd's own socket (`direct`), on a fixed port, so a restart keeps the same URL;
 //   - the child in its own process group, and every signal to the whole group: a kill to the Node
 //     process alone leaves workerd serving;
-//   - a memory cap: the group's resident memory is read every `checkEvery`, and past `capMb`
-//     (500 MB) the child is stopped and started again (94 saw workerd grow without bound);
+//   - a memory cap: workerd's resident memory is read every `checkEvery`, and past `capMb`
+//     (500 MB) the child is stopped and started again (94 saw workerd grow without bound). Only
+//     workerd counts: the child's own Node sits at 160 to 250 MB and does not grow, so counting
+//     the whole group left workerd about 75 MB of room, not the 500 MB the cap was set for;
+//     `memoryMb` still reads the whole group;
 //   - a small pool of keep-alive connections (`layerHttp`).
 //
 // `layerLocal` gives both the `Ledger` and `LocalLedger`, the handle on the child: its URL, its
@@ -58,7 +61,7 @@ export interface LocalOptions {
 	readonly graceMs?: number;
 	/** Crashes in a row on one message before it goes to `<name>/dead`; `null`: never. Default 3. */
 	readonly maxDeliveries?: number | null;
-	/** Restart the child when its process group holds more than this. Default 500 MB. */
+	/** Restart the child when its workerd holds more than this. Default 500 MB. */
 	readonly capMb?: number;
 	/** How often the memory is read. Default 2 s. */
 	readonly checkEvery?: Duration.Duration;
@@ -96,8 +99,10 @@ export class LocalLedger extends Context.Service<
 		readonly pid: Effect.Effect<number>;
 		/** Restarts so far: crashes and memory-cap restarts. */
 		readonly restarts: Effect.Effect<number>;
-		/** The group's resident memory now, in MB. */
+		/** The group's resident memory now, in MB: workerd, the child's own Node, and any helper. */
 		readonly memoryMb: Effect.Effect<number>;
+		/** workerd's resident memory now, in MB: what the cap reads. */
+		readonly workerdMb: Effect.Effect<number>;
 		/** SIGKILL the whole group, then start it again. Answers how long the restart took. */
 		readonly crash: Effect.Effect<{readonly restartMs: number}, LocalError>;
 		/** Stop the group gracefully (SIGTERM, then SIGKILL after 3 s) and start it again. */
@@ -145,17 +150,27 @@ const freePort = Effect.callback<number, LocalError>((resume) => {
 const Ready = Schema.fromJsonString(Schema.Struct({ready: Schema.String, pid: Schema.Number}));
 const readyOf = Schema.decodeUnknownExit(Ready);
 
-/** Every process's group and resident memory, from `ps`. */
+/** A process's name, from `ps`'s `comm`: a full path on macOS, the name alone on Linux. */
+const isWorkerd = (comm: string) => comm === "workerd" || comm.endsWith("/workerd");
+
+/**
+ * The resident memory of a process group, from `ps`: the whole group, and its workerd alone.
+ * `comm` is last, so a path with spaces in it is still one name.
+ */
 const groupMemoryKb = (pgid: number) =>
 	Effect.gen(function* () {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-		const out = yield* spawner.string(ChildProcess.make("ps", ["-A", "-o", "pgid=,rss="]));
-		let kb = 0;
+		const out = yield* spawner.string(ChildProcess.make("ps", ["-A", "-o", "pgid=,rss=,comm="]));
+		let group = 0;
+		let workerd = 0;
 		for (const line of out.split("\n")) {
-			const [g, rss] = line.trim().split(/\s+/);
-			if (Number(g) === pgid) kb += Number(rss);
+			const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+			if (m === null || Number(m[1]) !== pgid) continue;
+			const kb = Number(m[2]);
+			group += kb;
+			if (isWorkerd((m[3] ?? "").trim())) workerd += kb;
 		}
-		return kb;
+		return {group, workerd};
 	});
 
 export const startLocal = (o: LocalOptions) =>
@@ -274,17 +289,22 @@ export const startLocal = (o: LocalOptions) =>
 				try: () => process.kill(-c.pid, "SIGKILL"),
 				catch: (e) => new LocalError({message: String(e)}),
 			}).pipe(Effect.ignore, Effect.andThen(Scope.close(c.scope, Exit.void)));
-		const memoryMb = Ref.get(child).pipe(
+		const memory = Ref.get(child).pipe(
 			Effect.flatMap((c) => groupMemoryKb(c.pid)),
-			Effect.map((kb) => Math.round(kb / 102.4) / 10),
+			Effect.map((kb) => ({
+				group: Math.round(kb.group / 102.4) / 10,
+				workerd: Math.round(kb.workerd / 102.4) / 10,
+			})),
 			Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-			Effect.orElseSucceed(() => 0),
+			Effect.orElseSucceed(() => ({group: 0, workerd: 0})),
 		);
+		const memoryMb = Effect.map(memory, (m) => m.group);
+		const workerdMb = Effect.map(memory, (m) => m.workerd);
 		const restart = again((c) => Scope.close(c.scope, Exit.void));
 
-		// The memory cap.
+		// The memory cap, on workerd: the part that grows (docs/direction/a-local-first-sync-engine.md).
 		const cap = o.capMb ?? 500;
-		yield* memoryMb.pipe(
+		yield* workerdMb.pipe(
 			Effect.flatMap((mb) => (mb > cap ? Effect.ignore(restart) : Effect.void)),
 			Effect.repeat(Schedule.spaced(o.checkEvery ?? Duration.seconds(2))),
 			Effect.forkScoped,
@@ -297,6 +317,7 @@ export const startLocal = (o: LocalOptions) =>
 			pid: Ref.get(child).pipe(Effect.map((c) => c.pid)),
 			restarts: Ref.get(restarts),
 			memoryMb,
+			workerdMb,
 			crash: again(sigkill),
 			restart,
 		});

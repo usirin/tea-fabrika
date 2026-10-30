@@ -30,21 +30,30 @@ export const COMPATIBILITY_DATE = "2026-07-01";
 /**
  * The Worker as one module: the Durable Object, its rules, the door, the SSH signatures it checks
  * and the `Keys` Layers. `cloudflare:*` is workerd's own, so it stays an import.
+ *
+ * The Worker is bundled once, so esbuild is stopped right after. `buildSync` keeps a worker
+ * thread and esbuild's own process alive for the next call, and in the local ledger's child that
+ * process sat idle at about 50 MB for as long as the ledger ran.
  */
 const modules = () => {
-	const {buildSync}: typeof Esbuild = createRequire(import.meta.url)("esbuild");
+	const esbuild: typeof Esbuild = createRequire(import.meta.url)("esbuild");
 	const entry = LEDGER_ENTRY;
-	const out = buildSync({
-		entryPoints: [entry],
-		bundle: true,
-		format: "esm",
-		platform: "neutral",
-		target: "es2023",
-		external: ["cloudflare:*"],
-		write: false,
-		logLevel: "silent",
-	});
-	return [{type: "ESModule" as const, path: entry, contents: out.outputFiles[0]?.text ?? ""}];
+	try {
+		const out = esbuild.buildSync({
+			entryPoints: [entry],
+			bundle: true,
+			format: "esm",
+			platform: "neutral",
+			target: "es2023",
+			external: ["cloudflare:*"],
+			write: false,
+			logLevel: "silent",
+		});
+		return [{type: "ESModule" as const, path: entry, contents: out.outputFiles[0]?.text ?? ""}];
+	} finally {
+		// The stop starts at once (the worker thread is ended); the promise it answers is settled.
+		void esbuild.stop();
+	}
 };
 
 /** Where a shared door's keys come from. Only GitHub's today (`keys-github.ts`). */
