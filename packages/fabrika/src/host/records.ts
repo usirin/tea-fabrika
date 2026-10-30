@@ -4,7 +4,7 @@ import {jobTraceId} from "../program/trace.ts";
 import type {JobsOnHost, JobTable} from "./host-jobs.ts";
 import {type Job, type JobsMsg, traceIdOf} from "./jobs.ts";
 import type {SpanRow} from "./otlp.ts";
-import {type Beats, type JobEnd, jobWrites, layerTraces, type RecordCalls} from "./traces.ts";
+import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} from "./traces.ts";
 
 // Where a host keeps its jobs' records, and how it fills them as its jobs go
 // (docs/direction/a-job-record-holds-its-trace.md). One record per job, keyed by the job's trace
@@ -26,7 +26,7 @@ import {type Beats, type JobEnd, jobWrites, layerTraces, type RecordCalls} from 
 //
 // The records live where the host says: on the laptop, one SQLite file per job in its home
 // (`sqliteRecords`, @kampus/fabrika/records), the same tables and SQL as the Durable Object
-// (./job-rules.ts). Every write rings the job's beat, so a reader that follows the job
+// (./job-rules.ts). Every write sends a change for the job, so a reader that follows the job
 // (`Traces.watch`) reads it again at once.
 
 /** A host's jobs' records: one per job, by its trace id. */
@@ -35,12 +35,12 @@ export interface Records {
 	readonly calls: RecordCalls;
 	/** Keep ended spans of one trace in its record. A span kept again is the same span. */
 	readonly keep: (trace: string, spans: readonly SpanRow[]) => Effect.Effect<void, StorageBroken>;
-	/** A beat at once, then one after each write to that trace's record. */
-	readonly beats: Beats;
+	/** A change at once, then one after each write to that trace's record. */
+	readonly changes: Changes;
 }
 
 /** `Traces` over a host's own records: a followed record is read again on each write to it. */
-export const layerRecordTraces = (records: Records) => layerTraces(records.calls, records.beats);
+export const layerRecordTraces = (records: Records) => layerTraces(records.calls, records.changes);
 
 /**
  * Where a storage's steps go: into the record of the job the step's run is in. A step written in

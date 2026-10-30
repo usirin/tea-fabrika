@@ -120,7 +120,7 @@ describe("a host's records", () => {
 		const two = "2".repeat(32);
 		const reads = await Effect.runPromise(
 			Effect.gen(function* () {
-				const records = yield* sqliteRecords({dir: join(dir, "beats"), by: "user:owner"});
+				const records = yield* sqliteRecords({dir: join(dir, "changes"), by: "user:owner"});
 				const watch = yield* Effect.gen(function* () {
 					return (yield* Traces).watch(one);
 				}).pipe(Effect.provide(layerRecordTraces(records)));
