@@ -2,12 +2,16 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import {Shell} from "@kampus/fabrika";
+import {callOf, toolsOf} from "@kampus/fabrika/mcp";
+import {memoryService} from "@kampus/fabrika/memory";
 import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, FileSystem, Layer, Path, Schedule, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Down} from "../link.ts";
+import {appPrograms} from "../tsh.ts";
 import {appWire} from "../wire.ts";
 import {runHost} from "./run.ts";
 import {pathsOf, reach} from "./socket.ts";
@@ -65,9 +69,9 @@ const trackerInTile = Effect.gen(function* () {
 		if (last?.type !== "to") return undefined;
 		return Reflect.get(Object(last.m), "data") as Record<string, unknown>;
 	};
-	/** A click in the person's window: one `do`, as the window sends it. */
-	const click = (value: unknown) =>
-		wire.send({type: "on", port, m: {type: "msg", msg: {type: "do", value}}});
+	/** A click in the person's window: one input's value, as the window sends it. */
+	const click = (type: string, value: unknown) =>
+		wire.send({type: "on", port, m: {type: "msg", msg: {type, value}}});
 	return {home, paths, shown, click};
 });
 
@@ -105,6 +109,60 @@ const textOf = (result: {readonly content?: unknown}): string => {
 const pageOf = (shown: Record<string, unknown> | undefined) =>
 	Reflect.get(Object(shown), "page") as Record<string, unknown> | undefined;
 
+/** The tools of the app's programs, as an agent's list holds them. Nothing runs. */
+const agentsList = () =>
+	Shell.programList(
+		appPrograms(
+			memoryService(),
+			{kind: "agent", id: "claude", for: "owner"},
+			{open: Effect.succeed([])},
+		),
+	);
+
+describe("an agent's tools", () => {
+	it("are the tracker's inputs, one tool each: each write, a read-only query, quit, and no answer", () => {
+		const tools = toolsOf(agentsList());
+		expect(tools.map((t) => t.name).filter((n) => n.startsWith("tracker_"))).toEqual([
+			"tracker_file",
+			"tracker_comment",
+			"tracker_close",
+			"tracker_reopen",
+			"tracker_query",
+			"tracker_quit",
+		]);
+		const hints = Object.fromEntries(tools.map((t) => [t.name, t.annotations?.readOnlyHint]));
+		expect(hints).toMatchObject({
+			runs: true,
+			tracker_query: true,
+			tracker_file: undefined,
+			tracker_close: undefined,
+		});
+		// An input only a person tells has no tool, so a call to it is refused as any unknown tool is.
+		for (const name of ["tracker_answer", "tracker_rate_duplicate", "ticket_answer"])
+			expect(callOf(agentsList(), name, {value: {}})).toEqual({
+				kind: "refused",
+				why: `there is no tool ${name}`,
+			});
+		// A call tells the input of the same name its value, as it is.
+		expect(callOf(agentsList(), "tracker_query", {value: {ticket: 43}})).toEqual({
+			kind: "input",
+			program: "tracker",
+			input: "query",
+			value: {ticket: 43},
+		});
+		expect(callOf(agentsList(), "tracker_quit", {value: null})).toEqual({
+			kind: "input",
+			program: "tracker",
+			input: "quit",
+			value: null,
+		});
+		// The input already names the command: a value that names one too does not fit.
+		expect(
+			callOf(agentsList(), "tracker_close", {value: {kind: "close", ticket: 1}}),
+		).toMatchObject({kind: "refused"});
+	});
+});
+
 describe("an agent drives the app's programs through MCP", () => {
 	it("lists the tools from the programs' inputs, and files a ticket the person's tile shows, as the agent", async () => {
 		const seen = await go(
@@ -114,10 +172,11 @@ describe("an agent drives the app's programs through MCP", () => {
 				const mode = (yield* fs.stat(app.paths.mcp)).mode & 0o777;
 				const agent = yield* agentOn(app.home, "claude");
 				const tools = yield* Effect.promise(() => agent.client.listTools());
-				const doTool = tools.tools.find((t) => t.name === "tracker_do");
+				const fileTool = tools.tools.find((t) => t.name === "tracker_file");
+				const queryTool = tools.tools.find((t) => t.name === "tracker_query");
 
-				const filed = yield* agent.call("tracker_do", {
-					value: {kind: "file", title: "Filed by an agent", body: "Under #44."},
+				const filed = yield* agent.call("tracker_file", {
+					value: {title: "Filed by an agent", body: "Under #44."},
 				});
 				// The person's window, which nobody typed in, lists it within the tracker's poll.
 				const listed = yield* until("the ticket in the tile", () => {
@@ -125,7 +184,7 @@ describe("an agent drives the app's programs through MCP", () => {
 					const tickets = page?.kind === "list" ? (page.tickets as {title: string}[]) : [];
 					return tickets.find((t) => t.title === "Filed by an agent");
 				});
-				app.click({kind: "open", ticket: 1});
+				app.click("query", {ticket: 1});
 				const rows = yield* until("ticket 1's page", () => {
 					const page = pageOf(app.shown());
 					const opened =
@@ -133,15 +192,24 @@ describe("an agent drives the app's programs through MCP", () => {
 					return Array.isArray(opened) && opened.length > 0 ? opened : undefined;
 				});
 				const runs = JSON.parse(textOf(yield* agent.call("runs", {})));
-				return {mode, tools, doTool, filed, listed, rows, runs};
+				return {mode, tools, fileTool, queryTool, filed, listed, rows, runs};
 			}),
 		);
 		expect(seen.mode).toBe(0o600);
 		expect(seen.tools.tools.map((t) => t.name)).toEqual([
 			"runs",
 			"counter_press",
-			"tracker_do",
-			"ticket_do",
+			"tracker_file",
+			"tracker_comment",
+			"tracker_close",
+			"tracker_reopen",
+			"tracker_query",
+			"tracker_quit",
+			// The ticket's own commands, one input each, and no `ticket_answer`.
+			"ticket_comment",
+			"ticket_close",
+			"ticket_reopen",
+			"ticket_quit",
 			// A ticket to show: what a pipe from the tracker sends, an agent can send too.
 			"ticket_ticket",
 			"map_in",
@@ -150,13 +218,16 @@ describe("an agent drives the app's programs through MCP", () => {
 			"trace_do",
 			"trace_id",
 		]);
-		// The tool is the input: its description and its schema are the tracker's own `do`.
-		expect(seen.doTool?.description).toMatch(/^What the window does/);
-		expect(seen.doTool?.inputSchema).toMatchObject({
+		// The tool is the input: its description and its fields are the tracker's own `file`.
+		expect(seen.fileTool?.description).toMatch(/^File a new ticket/);
+		expect(seen.fileTool?.inputSchema).toMatchObject({
 			type: "object",
 			required: ["value"],
-			properties: {value: {anyOf: expect.any(Array)}},
+			properties: {value: {type: "object", required: ["title", "body"]}},
 		});
+		expect(seen.fileTool?.annotations?.readOnlyHint).toBeUndefined();
+		// The query only reads, and says so in MCP's own hint, through the SDK as a client sees it.
+		expect(seen.queryTool?.annotations).toEqual({readOnlyHint: true});
 		expect(seen.filed.isError).not.toBe(true);
 		expect(seen.listed).toMatchObject({number: 1, title: "Filed by an agent", state: "open"});
 		expect(seen.rows[0]).toMatchObject({
@@ -167,17 +238,23 @@ describe("an agent drives the app's programs through MCP", () => {
 			{run: expect.stringMatching(/^tracker:/), program: "tracker"},
 		]);
 		expect(seen.runs.yours).toMatchObject([{program: "tracker"}]);
+		expect(seen.runs.programs).toContainEqual(
+			expect.objectContaining({
+				name: "tracker",
+				tools: expect.not.arrayContaining(["tracker_answer"]),
+			}),
+		);
 	});
 
-	it("never writes as the person: an agent's answer is refused, and a handshake cannot name a user", async () => {
+	it("never writes as the person: an agent has no answer tool, and a handshake cannot name a user", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const app = yield* trackerInTile;
 				const agent = yield* agentOn(app.home, "claude");
-				yield* agent.call("tracker_do", {value: {kind: "file", title: "Needs a yes", body: ""}});
-				yield* agent.call("tracker_do", {
+				yield* agent.call("tracker_file", {value: {title: "Needs a yes", body: ""}});
+				// `answer` is a case only a person sends: the agent has no tool for it at all.
+				const answer = yield* agent.call("tracker_answer", {
 					value: {
-						kind: "answer",
 						ticket: 1,
 						ask: "a1",
 						pick: "yes",
@@ -185,19 +262,9 @@ describe("an agent drives the app's programs through MCP", () => {
 						saw: {title: "Needs a yes", body: ""},
 					},
 				});
-				// The agent's own tracker says why, on the next look.
-				const why = yield* Effect.gen(function* () {
-					for (let i = 0; i < 400; i += 1) {
-						const runs = JSON.parse(textOf(yield* agent.call("runs", {})));
-						const f = runs.yours[0]?.view?.failed;
-						if (f !== null && f !== undefined) return String(f.why);
-						yield* Effect.sleep("10 millis");
-					}
-					return "";
-				});
 				// A value that does not fit the input's schema never reaches the program.
-				const bad = yield* agent.call("tracker_do", {value: {kind: "answered", ticket: 1}});
-				app.click({kind: "open", ticket: 1});
+				const bad = yield* agent.call("tracker_file", {value: {title: 3}});
+				app.click("query", {ticket: 1});
 				const rows = yield* until("ticket 1's page", () => {
 					const page = pageOf(app.shown());
 					const opened =
@@ -210,10 +277,11 @@ describe("an agent drives the app's programs through MCP", () => {
 					Effect.as("connected"),
 					Effect.catch((e) => Effect.succeed(e.stderr)),
 				);
-				return {why, bad, rows, asUser};
+				return {answer, bad, rows, asUser};
 			}),
 		);
-		expect(seen.why).toMatch(/only a person writes answered/);
+		expect(seen.answer.isError).toBe(true);
+		expect(textOf(seen.answer)).toMatch(/there is no tool tracker_answer/);
 		expect(seen.bad.isError).toBe(true);
 		expect(textOf(seen.bad)).toMatch(/does not fit/);
 		expect(seen.rows.map((r: {type: string}) => r.type)).toEqual(["filed"]);

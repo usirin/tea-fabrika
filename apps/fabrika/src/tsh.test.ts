@@ -260,7 +260,7 @@ describe("a program's window", () => {
 					const empty = yield* s.until("the empty list", () => titles(s.seen, open.run));
 					const told = s.window(open.run).heard({
 						type: "msg",
-						msg: {type: "do", value: {kind: "file", title: "Login fails", body: ""}},
+						msg: {type: "file", value: {title: "Login fails", body: ""}},
 					});
 					const filed = yield* s.until("the ticket on the list", () =>
 						titles(s.seen, open.run)?.length === 1 ? titles(s.seen, open.run) : undefined,
@@ -466,9 +466,7 @@ describe("a program's window", () => {
 					yield* of("runs"),
 				];
 				const pick = (ticket: number) =>
-					s
-						.window(picker.run)
-						.heard({type: "msg", msg: {type: "do", value: {kind: "open", ticket}}});
+					s.window(picker.run).heard({type: "msg", msg: {type: "query", value: {ticket}}});
 				const both = (n: number) =>
 					s.until(`ticket and runs on #${n}`, () =>
 						numberOf(s.seen, page.run) === n && numberOf(s.seen, trail.run) === n
@@ -479,7 +477,7 @@ describe("a program's window", () => {
 				for (const title of ["Login fails", "Logout fails"])
 					s.window(picker.run).heard({
 						type: "msg",
-						msg: {type: "do", value: {kind: "file", title, body: ""}},
+						msg: {type: "file", value: {title, body: ""}},
 					});
 				const waiting = yield* s.until("ticket and runs shown", () =>
 					numberOf(s.seen, page.run) !== undefined && numberOf(s.seen, trail.run) !== undefined

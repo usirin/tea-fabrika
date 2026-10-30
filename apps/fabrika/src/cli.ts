@@ -25,12 +25,11 @@
 import {NodeRuntime, NodeServices, NodeSocket} from "@effect/platform-node";
 import {writerText} from "@kampus/fabrika";
 import {BridgeStopped, bridge} from "@kampus/fabrika/mcp";
-import type {Do} from "@tea-fabrika/tracker";
 import {Config, Console, Effect, Logger, Option} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
-import {post} from "./host/post.ts";
+import {type Post, post} from "./host/post.ts";
 import {pathsOf, reach} from "./host/socket.ts";
 
 const home = Flag.String("home").pipe(
@@ -144,7 +143,7 @@ const body = Flag.FileText("body-file").pipe(Flag.withDescription("the text, in 
 const ticket = Argument.Int("ticket").pipe(Argument.withDescription("the ticket's number"));
 
 /** One post, then the tickets after it. */
-const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Do>) =>
+const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
 		for (const line of yield* post(a.home, a.as, writes)) yield* Effect.logInfo(line);
 	});
@@ -154,13 +153,13 @@ const postCmd = Command.make("post").pipe(
 		Command.make(
 			"file",
 			{home, as, body, title: Argument.String("title").pipe(Argument.withDescription("its title"))},
-			(a) => posting(a, [{kind: "file", title: a.title, body: a.body.trim()}]),
+			(a) => posting(a, [{type: "file", value: {title: a.title, body: a.body.trim()}}]),
 		),
 		Command.make("comment", {home, as, body, ticket}, (a) =>
-			posting(a, [{kind: "comment", ticket: a.ticket, body: a.body.trim()}]),
+			posting(a, [{type: "comment", value: {ticket: a.ticket, body: a.body.trim()}}]),
 		),
 		Command.make("close", {home, as, ticket}, (a) =>
-			posting(a, [{kind: "close", ticket: a.ticket}]),
+			posting(a, [{type: "close", value: {ticket: a.ticket}}]),
 		),
 		Command.make("list", {home, as}, (a) => posting(a, [])),
 	]),

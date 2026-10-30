@@ -7,14 +7,22 @@ import type {ProgramList} from "../shell/programs.ts";
 // hand: a new input is a new tool, and a renamed input is a renamed tool.
 //
 //   toolsOf(programList([listed(tracker, ...)]))
-//   // [{name: "runs", ...},
-//   //  {name: "tracker_do", description: "What the window does: ...",
-//   //   inputSchema: {type: "object", properties: {value: <Do's JSON Schema>}, required: ["value"],
-//   //                 additionalProperties: false}}]
-//   callOf(list, "tracker_do", {value: {kind: "file", title: "Login fails", body: ""}})
-//   // {kind: "input", program: "tracker", input: "do", value: {kind: "file", ...}}
-//   callOf(list, "tracker_do", {value: {kind: "nope"}})
-//   // {kind: "refused", why: "tracker's do does not fit: ..."}
+//   // [{name: "runs", ..., annotations: {readOnlyHint: true}},
+//   //  {name: "tracker_file", description: "File a new ticket: ...",
+//   //   inputSchema: {type: "object", properties: {value: <File's JSON Schema>}, required: ["value"],
+//   //                 additionalProperties: false}},
+//   //  ...,
+//   //  {name: "tracker_query", ..., annotations: {readOnlyHint: true}}, ...]
+//   callOf(list, "tracker_file", {value: {title: "Login fails", body: ""}})
+//   // {kind: "input", program: "tracker", input: "file", value: {title: "Login fails", body: ""}}
+//   callOf(list, "tracker_file", {value: {title: 3}})
+//   // {kind: "refused", why: "tracker's file does not fit: ..."}
+//   callOf(list, "tracker_answer", {value: {...}})
+//   // {kind: "refused", why: "there is no tool tracker_answer"}: an input only a person tells
+//
+// What an input says of itself is in its declaration (../program/shape.ts, `input`):
+// `{writes: false}` gives its tool MCP's `readOnlyHint`, and `{personOnly: true}` gives it no tool
+// at all, so a call to it is refused as any unknown tool is. These tools are an agent's.
 //
 // The name is `<program>_<input>`. A program's name has no `_` (programList holds it to small
 // letters, digits and -), so the first `_` splits it, and no tool of an input is ever named
@@ -22,8 +30,8 @@ import type {ProgramList} from "../shell/programs.ts";
 // and `-` only, and Claude Code hands MCP tools to it by their names.
 //
 // The value goes under `value`, never as the arguments themselves: the spec wants an object
-// there, and an input's schema may be a union, a number or a string. Its `$defs` move up to the
-// top, where the `$ref`s inside it point.
+// there, and an input's schema may be a union, a number, a string or null. Its `$defs` move up to
+// the top, where the `$ref`s inside it point.
 //
 // An input whose schema gives no JSON Schema (a Standard Schema from outside Effect) has no tool:
 // an agent could not be told what it takes.
@@ -34,6 +42,8 @@ export interface Tool {
 	readonly description: string;
 	/** Always an object, as the spec wants: an input's own schema is under `value`. */
 	readonly inputSchema: JsonSchema & {readonly type: "object"};
+	/** The spec's hints about what a call does. Here only `readOnlyHint`, on a tool that writes nothing. */
+	readonly annotations?: {readonly readOnlyHint: true};
 }
 
 /** The tool that says what runs and what can be started. */
@@ -44,6 +54,7 @@ const RUNS_TOOL: Tool = {
 	description:
 		"What runs now and what can be started: each program you can drive, with its tools; your own runs, with what each window shows; and the runs in the person's tiles, which you can see but not drive. Your writes show in the person's tiles through the ledger.",
 	inputSchema: {type: "object", additionalProperties: false},
+	annotations: {readOnlyHint: true},
 };
 
 /** The tool's name for one input of one program. */
@@ -61,19 +72,34 @@ const wrap = (json: JsonSchema): Tool["inputSchema"] => {
 	};
 };
 
-/** Every tool of a program list: `runs` first, then each input's, in the list's order. */
+/** The inputs of a program an agent has a tool for, each with its JSON Schema, in declared order. */
+const toolInputsOf = (
+	inputs: Inputs,
+): ReadonlyArray<{
+	readonly input: string;
+	readonly declared: Inputs[string];
+	readonly json: JsonSchema;
+}> =>
+	Object.entries<Inputs[string]>(inputs).flatMap(([input, declared]) => {
+		const json = declared.shape.json;
+		return json === undefined || declared.personOnly ? [] : [{input, declared, json}];
+	});
+
+/** The names of a program's tools, in the order `toolsOf` lists them. */
+export const toolNamesOf = (program: string, inputs: Inputs): readonly string[] =>
+	toolInputsOf(inputs).map(({input}) => toolNameOf(program, input));
+
+/** Every tool of a program list: `runs` first, then each program's, in the list's order. */
 export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	const tools: Tool[] = [RUNS_TOOL];
 	for (const [name, entry] of list)
-		for (const [input, declared] of Object.entries<Inputs[string]>(entry.program.inputs)) {
-			const json = declared.shape.json;
-			if (json === undefined) continue;
+		for (const {input, declared, json} of toolInputsOf(entry.program.inputs))
 			tools.push({
 				name: toolNameOf(name, input),
 				description: `${declared.description} Sent to ${name}'s input ${input}, in your own run of ${name}, started on first use. ${name}: ${entry.program.description}`,
 				inputSchema: wrap(json),
+				...(declared.writes ? {} : {annotations: {readOnlyHint: true}}),
 			});
-		}
 	return tools;
 };
 
@@ -95,16 +121,15 @@ export const callOf = (list: ProgramList, name: string, args: unknown): Call => 
 	const program = name.slice(0, at);
 	const input = name.slice(at + 1);
 	const entry = at === -1 ? undefined : list.get(program);
-	const declared =
-		entry !== undefined && Object.hasOwn(entry.program.inputs, input)
-			? entry.program.inputs[input]
-			: undefined;
-	if (entry === undefined || declared === undefined || declared.shape.json === undefined)
-		return {kind: "refused", why: `there is no tool ${name}`};
+	const found =
+		entry === undefined
+			? undefined
+			: toolInputsOf(entry.program.inputs).find((t) => t.input === input);
+	if (found === undefined) return {kind: "refused", why: `there is no tool ${name}`};
 	if (typeof args !== "object" || args === null || !Object.hasOwn(args, "value"))
 		return {kind: "refused", why: `${name} takes {value: ...}`};
 	const value: unknown = Reflect.get(args, "value");
-	const why = declared.shape.problem(value);
+	const why = found.declared.shape.problem(value);
 	if (why !== undefined)
 		return {kind: "refused", why: `${program}'s ${input} does not fit: ${why}`};
 	return {kind: "input", program, input, value};

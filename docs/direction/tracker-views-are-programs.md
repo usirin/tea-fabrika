@@ -443,9 +443,9 @@ data apart from the inputs that only change the view, as CQRS keeps commands
 apart from queries. **The names `write` and `view` were a lean, 75% sure.
 Replaced 2026-10-28, below.**
 
-Today the tracker has one input, `do`, which mixes both: `file`, `comment`,
-`answer`, `close` and `reopen` become facts, while `list`, `open`, `show` and
-`find` only move the window (`programs/tracker/src/index.ts`). Input names
+Until 2026-10-30 the tracker had one input, `do`, which mixed both: `file`, `comment`,
+`answer`, `close` and `reopen` became facts, while `list`, `open`, `show` and
+`find` only moved the window (`programs/tracker/src/index.ts`). Input names
 also become tool names, since an agent will drive programs through tsh's MCP
 server. The 2026-10-27 lean gave two tools, `tracker.write` and `tracker.view`.
 
@@ -528,6 +528,56 @@ inputs: {
 - **How sure: 85%.** The doubt: whether one query shape can grow to the
   notebook's `where` without becoming its own small language. A few more
   notebook lines would show it.
+
+**A wrong guess, kept on purpose (2026-10-29, undone 2026-10-30).** The first
+build of this section
+([PR 164](https://github.com/usirin/tea-fabrika/pull/164)) kept one tracker
+input, `do`, holding a tagged union of every command, and split it into one
+MCP tool per case inside `@kampus/fabrika/mcp`.
+
+```ts
+// The detour, as first built. Wrong: do not copy.
+inputs: {
+	do: input(Do, "..."), // Do = {kind: "file", ...} | {kind: "close", ...} | ...
+	query: input(Query, "..."),
+}
+// tools: tracker_file, tracker_close, ... cut out of `do` by its `kind`,
+// with a person-only flag set on a case of the union.
+```
+
+- **Why it was guessed:** before, two inputs gave no order between them. A
+  `file` then a `close` told back to back on two inputs could land the close
+  first. One input kept them in order.
+- **Why it was wrong:** that reason went away when each run got one mailbox,
+  served in order across all its inputs
+  ([PR 195](https://github.com/usirin/tea-fabrika/pull/195)). What was left
+  was a name the owner rejects, `do`, and a second way to cut tools, by
+  union case, that only one program used.
+- **What replaced it:** one input per command, named by its verb, each value
+  the command's own struct with no `kind`. `answer` and `rate_duplicate` are
+  `input(..., {personOnly: true})`, so no tool is made for them; `query` is
+  `input(..., {writes: false})`, so its tool carries `readOnlyHint`. The test
+  "file #2 then close #2, told back to back on two inputs" keeps the order
+  promise (`programs/tracker/src/tracker.test.ts`).
+
+```ts
+// What the tracker has now (programs/tracker/src/index.ts).
+inputs: {
+	file: input(File, "File a new ticket: its title and body. Writes its `filed`."),
+	comment: input(Comment, "..."),
+	close: input(OneTicket, "Close a ticket. Writes its `closed`."),
+	reopen: input(OneTicket, "Reopen a closed ticket. Writes its `reopened`."),
+	answer: input(Answer, "...", {personOnly: true}),
+	rate_duplicate: input(RateDuplicate, "...", {personOnly: true}),
+	query: input(Query, "...", {writes: false}),
+	quit: input(Schema.Null, "Stop, once every write told before it is on the ledger."),
+}
+// tell(run, "file", {title: "Login fails", body: ""})
+// tell(run, "close", {ticket: 1})
+// tell(run, "quit", null)
+// MCP: tracker_file, tracker_comment, tracker_close, tracker_reopen,
+//      tracker_query (readOnlyHint), tracker_quit. No tracker_answer.
+```
 
 ## 8. The views, the facts and the column
 

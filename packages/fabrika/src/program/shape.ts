@@ -81,6 +81,13 @@ export interface Input<T, A extends Ack = Ack, C extends boolean = boolean>
 	 * input, whose values wait their turn in the mailbox.
 	 */
 	readonly control: C;
+	/**
+	 * `false` (`{writes: false}`): a value told to it changes no data, only what the run shows, as
+	 * CQRS keeps a query apart from a command. Its MCP tool carries `readOnlyHint`.
+	 */
+	readonly writes: boolean;
+	/** `true` (`{personOnly: true}`): only a person tells it. An agent's MCP tools have none for it. */
+	readonly personOnly: boolean;
 }
 
 /**
@@ -201,14 +208,22 @@ export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
  * `{ack: "manual"}`: `main` is handed each value with the way to say it is
  * saved (a `Delivery`), and says so once it is. `{control: true}`: a control
  * input, handled at once beside the order ({@link Input}'s `control`).
+ * `{writes: false}`: a query, which changes no data. `{personOnly: true}`: only a person tells it.
  *
  *   input(Line, "A line typed at the prompt.")                      // waits its turn in the mailbox
  *   input(Signal, "Ctrl-C: stops the foreground job.", {control: true})   // never waits behind a line
+ *   input(Query, "Read tickets. Writes nothing.", {writes: false})        // its tool says it only reads
+ *   input(Answer, "Answer an ask. A person only.", {personOnly: true})    // an agent has no tool for it
  */
 export const input = <T, const A extends Ack = "auto", const C extends boolean = false>(
 	schema: ShapeSchema<T>,
 	description: string,
-	options?: {readonly ack?: A; readonly control?: C},
+	options?: {
+		readonly ack?: A;
+		readonly control?: C;
+		readonly writes?: false;
+		readonly personOnly?: true;
+	},
 ): Input<T, A, C> => ({
 	direction: "input",
 	description: described(description),
@@ -216,6 +231,8 @@ export const input = <T, const A extends Ack = "auto", const C extends boolean =
 	// Left out, `A` is its default, "auto", and `C` is `false`.
 	ack: options?.ack ?? ("auto" as A),
 	control: options?.control ?? (false as C),
+	writes: options?.writes ?? true,
+	personOnly: options?.personOnly ?? false,
 });
 
 /** Declare an output: a value the program sends while it runs, to anyone who listens. */

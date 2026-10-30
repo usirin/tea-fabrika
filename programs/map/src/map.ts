@@ -45,7 +45,16 @@ export const PROGRAMS: {readonly [N in ProgramName]: ProgramNode & {readonly nam
 	tracker: {
 		name: "tracker",
 		at: "programs/tracker/src/index.ts",
-		ins: [port("do", "Do")],
+		ins: [
+			port("file", "File"),
+			port("comment", "Comment"),
+			port("close", "OneTicket"),
+			port("reopen", "OneTicket"),
+			port("answer", "Answer"),
+			port("rate_duplicate", "RateDuplicate"),
+			port("query", "Query"),
+			port("quit", "Null"),
+		],
 		outs: [port("ticket", "TicketNumber")],
 	},
 	plan: {
@@ -185,7 +194,7 @@ export const SPOTS: {readonly [S in StepName]: Where} = {
 export type Family = "fact" | "turn" | "checks" | "step";
 
 const FAMILIES: {readonly [F in Family]: ReadonlySet<string>} = {
-	fact: new Set(["TicketUrl", "Do"]),
+	fact: new Set(["TicketUrl", "File", "Comment", "OneTicket", "RateDuplicate"]),
 	turn: new Set([
 		"Planned",
 		"Revised",

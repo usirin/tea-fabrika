@@ -1,8 +1,10 @@
 import {run} from "@demlik/tea/effect";
 import {defineProgram, end, flag, input, output} from "@kampus/fabrika";
-import {Text} from "@kampus/pipeline/tickets/approval";
-import {Asks, Body, Id, Said, TicketNumber, Title} from "@kampus/pipeline/tickets/ticket";
+import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {
+	Answer,
+	Comment,
+	OneTicket,
 	type TrackerMsg,
 	tickets,
 	ticketsKind,
@@ -19,10 +21,14 @@ import {Shown, shownOf} from "./view.ts";
 //
 //   tsh> ticket --ticket 7          its window takes over the tile, on ticket 7
 //   tsh> tracker | ticket | runs    it shows the ticket the tracker picks, and sends it on
-//   {kind: "answer", ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}   on `do`
+//   answer {ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 //   // tracker/ticket/7/inbox gets {type: "answered", ask: "a-1", pick: "approve", ...} by user:owner
-//   {kind: "comment", ticket: 7, body: "Skip part 2.", asks: "changes"}         "Request changes"
-//   {kind: "quit"}                   it ends once its writes are on the ledger
+//   comment {ticket: 7, body: "Skip part 2.", asks: "changes"}         "Request changes"
+//   quit null                        it ends once its writes are on the ledger
+//
+// Its inputs are the tracker's own commands, by the same names and with the same structs:
+// `comment`, `answer` (a person only), `close`, `reopen`, and `quit`. One more, `ticket`, says
+// which ticket to show.
 //
 // Which ticket it shows comes from the flag, then from its input `ticket`, the latest one winning.
 // Each time the ticket it shows changes, it sends the number on its output `ticket`, so the next
@@ -32,62 +38,26 @@ import {Shown, shownOf} from "./view.ts";
 // shown, so a write made on #7 lands on #7 even when a pick of #3 came in a moment before, and a
 // window cannot write to a ticket it was never shown.
 
-/** What the window does to its ticket. Each is one of the tracker's writes, on a ticket it showed. */
-export const Do = Schema.Union([
-	Schema.Struct({
-		kind: Schema.Literal("comment"),
-		ticket: TicketNumber,
-		body: Said,
-		asks: Schema.optionalKey(Asks),
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("answer"),
-		ticket: TicketNumber,
-		ask: Id,
-		pick: Title,
-		note: Body,
-		saw: Text,
-	}),
-	Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber}),
-	Schema.Struct({kind: Schema.Literal("reopen"), ticket: TicketNumber}),
-	Schema.Struct({kind: Schema.Literal("quit")}),
-]);
-export type Do = typeof Do.Type;
+/** A write the ticket's window makes: one of the tracker's writes, always on one ticket. */
+export type TicketWrite = Extract<
+	Write,
+	{readonly kind: "comment" | "answer" | "close" | "reopen"}
+>;
 
 /**
- * The tracker's write for one `do`, when its ticket is one this run has shown. `null`: it names
- * a ticket the window was never shown, and nothing is written.
+ * The write itself, when its ticket is one this run has shown. `null`: it names a ticket the
+ * window was never shown, and nothing is written.
  *
  *   writeOf(new Set([7]), {kind: "close", ticket: 7})   {kind: "close", ticket: 7}
  *   writeOf(new Set([7]), {kind: "close", ticket: 3})   null
  */
-export const writeOf = (
-	shown: ReadonlySet<number>,
-	d: Exclude<Do, {readonly kind: "quit"}>,
-): Write | null => {
-	if (!shown.has(d.ticket)) return null;
-	switch (d.kind) {
-		case "comment":
-			return d.asks === undefined
-				? {kind: "comment", ticket: d.ticket, body: d.body}
-				: {kind: "comment", ticket: d.ticket, body: d.body, asks: d.asks};
-		case "answer":
-			return {
-				kind: "answer",
-				ticket: d.ticket,
-				ask: d.ask,
-				pick: d.pick,
-				note: d.note,
-				saw: d.saw,
-			};
-		case "close":
-			return {kind: "close", ticket: d.ticket};
-		case "reopen":
-			return {kind: "reopen", ticket: d.ticket};
-	}
-};
+export const writeOf = (shown: ReadonlySet<number>, write: TicketWrite): TicketWrite | null =>
+	shown.has(write.ticket) ? write : null;
 
 const msgOf = (write: Write): TrackerMsg => ({type: "write", id: crypto.randomUUID(), write});
+
+/** The inputs a person's window writes on, and quit: `serve` stops once all of them have closed. */
+const WINDOW = ["comment", "answer", "close", "reopen", "quit"] as const;
 
 export const ticket = defineProgram({
 	name: "ticket",
@@ -100,10 +70,18 @@ export const ticket = defineProgram({
 		),
 	},
 	inputs: {
-		do: input(
-			Do,
-			"What the window does to the ticket: answer an ask, comment, ask for changes, close, reopen, or quit.",
+		comment: input(
+			Comment,
+			'Comment on the ticket shown. `asks: "changes"` requests changes. Writes one `commented`.',
 		),
+		answer: input(
+			Answer,
+			"Answer an open ask on the ticket shown: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
+			{personOnly: true},
+		),
+		close: input(OneTicket, "Close the ticket shown. Writes its `closed`."),
+		reopen: input(OneTicket, "Reopen the ticket shown. Writes its `reopened`."),
+		quit: input(Schema.Null, "Stop, once every write told before it is on the ledger."),
 		ticket: input(
 			TicketNumber,
 			"A ticket to show now, by its number: what a pipe from the tracker sends as the person picks.",
@@ -134,20 +112,23 @@ export const ticket = defineProgram({
 					yield* send("ticket", n);
 				});
 			if (flags.ticket !== undefined) yield* show(flags.ticket);
-			// The picks and the writes, in the order told, until a quit or until `do` is closed. Once
-			// `ticket` is closed the last pick stays. A failed send ends the run.
+			const write = (w: TicketWrite) =>
+				writeOf(shown, w) === null
+					? Effect.logWarning(`ticket: a write to #${w.ticket}, never shown here, is dropped`)
+					: runtime.dispatch(msgOf(w)).pipe(Effect.orDie);
+			// The picks and the writes, in the order told across every input, until a quit or until
+			// the window's inputs are all closed. Once `ticket` is closed the last pick stays. A failed
+			// send ends the run.
 			yield* serve(
 				{
 					ticket: show,
-					do: (d) => {
-						if (d.kind === "quit") return end;
-						const write = writeOf(shown, d);
-						return write === null
-							? Effect.logWarning(`ticket: a write to #${d.ticket}, never shown here, is dropped`)
-							: runtime.dispatch(msgOf(write)).pipe(Effect.orDie);
-					},
+					comment: (v) => write({kind: "comment", ...v}),
+					answer: (v) => write({kind: "answer", ...v}),
+					close: (v) => write({kind: "close", ...v}),
+					reopen: (v) => write({kind: "reopen", ...v}),
+					quit: () => end,
 				},
-				{until: ["do"]},
+				{until: WINDOW},
 			);
 			// Quit, or the input was closed: the writes still waiting land before it ends.
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);

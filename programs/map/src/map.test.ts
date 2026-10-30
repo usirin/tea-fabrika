@@ -35,7 +35,16 @@ import {
 	shipProgram,
 } from "@kampus/pipeline/stages/ship/program";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
-import {Do, STEPS, tracker} from "@tea-fabrika/tracker";
+import {
+	Comment,
+	File,
+	OneTicket,
+	Query,
+	RateDuplicate,
+	STEPS,
+	Answer as TrackerAnswer,
+	tracker,
+} from "@tea-fabrika/tracker";
 import {Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {familyOf, PROGRAMS, type ProgramName, SPOTS, WIRES} from "./map.ts";
@@ -61,7 +70,12 @@ const REAL: {readonly [N in ProgramName]: AnyProgram} = {
 // Each type name the table uses, as its schema. Ship's `pr` takes a union the source does not
 // export: a bare url, or review's `passed`.
 const TYPES: Readonly<Record<string, ShapeSchema<any>>> = {
-	Do,
+	File,
+	Comment,
+	OneTicket,
+	RateDuplicate,
+	Query,
+	Null: Schema.Null,
 	TicketNumber,
 	TicketUrl,
 	Planned,
@@ -101,8 +115,16 @@ const ASKS_TYPES: Readonly<Record<string, ShapeSchema<any>>> = {
 	Built: AsksBuilt,
 };
 
+// The tracker's own `answer`: a person's pick on an ask, not ship's.
+const TRACKER_TYPES: Readonly<Record<string, ShapeSchema<any>>> = {Answer: TrackerAnswer};
+
+const OWN_TYPES: Partial<Record<ProgramName, Readonly<Record<string, ShapeSchema<any>>>>> = {
+	asks: ASKS_TYPES,
+	tracker: TRACKER_TYPES,
+};
+
 const typeOf = (program: ProgramName, type: string): ShapeSchema<any> => {
-	const schema = (program === "asks" ? ASKS_TYPES[type] : undefined) ?? TYPES[type];
+	const schema = OWN_TYPES[program]?.[type] ?? TYPES[type];
 	if (schema === undefined) throw new Error(`no schema for ${type}`);
 	return schema;
 };
