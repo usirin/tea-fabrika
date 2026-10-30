@@ -109,6 +109,32 @@ prompt, as WezTerm and tmux allow.
   keep running, and its front job loses its screen and goes to the
   background. 65%. Unix would hang them up.
 
+## A job names its owner (proposed 2026-10-30)
+
+One table for every tile made the "jobs from an earlier tsh" notice noisy: after a host restart,
+a tile that never ran a job was told it waits. Lean: each job names the tsh it is for, and a tsh
+that starts says only its own earlier jobs. `jobs` still lists every job, and `attach %n` works in
+any tile.
+
+```ts
+type Job = { n: 2; text: "counter"; state: "detached"; owner: "t2" | null };
+
+// After a host restart, t1 ran nothing, t2 ran counter.
+t1: "tsh$"
+t2: "tsh: 1 job from an earlier tsh, not running: %2. attach %n starts one again; jobs lists them."
+t1: "jobs"        // [2] detached  counter: every job, as before
+t1: "attach %2 &" // owner becomes "t1": the job is the tile's that runs it now
+```
+
+- **Owner** is the tile today, given to its tsh by the host, as tmux gives each pane's shell its
+  `TMUX_PANE`. Once a terminal has an id apart from its tile (the "a tile attaches" part above),
+  the owner is the terminal. `null` is a tsh with no name (a terminal's own tsh), which owns
+  every job, and a job kept before owners existed, which every tsh is told of, so none is hidden.
+- **Attach moves the job** to the tile that attached it. Closing a tile drops the detached jobs it
+  owns, an earlier host's included, so a later tile that gets the same id is not told of them.
+- **How sure: 70%.** The doubt: one shell's jobs list shows every job, so the owner may want every
+  tile told of every waiting job. What would settle it: a week of restarts with two or three tiles.
+
 ## What it cannot tell us
 
 - How it feels with two tiles on one terminal. Nothing is built yet.

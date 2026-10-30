@@ -12,7 +12,7 @@
 
 // The host's job table, as tsh shows it. The host's jobs themselves (`HostJobs`, `openJobs`) are
 // on the top level, beside the rest of the host.
-export {EMPTY, type Job, type Jobs, type JobsMsg} from "../host/jobs.ts";
+export {EMPTY, type Job, type Jobs, type JobsMsg, ownedBy} from "../host/jobs.ts";
 // A line, read the way tsh reads it before anything starts: for an app's own tests of its lines.
 export {type Checked, check, fedBy} from "./check.ts";
 export {complete} from "./complete.ts";

@@ -1,14 +1,16 @@
 import {execFile, spawn} from "node:child_process";
-import {mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
+import type {Shell} from "@kampus/fabrika";
 import {_electron, type ElectronApplication, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
-// tiled window, one screenshot per step. Not part of `pnpm test` or CI: it opens a real window.
-// The window rules it checks are macOS's: run it on a Mac.
+// tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
+// window rules it checks are macOS's, so it runs on a Mac: CI runs it on a macOS runner, the
+// check workflow's `e2e` job, on every pull request and every push to main.
 //
 //   pnpm --filter @kampus/fabrika-app e2e
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e     screenshots there, not in a temp folder
@@ -683,6 +685,32 @@ const hostPid = async (on: string) => {
 	const pid = Number.parseInt(text, 10);
 	return Number.isInteger(pid) ? pid : null;
 };
+/**
+ * The jobs in the host's one table, as kept in `<home>/storage/jobs` (host/run.ts), read from the
+ * files and never opened: an open takes the table over from the host that runs on it
+ * (@kampus/fabrika's host-jobs.ts), so its next write would fail. The table is the run `tsh`'s
+ * machine `jobs`, under `table`, in two slots, the newer one whole (program/storage.ts). A file
+ * that does not read fails the run, so a change to that layout is seen here.
+ */
+const keptJobs = async (on: string): Promise<readonly Shell.Job[]> => {
+	const slots = await Promise.all(
+		["a", "b"].map((slot) =>
+			readFile(
+				join(on, "storage", "jobs", encodeURIComponent(`run/tsh/machine/jobs/table/${slot}`)),
+				"utf8",
+			).then(
+				(text): {opened: number; count: number; body: string} => JSON.parse(text),
+				() => null,
+			),
+		),
+	);
+	const newest = slots
+		.flatMap((slot) => (slot === null ? [] : [slot]))
+		.sort((x, y) => y.opened - x.opened || y.count - x.count)[0];
+	if (newest === undefined) throw new Error(`no job table kept in ${on}`);
+	const table: Shell.Jobs = JSON.parse(newest.body);
+	return table.jobs;
+};
 /** The pids whose command line names `what`, as pgrep finds them. */
 const pgrep = (what: string) =>
 	promisify(execFile)("pgrep", ["-f", what]).then(
@@ -1035,12 +1063,14 @@ const reconnect = async () => {
 		if (last !== null) started.add(last);
 		await deskBack(page);
 		await tilesAre(page, ["t1", "t2"]);
-		await prompted(page, "t1");
+		await shows(page, "t1", "only a fresh prompt", (t) => t === "tsh$");
 		check(
 			"the folder back, Try again starts a host, and the desk is back",
 			last !== null && (await ours(last)),
 			last,
 		);
+		const still = await shows(page, "t2", "the earlier job", (t) => t.includes("tsh: 1 job from"));
+		check("on the restored desk, only t2 is told of its counter: t1 never ran it", true, still);
 	} finally {
 		await app.close().catch(() => {});
 		for (const pid of started) if (alive(pid) && (await ours(pid))) await stop(pid);
@@ -1059,10 +1089,10 @@ try {
 	}
 	const pid = await hostPid(home);
 	check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
-	const kept = await readdir(join(home, "storage", "tiles")).catch((): string[] => []);
+	const kept = (await keptJobs(home)).map((job) => [job.n, job.text, job.owner]);
 	check(
-		"the tile left with counter has its jobs in its own folder, and no closed tile has",
-		kept.includes(left) && !["t1", "t2", "t3"].some((t) => kept.includes(t)),
+		"the host's one job table keeps one job, the counter of the tile left, and no closed tile's",
+		kept.length === 1 && kept[0]?.[1] === "counter" && kept[0]?.[2] === left,
 		kept,
 	);
 	const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");

@@ -1,6 +1,6 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {JobTable} from "../host/host-jobs.ts";
-import type {Job, JobsMsg, StageRecord} from "../host/jobs.ts";
+import type {Job, JobsMsg, Owner, StageRecord} from "../host/jobs.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import type {TableView} from "../program/person.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
@@ -35,6 +35,8 @@ export interface Shell {
 	readonly storage: Storage;
 	/** The host's job table: tsh reads it and sends it Msgs, and never keeps a copy. */
 	readonly table: JobTable;
+	/** Whom this tsh is for: each job it begins or attaches is this owner's in the table. */
+	readonly owner: Owner;
 	readonly print: (to: "out" | "err", text: string) => void;
 	/** A table for a person, on out: its terminal lays it out (./table.ts). */
 	readonly printTable: (table: Table) => void;
@@ -521,7 +523,13 @@ const runStages = (
 		const [head, ...tail] = records;
 		if (head === undefined) return {status: 0, values: []};
 		const background = mode.kind === "background";
-		yield* note(shell, {type: "began", text: line.text, stages: [head, ...tail], background});
+		yield* note(shell, {
+			type: "began",
+			text: line.text,
+			stages: [head, ...tail],
+			background,
+			owner: shell.owner,
+		});
 		const n = numberOf(shell, head.run);
 		const values: unknown[] = [];
 		const capture = mode.kind === "capture" ? mode.output : null;
@@ -638,7 +646,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			shell.print("err", `tsh: ${missing.program} is not on the program list any more`);
 			return 1;
 		}
-		yield* note(shell, {type: "attached", n: job.n, background});
+		yield* note(shell, {type: "attached", n: job.n, background, owner: shell.owner});
 		const starting = job.stages.map((record, i): Starting => {
 			const entry = shell.list.get(record.program) as Entry;
 			const before = job.stages[i - 1];

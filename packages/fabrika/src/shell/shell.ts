@@ -1,6 +1,6 @@
 import {type Cause, Deferred, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
 import {HostJobs, TABLE} from "../host/host-jobs.ts";
-import {Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
+import {earlierFor, Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
 import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
@@ -118,12 +118,13 @@ export const tsh = defineProgram({
 		Effect.gen(function* () {
 			const list = yield* Programs;
 			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
-			const {table, storage, kept} = yield* HostJobs;
+			const {table, storage, kept, owner} = yield* HostJobs;
 			const scope = yield* Effect.scope;
 			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
 			yield* watch("jobs", TABLE.key, table);
 			// What the host found from before it started runs nowhere now: it waits to be attached.
-			const waiting = table.getState().jobs.filter((job) => job.state === "detached");
+			// Only this tsh's own are said; `jobs` lists every one.
+			const waiting = earlierFor(table.getState(), owner);
 			if (waiting.length > 0)
 				yield* send("printed", {
 					to: "err",
@@ -155,6 +156,7 @@ export const tsh = defineProgram({
 				list,
 				storage,
 				table,
+				owner,
 				print,
 				printTable,
 				show: flags.show,

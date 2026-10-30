@@ -32,6 +32,8 @@ const stage: fc.Arbitrary<StageRecord> = fc.record({
 	ended: fc.constant(false),
 });
 const n = fc.integer({min: 1, max: 4});
+/** Two tiles' tsh, and a tsh with no name. */
+const owner = fc.constantFrom("t1", "t2", null);
 
 /** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
@@ -41,10 +43,11 @@ const table: MsgArbitraryTable<Msg> = {
 			.tuple(stage, fc.array(stage, {maxLength: 2}))
 			.map(([first, rest]) => [first, ...rest] as const),
 		background: fc.boolean(),
+		owner,
 	}),
 	stage_ended: arbRecordMsg("stage_ended", {run}),
 	detached: arbRecordMsg("detached", {n: fc.option(n, {nil: null})}),
-	attached: arbRecordMsg("attached", {n, background: fc.boolean()}),
+	attached: arbRecordMsg("attached", {n, background: fc.boolean(), owner}),
 	foreground: arbRecordMsg("foreground", {n}),
 	dropped: arbRecordMsg("dropped", {n}),
 };
@@ -79,7 +82,7 @@ const live = (job: Job): boolean => job.stages.some((st) => !st.ended);
 const lastOf = (job: Job, run: string): boolean =>
 	job.stages.some((st) => st.run === run) && job.stages.every((st) => st.ended || st.run === run);
 
-/** A table an earlier host kept: one job detached with a program ended, one running in the background, and 2 and 4 gone. */
+/** A table an earlier host kept: t1's job detached with a program ended, t2's running in the background, and 2 and 4 gone. */
 const KEPT: Jobs = {
 	next: 5,
 	jobs: [
@@ -92,6 +95,7 @@ const KEPT: Jobs = {
 			],
 			state: "detached",
 			background: false,
+			owner: "t1",
 		},
 		{
 			n: 3,
@@ -99,6 +103,7 @@ const KEPT: Jobs = {
 			stages: [{program: "counter", flags: {}, run: "r3", wire: null, ended: false}],
 			state: "running",
 			background: true,
+			owner: "t2",
 		},
 	],
 };
@@ -123,6 +128,7 @@ const numbered = everyStep(
 			stages: msg.stages,
 			state: "running",
 			background: msg.background,
+			owner: msg.owner,
 		};
 		return (
 			next.next === prev.next + 1 &&
@@ -194,6 +200,21 @@ const backgroundByAsk = everyStep(
 		}),
 );
 
+const ownerByAsk = everyStep(
+	"a job is the tsh's that began it, or last attached it: no other Msg moves it to another",
+	({prev, msg, next}) =>
+		prev.jobs.every((job) => {
+			const now = byNumber(next, job.n);
+			if (now === undefined || now.owner === job.owner) return true;
+			return (
+				msg.type === "attached" &&
+				msg.n === job.n &&
+				job.state === "detached" &&
+				now.owner === msg.owner
+			);
+		}),
+);
+
 // ---------------------------------------------------------------- something good
 
 const fgWaits = everyStep(
@@ -216,6 +237,7 @@ const attachRuns = everyStep(
 			now.state === "running" &&
 			now.text === was.text &&
 			now.background === msg.background &&
+			now.owner === msg.owner &&
 			now.stages.length === was.stages.length &&
 			now.stages.every((st, at) => st.run === was.stages[at]?.run && !st.ended)
 		);
@@ -256,6 +278,7 @@ const LAWS = [
 	leavesRightly,
 	runningLive,
 	backgroundByAsk,
+	ownerByAsk,
 	fgWaits,
 	attachRuns,
 	lastEndLeaves,
@@ -382,6 +405,35 @@ const PLANTS = {
 			[],
 		],
 	}),
+	/** attach runs the job again, still the tsh's that ran it before. */
+	attachKeepsOwner: plant({
+		attached: (s, m) => {
+			const [next] = real.attached(s, m);
+			return [
+				{
+					...next,
+					jobs: next.jobs.map((job) => {
+						const was = s.jobs.find((one) => one.n === job.n);
+						return was === undefined ? job : {...job, owner: was.owner};
+					}),
+				},
+				[],
+			];
+		},
+	}),
+	/** detach forgets whose the job was. */
+	detachForgetsOwner: plant({
+		detached: (s, m) => {
+			const [next] = real.detached(s, m);
+			return [
+				{
+					...next,
+					jobs: next.jobs.map((job) => (job.state === "detached" ? {...job, owner: null} : job)),
+				},
+				[],
+			];
+		},
+	}),
 	/** drop does nothing. */
 	deafToDrop: plant({dropped: (s) => [s, []]}),
 	/** A tsh started again begins with an empty table. */
@@ -405,6 +457,7 @@ describe("the job table's laws", () => {
 				neverReused.name,
 				detachedWaits.name,
 				backgroundByAsk.name,
+				ownerByAsk.name,
 				lastEndLeaves.name,
 				dropLeaves.name,
 			],
@@ -417,6 +470,8 @@ describe("the job table's laws", () => {
 			detachForgetsBackground: [backgroundByAsk.name],
 			deafToFg: [fgWaits.name],
 			attachKeepsEnded: [attachRuns.name],
+			attachKeepsOwner: [attachRuns.name],
+			detachForgetsOwner: [ownerByAsk.name],
 			deafToDrop: [dropLeaves.name],
 			forgetsTheKept: [keptComesBack.name],
 		});
@@ -447,6 +502,7 @@ const keptTable: MsgArbitraryTable<Msg> = {
 			.tuple(flagged, fc.array(flagged, {maxLength: 2}))
 			.map(([first, rest]) => [first, ...rest] as const),
 		background: fc.boolean(),
+		owner,
 	}),
 };
 const keptLists = fc.array(arbMsg(keptTable, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
@@ -500,6 +556,7 @@ describe("the job table is kept", () => {
 					text: "counter",
 					stages: [{program: "counter", flags: {}, run: "r9", wire: null, ended: false}],
 					background: false,
+					owner: "t1",
 				});
 				return {kept: host.kept, table: host.table.getState()};
 			}).pipe(Effect.scoped),
@@ -512,5 +569,28 @@ describe("the job table is kept", () => {
 			[4, "running"],
 		]);
 		expect(opened.table.next).toBe(5);
+	});
+
+	it("a table kept before jobs had an owner opens, each job's owner not known", async () => {
+		// The table as older code kept it: no job names its tsh.
+		const Older = Schema.Struct({jobs: Schema.Array(Schema.Unknown), next: Schema.Int});
+		const opened = await Effect.runPromise(
+			Effect.gen(function* () {
+				const storage = memoryStorage();
+				const home = yield* storage.open(TABLE.run, null);
+				yield* Effect.promise(() =>
+					home
+						.store(TABLE.machine, TABLE.key, Older)
+						.save({jobs: KEPT.jobs.map(({owner: _, ...older}) => older), next: KEPT.next}),
+				);
+				const host = yield* openJobs(storage);
+				return {kept: host.kept, table: host.table.getState()};
+			}).pipe(Effect.scoped),
+		);
+		expect(opened.kept).toBe(true);
+		expect(opened.table.jobs.map((job) => [job.n, job.owner])).toEqual([
+			[1, null],
+			[3, null],
+		]);
 	});
 });

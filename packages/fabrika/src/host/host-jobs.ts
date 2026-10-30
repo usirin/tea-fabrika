@@ -2,7 +2,7 @@ import {run as runMachine, type StoreFailed} from "@demlik/tea/effect";
 import {Context, Effect, type Scope} from "effect";
 import type {Watchable} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
-import {Jobs, type JobsMsg, jobsMachine} from "./jobs.ts";
+import {Jobs, type JobsMsg, jobsMachine, type Owner} from "./jobs.ts";
 
 // Where a host keeps its jobs. A job is what one start on a host made: a root run and every run
 // it started, like a Unix process group. A tsh line is a job; so is a lane. The host keeps them,
@@ -51,6 +51,12 @@ export interface JobsOnHost {
 	readonly storage: Storage;
 	/** `false`: the table found was saved by older code. It is left as it was, and jobs started now are not kept. */
 	readonly kept: boolean;
+	/**
+	 * Whom the tsh handed these is for (./jobs.ts's `Owner`): every job it begins or attaches is
+	 * that tsh's in the table. `openJobs` answers `null`; a host that runs several names each, as
+	 * the app hands each tile's tsh `{...jobs, owner: "t2"}`.
+	 */
+	readonly owner: Owner;
 }
 
 /** The host's jobs. Whoever runs a host opens them (`openJobs`) and hands them to tsh. */
@@ -77,5 +83,5 @@ export const openJobs = (storage: Storage): Effect.Effect<JobsOnHost, StoreFaile
 			...(kept ? {store: home.store(TABLE.machine, TABLE.key, Jobs)} : {}),
 		})).ready;
 		yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
-		return {table, storage, kept};
+		return {table, storage, kept, owner: null};
 	});

@@ -30,6 +30,7 @@ import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
+import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
@@ -41,7 +42,7 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 // one per tile, in the host process (host/main.ts).
 //
 //   const jobs = yield* openJobs(memoryStorage());          // the host's one table, in its scope
-//   const tsh = yield* startTsh({jobs, history, runs});
+//   const tsh = yield* startTsh({tile: "t1", jobs, history, runs});
 //   const stop = tsh.terminal.show((m) => send(m));   // a reset, the screen, then each write
 //   tsh.terminal.heard({type: "keys", data: "cou\t"});
 //   // writes: "counter " goes on the line, as Tab put it in
@@ -73,11 +74,12 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 // Jobs: it is handed the host's job table (`openJobs`), the one every tile's tsh shows, so a job
 // is the same `%n` in each tile, as WezTerm's panes are the mux's and not a window's
 // (docs/direction/the-host-keeps-terminals-and-jobs.md). It is handed the history every tile
-// shares too. tiles.ts hands it the host process's table; a test opens one on memory. A tsh's
-// own jobs are those it started: when its scope closes, the ones still running are detached in
-// the host's table, and `drop` takes them out. The next host on the same storage finds the jobs
-// as "from an earlier tsh, not running", and `attach %n` starts one again where it left off,
-// with its view.
+// shares too. tiles.ts hands it the host process's table; a test opens one on memory. Each job
+// in the table names its tile (its `owner`): the one whose tsh began it, or last attached it.
+// When a tsh's scope closes, its tile's jobs still running are detached in the host's table, and
+// `drop` takes them out. The next host on the same storage finds the jobs as "from an earlier
+// tsh, not running": each tile's tsh says so of its own only, and `attach %n` in any tile starts
+// one again where it left off, with its view.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is the
 // host's table, not its run.
@@ -154,8 +156,8 @@ export interface Tsh {
 	/** Done when tsh has ended: `exit`, Ctrl-D on an empty line, or after `close`. */
 	readonly ended: Effect.Effect<void>;
 	/**
-	 * Take the jobs this tsh started out of the host's table, once its scope has closed and they
-	 * are detached: the tile is gone. Other tiles' jobs stay.
+	 * Take this tile's jobs out of the host's table, once its scope has closed and they are
+	 * detached: the tile is gone. An earlier host's job in this tile goes too. Other tiles' stay.
 	 */
 	readonly drop: Effect.Effect<void>;
 }
@@ -281,12 +283,15 @@ const runningIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): number 
 
 /** Start a tile's tsh: it shows the host's `jobs`, and the line editor keeps its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `PullRequests`. */
 export const startTsh = (options: {
+	/** The tile this tsh is in: the owner of every job it begins or attaches, in the host's table. */
+	readonly tile: TileId;
 	readonly jobs: JobsOnHost;
 	readonly history: SharedHistory;
 	readonly runs: Runs;
 }) =>
 	Effect.gen(function* () {
-		const {jobs, history, runs} = options;
+		const {tile, history, runs} = options;
+		const jobs: JobsOnHost = {...options.jobs, owner: tile};
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
@@ -308,16 +313,20 @@ export const startTsh = (options: {
 		/** This tile's jobs, with when each began and how the last one ended, told to the tile. */
 		const clock = yield* Clock.Clock;
 		const watch = watchJobs(() => clock.currentTimeMillisUnsafe(), runs.jobs);
-		/** This tsh's jobs that still say running when its scope closes run nowhere now: detached, as the host does at its start. */
-		/** Msgs to the host's table for each of this tsh's jobs in `state`, one after another, as tsh sends them. */
+		/**
+		 * Msgs to the host's table for each of this tile's jobs in `state`, one after another, as tsh
+		 * sends them. The table says which are the tile's, so a job an earlier host ran in this tile
+		 * is its too, though this tsh never saw its runs.
+		 */
 		const toOwn = (state: Shell.Job["state"], msg: (n: number) => Shell.JobsMsg) =>
 			Effect.suspend(() =>
 				Effect.forEach(
-					ownIn(jobs.table.getState(), mine).filter((job) => job.state === state),
+					Shell.ownedBy(jobs.table.getState(), tile).filter((job) => job.state === state),
 					(job) => jobs.table.dispatch(msg(job.n)).pipe(Effect.ignore),
 					{concurrency: 1, discard: true},
 				),
 			);
+		/** This tile's jobs that still say running when its scope closes run nowhere now: detached, as the host does at its start. */
 		const detachOwn = toOwn("running", (n) => ({type: "detached", n}));
 		// Added before tsh starts, so it runs after tsh and its runs have stopped.
 		yield* Effect.addFinalizer(() => detachOwn);
