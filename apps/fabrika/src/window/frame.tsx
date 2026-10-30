@@ -1,9 +1,10 @@
-import {type ReactNode, useLayoutEffect, useRef} from "react";
+import {type ReactNode, useCallback, useLayoutEffect} from "react";
 import type {AsksNow} from "../asks.ts";
-import {activeOf, type Open} from "../desk/desk.ts";
+import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
+import type {Group} from "../desk/keys.ts";
 import type {FromPage, LinkNow, ToApp} from "../messages.ts";
 import {
-	askRow,
+	asksSections,
 	asksWord,
 	type Bound,
 	bindingWord,
@@ -16,20 +17,28 @@ import {
 	ledgerWord,
 	lineIn,
 	matching,
+	nowhereNote,
+	opensOf,
 	type Part,
 	prefixLine,
 	questionWord,
 	type Shapes,
 	type TicketsShown,
-	tileOfTicket,
-	tipOf,
+	tileWord,
 	workspaceName,
 } from "./frame.ts";
+import {type Cap, capsOf, type Hint, type Row, sentence} from "./pop.ts";
+import {Menu, Palette, Panel, useTip} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
-// them out. Every item is a button with a tooltip (`name · key`) and, in info mode, a line of
-// plain words (`data-info`). No item has a background: plain words, ` · ` between them.
+// them out. Every item is a button with a tooltip (its name and keys, pop.tsx) and, in info mode,
+// a line of plain words (`data-info`). No item has a background: plain words, ` · ` between them.
+// The bars stay monospace, as a terminal's status line; what opens over the desk is drawn by
+// pop.tsx, in the program windows' own font (docs/direction/popovers.md).
+
+/** The element id of each thing that opens over the desk: its opener names it in `aria-controls`. */
+const POP = {asks: "pop-asks", lines: "pop-lines", palette: "pop-palette"} as const;
 
 /** What the frame is drawn from, and how it sends. */
 export interface FrameProps {
@@ -46,40 +55,76 @@ export interface FrameProps {
 	readonly armed: boolean;
 	readonly toHost: (m: FromPage) => void;
 	readonly toApp: (m: ToApp) => void;
+	/** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
+	readonly toRun: (run: string, msg: unknown) => void;
 	readonly step: (m: FrameMsg) => void;
 }
 
 /** ` · `, between two words of the frame. */
 const Sep = () => <span className="sep">·</span>;
 
-/** The key bound to a name, as the frame writes it, or `null`. */
+/** The key bound to a name, as the bars write it, or `null`. */
 const keyFor = (props: FrameProps, name: string): string | null => {
 	const bound = props.table.find((b) => b.name === name);
 	return bound === undefined ? null : bindingWord(props.prefix, bound.key);
 };
 
+/** The key bound to a name, as keycaps for its tooltip: `⌃B` `A`. None when nothing is bound. */
+const capsFor = (props: FrameProps, name: string): readonly Cap[] => {
+	const bound = props.table.find((b) => b.name === name);
+	return bound === undefined ? [] : capsOf(props.prefix, bound.key);
+};
+
+/** No tooltip shows while something lies over the desk, or while info mode explains the item. */
+const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info;
+
+/** What a frame item opens, if anything: a menu or a dialog, by its element's id. */
+interface Opens {
+	readonly popup: "menu" | "dialog";
+	readonly id: string;
+	readonly open: boolean;
+}
+
 /** A frame item: a button of plain words, with its tooltip and its info line. */
 function Item(props: {
 	readonly name: string;
-	readonly keyed: string | null;
+	/** The name is a typed word, a program's: its tooltip draws it in mono. */
+	readonly typed?: boolean;
+	readonly caps: readonly Cap[];
+	readonly quiet: boolean;
 	readonly info: string;
 	readonly className?: string | undefined;
 	readonly current?: boolean;
+	readonly opens?: Opens;
 	readonly onClick: () => void;
 	readonly children: ReactNode;
 }): ReactNode {
+	const tip = useTip(
+		{
+			name: props.typed === true ? props.name : sentence(props.name),
+			typed: props.typed === true,
+			caps: props.caps,
+		},
+		props.quiet,
+	);
 	return (
-		<button
-			type="button"
-			className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
-			title={tipOf(props.name, props.keyed)}
-			data-info={props.info}
-			aria-current={props.current}
-			onPointerDown={(e) => e.preventDefault()}
-			onClick={props.onClick}
-		>
-			{props.children}
-		</button>
+		<>
+			<button
+				type="button"
+				className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
+				data-info={props.info}
+				aria-current={props.current}
+				aria-haspopup={props.opens?.popup}
+				aria-expanded={props.opens?.open}
+				aria-controls={props.opens?.id}
+				{...tip.on}
+				onPointerDown={(e) => e.preventDefault()}
+				onClick={props.onClick}
+			>
+				{props.children}
+			</button>
+			{tip.node}
+		</>
 	);
 }
 
@@ -95,6 +140,13 @@ export function TopBar(props: FrameProps): ReactNode {
 	const host = hostWord(props.link, props.attachedOnce);
 	const count = asks?.asks.length ?? 0;
 	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
+	const quiet = quietOf(props.frame);
+	const over = props.frame.over;
+	const lines = (what: Part): Opens => ({
+		popup: "dialog",
+		id: POP.lines,
+		open: over.kind === "item" && over.what === what,
+	});
 	return (
 		<header className="topbar">
 			<div className="lights-room" aria-hidden="true" />
@@ -104,7 +156,8 @@ export function TopBar(props: FrameProps): ReactNode {
 						<Item
 							key={w.id}
 							name={`workspace ${i + 1}`}
-							keyed={i < 9 ? bindingWord(props.prefix, String(i + 1)) : null}
+							caps={i < 9 ? capsOf(props.prefix, String(i + 1)) : []}
+							quiet={quiet}
 							info={INFO.workspace}
 							current={w.id === desk.active}
 							onClick={() => props.toHost({type: "pick", workspace: w.id})}
@@ -119,13 +172,15 @@ export function TopBar(props: FrameProps): ReactNode {
 				{line.map((s, i) => (
 					<span key={s.tile} className="seg-pair">
 						{i > 0 && (
-							<span className="pipe" data-info={INFO.pipe} title="pipe">
+							<span className="pipe" data-info={INFO.pipe}>
 								|
 							</span>
 						)}
 						<Item
 							name={s.program}
-							keyed={null}
+							typed
+							caps={[]}
+							quiet={quiet}
 							info={INFO.segment}
 							className={`seg${s.focused ? " on" : ""}`}
 							onClick={() => props.toHost({type: "go", tile: s.tile})}
@@ -135,16 +190,18 @@ export function TopBar(props: FrameProps): ReactNode {
 					</span>
 				))}
 			</nav>
-			<div className="drag" data-info={INFO.drag} title="drag to move the window" />
+			<div className="drag" data-info={INFO.drag} />
 			<div className="right">
 				{asks === null ? (
 					<span className="quiet">reading the ledger</span>
 				) : (
 					<Item
 						name="asks"
-						keyed={keyFor(props, "asks")}
+						caps={capsFor(props, "asks")}
+						quiet={quiet}
 						info={INFO.asks}
 						className={count > 0 ? "accent" : undefined}
+						opens={{popup: "menu", id: POP.asks, open: over.kind === "asks"}}
 						onClick={() => step({type: "show", what: "asks"})}
 					>
 						{asksWord(count)}
@@ -156,9 +213,11 @@ export function TopBar(props: FrameProps): ReactNode {
 						<Sep />
 						<Item
 							name="ledger"
-							keyed={null}
+							caps={[]}
+							quiet={quiet}
 							info={INFO.ledger}
 							className="broken"
+							opens={lines("ledger")}
 							onClick={() => step({type: "item", what: "ledger"})}
 						>
 							{ledger.word}
@@ -171,9 +230,11 @@ export function TopBar(props: FrameProps): ReactNode {
 					{host !== null && (
 						<Item
 							name="host"
-							keyed={null}
+							caps={[]}
+							quiet={quiet}
 							info={INFO.host}
 							className={host.broken ? "broken" : undefined}
+							opens={lines("host")}
 							onClick={() => step({type: "item", what: "host"})}
 						>
 							{host.word}
@@ -184,7 +245,8 @@ export function TopBar(props: FrameProps): ReactNode {
 							<Sep />
 							<Item
 								name="try again"
-								keyed={null}
+								caps={[]}
+								quiet={quiet}
 								info={INFO.again}
 								onClick={() => props.toApp({type: "again"})}
 							>
@@ -209,7 +271,7 @@ export function Over(props: FrameProps): ReactNode {
 		case "item":
 			return <ItemLines {...props} what={over.what} />;
 		case "palette":
-			return <Palette {...props} />;
+			return <CommandPalette {...props} />;
 	}
 }
 
@@ -218,90 +280,60 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
+/** The asks list's footer: the keys no row shows. */
+const ASKS_FOOT: readonly Hint[] = [
+	{caps: ["↑", "↓"], name: "Move"},
+	{caps: ["↵"], name: "Open"},
+	{caps: ["H"], name: "Later"},
+	{caps: ["Esc"], name: "Close"},
+];
+
 /**
- * The asks list: each ask named by its tile and ticket; a pick focuses that tile. An ask whose
- * ticket no tile shows is words, not a button: there is nothing to focus.
+ * The asks list, a menu: one row per ask, the ones set aside under `Later`. Enter opens the
+ * ticket: its tile, else the tracker turned to it (frame.ts, `opensOf`). H sets an ask aside, or
+ * brings it back. You answer in the ticket's own tile, never here.
  */
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
-	const {asks, desk, frame, step} = props;
-	const later = frame.over.kind === "asks" && frame.over.later;
-	const tileOf = (ticket: number) =>
-		desk === null ? undefined : tileOfTicket(desk, ticket, props.tickets);
+	const {asks, desk, step, toHost, toRun, tickets} = props;
 	// Opened, every ask in it is seen: the dot in the top bar goes.
 	useLayoutEffect(() => {
-		props.toHost({type: "seen"});
+		toHost({type: "seen"});
 	}, [asks.asks.length]);
+	const close = useCallback(() => step({type: "close"}), [step]);
+	const open = (row: Row) => {
+		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
+		if (ask === undefined) return;
+		const to = opensOf(desk, ask.ticket, tickets);
+		switch (to.kind) {
+			case "tile":
+				toHost({type: "go", tile: to.tile});
+				return close();
+			case "tracker":
+				toRun(to.run, {type: "query", value: {ticket: ask.ticket}});
+				toHost({type: "go", tile: to.tile});
+				return close();
+			case "none":
+				return step({type: "say", note: nowhereNote(ask.ticket)});
+		}
+	};
+	const aside = (row: Row) =>
+		toHost(
+			asks.later.some((a) => a.key === row.id)
+				? {type: "back", key: row.id}
+				: {type: "later", key: row.id},
+		);
 	return (
-		<section className="over asks-list" aria-label="asks">
-			<h2>
-				asks <Sep /> {asks.asks.length} live
-			</h2>
-			{asks.asks.length === 0 && <p className="quiet">nothing asks you</p>}
-			<ul>
-				{asks.asks.map((a) => {
-					const tile = tileOf(a.ticket);
-					return (
-						<li key={a.key}>
-							{tile === undefined ? (
-								<span className="accent" title="no tile shows this ticket">
-									{askRow(a, tile)}
-								</span>
-							) : (
-								<button
-									type="button"
-									className="act accent"
-									title={`focus ${tile}`}
-									onClick={() => {
-										props.toHost({type: "go", tile});
-										step({type: "close"});
-									}}
-								>
-									{askRow(a, tile)}
-								</button>
-							)}
-							<Sep />
-							<button
-								type="button"
-								className="act soft"
-								onClick={() => props.toHost({type: "later", key: a.key})}
-							>
-								later
-							</button>
-						</li>
-					);
-				})}
-			</ul>
-			{asks.later.length > 0 && (
-				<>
-					<button
-						type="button"
-						className="act soft foot"
-						aria-expanded={later}
-						onClick={() => step({type: "later", open: !later})}
-					>
-						{asks.later.length} later
-					</button>
-					{later && (
-						<ul className="later">
-							{asks.later.map((a) => (
-								<li key={a.key}>
-									<span>{askRow(a, tileOf(a.ticket))}</span>
-									<Sep />
-									<button
-										type="button"
-										className="act"
-										onClick={() => props.toHost({type: "back", key: a.key})}
-									>
-										bring back
-									</button>
-								</li>
-							))}
-						</ul>
-					)}
-				</>
-			)}
-			<p className="hint">Only you answer these: in the ticket's own tile.</p>
-		</section>
+		<Menu
+			id={POP.asks}
+			label="Asks"
+			count={asks.asks.length}
+			sections={asksSections(asks, desk, tickets, Date.now())}
+			foot={ASKS_FOOT}
+			empty={{title: "Nothing waits on you", sub: "A new ask shows here and in the top bar."}}
+			onAct={open}
+			onSecond={aside}
+			onClose={close}
+		/>
 	);
 }
 
@@ -311,29 +343,39 @@ const JOBS_STOP =
 
 /** A few lines on one item of the top bar, under it: the ledger or the host. */
 function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
-	const {asks, link} = props;
+	const {asks, link, step} = props;
+	const close = useCallback(() => step({type: "close"}), [step]);
 	const body = (): ReactNode => {
 		switch (props.what) {
 			case "ledger":
 				return asks === null ? null : asks.reach === "failed" ? (
 					<>
-						<h2>The ledger is unreachable</h2>
-						<p>{asks.why}</p>
-						<p className="hint">
+						<h2 className="pop-title broken">The ledger is unreachable</h2>
+						{asks.why !== null && <code className="pop-why">{asks.why}</code>}
+						<p className="pop-text">
 							The asks count is the last one read. It reads again every second.
 						</p>
 					</>
 				) : (
-					<h2>The ledger answers</h2>
+					<h2 className="pop-title">The ledger answers</h2>
 				);
 			case "host":
 				return <HostLines link={link} first={!props.attachedOnce} toApp={props.toApp} />;
 		}
 	};
 	return (
-		<section className="over item-lines" aria-label={props.what}>
+		<Panel id={POP.lines} label={props.what === "host" ? "The host" : "The ledger"} onClose={close}>
 			{body()}
-		</section>
+		</Panel>
+	);
+}
+
+/** A panel's one thing to do, as a button. */
+function Do(props: {readonly onClick: () => void; readonly children: ReactNode}): ReactNode {
+	return (
+		<button type="button" className="pop-button" onClick={props.onClick}>
+			{props.children}
+		</button>
 	);
 }
 
@@ -345,21 +387,25 @@ function HostLines(props: {
 }): ReactNode {
 	const {link, first} = props;
 	const restart = (
-		<button type="button" className="act" onClick={() => props.toApp({type: "restart"})}>
-			Stop the old host and start this one
-		</button>
+		<Do onClick={() => props.toApp({type: "restart"})}>Stop the old host and start this one</Do>
 	);
 	switch (link.kind) {
 		case "up":
-			return <h2>The host is up</h2>;
+			return <h2 className="pop-title">The host is up</h2>;
 		case "build":
 			return (
 				<>
-					<h2>The host runs older code</h2>
-					<p>
-						{link.theirs === null
-							? `It names no build. This app is build ${link.ours}.`
-							: `It is build ${link.theirs}. This app is build ${link.ours}.`}{" "}
+					<h2 className="pop-title">The host runs older code</h2>
+					<p className="pop-text">
+						{link.theirs === null ? (
+							<>
+								It names no build. This app is build <code>{link.ours}</code>.
+							</>
+						) : (
+							<>
+								It is build <code>{link.theirs}</code>. This app is build <code>{link.ours}</code>.
+							</>
+						)}{" "}
 						{JOBS_STOP}
 					</p>
 					{restart}
@@ -368,34 +414,36 @@ function HostLines(props: {
 		case "version":
 			return (
 				<>
-					<h2>The host speaks link version {link.theirs}</h2>
-					<p>This app speaks {link.ours}.</p>
+					<h2 className="pop-title broken">The host speaks link version {link.theirs}</h2>
+					<p className="pop-text">This app speaks {link.ours}.</p>
 					{restart}
 				</>
 			);
 		case "reconnecting":
 			return (
 				<>
-					<h2>{first ? "Connecting to the host…" : "Reconnecting to the host…"}</h2>
-					<p>{link.why}</p>
+					<h2 className="pop-title">
+						{first ? "Connecting to the host…" : "Reconnecting to the host…"}
+					</h2>
+					<code className="pop-why">{link.why}</code>
 				</>
 			);
 		case "stopped":
 			return (
 				<>
-					<h2>{first ? "Could not connect to the host" : "Could not reconnect to the host"}</h2>
-					<p>{link.why}</p>
-					<p>It stopped trying after five minutes.</p>
-					<button type="button" className="act" onClick={() => props.toApp({type: "again"})}>
-						Try again
-					</button>
+					<h2 className="pop-title broken">
+						{first ? "Could not connect to the host" : "Could not reconnect to the host"}
+					</h2>
+					<code className="pop-why">{link.why}</code>
+					<p className="pop-text">It stopped trying after five minutes.</p>
+					<Do onClick={() => props.toApp({type: "again"})}>Try again</Do>
 				</>
 			);
 		case "restarting":
 			return (
 				<>
-					<h2>Stopping the old host…</h2>
-					<p>Once it has stopped, this app starts its own and attaches.</p>
+					<h2 className="pop-title">Stopping the old host…</h2>
+					<p className="pop-text">Once it has stopped, this app starts its own and attaches.</p>
 				</>
 			);
 	}
@@ -448,11 +496,13 @@ export function BottomLine(props: FrameProps): ReactNode {
 		if (frame.note !== null) return <span className="note">{frame.note}</span>;
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
+		const quiet = quietOf(frame);
 		return (
 			<>
 				<Item
 					name="info"
-					keyed={info}
+					caps={capsFor(props, "info")}
+					quiet={quiet}
 					info={INFO.info}
 					onClick={() => props.step({type: "show", what: "info"})}
 				>
@@ -461,8 +511,14 @@ export function BottomLine(props: FrameProps): ReactNode {
 				<Sep />
 				<Item
 					name="keys"
-					keyed={keys}
+					caps={capsFor(props, "keys")}
+					quiet={quiet}
 					info={INFO.keys}
+					opens={{
+						popup: "dialog",
+						id: POP.palette,
+						open: frame.over.kind === "palette" && frame.over.title === "keys",
+					}}
 					onClick={() => props.step({type: "show", what: "keys"})}
 				>
 					{keys ?? ""} keys
@@ -478,62 +534,63 @@ export function BottomLine(props: FrameProps): ReactNode {
 	);
 }
 
+/** A group of commands, as its heading says it. */
+const GROUP_TITLE: Readonly<Record<Group, string>> = {
+	tile: "Tile",
+	focus: "Focus",
+	workspace: "Workspace",
+	window: "Window",
+};
+
+/** `19 commands`, `1 shortcut`. */
+const countWord = (n: number, keys: boolean): string =>
+	`${n} ${keys ? "shortcut" : "command"}${n === 1 ? "" : "s"}`;
+
 /**
- * The palette (Cmd-K), or every key (C-b ?): each command and its key. Typing
- * narrows it, the arrows move, Enter runs the command as its key would, Escape closes it.
+ * The palette (Cmd-K), or every key (C-b ?): each command and its keys, grouped, the focused tile
+ * named on top since the commands act on it. Typing narrows it, the arrows move, Enter runs the
+ * command as its key would, Escape closes it.
  */
-function Palette(props: FrameProps): ReactNode {
-	const {frame, step} = props;
-	const input = useRef<HTMLInputElement>(null);
-	useLayoutEffect(() => {
-		input.current?.focus();
-	}, []);
+function CommandPalette(props: FrameProps): ReactNode {
+	const {frame, step, desk} = props;
+	const close = useCallback(() => step({type: "close"}), [step]);
 	if (frame.over.kind !== "palette") return null;
 	const {title, query, at} = frame.over;
-	const all = commandsOf(props.prefix, props.table, props.desk?.workspaces.length ?? 0);
-	const shown = matching(all, query);
+	const keys = title === "keys";
+	const shown = matching(
+		commandsOf(props.prefix, props.table, desk?.workspaces.length ?? 0),
+		query,
+	);
 	const run = (i: number) => {
 		const c = shown[i];
 		if (c === undefined) return;
 		props.toHost({type: "run", key: c.runs});
 		step({type: "ran", key: c.key});
 	};
+	const focused = desk === null ? null : focusedOf(desk);
+	const groups = [...new Set(shown.map((c) => c.group))];
 	return (
-		<div className="over palette" role="dialog" aria-label={title}>
-			<p className="palh">{title === "keys" ? "every key" : "commands"}</p>
-			<input
-				ref={input}
-				aria-label="find a command"
-				value={query}
-				placeholder="type a command"
-				onChange={(e) => step({type: "query", query: e.currentTarget.value})}
-				onKeyDown={(e) => {
-					if (e.key === "Escape") step({type: "close"});
-					else if (e.key === "ArrowDown") step({type: "move", by: 1, of: shown.length});
-					else if (e.key === "ArrowUp") step({type: "move", by: -1, of: shown.length});
-					else if (e.key === "Enter") run(at);
-					else return;
-					e.preventDefault();
-				}}
-			/>
-			<ul>
-				{shown.map((c, i) => (
-					<li key={c.name}>
-						<button
-							type="button"
-							className={`cmd${i === at ? " on" : ""}`}
-							onPointerDown={(e) => e.preventDefault()}
-							onClick={() => run(i)}
-						>
-							<span>{c.name}</span>
-							<span className="k">{c.key}</span>
-						</button>
-					</li>
-				))}
-			</ul>
-			<p className="palf">
-				Cmd-K commands <Sep /> Enter runs <Sep /> Esc closes
-			</p>
-		</div>
+		<Palette
+			id={POP.palette}
+			label={keys ? "Keyboard shortcuts" : "Commands"}
+			chip={
+				keys || focused === null
+					? "Keyboard shortcuts"
+					: `${focused.id} · ${tileWord(focused, props.tickets)}`
+			}
+			query={query}
+			sections={groups.map((g) => ({
+				title: GROUP_TITLE[g],
+				options: shown
+					.filter((c) => c.group === g)
+					.map((c) => ({id: c.name, name: c.name, caps: c.caps})),
+			}))}
+			at={at}
+			count={countWord(shown.length, keys)}
+			onQuery={(q) => step({type: "query", query: q})}
+			onMove={(by) => step({type: "move", by, of: shown.length})}
+			onRun={run}
+			onClose={close}
+		/>
 	);
 }

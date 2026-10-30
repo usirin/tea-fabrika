@@ -1,6 +1,7 @@
 # What opens over the desk: popovers, menus, the palette
 
-**Proposed 2026-10-30.** Two parts are settled by the owner on 2026-10-30:
+**Settled, owner 2026-10-30.** The owner saw the mockups and settled the whole
+note. Two parts were ruled first:
 
 - **One font and one set of tokens.** What opens over the desk uses the same font,
   size scale and colors as the program windows: `--font`, `--fs-*` and the
@@ -9,7 +10,18 @@
 - **The bars stay as they are.** The top bar and the bottom line keep their
   monospace, tmux-like look. They are out of scope for this note.
 
-Everything else below is a recommendation.
+The build settled the questions the note left open (section 9):
+
+- **`↵` on an ask that no tile shows** turns the tracker to that ticket, and
+  focuses the tracker's tile. With no tracker on the desk, the list closes and
+  the bottom line says so. It never opens a new tile: the app has no path for
+  that yet.
+- **Sentence case** everywhere inside a popover, as Linear writes it.
+- **Two spellings of one key, on purpose.** Inside a popover a key is drawn
+  with the Mac's glyphs (`⌃B` `A`). The bars keep tmux's `C-b a`.
+- **Closing is at once,** with no fade out.
+- **The close-tile question stays in the bars,** where tmux asks it.
+- **The type scale stays as it is** for now. Its 14px root is tracker ticket 108.
 
 The whole idea, in one block:
 
@@ -35,14 +47,13 @@ It holds together because the two layers are different things:
 - Ghostty draws the same line: the terminal grid is mono, and its tabs, splits
   and error messages are native UI ([Ghostty, about](https://ghostty.org/docs/about)).
 
-The owner looks at mockups first (the asks popover before and after, its
-states, the Cmd-K palette and the `C-b ?` panel). Nothing in the app changes
-before that; the change that builds it carries real screenshots, as every
-program change does.
+The owner looked at mockups first (the asks popover before and after, its
+states, the Cmd-K palette and the `C-b ?` panel). The change that builds it
+carries real screenshots, in `apps/fabrika/docs/frame/`.
 
-## 1. Why today's asks list reads as terminal text
+## 1. Why the old asks list read as terminal text
 
-Today's list (from [PR 199](https://github.com/usirin/tea-fabrika/pull/199),
+The list before this rule (from [PR 199](https://github.com/usirin/tea-fabrika/pull/199),
 `AsksList` in `apps/fabrika/src/window/frame.tsx`):
 
 ```text
@@ -168,14 +179,15 @@ The behavior side, from the standards:
   in sentence case at weight 500, one muted line under it, and the time or the
   row's keys at the right.
 - **Keys are keycaps,** in `--font`, with the Mac's glyphs: `⌃B` `A`. A key that
-  belongs to a row sits on that row; a key no row shows sits in the footer.
+  belongs to a row sits on that row; a key no row shows sits in the footer. The
+  footer reads as the active row does: on a Later row it says `H Bring back`.
 - **It behaves like the standard it is.** Pick the role by the content: a
   `menu` for rows that each do something, a `combobox` with a `listbox` in a
   `dialog` for the palette, a `dialog` when it has fields, a `tooltip` for a
   name. Focus moves in; arrows move; Enter acts; Escape closes and puts focus
   back where it was; a click outside closes it; one at a time.
 - **Calm motion.** In over `--fast` with a fade and a 0.96 scale from the
-  anchor; out faster, fade only. With reduced motion, fade only.
+  anchor. Out at once (section 9). With reduced motion, fade only.
 - **Never a blank box.** No rows means one calm line and what to expect.
 
 Why, cost and confidence:
@@ -290,6 +302,43 @@ const asks: Over = {
 Every field comes from `Ask` in `apps/fabrika/src/asks.ts` (`ticket`, `title`,
 `what`, `kind`, `at`) and the tile that shows the ticket. Nothing is made up.
 
+As built, the rows are plain data (`apps/fabrika/src/window/pop.ts`), and one
+component draws them (`pop.tsx`). Which popover is open lives in the frame's
+model, one `over`, so two cannot be open at once. The active row and a folded
+section are the menu's own state, so a new popover needs one import and its rows:
+
+```tsx
+import {Menu} from "./pop.tsx";
+
+<Menu
+	id="pop-asks"
+	label="Asks"
+	count={2}
+	sections={[
+		{id: "asks", title: null, fold: false, rows: [
+			{id: "1/a-1", icon: "ask", title: "Approve plan", sub: "#1 Login fails on Safari · t2",
+				side: "11:13", second: {name: "Later", cap: "H"}},
+		]},
+		{id: "later", title: "Later", fold: true, rows: [/* ... */]},
+	]}
+	foot={[{caps: ["↑", "↓"], name: "Move"}, {caps: ["↵"], name: "Open"}]}
+	empty={{title: "Nothing waits on you", sub: "A new ask shows here and in the top bar."}}
+	onAct={open}
+	onSecond={later}
+	onClose={close}
+/>;
+
+// What each key does is one pure function, tested on its own:
+menuKey(stops, "1/a-1", {key: "ArrowDown"}); // {do: "move", to: "2/stuck/r-1"}
+menuKey(stops, "1/a-1", {key: "h"}); //         {do: "second", row: ...}
+menuKey(stops, "1/a-1", {key: "Escape"}); //    {do: "close"}
+```
+
+The other three are `Palette` (a combobox in a modal dialog), `Panel` (a
+non-modal dialog with a few lines and a button) and `useTip` (a tooltip). While
+any of them is open, `keyGoesTo` in `frame.ts` sends the keys it reads to it,
+never to the tile under it.
+
 How a row's second action stays valid for a screen reader:
 
 - The row is a `menuitem` with `aria-keyshortcuts="H"`, so `H` is announced.
@@ -307,7 +356,7 @@ Opened with `C-b a` or a click on `2 ask you`:
 |---|---|
 | `↑` `↓`, or `J` `K` as in Linear's Inbox | Move the active row |
 | A letter | Jump to the next row whose title starts with it |
-| `↵` | Open: focus the tile that shows the ticket, and close |
+| `↵` | Open: focus the tile that shows the ticket, and close. No tile shows it: turn the tracker to it |
 | `H` | Later, or Bring back on a set-aside row (Linear snoozes with `H`) |
 | `↵` on the "Later" heading | Fold or unfold the set-aside rows |
 | `Esc` | Close; focus goes back where it was before |
@@ -341,15 +390,27 @@ neighbors, as Radix does; they also open on keyboard focus.
 - **The size scale is 12.5% smaller than its names.** With a 14px root,
   `--fs-body` is 11.4px and `--fs-small` 10.5px, under macOS's 13pt body and
   Linear's 13px. The popover follows the windows, so it is as small as they
-  are. Moving the root to 16px would fix both at once, and change every window.
-- **The ask whose ticket no tile shows** (#2 in the shots) has no action today.
-  The lean is that `↵` opens the ticket in a new tile beside the focused one,
-  as Linear opens an Inbox item. That is new behavior with its own ticket.
-- **Two spellings of one key.** Keycaps say `⌃B` `A`; the bottom line keeps
-  `C-b a`. The owner may want one spelling.
+  are. Moving the root to 16px would fix both at once, and change every window:
+  tracker ticket 108.
 - **Who asked is not in the data.** `Ask` has no stage, so a row cannot say
   "plan asks" without a new field.
-- **Apple says title case for menus; Linear uses sentence case.** This note
-  follows Linear. Not tested with anyone.
-- **Motion is not in the mockups.** They are still pictures.
+- **Sentence case is not tested with anyone.** Apple says title case for menus;
+  Linear uses sentence case, and so does fabrika now.
+- **VoiceOver is not tested.** Whether it reads `aria-keyshortcuts` on a menu
+  row well enough is still the doubt from section 5.
 - **Raycast** stays unconfirmed.
+
+## 9. What the build decided
+
+| Question | Decided | Why |
+|---|---|---|
+| `↵` on an ask no tile shows | Turn the tracker to the ticket, focus the tracker's tile. No tracker: close, and the bottom line says `no tile shows #2 · the tracker opens it` | A real path exists: the tracker takes a `query` for a ticket, and its line hands the ticket to the ticket view. Opening a new tile from the page has no path today, and a key that does nothing is worse than either |
+| Title case or sentence case | Sentence case: `Approve plan`, `Stuck: checks red`, `Bring back` | Linear writes it; the text comes from the ledger as lowercase words, and one rule (`sentence`) makes it read |
+| `⌃B` `A` or `C-b a` | Glyphs inside a popover, `C-b a` in the bars | The bars are the terminal layer and say keys as tmux does; a popover is the product and says them as the Mac does, as Linear's keycaps do |
+| Out motion | At once, no fade | The box leaves the moment focus goes back; a fading box would no longer take keys yet still sit on the desk |
+| The close-tile question (`close t2? (y/n)`) | Stays in the bottom line and the tile's bar | It is the frame's own question, said where tmux says it. It is not a popover |
+| Info mode | Stays on the bottom line | It says what the pointer is over in the bar. The ledger and host lines it points at are panels now |
+
+The palette groups its commands as Tile, Focus, Workspace, then the window's
+own (Window). A command a newer host knows and this page does not is still
+listed, with the window's own.

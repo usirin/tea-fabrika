@@ -35,10 +35,10 @@ const scrollersOf = (css: string) =>
 
 describe("a tile's scroll", () => {
 	it("is the view's alone: the frame clips, and only the frame's lists over the desk scroll too", () => {
-		expect(scrollersOf(CSS)).toEqual(["main.program > *", ".over", ".palette ul"]);
+		expect(scrollersOf(CSS)).toEqual(["main.program > *", ".pop.menu, .pop.panel", ".pop .list"]);
 		const frame = rulesOf(CSS).filter((r) => r.selector === "main.program");
 		expect(frame.map((r) => r.says.get("overflow"))).toEqual(["clip"]);
-		const palette = rulesOf(CSS).filter((r) => r.selector === ".palette");
+		const palette = rulesOf(CSS).filter((r) => r.selector === ".pop.palette");
 		expect(palette.map((r) => r.says.get("overflow"))).toEqual(["clip"]);
 	});
 

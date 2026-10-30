@@ -111,11 +111,11 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. The person's later and seen (`Marks`) come in as its flags from `asks.json`, and the host writes them back on each change (`src/host/serve.ts`). |
-| `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `pop.ts` and `pop.tsx`, what opens over the desk: one raised box of rows for every popover (`Menu`, `Palette`, `Panel`, `useTip`), its keys as one pure function (`menuKey`), by [the popover rule](../../docs/direction/popovers.md). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's color tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | runs` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
 
@@ -138,8 +138,10 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `B` | hide both bars; again to show them |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
 
-`Cmd-K` (no prefix) opens the palette: every command by name, with its key. Type to
-narrow it, Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
+`Cmd-K` (no prefix) opens the palette: every command by name, in groups (Tile, Focus,
+Workspace, Window), with its keys as Mac keycaps (`⌃B` `Z`). Type to narrow it, the matched
+letters bold; Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
+`C-b ?` opens the same list as "Keyboard shortcuts".
 This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
 commands; programs' inputs join it later, from the same list that makes the agent tools.
 Ghostty's own palette opens with Cmd-Shift-P and takes user entries (`command-palette-entry`);
@@ -195,15 +197,22 @@ When something is wrong, its word joins the top bar's right end, in red where it
   ask never shows here.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
   each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
-  and the asks list all read that one value. A click on the count opens the list; picking one
-  focuses the tile that shows its ticket; an ask whose ticket no tile shows is plain words. You
-  answer in the ticket's own tile. `later` takes an ask out of the count until you bring it
-  back. A new ask never moves focus; with the window not focused, the system notifies once.
+  and the asks list all read that one value. A click on the count, or `C-b a`, opens the list,
+  a menu with focus in it: one row per ask (what it asks, its ticket and tile under it, its
+  time), `↑` `↓` or `J` `K` to move, `↵` to open, `H` to set the ask aside (Later) or bring it
+  back, `Esc` or a click outside to close, focus back where it was. `↵` focuses the tile that
+  shows the ticket; when none does, it turns the tracker to the ticket and focuses the tracker;
+  with no tracker on the desk, the bottom line says so. You answer in the ticket's own tile. A
+  set-aside ask leaves the count and waits under Later, at the list's foot. While the list or
+  the palette is open, no key it reads reaches a tile. A new ask never moves focus; with the
+  window not focused, the system notifies once.
   Later and seen are yours, not the ticket's: the host keeps them in your home's `asks.json`,
   so a host restart keeps them, and two people on one shared ledger each keep their own. An
   ask answered meanwhile drops out of the file at the host's first read. A file that does not
   read starts with every ask counted and new, and the host's log says why.
-- **Every item is a button with a tooltip,** `name · key`, or the name alone when it has no key.
+- **Every item is a button with a tooltip:** its name and its keys as keycaps (`Asks` `⌃B`
+  `A`), after the pointer rests 700 ms, at once within 300 ms of the last one, as Radix does;
+  keyboard focus shows it too. The bars themselves keep tmux's spelling, `C-b a`.
 - **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
   word; running and done are gray words.
 

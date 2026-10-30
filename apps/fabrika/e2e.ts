@@ -24,7 +24,9 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //   7 closing        `sleep --ms 600000 &` in t1, Ctrl-B x, y: t1 shows "closing", as sleep runs on
 //   8 stop-asked     Ctrl-B x on the closing t1: "stop t1 now? (y/n)"; y and t1 goes
 //
-// Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; Ctrl-C over counter
+// Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; what opens over the
+// desk (the asks list, the palette) takes focus and every key it reads, so no arrow reaches the tile
+// under it, and Escape or a press outside gives focus back, one open at a time; Ctrl-C over counter
 // is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
 // Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
 // window.open hands http and https to the browser and refuses file:, javascript: and the app's
@@ -210,6 +212,88 @@ const activate = async (app: ElectronApplication) => {
 	return await next;
 };
 
+/** The popover that holds the page's focus: its id, or `null`. */
+const overHolds = (page: Page) =>
+	page.evaluate(() => document.activeElement?.closest("[data-over]")?.id ?? null);
+const gone = (page: Page, id: string) =>
+	until(
+		`#${id} to close`,
+		() => page.locator(`#${id}`).count(),
+		(n) => n === 0,
+	);
+
+/**
+ * What opens over the desk (docs/direction/popovers.md), from t3 at an empty prompt, with t1's
+ * line in the shared history: focus moves in; no key it takes reaches t3 under it, even with
+ * focus knocked out of it; Escape and a press outside close it, focus back in t3; one at a time.
+ */
+const popovers = async (page: Page) => {
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	check("Ctrl-B a opens the asks list, focus in it", (await overHolds(page)) === "pop-asks");
+	const empty = (await page.locator("#pop-asks").textContent()) ?? "";
+	check(
+		"with nothing waiting, it says so in one calm line",
+		empty.includes("Nothing waits on you"),
+	);
+	for (const key of ["ArrowUp", "ArrowDown", "Enter", "j", "x"]) await page.keyboard.press(key);
+	// Focus knocked out of the list, onto the page itself: the next key still never reaches t3.
+	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+	await page.keyboard.press("ArrowUp");
+	check("a key with focus outside it moves focus back in", (await overHolds(page)) === "pop-asks");
+	await page.waitForTimeout(200);
+	const under = await screen(page, "t3");
+	check("no arrow, Enter or letter reached t3 under the list", lastRow(under) === "tsh$", under);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-asks");
+	check("Escape closes it, and focus is back in t3", (await focusedIn(page)) === "t3");
+
+	await page.keyboard.press("Meta+k");
+	const palette = page.getByRole("dialog", {name: "Commands"});
+	await palette.waitFor();
+	check(
+		"Cmd-K opens the palette, focus in its text box",
+		(await overHolds(page)) === "pop-palette",
+	);
+	await page.keyboard.type("zo");
+	await page.keyboard.press("ArrowDown");
+	const typed = await palette.getByRole("combobox").inputValue();
+	check("what is typed goes to its text box, not to t3", typed === "zo", typed);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+	check("Escape closes the palette, and focus is back in t3", (await focusedIn(page)) === "t3");
+
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await page.keyboard.press("Meta+k");
+	await palette.waitFor();
+	check(
+		"one at a time: the palette takes the asks list's place",
+		(await page.locator("#pop-asks").count()) === 0,
+	);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await tile(page, "t3").click();
+	await gone(page, "pop-asks");
+	check("a press outside closes the list, and focus is in t3", (await focusedIn(page)) === "t3");
+	const still = await screen(page, "t3");
+	check("t3's prompt is still empty", lastRow(still) === "tsh$", still);
+
+	// And with nothing open, Up does reach t3: the keys above were held back, not lost on the way.
+	await page.keyboard.press("ArrowUp");
+	await shows(
+		page,
+		"t3",
+		"t1's line, from the history",
+		(t) => lastRow(t) === "tsh$ seq --to 3 | double",
+	);
+	await page.keyboard.press("Control+c");
+	await prompted(page, "t3");
+};
+
 const flow = async (app: ElectronApplication) => {
 	const page = await app.firstWindow();
 	await prompted(page, "t1");
@@ -242,6 +326,7 @@ const flow = async (app: ElectronApplication) => {
 	await tile(page, "t3").click();
 	await focusIs(page, "t3");
 	check("a click focuses a tile", true);
+	await popovers(page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
@@ -786,7 +871,8 @@ const noteNow = (page: Page) =>
 const hostLines = async (page: Page) => {
 	const host = page.locator(LINK).getByRole("button", {name: /^host /});
 	await host.click();
-	const lines = (await page.locator(".item-lines").textContent({timeout: 2000})) ?? "";
+	const lines =
+		(await page.getByRole("dialog", {name: "The host"}).textContent({timeout: 2000})) ?? "";
 	await host.click();
 	return lines;
 };

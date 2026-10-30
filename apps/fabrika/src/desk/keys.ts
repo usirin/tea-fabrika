@@ -96,6 +96,29 @@ export const BINDINGS: readonly Binding[] = [
 
 export const bindingOf = (key: string): Binding | undefined => BINDINGS.find((b) => b.key === key);
 
+/** What a key acts on: the focused tile, focus, the workspaces, or the window's frame. */
+export type Group = "tile" | "focus" | "workspace" | "window";
+
+/** The group a binding is listed under, in the palette and the keys panel (window/frame.ts). */
+export const groupOf = (does: Does): Group => {
+	switch (does.kind) {
+		case "split":
+		case "turn":
+		case "fold":
+		case "zoom":
+		case "close":
+			return "tile";
+		case "focus":
+			return "focus";
+		case "new":
+		case "step":
+		case "pick":
+			return "workspace";
+		case "show":
+			return "window";
+	}
+};
+
 /** A key press, as the page reads it off a keyboard event. */
 export interface Press {
 	readonly key: string;
