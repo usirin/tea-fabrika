@@ -27,8 +27,8 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   has one program per stage from the start, and no `hosted/` folder.
 - **The repo stays clean by checks, not by a written rule:** dead code found,
   and the public names diffed against main, so a new export is seen. Built
-  2026-10-29: dead code, as advice only (below). Public names are not built
-  yet.
+  2026-10-29: dead code, blocking in `pnpm lint` from 2026-10-30 (below).
+  Public names are not built yet.
 - **No limit on file size** (dropped 2026-10-24). Its number, 400 lines, was
   code-graph's default, picked by nobody here. Research finds no line count
   where defects jump: bigger files carry somewhat more risk on average, with
@@ -56,9 +56,9 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   ```
 
   - dead code: code-graph gates it since 0.11.0
-    (https://github.com/kamp-us/demlik/issues/729), but here it only
-    advises. It is not in `pnpm lint`, and its CI step cannot turn the check
-    red. Measured on 2026-10-29, first with 0.11.0, then with 0.12.0:
+    (https://github.com/kamp-us/demlik/issues/729). It is part of
+    `pnpm lint` and blocks a merge (2026-10-30). Measured on 2026-10-29,
+    first with 0.11.0, then with 0.12.0:
 
     | Version | Found | Right | Wrong |
     |---|---|---|---|
@@ -72,8 +72,11 @@ the old one   stays as a map of which jobs exist        deleted once the new one
     wrong entries. The 4 left were searched for again across the whole tree,
     and are still right. False alarms are now about 0%. Blocking needs about
     0% false alarms (Google CACM 2018); advising tolerates up to 10%. So it
-    could now move into `pnpm lint`. That is the owner's call, and it still
-    advises until then. One thing is lost: 23 of the 32 old findings pointed
+    blocks. The earlier lean, to advise for a couple of weeks first because 4
+    findings is a small count, was not taken: a wrong finding is cheap to
+    see (the check names it) and to fix (a code-graph bug, as 751 and 733
+    were). What would undo this: a wrong finding blocking a real pull
+    request. One thing is lost: 23 of the 32 old findings pointed
     at an `export` nobody needs outside its own file. 0.12.0 no longer
     reports those, so an unneeded `export` is no longer found. How sure that
     the count is right: 90%; it is one tree on one day, and the count was

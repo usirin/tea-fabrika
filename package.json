@@ -8,7 +8,7 @@
 		"typecheck": "effect-tsgo patch --typescript && pnpm -r typecheck",
 		"build": "pnpm --filter @kampus/fabrika --filter @kampus/pipeline build",
 		"test": "vitest run",
-		"lint": "biome check --error-on-warnings . && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser",
+		"lint": "biome check --error-on-warnings . && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead",
 		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
 		"lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
 		"lint:browser": "node packages/fabrika/browser-check.ts",
