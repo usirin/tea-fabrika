@@ -188,7 +188,9 @@ When something is wrong, its word joins the top bar's right end, in red where it
   failed, as `ledger unreachable`; a click says why. The asks it last read stay, drawn faint
   while the host is down.
 - **The bottom line is where you are:** the focused tile, what it takes and sends, its
-  neighbors in its line, and its running jobs. After Ctrl-B it lists the keys (`PREFIX`); your
+  neighbors in its line, and its running jobs. What it takes is the data a pipe can feed it,
+  by tsh's own rule (`Shell.fedBy`: an input some program's output fits), never its commands:
+  the ticket takes `ticket`, not `close` or `quit`. After Ctrl-B it lists the keys (`PREFIX`); your
   own close question is asked here (and in the tile's title bar), as tmux asks it. An agent's
   ask never shows here.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):

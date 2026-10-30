@@ -14,7 +14,7 @@
 // on the top level, beside the rest of the host.
 export {EMPTY, type Job, type Jobs, type JobsMsg} from "../host/jobs.ts";
 // A line, read the way tsh reads it before anything starts: for an app's own tests of its lines.
-export {type Checked, check} from "./check.ts";
+export {type Checked, check, fedBy} from "./check.ts";
 export {complete} from "./complete.ts";
 export {shapeLines, typeOf} from "./decode.ts";
 export {parse} from "./grammar.ts";

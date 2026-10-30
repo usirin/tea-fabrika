@@ -196,6 +196,9 @@ export const appPrograms = (
 	];
 };
 
+/** What a tile's tsh lists, and so what a line can pipe from: tsh's small programs, then `apps`. */
+export const tshList = (apps: readonly Entry[]): readonly Entry[] => [...Shell.SMALL, ...apps];
+
 /** An entry whose runs are handed to `seen` as they start, however tsh starts them. */
 const seenBy = (entry: Entry, seen: (running: AnyRunning) => Effect.Effect<void>): Entry => ({
 	...entry,
@@ -386,9 +389,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...Shell.SMALL, ...appPrograms(ledger, author, pullRequests)].map((entry) =>
-				seenBy(entry, seen),
-			),
+			tshList(appPrograms(ledger, author, pullRequests)).map((entry) => seenBy(entry, seen)),
 		);
 		const started = yield* start(
 			Shell.tsh,

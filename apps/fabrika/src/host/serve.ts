@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Entry, type JobsOnHost, Ledger} from "@kampus/fabrika";
+import {type Entry, type JobsOnHost, Ledger, Shell} from "@kampus/fabrika";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
@@ -21,7 +21,7 @@ import type {SharedHistory} from "../editor/history.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
 import {startTiles} from "../tiles.ts";
-import {appPrograms, type Screen} from "../tsh.ts";
+import {appPrograms, type Screen, tshList} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import {serveAgents} from "./agents.ts";
 
@@ -77,15 +77,16 @@ const KEYS: ToPage = {
 };
 
 /**
- * Each program tsh runs here, with the inputs a pipe can fill and the outputs it sends, for the
- * frame's bottom line (`takes ticket · sends ticket`). `do` is left out: every program here takes
- * its window's clicks on it, and no pipe fills it.
+ * Each of the app's programs, with the inputs a pipe can feed and the outputs it sends, for the
+ * frame's bottom line (`takes ticket · sends ticket`). What it takes is tsh's own rule for a pipe
+ * (`Shell.fedBy`), over the list a tile's tsh has: its commands (`close`, `quit`) are not data a
+ * pipe brings, and the line and the frame never disagree.
  */
-const programsOf = (entries: readonly Entry[]): ToPage => ({
+const programsOf = (apps: readonly Entry[]): ToPage => ({
 	type: "programs",
-	programs: entries.map(({program}) => ({
+	programs: apps.map(({program}) => ({
 		name: program.name,
-		takes: Object.keys(program.inputs).filter((name) => name !== "do"),
+		takes: Shell.fedBy(program, tshList(apps)),
 		sends: Object.keys(program.outputs),
 	})),
 });
