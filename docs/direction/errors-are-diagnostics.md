@@ -144,6 +144,10 @@ Checked in Effect 4.0.6, the version in the catalog.
 - Moving each area's errors onto it: tsh first, then programs, the host and the
   MCP door, one pull request each. Which errors go first comes from an
   inventory of every error and its text today.
+- Making every error a `Schema.TaggedError` first (decided 2026-10-29). Today
+  source files hold 43 `Schema.TaggedError`, 86 plain `new Error(...)` and 4
+  hand-written `extends Error`. The plain ones move in this pass, not in the
+  [Schema class sweep](./schema-classes-not-of-helpers.md).
 - An explain page and a snapshot per code. That is writing, on purpose.
 
 ## Doubts
