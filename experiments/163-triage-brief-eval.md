@@ -16,7 +16,8 @@ exam tickets GPT sol closed 1 of 32 built tickets (v5: 4) and opus 2 of 27
 (v5: 10 of 32). But 48% to 66% of answers are asks: about 105 to 190 a week at
 phoenix's filing rate. 12 of 15 sampled asks could be answered from the trace
 alone. Neither set is blind any more; v6 ran once, as written. Opus $11.49
-(stopped by the $12 cap at 51 of 63).
+(stopped by the $12 cap at 51 of 63); GPT sol $25.37 at list price for 364
+answers.
 
 **Part 3's answer: reading the code helps, and v5 is ready for the exam.**
 With read-only access to phoenix's code as it was on the day each ticket was
@@ -30,13 +31,23 @@ sample got 14 right for $3.33. The exam on a fresh set has not run.
 the open half on opus and closed 9 of 40 locked built tickets (bar: at most 5)
 and 1 of 5 locked security tickets (bar: 0). It fit the 58 cases it was tuned
 on. GPT sol has no locked score: the lock refused a second model on the same
-brief. Opus cost $17.96.
+brief. Opus cost $17.96; GPT sol $8.38 at list price.
 
 **Answer: the pieces are built and the harness works on both models. 119
 labelled phoenix cases, split 58 open and 61 locked. Brief v1 is 388 words with
 three close rules. On 5 open cases, opus got all 10 answers right; GPT sol got 8,
-closing one built ticket as hardening in both runs. Opus cost $0.61. The bar
-below waits for the owner.**
+closing one built ticket as hardening in both runs. Opus cost $0.61, GPT sol
+$0.34 at list price. The bar below waits for the owner.**
+
+**On GPT sol's dollars:** it runs on the ChatGPT plan, which bills no call.
+Every GPT sol dollar figure in this write-up is what the same tokens cost at
+OpenAI's standard API price for `gpt-6.1-sol` (short context: $2.00 input,
+$0.10 cached input, $10.00 output per 1M tokens; read 2026-10-30 from
+https://developers.openai.com/api/docs/pricing; `lib/list-price.ts`). The
+figures were added on 2026-10-30, after parts 1 to 4 ran. Their
+`field/runs.jsonl` rows keep `costUsd: null` and carry the dollars in a new
+`listUsd` field. Opus's dollars are the Agent SDK's own, at Anthropic's list
+price.
 
 ```ts
 // The whole shape: six steps, each a file in and a file out.
@@ -223,8 +234,9 @@ each, once per model. `STEP=tune SMOKE=1`.
 - **Agreement:** every ticket the same both runs, on both models (5 of 5).
 - **Cost:** opus $0.61 for 10 answers (the estimate was $0.64; the cap was $1
   for the smoke, $2 for part 1). A first call cost $0.07 to $0.10, a second $0.01
-  to $0.02 when the first had finished. GPT sol on the plan, no price; median
-  about 8 s an answer, about 17k tokens.
+  to $0.02 when the first had finished. GPT sol $0.34 at list price for 10
+  answers (167k input tokens, 9k cached, 1.8k output); median about 8 s an
+  answer, about 17k tokens.
 - **One edit to the saved answers:** the script replaces a long dash in a
   model's `why` with a colon before it saves, so the public file holds none.
   GPT sol wrote some in the smoke.
@@ -254,7 +266,8 @@ each, once per model. `STEP=tune SMOKE=1`.
 - **Demlik.** Left out; brief v1 is a phoenix brief.
 - **Whether the open half is big enough to tune on.** 58 cases, 2 hard-yes and
   5 security among them. Tuning on so few security tickets can fit them by luck.
-- **The cost of GPT sol.** The plan gives no price.
+- **What the plan really charges for GPT sol.** Its dollars here are list
+  price for the same tokens; the plan bills no call.
 - **Another day.** One Codex version, one model id, one SDK version.
 
 ## Part 2: tune and lock
@@ -267,7 +280,7 @@ hard-no answers. On the locked half it closed 9 of 40 built tickets and 1 of 5
 security tickets. The two edits fit the 58 cases they were written from. GPT
 sol has no locked score, because the lock refuses a second run of one brief
 hash whatever the model. Opus cost $17.96 for 344 answers; GPT sol gave 338
-answers on the plan.
+answers for $8.38 at list price.
 
 ```ts
 // A sketch of the STEP calls part 2 made, in order. Every version and every answer is kept.
@@ -325,7 +338,8 @@ both runs. The bar's lines are in bold where a version misses them.
   #10214).
 - **v2 never ran on opus.** At about $6 an open-half run, v1, v2 and v3 on
   opus plus the lock would have passed $20. v2 and v3 went to GPT sol first,
-  for free, and only the better one went to opus.
+  on the plan (about $2.50 each at list price), and only the better one went
+  to opus.
 - **Every version is kept:** `163-briefs/triage-v1.md` (2ccebff3e7c1),
   `triage-v2.md` (9efb4899ddae), `triage-v3.md` (a2c5afb17bfe), and every
   answer in `results/163-triage-brief-eval.json`.
@@ -397,15 +411,15 @@ It does not change the decision: a brief that fails on one model is not taken.
 
 ### What it cost
 
-| Run | Answers | Opus dollars | Input tokens (cached) | Output tokens |
+| Run | Answers | Dollars | Input tokens (cached) | Output tokens |
 |---|---|---|---|---|
 | v1, opus, open (53 new cases) | 106 | $5.14 | 1,141,029 (643,873) | 46,368 |
-| v1, GPT sol, open | 106 | plan | 1,759,098 (360,192) | 19,297 |
-| v2, GPT sol, open | 116 | plan | 1,943,095 (626,048) | 21,912 |
-| v3, GPT sol, open | 116 | plan | 1,951,673 (883,328) | 20,501 |
+| v1, GPT sol, open | 106 | $3.03 list | 1,759,098 (360,192) | 19,297 |
+| v2, GPT sol, open | 116 | $2.92 list | 1,943,095 (626,048) | 21,912 |
+| v3, GPT sol, open | 116 | $2.43 list | 1,951,673 (883,328) | 20,501 |
 | v3, opus, open | 116 | $6.29 | 1,295,000 (653,374) | 45,397 |
 | v3, opus, locked | 122 | $6.53 | 1,450,458 (817,834) | 58,822 |
-| all of part 2 | 682 | $17.96 | 9,540,353 | 212,297 |
+| all of part 2 | 682 | $17.96 opus, $8.38 GPT sol | 9,540,353 | 212,297 |
 
 - **The estimate was high by about 20%.** DRY=1 said $6.73 for v1's open run
   ($5.14 real) and $7.92 for the lock ($6.53 real). The whole plan as first
@@ -552,7 +566,8 @@ least 90%. Two of the three allowed rounds were used.
   wrong on 8826 (kept a hard no after 22 reads) and 5416 (the same duplicate
   close). Median 9 reads and 16 s an answer, mean $0.21.
 - **GPT sol's cost:** median 20 s and 3 reads an answer; 21.9M input tokens
-  (16.9M cached) and 126k output for round 2, on the ChatGPT plan, no dollars.
+  (16.9M cached) and 126k output for round 2, $12.89 at list price ($0.054 an
+  answer). Round 1 (v4): 21.4M input (16.2M cached) and 124k output, $13.35.
 
 ### The exam step
 
@@ -592,7 +607,7 @@ built-random tickets alone. Agreement stays at 90%, at least 57 of 63.
 | Model | Per answer | 120 answers | Room left |
 |---|---|---|---|
 | opus | about $0.20 (mean of 21 read-code calls) | about $23.50 | $20.88 of $25 |
-| GPT sol | 0 dollars, about 20 s | about 40 min at 2 at once | ChatGPT plan weekly limit |
+| GPT sol | about $0.054 at list price (round 2's mean), about 20 s | about $6.50, about 40 min at 2 at once | ChatGPT plan weekly limit |
 
 Opus 60 x 2 did not fit what was left. The owner raised part 3's opus cap to
 $30 before the exam.
@@ -793,11 +808,13 @@ close outside the safety tickets is the same on both: #5643 as churn.
 
 | Model | Answers | Dollars | Input tokens (cached) | Output tokens | Median an answer |
 |---|---|---|---|---|---|
-| GPT sol | 126 | plan | 10,826,218 (8,380,800) | 63,214 | 18.5 s, 3 reads |
+| GPT sol | 126 | $6.36 list | 10,826,218 (8,380,800) | 63,214 | 18.5 s, 3 reads |
 | opus | 126 | $18.67 | 7,793,159 (6,193,578) | 224,481 | 15.1 s, 7 reads |
 
 - Opus mean $0.15 an answer. DRY=1 said $24.74; real was 25% lower.
 - Part 3's opus spend is now $22.79 ($4.12 tuning, $18.67 exam), under the $30 cap.
+- Part 3's GPT sol, at list price: $32.60 ($13.35 round 1, $12.89 round 2,
+  $6.36 exam), on the plan.
 - Each model took about 20 minutes at 2 calls at once.
 - `results/163-exam.json` holds every answer. No `why` named a person, so
   nothing needed masking.
@@ -836,7 +853,8 @@ close outside the safety tickets is the same on both: #5643 as churn.
 Written before the exam, kept as written, with what the exam said:
 
 1. **Take v5 to the exam, on GPT sol first.** It is the only version that
-   cleared all four lines anywhere, and the exam costs nothing on the plan.
+   cleared all four lines anywhere, and the exam costs nothing on the plan
+   (about $6.40 at list price, added later).
    Confidence 65% that it passes there: the numbers are tuned, and 6 of 78 is
    already half the bad-close line. **Wrong: it failed on GPT sol**, on hard
    no's (43%, against 91% tuned) and one security close.
@@ -1085,13 +1103,14 @@ approved;** the owner sets the numbers.
 
 | Run | Answers | Dollars | Input tokens (cached) | Output tokens |
 |---|---|---|---|---|
-| GPT sol, 63 and 119 | 364 | plan | 40,190,985 (30,302,080) | 256,214 |
+| GPT sol, 63 and 119 | 364 | $25.37 list ($9.34 on the 63, $16.03 on the 119) | 40,190,985 (30,302,080) | 256,214 |
 | Opus, 63 (stopped at 51) | 51 | $11.49 | 4,475,507 (3,407,713) | 109,996 |
 
 - Opus mean $0.23 an answer, median 8 reads and 18 s. DRY=1 said $9.32 for
   all 63 at part 3's mean ($0.148); v6 also reads diffs, so it cost 52% more an
   answer, and the cap stopped it at 51. Part 4's opus spend is $11.49 of $12.
-- GPT sol median about 23 s and 4 reads an answer.
+- GPT sol median about 23 s and 4 reads an answer; mean $0.070 an answer at
+  list price, about a third of opus's $0.23 for the same brief.
 - `field/runs.jsonl` has a row per answer (415); `field/notes.jsonl` notes
   2026-10-30-11 to 13.
 
