@@ -57,14 +57,15 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // in t1 and counter in t2. Main's dialogs, dock bounce and focus are swapped for a list first,
 // and read back empty after each drop:
 //
-//   socket cut       main's socket to the host is cut, the host alive: the window says it is
-//                    reconnecting, then the desk is back on the same host, t1 drawn once
+//   socket cut       main's socket to the host is cut, the host alive: the top bar says host
+//                    down, then the desk is back on the same host, t1 drawn once
 //   host killed      SIGKILL, as a crash: the app starts a new host, and the kept desk comes
 //                    back with fresh screens
 //   12 reconnecting  no host to be had (the home's host folder is a file): the desk stays,
-//                    dimmed and out of reach, with a calm note in its corner
-//   13 stopped       main's clock moved five minutes on: it stops, and offers Try again, which
-//                    takes no focus. The folder back, Try again starts a host, and the desk is back
+//                    dimmed and out of reach; the top bar says host down, its lines reconnecting
+//   13 stopped       main's clock moved five minutes on: it stops, and the top bar offers try
+//                    again, which takes no focus. The folder back, a click on it starts a host,
+//                    and the desk is back
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -278,7 +279,9 @@ const flow = async (app: ElectronApplication) => {
 
 	await focusIs(page, "t2");
 	await run(page, "t2", "tracker &");
-	const job = await shows(page, "t2", "the job's number", (t) => /\[1\] tracker:/.test(t));
+	// The host keeps one job table, numbers never reused: the tracker's is whatever comes next.
+	const job = await shows(page, "t2", "the job's number", (t) => /\[\d+\] tracker:/.test(t));
+	const n = /\[(\d+)\] tracker:/.exec(job)?.[1] ?? "1";
 	await prompted(page, "t2");
 	await page.waitForTimeout(300);
 	await tilesAre(page, ["t1", "t2"]);
@@ -287,10 +290,10 @@ const flow = async (app: ElectronApplication) => {
 		(await tile(page, "t2").getByLabel("tracker view").count()) === 0,
 		job,
 	);
-	await run(page, "t2", "attach %1");
+	await run(page, "t2", `attach %${n}`);
 	await tile(page, "t2").getByLabel("tracker view").waitFor();
 	await tilesAre(page, ["t1", "t2"]);
-	check("attach %1 brings the tracker in, covering t2, as fg does", true);
+	check(`attach %${n} brings the tracker in, covering t2, as fg does`, true);
 	await shot(page, "5-attached");
 
 	const tracker = tile(page, "t2").getByLabel("tracker view");
@@ -346,9 +349,9 @@ const flow = async (app: ElectronApplication) => {
 	await run(page, "t1", "sleep --ms 600000 &");
 	await prompted(page, "t1");
 	await until(
-		"t1's job on the status line",
-		() => page.locator(".status .focus").innerText(),
-		(t) => t === "t1 · 1 running",
+		"t1's job on the bottom line",
+		() => page.locator(".bottomline .here").innerText(),
+		(t) => t === "t1 tsh · 1 running",
 	);
 	await prefixed(page, "x");
 	await askedIs(page, "close t1? (y/n)");
@@ -752,42 +755,52 @@ const noInterrupts = (app: ElectronApplication) =>
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
 
+/** Where the window says the link: the host's word in the top bar, a status, empty while up. */
+const LINK = '[role="status"][aria-label="the link to the host"]';
 /**
- * From now on, note each change in what the window says of the link: a note may be up for a
- * moment only. "" is no note.
+ * From now on, note each change in what the window says of the link: a word may be up for a
+ * moment only. "" is the host up.
  */
 const watchNotes = (page: Page) =>
-	page.evaluate(() => {
+	page.evaluate((link) => {
 		const said: string[] = [""];
 		Object.assign(globalThis, {said});
 		new MutationObserver(() => {
-			const text = document.querySelector(".lost-note")?.textContent ?? "";
+			const text = document.querySelector(link)?.textContent ?? "";
 			if (said.at(-1) !== text) said.push(text);
 		}).observe(document.body, {childList: true, subtree: true, characterData: true});
-	});
-/** The notes the window showed since `watchNotes`, in order, with no "". */
+	}, LINK);
+/** The words the window said of the link since `watchNotes`, in order, with no "". */
 const notesSaid = (page: Page) =>
 	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
-/** The note the window shows now, or "". */
+/** What the window says of the link now, or "" for the host up. */
 const noteNow = (page: Page) =>
 	page
-		.locator(".lost-note")
+		.locator(LINK)
 		.textContent({timeout: 500})
 		.then(
 			(t) => t ?? "",
 			() => "",
 		);
+/** The host's few lines, opened from its word in the top bar, then closed again. */
+const hostLines = async (page: Page) => {
+	const host = page.locator(LINK).getByRole("button", {name: /^host /});
+	await host.click();
+	const lines = (await page.locator(".item-lines").textContent({timeout: 2000})) ?? "";
+	await host.click();
+	return lines;
+};
 /** The tile that holds the page's focus, or none. */
 const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: no note, and nothing dimmed. */
+/** The desk is back: nothing said of the host, and nothing dimmed. */
 const deskBack = (page: Page) =>
 	until(
-		"the desk back, with no note",
-		() => page.locator(".lost-note, .desk.lost").count(),
-		(n) => n === 0,
+		"the desk back, the host up",
+		async () => [await noteNow(page), await page.locator(".desk.lost").count()] as const,
+		([word, lost]) => word === "" && lost === 0,
 	);
 
 /**
@@ -826,8 +839,8 @@ const reconnect = async () => {
 		);
 		await deskBack(page);
 		check(
-			"the socket cut: the window says calmly it is reconnecting, and the desk comes back",
-			said[0]?.startsWith("Reconnecting to the host") === true,
+			"the socket cut: the top bar says calmly the host is down, and the desk comes back",
+			said[0] === "host down",
 			said,
 		);
 		check("on the same host: it was alive all along", (await hostPid(own)) === host);
@@ -877,21 +890,25 @@ const reconnect = async () => {
 		await until(
 			"the window to say it reconnects",
 			() => noteNow(page),
-			(t) => t.startsWith("Reconnecting to the host"),
+			(t) => t === "host down",
 		);
 		await page.waitForTimeout(1500);
 		const dimmed = {
 			lost: await page.locator(".desk.lost").count(),
 			inert: await page.locator(".workspace[inert]").count(),
 			status: await page.getByRole("status", {name: "the link to the host"}).count(),
-			focused: await page.evaluate(
-				() => document.activeElement?.closest(".lost-note, [data-tile]") !== null,
-			),
+			focused: await page.evaluate(() => document.activeElement?.closest("[data-tile]") !== null),
 		};
 		check(
-			"no host: the desk stays, dimmed and out of reach, with a note in its corner, and focus is nowhere in it",
+			"no host: the desk stays, dimmed and out of reach, the top bar says host down, and focus is nowhere in it",
 			dimmed.lost === 1 && dimmed.inert === 1 && dimmed.status === 1 && !dimmed.focused,
 			dimmed,
+		);
+		const reaching = await hostLines(page);
+		check(
+			"the host's lines say it is reconnecting",
+			reaching.startsWith("Reconnecting to the host"),
+			reaching,
 		);
 		await shot(page, "12-reconnecting");
 
@@ -901,16 +918,18 @@ const reconnect = async () => {
 			Object.assign(globalThis, {realNow: real});
 			Date.now = () => real() + 6 * 60_000;
 		});
-		const stopped = await until(
+		const button = page.locator(".topbar").getByRole("button", {name: "try again", exact: true});
+		await until(
 			"the app to stop trying",
-			() => noteNow(page),
-			(t) => t.startsWith("Could not reconnect to the host"),
+			() => button.count(),
+			(n) => n === 1,
 		);
-		const button = page.getByRole("button", {name: "Try again"});
+		const stopped = await hostLines(page);
 		check(
-			"five minutes on, it stops and offers Try again, which takes no focus",
+			"five minutes on, it stops and offers try again in the top bar, which takes no focus",
 			(await button.count()) === 1 &&
 				!(await button.evaluate((b) => b === document.activeElement)) &&
+				stopped.startsWith("Could not reconnect to the host") &&
 				stopped.includes("five minutes"),
 			stopped,
 		);

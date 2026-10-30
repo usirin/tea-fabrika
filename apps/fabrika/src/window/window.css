@@ -145,20 +145,20 @@ body,
 	white-space: pre-wrap;
 }
 
-/* The desk: the active workspace's tiles, and a status line under them, as tmux's. */
+/* The desk: the window's frame around the active workspace's tiles (frame.tsx). */
 .desk {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	box-sizing: border-box;
-	padding: var(--s-1) var(--s-1) 0;
-	gap: var(--s-1);
 }
 
 .workspace {
 	flex: 1;
 	display: flex;
 	min-height: 0;
+	padding: var(--s-1);
 }
 
 .container {
@@ -456,51 +456,21 @@ main.program > [role="alert"] {
 	font-size: 12px;
 }
 
-/* "close t2? (y/n)", over the tile it is for, as tmux's confirm-before asks on its status line. */
-.ask {
-	position: absolute;
-	inset: auto 0 0 0;
-	padding: 8px 12px;
-	background: var(--surface-raised);
-	border-top: 1px solid var(--key);
+/* "close t2? (y/n)" in the title bar of the tile it is for; the bottom line asks it too. */
+.titlebar .asking {
+	color: var(--text-primary);
 }
 
-.ask p {
-	margin: 0;
+.titlebar .asking::before {
+	content: "·";
+	padding: 0 6px;
+	color: var(--border-strong);
 }
 
 kbd {
 	padding: 0 4px;
 	border: 1px solid var(--faint);
 	border-radius: 3px;
-}
-
-.status {
-	display: flex;
-	gap: 16px;
-	align-items: center;
-	height: 28px;
-	padding: 0 var(--s-3);
-	color: var(--text-muted);
-	font: 400 var(--fs-small) var(--mono);
-}
-
-.workspaces {
-	display: flex;
-	gap: 6px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.workspaces li[aria-current="true"] {
-	color: var(--text-primary);
-	text-decoration: underline;
-	text-underline-offset: 3px;
-}
-
-.prefix.armed {
-	color: var(--text-primary);
 }
 
 .starting {
@@ -527,52 +497,342 @@ kbd {
 	filter: grayscale(0.6);
 }
 
-/* A calm note in the corner, over the desk, never in the way of reading it. */
-.lost-note {
-	position: fixed;
-	right: 16px;
-	bottom: 36px;
-	max-width: 48ch;
-	padding: 12px 16px;
-	background: var(--ground);
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	line-height: 1.5;
+/*
+ * The window's frame (frame.tsx): a top bar that is the whole desk, and a bottom line that is the
+ * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
+ * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
+ * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
+ * the window is moved by it, and its buttons take no drag.
+ */
+.topbar,
+.bottomline {
+	flex: none;
+	display: flex;
+	align-items: center;
+	padding: 0 var(--s-3);
+	color: var(--text-faint);
+	font: 400 var(--fs-small) / 1 var(--mono);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 }
 
-.lost-note h1 {
-	margin: 0 0 4px;
-	font-size: 14px;
+.topbar {
+	position: relative;
+	height: 34px;
+	border-bottom: 1px solid var(--border-faint);
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+/* The room the system's three window buttons sit in, on macOS only (main.ts, `FRAME`). */
+.lights-room {
+	display: none;
+	flex: none;
+	width: 72px;
+}
+
+.mac .lights-room {
+	display: block;
+}
+
+/* Both bars hidden, or no desk to draw: on macOS a thin band still holds the window's buttons. */
+.band {
+	display: none;
+	flex: none;
+	height: 28px;
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+.mac .band {
+	display: block;
+}
+
+/* Every item of the frame is a button, and a button never moves the window. */
+.fb {
+	all: unset;
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+	cursor: pointer;
+	padding: 5px 0;
+	color: var(--text-faint);
+}
+
+.fb:hover {
+	color: var(--text-primary);
+}
+
+.fb:focus-visible {
+	outline: 1px solid var(--text-faint);
+	outline-offset: 2px;
+}
+
+.fb.accent {
+	color: var(--turn);
+}
+
+.fb.broken {
+	color: var(--stuck);
+}
+
+.sep {
+	padding: 0 6px;
+	color: var(--border-strong);
+}
+
+.quiet {
+	color: var(--wire);
+}
+
+.topbar .workspaces {
+	display: flex;
+	flex: none;
+	gap: 14px;
+}
+
+.topbar .num {
+	color: var(--wire);
+}
+
+.topbar .fb[aria-current="true"] {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--wire);
+	text-underline-offset: 6px;
+}
+
+.topbar .line {
+	display: flex;
+	flex: 0 1 auto;
+	align-items: center;
+	min-width: 0;
+	margin-left: 22px;
+	overflow: hidden;
+}
+
+.topbar .seg.on {
+	color: var(--text-primary);
+}
+
+.topbar .seg.plain,
+.topbar .pipe {
+	color: var(--wire);
+}
+
+.topbar .pipe {
+	padding: 0 7px;
+	cursor: help;
+}
+
+/* The empty stretch the window is moved by. */
+.topbar .drag {
+	flex: 1 1 60px;
+	align-self: stretch;
+	min-width: 44px;
+}
+
+.topbar .right {
+	display: flex;
+	flex: none;
+	align-items: center;
+}
+
+/* The host down: the asks it last said are old news, drawn faint until it is back. */
+.desk.lost .topbar .right > .fb {
+	opacity: 0.45;
+}
+
+/* A new ask, not seen yet: a dot beside the count, never a second number. */
+.udot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-left: 6px;
+	vertical-align: 1px;
+	border-radius: 50%;
+	background: var(--turn);
+}
+
+.bottomline {
+	justify-content: space-between;
+	gap: var(--s-4);
+	height: 26px;
+	border-top: 1px solid var(--surface-hover);
+	color: var(--text-muted);
+}
+
+.bottomline .left {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.bottomline .right {
+	display: flex;
+	flex: none;
+	align-items: center;
+}
+
+.bottomline b {
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
-.lost-note p {
-	margin: 0 0 8px;
-	color: var(--faint);
+.bottomline .prompt {
+	color: var(--text-primary);
 }
 
-/* The host runs older code: the desk stays in reach, and this sits in the same corner. */
-.older-note {
-	position: fixed;
-	right: 16px;
-	bottom: 36px;
-	max-width: 48ch;
-	padding: 12px 16px;
-	background: var(--ground);
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	line-height: 1.5;
+.bottomline .info,
+.bottomline .note {
+	color: var(--text-secondary);
 }
 
-.older-note h1 {
+/* What opens over the desk, from the top bar: the asks list, an item's few lines, the palette. */
+.over {
+	position: absolute;
+	z-index: 10;
+	top: 38px;
+	right: var(--s-3);
+	width: 400px;
+	max-height: 70vh;
+	overflow: auto;
+	padding: 10px 12px;
+	background: var(--surface-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--r-lg);
+	box-shadow: 0 12px 30px rgb(0 0 0 / 0.5);
+	color: var(--text-secondary);
+	font: 400 var(--fs-small) / 1.6 var(--mono);
+	white-space: normal;
+}
+
+.over h2 {
 	margin: 0 0 4px;
-	font-size: 14px;
-	font-weight: 600;
+	color: var(--text-primary);
+	font-size: var(--fs-small);
+	font-weight: 400;
 }
 
-.older-note p {
-	margin: 0 0 8px;
-	color: var(--faint);
+.over p {
+	margin: 0 0 6px;
+}
+
+.over ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.over li {
+	padding: 6px 0;
+	border-bottom: 1px solid var(--border-faint);
+}
+
+.over .hint {
+	margin-top: 8px;
+	color: var(--text-faint);
+}
+
+.act {
+	all: unset;
+	cursor: pointer;
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--border-strong);
+	text-underline-offset: 3px;
+}
+
+.act:hover {
+	text-decoration-color: var(--text-secondary);
+}
+
+.act.accent,
+.over .accent {
+	color: var(--turn);
+}
+
+.act.soft {
+	color: var(--text-muted);
+}
+
+.act.foot {
+	display: inline-block;
+	margin-top: 8px;
+}
+
+.palette {
+	top: 64px;
+	right: auto;
+	left: 50%;
+	width: 560px;
+	padding: 0;
+	overflow: clip;
+	transform: translateX(-50%);
+	font-size: 12.5px;
+}
+
+.palette .palh {
+	margin: 0;
+	padding: 9px 14px 0;
+	color: var(--text-faint);
+}
+
+.palette input {
+	all: unset;
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 8px 14px 10px;
+	border-bottom: 1px solid var(--border);
+	color: var(--text-primary);
+	font: 14px var(--mono);
+}
+
+.palette ul {
+	max-height: 360px;
+	overflow: auto;
+	padding: 4px 0;
+}
+
+.palette li {
+	padding: 0;
+	border: 0;
+}
+
+.palette .cmd {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 10px;
+	width: 100%;
+	padding: 5px 14px;
+	cursor: pointer;
+	color: var(--text-secondary);
+}
+
+.palette .cmd.on,
+.palette .cmd:hover {
+	background: var(--surface-selected);
+	color: var(--text-primary);
+}
+
+/* The key sits at the row's right, quieter than the name, as a menu shows its shortcut. */
+.palette .k {
+	color: var(--text-faint);
+}
+
+.palette .cmd.on .k,
+.palette .cmd:hover .k {
+	color: var(--text-secondary);
+}
+
+.palette .palf {
+	margin: 0;
+	padding: 7px 14px;
+	border-top: 1px solid var(--border);
+	color: var(--text-faint);
 }
 
 /* Centred while it fits; in a short tile it starts at the top, so its scroll reaches all of it. */

@@ -138,7 +138,7 @@ The trace files are on `@kampus/fabrika/otel`.
 | `small.ts` | The small programs: `say`, `seq`, `double`, `upper`, `sleep`, `true`, `false`, `tally` |
 | `shell.ts` | `tsh` as a program: lines in, printed values out, no terminal in it |
 | `grammar.ts` | The line grammar: statements, `;` `&` `&&` `\|\|`, pipes, `--flag value`, `input=value`, `$( )` |
-| `check.ts` | A parsed line checked against the program list before anything starts |
+| `check.ts` | A parsed line checked against the program list before anything starts; `fedBy`, the inputs of a program a pipe can feed |
 | `decode.ts` | A word on a line read as a value of a program's own shape |
 | `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit` |
 | `help.ts` | What `<program> --help` prints, whole or one part, from the program's declaration || `complete.ts` | Tab completion, from the line typed so far |

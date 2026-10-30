@@ -1,5 +1,5 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, openJobs, type Storage, streams} from "@kampus/fabrika";
+import {Ledger, memoryStorage, openJobs, Shell, type Storage, streams} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
@@ -10,7 +10,7 @@ import {Effect, FileSystem, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
-import {type Placed, type Runs, startTsh, type WindowScreen} from "./tsh.ts";
+import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScreen} from "./tsh.ts";
 
 // One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
@@ -589,6 +589,38 @@ describe("a program's window", () => {
 		]);
 		expect(seen.picked).toEqual({kind: "read"});
 		expect((seen.read as {data: {id: string}}).data.id).toBe(SEVEN_TRACE);
+	});
+});
+
+describe("what a pipe can feed", () => {
+	const apps = appPrograms(
+		memoryService(),
+		{kind: "user", id: "owner"},
+		{open: Effect.succeed([])},
+	);
+	const list = tshList(apps);
+	const takes = (name: string) => {
+		const entry = apps.find((e) => e.program.name === name);
+		if (entry === undefined) throw new Error(`no program ${name}`);
+		return Shell.fedBy(entry.program, list);
+	};
+
+	it("is each program's data, never its commands: the frame's takes", () => {
+		expect(takes("tracker")).toEqual([]);
+		expect(takes("ticket")).toEqual(["ticket"]);
+		expect(takes("runs")).toEqual(["ticket"]);
+		expect(takes("trace")).toEqual(["id"]);
+		expect(takes("map")).toEqual([]);
+	});
+
+	it("is what a line wires each stage's pipe into", () => {
+		const text = "tracker | ticket | runs | trace";
+		const parsed = Shell.parse(text);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
+		if (checked.kind !== "line") throw new Error(text);
+		for (const stage of checked.line.stages.slice(1))
+			expect(takes(stage.entry.program.name)).toContain(stage.fed);
 	});
 });
 

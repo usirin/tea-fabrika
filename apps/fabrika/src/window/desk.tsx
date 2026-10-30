@@ -11,6 +11,7 @@ import {
 } from "react";
 import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
+import type {AsksNow} from "../asks.ts";
 import {
 	activeOf,
 	type Desk,
@@ -44,6 +45,17 @@ import {
 	type ToApp,
 	type ToWindow,
 } from "../messages.ts";
+import {
+	type Bound,
+	FRAME,
+	type Frame,
+	type FrameMsg,
+	frameUpdate,
+	INFO,
+	type Shapes,
+	ticketsShown,
+} from "./frame.ts";
+import {Band, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -70,27 +82,41 @@ import {WINDOWS} from "./windows.tsx";
 // Each tile's terminal is made once and moved into its slot as the layout changes (terminal.ts).
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 //
-// When the link to the host drops, the app reconnects (reconnect.ts) and says so here: the desk
-// stays drawn, dimmed and out of reach, with a calm note in its corner. Nothing takes focus, and
-// no dialog opens. Once the app says the link is up again, the desk is in reach, and focus goes
-// back to the tile.
+// Around the desk is the window's frame (frame.tsx, its words in frame.ts): the top bar is the
+// whole desk (workspaces, the line, what asks you, and the ledger or the host when broken), and the
+// bottom line is the tile you are in and the key you just pressed. Cmd-K opens the palette;
+// C-b a the asks list, C-b ? every key, C-b i the info mode, C-b B hides both bars.
+//
+// When the link to the host drops, the app reconnects (reconnect.ts) and the top bar says so, in
+// a word: the desk stays drawn, dimmed and out of reach. Nothing takes focus, and no dialog opens.
+// Once the app says the link is up again, the desk is in reach, and focus goes back to the tile.
 //
 // What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
 // one branch for each of its kinds, so a kind left out fails the typecheck:
 //
-//   up            the desk, nothing more
-//   build         the desk, with a banner: "the host runs older code", and the restart
+//   up            the desk, nothing more: the top bar says nothing of the host
+//   build         the desk: the top bar says host older, and its lines offer the restart
 //   version       no desk: both versions named, and the restart
-//   reconnecting  the desk dimmed, with a note in its corner
-//   stopped       the same, with Try again
-//   restarting    the desk dimmed: "Stopping the old host..."
+//   reconnecting  the desk dimmed: the top bar says host down, and its lines say why
+//   stopped       the same, and its lines offer Try again
+//   restarting    the desk dimmed: the top bar says host restarting
 
-/** The desk, the newest view of each run, and who to tell of a change. */
+/** The desk, the newest view of each run, the frame's own state, and who to tell of a change. */
 const store: {
 	/** `null` until the host sends the desk. */
 	desk: Desk | null;
+	/** A desk came once: a link down after it is the host down. */
+	attachedOnce: boolean;
 	/** The desk's Ctrl-B key, as the host's table says. */
 	prefix: string;
+	/** The desk's Ctrl-B table, each key with its name. */
+	table: readonly Bound[];
+	/** What each program takes and sends. */
+	shapes: Shapes;
+	/** What waits on the person, as the host counts it; `null` until it says. */
+	asks: AsksNow | null;
+	/** What the frame shows over the desk, and its modes (frame.ts). */
+	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
 	link: LinkNow;
 	readonly views: Map<string, ToWindow>;
@@ -98,7 +124,12 @@ const store: {
 	version: number;
 } = {
 	desk: null,
+	attachedOnce: false,
 	prefix: "",
+	table: [],
+	shapes: new Map(),
+	asks: null,
+	frame: FRAME,
 	link: {kind: "up"},
 	views: new Map(),
 	listeners: new Set(),
@@ -241,6 +272,22 @@ const holdStep = (msg: HoldMsg): boolean => {
 	return live;
 };
 
+/** How long a note on the bottom line stays, as after the palette ran a command. */
+const NOTE_MS = 4000;
+let noteTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Step the frame's own state (frame.ts), and draw it. A note goes after a while. */
+const frameStep = (m: FrameMsg) => {
+	const next = frameUpdate(store.frame, m);
+	if (next === store.frame) return;
+	if (next.note !== null && next.note !== store.frame.note) {
+		clearTimeout(noteTimer);
+		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
+	}
+	store.frame = next;
+	changed();
+};
+
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
@@ -249,9 +296,19 @@ const heard = (raw: unknown) => {
 	switch (m.type) {
 		case "keys":
 			store.prefix = m.prefix;
+			store.table = m.table;
 			return changed();
+		case "programs":
+			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
+			return changed();
+		case "asks":
+			store.asks = m.now;
+			return changed();
+		case "show":
+			return frameStep({type: "show", what: m.what});
 		case "desk":
 			store.desk = m.desk;
+			store.attachedOnce = true;
 			follows(m.desk);
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(changed);
@@ -270,9 +327,29 @@ const heard = (raw: unknown) => {
 	}
 };
 
-/** Every key, before anything else on the page sees it: the desk's, or the focused tile's. */
+/** Take a key from the page: nothing else hears it. */
+const swallow = (e: KeyboardEvent) => {
+	e.preventDefault();
+	e.stopImmediatePropagation();
+};
+
+/**
+ * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
+ * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; while the palette is open,
+ * its own box takes every key; Escape closes what lies over the desk.
+ */
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
+	if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "k") {
+		swallow(e);
+		return frameStep({type: "palette"});
+	}
+	const over = store.frame.over.kind;
+	if (over === "palette") return;
+	if (over !== "none" && e.key === "Escape") {
+		swallow(e);
+		return frameStep({type: "close"});
+	}
 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
 	if (name === null) return;
 	const press = {
@@ -284,8 +361,14 @@ const onKey = (e: KeyboardEvent) => {
 		shift: e.shiftKey,
 	};
 	if (holdStep({type: "key", key: {name, press}})) return;
-	e.preventDefault();
-	e.stopImmediatePropagation();
+	swallow(e);
+};
+
+/** In info mode, what the pointer is over, said on the bottom line. */
+const onPointerOver = (e: PointerEvent) => {
+	if (!store.frame.info) return;
+	const at = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-info]") : null;
+	frameStep({type: "explain", text: at?.dataset.info ?? null});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
@@ -370,12 +453,16 @@ function Tile(props: {
 				className="titlebar"
 				aria-label={`tile ${tile.id}: double-click to fold`}
 				aria-disabled={!folds}
+				data-info={INFO.titlebar}
 				onPointerDown={noFocus}
 				onDoubleClick={() => {
 					if (folds) toHost({type: "fold", tile: tile.id});
 				}}
 			>
 				<span>{nameOf(tile)}</span>
+				{/* The question itself is on the bottom line, where tmux asks it; the tile it is for
+				    says so too, so an eye on the tile does not miss it. */}
+				{asking !== null && <span className="asking">{asking}</span>}
 				<span className="tid">{tile.id}</span>
 			</button>
 			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
@@ -384,11 +471,6 @@ function Tile(props: {
 				<p className="closing-note" role="status">
 					closing
 				</p>
-			)}
-			{asking !== null && (
-				<div className="ask" role="alertdialog" aria-label={asking}>
-					<p>{asking}</p>
-				</div>
 			)}
 		</section>
 	);
@@ -496,6 +578,7 @@ function Strip({node}: {readonly node: LayoutNode}): ReactNode {
 			data-strip={node.id}
 			data-tint={tintOf(node)}
 			aria-label={`open ${name}, ${node.id}`}
+			data-info={INFO.strip}
 			onPointerDown={noFocus}
 			onClick={() => toHost({type: "unfold", node: node.id})}
 		>
@@ -532,61 +615,6 @@ function DeskTile(props: {
 	);
 }
 
-function Status({desk}: {readonly desk: Open}): ReactNode {
-	const tile = focusedOf(desk);
-	const running = tile === null ? 0 : (desk.running[tile.id] ?? 0);
-	return (
-		<footer className="status">
-			<ol className="workspaces" aria-label="workspaces">
-				{desk.workspaces.map((ws, i) => (
-					<li key={ws.id} aria-current={ws.id === desk.active}>
-						{i + 1}
-					</li>
-				))}
-			</ol>
-			<span className="focus">
-				{tile?.id ?? ""}
-				{running > 0 ? ` · ${running} running` : ""}
-			</span>
-			<span className={`prefix${desk.prefix.armed ? " armed" : ""}`}>
-				{desk.prefix.armed ? store.prefix : ""}
-			</span>
-		</footer>
-	);
-}
-
-/**
- * The link is down and the app is on it: said in a corner of the desk, as a status, not an alert.
- * Stopped, it offers Try again, which takes no focus until the person moves to it. Before the
- * first desk came, the app was never attached: it is connecting, not reconnecting.
- */
-function LostNote(props: {
-	readonly lost: Extract<LinkNow, {readonly kind: "reconnecting" | "stopped"}>;
-	readonly first: boolean;
-}): ReactNode {
-	const {lost, first} = props;
-	const stopped = lost.kind === "stopped";
-	const verb = first ? "connect" : "reconnect";
-	return (
-		<section className="lost-note" role="status" aria-label="the link to the host">
-			<h1>
-				{stopped
-					? `Could not ${verb} to the host`
-					: `${first ? "Connecting" : "Reconnecting"} to the host…`}
-			</h1>
-			<p>{lost.why}</p>
-			{stopped ? (
-				<>
-					<p>It stopped trying after five minutes.</p>
-					<button type="button" onClick={() => toApp({type: "again"})}>
-						Try again
-					</button>
-				</>
-			) : null}
-		</section>
-	);
-}
-
 /** What a restart does to the jobs, said before the person confirms. */
 const JOBS_STOP =
 	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
@@ -603,38 +631,22 @@ function Restart(): ReactNode {
 /** Is the app on a host now: the desk is in reach. */
 const attached = (now: LinkNow): now is Attached => now.kind === "up" || now.kind === "build";
 
-/** What the window shows for the link: a page in place of the desk, or the desk with a note. */
+/**
+ * What the window shows for the link: a page in place of the desk, or the desk, dimmed and out
+ * of reach while the link is down. How the host is, and what to do about it, is the top bar's
+ * host item (frame.tsx): said in words, quietly, never as an alert.
+ */
 type Shown =
 	| {readonly kind: "instead"; readonly page: ReactNode}
 	/** `dim`: the desk is out of reach, as the link is down. */
-	| {readonly kind: "over"; readonly dim: boolean; readonly note: ReactNode};
+	| {readonly kind: "over"; readonly dim: boolean};
 
-/**
- * One branch for each kind of `LinkNow`: one left out does not compile. `first`: no desk came
- * yet, so the app was never attached.
- */
-const linkView = (now: LinkNow, first: boolean): Shown => {
+/** One branch for each kind of `LinkNow`: one left out does not compile. */
+const linkView = (now: LinkNow): Shown => {
 	switch (now.kind) {
 		case "up":
-			return {kind: "over", dim: false, note: null};
 		case "build":
-			// Attached, and the desk is in reach: a banner, not an alert.
-			return {
-				kind: "over",
-				dim: false,
-				note: (
-					<section className="older-note" role="status" aria-label="the host's build">
-						<h1>The host runs older code</h1>
-						<p>
-							{now.theirs === null
-								? `It names no build. This app is build ${now.ours}.`
-								: `It is build ${now.theirs}. This app is build ${now.ours}.`}{" "}
-							{JOBS_STOP}
-						</p>
-						<Restart />
-					</section>
-				),
-			};
+			return {kind: "over", dim: false};
 		case "version":
 			// Another version of the link: the app does not attach, so there is no desk to keep.
 			return {
@@ -652,66 +664,85 @@ const linkView = (now: LinkNow, first: boolean): Shown => {
 			};
 		case "reconnecting":
 		case "stopped":
-			return {kind: "over", dim: true, note: <LostNote lost={now} first={first} />};
 		case "restarting":
-			return {
-				kind: "over",
-				dim: true,
-				note: (
-					<section className="lost-note" role="status" aria-label="the link to the host">
-						<h1>Stopping the old host…</h1>
-						<p>Once it has stopped, this app starts its own and attaches.</p>
-					</section>
-				),
-			};
+			return {kind: "over", dim: true};
 		default:
 			return absurd(now);
 	}
 };
 
+/** The macOS window has no title bar of its own: the top bar keeps room for its three buttons. */
+const MAC = /Mac/.test(navigator.userAgent);
+
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
 	const desk = store.desk;
-	const view = linkView(store.link, desk === null);
+	const view = linkView(store.link);
 	/** The desk is out of reach: the link is down, or there is no desk to reach. */
 	const away = view.kind === "instead" || view.dim;
-	const ws = desk?.at === "open" ? activeOf(desk) : null;
-	const focused = desk?.at === "open" ? focusedOf(desk) : null;
+	const open = desk?.at === "open" ? desk : null;
+	const ws = open === null ? null : activeOf(open);
+	const focused = open === null ? null : focusedOf(open);
+	const over = store.frame.over.kind;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
-	// desk is out of reach while the link is down, so focus goes back to it once the link is up.
+	// desk is out of reach while the link is down, so focus goes back to it once the link is up,
+	// and while the palette is open, which has its own box; it goes back once that closes.
 	useLayoutEffect(() => {
-		if (focused === null || away) return;
+		if (focused === null || away || over === "palette") return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
-	}, [shown, away]);
-	if (view.kind === "instead") return view.page;
-	const note = view.note;
-	if (desk === null) return note ?? <p className="starting">starting</p>;
-	if (desk.at === "over" || ws === null) return note ?? <p className="starting">closing</p>;
-	const zoomed = ws.layout.zoomed;
+	}, [shown, away, over]);
+	const props: FrameProps = {
+		desk: open,
+		frame: store.frame,
+		asks: store.asks,
+		link: store.link,
+		attachedOnce: store.attachedOnce,
+		prefix: store.prefix,
+		table: store.table,
+		shapes: store.shapes,
+		tickets: ticketsShown(store.views),
+		armed: open?.prefix.armed ?? false,
+		toHost,
+		toApp,
+		step: frameStep,
+	};
+	const bare = store.frame.bare;
+	/** With both bars hidden, the bottom line still shows while you are mid-key. */
+	const keying = props.armed || open?.ask != null || store.frame.note !== null;
+	const zoomed = ws?.layout.zoomed ?? null;
 	return (
-		<div className={`desk${view.dim ? " lost" : ""}`}>
-			<div
-				className="workspace"
-				ref={measure}
-				data-workspace={ws.id}
-				data-zoomed={zoomed ?? undefined}
-				inert={view.dim}
-			>
-				{zoomed !== null ? (
-					<ZoomedTile ws={ws} id={zoomed} desk={desk} />
-				) : (
-					<Node node={ws.layout.root} ws={ws} desk={desk} />
-				)}
-			</div>
-			<Status desk={desk} />
-			{note}
+		<div
+			className={`desk${view.kind === "over" && view.dim ? " lost" : ""}${MAC ? " mac" : ""}${bare ? " bare" : ""}`}
+		>
+			{bare || view.kind === "instead" ? <Band /> : <TopBar {...props} />}
+			{view.kind === "instead" ? (
+				view.page
+			) : open === null || ws === null ? (
+				<p className="starting">{desk === null ? "starting" : "closing"}</p>
+			) : (
+				<div
+					className="workspace"
+					ref={measure}
+					data-workspace={ws.id}
+					data-zoomed={zoomed ?? undefined}
+					inert={view.dim}
+				>
+					{zoomed !== null ? (
+						<ZoomedTile ws={ws} id={zoomed} desk={open} />
+					) : (
+						<Node node={ws.layout.root} ws={ws} desk={open} />
+					)}
+				</div>
+			)}
+			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}
+			<Over {...props} />
 		</div>
 	);
 }
@@ -730,6 +761,7 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
+	window.addEventListener("pointerover", onPointerOver);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
 	if (root !== null) createRoot(root).render(<App />);

@@ -221,6 +221,23 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 	return {stages: [first, ...rest], text: text.slice(pipeline.at.start, pipeline.at.end)};
 }
 
+/**
+ * The inputs of `program` a pipe from a program on `list` can feed: each one an output there
+ * fits, the pairs `wireOf` picks from when a line names no `>out` or `<in`. A command a person
+ * clicks or types (`close`, `quit`) takes a shape no output sends, and is not one.
+ *
+ *   fedBy(ticket, [tracker, ticket, runs, trace])   ["ticket"]   (tracker's output ticket fits)
+ *   fedBy(tracker, [tracker, ticket, runs, trace])  []           (file, close, quit: no output fits)
+ */
+export const fedBy = (program: Entry["program"], list: readonly Entry[]): readonly string[] =>
+	Object.keys(program.inputs).filter((input) =>
+		list.some((from) =>
+			Object.keys(from.program.outputs).some(
+				(output) => fit(from.program.outputs[output], program.inputs[input]) === "fits",
+			),
+		),
+	);
+
 /** Which output of `a` feeds which input of `b`: named by `>out` / `<in`, or the one pair whose shapes fit. */
 function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 	const outs = namedOr(from.out, a.program.outputs, a.program.name, "output");

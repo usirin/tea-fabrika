@@ -1,7 +1,7 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
-import {bindingOf, type Does, PREFIX, REPEAT_MS} from "./keys.ts";
+import {bindingOf, type Does, PREFIX, REPEAT_MS, SHOWS} from "./keys.ts";
 import {
 	type Area,
 	checkTree,
@@ -94,6 +94,15 @@ import {
 //   empty {}             the last tile closed: the window closes, as the last tab's does in Terminal
 //   end {process}        a line's window closed: give its one process the end of its inputs
 //   kill {process}       a closing window asked to stop now: stop its one process
+//   show {what}          the frame shows the asks, the keys, the info mode or hides its bars, on
+//                        the page that pressed the key (window/frame.ts): not a desk change
+//
+// The window's frame moves the desk too (window/frame.tsx), with no key pressed:
+//
+//   {type: "go", tile: "t7"}           a tile anywhere, as an ask in the asks list is picked:
+//                                      its workspace comes forward and it is focused
+//   {type: "pick", workspace: "w2"}    a workspace clicked in the top bar
+//   {type: "run", key: "z"}            the palette ran a command: as Ctrl-B, then that key
 //
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
@@ -169,7 +178,13 @@ export type DeskMsg =
 	/** A tile is closing: its programs were given their inputs' end. Said by no one since the desk moved to the host. */
 	| {readonly type: "closing"; readonly tile: TileId}
 	/** A tile's tsh ended: `exit`, Ctrl-D on an empty line, or its programs ended after a close. */
-	| {readonly type: "ended"; readonly tile: TileId};
+	| {readonly type: "ended"; readonly tile: TileId}
+	/** Focus this tile, in whichever workspace it is: that workspace comes forward. */
+	| {readonly type: "go"; readonly tile: TileId}
+	/** This workspace comes forward. */
+	| {readonly type: "pick"; readonly workspace: string}
+	/** What this key does after the prefix, with no prefix pressed: the palette ran it. */
+	| {readonly type: "run"; readonly key: string};
 
 /** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
@@ -254,6 +269,12 @@ export const empty = Cmd.define("empty", {input: Schema.Struct({}), ok: Done, er
 const Process = Schema.Struct({process: Schema.String});
 export const end = Cmd.define("end", {input: Process, ok: Done, err: []});
 export const kill = Cmd.define("kill", {input: Process, ok: Done, err: []});
+/** The frame shows something, on the page whose key asked: no tile and no layout changes. */
+export const show = Cmd.define("show", {
+	input: Schema.Struct({what: Schema.Literals(SHOWS)}),
+	ok: Done,
+	err: [],
+});
 
 export type DeskCmd =
 	| ReturnType<typeof open>
@@ -263,7 +284,8 @@ export type DeskCmd =
 	| ReturnType<typeof save>
 	| ReturnType<typeof empty>
 	| ReturnType<typeof end>
-	| ReturnType<typeof kill>;
+	| ReturnType<typeof kill>
+	| ReturnType<typeof show>;
 
 type Step = readonly [Desk, readonly DeskCmd[]];
 
@@ -490,7 +512,42 @@ const act = (s: Open, does: Does): Step => {
 			const next = {...s, active: to.id};
 			return [next, keep(next)];
 		}
+		case "pick": {
+			const to = s.workspaces[does.at - 1];
+			return to === undefined ? [s, []] : picked(s, to.id);
+		}
+		case "show":
+			return [s, [show({what: does.what})]];
 	}
+};
+
+/** This workspace comes forward. One not there, or the one forward already, changes nothing. */
+const picked = (s: Open, id: string): Step => {
+	if (s.active === id || !s.workspaces.some((ws) => ws.id === id)) return [s, []];
+	const next = {...s, active: id, ask: null};
+	return [next, keep(next)];
+};
+
+/**
+ * Focus a tile, in whichever workspace it is, as picking an ask in the asks list does. Its
+ * workspace comes forward; a zoom on another tile goes, so the tile is drawn; a question asked is
+ * answered no, as a click answers it.
+ */
+const went = (s: Open, tile: TileId): Step => {
+	const ws = whereIs(s, tile);
+	if (ws === undefined) return [s, []];
+	if (s.active === ws.id && ws.focused === tile && s.ask === null) return [s, []];
+	const layout =
+		ws.layout.zoomed === null || ws.layout.zoomed === tile ? ws.layout : unzoom(ws.layout);
+	const next = {...withWorkspace(s, {...ws, layout, focused: tile}), active: ws.id, ask: null};
+	return [next, keep(next)];
+};
+
+/** The palette ran a key's command: as after the prefix, with the prefix put down and no question up. */
+const ran = (s: Open, key: string): Step => {
+	const binding = bindingOf(key);
+	if (binding === undefined) return [s, []];
+	return act({...s, prefix: DISARMED, ask: null}, binding.does);
 };
 
 /** What a key comes to: the desk's (with its step), or the focused tile's, as if the desk were not there. */
@@ -606,7 +663,14 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 		area: s.area,
 	});
 	if (layout === ws.layout) return [s, []];
-	if (more === 0) return [withWorkspace(s, {...ws, layout}), []];
+	// One run over a tsh changes nothing kept: a restore shows the tsh again. Over the tile a line
+	// was typed in (its line sent to the back), that line's windows lose the tile they give their
+	// space back to, and that is kept.
+	if (more === 0 && node.shows.kind === "tsh") return [withWorkspace(s, {...ws, layout}), []];
+	if (more === 0) {
+		const next = withWorkspace(s, {...ws, layout});
+		return [next, keep(next)];
+	}
 	const next = {...withWorkspace(s, {...ws, layout}), next: s.next + more};
 	return [next, keep(next)];
 };
@@ -639,7 +703,7 @@ const closingNow = (s: Open, tile: TileId): Step =>
 
 export const deskMachine = defineMachine({
 	types: {model: {} as Desk, msg: {} as DeskMsg},
-	cmds: [open, close, stop, send, save, empty, end, kill],
+	cmds: [open, close, stop, send, save, empty, end, kill, show],
 	init: (loaded) => {
 		if (loaded !== null && loaded.at === "open")
 			return [
@@ -676,6 +740,11 @@ export const deskMachine = defineMachine({
 		),
 		closing: onOpen((s, m) => closingNow(s, m.tile)),
 		ended: onOpen((s, m) => goneTile(s, m.tile)),
+		go: onOpen((s, m) => went(s, m.tile)),
+		pick: onOpen((s, m) => picked(s, m.workspace)),
+		run: onOpen((s, m) => ran(s, m.key)),
+		show_ok: noop,
+		show_err: noop,
 		open_ok: noop,
 		open_err: noop,
 		close_ok: noop,
