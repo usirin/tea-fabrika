@@ -381,8 +381,13 @@ body,
 	box-sizing: border-box;
 }
 
+/*
+ * ghostty-web makes this element contenteditable, for an input method's text, and draws its own
+ * cursor on the canvas. The browser's text caret would blink at the element's top left corner.
+ */
 .screen {
 	height: 100%;
+	caret-color: transparent;
 }
 
 /* The screen as text: there for a screen reader and a test, out of sight. */
@@ -1346,6 +1351,11 @@ main.program:has(> .view) {
 
 .view .view-empty {
 	margin: var(--s-8) auto;
+}
+
+/* A view's own empty line, when it is all the view shows: off the tile's edge, as the frame no longer pads. */
+.view > .empty {
+	margin: 16px;
 }
 
 .view .alert {
