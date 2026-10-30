@@ -31,7 +31,7 @@ import {
 	workspaceName,
 } from "./frame.ts";
 import {type Cap, capsOf, type Hint, type Row, sentence} from "./pop.ts";
-import {Menu, Palette, Panel, useTip} from "./pop.tsx";
+import {type Empty, Menu, Palette, Panel, useTip} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -356,6 +356,22 @@ const JOBS_FOOT: readonly Hint[] = [
 ];
 
 /**
+ * The jobs list's calm line, shown only when no tile runs anything: what to expect, and the two
+ * tsh words for jobs, since that is when someone is learning them. A list with rows needs no
+ * hint: each row already shows its `%n`.
+ */
+const JOBS_EMPTY: Empty = {
+	title: "Nothing is running",
+	sub: [
+		{text: "A job you start in tsh shows here. There, ", typed: false},
+		{text: "jobs", typed: true},
+		{text: " lists them and ", typed: false},
+		{text: "attach %n", typed: true},
+		{text: " brings one forward.", typed: false},
+	],
+};
+
+/**
  * The jobs list, a menu over the bottom line's job item, as tsh's `jobs` prints the host's table:
  * the focused tile's jobs, its last to end, then each other tile's (frame.ts, `jobsList`). Enter
  * on a row focuses the tile it runs in; on one of this tile's, that is only the list closing and
@@ -377,13 +393,10 @@ function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
 			id={POP.jobs}
 			label="Jobs"
 			from="bottom"
-			count={list.running}
+			count={list.count}
 			sections={list.sections}
 			foot={JOBS_FOOT}
-			empty={{
-				title: here === undefined ? "Nothing runs" : `Nothing runs in ${here}`,
-				sub: "A job you start in tsh shows here and on the bottom line.",
-			}}
+			empty={JOBS_EMPTY}
 			onAct={go}
 			// No job row has a second thing (`second: null`), so H does nothing here.
 			onSecond={() => undefined}

@@ -402,6 +402,12 @@ export const endWord = (ended: JobEnded): string => {
 	return ended.how === "done" ? `done in ${took}` : `${ended.how} after ${took}`;
 };
 
+/**
+ * How long ago something ended, in the same calm form as `tookWord`: `14s ago`, `2m ago`. Under
+ * a second it is `just now`, where `0s ago` reads oddly.
+ */
+export const agoWord = (ms: number): string => (ms < 1000 ? "just now" : `${tookWord(ms)} ago`);
+
 /** Is this end still news at `now`: said a short while after, and only when it was not seen happen. */
 const fresh = (ended: JobEnded | null, now: number): ended is JobEnded =>
 	ended !== null &&
@@ -456,28 +462,36 @@ const runningRow = (tile: TileId, job: TileJobs["running"][number], now: number)
 	second: null,
 });
 
-/** The jobs list: its sections, the tile each row's Enter focuses, and how many jobs run. */
+/** The jobs list: its sections, the tile each row's Enter focuses, and the count at its head. */
 export interface JobsList {
 	readonly sections: readonly Section[];
 	readonly tiles: ReadonlyMap<string, TileId>;
-	/** On the whole desk: the count at the list's head. */
-	readonly running: number;
+	/**
+	 * The running jobs the list shows, on the whole desk: `Jobs 3`. `null` when none runs, so the
+	 * head says only `Jobs` over its calm line, never `Jobs 0`.
+	 */
+	readonly count: number | null;
 }
 
 /**
  * The jobs list, as tsh's `jobs` lists the host's table: the focused tile's jobs, the one the
  * bottom line names first; then its last to end, however long ago, so the list still says it once
  * the bottom line has cleared; then each other tile's, by tile. Enter on a row focuses its tile.
+ * The right side is always time from now: how long a job has run, or how long ago it ended.
  *
- *   Jobs 2
+ *   Jobs 3
  *   ◐ sleep --ms 9000                 2m
  *     %5 · t2
  *   Last ended
- *   ✓ seq --to 9 | tally              14:26
+ *   ✓ seq --to 9 | tally          1m ago
  *     %3 · t2 · done in 1m
  *   Other tiles
  *   ◐ counter                         2m
  *     %1 · t1
+ *
+ * A section with no rows is left out, this tile's own too: when only other tiles run something,
+ * the list opens on `Other tiles`, which already says this one runs nothing. With no row at all,
+ * the menu shows its calm line instead.
  */
 export const jobsList = (desk: Open, now: number): JobsList => {
 	const here = focusedOf(desk)?.id;
@@ -502,7 +516,7 @@ export const jobsList = (desk: Open, now: number): JobsList => {
 					icon: ended.how,
 					title: [{text: ended.text, typed: true}],
 					sub: whereOf(ended.n, here, ` · ${endWord(ended)}`),
-					side: whenOf(ended.at, now),
+					side: agoWord(now - ended.at),
 					second: null,
 				}),
 			);
@@ -513,18 +527,16 @@ export const jobsList = (desk: Open, now: number): JobsList => {
 		.flatMap((tile) =>
 			(desk.jobs[tile]?.running ?? []).map((j) => at(tile, runningRow(tile, j, now))),
 		);
+	const sections: readonly Section[] = [
+		{id: "here", title: null, fold: false, rows: hereRows},
+		{id: "ended", title: "Last ended", fold: false, rows: endedRows},
+		{id: "others", title: "Other tiles", fold: false, rows: otherRows},
+	];
+	const running = hereRows.length + otherRows.length;
 	return {
-		sections: [
-			{id: "here", title: null, fold: false, rows: hereRows},
-			...(endedRows.length === 0
-				? []
-				: [{id: "ended", title: "Last ended", fold: false, rows: endedRows}]),
-			...(otherRows.length === 0
-				? []
-				: [{id: "others", title: "Other tiles", fold: false, rows: otherRows}]),
-		],
+		sections: sections.filter((s) => s.rows.length > 0),
 		tiles,
-		running: Object.values(desk.jobs).reduce((n, j) => n + j.running.length, 0),
+		count: running === 0 ? null : running,
 	};
 };
 

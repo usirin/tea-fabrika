@@ -230,6 +230,32 @@ describe("the roles each one draws", () => {
 		expect(html).not.toContain("pop-foot");
 	});
 
+	it("draws a bare head with no count, and typed words in the calm line in mono", () => {
+		const html = renderToStaticMarkup(
+			createElement(Menu, {
+				id: "pop-jobs",
+				label: "Jobs",
+				from: "bottom",
+				count: null,
+				sections: [],
+				foot: [],
+				empty: {
+					title: "Nothing is running",
+					sub: [
+						{text: "There, ", typed: false},
+						{text: "jobs", typed: true},
+						{text: " lists them.", typed: false},
+					],
+				},
+				onAct: noop,
+				onSecond: noop,
+				onClose: noop,
+			} satisfies MenuProps),
+		);
+		expect(html).toContain('<div class="pop-head" aria-hidden="true">Jobs</div>');
+		expect(html).toContain("<span>There, </span><code>jobs</code><span> lists them.</span>");
+	});
+
 	it("draws typed words in mono, a titled section's heading, and a menu from the bottom line", () => {
 		const job: Row = {
 			id: "t2/%5",

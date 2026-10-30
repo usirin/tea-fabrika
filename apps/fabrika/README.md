@@ -207,9 +207,12 @@ When something is wrong, its word joins the top bar's right end, in red where it
 - **A click on the job item, or `C-b J`, lists the jobs,** as tsh's `jobs` lists the table: a
   menu over the bottom line, with focus in it. The tile's own jobs come first, then its last to
   end (under Last ended), then each other tile's (under Other tiles). A row is the job's line as
-  typed, its `%n` and tile under it, and how long it has run (or when it ended) at the right.
-  `↑` `↓` or `J` `K` move, `↵` focuses the tile the job runs in, `Esc` or a click outside closes
-  it and gives focus back. With nothing running here, it says so in one calm line. There is no
+  typed, its `%n` and tile under it, and at the right how long it has run (or how long ago it
+  ended, `2m ago`). The head counts the running jobs it lists. A part with no rows is left out,
+  so a tile that runs nothing opens straight on Other tiles. `↑` `↓` or `J` `K` move, `↵`
+  focuses the tile the job runs in, `Esc` or a click outside closes it and gives focus back.
+  With nothing running anywhere, the head has no count and one calm line says so, with tsh's
+  `jobs` and `attach %n`. There is no
   trace to open for a job yet: the app's `trace` reads only records held in memory, until the
   host keeps each job's record.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):

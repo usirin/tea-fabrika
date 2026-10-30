@@ -171,7 +171,8 @@ function Foot(props: {readonly hints: readonly Hint[]; readonly children?: React
 /** What a menu shows with no rows: one calm line and what to expect, never a blank box. */
 export interface Empty {
 	readonly title: string;
-	readonly sub: string;
+	/** What to expect; typed words in it, such as a tsh command, are drawn as code. */
+	readonly sub: Words;
 }
 
 export interface MenuProps {
@@ -359,7 +360,9 @@ function EmptyLine(props: {readonly empty: Empty}): ReactNode {
 		<>
 			<IconOf icon="done" />
 			<span className="t">{props.empty.title}</span>
-			<span className="s">{props.empty.sub}</span>
+			<span className="s">
+				<WordsOf words={props.empty.sub} />
+			</span>
 		</>
 	);
 }

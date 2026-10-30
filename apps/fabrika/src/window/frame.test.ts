@@ -1,5 +1,4 @@
 import {applyCell} from "@demlik/tea";
-import {whenOf} from "@tea-fabrika/tracker/window";
 import {describe, expect, it} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
@@ -13,6 +12,7 @@ import {
 import {BINDINGS, PREFIX} from "../desk/keys.ts";
 import type {JobEnded} from "../tile-jobs.ts";
 import {
+	agoWord,
 	asksSections,
 	asksWord,
 	commandsOf,
@@ -399,7 +399,7 @@ describe("the job item and the jobs list", () => {
 		const list = jobsList(desk, 120_000);
 		const typed = (text: string) => ({text, typed: true});
 		const plain = (text: string) => ({text, typed: false});
-		expect(list.running).toBe(3);
+		expect(list.count).toBe(3);
 		expect(list.sections).toEqual([
 			{
 				id: "here",
@@ -434,7 +434,7 @@ describe("the job item and the jobs list", () => {
 						icon: "done",
 						title: [typed("seq --to 9 | tally")],
 						sub: [typed("%3"), plain(" · t2 · done in 1m")],
-						side: whenOf(60_000, 120_000),
+						side: "1m ago",
 						second: null,
 					},
 				],
@@ -460,17 +460,28 @@ describe("the job item and the jobs list", () => {
 		expect(list.tiles.get("t2/ended")).toBe("t2");
 	});
 
-	it("keeps the jobs list's own part when this tile runs nothing, so its calm line shows", () => {
+	it("leaves out a section with no rows, and counts nothing when nothing runs", () => {
+		// This tile runs nothing: the list opens on Other tiles, and the count is theirs.
 		const desk: Open = {...lined, jobs: {t1: {running: [job(1, "counter", 0)], ended: null}}};
-		const {sections, running} = jobsList(desk, 1000);
-		expect(running).toBe(1);
-		expect(sections.map((s) => [s.id, s.rows.length])).toEqual([
-			["here", 0],
-			["others", 1],
-		]);
-		expect(jobsList({...lined, jobs: {}}, 0).sections).toEqual([
-			{id: "here", title: null, fold: false, rows: []},
-		]);
+		const others = jobsList(desk, 1000);
+		expect(others.count).toBe(1);
+		expect(others.sections.map((s) => [s.id, s.rows.length])).toEqual([["others", 1]]);
+		// Only an end: the row shows, and the head has no count.
+		const ends = jobsList({...lined, jobs: {t2: {running: [], ended: ended()}}}, 120_000);
+		expect(ends.count).toBeNull();
+		expect(ends.sections.map((s) => s.id)).toEqual(["ended"]);
+		// Nothing at all: no section, so the menu shows its calm line under a bare `Jobs`.
+		expect(jobsList({...lined, jobs: {}}, 0)).toEqual({
+			sections: [],
+			tiles: new Map(),
+			count: null,
+		});
+	});
+
+	it("says how long ago an end was in the bottom line's calm form", () => {
+		expect(agoWord(400)).toBe("just now");
+		expect(agoWord(14_000)).toBe("14s ago");
+		expect(agoWord(134_000)).toBe("2m ago");
 	});
 
 	it("opens and closes the jobs list as a menu, by its key", () => {
