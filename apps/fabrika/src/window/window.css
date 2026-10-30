@@ -679,6 +679,96 @@ button:focus-visible {
 }
 
 /*
+ * The markdown window (programs/markdown/src/window.tsx): a page to read, as the tracker's
+ * column is. The app's sans type, a margin round the text, and tables with room between cells.
+ * Here, before the windows that style a th or a pre more closely, so their rules still win.
+ */
+.markdown {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 20px 28px 32px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 400 var(--fs-prose) / 1.6 var(--font);
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+}
+
+.markdown:focus {
+	outline: none;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+	color: var(--text-primary);
+	font-weight: 600;
+	line-height: 1.3;
+	margin: 1.4em 0 0.6em;
+}
+
+.markdown h1 {
+	font-size: var(--fs-title);
+	margin-top: 0;
+}
+
+.markdown h2 {
+	font-size: var(--fs-head);
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+	max-width: 880px;
+	margin: 0 0 0.9em;
+}
+
+.markdown code,
+.markdown pre {
+	font-family: var(--mono);
+	font-size: var(--fs-small);
+}
+
+.markdown pre {
+	padding: 10px 12px;
+	background: var(--raised);
+	border-radius: var(--r);
+	overflow: auto;
+}
+
+.markdown blockquote {
+	padding-left: 12px;
+	border-left: 2px solid var(--line);
+	color: var(--soft);
+}
+
+.markdown table {
+	border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+	padding: 4px 16px 4px 0;
+	border-bottom: 1px solid var(--border-faint);
+	text-align: left;
+	vertical-align: top;
+	white-space: nowrap;
+}
+
+.markdown td:nth-child(2) {
+	white-space: normal;
+}
+
+.markdown th {
+	color: var(--soft);
+	font-weight: 500;
+}
+
+/*
  * The tracker's window (programs/tracker/src/window.tsx). Its colours are the app's tokens, at the
  * top of this file: a program has no theme of its own. Calm on purpose: one column, the app's
  * sans type, and colour only where it says something (a ticket's state, the focus).
