@@ -17,62 +17,56 @@ import {Effect, Schema} from "effect";
 // themselves, and the fold, are the pipeline's (`@kampus/pipeline/tickets/ticket`), so a lane
 // writes the same facts this window shows.
 //
-//   {kind: "comment", ticket: 3, body: "Skip part 2.", asks: "changes"}
+//   comment {ticket: 3, body: "Skip part 2.", asks: "changes"}
 //   // tracker/ticket/3/inbox  {type: "commented", body: "Skip part 2.", asks: "changes"}
-//   {kind: "answer", ticket: 3, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
+//   answer {ticket: 3, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 //   // tracker/ticket/3/inbox  {type: "answered", ..., text: "sha256:…"}: the hash of what it saw
+//
+// Each command is its own struct, the value of the tracker's input of the same name (./index.ts).
+// Inside the machine a write is one tagged union, `Write`, as an Elm Msg is: the input's name
+// becomes the tag there, and only there.
+
+/** A new ticket: its title and body. Becomes its `filed`. */
+export const File = Schema.Struct({title: Title, body: Body});
+export type File = typeof File.Type;
+
+/** A comment. `asks: "changes"`: the "Request changes" button, not "Comment". Becomes one `commented`. */
+export const Comment = Schema.Struct({
+	ticket: TicketNumber,
+	body: Said,
+	asks: Schema.optionalKey(Asks),
+});
+export type Comment = typeof Comment.Type;
+
+/** One ticket, by its number: what `close` and `reopen` take. Becomes its `closed` or `reopened`. */
+export const OneTicket = Schema.Struct({ticket: TicketNumber});
+export type OneTicket = typeof OneTicket.Type;
 
 /**
- * One change a person asks for. Each becomes one fact: `file` a new ticket's `filed`. Each case's
- * description is what an agent reads on its tool (`tracker_file`, ...); `answer` and
- * `rate_duplicate` are `{personOnly: true}`, so an agent has no tool for either.
+ * A click on an ask's box: one of its picks, the note typed beside it, and the ticket's title and
+ * body as the person saw them, so the answer names the text it covers. Becomes one `answered`.
  */
+export const Answer = Schema.Struct({
+	ticket: TicketNumber,
+	ask: Id,
+	pick: Title,
+	note: Body,
+	saw: Text,
+});
+export type Answer = typeof Answer.Type;
+
+/** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
+export const RateDuplicate = Schema.Struct({ticket: TicketNumber, of: TicketNumber, says: Says});
+export type RateDuplicate = typeof RateDuplicate.Type;
+
+/** One change a person asks for, as the machine holds it: the command, tagged by its input's name. */
 export const Write = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("file"), title: Title, body: Body}).annotate({
-		description: "File a new ticket: its title and body. Writes its `filed`.",
-	}),
-	/** `asks: "changes"`: the "Request changes" button, not "Comment". */
-	Schema.Struct({
-		kind: Schema.Literal("comment"),
-		ticket: TicketNumber,
-		body: Said,
-		asks: Schema.optionalKey(Asks),
-	}).annotate({
-		description: 'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.',
-	}),
-	Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber}).annotate({
-		description: "Close a ticket. Writes its `closed`.",
-	}),
-	Schema.Struct({kind: Schema.Literal("reopen"), ticket: TicketNumber}).annotate({
-		description: "Reopen a closed ticket. Writes its `reopened`.",
-	}),
-	/**
-	 * A click on an ask's box: one of its picks, the note typed beside it, and the ticket's title and
-	 * body as the person saw them, so the answer names the text it covers.
-	 */
-	Schema.Struct({
-		kind: Schema.Literal("answer"),
-		ticket: TicketNumber,
-		ask: Id,
-		pick: Title,
-		note: Body,
-		saw: Text,
-	}).annotate({
-		description:
-			"Answer an open ask on a ticket: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
-		personOnly: true,
-	}),
-	/** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
-	Schema.Struct({
-		kind: Schema.Literal("rate_duplicate"),
-		ticket: TicketNumber,
-		of: TicketNumber,
-		says: Says,
-	}).annotate({
-		description:
-			"Accept or dismiss a duplicate hint: is the ticket the same as `of`? A person only. Writes one `duplicate_rated`.",
-		personOnly: true,
-	}),
+	Schema.Struct({kind: Schema.Literal("file"), ...File.fields}),
+	Schema.Struct({kind: Schema.Literal("comment"), ...Comment.fields}),
+	Schema.Struct({kind: Schema.Literal("close"), ...OneTicket.fields}),
+	Schema.Struct({kind: Schema.Literal("reopen"), ...OneTicket.fields}),
+	Schema.Struct({kind: Schema.Literal("answer"), ...Answer.fields}),
+	Schema.Struct({kind: Schema.Literal("rate_duplicate"), ...RateDuplicate.fields}),
 ]);
 export type Write = typeof Write.Type;
 

@@ -2,6 +2,7 @@ import {
 	Ledger,
 	memoryStorage,
 	offer,
+	type PayloadOf,
 	start,
 	streams,
 	type Word,
@@ -11,8 +12,15 @@ import {memoryService} from "@kampus/fabrika/memory";
 import {Jev} from "@kampus/pipeline/services";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {Author, type Do, pullRequestsOf, tracker} from "./index.ts";
+import {Author, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
+
+/** One value told to one of the tracker's inputs, by its name. */
+type Inputs = (typeof tracker)["inputs"];
+type Say = <K extends keyof Inputs & string>(
+	input: K,
+	value: PayloadOf<Inputs[K]>,
+) => Effect.Effect<Word>;
 
 // The duplicate hint end to end, on a ledger in memory and a scripted Jev: a filing that lands
 // asks Jev about the open tickets the cheap filter keeps, a hint at the floor goes on the new
@@ -49,7 +57,7 @@ const session = (
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()});
 		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
 		const {run} = started;
-		const say = (d: Do): Effect.Effect<Word> => offer(run, "do", d);
+		const say: Say = (input, value): Effect.Effect<Word> => offer(run, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>
 			run.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
@@ -74,12 +82,12 @@ const hintsOf = (s: Shown) =>
 	s.page.kind === "ticket" && s.page.opened !== null ? s.page.opened.duplicates : [];
 
 /** Three open tickets, then a fourth that repeats the first in other words. */
-const fileFour = (say: (d: Do) => Effect.Effect<unknown>) =>
+const fileFour = (say: Say) =>
 	Effect.gen(function* () {
-		yield* say({kind: "file", title: "Login fails on Safari", body: "The login button spins."});
-		yield* say({kind: "file", title: "Docs typo in the README", body: ""});
-		yield* say({kind: "file", title: "Dark mode for the settings page", body: ""});
-		yield* say({kind: "file", title: "Cannot log in from Safari", body: "Login spins forever."});
+		yield* say("file", {title: "Login fails on Safari", body: "The login button spins."});
+		yield* say("file", {title: "Docs typo in the README", body: ""});
+		yield* say("file", {title: "Dark mode for the settings page", body: ""});
+		yield* say("file", {title: "Cannot log in from Safari", body: "Login spins forever."});
 	});
 
 describe("the duplicate hint", () => {
@@ -91,9 +99,9 @@ describe("the duplicate hint", () => {
 				const {say, until} = yield* session(ledger, scriptedJev({"Login fails": 0.91}, asked));
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "query", ticket: 4});
+				yield* say("query", {ticket: 4});
 				const page = yield* until((s) => hintsOf(s).length > 0);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				const rows = yield* ledger.readStream(streams("tracker/ticket/4").inbox);
 				return {
 					hints: hintsOf(page),
@@ -129,7 +137,7 @@ describe("the duplicate hint", () => {
 				const {say, until, run} = yield* session(ledger, scriptedJev({"Login fails": 0.69}));
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				// Quit waits for the hints still out, so once it ends Jev has answered.
 				yield* run.ended;
 				return yield* ledger.readStream(streams("tracker/ticket/4").inbox);
@@ -145,7 +153,7 @@ describe("the duplicate hint", () => {
 				const {say, until, run} = yield* session(ledger, null);
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				yield* run.ended;
 				return yield* ledger.readStream(streams("tracker/ticket/4").inbox);
 			}).pipe(Effect.scoped),
@@ -178,11 +186,11 @@ describe("the duplicate hint", () => {
 				const {say, until} = yield* session(ledger, scriptedJev({"Login fails": 0.91}));
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "query", ticket: 4});
+				yield* say("query", {ticket: 4});
 				yield* until((s) => hintsOf(s).length > 0);
-				yield* say({kind: "rate_duplicate", ticket: 4, of: 1, says: "accept"});
+				yield* say("rate_duplicate", {ticket: 4, of: 1, says: "accept"});
 				yield* until((s) => hintsOf(s)[0]?.says === "accept");
-				yield* say({kind: "rate_duplicate", ticket: 4, of: 1, says: "dismiss"});
+				yield* say("rate_duplicate", {ticket: 4, of: 1, says: "dismiss"});
 				const page = yield* until((s) => hintsOf(s)[0]?.says === "dismiss");
 				const states =
 					page.page.kind === "ticket" ? page.page.opened?.ticket.state : "not a ticket page";
@@ -207,7 +215,7 @@ describe("the duplicate hint", () => {
 				const {say, until} = yield* session(ledger, scriptedJev({"Login fails": 0.91}), agent);
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "rate_duplicate", ticket: 4, of: 1, says: "accept"});
+				yield* say("rate_duplicate", {ticket: 4, of: 1, says: "accept"});
 				return (yield* until((s) => s.failed !== null)).failed;
 			}).pipe(Effect.scoped),
 		);

@@ -13,8 +13,8 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
 // {step: "approval", state: "you", runs: 1, usd: 0, last: "approve plan v1"}
 
 // tsh> ticket --ticket 7
-// the window sends, on `do`, naming the ticket it was on:
-// {kind: "answer", ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
+// the window sends, on `answer`, naming the ticket it was on:
+// {ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 // tracker/ticket/7/inbox gets {type: "answered", ask: "a-1", pick: "approve", ...} by user:owner
 
 // tsh> tracker | ticket | runs
@@ -26,7 +26,7 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/ticket` | `src/index.ts` | `ticket`, the program: flag `ticket` (left out, it waits), input `do` (answer, comment, ask for changes, close, reopen, quit), input `ticket` (a ticket to show now), output `ticket` (the ticket it shows), and its view. `writeOf` turns a `do` into the tracker's write, or `null` for a ticket never shown here. |
+| `@tea-fabrika/ticket` | `src/index.ts` | `ticket`, the program: flag `ticket` (left out, it waits), one input per command, by the tracker's names and structs (`comment`, which can ask for changes, `answer`, a person's only, `close`, `reopen`, `quit`), input `ticket` (a ticket to show now), output `ticket` (the ticket it shows), and its view. `writeOf` keeps a write, or answers `null` for a ticket never shown here. |
 | | `src/view.ts` | `Shown` and `shownOf`: the page the window draws, with its nine steps, plan, pull request and cost. Pure. |
 | `@tea-fabrika/ticket/window` | `src/window.tsx` | `TicketWindow`, the round 6 layout. |
 

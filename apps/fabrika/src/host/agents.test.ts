@@ -120,7 +120,7 @@ const agentsList = () =>
 	);
 
 describe("an agent's tools", () => {
-	it("are the cases of the tracker's one input: each write, a read-only query, quit, and no answer", () => {
+	it("are the tracker's inputs, one tool each: each write, a read-only query, quit, and no answer", () => {
 		const tools = toolsOf(agentsList());
 		expect(tools.map((t) => t.name).filter((n) => n.startsWith("tracker_"))).toEqual([
 			"tracker_file",
@@ -137,26 +137,28 @@ describe("an agent's tools", () => {
 			tracker_file: undefined,
 			tracker_close: undefined,
 		});
-		// A case only a person sends has no tool, so a call to it is refused as any unknown tool is.
+		// An input only a person tells has no tool, so a call to it is refused as any unknown tool is.
 		for (const name of ["tracker_answer", "tracker_rate_duplicate", "ticket_answer"])
 			expect(callOf(agentsList(), name, {value: {}})).toEqual({
 				kind: "refused",
 				why: `there is no tool ${name}`,
 			});
-		// A call puts the case's tag back and tells the one input, so order across cases holds.
+		// A call tells the input of the same name its value, as it is.
 		expect(callOf(agentsList(), "tracker_query", {value: {ticket: 43}})).toEqual({
 			kind: "input",
 			program: "tracker",
-			input: "do",
-			value: {kind: "query", ticket: 43},
+			input: "query",
+			value: {ticket: 43},
 		});
-		expect(callOf(agentsList(), "tracker_quit", {value: {}})).toMatchObject({
-			input: "do",
-			value: {kind: "quit"},
+		expect(callOf(agentsList(), "tracker_quit", {value: null})).toEqual({
+			kind: "input",
+			program: "tracker",
+			input: "quit",
+			value: null,
 		});
-		// The tag is the tool's to put back: a value that names one does not fit.
+		// The input already names the command: a value that names one too does not fit.
 		expect(
-			callOf(agentsList(), "tracker_close", {value: {kind: "answer", ticket: 1}}),
+			callOf(agentsList(), "tracker_close", {value: {kind: "close", ticket: 1}}),
 		).toMatchObject({kind: "refused"});
 	});
 });
@@ -182,7 +184,7 @@ describe("an agent drives the app's programs through MCP", () => {
 					const tickets = page?.kind === "list" ? (page.tickets as {title: string}[]) : [];
 					return tickets.find((t) => t.title === "Filed by an agent");
 				});
-				app.click("do", {kind: "query", ticket: 1});
+				app.click("query", {ticket: 1});
 				const rows = yield* until("ticket 1's page", () => {
 					const page = pageOf(app.shown());
 					const opened =
@@ -203,7 +205,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			"tracker_reopen",
 			"tracker_query",
 			"tracker_quit",
-			// The ticket's own `do`, split the same way, and no `ticket_answer`.
+			// The ticket's own commands, one input each, and no `ticket_answer`.
 			"ticket_comment",
 			"ticket_close",
 			"ticket_reopen",
@@ -211,15 +213,12 @@ describe("an agent drives the app's programs through MCP", () => {
 			// A ticket to show: what a pipe from the tracker sends, an agent can send too.
 			"ticket_ticket",
 			"map_in",
-			"runs_choose",
-			"runs_quit",
+			"runs_in",
 			"runs_ticket",
-			"trace_toggle",
-			"trace_choose",
-			"trace_quit",
+			"trace_do",
 			"trace_id",
 		]);
-		// The tool is the case: its description and its fields are the tracker's own `file`.
+		// The tool is the input: its description and its fields are the tracker's own `file`.
 		expect(seen.fileTool?.description).toMatch(/^File a new ticket/);
 		expect(seen.fileTool?.inputSchema).toMatchObject({
 			type: "object",
@@ -265,7 +264,7 @@ describe("an agent drives the app's programs through MCP", () => {
 				});
 				// A value that does not fit the input's schema never reaches the program.
 				const bad = yield* agent.call("tracker_file", {value: {title: 3}});
-				app.click("do", {kind: "query", ticket: 1});
+				app.click("query", {ticket: 1});
 				const rows = yield* until("ticket 1's page", () => {
 					const page = pageOf(app.shown());
 					const opened =

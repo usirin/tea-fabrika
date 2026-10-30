@@ -79,8 +79,8 @@ const SPARK = (
 /** Where each box sits, and how wide it is: the round 6 layout. */
 const AT: {readonly [N in ProgramName | "ledger"]: {x: number; y: number; w: number}} = {
 	tracker: {x: 24, y: 24, w: 240},
-	plan: {x: 24, y: 206, w: 240},
-	deliver: {x: 24, y: 420, w: 240},
+	plan: {x: 24, y: 290, w: 240},
+	deliver: {x: 24, y: 440, w: 240},
 	asks: {x: 380, y: 24, w: 230},
 	ledger: {x: 380, y: 452, w: 230},
 	agent: {x: 380, y: 640, w: 230},

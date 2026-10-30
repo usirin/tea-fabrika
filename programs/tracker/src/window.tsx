@@ -10,7 +10,6 @@ import {
 } from "react";
 import {lineOf, waits} from "./head.ts";
 import type {
-	Do,
 	Head,
 	Hint,
 	OpenAsk,
@@ -25,11 +24,12 @@ import type {
 } from "./index.ts";
 import {piecesOf} from "./links.ts";
 
-// The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
-// `do`: a write, the query, or quit. All it keeps is what a person is typing and which row is
-// picked, so a half-written ticket or comment survives a look at another page. Which tickets show,
-// and the search, are the machine's (`show`, `find`): this window only draws them and sends a
-// query when they change, with the whole filter: `{kind: "query", status: "closed", find: "login"}`.
+// The tracker's window: plain React, keyboard first. It draws the view it is handed and sends one
+// of its inputs: a write, the query, or quit. All it keeps is what a person is typing and which row
+// is picked, so a half-written ticket or comment survives a look at another page. Which tickets
+// show, and the search, are the machine's (`show`, `find`): this window only draws them and sends
+// a query when they change, with the whole filter:
+// `{type: "query", value: {status: "closed", find: "login"}}`.
 //
 //   the list     ↑ ↓ or j k pick a row, Enter opens it, c goes to the new ticket's title,
 //                o x a show open, closed or all tickets, / goes to the search, q quits
@@ -41,7 +41,7 @@ import {piecesOf} from "./links.ts";
 // `target="_blank"`, which the app never makes: it hands an http or https URL to the person's own
 // browser instead.
 
-type Send = (d: Do) => void;
+type Send = WindowProps<typeof tracker>["send"];
 
 /** A write in words, for "saving" and "not saved". */
 const said = (w: Write): string => {
@@ -87,7 +87,6 @@ const prRow = (pr: PullRequest) => `pr:${pr.url}`;
 const shortOf = (repo: string): string => repo.split("/").filter(Boolean).at(-1) ?? repo;
 
 export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
-	const act: Send = (value) => send({type: "do", value});
 	const [picked, setPicked] = useState<string | null>(null);
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
@@ -109,10 +108,10 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						find={find}
 						setFind={(text) => {
 							setFind(text);
-							act({kind: "query", status: view.filter.show, find: text});
+							send({type: "query", value: {status: view.filter.show, find: text}});
 						}}
 						draft={{title, body, setTitle, setBody}}
-						act={act}
+						act={send}
 					/>
 				) : (
 					<TicketPage
@@ -121,8 +120,8 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						saving={view.saving}
 						draft={comments[page.number] ?? ""}
 						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
-						back={() => act({kind: "query", status: view.filter.show, find})}
-						act={act}
+						back={() => send({type: "query", value: {status: view.filter.show, find}})}
+						act={send}
 					/>
 				)}
 			</div>
@@ -229,7 +228,7 @@ function ListPage(props: {
 		e?.preventDefault();
 		const t = draft.title.trim();
 		if (t === "") return titleRef.current?.focus();
-		act({kind: "file", title: t, body: draft.body.trimEnd()});
+		act({type: "file", value: {title: t, body: draft.body.trimEnd()}});
 		draft.setTitle("");
 		draft.setBody("");
 		titleRef.current?.focus();
@@ -251,7 +250,7 @@ function ListPage(props: {
 		pick(next);
 		rows.current.get(next)?.focus();
 	};
-	const show = (s: Show) => act({kind: "query", status: s, find: props.find});
+	const show = (s: Show) => act({type: "query", value: {status: s, find: props.find}});
 	/** The list's own keys, anywhere on the page but in a box being typed in. */
 	const onListKey = (e: KeyboardEvent) => {
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -267,7 +266,7 @@ function ListPage(props: {
 			o: () => show("open"),
 			x: () => show("closed"),
 			a: () => show("all"),
-			q: () => act({kind: "quit"}),
+			q: () => act({type: "quit", value: null}),
 		};
 		const key = keys[e.key];
 		if (key === undefined) return;
@@ -383,7 +382,7 @@ function ListPage(props: {
 										tabIndex={row === picked ? 0 : -1}
 										aria-current={row === picked}
 										onFocus={() => pick(row)}
-										onClick={() => act({kind: "query", ticket: t.number})}
+										onClick={() => act({type: "query", value: {ticket: t.number}})}
 									>
 										<StateGlyph state={t.state} />
 										<span className="tracker-number">{t.number}</span>
@@ -598,11 +597,10 @@ function TicketPage(props: {
 		e?.preventDefault();
 		if (draft.trim() === "") return;
 		const body = draft.trimEnd();
-		act(
-			asks === undefined
-				? {kind: "comment", ticket: number, body}
-				: {kind: "comment", ticket: number, body, asks},
-		);
+		act({
+			type: "comment",
+			value: asks === undefined ? {ticket: number, body} : {ticket: number, body, asks},
+		});
 		setDraft("");
 	};
 	const pending = saving.filter((w) => w.kind === "comment" && w.ticket === number);
@@ -692,7 +690,7 @@ function TicketPage(props: {
 								type="button"
 								onKeyDown={onPageKey}
 								onClick={() =>
-									act({kind: ticket.state === "open" ? "close" : "reopen", ticket: number})
+									act({type: ticket.state === "open" ? "close" : "reopen", value: {ticket: number}})
 								}
 							>
 								{ticket.state === "open" ? "Close ticket" : "Reopen ticket"}
@@ -807,7 +805,10 @@ function AskBox(props: {
 						disabled={saving}
 						onKeyDown={onKey}
 						onClick={() =>
-							act({kind: "answer", ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw})
+							act({
+								type: "answer",
+								value: {ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw},
+							})
 						}
 					>
 						{pick}
@@ -833,7 +834,7 @@ function DuplicateHint(props: {
 }) {
 	const {number, hint, saving, act, onKey} = props;
 	const rate = (says: "accept" | "dismiss") =>
-		act({kind: "rate_duplicate", ticket: number, of: hint.of, says});
+		act({type: "rate_duplicate", value: {ticket: number, of: hint.of, says}});
 	return (
 		<section
 			className="tracker-hint"
@@ -846,7 +847,7 @@ function DuplicateHint(props: {
 					type="button"
 					className="tracker-hint-link"
 					onKeyDown={onKey}
-					onClick={() => act({kind: "query", ticket: hint.of})}
+					onClick={() => act({type: "query", value: {ticket: hint.of}})}
 				>
 					#{hint.of}
 					{hint.title === null ? null : ` ${hint.title}`}

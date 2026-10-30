@@ -18,9 +18,9 @@ import {appPrograms} from "../tsh.ts";
 // the person. Its writer is the agent the handshake named, for the host's person; `appPrograms` packs
 // every program with that writer, the same function a tile's tsh packs them with as the person.
 // So an agent's tool call has no path to the person's writer. An agent has no `tracker_answer`
-// at all: the tracker's `answer` is a case only a person sends (`{personOnly: true}`), so no tool
-// is made for it. Behind that, the tracker still refuses an agent's `answered` as it refuses any agent's
-// (programs/tracker, `mayWrite`).
+// at all: the tracker's `answer` is an input only a person tells (`{personOnly: true}`), so no
+// tool is made for it. Behind that, the tracker still refuses an agent's `answered` as it refuses
+// any agent's (programs/tracker, `mayWrite`).
 //
 // Only on a home that keeps its own ledger file (host/run.ts). On a home connected to a ledger
 // server, the host's ledger is the person's session there, and the door stamps what it writes as

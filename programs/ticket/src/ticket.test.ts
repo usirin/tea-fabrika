@@ -1,4 +1,12 @@
-import {Ledger, memoryStorage, offer, start, streams, type Word} from "@kampus/fabrika";
+import {
+	Ledger,
+	memoryStorage,
+	offer,
+	type PayloadOf,
+	start,
+	streams,
+	type Word,
+} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
@@ -6,8 +14,11 @@ import {Author, pullRequestsOf} from "@tea-fabrika/tracker";
 import {LANE, OWNER, SEVEN, SEVEN_BODY, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Do, ticket, writeOf} from "./index.ts";
+import {ticket, writeOf} from "./index.ts";
 import {type Shown, shownOf} from "./view.ts";
+
+/** The ticket program's inputs, by name: what a test tells it. */
+type Inputs = (typeof ticket)["inputs"];
 
 // The ticket program with no window, on a ledger in memory that holds ticket 7 as a lane left it.
 // Told what its window sends, it writes the tracker's own facts, on ticket 7 only.
@@ -48,7 +59,10 @@ const session = (ledger: Ledger["Service"], flags: {readonly ticket?: number} = 
 		);
 		if (started.kind !== "running") return yield* Effect.die("the ticket program did not start");
 		const {run} = started;
-		const say = (d: Do): Effect.Effect<Word> => offer(run, "do", d);
+		const say = <K extends keyof Inputs & string>(
+			input: K,
+			value: PayloadOf<Inputs[K]>,
+		): Effect.Effect<Word> => offer(run, input, value);
 		const pick = (n: number): Effect.Effect<Word> => offer(run, "ticket", n);
 		const until = (ok: (shown: Shown) => boolean) =>
 			run.machines.tickets.changes.pipe(
@@ -77,22 +91,16 @@ describe("the ticket program", () => {
 				yield* seed(ledger);
 				const {run, say, until, sent} = yield* session(ledger);
 				const first = yield* until((s) => s.page !== null);
-				yield* say({
-					kind: "answer",
+				yield* say("answer", {
 					ticket: 7,
 					ask: "a-1",
 					pick: "approve",
 					note: "",
 					saw: {title: SEVEN_TITLE, body: SEVEN_BODY},
 				});
-				yield* say({
-					kind: "comment",
-					ticket: 7,
-					body: "Keep the old format too.",
-					asks: "changes",
-				});
+				yield* say("comment", {ticket: 7, body: "Keep the old format too.", asks: "changes"});
 				const last = yield* until((s) => (s.page?.opened.ticket.timeline.length ?? 0) === 9);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				return {first, last, ended: (yield* run.ended).kind, sent};
 			}).pipe(Effect.scoped),
 		);
@@ -131,7 +139,7 @@ describe("the ticket program", () => {
 				yield* pick(7);
 				yield* pick(3);
 				const three = yield* until((s) => s.page?.opened.ticket.number === 3);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				yield* run.ended;
 				return {none: none.number, seven: seven.page?.opened.ticket.title, three, sent};
 			}).pipe(Effect.scoped),
@@ -153,9 +161,9 @@ describe("the ticket program", () => {
 				yield* pick(3);
 				yield* until((s) => s.page?.opened.ticket.number === 3);
 				close("ticket");
-				yield* say({kind: "comment", ticket: 3, body: "Still here."});
+				yield* say("comment", {ticket: 3, body: "Still here."});
 				const after = yield* until((s) => (s.page?.opened.ticket.timeline.length ?? 0) === 2);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				return {after, ended: (yield* run.ended).kind};
 			}).pipe(Effect.scoped),
 		);
@@ -179,9 +187,9 @@ describe("the ticket program", () => {
 				yield* until((s) => s.page?.opened.ticket.number === 7);
 				yield* pick(3);
 				yield* until((s) => s.page?.opened.ticket.number === 3);
-				yield* say({kind: "comment", ticket: 7, body: "Made on seven."});
-				yield* say({kind: "comment", ticket: 4, body: "Never shown here."});
-				yield* say({kind: "comment", ticket: 3, body: "Made on three."});
+				yield* say("comment", {ticket: 7, body: "Made on seven."});
+				yield* say("comment", {ticket: 4, body: "Never shown here."});
+				yield* say("comment", {ticket: 3, body: "Made on three."});
 				const three = yield* until((s) => (s.page?.opened.ticket.timeline.length ?? 0) === 2);
 				yield* pick(7);
 				const seven = yield* until(
@@ -190,7 +198,7 @@ describe("the ticket program", () => {
 				);
 				yield* pick(4);
 				const four = yield* until((s) => s.page?.opened.ticket.number === 4);
-				yield* say({kind: "quit"});
+				yield* say("quit", null);
 				yield* run.ended;
 				return {three, seven, four};
 			}).pipe(Effect.scoped),

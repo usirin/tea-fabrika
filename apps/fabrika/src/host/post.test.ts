@@ -85,7 +85,7 @@ const timelineAt = (home: string, n: number) =>
 			if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
 			const view = viewOf(tracker);
 			if (view === undefined) return yield* Effect.die("the tracker has no view");
-			yield* offer(started.run, "do", {kind: "query", ticket: n});
+			yield* offer(started.run, "query", {ticket: n});
 			const shown = yield* started.run.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
 				Stream.map((s) => view.of(s) as Shown),
@@ -93,7 +93,7 @@ const timelineAt = (home: string, n: number) =>
 				Stream.runHead,
 				Effect.map(Option.getOrThrow),
 			);
-			yield* offer(started.run, "do", {kind: "quit"});
+			yield* offer(started.run, "quit", null);
 			return shown.page.kind === "ticket"
 				? (shown.page.opened?.ticket.timeline.map((e) => [e.by, e.fact.type]) ?? [])
 				: [];
@@ -109,7 +109,7 @@ describe("an agent posts for its person", () => {
 		await run(connect(bob.home, {address, login: "bob", key: bob.key}));
 
 		const filed = await run(
-			post(bob.home, "triage", [{kind: "file", title: "A bug", body: "It breaks."}]),
+			post(bob.home, "triage", [{type: "file", value: {title: "A bug", body: "It breaks."}}]),
 		);
 		expect(filed).toEqual(["#1 open c0 A bug"]);
 		const key = join(bob.home, AGENT_KEY);
@@ -117,7 +117,7 @@ describe("an agent posts for its person", () => {
 		const made = readFileSync(key, "utf8");
 
 		const commented = await run(
-			post(bob.home, "triage", [{kind: "comment", ticket: 1, body: "Seen it."}]),
+			post(bob.home, "triage", [{type: "comment", value: {ticket: 1, body: "Seen it."}}]),
 		);
 		expect(commented).toEqual(["#1 open c1 A bug"]);
 		expect(readFileSync(key, "utf8")).toBe(made);

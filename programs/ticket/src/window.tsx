@@ -124,7 +124,7 @@ function AskCard(props: {
 	const saw = {title: page.opened.ticket.title, body: page.body};
 	const ticket = page.opened.ticket.number;
 	const answer = (pick: string, text: string) =>
-		send({type: "do", value: {kind: "answer", ticket, ask: ask.ask, pick, note: text, saw}});
+		send({type: "answer", value: {ticket, ask: ask.ask, pick, note: text, saw}});
 	return (
 		<section className="turnc you" aria-label="Whose turn">
 			<span className="m p you lg" aria-hidden="true">
@@ -509,10 +509,8 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 	const post = (changes: boolean) => {
 		if (body === "") return;
 		send({
-			type: "do",
-			value: changes
-				? {kind: "comment", ticket, body, asks: "changes"}
-				: {kind: "comment", ticket, body},
+			type: "comment",
+			value: changes ? {ticket, body, asks: "changes"} : {ticket, body},
 		});
 		setText("");
 	};

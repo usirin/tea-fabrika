@@ -14,6 +14,7 @@ import {
 	type Moved,
 	memoryStorage,
 	offer,
+	type PayloadOf,
 	type Row,
 	Rows,
 	start,
@@ -25,7 +26,6 @@ import {layerSqliteSync} from "@kampus/fabrika/sqlite";
 import {startTwin} from "@kampus/ledger-server/twin";
 import {
 	Author,
-	type Do,
 	fold,
 	pullRequestsOf,
 	ROOT,
@@ -157,7 +157,11 @@ const trackerOn = <E>(
 		const {run: r} = started;
 		const view = viewOf(tracker);
 		if (view === undefined) return yield* Effect.die("the tracker has no view");
-		const say = (d: Do): Effect.Effect<unknown> => offer(r, "do", d);
+		type Inputs = (typeof tracker)["inputs"];
+		const say = <K extends keyof Inputs & string>(
+			input: K,
+			value: PayloadOf<Inputs[K]>,
+		): Effect.Effect<unknown> => offer(r, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>
 			r.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
@@ -231,15 +235,15 @@ describe("two people on one ledger server", () => {
 				const a = yield* trackerAt(person("alice").home, "tracker:alice");
 				const b = yield* trackerAt(person("bob").home, "tracker:bob");
 				yield* a.until((s) => s.ready);
-				yield* a.say({kind: "file", title: "Login fails", body: "On main."});
+				yield* a.say("file", {title: "Login fails", body: "On main."});
 
 				// Bob's tracker sees it on its own poll.
 				yield* b.until(
 					(s) => s.page.kind === "list" && s.page.tickets.some((t) => t.title === "Login fails"),
 				);
-				yield* b.say({kind: "comment", ticket: 1, body: "Seen it too."});
+				yield* b.say("comment", {ticket: 1, body: "Seen it too."});
 
-				yield* a.say({kind: "query", ticket: 1});
+				yield* a.say("query", {ticket: 1});
 				const shown = yield* a.until((s) => timelineOf(s).length === 2);
 				return timelineOf(shown);
 			}).pipe(Effect.scoped),
@@ -303,11 +307,11 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 			Effect.gen(function* () {
 				const me = yield* trackerAt(laptop, "tracker:owner");
 				yield* me.until((s) => s.ready);
-				yield* me.say({kind: "file", title: "Login fails", body: "On main."});
-				yield* me.say({kind: "file", title: "Slow build", body: ""});
-				yield* me.say({kind: "comment", ticket: 1, body: "Seen on main."});
-				yield* me.say({kind: "close", ticket: 2});
-				yield* me.say({kind: "query", ticket: 2});
+				yield* me.say("file", {title: "Login fails", body: "On main."});
+				yield* me.say("file", {title: "Slow build", body: ""});
+				yield* me.say("comment", {ticket: 1, body: "Seen on main."});
+				yield* me.say("close", {ticket: 2});
+				yield* me.say("query", {ticket: 2});
 				yield* me.until((s) => timelineOf(s).length === 2);
 			}).pipe(Effect.scoped),
 		);
@@ -321,9 +325,9 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 					"tracker:x",
 				);
 				yield* agent.until((s) => s.ready);
-				yield* agent.say({kind: "comment", ticket: 1, body: "Fixed in the next build."});
-				yield* agent.say({kind: "close", ticket: 1});
-				yield* agent.say({kind: "query", ticket: 1});
+				yield* agent.say("comment", {ticket: 1, body: "Fixed in the next build."});
+				yield* agent.say("close", {ticket: 1});
+				yield* agent.say("query", {ticket: 1});
 				yield* agent.until((s) => timelineOf(s).length === 4);
 			}).pipe(Effect.scoped),
 		);
@@ -355,7 +359,7 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 		const seen = await run(
 			Effect.gen(function* () {
 				const b = yield* trackerAt(bobs, "tracker:bob");
-				yield* b.say({kind: "query", ticket: 1});
+				yield* b.say("query", {ticket: 1});
 				return timelineOf(yield* b.until((s) => timelineOf(s).length === 4));
 			}).pipe(Effect.scoped),
 		);

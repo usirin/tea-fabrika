@@ -284,8 +284,8 @@ Written once here, and named by site in the rows.
 | name | means here | industry (with a source link) | mark | proposal |
 |---|---|---|---|---|
 | program `tracker` / machine `tracker` exported as `tickets` / `ticketsKind` / `ticketsOptions` / kind `tickets` | one machine, two names | issue tracker (GitHub, Linear) | two-words | one name: `tracker` everywhere (kind `tracker`). 75% |
-| input `do` / `Do` | what the view does | Msg (Elm); user action | two-words | map and trace call theirs `in`, counter `press`. One word for "the view's input": `do`. 65% |
-| `Do` `list`, `open`, `show`, `find`, `quit` | navigate, filter, search, quit | Linear: views, filters, search | two-words | `find` vs the key help "/ search" and the box "Search titles". `search`. 75% |
+| input `do` / `Do` | what the view does | Msg (Elm); user action | two-words | ~~One word for "the view's input": `do`. 65%~~ Wrong: the owner rejects `do` (2026-10-28). Done 2026-10-30 ([PR 164](https://github.com/usirin/tea-fabrika/pull/164)): one input per command, named by its verb (`file`, `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `query`, `quit`), each the command's own struct. |
+| `Do` `list`, `open`, `show`, `find`, `quit` | navigate, filter, search, quit | Linear: views, filters, search | two-words | Gone: `list`, `open`, `show` and `find` are now shapes of `query` (`{ticket}`, or `{status, find}`); `quit` is its own input. `find` vs the key help "/ search" and the box "Search titles" stays open: `search`. 75% |
 | `Write` / `factOf` | one change a person asks for, as a fact | mutation ([Zero, mutators](https://zero.rocicorp.dev/docs/writing-data)); command (CQRS) | ok | plain |
 | `Write.kind: file` | file a new ticket | "Create new issue", key `C` (Linear); "New issue" (GitHub); `gh issue create` | differs | `create`. 70%. On screen it says "new ticket" and "files it": two words |
 | `Write` `comment` (`asks: "changes"`) | a comment, or "Request changes" | request changes (GitHub reviews, [reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | two-ideas | `asks` is one more meaning of ask (open #32). `requests: "changes"`. 55% |
@@ -335,7 +335,7 @@ Written once here, and named by site in the rows.
 | name | means here | industry (with a source link) | mark | proposal |
 |---|---|---|---|---|
 | `ticket --ticket 7` / `map --ticket 7` / `trace --ticket 7` | the ticket, by number | `gh issue view 7` (positional) | differs | a positional argument, `ticket 7`. 60%: needs tsh to take positional args |
-| ticket input `do` / `Do` (`comment`, `answer`, `close`, `reopen`, `quit`) / `writeOf` | what the ticket view does | as the tracker's `Do` | ok | |
+| ticket input `do` / `Do` (`comment`, `answer`, `close`, `reopen`, `quit`) / `writeOf` | what the ticket view does | as the tracker's `Do` | two-words | Done 2026-10-30 ([PR 164](https://github.com/usirin/tea-fabrika/pull/164)): inputs `comment`, `answer`, `close`, `reopen`, `quit`, by the tracker's names and structs; `writeOf` stays. |
 | map, trace input `in` (`kind: "quit"`) | quit | none | two-words | the others say `do`. `do`. 65% |
 | ticket `Plan` (`version`, `tasks`) | the newest plan's version and tasks | none | collides | `Plan` is the pipeline's plan. `PlanLine` or `LatestPlan`. 75% |
 | ticket `Pr` (`url`, `state`, `checks`) | the newest PR fact | pull request | ok | |

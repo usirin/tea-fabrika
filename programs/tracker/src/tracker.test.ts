@@ -2,6 +2,7 @@ import {
 	Ledger,
 	memoryStorage,
 	offer,
+	type PayloadOf,
 	readInput,
 	start,
 	streams,
@@ -15,8 +16,12 @@ import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeli
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {headOf, lineOf} from "./head.ts";
-import {Author, type Do, type PullRequest, pickOf, pullRequestsOf, tracker} from "./index.ts";
+import {Author, type PullRequest, pickOf, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
+
+/** The tracker's inputs, by name: what a test tells it. */
+type Inputs = (typeof tracker)["inputs"];
+type Name = keyof Inputs & string;
 
 // The tracker with no window, on a ledger in memory: told what a window would send, it writes
 // facts, and shows them back. A second run on the same ledger finds them all, as the app does
@@ -50,7 +55,8 @@ const session = (ledger: Ledger["Service"], id = "tracker:test", author: Writer 
 		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
 		const {run} = started;
 		/** Offered, as the app does: it waits for room, and never drops what a person did. */
-		const say = (d: Do): Effect.Effect<Word> => offer(run, "do", d);
+		const say = <K extends Name>(input: K, value: PayloadOf<Inputs[K]>): Effect.Effect<Word> =>
+			offer(run, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>
 			run.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
@@ -74,25 +80,25 @@ describe("the tracker", () => {
 					const {run, say, until} = yield* session(ledger);
 					yield* until((s) => s.ready);
 					// The list hides closed tickets until it is asked to show them.
-					yield* say({kind: "query", status: "all"});
-					yield* say({kind: "file", title: "Login fails", body: "On main."});
-					yield* say({kind: "file", title: "Docs typo", body: ""});
-					yield* say({kind: "comment", ticket: 1, body: "Seen it too."});
-					yield* say({kind: "close", ticket: 2});
+					yield* say("query", {status: "all"});
+					yield* say("file", {title: "Login fails", body: "On main."});
+					yield* say("file", {title: "Docs typo", body: ""});
+					yield* say("comment", {ticket: 1, body: "Seen it too."});
+					yield* say("close", {ticket: 2});
 					// The close is the last write asked for: once it is read back, they all are.
 					const shown = yield* until((s) =>
 						listed(s).some(([n, , state]) => n === 2 && state === "closed"),
 					);
-					yield* say({kind: "quit"});
+					yield* say("quit", null);
 					return {list: listed(shown), ended: (yield* run.ended).kind};
 				}).pipe(Effect.scoped);
 
 				// Started again: nothing was kept but the ledger.
 				const again = yield* Effect.gen(function* () {
 					const {say, until} = yield* session(ledger, "tracker:again");
-					yield* say({kind: "query", status: "all"});
+					yield* say("query", {status: "all"});
 					const list = listed(yield* until((s) => s.ready && s.filter.show === "all"));
-					yield* say({kind: "query", ticket: 1});
+					yield* say("query", {ticket: 1});
 					const page = (yield* until((s) => s.page.kind === "ticket")).page;
 					return {list, page};
 				}).pipe(Effect.scoped);
@@ -127,19 +133,21 @@ describe("the tracker", () => {
 		]);
 	});
 
-	// What is told is read in the order it was told. With an input per write, each its own queue
-	// before the run had one mailbox, a close told right after a file was sometimes read first.
-	it("reads a file and a close told back to back in that order", async () => {
+	// What is told is read in the order it was told, across every input. Before a run had one
+	// mailbox, each input was its own queue, and a close told right after a file, on two inputs, was
+	// sometimes read first: the close failed.
+	it("reads file #2 then close #2, told back to back on two inputs, in that order", async () => {
 		const ledger = memoryService();
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {run, say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
-				yield* say({kind: "close", ticket: 1});
-				yield* say({kind: "quit"});
+				yield* say("file", {title: "Login fails", body: ""});
+				yield* say("file", {title: "Docs typo", body: ""});
+				yield* say("close", {ticket: 2});
+				yield* say("quit", null);
 				const ended = yield* run.ended;
-				const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
+				const rows = yield* ledger.readStream(streams("tracker/ticket/2").inbox);
 				return {ended: ended.kind, kinds: rows.map((r) => r.kind)};
 			}).pipe(Effect.scoped),
 		);
@@ -151,8 +159,8 @@ describe("the tracker", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {run, say} = yield* session(ledger);
-				yield* say({kind: "file", title: "Login fails", body: ""});
-				yield* say({kind: "quit"});
+				yield* say("file", {title: "Login fails", body: ""});
+				yield* say("quit", null);
 				const ended = yield* run.ended;
 				const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
 				return {ended: ended.kind, kinds: rows.map((r) => r.kind)};
@@ -167,14 +175,14 @@ describe("the tracker", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say("file", {title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				yield* ledger.send(streams("tracker/ticket/1").inbox, "from-an-agent", {
 					kind: "commented",
 					writer: "agent:review",
 					data: {type: "commented", body: "Found the cause."},
 				});
-				yield* say({kind: "query", ticket: 1});
+				yield* say("query", {ticket: 1});
 				const page = (yield* until(
 					(s) => s.page.kind === "ticket" && (s.page.opened?.ticket.timeline.length ?? 0) === 2,
 				)).page;
@@ -191,7 +199,7 @@ describe("the tracker", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say("file", {title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				// The pipeline's side: no tracker code, only the service a lane writes through.
 				yield* Effect.gen(function* () {
@@ -268,14 +276,14 @@ describe("the tracker", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say("file", {title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				yield* ask(ledger);
-				yield* say({kind: "query", ticket: 1});
+				yield* say("query", {ticket: 1});
 				const asking = yield* until((s) => (opened(s)?.asks.length ?? 0) === 1);
-				yield* say({kind: "comment", ticket: 1, body: "approve"});
+				yield* say("comment", {ticket: 1, body: "approve"});
 				const commented = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 3);
-				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "Go.", saw});
+				yield* say("answer", {ticket: 1, ask: "a-1", pick: "approve", note: "Go.", saw});
 				const answered = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 4);
 				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
 				return {
@@ -305,10 +313,10 @@ describe("the tracker", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session(ledger, "tracker:agent", agent);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say("file", {title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				yield* ask(ledger);
-				yield* say({kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw});
+				yield* say("answer", {ticket: 1, ask: "a-1", pick: "approve", note: "", saw});
 				const failed = (yield* until((s) => s.failed !== null)).failed;
 				const rows = yield* ledger.read(0, 50, "tracker/ticket/1/inbox");
 				return {why: failed?.why, kinds: rows.map((r) => r.kind)};
@@ -326,7 +334,7 @@ describe("the tracker", () => {
 				yield* ledger.register("tracker/ticket/1", "user:owner");
 				const {say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say("file", {title: "Login fails", body: ""});
 				return listed(yield* until((s) => listed(s).length === 1));
 			}).pipe(Effect.scoped),
 		);
@@ -339,15 +347,15 @@ describe("the tracker", () => {
 			Effect.gen(function* () {
 				const {say, until} = yield* session(ledger);
 				yield* until((s) => s.ready);
-				yield* say({kind: "file", title: "Login fails", body: ""});
-				yield* say({kind: "file", title: "Docs typo", body: ""});
-				yield* say({kind: "close", ticket: 2});
+				yield* say("file", {title: "Login fails", body: ""});
+				yield* say("file", {title: "Docs typo", body: ""});
+				yield* say("close", {ticket: 2});
 				const open = yield* until(
 					(s) => s.page.kind === "list" && s.page.counts.closed === 1 && s.github.read,
 				);
-				yield* say({kind: "query", status: "open", find: "  LOGIN "});
+				yield* say("query", {status: "open", find: "  LOGIN "});
 				const found = yield* until((s) => s.filter.find === "  LOGIN ");
-				yield* say({kind: "query", status: "closed", find: "  LOGIN "});
+				yield* say("query", {status: "closed", find: "  LOGIN "});
 				const closed = yield* until((s) => s.filter.show === "closed");
 				const prsOn = (s: Shown) => (s.page.kind === "list" ? s.page.pullRequests : []);
 				return {
@@ -376,15 +384,15 @@ describe("the tracker", () => {
 					{id: "tracker:picks", storage: memoryStorage()},
 				);
 				if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
-				const say = (d: Do): Effect.Effect<Word> => offer(started.run, "do", d);
-				yield* say({kind: "file", title: "Login fails", body: ""});
-				yield* say({kind: "file", title: "Docs typo", body: ""});
-				yield* say({kind: "query", ticket: 1});
-				yield* say({kind: "query", status: "open"});
-				yield* say({kind: "query", ticket: 1});
-				yield* say({kind: "query", status: "all"});
-				yield* say({kind: "query", ticket: 2});
-				yield* say({kind: "quit"});
+				const {run} = started;
+				yield* offer(run, "file", {title: "Login fails", body: ""});
+				yield* offer(run, "file", {title: "Docs typo", body: ""});
+				yield* offer(run, "query", {ticket: 1});
+				yield* offer(run, "query", {status: "open"});
+				yield* offer(run, "query", {ticket: 1});
+				yield* offer(run, "query", {status: "all"});
+				yield* offer(run, "query", {ticket: 2});
+				yield* offer(run, "quit", null);
 				yield* started.run.ended;
 				return sent;
 			}).pipe(Effect.scoped, Effect.provide(services(ledger, OWNER))),
@@ -394,43 +402,38 @@ describe("the tracker", () => {
 	});
 
 	it("reads what its window sends, and refuses a blank title or an empty comment", () => {
-		expect(readInput(tracker, {type: "do", value: {kind: "close", ticket: 3}}).kind).toBe("read");
-		expect(readInput(tracker, {type: "do", value: {kind: "file", title: " ", body: ""}}).kind).toBe(
-			"refused",
-		);
-		expect(
-			readInput(tracker, {type: "do", value: {kind: "comment", ticket: 1, body: "\n"}}).kind,
-		).toBe("refused");
-		const query = (value: object) =>
-			readInput(tracker, {type: "do", value: {kind: "query", ...value}}).kind;
-		expect(query({ticket: 0})).toBe("refused");
-		expect(query({status: "all"})).toBe("read");
-		expect(query({status: "open", find: "login"})).toBe("read");
-		expect(query({status: "done"})).toBe("refused");
-		expect(query({status: "open", find: "x".repeat(257)})).toBe("refused");
+		const read = (type: string, value: unknown) => readInput(tracker, {type, value}).kind;
+		expect(read("close", {ticket: 3})).toBe("read");
+		expect(read("file", {title: " ", body: ""})).toBe("refused");
+		expect(read("comment", {ticket: 1, body: "\n"})).toBe("refused");
+		// A value is the command's own struct: its input already says which command it is.
+		expect(read("close", {kind: "close", ticket: 3})).toBe("refused");
+		expect(read("do", {kind: "close", ticket: 3})).toBe("refused");
+		expect(read("query", {ticket: 0})).toBe("refused");
+		expect(read("query", {status: "all"})).toBe("read");
+		expect(read("query", {status: "open", find: "login"})).toBe("read");
+		expect(read("query", {status: "done"})).toBe("refused");
+		expect(read("query", {status: "open", find: "x".repeat(257)})).toBe("refused");
 		// A query is a ticket or a filter, never both.
-		expect(query({ticket: 1, status: "all"})).toBe("refused");
-		expect(readInput(tracker, {type: "do", value: {kind: "quit"}}).kind).toBe("read");
-		const answer = {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw};
-		expect(readInput(tracker, {type: "do", value: answer}).kind).toBe("read");
-		expect(readInput(tracker, {type: "do", value: {...answer, pick: " "}}).kind).toBe("refused");
+		expect(read("query", {ticket: 1, status: "all"})).toBe("refused");
+		expect(read("quit", null)).toBe("read");
+		const answer = {ticket: 1, ask: "a-1", pick: "approve", note: "", saw};
+		expect(read("answer", answer)).toBe("read");
+		expect(read("answer", {...answer, pick: " "})).toBe("refused");
 		// An answer names the text it saw, or it is no answer.
 		const {saw: _, ...blind} = answer;
-		expect(readInput(tracker, {type: "do", value: blind}).kind).toBe("refused");
-		const changes = {kind: "comment", ticket: 1, body: "Skip part 2.", asks: "changes"};
-		expect(readInput(tracker, {type: "do", value: changes}).kind).toBe("read");
-		expect(readInput(tracker, {type: "do", value: {...changes, asks: "merge"}}).kind).toBe(
-			"refused",
-		);
+		expect(read("answer", blind)).toBe("refused");
+		const changes = {ticket: 1, body: "Skip part 2.", asks: "changes"};
+		expect(read("comment", changes)).toBe("read");
+		expect(read("comment", {...changes, asks: "merge"})).toBe("refused");
 	});
 });
 
 describe("pickOf", () => {
-	it("is a new ticket's query only: the same ticket again, the list, or a write picks nothing", () => {
-		expect(pickOf({kind: "query", ticket: 7}, null)).toBe(7);
-		expect(pickOf({kind: "query", ticket: 7}, 3)).toBe(7);
-		expect(pickOf({kind: "query", ticket: 7}, 7)).toBeNull();
-		expect(pickOf({kind: "query", status: "open"}, 7)).toBeNull();
-		expect(pickOf({kind: "close", ticket: 7}, null)).toBeNull();
+	it("is a new ticket's query only: the same ticket again, or the list, picks nothing", () => {
+		expect(pickOf({ticket: 7}, null)).toBe(7);
+		expect(pickOf({ticket: 7}, 3)).toBe(7);
+		expect(pickOf({ticket: 7}, 7)).toBeNull();
+		expect(pickOf({status: "open"}, 7)).toBeNull();
 	});
 });

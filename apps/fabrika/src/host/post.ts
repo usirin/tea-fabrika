@@ -2,7 +2,7 @@
 // the home's person. The door stamps it `agent:<name>` for that person, and an agent's session
 // cannot answer an ask, so a post never approves anything (door.ts).
 //
-//   yield* post(home, "triage", [{kind: "comment", ticket: 9, body: "Plan ready."}])
+//   yield* post(home, "triage", [{type: "comment", value: {ticket: 9, body: "Plan ready."}}])
 //   // ["#9 open c28 The ledger moves to Cloudflare", ...]
 //
 // The agent's own key is <home>/agent_ed25519, made on first use. Each post signs a grant for it
@@ -10,6 +10,7 @@
 // has a session, so when it says no, the person logs in and the agent tries once more.
 import {
 	grant,
+	type InputMsgOf,
 	isAgentName,
 	keyFileText,
 	layerSignerFile,
@@ -20,7 +21,7 @@ import {
 	viewOf,
 } from "@kampus/fabrika";
 import {DoorRefused, doorOf, layerHttp} from "@kampus/fabrika/http";
-import {Author, type Do, pullRequestsOf, type Shown, tracker} from "@tea-fabrika/tracker";
+import {Author, pullRequestsOf, type Shown, tracker} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream} from "effect";
 import {ConnectFailed, connectionOf, loginWith} from "./connection.ts";
 
@@ -29,6 +30,12 @@ export const AGENT_KEY = "agent_ed25519";
 
 /** How long a post's grant lasts. A post takes seconds; the hour is room, not a session. */
 const GRANT_MS = 60 * 60 * 1000;
+
+/** One write a post tells the tracker, as its window sends it: a file, a comment or a close. */
+export type Post = Extract<
+	InputMsgOf<typeof tracker>,
+	{readonly type: "file" | "comment" | "close"}
+>;
 
 /** A post the tracker refused, with why in words. */
 export class PostFailed extends Schema.TaggedError<PostFailed>()("PostFailed", {
@@ -106,7 +113,7 @@ const lineOf = (t: {number: number; state: string; comments: number; title: stri
  * only when every write is on the ledger, so the list after it shows them. The first write the
  * ledger refused fails the post, with why.
  */
-export const post = (home: string, name: string, writes: ReadonlyArray<Do>) =>
+export const post = (home: string, name: string, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
 		const services = yield* Layer.build(Layer.merge(asAgent(home, name), pullRequestsOf([])));
 		const view = viewOf(tracker);
@@ -136,12 +143,13 @@ export const post = (home: string, name: string, writes: ReadonlyArray<Do>) =>
 			),
 			Effect.forkScoped,
 		);
-		for (const w of writes) yield* offer(writing.run, "do", w);
-		yield* offer(writing.run, "do", {kind: "quit"});
+		// Told one after another; the run reads them in that order, across its inputs, then quits.
+		for (const w of writes) yield* offer(writing.run, w.type, w.value);
+		yield* offer(writing.run, "quit", null);
 		yield* writing.run.ended;
 		const why = yield* Ref.get(refused);
 		if (why !== null) return yield* new PostFailed({why});
 		const after = yield* ready(`tracker:post:${name}:after`);
-		yield* offer(after.run, "do", {kind: "quit"});
+		yield* offer(after.run, "quit", null);
 		return after.shown.page.kind === "list" ? after.shown.page.tickets.map(lineOf) : [];
 	}).pipe(Effect.scoped);

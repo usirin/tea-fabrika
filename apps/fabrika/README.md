@@ -323,18 +323,16 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   official SDK (`@kampus/fabrika/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
-  the input's own description and its schema as JSON Schema (`ticket_ticket`, `counter_press`).
-  An input whose schema is a tagged union gets one tool per case instead, named
-  `<program>_<case>`, with the case's own description and fields (`tracker_file`,
-  `tracker_query`, `ticket_comment`). The program keeps one input; the split is the MCP layer's.
-  A case that writes nothing carries MCP's `readOnlyHint` (`tracker_query`, and `runs`). One
-  more, `runs`, lists every program and its tools, the agent's own runs, and what runs in your
-  tiles.
+  the input's own description and its schema as JSON Schema (`tracker_file`, `tracker_query`,
+  `ticket_comment`, `ticket_ticket`, `counter_press`). Each command is its own input, named by
+  its verb, so each is its own tool. An input declared `{writes: false}` carries MCP's
+  `readOnlyHint` (`tracker_query`, and `runs`). One more, `runs`, lists every program and its
+  tools, the agent's own runs, and what runs in your tiles.
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
   use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
   handshake holds only an agent's name, and the host makes the writer. An agent has no
-  `tracker_answer`, `ticket_answer` or `tracker_rate_duplicate`: each is a case only a person
-  sends, so no tool is made for it. Behind that, the tracker refuses an agent's answer, as it
+  `tracker_answer`, `ticket_answer` or `tracker_rate_duplicate`: each is an input only a person
+  tells (`{personOnly: true}`), so no tool is made for it. Behind that, the tracker refuses an agent's answer, as it
   refuses any agent's.
 
 What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X under #44". It calls
