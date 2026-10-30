@@ -304,37 +304,38 @@ export class Traces extends Context.Service<
 export const POLL = Duration.seconds(1);
 
 /**
- * When to read a followed record again: a beat at once, then one after each write to it. A beat
- * stream listens before its first beat, so no write between the first read and the next is
- * missed.
+ * A record's change notifications, as a watch in etcd or Kubernetes, or Postgres's LISTEN/NOTIFY:
+ * one at once, then one after each write to it. Each is empty: it says only "read again". A
+ * changes stream listens before its first one, so no write between the first read and the next
+ * is missed.
  */
-export type Beats = (trace: string) => Stream.Stream<void>;
+export type Changes = (trace: string) => Stream.Stream<void>;
 
-/** Beats for records that say nothing of their writes: at once, then every `POLL`. */
-export const polled: Beats = () => Stream.tick(POLL);
+/** Changes for records that say nothing of their writes: at once, then every `POLL`. */
+export const polled: Changes = () => Stream.tick(POLL);
 
 /**
- * A followed record: read at each beat, the beats that came while a read was out folded into one,
- * so a burst of writes costs one read, not one each.
+ * A followed record: read at each change, the changes that came while a read was out folded into
+ * one, so a burst of writes costs one read, not one each.
  */
 export const watchOn = <E>(
 	read: Effect.Effect<JobTrace, E>,
-	beats: Stream.Stream<void>,
+	changes: Stream.Stream<void>,
 ): Stream.Stream<JobTrace, E> =>
-	beats.pipe(
+	changes.pipe(
 		Stream.buffer({capacity: 1, strategy: "sliding"}),
 		Stream.mapEffect(() => read),
 	);
 
 /**
  * `Traces` over the records `calls` reaches. A trace nobody wrote reads as an empty record.
- * `beats`: when a followed record is read again. A host's own records beat on each write
+ * `changes`: when a followed record is read again. A host's own records send one on each write
  * (`Records`, ./records.ts); records behind the door are polled.
  */
-export const layerTraces = (calls: RecordCalls, beats: Beats = polled) =>
-	Layer.succeed(Traces, tracesOn(calls, beats));
+export const layerTraces = (calls: RecordCalls, changes: Changes = polled) =>
+	Layer.succeed(Traces, tracesOn(calls, changes));
 
-const tracesOn = (calls: RecordCalls, beats: Beats): Traces["Service"] => {
+const tracesOn = (calls: RecordCalls, changes: Changes): Traces["Service"] => {
 	const read = (trace: string) =>
 		Effect.gen(function* () {
 			const id = yield* Schema.decodeUnknownEffect(TraceId)(trace);
@@ -362,5 +363,5 @@ const tracesOn = (calls: RecordCalls, beats: Beats): Traces["Service"] => {
 					}),
 			),
 		);
-	return Traces.of({read, watch: (trace) => watchOn(read(trace), beats(trace))});
+	return Traces.of({read, watch: (trace) => watchOn(read(trace), changes(trace))});
 };

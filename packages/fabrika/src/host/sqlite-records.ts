@@ -13,7 +13,7 @@ import type {JobCall} from "./traces.ts";
 //
 //   const records = yield* sqliteRecords({dir: "<home>/records", by: "user:owner"});
 //   yield* records.calls(trace, {op: "began", n: 1, text: "seq --to 3 | tally", host: "laptop", at});
-//   // <home>/records/<trace>.sqlite made, its tables made, and the trace's beat rung
+//   // <home>/records/<trace>.sqlite made, its tables made, and a change sent for the trace
 //
 // A record is made by its job's start (`began`), and only by it. A step or a span of a trace no
 // job began (tsh's own run, the host's table) is let go, and a read of one reads as empty, as a
@@ -111,7 +111,7 @@ export const sqliteRecords = (o: {readonly dir: string; readonly by: string}) =>
 				spans.length === 0
 					? Effect.void
 					: on(trace, "writes", (r) => keepSpans(r.db, spans, o.by)).pipe(Effect.asVoid),
-			beats: (trace) =>
+			changes: (trace) =>
 				Stream.unwrap(
 					Effect.map(PubSub.subscribe(written), (heard) =>
 						Stream.concat(
