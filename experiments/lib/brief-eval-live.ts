@@ -19,8 +19,8 @@ import {join} from "node:path";
 import {type Options, query} from "@anthropic-ai/claude-agent-sdk";
 import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
 import {agentEnv, guardHook} from "@kampus/fabrika/agents/sandbox";
-import {Effect, Layer, Option, type Scope} from "effect";
-import {type Answer, type Asked, answerOf, type Brief, type Said, Sorter} from "./brief-eval.ts";
+import {Effect, Layer, Option, type Schema, type Scope} from "effect";
+import {type Asked, answerOf, type Brief, type Said, Sorter} from "./brief-eval.ts";
 import {type Earlier, fenced, type Ticket} from "./sort.ts";
 import {codexTurn} from "./triage-codex.ts";
 
@@ -44,9 +44,20 @@ export interface Tree {
 }
 
 /**
+ * Files added to one case's copy (part 4: the pull requests open when the ticket was filed). The
+ * copy is then the case's own: `key` names it beside the commit.
+ */
+export interface Extra {
+	readonly key: string;
+	/** Path inside the copy, and its text. */
+	readonly files: Readonly<Record<string, string>>;
+}
+
+/**
  * Copies of a clone's code, one per commit, made with `git archive` and held while a call reads them.
  * At most `keep` idle copies stay on disk; the oldest idle one goes first. Each copy has no history
- * and no links, and its files are read-only. `left` are paths taken out of every copy.
+ * and no links, and its files are read-only. `left` are paths taken out of every copy. With `extra`,
+ * a case gets its own copy, its commit plus the extra files.
  */
 export function treePool(o: {
 	readonly clone: string;
@@ -54,37 +65,42 @@ export function treePool(o: {
 	readonly atOf: (c: Asked) => string | undefined;
 	readonly keep: number;
 	readonly left: readonly string[];
+	readonly extra?: (c: Asked) => Extra;
 }): (c: Asked) => Effect.Effect<Tree, string, Scope.Scope> {
 	const held = new Map<string, {users: number; used: number}>();
-	const pathOf = (at: string) => join(o.root, at, "code");
-	const drop = (at: string) => {
-		const path = join(o.root, at);
+	const pathOf = (dir: string) => join(o.root, dir, "code");
+	const drop = (dir: string) => {
+		const path = join(o.root, dir);
 		if (existsSync(path)) execFileSync("chmod", ["-R", "u+w", path]);
 		rmSync(path, {recursive: true, force: true});
 	};
-	const make = (at: string) => {
-		const path = pathOf(at);
+	const make = (dir: string, at: string, extra: Extra | null) => {
+		const path = pathOf(dir);
 		// A copy made whole by an earlier run is used as it is; a half-made one is made again.
-		if (existsSync(join(o.root, at, ".made"))) return;
-		drop(at);
+		if (existsSync(join(o.root, dir, ".made"))) return;
+		drop(dir);
 		mkdirSync(path, {recursive: true});
-		const packed = join(o.root, at, "code.tar");
+		const packed = join(o.root, dir, "code.tar");
 		execFileSync("git", ["-C", o.clone, "archive", "--format=tar", "-o", packed, at]);
 		execFileSync("tar", ["-xf", packed, "-C", path]);
 		rmSync(packed);
 		for (const p of o.left) rmSync(join(path, p), {recursive: true, force: true});
+		for (const [file, text] of Object.entries(extra?.files ?? {})) {
+			mkdirSync(join(path, file, ".."), {recursive: true});
+			writeFileSync(join(path, file), text);
+		}
 		// No link (the Check follows none), and nothing writable.
 		execFileSync("find", [path, "-type", "l", "-delete"]);
 		execFileSync("chmod", ["-R", "a-w", path]);
-		writeFileSync(join(o.root, at, ".made"), at);
+		writeFileSync(join(o.root, dir, ".made"), at);
 	};
 	const sweep = () => {
 		const idle = [...held.entries()]
 			.filter(([, h]) => h.users === 0)
 			.toSorted((a, b) => a[1].used - b[1].used);
-		for (const [at] of idle.slice(0, Math.max(0, idle.length - o.keep))) {
-			held.delete(at);
-			drop(at);
+		for (const [dir] of idle.slice(0, Math.max(0, idle.length - o.keep))) {
+			held.delete(dir);
+			drop(dir);
 		}
 	};
 	return (c) =>
@@ -93,20 +109,22 @@ export function treePool(o: {
 				try: () => {
 					const at = o.atOf(c);
 					if (at === undefined) throw new Error(`${c.id} has no commit: run STEP=trees`);
-					const h = held.get(at) ?? {users: 0, used: 0};
-					if (h.users === 0) make(at);
-					held.set(at, {users: h.users + 1, used: Date.now()});
-					return {at, path: realpathSync(pathOf(at))};
+					const extra = o.extra?.(c) ?? null;
+					const dir = extra === null ? at : `${at}-${extra.key}`;
+					const h = held.get(dir) ?? {users: 0, used: 0};
+					if (h.users === 0) make(dir, at, extra);
+					held.set(dir, {users: h.users + 1, used: Date.now()});
+					return {at, dir, path: realpathSync(pathOf(dir))};
 				},
 				catch: (e) => String(e),
 			}),
 			(t) =>
 				Effect.sync(() => {
-					const h = held.get(t.at);
-					if (h !== undefined) held.set(t.at, {users: h.users - 1, used: Date.now()});
+					const h = held.get(t.dir);
+					if (h !== undefined) held.set(t.dir, {users: h.users - 1, used: Date.now()});
 					sweep();
 				}),
-		);
+		).pipe(Effect.map(({at, path}): Tree => ({at, path})));
 }
 
 /** As 92b and 162: the 200 tickets filed just before, by number. */
@@ -143,17 +161,21 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
 export const codeLine = (t: Tree) =>
 	`# The code\n\nYour working folder holds the project's code at commit ${t.at.slice(0, 12)}, the last commit on main before this ticket was filed. It is a read-only copy with no history.`;
 
+/** What one turn hands back, for an answer of any shape: a Said, with that answer. */
+export type Heard<A> = Omit<Said, "answer"> & {readonly answer: A | null};
+
 /**
  * Opus, through the Agent SDK. With no tree: no tools, as in part 2. With a tree: Read, Grep and
  * Glob only, in the tree, held by the read-only Check (as experiment 136's planner), no settings.
+ * The brief is the system prompt; `schema` is the answer's shape.
  */
-async function opusOnce(
+export async function opusOnce<A>(
 	brief: Brief,
+	schema: Schema.Codec<A, unknown>,
 	prompt: string,
 	cwd: string,
 	tree: Tree | null,
-): Promise<Said> {
-	const schema = answerOf(brief);
+): Promise<Heard<A>> {
 	const read = reader(schema);
 	const started = Date.now();
 	let seen = "";
@@ -204,7 +226,7 @@ async function opusOnce(
 			const answer =
 				message.subtype === "success" ? read(message.structured_output) : Option.none();
 			return {
-				answer: Option.getOrNull(answer) as Answer | null,
+				answer: Option.getOrNull(answer),
 				modelId: seen,
 				usd: message.total_cost_usd,
 				ms: Date.now() - started,
@@ -235,23 +257,24 @@ async function opusOnce(
  * GPT sol through Codex. The brief goes before the case, as in part 2. With a tree: Codex works in
  * it, the box makes it read-only, and its commands count as reads.
  */
-async function solOnce(
+export async function solOnce<A>(
 	brief: Brief,
+	schema: Schema.Codec<A, unknown>,
 	prompt: string,
 	folder: string,
 	tree: Tree | null,
-): Promise<Said> {
+): Promise<Heard<A>> {
 	const r = await codexTurn(
 		tree === null
 			? `${brief.text}\n\n${prompt}`
 			: `${brief.text}\n\n${prompt}\n\n${codeLine(tree)}`,
-		answerOf(brief),
+		schema,
 		tree === null
 			? {name: "exp-163", folder, effort: "medium"}
 			: {name: "exp-163", folder: tree.path, effort: "medium", reads: "code"},
 	);
 	return {
-		answer: r.answer as Answer | null,
+		answer: r.answer,
 		modelId: r.model,
 		usd: null,
 		ms: r.ms,
@@ -286,10 +309,10 @@ export const liveSorter = (world: World): Layer.Layer<Sorter> =>
 			});
 			const ask = (brief: Brief, model: string, c: Asked, tree: Tree | null) =>
 				Effect.tryPromise({
-					try: () =>
+					try: (): Promise<Said> =>
 						model === "opus"
-							? opusOnce(brief, casePrompt(world, c), folder, tree)
-							: solOnce(brief, casePrompt(world, c), folder, tree),
+							? opusOnce(brief, answerOf(brief), casePrompt(world, c), folder, tree)
+							: solOnce(brief, answerOf(brief), casePrompt(world, c), folder, tree),
 					catch: failed,
 				});
 			return Sorter.of({

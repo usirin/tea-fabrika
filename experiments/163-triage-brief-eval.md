@@ -6,6 +6,42 @@ scorer? Part 1 builds every piece and proves the harness on 5 cases. It does
 not score the brief. [Part 2](#part-2-tune-and-lock) tunes the brief on the
 open half and scores it once on the locked half. [Part 3](#part-3-triage-reads-the-code)
 lets triage read the code and gets a brief ready for a fresh exam.
+[Part 4](#part-4-triage-in-two-close-on-a-fact-ask-on-worth) splits triage in
+two: close on a fact, ask the owner on worth.
+[Part 5](#part-5-fewer-asks-without-looser-closes) tries three ways to ask
+less, offline, on part 4's asks.
+[Part 6](#part-6-can-jev-attach-a-precedent-to-an-ask) asks Jev to show a
+past ruling beside an ask, as advice only.
+
+**Part 6's answer: not with the shipped question, and only half with a new
+one.** With the duplicate hint's filter, question shape and floor, Jev shows
+no precedent at 0.7 or 0.8: 0 of 20 asks with one, and 1 false hint in 84
+without one at 0.7. A
+question rewritten for "the same kind of fault, settled elsewhere" puts the
+right precedent first on 12 of 20, but its scores barely split the two groups.
+At 0.9 it shows the right one on 7 of 20 with a false hint on 2 of 84; at 0.8,
+7 of 20 with 16 false. On the one reversed ruling, the newer ruling never
+ranks first. Three questions, $0.52 in all.
+
+**Part 5's answer: none of the three gets near 50 asks a week without breaking
+another line.** A code rule that sends every security ticket to the owner
+fixes opus's one security close (#3361) for one more ask. Bundling asks by
+area looks like 35% to 45% fewer decisions, but only 2 of 10 hand-checked
+bundles were one decision, so it saves about 5% to 10%. Following earlier
+rulings answers 0 of the 68 tickets it may answer (haiku and sonnet both).
+Keeping every worth ask cuts asks to about 48 to 87 a week, but builds 42% to
+48% of the tickets that should close (bar: 10%). It pays only if 30 s of the
+owner is worth more than about $1.60. Matcher spend $4.22 at list price.
+
+**Part 4's answer: wrong closes drop, and asks take their place.** Brief v6
+closes only on a fact it shows and asks the owner on worth and on every
+security ticket, with the pull requests open at filing in reach. On the 63
+exam tickets GPT sol closed 1 of 32 built tickets (v5: 4) and opus 2 of 27
+(v5: 10 of 32). But 48% to 66% of answers are asks: about 105 to 190 a week at
+phoenix's filing rate. 12 of 15 sampled asks could be answered from the trace
+alone. Neither set is blind any more; v6 ran once, as written. Opus $11.49
+(stopped by the $12 cap at 51 of 63); GPT sol $25.37 at list price for 364
+answers.
 
 **Part 3's answer: reading the code helps, and v5 is ready for the exam.**
 With read-only access to phoenix's code as it was on the day each ticket was
@@ -19,13 +55,23 @@ sample got 14 right for $3.33. The exam on a fresh set has not run.
 the open half on opus and closed 9 of 40 locked built tickets (bar: at most 5)
 and 1 of 5 locked security tickets (bar: 0). It fit the 58 cases it was tuned
 on. GPT sol has no locked score: the lock refused a second model on the same
-brief. Opus cost $17.96.
+brief. Opus cost $17.96; GPT sol $8.38 at list price.
 
 **Answer: the pieces are built and the harness works on both models. 119
 labelled phoenix cases, split 58 open and 61 locked. Brief v1 is 388 words with
 three close rules. On 5 open cases, opus got all 10 answers right; GPT sol got 8,
-closing one built ticket as hardening in both runs. Opus cost $0.61. The bar
-below waits for the owner.**
+closing one built ticket as hardening in both runs. Opus cost $0.61, GPT sol
+$0.34 at list price. The bar below waits for the owner.**
+
+**On GPT sol's dollars:** it runs on the ChatGPT plan, which bills no call.
+Every GPT sol dollar figure in this write-up is what the same tokens cost at
+OpenAI's standard API price for `gpt-6.1-sol` (short context: $2.00 input,
+$0.10 cached input, $10.00 output per 1M tokens; read 2026-10-30 from
+https://developers.openai.com/api/docs/pricing; `lib/list-price.ts`). The
+figures were added on 2026-10-30, after parts 1 to 4 ran. Their
+`field/runs.jsonl` rows keep `costUsd: null` and carry the dollars in a new
+`listUsd` field. Opus's dollars are the Agent SDK's own, at Anthropic's list
+price.
 
 ```ts
 // The whole shape: six steps, each a file in and a file out.
@@ -212,8 +258,9 @@ each, once per model. `STEP=tune SMOKE=1`.
 - **Agreement:** every ticket the same both runs, on both models (5 of 5).
 - **Cost:** opus $0.61 for 10 answers (the estimate was $0.64; the cap was $1
   for the smoke, $2 for part 1). A first call cost $0.07 to $0.10, a second $0.01
-  to $0.02 when the first had finished. GPT sol on the plan, no price; median
-  about 8 s an answer, about 17k tokens.
+  to $0.02 when the first had finished. GPT sol $0.34 at list price for 10
+  answers (167k input tokens, 9k cached, 1.8k output); median about 8 s an
+  answer, about 17k tokens.
 - **One edit to the saved answers:** the script replaces a long dash in a
   model's `why` with a colon before it saves, so the public file holds none.
   GPT sol wrote some in the smoke.
@@ -243,7 +290,8 @@ each, once per model. `STEP=tune SMOKE=1`.
 - **Demlik.** Left out; brief v1 is a phoenix brief.
 - **Whether the open half is big enough to tune on.** 58 cases, 2 hard-yes and
   5 security among them. Tuning on so few security tickets can fit them by luck.
-- **The cost of GPT sol.** The plan gives no price.
+- **What the plan really charges for GPT sol.** Its dollars here are list
+  price for the same tokens; the plan bills no call.
 - **Another day.** One Codex version, one model id, one SDK version.
 
 ## Part 2: tune and lock
@@ -256,7 +304,7 @@ hard-no answers. On the locked half it closed 9 of 40 built tickets and 1 of 5
 security tickets. The two edits fit the 58 cases they were written from. GPT
 sol has no locked score, because the lock refuses a second run of one brief
 hash whatever the model. Opus cost $17.96 for 344 answers; GPT sol gave 338
-answers on the plan.
+answers for $8.38 at list price.
 
 ```ts
 // A sketch of the STEP calls part 2 made, in order. Every version and every answer is kept.
@@ -314,7 +362,8 @@ both runs. The bar's lines are in bold where a version misses them.
   #10214).
 - **v2 never ran on opus.** At about $6 an open-half run, v1, v2 and v3 on
   opus plus the lock would have passed $20. v2 and v3 went to GPT sol first,
-  for free, and only the better one went to opus.
+  on the plan (about $2.50 each at list price), and only the better one went
+  to opus.
 - **Every version is kept:** `163-briefs/triage-v1.md` (2ccebff3e7c1),
   `triage-v2.md` (9efb4899ddae), `triage-v3.md` (a2c5afb17bfe), and every
   answer in `results/163-triage-brief-eval.json`.
@@ -386,15 +435,15 @@ It does not change the decision: a brief that fails on one model is not taken.
 
 ### What it cost
 
-| Run | Answers | Opus dollars | Input tokens (cached) | Output tokens |
+| Run | Answers | Dollars | Input tokens (cached) | Output tokens |
 |---|---|---|---|---|
 | v1, opus, open (53 new cases) | 106 | $5.14 | 1,141,029 (643,873) | 46,368 |
-| v1, GPT sol, open | 106 | plan | 1,759,098 (360,192) | 19,297 |
-| v2, GPT sol, open | 116 | plan | 1,943,095 (626,048) | 21,912 |
-| v3, GPT sol, open | 116 | plan | 1,951,673 (883,328) | 20,501 |
+| v1, GPT sol, open | 106 | $3.03 list | 1,759,098 (360,192) | 19,297 |
+| v2, GPT sol, open | 116 | $2.92 list | 1,943,095 (626,048) | 21,912 |
+| v3, GPT sol, open | 116 | $2.43 list | 1,951,673 (883,328) | 20,501 |
 | v3, opus, open | 116 | $6.29 | 1,295,000 (653,374) | 45,397 |
 | v3, opus, locked | 122 | $6.53 | 1,450,458 (817,834) | 58,822 |
-| all of part 2 | 682 | $17.96 | 9,540,353 | 212,297 |
+| all of part 2 | 682 | $17.96 opus, $8.38 GPT sol | 9,540,353 | 212,297 |
 
 - **The estimate was high by about 20%.** DRY=1 said $6.73 for v1's open run
   ($5.14 real) and $7.92 for the lock ($6.53 real). The whole plan as first
@@ -541,7 +590,8 @@ least 90%. Two of the three allowed rounds were used.
   wrong on 8826 (kept a hard no after 22 reads) and 5416 (the same duplicate
   close). Median 9 reads and 16 s an answer, mean $0.21.
 - **GPT sol's cost:** median 20 s and 3 reads an answer; 21.9M input tokens
-  (16.9M cached) and 126k output for round 2, on the ChatGPT plan, no dollars.
+  (16.9M cached) and 126k output for round 2, $12.89 at list price ($0.054 an
+  answer). Round 1 (v4): 21.4M input (16.2M cached) and 124k output, $13.35.
 
 ### The exam step
 
@@ -581,7 +631,7 @@ built-random tickets alone. Agreement stays at 90%, at least 57 of 63.
 | Model | Per answer | 120 answers | Room left |
 |---|---|---|---|
 | opus | about $0.20 (mean of 21 read-code calls) | about $23.50 | $20.88 of $25 |
-| GPT sol | 0 dollars, about 20 s | about 40 min at 2 at once | ChatGPT plan weekly limit |
+| GPT sol | about $0.054 at list price (round 2's mean), about 20 s | about $6.50, about 40 min at 2 at once | ChatGPT plan weekly limit |
 
 Opus 60 x 2 did not fit what was left. The owner raised part 3's opus cap to
 $30 before the exam.
@@ -782,11 +832,13 @@ close outside the safety tickets is the same on both: #5643 as churn.
 
 | Model | Answers | Dollars | Input tokens (cached) | Output tokens | Median an answer |
 |---|---|---|---|---|---|
-| GPT sol | 126 | plan | 10,826,218 (8,380,800) | 63,214 | 18.5 s, 3 reads |
+| GPT sol | 126 | $6.36 list | 10,826,218 (8,380,800) | 63,214 | 18.5 s, 3 reads |
 | opus | 126 | $18.67 | 7,793,159 (6,193,578) | 224,481 | 15.1 s, 7 reads |
 
 - Opus mean $0.15 an answer. DRY=1 said $24.74; real was 25% lower.
 - Part 3's opus spend is now $22.79 ($4.12 tuning, $18.67 exam), under the $30 cap.
+- Part 3's GPT sol, at list price: $32.60 ($13.35 round 1, $12.89 round 2,
+  $6.36 exam), on the plan.
 - Each model took about 20 minutes at 2 calls at once.
 - `results/163-exam.json` holds every answer. No `why` named a person, so
   nothing needed masking.
@@ -825,7 +877,8 @@ close outside the safety tickets is the same on both: #5643 as churn.
 Written before the exam, kept as written, with what the exam said:
 
 1. **Take v5 to the exam, on GPT sol first.** It is the only version that
-   cleared all four lines anywhere, and the exam costs nothing on the plan.
+   cleared all four lines anywhere, and the exam costs nothing on the plan
+   (about $6.40 at list price, added later).
    Confidence 65% that it passes there: the numbers are tuned, and 6 of 78 is
    already half the bad-close line. **Wrong: it failed on GPT sol**, on hard
    no's (43%, against 91% tuned) and one security close.
@@ -875,6 +928,686 @@ After the exam:
   tickets. It may be how each reads "harm small", or how far each reads.
 - **Another day.** One run of each, one model id each, codex-cli 0.165.0.
 
+## Part 4: triage in two (close on a fact, ask on worth)
+
+Run on 2026-10-30, after the owner split triage in two: the model checks facts
+in the code and closes only on a clear fact; when a real fault turns on worth,
+it asks the owner, with its trace.
+
+**Answer: wrong closes drop a lot, and the price is asks.** With brief v6,
+written once and run as written, GPT sol closed 1 of 32 built exam tickets
+(v5: 4) and opus 2 of the 27 it answered (v5: 10 of 32). Both models now ask
+on #4208 and #4313, and cite the open pull requests that hold the code. But
+48% to 66% of all answers are asks. At phoenix's filing rate that is about 105
+to 190 asks a week. 12 of 15 sampled asks could be answered from the trace
+alone.
+
+```ts
+// Part 4's shape: three answers, each with its trace, and the open pull requests in the copy.
+type Triage =
+  | { answer: "close"; why: "duplicate" | "fixed" | "absent" | "churn"; of: number | null; trace: string }
+  | { answer: "keep";  why: "fault" | "feature"; trace: string }
+  | { answer: "ask";   why: "worth" | "security" | "unclear"; trace: string; question: string };
+
+const tree = treePool({ ..., extra: (c) => ({ key: `t${c.n}`, files: diffsOpenAt(c) }) });
+// one answer from the exam, GPT sol, #4313 (a security ticket phoenix built):
+{ answer: "ask", why: "security",
+  trace: "comment.react broadcasts toComment(r.comment) unchanged at apps/web/worker/features/pano/mutations.ts:666-667 ... PR #4310 adds owner-scoped sandboxed to that read and shaper without stripping this broadcast",
+  question: "Should the owner-scoped flag be stripped from comment.react broadcasts as latent privacy hardening: build or close?" }
+```
+
+### Neither set is blind any more
+
+- **The 119** were tuned on in parts 2 and 3.
+- **The 63** were seen once, in part 3's exam. Their answers and part 3's
+  misses (#4208, #4313, the 5 owner-closed security gaps) shaped what the
+  owner asked for in part 4.
+- **So no tuning used them.** v6 was written once, from the owner's three
+  answers and v5's fact rules, before any v6 answer came back. It ran once on
+  each set, as written: a measure, not a tune. Two GPT sol answers on #4208 and
+  #4313 were a harness check before the full run; they count as run 1 of those
+  two tickets.
+
+### What changed from part 3
+
+- **Brief v6** (`163-briefs/triage-v6.md`, hash `35e71e146b92`, written fresh
+  from the writing guide). Four steps: trace the claim to a live caller; check
+  the open pull requests; pick the answer (a security ticket is always ask,
+  then each close fact, then keep, then ask); write the trace so someone who
+  has not read the code can check it.
+  - **close** only on a fact: a duplicate (`of` names it), already fixed (file
+    and line, or a merged PR), absent (the code the claim names does not exist
+    and no open PR adds it), or churn (v5's factual rule).
+  - **keep** a confirmed fault on a normal path with clear serious harm, or a
+    feature with no fact against it.
+  - **ask** on worth (a confirmed small or unseen fault), on every security
+    ticket, and when the trace does not settle it. `question` ends in "build or
+    close?".
+- **The code copy now carries the pull requests open at filing.** Main at
+  filing is kept, so a built ticket's own fix never shows. Next to it:
+  - every PR whose `createdAt` is before the filing and that was still open
+    then (from `gh pr list`, read-only; median 8 a ticket, at most 24);
+  - each one at its newest own commit written before the filing (author date,
+    because agents rebase and a rebase resets the committer date), its diff
+    from the parent of its oldest own commit, so main's later work stays out;
+  - the list in the prompt (number, title, files); each diff as a file in the
+    copy, under `open-pull-requests-at-filing/`, cut at 3,000 lines.
+  - Each case gets its own copy (`treePool`'s new `extra`). 593 PR heads were
+    fetched into the clone copy (push off). 379 of 1,716 listings had no own
+    commit from before the filing (a dependency bump, a release PR, or one
+    rewritten later); those show the title only.
+- **The check on #4208 and #4313 holds.** #4208's list has #4204 ("a path-only
+  §CP answer can no longer read as not control plane", 11 files); #4313's has
+  #4310 ("thread the owner-scoped sandboxed flag onto the Comment wire", 14
+  files). Both models cite them in their traces and ask; in part 3 opus closed
+  both as "not there".
+
+### The numbers
+
+GPT sol: 2 runs a ticket on both sets. Opus: 1 run on the 63, stopped by the
+$12 cap at 51 tickets; the calls ran in a seeded order, so the 51 are a random
+draw of the 63. "Tickets" counts a ticket once if any run gave that answer.
+
+| | GPT sol, 63 | GPT sol, 119 | Opus, 51 of 63 |
+|---|---|---|---|
+| answers | 126 | 238 | 51 |
+| wrong closes (built ticket closed) | 1 of 32 tickets, 2 answers | 6 of 78 tickets, 9 answers | 2 of 27 tickets, 2 answers |
+| by fact | churn 2 | duplicate 5, absent 4 | fixed 1, churn 1 |
+| wrong keeps (closed ticket kept) | 4 of 31 tickets, 7 answers | 0 of 41 | 1 of 24 tickets |
+| right closes (answers) | 20 | 45 | 10 |
+| asks | 83 (66%) | 114 (48%) | 32 (63%) |
+| asks by why | worth 46, security 35, unclear 2 | worth 73, security 38, unclear 3 | worth 20, security 11, unclear 1 |
+| asks, really built / closed | 48 / 35 | 77 / 37 | 19 / 13 |
+| same answer both runs | 60 of 63 | 113 of 119 | (1 run) |
+
+- **The wrong closes, by ticket:**
+  - [#5643](https://github.com/kamp-us/phoenix/issues/5643), both models, churn:
+    an agent-filed glossary rewrite phoenix built anyway. Same as part 3. By
+    v6's own rule this is a right churn close; the label says otherwise.
+  - [#3361](https://github.com/kamp-us/phoenix/issues/3361), opus, fixed: a
+    security ticket. The trace is right (the file already used a safe random),
+    but v6 says to always ask on security. One break of that rule in 13 opus
+    security answers; GPT sol asked on all 50 of its own.
+  - The 119 on GPT sol: duplicates #5416 (both runs, as in parts 2 and 3),
+    #6003 and #3682 (both runs); absent #6314, #5092 and #8731. On those three
+    the code the ticket names was on no PR listed: #6314's names are not in the
+    one-PR epic run #6313 either. The work likely sat on a branch with no PR,
+    or the ticket's premise was wrong and phoenix built something else.
+- **The wrong keeps:** on the 63, GPT sol kept #3367 (a duplicate, as a
+  feature, both runs), #6476 (a planning step a decision record asks for, as
+  a feature), #6529 and #6542 (each with a real run going wrong, as faults,
+  both runs). Opus kept #6476. On the 119, no wrong keep at all.
+- **Security, always ask:** GPT sol asked on every security ticket (30 answers
+  on the 63, 20 on the 119). Opus asked on 12 of 13 and closed #3361.
+- **Asks split nearly evenly on what really happened.** Of GPT sol's 83 asks on
+  the 63, phoenix built 48 and closed 35. That is the point of asking: the
+  model cannot tell these apart, and phoenix did not decide them the same way
+  either.
+
+Against part 3's v5 on the same 63 tickets:
+
+- GPT sol: wrong closes 4 tickets to 1; closed tickets kept 15 to 4; right
+  closes 32 answers of 126 to 20 of 126.
+- Opus: wrong closes 10 of 32 to 2 of 27; closed tickets kept 11 to 1; right
+  closes 42 of 126 answers (33%) to 10 of 51 (20%).
+- The rest became asks. v6 gives up some right closes to stop wrong ones.
+
+### The ask load
+
+`STEP=load`: GitHub's search counts 2,468 phoenix issues filed in the 60 days
+to 2026-10-30, about 288 a week. In a read of the newest 1,000, 158 (16%) are
+epics, decision tickets, spikes, grilling sessions, maps or main alarms, which
+triage may skip.
+
+| Run | Ask share | Asks a week at 288 |
+|---|---|---|
+| GPT sol, 63 | 66% | about 190 |
+| GPT sol, 119 | 48% | about 138 |
+| Opus, 51 of 63 | 63% | about 181 |
+| GPT sol, random built tickets only (24 + 60 answers) | 50% and 47% | about 134 to 144 |
+| Opus, random built tickets only | 36% | about 105 |
+
+- **Both sets lean hard.** Half the 63 are code-read safety tickets, a sixth
+  security. The random built tickets are the nearest thing to phoenix's real
+  mix on the keep side, and they still ask 36% to 50% of the time.
+- **So about 100 to 190 asks a week, 15 to 27 a day.** At 30 seconds each,
+  that is about 50 to 95 minutes of the owner's week.
+
+### Can the owner answer an ask from its trace?
+
+15 asks, drawn with seed 1634 from all 229 asks across both models and sets
+(`STEP=sample`). I read each trace and question with only the ticket's title,
+and asked one thing: could the owner say "build" or "close" now, without
+opening the code or the ticket? Yes needs all three: the trace says what the
+code does and where (file and line, or the PR); it says the harm or what is
+missing; and the question is one yes-or-no call.
+
+- **Yes, 12 of 15:** #7952, #10139, #8479 (both models), #8672, #6471, #9623,
+  #6330, #10066, #10138, #1810 (GPT sol), #9826.
+- **No, 3 of 15:**
+  - #1810 on opus: right and complete, but the question offers three fixes
+    (a karma gate, inert votes or a rate limit). A real design call; not
+    seconds.
+  - #9983 on GPT sol: the diff was cut before the code it needed, and the
+    question asks to "run the two-account spike". It needs work first.
+  - #8057 on GPT sol, `unclear`: the trace could not confirm the fault. The
+    owner would have to look.
+- **Worth knowing:** 7 of the 15 questions lean on the answer ("despite no
+  observed failure", "a hypothetical wrong-path merge"). That framing may
+  push the owner to close. The owner's real answers on these 15 were 7 built,
+  8 closed.
+- **How sure:** one reader, me, and the reader also wrote the brief. A second
+  reader, or the owner timing a real batch, would settle it.
+
+### Proposed bar (needs the owner)
+
+The old bar had two answers. These lines fit three. **Proposed, not
+approved;** the owner sets the numbers.
+
+| Line | Proposed | v6 now | Why |
+|---|---|---|---|
+| wrong closes, built tickets | at most 1 in 30 (about 3%) | GPT sol 1 of 32, opus 2 of 27 | a wrong close is work nobody sees again; with asks as the way out, a close should be a fact |
+| security closed | 0 | GPT sol 0, opus 1 (#3361) | the owner decides every security ticket |
+| wrong keeps, closed tickets | at most 10% | GPT sol 4 of 31 (13%), opus 1 of 24 | a wrong keep costs a build, cheaper than a wrong close |
+| ask load | a weekly budget the owner names, for example 50 | about 105 to 190 | this is the owner's time |
+| answerable asks | at least 12 of 15 sampled | 12 of 15 | an ask that needs digging is not a seconds call |
+
+- **Why these numbers:** 3% is v6 on GPT sol, rounded up, so the line says
+  "no worse than now"; 10% keeps today's cheap-error room; 50 a week is about
+  7 a day. Confidence 60%: none of these is measured against what the owner
+  will put up with. The ask budget is the line that decides if v6 is usable,
+  and only the owner can set it.
+- **v6 fails the ask line by 2 to 4 times at any budget near 50.** The next
+  move is not a tighter close rule. It is to make asks cheaper (a batch view,
+  "build or close?" one tap each) or fewer (let the owner rule a class once,
+  such as "missing tests for working code: close", and turn that ruling into a
+  close fact).
+
+### What it cost
+
+| Run | Answers | Dollars | Input tokens (cached) | Output tokens |
+|---|---|---|---|---|
+| GPT sol, 63 and 119 | 364 | $25.37 list ($9.34 on the 63, $16.03 on the 119) | 40,190,985 (30,302,080) | 256,214 |
+| Opus, 63 (stopped at 51) | 51 | $11.49 | 4,475,507 (3,407,713) | 109,996 |
+
+- Opus mean $0.23 an answer, median 8 reads and 18 s. DRY=1 said $9.32 for
+  all 63 at part 3's mean ($0.148); v6 also reads diffs, so it cost 52% more an
+  answer, and the cap stopped it at 51. Part 4's opus spend is $11.49 of $12.
+- GPT sol median about 23 s and 4 reads an answer; mean $0.070 an answer at
+  list price, about a third of opus's $0.23 for the same brief.
+- `field/runs.jsonl` has a row per answer (415); `field/notes.jsonl` notes
+  2026-10-30-11 to 13.
+
+### Who did what
+
+- **This repo's harness:** brief v6, the open-PR read (`STEP=prs`), the code
+  copies with each case's diffs, the run, the numbers and the sample, in
+  `163-triage-ask.ts` and `lib/triage-ask.ts`. The live turns in
+  `lib/brief-eval-live.ts` now take any answer's shape.
+- **Opus:** the Claude Agent SDK on its own login, `claude-opus-5-5`, Read,
+  Grep and Glob in a read-only copy, the brief as its system prompt.
+- **GPT sol:** `gpt-6.1-sol`, effort medium, through this repo's Codex adapter
+  with the folder read-only, on the ChatGPT plan, no OpenAI key.
+- **The labels are part 1 to 3's:** today's fabrika's for the 119, and what
+  really happened (a merged PR or a person's close) for the 63. Phoenix was
+  only read: the PR list and PR heads through `gh` and `git fetch`. Nothing
+  was written to phoenix. Names in the saved traces are masked as `[name]`
+  (none came up); two traces named phoenix's preview host, masked as `[a
+  Cloudflare host]`.
+
+### What part 4 means
+
+1. **Keep the split.** Closing only on a shown fact removes most wrong closes
+   on both models, and the two models no longer land on opposite sides.
+   Confidence 80%: the drop is large (4 to 1, 10 to 2) but on sets that are no
+   longer blind.
+2. **The open pull request list was worth adding.** It fixed the two cases
+   part 3 named, and models used it unprompted on other tickets (#6471,
+   #10066, #8672 trace into PR diffs). Confidence 75%; work on a branch with no
+   PR still looks absent (#6314, #5092, #8731).
+3. **The ask load is the new problem, and it is the owner's.** 105 to 190 a
+   week is too many for one person to answer well. Make asks cheap or rule
+   classes once; that is a product question, not a brief edit.
+4. **Fix "always ask on security" in code, not in words.** Opus broke it once.
+   A Check after the Draft can turn any non-ask answer on a security ticket
+   into an ask, if security is known; here it comes from the label, which
+   triage will not have. Confidence 70% that a small Judge (is this a security
+   ticket?) can do it; untested.
+
+### What part 4 cannot tell us
+
+- **A blind number.** Both sets have been seen; v6 is untuned, but the owner's
+  ask for v6 came from the 63's misses.
+- **Opus on all 63, or twice.** The cap stopped it at 51 and one run gives no
+  agreement.
+- **How long a real ask takes the owner.** The 15-ask judgment is mine, by
+  hand, from text. A timed batch with the owner would settle it.
+- **Whether the owner would answer asks the way phoenix went.** Phoenix's
+  outcomes were not consistent on small faults; the owner's live answers may
+  not match them either.
+- **The real filing mix.** The load uses one 60-day count and the sets' ask
+  shares, and the sets are not a random sample of phoenix.
+- **Work on a branch with no pull request.** The copy cannot show it.
+- **Another day.** One run, one model id each, one Codex version.
+
+## Part 5: fewer asks without looser closes
+
+Run on 2026-10-30. Part 4 left 229 asks on 104 tickets, about 135 to 192 a
+week. The proposed bar's ask budget is about 50. Can we ask less without
+closing more wrongly? Everything here is offline, on part 4's saved answers:
+no triage model ran again.
+
+**Answer: no single idea, and not all three together, meets the bar.** The
+security rule is worth building: it removes the one security close for one
+ask. Bundling and precedents remove almost nothing once checked. Keeping worth
+asks is the only big cut, and it is a trade the owner has to choose: about 45%
+wrong keeps for about 100 fewer asks a week.
+
+```ts
+// Part 5's shape: four rewrites of part 4's answers, then the same bar.
+type Answer = { n: number; said: "close" | "keep" | "ask"; why: string; really: "close" | "keep"; security: boolean };
+
+const securityRule = (xs) => xs.map((a) => a.security && a.said !== "ask" ? { ...a, said: "ask", why: "security" } : a);
+const followRulings = (xs, rulingOf) => xs.map((a) =>
+  a.said !== "ask" || a.security || a.why === "security" ? a
+  : rulingOf(a.n) ? { ...a, said: rulingOf(a.n).verdict, why: "precedent" } : a);
+const keepWorth = (xs) => xs.map((a) => a.said === "ask" && a.why === "worth" ? { ...a, said: "keep", why: "cheap" } : a);
+// bundles do not change an answer; they change how many decisions the owner makes.
+
+// the one precedent both matchers found, on #6374 (asked as security, so not applied):
+{ kind: "rule", n: 6062, why: "Earlier #6062 asked for a takeover path for a stale claim left by a dead session, and it was closed not-planned under the #5752 ruling ..." }
+// phoenix built #6374 later: following that ruling would have been a wrong close.
+```
+
+### The security rule
+
+- **The rule:** any answer that is not ask, on a security ticket, becomes an
+  ask. Code, after the Draft, so the model cannot break it.
+- **What it changes:** opus's close on #3361 becomes an ask. Opus's wrong
+  closes go from 2 of 27 to 1 of 27, security closed from 1 to 0, asks from 32
+  to 33. GPT sol asked on every security ticket already, so nothing changes.
+- **Every scenario below applies it first.**
+- **How sure:** 95% on these numbers. But security here comes from the label,
+  which triage will not have. A real rule needs a security check of its own,
+  untested (part 4's point 4).
+
+### Bundle by area
+
+**The rule, fixed before any bundle was read:** two asks are one decision when
+they share a key. The keys of an ask are its own number, every number its body
+or trace names, each open pull request its trace names from its own list, and
+the first file path its trace names. Bundles are built greedily, the most
+shared key first, and each ask joins one bundle. Three windows: the whole set,
+each filing week, and a looser "chained" count (anything linked, even through
+a third ask) as the upper end.
+
+**The weekly number is a sketch.** The sets hold 4 or 5 asks a week; a real
+week has about 140. So the asked tickets of one model are drawn k at a time
+(40 draws each, seed 1635), bundled, and a power law fitted to that curve is
+read at the week's ask count.
+
+**The hand check:** 10 bundles of two or more, drawn with seed 1635 from GPT
+sol's run 1 on both sets (`STEP=groups`). One reader, me, asked: would one
+answer from the owner settle every ask in it?
+
+- **One decision, 2 of 10:** three leaks of the newcomer sandbox (#1810, #1811,
+  #3724: one ruling, "the sandbox holds on every path", settles all); two faults
+  in the same spawn-clear branch check (#7340, #7344).
+- **Not one decision, 8 of 10:** four unrelated faults that start at the same
+  entry file (pano `mutations.ts`); two tickets that only list the same open
+  pull request (#9611 and #9771, #10463 and #10418, #4208 and #4200, #6566 and
+  #6585); two chat window tickets (a clipped notice, a missing test); a CI
+  comment check and a test that skips `.tsx` files (same workflow file).
+- **So a file or a pull request says where the code is, not what the owner
+  must decide.** What bundling saves is scaled down to the 2 in 10 that held.
+
+| | GPT sol, 63 | GPT sol, 119 | Opus, 51 |
+|---|---|---|---|
+| asks a week (security rule) | 187 to 192 | 135 to 140 | 186 |
+| decisions, whole set (asks in the set) | 30 to 31 (41 to 42) | 41 (56 to 58) | 26 (33) |
+| decisions a week, rule as written | about 108 to 110 | about 83 to 86 | about 119 |
+| decisions a week, after the hand check | about 172 to 176 | about 125 to 129 | about 173 |
+
+- **How sure:** 60%. The hand check is 10 bundles, one reader. 2 of 10 could
+  be anything from about 1 in 20 to 1 in 2. The power law reads past the pool
+  (102 asked tickets for GPT sol, 32 for opus). A real week is denser in time,
+  so more links may hold; a second reader on 20 more bundles would settle it.
+
+### Follow past rulings
+
+**How:** for each of the 104 asked tickets, every phoenix issue settled before
+that ticket was filed (`closedAt` earlier than the filing) is a candidate.
+7,301 issues read read-only through `gh` (`STEP=ruled`): 3,295 built by a
+merged pull request, 2,162 closed not planned, 955 closed done with no pull
+request, 889 open. No issue was closed as a duplicate by GitHub's reason. The
+8 best lexical matches (tf-idf on titles; the asked ticket's title and body)
+go to a matcher with how each was settled and, if closed unbuilt, the note it
+was closed with (its last comment from before the close). The matcher answers
+`same`, `rule` (cite one) or `none`, and is told to pick none unless sure. A
+`rule` takes the earlier ticket's settling (built is keep, not planned is
+close); `same` closes. A precedent never answers a security ask, by label or
+by the model's own why.
+
+| Matcher | Tickets it may answer | Matched | Right | Wrong closes | Dollars at list price |
+|---|---|---|---|---|---|
+| claude-haiku-5-5 | 68 | 0 (1 more, on a security ask) | 0 | 0 (the security one would be wrong) | $0.25 |
+| claude-sonnet-5-5 | 68 | 0 (2 more, on security asks) | 0 (of the 2: 1 right, 1 wrong) | 0 | $3.97 |
+| lexical, top match at 0.3 or more, no model | 68 | 3 | 2 | 1 (#8992) | $0 |
+| lexical, at 0.4 or more | 68 | 1 | 1 | 0 | $0 |
+
+- **Phoenix's history holds almost no ruling that settles a later ticket.**
+  The best earlier matches are mostly built tickets on the same page or
+  module, with a different fault. The median best lexical score is 0.17.
+- **The one match both models made shows the risk.** #6374 (a killed seat
+  strands its lane claim) cites #6062, closed not planned under a class ruling
+  (#5752: a strand from a gone session is a person's job). Phoenix built #6374
+  later. A class ruling can be reversed, and an old match does not know.
+- **Sonnet's other match was right:** #10591 cites #10363, built, the same
+  owner-only check. A security ask, so it stays an ask.
+- **How sure:** 85% that matching on this history saves under 5% of asks.
+  The candidates are titles and closing notes only; a matcher shown the
+  earlier tickets' bodies might find more. Part 4's idea of a dated class
+  ruling, written by the owner, is a different thing and is not tested here.
+
+### Keep when it is cheap
+
+**The trade:** a worth ask kept without asking saves 30 s of the owner. It
+wastes a build when the ticket should have been closed, which is a share p of
+worth asks. Keeping wins when 30 s of the owner is worth more than p times a
+build. No hourly value is picked here.
+
+- **p:** GPT sol 50% of 119 worth asks, opus 45% of 20 (part 4's labels).
+- **A build:** $3.23 median, $1.73 to $7.68, over the 6 machine-driven
+  kamp-us/demlik lanes with dollars in `field/runs.jsonl` (machine rows
+  summed per lane). 25.4 agent minutes median, 1.8 to 45.9, over 18 demlik
+  lanes with builder, reviewer and shipper minutes.
+- **Break-even:** keeping beats asking if 30 s of the owner is worth more than
+  about **$1.60** (GPT sol $1.60, $0.86 to $3.81 over the build range; opus
+  $1.45). That is about $190 an hour.
+- **Asks removed a week:** at $0.25, $0.50 or $1 per 30 s, none (ask). At $2 or
+  $5, all worth asks: about 94 a week on GPT sol, 113 on opus.
+- **What it breaks:** wrong keeps go from 0% to 13% to 42% to 48% (opus 10 of
+  24, GPT sol 15 of 31 and 18 of 41). The proposed line is 10%.
+- **How sure:** 55%. The builds are demlik lanes, not phoenix; six lanes with
+  dollars. The dollars leave out the owner's own time on each wasted pull
+  request: if the owner reads every pull request, a wasted build costs more
+  owner time than the 30 s it saved, and the break-even does not hold at any
+  price. Timing the owner on a real batch of pull requests would settle it.
+
+### All together, against the bar
+
+GPT sol 2 runs, opus 1. Asks a week at 288 filings a week. Decisions a week
+after the hand check. Precedent adds nothing on either model, so "all three"
+is the security rule, then keep worth, then bundles.
+
+| Scenario | Asks a week (decisions) | Wrong closes | Security closed | Wrong keeps | Budget 50 |
+|---|---|---|---|---|---|
+| part 4 as it was | sol 135 to 192, opus 181 | sol 1/32, 3 to 6/78; opus 2/27 | opus 1 | sol up to 13%, opus 4% | fail |
+| security rule | sol 135 to 192, opus 186 | opus 1/27 | 0 | same | fail |
+| + bundles alone | (sol 125 to 176, opus 173) | same | 0 | same | fail |
+| + precedent alone (either model) | no change | same | 0 | same | fail |
+| + keep worth alone | sol 48 to 87, opus 73 | same | 0 | 42% to 48% | sol 119 only |
+| all three | sol 48 to 87 (45 to 81), opus 73 (67) | same | 0 | 42% to 48% | sol 119 only |
+
+- **Wrong closes, at most about 1 in 30:** GPT sol on the 63 passes (1 of 32);
+  on the 119 it fails (6 and 3 of 78), as in part 4. Opus is 1 of 27 after the
+  rule, just over 1 in 30. None of the ideas here touches a close.
+- **Security closed, 0:** passes everywhere once the rule is in.
+- **Wrong keeps, at most 10%:** fails as soon as worth asks are kept. Without
+  keep worth, GPT sol on the 63 is at 10% and 13% (part 4).
+- **Answerable, 12 of 15:** not measured again. Of part 4's 15 sampled asks, 7
+  were worth asks, which keep worth removes; 7 security asks and 1 unclear
+  stay. Whether the asks left are as easy to answer is not known.
+- **Ask budget, about 50:** only GPT sol on the 119 gets there, and only with
+  keep worth.
+- **Without bundles' paper numbers** (the rule as written, not hand-checked),
+  all three would read sol 34 to 56, opus 43. Those are the wrong numbers to
+  plan on; they stay here so the gap shows.
+
+### What it cost
+
+| Step | Calls | Dollars at list price |
+|---|---|---|
+| haiku matcher | 104 | $0.25 |
+| sonnet matcher | 104 | $3.97 |
+| issue states and closing notes (`gh`, read-only) | 74 pages, 7 batches | $0 |
+
+- **Wrong estimate, kept:** `DRY=1` said about $0.06 for haiku and $1.11 for
+  sonnet, from about four characters a token plus 3,000 tokens a call. Real:
+  about 10,100 tokens in a call and $0.0024 (haiku) and $0.038 (sonnet), about
+  4 times the guess. The cap of $5 held: $4.22 in all.
+- `field/runs.jsonl` has a row per matcher call (208); `field/notes.jsonl`
+  notes 2026-10-30-15 to 17.
+
+### Who did what
+
+- **This repo's harness:** the four rewrites, the bundle rule, the bar, the
+  week sketch and the break-even in `lib/fewer-asks.ts`; the matcher call in
+  `lib/fewer-asks-live.ts`; the steps in `163-fewer-asks.ts`.
+- **Matchers:** the Claude Agent SDK on its own login, `claude-haiku-5-5` and
+  `claude-sonnet-5-5`, no tools, no settings, the matcher brief as the system
+  prompt.
+- **Part 4's answers** (GPT sol and opus with brief v6) are the input; no
+  triage model ran. Build costs are from today's fabrika and this repo's
+  machine on kamp-us/demlik lanes. Phoenix was only read. Nothing was written
+  to phoenix. The matchers' saved whys are masked for names and hosts (none
+  came up).
+
+### What part 5 means
+
+1. **Build the security rule as a Check after triage's Draft.** It is a few
+   lines, it fixes the one break, and it costs one ask. Confidence 90% that it
+   is worth building; the open part is how triage knows a ticket is security
+   without the label.
+2. **Do not build precedent matching on phoenix's history.** It found 0 of 68,
+   and the one strong match it made would have been wrong because the old
+   ruling was reversed. Confidence 85%. If the owner wants to rule a class
+   once, keep it as a named, dated rule the owner can withdraw.
+3. **Group asks by area in the owner's batch view, but do not count it as
+   fewer decisions.** It may make reading faster; it does not merge answers.
+   Confidence 60% that grouping helps reading at all; untested.
+4. **The ask budget and the wrong-keep line cannot both hold with v6.** The
+   owner picks: about 130 to 190 asks a week at 10% wrong keeps, or about 50
+   to 90 at about 45%. Keeping is cheaper in dollars above about $1.60 per 30 s
+   of the owner, but only if the owner does not read each wasted pull request.
+   Confidence 70% in the trade as stated.
+
+**The owner's pick (2026-10-30): the first way, more asks with clean builds.**
+The ask budget stays open until triage runs on real weeks, and the pick is
+checked against those weeks. The security rule is the next piece to build. See
+[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md).
+
+### What part 5 cannot tell us
+
+- **Any live number.** No triage model ran; every scenario rewrites part 4's
+  answers.
+- **A blind number.** Same sets as part 4, both seen.
+- **What a real week bundles to.** The week count is a fitted sketch on about
+  14 weeks of thin data, and the hand check is 10 bundles by one reader.
+- **Whether an owner-written class ruling would work.** Phoenix's history has
+  few, and the one found was reversed. Only the owner writing rules on a real
+  week would tell.
+- **What a wasted phoenix build costs.** The build dollars are six demlik
+  lanes, and the owner's review time is not in them.
+- **Whether security can be known without the label.** The rule's numbers are
+  an upper bound.
+- **Another day.** One run of each matcher.
+
+## Part 6: can Jev attach a precedent to an ask?
+
+Run on 2026-10-30. The owner picked more asks with clean builds (see
+[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md)),
+so each ask should be quick to answer. Part 5 tried precedents as verdicts and
+found almost none. Here a precedent is only advice: "the owner settled #N like
+this", shown beside the ask. It never answers, closes or builds anything.
+
+**Answer: not with the shipped question, and only half with a new one.** The
+duplicate hint as it ships, pointed at settled tickets, shows no right
+precedent at 0.7 or 0.8. A question rewritten for "the same kind of fault, settled elsewhere"
+ranks well but scores high on almost everything. At 0.9 it is within the
+advice line (2 false hints in 84, about 2%) and shows the right precedent on 7
+of 20. It also put a reversed ruling above the newer one. Do not ship it yet.
+
+```ts
+// Part 6's shape: the duplicate hint of experiment 167, with a different pool and question.
+const pool = settledBefore(ask.filed);                // phoenix tickets closed before the ask was filed
+const shortlist = candidatesOf(ask, pool, 20);        // the shipped word filter, unchanged
+const scores = yield* Effect.forEach(shortlist, (c) =>
+  siblingJudge.judge(model, {new: textOf(ask), earlier: textOf(withSettling(c))}));
+const hints = hintsOf(scores, 0.9, 3);                // the shipped ranking; advice, never an answer
+
+// #2550 "Comment vote path lacks the self-vote guard posts/definitions have"
+// [{of: 2216, yes: 0.93}]  "Self-vote is allowed, should be blocked (founder-confirmed)", built
+// #6374 "A killed operator seat strands its lane claim ..." (built later)
+// [{of: 4118, yes: 0.90}]  a closed design ticket; #6062 (closed, the reversed ruling) 0.86 next;
+//                          #6068 (built the day before, the newer ruling) never in the top three
+```
+
+### The labels, written before any call
+
+- **Who:** one reader, from `STEP=list`: for each of the 104 asked tickets,
+  the settled tickets its body names, part 5's matcher citations, part 5's
+  three best text matches and the shipped filter's top five. Committed in
+  `163-precedent-hint.ts` before the first Jev call.
+- **A precedent** is an earlier settled ticket that is the same request, or
+  the same kind of request on the same part for the same reason, and whose
+  settling points the way the ask was really settled.
+- **20 of 104 asks have one** (15 sure, 5 a call either way). Most are the
+  same rule broken in a new place: a sandbox mask missing on another read path
+  (#1811, #3724, #4313, #6467), the same exit-1 collision on a sibling verb
+  (#4736), the same `--help` clean-up (#9928, #9935), an owner-only check
+  fooled by an agent's comment (#10591).
+- **The reversed ruling is a case.** #6374 is labelled with #6068 and #5795
+  (built the day before it was filed) as right, and #6062 and #5752 (the
+  class ruling, later reversed) as wrong. A hint to a wrong one counts as
+  misled unless a right one ranks above it. #8992 is labelled the same way:
+  #6616 right, #6269 (part 5's wrong close) wrong.
+- **Six asks without a precedent** have a like ticket settled the other way
+  (for example #8524 and #7761: the same "reports delivered for a dropped
+  payload", built there, closed here). A hint there is false and misleading.
+- **This bar is lower than part 5's.** Part 5 needed a ruling that decides
+  the ticket, and found almost none. Advice only needs a like ticket the owner
+  would want to see. That is why 20 asks qualify here.
+
+### The numbers
+
+The pool is every phoenix ticket closed before the ask was filed, with its
+first body (fetched read-only for this part; part 5 had titles only), how it
+was settled, and its closing note. The shipped filter keeps 20. Its recall: a
+labelled precedent is among the 20 on 19 of 20 asks (#4236's is cut), first on
+11.
+
+| Way | Right first, of 20 | Right in top 3 | Misled | False hints, of 84 |
+|---|---|---|---|---|
+| shipped duplicate question, at 0.7 / 0.8 | 0 / 0 | 0 / 0 | 0 / 0 | 1 / 0 |
+| precedent question, at 0.7 / 0.8 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| sibling question, at 0.7 / 0.8 | 10 / 7 | 13 / 10 | 1 / 1 | 41 / 16 |
+| sibling question, at 0.9 | 7 | 7 | 0 | 2 |
+| sibling question, ranking only (no floor) | 12 | 18 | 2 | 84 |
+| the free filter alone, its top 3 | 11 | 17 | 0 | 84 |
+| part 5 haiku (verdict matcher) | 0 | 0 | 1 | 0 |
+| part 5 sonnet (verdict matcher) | 1 | 1 | 1 | 0 |
+| part 5 text match at 0.3 / 0.4 | 2 / 1 | 2 / 1 | 1 / 0 | 1 / 0 |
+
+- **The shipped question and the precedent question score precedents low.**
+  The median best score on a true precedent is 0.13 and 0.16. Their "no"
+  says "a different fault, even in the same feature", which fits most
+  precedents here: the same rule broken in another place. Their ranking with
+  no floor (8 and 9 right first) is no better than the free filter (11).
+- **The sibling question fixes the ranking, not the floor.** Median best score
+  on a true precedent 0.80, but the best score on asks without one runs 0.91,
+  0.90, 0.89, 0.88, 0.87. Only 5 of 20 precedents score above every ask
+  without one. 0.9 is the one floor under the 10% advice line.
+- **At 0.9, the 7 right:** #2550, #3724, #4736, #9890, #9928, #9935, #10591.
+  **The 2 false:** #6556 shows #5207, closed, the same "passes over nothing"
+  kind, which points the right way (a class likeness the labels did not
+  count); #9391 shows #7688, built, which points the wrong way.
+- **The reversed ruling fails on every question that shows anything.** On
+  #6374 the newer ruling (#6068) scores 0.10 on the precedent question and is
+  not in the sibling question's top three. The sibling question shows #4118
+  (closed, 0.90) and #6062 (the reversed ruling, 0.86). At 0.9 only #4118
+  shows: not labelled wrong, but it points to a close the owner did not make.
+- **Against part 5:** the verdict matchers and the text match find 0 to 2
+  with a misled case each. The sibling question at 0.9 finds 7 with none
+  misled by the labels. It is the only way here that shows a precedent on
+  more than a tenth of the asks that have one.
+
+### What it cost
+
+| Question | Calls | Input tokens | Output tokens | Dollars |
+|---|---|---|---|---|
+| precedent | 2,080 | 4,132,991 | 41,600 | $0.1753 |
+| shipped duplicate | 2,080 | 4,049,791 | 41,600 | $0.1718 |
+| sibling | 2,080 | 4,108,031 | 41,600 | $0.1743 |
+| all | 6,240 | 12,290,813 | 124,800 | $0.5214 |
+
+- Each question ran a handful of asks first (6 to 8), the answers were read,
+  then the rest. Part 5's verdict matchers cost $0.25 (haiku) and $3.97
+  (sonnet) for one pass.
+- **Wrong estimate, kept:** `STEP=plan` said $0.142 a question, from four
+  characters a token and 250 tokens a call for the question. Real: $0.175,
+  about 1.23 times. About 1,990 tokens a call, against 732 in experiment 167:
+  phoenix bodies are longer.
+- `field/runs.jsonl` has one row per question.
+
+### Wrong guesses, kept
+
+- **"The shipped question carries over."** Experiment 167 put 24 of 25 true
+  duplicates above 0.7. Here no true precedent reached 0.7 on it. A precedent
+  is not a duplicate, and the question's own "no" rules most of them out.
+- **"0.7 or 0.8 is the floor."** On the sibling question, 0.7 shows a false
+  hint on about half the asks without a precedent, and 0.8 on about a fifth.
+- **The sibling question was written after the first two came back.** Labels
+  were fixed before any call, but the question is one rewrite fitted to this
+  set. Its numbers are not blind.
+
+### Who did what
+
+- **This repo's harness:** the pool, the labels, the scoring and the steps in
+  `163-precedent-hint.ts`. The filter (`candidatesOf`), the text Jev reads
+  (`textOf`), the ranking (`hintsOf`), the question shape
+  (`createYesNoJudge`) and the live Jev with its cap and receipts
+  (`jevFromConfig`) are the shipped ones, imported by package name.
+- **Jev** (`jev-latest`, TypeSafe's API) answered every pair. No agent ran.
+- **Part 4's asks and part 5's matcher answers** are inputs. Phoenix was only
+  read, through `gh`; nothing was written there. Today's fabrika took no part.
+
+### What part 6 means
+
+1. **Do not ship the precedent hint on the shipped question.** At the shipped
+   floor it is silent. Confidence 90%.
+2. **The sibling question at 0.9 is worth a fresh test, not a build.** It
+   shows the right precedent on about a third of the asks that have one, with
+   about 2% false hints, within the 10% advice line (Google CACM 2018). It was
+   fitted on this set. Confidence 55% that it holds: the doubt is the fit and
+   20 positives labelled by one reader. A fresh batch of asks from live weeks,
+   labelled before the run, would settle it.
+3. **A hint needs dates before it can show a ruling.** The one reversed ruling
+   ranked above the newer one, and Jev cannot know a ruling was reversed.
+   A sketch, untested: show each hint's settle date, and when two hints point
+   opposite ways, show the newer first. Confidence 70% that some rule like
+   this is needed; which rule is untested.
+4. **The free filter already finds the precedent.** It has the right ticket
+   in its top 3 on 17 of 20. What Jev adds is knowing when to stay quiet, and
+   that is the part that does not hold yet.
+
+**The owner's pick (2026-10-30): parked.** Nothing is built until triage runs
+on real weeks. Then a fresh batch of asks, labelled before any call, goes
+through the sibling question at 0.9, with a date rule.
+
+### What part 6 cannot tell us
+
+- **A blind number.** Same 104 asks as parts 4 and 5, and the sibling question
+  was written after seeing two runs.
+- **Whether a hint makes an ask quicker.** Nobody answered asks with and
+  without hints. That needs the owner timed on a real batch.
+- **A second reader's labels.** 20 positives, one reader; five are a call
+  either way, and the two false hints at 0.9 show a class likeness the labels
+  did not count.
+- **How the hint handles rulings beyond one reversal.** One reversed case is a
+  single example.
+- **Another day.** One run of each question.
+
 ## Run it
 
 ```
@@ -898,7 +1631,27 @@ STEP=exam FRESH=<set.json> MODEL=sol BRIEF=triage-v5 node experiments/163-triage
 STEP=exam FRESH=experiments/163-exam-set.json MODEL=opus BRIEF=triage-v5 MAX_USD=30 node experiments/163-triage-brief-eval.ts   # the exam as run; both pairs are done, so it now refuses
 STEP=field PART=3 node experiments/163-triage-brief-eval.ts   # part 3's rows only
 STEP=field FRESH=experiments/163-exam-set.json node experiments/163-triage-brief-eval.ts   # the exam's rows
+STEP=prs node experiments/163-triage-ask.ts                # part 4: the PRs open at each filing, through gh, read-only; their heads fetched into the clone (push off)
+STEP=check ONLY=4208,4313 node experiments/163-triage-ask.ts   # part 4: the open PR list as the model sees it
+STEP=run SET=exam MODEL=sol RUNS=2 node experiments/163-triage-ask.ts   # part 4: SET=tuning for the 119; MODEL=opus RUNS=1 MAX_USD=12, DRY=1 first
+STEP=report node experiments/163-triage-ask.ts             # part 4: the numbers; WHY=1 adds every trace
+STEP=load node experiments/163-triage-ask.ts               # part 4: phoenix's filing rate over 60 days, and asks a week
+STEP=sample node experiments/163-triage-ask.ts             # part 4: 15 asks, seed 1634, for the by-hand judgment
+STEP=field node experiments/163-triage-ask.ts              # part 4: field/runs.jsonl rows
+STEP=listprice node experiments/163-triage-ask.ts          # GPT sol's list-price dollars on 159 to 163's field rows
+STEP=ruled node experiments/163-fewer-asks.ts              # part 5: phoenix's issue states, through gh, read-only; run twice (the second reads closing notes)
+STEP=match MODEL=haiku DRY=1 node experiments/163-fewer-asks.ts   # part 5: the precedent matcher's estimate; drop DRY to run; MODEL=sonnet; MAX_USD=5 caps both together
+STEP=groups node experiments/163-fewer-asks.ts             # part 5: ten seeded bundles for the hand check
+STEP=report node experiments/163-fewer-asks.ts             # part 5: every scenario against the bar; writes results/163-fewer-asks.json
+STEP=field node experiments/163-fewer-asks.ts              # part 5: field/runs.jsonl rows, one per matcher call
+STEP=bodies node experiments/163-precedent-hint.ts         # part 6: every phoenix issue's first body and last comments, through gh, read-only
+STEP=list node experiments/163-precedent-hint.ts           # part 6: what the hand labels were written from
+STEP=plan QUESTION=sibling node experiments/163-precedent-hint.ts   # part 6: pairs and the cost estimate, no call; SHOW=1 prints one pair
+STEP=run QUESTION=sibling ONLY=2550,6374 node experiments/163-precedent-hint.ts   # part 6: QUESTION=precedent|duplicate|sibling; drop ONLY for all; MAX_USD=0.5, refuses past $2
+STEP=report node experiments/163-precedent-hint.ts         # part 6: every way against the labels; writes results/163-precedent-hint.json
+STEP=field node experiments/163-precedent-hint.ts          # part 6: field/runs.jsonl rows, one per question
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
-the live Sorter refuses to start with any of them set.
+the live Sorter refuses to start with any of them set. Part 6's `STEP=run` is
+the one exception: it calls Jev, so it needs `TYPESAFE_API_KEY` and nothing else.
