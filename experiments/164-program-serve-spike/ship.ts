@@ -1,13 +1,26 @@
 import {type Delivery, flag, output, type RefsOf, type Send} from "@kampus/fabrika";
-import * as Program from "@kampus/fabrika/spike/serve";
+import {nameOf} from "@kampus/pipeline/stages/outcome";
+import {drop, queueKind, workQueue} from "@kampus/pipeline/stages/queue";
+import {Look, look} from "@kampus/pipeline/stages/ship/look";
+import {ship} from "@kampus/pipeline/stages/ship/machine";
+import {
+	Answer,
+	Ask,
+	Forget,
+	keyOf,
+	Passed,
+	PullRequestUrl,
+	Shipped,
+	shipKind,
+} from "@kampus/pipeline/stages/ship/program";
 import {type Cause, Deferred, Effect, Exit, Fiber, Queue, Schema, Stream} from "effect";
-import {nameOf} from "../outcome.ts";
-import {drop, queueKind, workQueue} from "../queue.ts";
-import {Look, look} from "./look.ts";
-import {ship} from "./machine.ts";
-import {Answer, Ask, Forget, keyOf, Passed, PullRequestUrl, Shipped, shipKind} from "./program.ts";
+import * as Program from "./serve.ts";
 
-// Experiment 164's spike: the ship program (./program.ts) on one mailbox. The
+// A record: written against the runtime before
+// https://github.com/usirin/tea-fabrika/pull/195, which ported the real ship
+// program to the real mailbox; it no longer runs on main.
+//
+// Experiment 164's spike: the ship program (packages/pipeline/src/stages/ship/program.ts) on one mailbox. The
 // same machines, the same kept queue and the same work per pull request. What
 // changes is how `pr`, `ask` and `forget` are read: one handler each, served
 // in the order told, until `pr` closes. The kept queue's worker starts in

@@ -1,18 +1,44 @@
 import {flag, output} from "@kampus/fabrika";
-import * as Program from "@kampus/fabrika/spike/serve";
+import {
+	Answer,
+	type Ask,
+	Ask as AskShape,
+	Refused,
+	Settled,
+	Waiting,
+} from "@kampus/pipeline/asks/ask";
+import {type Fact, readFacts, sendFact} from "@kampus/pipeline/asks/ledger";
+import {
+	Build,
+	BuildRef,
+	Built,
+	Cleared,
+	Raise,
+	Reviewed,
+	Revised,
+	Ruling,
+} from "@kampus/pipeline/asks/program";
+import {
+	type Folded,
+	foldLedger,
+	nextOf,
+	openAsks,
+	problemWith,
+	readyBuilds,
+} from "@kampus/pipeline/asks/rules";
+import {planOf, readTicketId, ticketOf} from "@kampus/pipeline/ids";
+import {revisionOfDraft} from "@kampus/pipeline/stages/plan/plan";
+import {Planned} from "@kampus/pipeline/stages/plan/program";
 import {Effect, Schema} from "effect";
-import {planOf, readTicketId, ticketOf} from "../ids.ts";
-import {revisionOfDraft} from "../stages/plan/plan.ts";
-import {Planned} from "../stages/plan/program.ts";
-import {Answer, type Ask, Ask as AskShape, Refused, Settled, Waiting} from "./ask.ts";
-import {type Fact, readFacts, sendFact} from "./ledger.ts";
-import {Build, BuildRef, Built, Cleared, Raise, Reviewed, Revised, Ruling} from "./program.ts";
-import {type Folded, foldLedger, nextOf, openAsks, problemWith, readyBuilds} from "./rules.ts";
+import * as Program from "./serve.ts";
 
-// Experiment 164's spike: the asks program (./program.ts) on one mailbox. The
-// same setup and the same work per value; the eight inputs are served from
-// one mailbox in the order told, in place of seven merged streams merged again
-// with `answer`. `idOf` and `factOf` are copied from ./program.ts unchanged.
+// Experiment 164's spike: the asks program (packages/pipeline/src/asks/program.ts)
+// on one mailbox. The same setup and the same work per value; the eight inputs
+// are served from one mailbox in the order told, in place of seven merged
+// streams merged again with `answer`. `idOf` and `factOf` are copied from that
+// file unchanged. A record: it was written against the runtime before
+// https://github.com/usirin/tea-fabrika/pull/195, which ported the real asks
+// program to the real mailbox, and it no longer runs on main.
 
 const idOf = (fact: Fact): {readonly id?: string} => {
 	switch (fact.type) {

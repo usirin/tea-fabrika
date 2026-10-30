@@ -2,6 +2,45 @@
 
 Date: 2026-10-28. No model, no network, no key, $0.
 
+## What happened next
+
+- **Shape B was adopted on 2026-10-30** and built into the runtime in
+  https://github.com/usirin/tea-fabrika/pull/195. Every run now has one
+  mailbox in `begin` in `packages/fabrika/src/program/program.ts`, served in
+  the order told. The note is
+  [`tea-program.md`](../docs/direction/tea-program.md).
+- **Control inputs got their own small bound.** An input declared with
+  `{control: true}` has a fixed bound of 16 values not yet handled, apart
+  from the run's one bound, and its handler must be a `fork`. That is the
+  fix sketched below, but as one fixed number keyed by `control: true`, not
+  a `forkedCapacity` each program sets.
+- **The Ctrl-C hole is closed and tested.**
+  `packages/fabrika/src/shell/ctrl-c.test.ts`: with 999 lines behind a slow
+  line in tsh, Ctrl-C is queued and the job ends 130. With the mailbox full,
+  1,000 waiting and the next line refused `MailboxFull`, Ctrl-C is still
+  taken.
+- **The doubt below is settled.** Akka's control-aware mailbox and Erlang's
+  priority messages (EEP 76) let urgent messages go first, but they share the
+  mailbox's bound. So the separate bound is our own rule, as guessed. The
+  closest precedent is the terminal, where Ctrl-C skips the input buffer.
+- **One guess here did not carry over.** "The value in hand counts against
+  the bound" (in (c)) is **wrong** for the real mailbox: it counts values not
+  yet taken, as experiment 79 did.
+- **What this spike could not tell us, #195 tested:** pipes, a pipe's
+  outbox, `ack: "manual"` through a pipe, a restored run with a closed input,
+  and acp (it needed no fork).
+- **This file is now a record.** The spike code left the packages: no
+  `@kampus/fabrika/spike/serve` export, no package file. `serve.ts`, and the
+  asks and ship copies, are in [`164-program-serve-spike/`](./164-program-serve-spike/),
+  importing packages by name. They no longer run on main: the spike read its
+  hidden input as a stream from the kit, and since #195 the kit hands
+  `serve` instead. The tsh copy and the four test files used package internals no
+  package name reaches, so they were dropped; they are in this experiment's
+  first commit, `e01837e`, in https://github.com/usirin/tea-fabrika/pull/166. The flood
+  script now floods the real mailbox alone. Run on 2026-10-30, 1,000,000
+  tells gave `{queued: 1000, MailboxFull: 999000}` and the heap shrank by
+  4.1 MB, the same numbers #195 got from experiment 79's script.
+
 ## The answer first
 
 Shape B works, with one catch that needs a fix before it is adopted.
@@ -42,15 +81,16 @@ is gone, the bound has a known hole.
 
 ## What was built
 
-The spike sits beside today's API. Nothing old was removed.
+The spike sat beside the API of its day. Nothing old was removed. The paths
+below are where it sat then; the second column says where each file is now.
 
-| File | What it is |
+| File, as built | What it is, and where it is now |
 |---|---|
-| `packages/fabrika/src/program/spike-serve.ts` | `Program.make`, `input`, `serve`, `fork`, `end`, `MailboxFull`, `start`, `tell`, `offer`, `call`. Exported as `@kampus/fabrika/spike/serve`. |
-| `packages/pipeline/src/asks/spike-serve.ts` | asks, as a copy, served. |
-| `packages/pipeline/src/stages/ship/spike-serve.ts` | ship, as a copy, served. |
-| `packages/fabrika/src/shell/spike-tsh.ts` | tsh's `main`, as a copy, with `signal` forked. |
-| `experiments/164-program-serve-spike.ts` | Experiment 79's flood on both runtimes. |
+| `packages/fabrika/src/program/spike-serve.ts` | `Program.make`, `input`, `serve`, `fork`, `end`, `MailboxFull`, `start`, `tell`, `offer`, `call`. Was exported as `@kampus/fabrika/spike/serve`. Now `164-program-serve-spike/serve.ts`. |
+| `packages/pipeline/src/asks/spike-serve.ts` | asks, as a copy, served. Now `164-program-serve-spike/asks.ts`. |
+| `packages/pipeline/src/stages/ship/spike-serve.ts` | ship, as a copy, served. Now `164-program-serve-spike/ship.ts`. |
+| `packages/fabrika/src/shell/spike-tsh.ts` | tsh's `main`, as a copy, with `signal` forked. Dropped, with the four `spike-*.test.ts` files: see "What happened next". |
+| `experiments/164-program-serve-spike.ts` | Experiment 79's flood on both runtimes. Now on the real mailbox alone. |
 
 How the spike runs, so the numbers can be weighed:
 
@@ -253,6 +293,8 @@ What changes:
   1,000 each. This reverses the 2026-10-19 capacity item in
   [`tea-program.md`](../docs/direction/tea-program.md).
 - The value in hand counts against the bound. Today it has left the queue.
+  (**Wrong** for what was built: the real mailbox counts values not yet
+  taken, so a full mailbox is 1,000 waiting plus one in hand.)
 - A pile behind a slow handler fills the bound for every input. That is the
   tsh refusal in (b).
 - Experiment 79's pipe law was not ported: the spike has no pipes.
@@ -297,8 +339,9 @@ A few days, most of it tests. The study's estimate holds.
 
 ## The fix the spike points at
 
-Sketch, not built: forked inputs get their own small bound, so a pile of slow
-work can never refuse a Ctrl-C or a cancel.
+Sketch, not built here: forked inputs get their own small bound, so a pile of
+slow work can never refuse a Ctrl-C or a cancel. (Built in #195 as a fixed
+bound of 16 for inputs declared `{control: true}`, not as `forkedCapacity`.)
 
 ```ts
 // Sketch. Each forked input counts against its own bound, not the shared one.

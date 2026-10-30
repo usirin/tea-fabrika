@@ -1,4 +1,33 @@
 import {
+	type BadShape,
+	CAPACITY,
+	capacityOf,
+	type Program as Defined,
+	type Run as DefinedRun,
+	type Delivery,
+	input as declareInput,
+	defineProgram,
+	type Ended,
+	type Flags,
+	type Given,
+	type Heard,
+	type Input,
+	type Inputs,
+	type KeepingOf,
+	type Kinds,
+	type Kit,
+	type Listeners,
+	type Outputs,
+	type Parented,
+	type PayloadOf,
+	type StandardShape,
+	start as startDefined,
+	type Told,
+	type Unread,
+	type Watch,
+	type Word,
+} from "@kampus/fabrika";
+import {
 	type Cause,
 	Deferred,
 	Effect,
@@ -9,43 +38,18 @@ import {
 	type Scope,
 	Stream,
 } from "effect";
-import {
-	type BadShape,
-	type Program as Defined,
-	type Run as DefinedRun,
-	type Delivery,
-	defineProgram,
-	type Ended,
-	type Flags,
-	type Given,
-	type Heard,
-	type Inputs,
-	type KeepingOf,
-	type Kinds,
-	type Kit,
-	type Listeners,
-	type Outputs,
-	type Parented,
-	start as startDefined,
-	type Told,
-	type Unread,
-	type Watch,
-	type Word,
-} from "./program.ts";
-import {
-	CAPACITY,
-	capacityOf,
-	input as declareInput,
-	type Input,
-	type PayloadOf,
-	type StandardShape,
-} from "./shape.ts";
 
 // A throwaway spike (experiment 164): shape B of the program API study. One
 // mailbox per run, in arrival order, and `main` hands `serve` one handler per
 // input. Nothing in the repo uses it but the spike's own ports and tests. The
 // names are Effect's (`make`, `input`, `fork`, `end`, `MailboxFull`) and stay
-// in this file: read it as `import * as Program from "@kampus/fabrika/spike/serve"`.
+// in this file: read it as `import * as Program from "./serve.ts"`.
+//
+// A record since 2026-10-30: shape B was built into the runtime itself in
+// https://github.com/usirin/tea-fabrika/pull/195. This file rode on the
+// runtime before that, and was moved here out of `@kampus/fabrika` unchanged
+// but for its imports. It no longer runs on main: it reads its hidden input
+// as a stream from the kit, and since #195 the kit hands `serve` instead.
 //
 //   const echo = Program.make("echo", {
 //     description: "Says back each number.",
