@@ -1,0 +1,3030 @@
+{
+	"model": "opus",
+	"effort": "medium",
+	"may": {
+		"389": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes what evidence gets fetched and shown, in github.ts and evidence.ts: it adds a closes-or-partial relation to each linked PR. #388 changes the rule in `propose` that turns `already_done` into `close`. The two fix the same false \"done\" calls, but they touch different code and each can land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0903447,
+							"ms": 6836,
+							"turns": 2,
+							"billed": 10556,
+							"context": 10096,
+							"reads": 0,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"444": {
+			"at": "e299ea92e779b38e261bf430381f1fd914c29a67",
+			"listed": [
+				441,
+				440,
+				439,
+				438,
+				431,
+				429,
+				428,
+				426,
+				425,
+				424,
+				423,
+				422,
+				413,
+				412,
+				411,
+				410,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is a small follow-up perf fix to the already-merged engine swap (PR #443): keep one tsgo session open for the in-process graph's lifetime in resolve.ts. It is its own change; #397's broader engine plan doesn't need it, and #423's branch-level facts touch different code."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0904775,
+							"ms": 6035,
+							"turns": 2,
+							"billed": 13327,
+							"context": 12916,
+							"reads": 0,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"468": {
+			"at": "47b49b6494e9d37bca01ba2ef29b7caefec0a32e",
+			"listed": [
+				467,
+				463,
+				461,
+				458,
+				456,
+				453,
+				452,
+				451,
+				448,
+				431,
+				429,
+				428,
+				422,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "None of the open tickets touches how `--unreachable` classifies entry points. The nearest code-graph tickets cover other passes: #463 is the `--data` alias scope, and #448 is changeset text for `--boundaries`. Adding framework entry conventions is a change of its own and belongs in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.080899,
+							"ms": 4307,
+							"turns": 2,
+							"billed": 12440,
+							"context": 12230,
+							"reads": 0,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		}
+	},
+	"must": {
+		"21": {
+			"at": "6d1fb6cc5e79a0ab13c48e859b41cdb2c19ec70f",
+			"listed": [
+				20,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 20,
+								"why": "Both changes add the same thing to `lookupCell` in src/pure/core.ts: the set of msg types a state admits. #20 needs that set to fill NoCellError's new `acceptedTypes` field, and this ticket exposes it as a public helper. This ticket's property test also checks against \"the refusal's acceptedTypes\", a field only #20 adds, so building both in one pass keeps the two in agreement."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0977142,
+							"ms": 9561,
+							"turns": 4,
+							"billed": 32862,
+							"context": 12568,
+							"reads": 2,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 20,
+								"why": "Both tickets change the same spot: `lookupCell` in src/pure/core.ts. To fill its new `acceptedTypes` field, #20's `NoCellError` needs `lookupCell` to work out each state's accepted cell keys, and #21's public helper is that same selection exposed directly. #21's property test also checks the refusal's `acceptedTypes` field, which only exists once #20 lands, so one pull request should carry both."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0403114,
+							"ms": 9209,
+							"turns": 4,
+							"billed": 32151,
+							"context": 11852,
+							"reads": 2,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				}
+			]
+		},
+		"46": {
+			"at": "53b65dfa31f978e82b8896ce296743f92faf64ca",
+			"listed": [
+				45,
+				44,
+				41,
+				34,
+				24,
+				23,
+				22,
+				21,
+				20,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket needs #44 to land first, because `Cmd.define` doesn't exist in `src/pure` yet. But its own work is separate: it moves the resilience modules into an internal folder, rewrites their importers and removes their `package.json` export entries. That makes it its own collapse-child pull request, not part of the kernel types change in `core.ts`, and #41 is the parent issue rather than a plan to fold into."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08219499999999999,
+							"ms": 8514,
+							"turns": 4,
+							"billed": 22645,
+							"context": 11265,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#46 moves the eleven resilience modules into an internal folder, retypes them, and removes their export entries. #44 builds the kernel's `Cmd.define` in `src/pure/core.ts`, where `Cmd` is still untyped today. #46 depends on #44 landing first, but it is its own collapse child under #41 and should land in a separate pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0217673,
+							"ms": 7831,
+							"turns": 4,
+							"billed": 22852,
+							"context": 11441,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"66": {
+			"at": "53b65dfa31f978e82b8896ce296743f92faf64ca",
+			"listed": [
+				63,
+				61,
+				60,
+				59,
+				58,
+				57,
+				56,
+				54,
+				53,
+				52,
+				51,
+				50,
+				49,
+				48,
+				47,
+				46,
+				45,
+				44,
+				41,
+				34,
+				24,
+				23,
+				22,
+				21,
+				20,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 46,
+								"why": "The fix goes into with-deadline, with-resilience and with-telemetry: each wrapper has to pass the base machine's `cmds` through, alongside its own Cmd.define constructors. #46 already moves those same wrappers and retypes them onto Cmd.define, so the same edit is best made in that pass. #44 was a poorer fit because its scope deliberately left the batteries out."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1192588,
+							"ms": 11873,
+							"turns": 3,
+							"billed": 29848,
+							"context": 15149,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 44,
+								"why": "At this commit there is no `cmds`/`cmdDefs` anywhere in `run.ts` or `pure/core.ts`, so #44's kernel change hasn't landed yet. This ticket is a case #44 misses: the `withX` wrappers drop `Machine.cmds`, so the boundary parse doesn't run for a wrapped machine, and the fix (forward `cmds` through the wrappers, or have the kernel get the defs from something a wrap can't drop) belongs in the same pull request that adds `cmds` and the parse at the interpret edge."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.045931700000000006,
+							"ms": 15689,
+							"turns": 4,
+							"billed": 46549,
+							"context": 15946,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"107": {
+			"at": "e04944e0ffc3990d4d87d4b13e59a8fdb5f1e0e0",
+			"listed": [
+				81,
+				73,
+				61,
+				52,
+				51,
+				50,
+				41,
+				34,
+				24,
+				23,
+				22,
+				21,
+				20,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The core of this ticket is a type-only re-export added to src/parity/index.ts. That is a change to the public API, plus a small follow-up edit to the how-to. #73 is a docs-only sweep of resilience-subpath imports, and this ticket came out of that work as a follow-up rather than as a missed case, so it should land in its own small pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10842960000000001,
+							"ms": 15917,
+							"turns": 6,
+							"billed": 49098,
+							"context": 12579,
+							"reads": 4,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The core of this ticket is a type-only re-export added to src/parity/index.ts. None of the listed tickets touches that file. #73 rewrites resilience-subpath imports in the docs, and #51 pins package.json exports, so neither carries this change. The small how-to edit that follows it belongs with the re-export in its own PR."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0228306,
+							"ms": 7496,
+							"turns": 4,
+							"billed": 24093,
+							"context": 12160,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"206": {
+			"at": "92afb6b835544a8f2ad91065790f0c16e506a72f",
+			"listed": [
+				205,
+				204,
+				203,
+				202,
+				201
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This fix adds `const` to `K` on the two `layer` signatures in src/provide/index.ts (lines 246 and 251). It is a one-line compatibility fix that should ship soon, so it stands alone. #201 touches the same signatures but is a longer-term redesign around a typed dep token, and the ticket itself calls it related, longer-term work rather than part of this change."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0741782,
+							"ms": 6648,
+							"turns": 3,
+							"billed": 21409,
+							"context": 10688,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is a one-line `const K` fix on the two `layer` overloads in src/provide/index.ts (lines 246/251), and it stands on its own. #201 touches the same signatures, but it is a larger redesign of deps into typed tokens, and the ticket itself calls it longer-term. The urgent TS 7 fix should land on its own rather than wait for that design."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0160388,
+							"ms": 6439,
+							"turns": 3,
+							"billed": 21408,
+							"context": 10608,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"212": {
+			"at": "fffab4d6a45121bb120e77cf4bbb3c94c4eddc7f",
+			"listed": [
+				205,
+				204,
+				203,
+				202,
+				201
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 205,
+								"why": "At this commit the doors don't exist yet: package.json has no battery exports and even job-queue.ts still imports ../src/internal. So this sweep can't land without #205, and it only finishes #205's own work of moving examples onto the new specifiers. One pull request that opens the doors and switches all ten examples is the natural single change, though the ruling behind #205 deliberately put only job-queue in scope, so it's worth a check with the maintainer."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0873763,
+							"ms": 11487,
+							"turns": 4,
+							"billed": 22296,
+							"context": 11441,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 205,
+								"why": "At this commit no battery door is open yet: package.json has no battery exports, and even examples/job-queue.ts still imports ../src/internal/work-queue. So switching the nine examples to the published specifiers can only happen once #205 adds those specifiers, and it is best done in the same pull request that opens them."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0379338,
+							"ms": 10021,
+							"turns": 4,
+							"billed": 23231,
+							"context": 12379,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"360": {
+			"at": "98642809ec808cb3f0727c5184708157b661ab91",
+			"listed": [
+				358,
+				357,
+				356,
+				355,
+				354,
+				345,
+				344,
+				339,
+				335,
+				333,
+				322,
+				321,
+				320,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#360 narrows the published defaults in packages/code-graph/src/kinds/rules.ts and adds a snapshot test and a minor changeset. #344 is a sync that brings code-graph level with ‹product›'s later work. They touch the same file, but they are separate changes, and the ticket itself asks to land after #344 merges instead of riding inside the sync."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0880168,
+							"ms": 8246,
+							"turns": 3,
+							"billed": 24159,
+							"context": 11992,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#344 is a big sync that brings code-graph up to date with ‹product›'s later work. This ticket is a separate policy change: it narrows the published defaults in packages/code-graph/src/kinds/rules.ts, adds a snapshot test and ships a minor changeset. It touches the same file, but the ticket itself says to land it after #344 merges, so it should be its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0191411,
+							"ms": 8257,
+							"turns": 3,
+							"billed": 24183,
+							"context": 12011,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"389": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket adds a closes/partial relation to linked PRs in github.ts (ISSUES_QUERY, linksOf) and evidence.ts, so it changes what evidence goes in. #388, the closest ticket, changes how verdict.ts turns an already_done verdict into a close proposal. The two touch different code and each can land as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08326910000000001,
+							"ms": 9151,
+							"turns": 4,
+							"billed": 32467,
+							"context": 11185,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket adds a closes/partial relation to the linked-PR evidence (the GraphQL query in github.ts and linkedPullRequests in evidence.ts). #388 changes how an already_done verdict becomes a close proposal (verdict.ts/propose), which is a separate policy change that can land on its own even though both come from the same graded sample."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0265573,
+							"ms": 7812,
+							"turns": 3,
+							"billed": 22339,
+							"context": 11756,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"390": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				389,
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 389,
+								"why": "Both tickets add summary facts about linked pull requests to the same `linkedPullRequests` block in `gatherEvidence` (evidence.ts), and both change the verdict criteria that read those facts. #389 adds whether each PR closes or only references the issue, and this ticket adds closed-unmerged and all-paths-gone flags, so it fits best as one pass over the evidence shape and criterion text."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0782582,
+							"ms": 7258,
+							"turns": 3,
+							"billed": 21701,
+							"context": 10906,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 389,
+								"why": "Both change the same `evidence.linkedPullRequests` block that `gatherEvidence` builds in evidence.ts, plus the verdict.ts criterion text that reads it. #389 marks each linked PR as closing or only referencing, and this ticket's `linkedPullRequestClosedUnmerged` summary depends on that same distinction, so one pass over the evidence shape and criteria fits both."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0323798,
+							"ms": 7141,
+							"turns": 3,
+							"billed": 23170,
+							"context": 12326,
+							"reads": 1,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				}
+			]
+		},
+		"391": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				390,
+				389,
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket adds a new `duplicates` command to backlog-sweep, built on similarity.ts and a pairwise Jev question across the whole backlog. The close tickets change other code: #389 and #390 the evidence in evidence.ts, and #388 the rule in `propose` that turns a verdict into a proposal. So this is a separate feature that should land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.080165,
+							"ms": 6906,
+							"turns": 4,
+							"billed": 32791,
+							"context": 11068,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#391 adds a new `duplicates` command, likely a new module plus a subcommand in bin.ts, built on similarity.ts and a pairwise question in the style of verdict.ts. #389 and #390 change what evidence.ts gathers, and #388 changes how `propose` turns a verdict into a proposal, so none of them is the same change and this one should land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0143063,
+							"ms": 5478,
+							"turns": 3,
+							"billed": 21682,
+							"context": 10840,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"392": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				391,
+				390,
+				389,
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket is a docs-only change: a new \"What it can decide\" section in packages/backlog-sweep/README.md with the measured numbers for every verdict and the two refuted experiments. The closest ticket, #388, changes how `propose` maps `already_done` in the code; it might touch the README's verdict lines (22–24), but this ticket's table stands on its own and is better landed in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0790437,
+							"ms": 9361,
+							"turns": 3,
+							"billed": 21929,
+							"context": 10862,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket only adds a new \"What it can decide\" section with measured numbers to packages/backlog-sweep/README.md. The close candidate is #388, but that one changes the propose logic so `already_done` no longer turns into a close, and the evidence tickets (#389, #390) and the duplicate-pass ticket (#391) change code too, so none of them needs this docs table to be finished."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0181783,
+							"ms": 8054,
+							"turns": 3,
+							"billed": 21899,
+							"context": 10870,
+							"reads": 1,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				}
+			]
+		},
+		"393": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				392,
+				391,
+				390,
+				389,
+				388,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket's change lands in packages/code-graph/src/boundaries/ (rules.ts, analyze.ts, plus fixture tests). None of the open tickets touch code-graph: they cover backlog-sweep, structure-sweep, CLAUDE.md, and the agent/bootResume engine APIs. So this should be its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.07641959999999999,
+							"ms": 6534,
+							"turns": 3,
+							"billed": 22464,
+							"context": 11245,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This change belongs in packages/code-graph/src/boundaries/ (rules.ts and analyze.ts). None of the open tickets touch that code: they cover backlog-sweep, structure-sweep, CLAUDE.md checks and tea engine helpers. So it should land as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.012534300000000002,
+							"ms": 6470,
+							"turns": 3,
+							"billed": 22452,
+							"context": 11249,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"412": {
+			"at": "bab1ac8e393632981ee0c6697dcf7d5d8997f462",
+			"listed": [
+				411,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes code-graph's boundary ratchet: boundaries/gate.ts, ratchet/scope-count.ts and the ceilings file format. None of the open tickets touch that code. The structure-sweep tickets change Jev prompts and sweep inputs, and #397 is about the parsing engine past ts-morph."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08728939999999999,
+							"ms": 6993,
+							"turns": 3,
+							"billed": 24834,
+							"context": 12426,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes code-graph's boundaries gate and its scope-count ratchet (boundaries/gate.ts, ratchet/scope-count.ts, and render.ts for the SLACK message). None of the open tickets touch that code: the structure-sweep and backlog-sweep tickets are about Jev prompts, inputs and evidence, and #397 is about code-graph's parsing engine."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.015137600000000001,
+							"ms": 6896,
+							"turns": 3,
+							"billed": 24852,
+							"context": 12423,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"413": {
+			"at": "bab1ac8e393632981ee0c6697dcf7d5d8997f462",
+			"listed": [
+				412,
+				411,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes only how `applyManifest` in `move/apply.ts` records moves in git: split into a rename-only commit, then a commit with the rewrites. None of the open tickets touch apply.ts. #411 is about which files `move plan` picks, and #407–#410 are about sweep prompts and inputs, so this should land as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0869411,
+							"ms": 7240,
+							"turns": 3,
+							"billed": 24551,
+							"context": 12251,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes how `applyManifest` in `move/apply.ts` records its result in git: one commit with only the renames, then a second with the import rewrites. No listed ticket touches `move apply` or its git staging. The closest one, #411, changes how `move plan` and sweep pick which files to move, so this is a separate pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0158621,
+							"ms": 8790,
+							"turns": 3,
+							"billed": 24581,
+							"context": 12292,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"424": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The lexicon is a new stage-3 artifact: its own schema'd file next to structure-sweep.config.json, plus a fingerprint, a propose-style drafter and a resolver. None of that exists yet. #423 is about branch facts inside code-graph's passes, and #422 is the umbrella pipeline, so this ticket depends on stage 2's atoms and is best landed in its own pull request rather than inside either plan."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1074644,
+							"ms": 19012,
+							"turns": 5,
+							"billed": 41278,
+							"context": 13895,
+							"reads": 3,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The lexicon is new work of its own: a schema'd file, a fingerprint, a propose command and a resolver, built next to structure-sweep's vocabulary.ts and propose/. #423's branch lowering lands in code-graph and only feeds the lexicon, and #422 is an umbrella over many stages, so this lexicon is a separate pull request that depends on them rather than a part of either."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.022338100000000003,
+							"ms": 8644,
+							"turns": 4,
+							"billed": 40803,
+							"context": 13708,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"425": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				424,
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This stage-4 work would expose the SCC condensation from extract/scc.ts as a first-class output (with topological order) and add a callee-summary pass whose fact is either a confident label or `unknown`. No listed ticket touches that code: #423 adds per-branch facts inside functions, #424 adds a lexicon, and #422 is only the umbrella. So this should be its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10107870000000001,
+							"ms": 7559,
+							"turns": 3,
+							"billed": 27465,
+							"context": 13835,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is stage 4: it builds the call-graph condensation and callee summaries in code-graph's scc.ts and the callee code. That is a separate deliverable from stage 2's branch facts (#423), stage 3's lexicon (#424) and the engine plan (#397), and #422 is only the umbrella that tracks the stages. It also depends on stage 5 labels that don't exist yet, so it should land as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.018044900000000003,
+							"ms": 8016,
+							"turns": 3,
+							"billed": 27169,
+							"context": 13599,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"426": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				425,
+				424,
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#426 adds a new Jev question set that reads lowered branches from stages 2–4 (#423–#425), and none of those exist in the code yet, so it is its own change that comes after them. #410 changes the existing per-file and per-pair questions in sweep/questions.ts and pairs/questions.ts, and #422 is only the umbrella over separately filed stages, so neither one carries this work."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1067172,
+							"ms": 8066,
+							"turns": 4,
+							"billed": 28207,
+							"context": 14071,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#426 adds a new per-branch Jev question that reads the outputs of stages 2–4 (#423–#425). None of those stages exist in code yet, so it depends on them but is not part of their changes. #410 would add an evidence step to the existing per-file and per-pair questions in sweep/questions.ts and pairs/questions.ts. #426 builds a separate question for its own stage, so it should land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.029617,
+							"ms": 10258,
+							"turns": 4,
+							"billed": 42392,
+							"context": 14278,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"444": {
+			"at": "e299ea92e779b38e261bf430381f1fd914c29a67",
+			"listed": [
+				441,
+				440,
+				439,
+				438,
+				431,
+				429,
+				428,
+				426,
+				425,
+				424,
+				423,
+				422,
+				413,
+				412,
+				411,
+				410,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 397,
+								"why": "At this commit resolve.ts still holds a single ts-morph Project, so the tsgo swap that causes the per-call startup is #397's own change. Holding one tsgo session for the graph's lifetime is a case that swap missed, and it is best done in the same pass over resolve.ts."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1102822,
+							"ms": 11145,
+							"turns": 4,
+							"billed": 41242,
+							"context": 13963,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 397,
+								"why": "At this commit resolve.ts still holds one ts-morph Project, so the tsgo swap is still #397's to build. Holding one tsgo session for the graph's lifetime is how that same rewrite of resolveExportOrigin should be done, so one pull request should carry both."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.019765900000000003,
+							"ms": 7343,
+							"turns": 3,
+							"billed": 26854,
+							"context": 13371,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"468": {
+			"at": "47b49b6494e9d37bca01ba2ef29b7caefec0a32e",
+			"listed": [
+				467,
+				463,
+				461,
+				458,
+				456,
+				453,
+				452,
+				451,
+				448,
+				431,
+				429,
+				428,
+				422,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This change lands in code-graph's entry classification (the `--kinds` node kinds that `query/unreachable.ts` treats as roots), adding framework file-convention entries. The closest open code-graph ticket, #463, fixes alias scoping in the separate `--data` pass, so the two changes touch different code and neither adds to the other."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.09672660000000001,
+							"ms": 8644,
+							"turns": 4,
+							"billed": 38267,
+							"context": 12887,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This change would land in code-graph's entry classification (`nodeKind` \"entry\" roots in query/unreachable.ts), where a framework-convention detector would be added. None of the open tickets touches that code: #463 is about alias scope in the `--data` pass, and the rest cover structure-sweep, lowering, backlog-sweep or tea, so this should be its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.023050200000000003,
+							"ms": 10511,
+							"turns": 4,
+							"billed": 38147,
+							"context": 12803,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"473": {
+			"at": "0a65bf4e13889189933f953eaef5775f5c2aa433",
+			"listed": [
+				471,
+				469,
+				468,
+				467,
+				448,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 471,
+								"why": "#471 changes how `--redact` resolves aliases against `--ref`. Its PR has to touch the README's `--redact` text about aliases anyway, and this ticket's one-sentence fix is to that same paragraph, describing the same alias behaviour. Doing both in one pass keeps the docs in step with the code."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1095266,
+							"ms": 13256,
+							"turns": 5,
+							"billed": 50002,
+							"context": 13202,
+							"reads": 3,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 471,
+								"why": "The fix is a rewrite of the `--redact` paragraph in packages/structure-sweep/README.md (lines 196–206) to say which aliases become ids: those that resolve to a file at `--ref`. #471 tightens that same alias-against-`--ref` check and will likely document it in the same paragraph, so it is cheapest to fix the wrong sentence in that pull request. This is a close call: it is only a doc edit and could also stand alone."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0456458,
+							"ms": 15217,
+							"turns": 5,
+							"billed": 49841,
+							"context": 13087,
+							"reads": 3,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				}
+			]
+		},
+		"494": {
+			"at": "6b691405e64a9201ee5ab65aa4308c89cd8b96bf",
+			"listed": [
+				493,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 493,
+								"why": "#493 targets the same cost problem: `pairs/run.ts` `stateOf` sends both full sources for every one of the 9,140 ‹product› pairs. This ticket's per-anchor Choice batching is one way to fix it in that same code, so both belong in one pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0687556,
+							"ms": 4871,
+							"turns": 3,
+							"billed": 20550,
+							"context": 10292,
+							"reads": 1,
+							"model": "claude-opus-5-5,claude-haiku-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 493,
+								"why": "#493 reports the same cost problem in `structure-sweep pairs`: one Jev call per pair, with both full sources sent each time, in `pairs/run.ts` `stateOf`. This ticket's per-anchor Choice batching is one way to fix exactly that, so it belongs in the same change to the same code."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.013773500000000001,
+							"ms": 6946,
+							"turns": 3,
+							"billed": 20633,
+							"context": 10296,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"524": {
+			"at": "16d205a956a7ce2a4093af0ea6a34ab48e08bf78",
+			"listed": [
+				523,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#523 is Part A of the same plan (B11-B14), and it would touch the same files in packages/code-graph/src/boundaries (rules.ts, ledger.ts, analyze.ts). This ticket is Part C (B17-B19), and it says each part ships as its own minor release, A first and C after, each with its own changeset, README and SPEC update. So it belongs in its own later pull request, not inside #523's."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0828798,
+							"ms": 5659,
+							"turns": 3,
+							"billed": 23370,
+							"context": 11696,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "Both #523 (Part A, B11-B14) and this ticket (Part C, B17-B19) would add kinds to the same files: packages/code-graph/src/boundaries/rules.ts, analyze.ts and ledger.ts. But the shared spec says the parts ship as separate minor releases, A then C then B, each with its own changeset, README and SPEC update. So this is its own PR that lands after A, not part of A's plan."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0166095,
+							"ms": 7879,
+							"turns": 3,
+							"billed": 23353,
+							"context": 11687,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"569": {
+			"at": "a564264a07bf15ce0e837777baf23ea98e0b938d",
+			"listed": [
+				568,
+				567,
+				565,
+				564,
+				563,
+				562,
+				561,
+				560,
+				559,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket adds links to the child-machine how-to from the README, the Effect-engine how-to and the glossary, and maybe changes the reference generator. #567 and #568 change the spawn helper's behaviour and its own docs, and #561 rewords \"door\" on other how-to pages, so none of them touches the same edit."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08847930000000001,
+							"ms": 7866,
+							"turns": 3,
+							"billed": 24200,
+							"context": 12298,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#569 adds links and a glossary line in pages that don't mention spawn yet (the README, docs/README, glossary, the Effect-engine how-to), and maybe changes the reference generator. #567 and #568 fix how spawn behaves and its TSDoc and how-to text, so they touch different files and #569 is better as its own small docs pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.017804300000000002,
+							"ms": 7489,
+							"turns": 3,
+							"billed": 23778,
+							"context": 11848,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"575": {
+			"at": "5029103d86838076fb48d3d48b09e76e23525a87",
+			"listed": [
+				573,
+				569,
+				568,
+				564,
+				563,
+				562,
+				561,
+				560,
+				559,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 573,
+								"why": "At this commit no suite declares its long timeout on its `describe`, so #573's work, which its amendment widens to \"every suite that spells its long timeout per test\", has not landed yet. These three code-graph files (deployables, syntax-errors, parity) are cases that sweep missed, and the edit is the same, so one pull request should carry both, with build-a-durable-agent's status settled against #573's criterion 5 in the same plan."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0931772,
+							"ms": 7483,
+							"turns": 4,
+							"billed": 24969,
+							"context": 12563,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 573,
+								"why": "#573's amended scope is \"every suite that spells its long timeout per test\". At this commit, parity.test.ts, deployables.test.ts and syntax-errors.test.ts still spell their timeout per test and no describe-level timeout exists anywhere yet, so these are cases that same change misses and belong in the same pass. The question of whether build-a-durable-agent.test.ts should be touched is decided by #573's own criterion 5."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.023833,
+							"ms": 18275,
+							"turns": 4,
+							"billed": 24975,
+							"context": 12487,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"682": {
+			"at": "626dc6f9e9d75c5a7c51d0d94d30775a0b7c033f",
+			"listed": [
+				670,
+				669,
+				668,
+				667,
+				666,
+				665,
+				664,
+				657,
+				643,
+				642,
+				639,
+				624,
+				621,
+				593,
+				591,
+				564,
+				563,
+				562,
+				560,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket renames \"door\" across code-graph's boundaries code (doors.ts, door-uses.ts, door-violations.ts, ledger kinds, rules) and tea's subpath tests. That is a vocabulary break of its own. The closest ticket, #591, adds a removal-issue field to the ledger entry schema, and #624 updates SPEC §13 for the published-API mode. Neither is part of this rename, so it should land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10629740000000001,
+							"ms": 6775,
+							"turns": 3,
+							"billed": 27977,
+							"context": 14355,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket is a wide rename from \"door\" to \"impure\"/\"subpath\" across code-graph boundaries, tea file names, the docs and the ADRs, plus a schema export and a derived kind list. The closest ticket, #591, also edits the entry schema in ledger.ts, but it only adds an issue field. That is a separate change a builder would land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0226098,
+							"ms": 12917,
+							"turns": 3,
+							"billed": 27604,
+							"context": 13985,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"717": {
+			"at": "6b8d68e4c9d5ebca2810c9661156dbc683024a01",
+			"listed": [
+				715,
+				714,
+				705,
+				704,
+				703,
+				700,
+				670,
+				643,
+				642,
+				639,
+				624,
+				621,
+				593,
+				591,
+				564,
+				563,
+				562,
+				560,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 715,
+								"why": "This ticket fixes cases that #715's port-layout change missed. It adds the refusal for a scope that lists only some port folders and removes the dead `index`/`unknown` rows from the `PORT_ZONES` table that change created in rules.ts and analyze.ts. #714 adds an unrelated rule for imports of contract libraries and only shares the package."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.09851110000000002,
+							"ms": 11618,
+							"turns": 3,
+							"billed": 26168,
+							"context": 12965,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The #715 port layout is already in the code (PORT_ZONES in rules.ts, unknownZone at analyze.ts:127), so this is a separate follow-up fix: refuse a partial port scope at load and drop the dead zone rows. #714 adds a new rule about contract-library imports. It may touch the same files, but it isn't the same change, so this ticket should get its own small pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.027308600000000002,
+							"ms": 10897,
+							"turns": 3,
+							"billed": 26799,
+							"context": 13617,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		}
+	},
+	"pull": {
+		"20": {
+			"at": "6d1fb6cc5e79a0ab13c48e859b41cdb2c19ec70f",
+			"listed": [
+				23,
+				22,
+				21,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change touches only `NoCellError` and `lookupCell` in src/pure/core.ts. #21 adds a new public `acceptedTypes` function on top of that same selection, so it is its own story and its own pull request, and the others work on the chart compiler (#22), the lane importer (#23), or are the parent issue (#19)."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0909758,
+							"ms": 9590,
+							"turns": 4,
+							"billed": 32680,
+							"context": 12036,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change lives in `NoCellError` and `lookupCell` in src/pure/core.ts, which is the code that reads the accepted set when a cell is missing. #21 reuses that same read, but it adds a new public function, so it is better as its own follow-up pull request on top of this one. #22 and #23 touch the chart compiler and the lane importer, and #19 is the umbrella issue rather than a separate piece of work."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0393573,
+							"ms": 11318,
+							"turns": 4,
+							"billed": 32806,
+							"context": 12033,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"45": {
+			"at": "53b65dfa31f978e82b8896ce296743f92faf64ca",
+			"listed": [
+				51,
+				50,
+				49,
+				48,
+				47,
+				46,
+				44,
+				41,
+				34,
+				24,
+				23,
+				22,
+				21,
+				20,
+				19
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change is just deleting the two dead aliases (core.ts:930 and parity/index.ts:226) plus a changeset. #44 also edits core.ts, but it is the kernel typing work that this ticket says runs alongside it. The resilient-call deprecations belong to #46, and the export-map and docs sweep is #51's job after every other ticket lands, so each is its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08818870000000001,
+							"ms": 7623,
+							"turns": 3,
+							"billed": 24030,
+							"context": 12180,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "The change only deletes two aliases with no uses, at src/parity/index.ts:226 and src/pure/core.ts:930, and adds a changeset. The other `@deprecated` sites are in resilient-call and belong to #46's family move. #44's kernel retyping also edits core.ts, but it is a separate TDD change that the ticket says can run in parallel."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0189985,
+							"ms": 7669,
+							"turns": 3,
+							"billed": 23934,
+							"context": 12203,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"358": {
+			"at": "98642809ec808cb3f0727c5184708157b661ab91",
+			"listed": [
+				360,
+				357,
+				356,
+				355,
+				354,
+				345,
+				344,
+				339,
+				335,
+				333,
+				322,
+				321,
+				320,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change touches only workspace-level files: the CODEOWNERS rows, a drift test against .fabrika.jsonc, a pnpm catalog in pnpm-workspace.yaml, and tea's ws dev pin. The nearest tickets are separate changes: #344 syncs code-graph's code, #345 adds new packages that the planned `/packages/*/package.json` row will already cover, and #335 edits CLAUDE.md's check list."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0943428,
+							"ms": 10376,
+							"turns": 4,
+							"billed": 24740,
+							"context": 12417,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change lands in .github/CODEOWNERS, pnpm-workspace.yaml (catalog) and the pins in packages/*/package.json. None of the listed tickets touches those as part of its own work. #344 and #345 add or sync package code, and the `/packages/*/package.json` glob already covers any new packages; #335 is a CLAUDE.md doc fix, so each is a change of its own."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0214148,
+							"ms": 10127,
+							"turns": 4,
+							"billed": 24462,
+							"context": 12293,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"388": {
+			"at": "33bf16b1c6278332b5017418217c9b276a26c5f5",
+			"listed": [
+				392,
+				391,
+				390,
+				389,
+				387,
+				385,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change only touches `propose` in verdict.ts and its test: a confident already_done becomes a review instead of a close. #389 and #390 change what goes into the evidence, #391 adds a new command, #392 is a README rewrite about how reliable each verdict is, and the rest are about other packages, so each of those is better as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.1050052,
+							"ms": 6954,
+							"turns": 3,
+							"billed": 22710,
+							"context": 11713,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change is a small rule edit in `propose` in verdict.ts: send `already_done` to `review`, plus its test and the one README line about when a proposal is `review`. #389 and #390 add new facts to the evidence (evidence.ts), #391 adds a new command, and #392 writes a separate README section on how reliable each verdict is, so each one stands as its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.049741499999999994,
+							"ms": 16146,
+							"turns": 5,
+							"billed": 36870,
+							"context": 14393,
+							"reads": 3,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"411": {
+			"at": "bab1ac8e393632981ee0c6697dcf7d5d8997f462",
+			"listed": [
+				415,
+				413,
+				412,
+				410,
+				409,
+				408,
+				407,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This ticket adds a step where graph coupling picks which files get swept (it filters the file list in runSweep), and it requires agreement between the graph and Jev in move plan before a file is moved. #408 also touches the file selection in runSweep, but it adds a user-supplied file list to the CLI, and the other tickets cover prompts, the propose loop, the move apply step, boundaries or backlog-sweep, so each should land in its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10067899999999999,
+							"ms": 9488,
+							"turns": 4,
+							"billed": 26067,
+							"context": 13101,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This ticket adds a graph-based nomination step to the file selection in `runSweep` and a graph-plus-Jev agreement check in `move/plan.ts`. #408 (file-list input) touches the same file listing in `runSweep` but is its own CLI input feature, and the other tickets (prompt fields, roles, move apply, boundaries, propose) each change different code."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0225528,
+							"ms": 7121,
+							"turns": 3,
+							"billed": 25830,
+							"context": 13045,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"423": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				431,
+				430,
+				429,
+				428,
+				427,
+				426,
+				425,
+				424,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "Branch lowering is a new pass in packages/code-graph/src/extract, next to functions.ts, plus its own artifact schema; nothing like it exists in the code yet. The nearby tickets are separate changes: #397 is the engine swap this ticket waits on, #424–#429 and #431 are the later stages that read its output, and #430 is a harness that checks Jev's answers across all stages."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10627679999999999,
+							"ms": 8692,
+							"turns": 3,
+							"billed": 28861,
+							"context": 14528,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This ticket adds a new branch-lowering pass in code-graph's extract/schema layer (next to functions.ts and FunctionNodeSchema in core.ts). The other pipeline stages (#424–#431) each build their own later stage that reads this output, and #397 is a prerequisite engine change, so each one is a separate pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0191551,
+							"ms": 6464,
+							"turns": 3,
+							"billed": 28871,
+							"context": 14558,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"467": {
+			"at": "47b49b6494e9d37bca01ba2ef29b7caefec0a32e",
+			"listed": [
+				469,
+				468,
+				463,
+				461,
+				458,
+				456,
+				453,
+				452,
+				451,
+				448,
+				431,
+				429,
+				428,
+				422,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change sits in `scopeOf` in structure-sweep's `cli-paths.ts`, plus the `pairs`/`sweep` callers and how the ledger names the scope. None of the open tickets edit that path: #469 adds a new inventory command, #395 adds a new candidate source and #452 fixes how `sweep --redact` resolves aliases. Each of those is its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.10463720000000001,
+							"ms": 5610,
+							"turns": 3,
+							"billed": 27393,
+							"context": 14539,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "This change is limited to letting `scopeOf` in structure-sweep's `src/cli-paths.ts` accept the repo root, keying root runs as `.` in the ledger, and documenting that the whole-tree report is the one to judge. None of the listed tickets touch that code: #469 adds a new inventory command, #468 is about code-graph's unreachable pass, and #395 adds a new source of candidates, so each is its own pull request."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.0224032,
+							"ms": 7233,
+							"turns": 3,
+							"billed": 26572,
+							"context": 13701,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		},
+		"523": {
+			"at": "16d205a956a7ce2a4093af0ea6a34ab48e08bf78",
+			"listed": [
+				525,
+				524,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "#524 and #525 would edit the same boundaries files (analyze.ts, ledger.ts, render.ts), but they are Parts B and C of the same proposal. The ticket says each part ships as its own minor release, in order, so they get their own PRs. #335, #322 and #318 cover CLAUDE.md checks and the tea engine, which have nothing to do with code-graph boundaries."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.08299300000000001,
+							"ms": 7352,
+							"turns": 3,
+							"billed": 23689,
+							"context": 11790,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"carries": [],
+								"why": "#524 (B17-B19) and #525 (B15-B16) touch the same files (the boundaries analyze, ledger and render tables), but the ticket itself says each part ships as its own minor release, in order, with its own changeset. So they follow this PR instead of riding in it. The other three (#335, #322, #318) are about CLAUDE.md and the tea engine, not this code."
+							},
+							"problems": [],
+							"error": null,
+							"usd": 0.014113700000000002,
+							"ms": 6091,
+							"turns": 3,
+							"billed": 23660,
+							"context": 11821,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5"
+						}
+					]
+				}
+			]
+		}
+	},
+	"unbuilt": {
+		"46": {
+			"at": "53b65dfa31f978e82b8896ce296743f92faf64ca",
+			"listed": [
+				45,
+				44,
+				41,
+				34,
+				24
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#46 depends on #44, because `Cmd.define` isn't in `src/pure/core.ts` yet. But it is its own large change: it moves eleven resilience modules, rewrites their importers and removes their exports, while #44 only changes kernel types. #41 is the parent problem that these collapse children each solve in their own pull request."
+							},
+							"error": null,
+							"usd": 0.0848119,
+							"ms": 10863,
+							"turns": 5,
+							"billed": 32623,
+							"context": 10954,
+							"reads": 3,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket moves the resilience files into an internal folder and removes their entries from package.json exports. #44 is a separate change: it adds `Cmd.define` to `src/pure/core.ts`, which doesn't exist there yet, so this ticket depends on it and should land after it, in its own PR. #41 is the parent problem that this ticket's work is split out from, and #45 deletes two unrelated aliases in other files."
+							},
+							"error": null,
+							"usd": 0.0253643,
+							"ms": 11311,
+							"turns": 5,
+							"billed": 32394,
+							"context": 10872,
+							"reads": 3,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"66": {
+			"at": "53b65dfa31f978e82b8896ce296743f92faf64ca",
+			"listed": [
+				63,
+				61,
+				60,
+				59,
+				57,
+				56,
+				53,
+				52,
+				51,
+				50,
+				49,
+				48,
+				47,
+				46,
+				45,
+				41,
+				34,
+				24
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": 46,
+								"why": "The fix goes in with-deadline, with-resilience and with-telemetry, which must pass the base machine's `cmds` (and `__form`) through. #46 already moves those wrappers and retypes their emitted Cmds onto `Cmd.define`, so it has to put together each wrapped machine's `cmds` list anyway. Forwarding the base `cmds`, plus a test that wraps a `cmds` machine, belongs in that same pass."
+							},
+							"error": null,
+							"usd": 0.11113719999999999,
+							"ms": 10894,
+							"turns": 3,
+							"billed": 27679,
+							"context": 14061,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket is a correctness fix: either every withX wrapper forwards `cmds`/`__form` from the base machine, or run/defineMachine stop relying on a property a wrap can drop. It also depends on #44's `Machine.cmds`, which does not exist yet at this commit. #46 touches the same wrapper files, but only to move them into an internal folder and retype the Cmds they emit. That move is the biggest change in the collapse work, and a builder would rather land this small bug fix and its test in a pull request of its own."
+							},
+							"error": null,
+							"usd": 0.024035300000000002,
+							"ms": 8857,
+							"turns": 4,
+							"billed": 26710,
+							"context": 13222,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"107": {
+			"at": "e04944e0ffc3990d4d87d4b13e59a8fdb5f1e0e0",
+			"listed": [
+				61,
+				52,
+				51,
+				50,
+				41,
+				34,
+				24
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is a small type-only re-export of `Trace` and `RecorderOptions` in `src/parity/index.ts`, plus a how-to edit, and it can land in its own pull request. #51 and #41 do touch the export map, but their job is to cut the list of public doors. Neither one changes what `./parity` exports, so this fix doesn't add to either change."
+							},
+							"error": null,
+							"usd": 0.08632010000000001,
+							"ms": 11398,
+							"turns": 4,
+							"billed": 22751,
+							"context": 11710,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This fix is a small type-only re-export of `Trace` and `RecorderOptions` from `src/parity/index.ts`, plus one edit to the gate-a-refactor how-to. None of the listed tickets touch that file. #51 is the nearest: it pins the whole `package.json` export map, tables and changelog. That is a separate sweep, so this lands best as its own small pull request."
+							},
+							"error": null,
+							"usd": 0.0203881,
+							"ms": 7555,
+							"turns": 4,
+							"billed": 22008,
+							"context": 10990,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"212": {
+			"at": "fffab4d6a45121bb120e77cf4bbb3c94c4eddc7f",
+			"listed": [
+				201
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket only changes the import lines in the example files under examples/, switching them from src/internal/ paths to the published specifiers. #201 changes the `layer` API itself (how deps and the acquire annotation are spelled), and no example calls `layer(`, so the two changes touch different code."
+							},
+							"error": null,
+							"usd": 0.0692695,
+							"ms": 6135,
+							"turns": 4,
+							"billed": 20002,
+							"context": 10058,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#212 is a mechanical sweep that only changes the import lines in the example files under examples/. #201 changes the layer API in src (the deps array and the acquire annotation), and none of those examples use acquire, so the two touch different code and each fits its own pull request."
+							},
+							"error": null,
+							"usd": 0.016432300000000004,
+							"ms": 12625,
+							"turns": 4,
+							"billed": 19988,
+							"context": 10069,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"360": {
+			"at": "98642809ec808cb3f0727c5184708157b661ab91",
+			"listed": [
+				358,
+				357,
+				356,
+				355,
+				354,
+				345,
+				339,
+				335,
+				322,
+				321,
+				320,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This change narrows the default rules in packages/code-graph/src/kinds/rules.ts and adds a snapshot test for them. None of the open tickets touch that file. #345 is also about generalizing ‹product›-specific code, but it adds two new packages and does not change code-graph's defaults, so this should be its own pull request."
+							},
+							"error": null,
+							"usd": 0.0825908,
+							"ms": 6594,
+							"turns": 3,
+							"billed": 23438,
+							"context": 11702,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The change lands in the schema defaults in packages/code-graph/src/kinds/rules.ts, plus a snapshot test. None of the listed tickets touches that file: #345 adds two new sweep packages, #358 fixes workspace CODEOWNERS and version pins, and the rest are about tea or the docs. So this is a pull request of its own."
+							},
+							"error": null,
+							"usd": 0.0163011,
+							"ms": 8244,
+							"turns": 3,
+							"billed": 23483,
+							"context": 11745,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"424": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The lexicon is stage 3 of the pipeline and stands on its own: a new schema'd file, fingerprint, proposer and resolver modelled on structure-sweep's vocabulary.ts and propose/. #423 (stage 2, branch facts in code-graph) only produces its input, and #422 is the umbrella whose stages are filed as separate tickets, so this ticket lands as its own pull request."
+							},
+							"error": null,
+							"usd": 0.09636700000000001,
+							"ms": 6999,
+							"turns": 3,
+							"billed": 26828,
+							"context": 13407,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The lexicon is a separate artifact: a new schema'd file, a fingerprint and a propose-style command in structure-sweep, built next to vocabulary.ts and propose/. #423 records branch facts inside code-graph and #422 is the umbrella pipeline, so neither changes that code. The lexicon only reads stage 2's output, so it should land in its own pull request."
+							},
+							"error": null,
+							"usd": 0.019848400000000002,
+							"ms": 8514,
+							"turns": 4,
+							"billed": 27074,
+							"context": 13503,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"425": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				424,
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket's work goes into `extract/scc.ts`: it turns the existing SCCs into a condensed graph with a topological order, then adds a new pass that summarizes callees bottom-up. That is its own stage-4 change. #423's branch-level facts would land in different code, and #422 is the umbrella that lists the stages as separate tickets, so neither pull request would naturally carry this one."
+							},
+							"error": null,
+							"usd": 0.09809689999999999,
+							"ms": 13770,
+							"turns": 3,
+							"billed": 26923,
+							"context": 13391,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This stage-4 work would expose the SCC condensation from extract/scc.ts and add a bottom-up callee-summary pass. That is a change of its own, and it needs stage 5 labels that don't exist yet. #422 is only the umbrella, and #423 (branch facts) and #424 (lexicon) touch different code, so none of them would carry this in the same pull request."
+							},
+							"error": null,
+							"usd": 0.0193899,
+							"ms": 8756,
+							"turns": 3,
+							"billed": 27181,
+							"context": 13703,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"426": {
+			"at": "432adf5826ae82f328e574bd112d23ecac87eee4",
+			"listed": [
+				425,
+				424,
+				423,
+				422,
+				421,
+				419,
+				418,
+				417,
+				415,
+				413,
+				412,
+				411,
+				410,
+				409,
+				408,
+				397,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket adds a new per-branch Jev question that reads the output of stages 2–4 (#423, #424, #425), and none of that pipeline code exists yet, so it is its own later change. #410 changes the existing sweep/pairs questions in structure-sweep, and #422 is an umbrella with no code of its own, so neither would carry this work in the same pull request."
+							},
+							"error": null,
+							"usd": 0.11130670000000001,
+							"ms": 11481,
+							"turns": 4,
+							"billed": 42009,
+							"context": 14331,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#426 adds a new stage-5 Jev question that labels each lowered branch. It reads output from stages 2–4 (#423, #424, #425), and none of that code exists yet, so it is its own pull request that comes after those stages land, not one that goes in with them. It also isn't an edit to the existing sweepQuestions/pairQuestions that #410 would change: it only borrows #410's evidence-first idea for its own new question, so neither #410 nor the umbrella #422 shares its change."
+							},
+							"error": null,
+							"usd": 0.029618799999999997,
+							"ms": 10347,
+							"turns": 4,
+							"billed": 42101,
+							"context": 14342,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"444": {
+			"at": "e299ea92e779b38e261bf430381f1fd914c29a67",
+			"listed": [
+				441,
+				440,
+				439,
+				438,
+				431,
+				429,
+				428,
+				426,
+				425,
+				424,
+				423,
+				422,
+				413,
+				412,
+				411,
+				410,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This fix keeps one tsgo session open for the life of the in-process graph returned by `loadInProcessGraph`, with a dispose step, all inside `packages/code-graph/src/resolve.ts`. The two other open code-graph tickets touch different code: #423 adds branch-level facts and #412 changes how boundary ceilings are stored. Neither changes resolve.ts or the session's lifetime, so this fix should land in its own pull request."
+							},
+							"error": null,
+							"usd": 0.096158,
+							"ms": 6598,
+							"turns": 3,
+							"billed": 26460,
+							"context": 13196,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "The fix is to keep one tsgo session open for the life of the graph in `loadInProcessGraph`/`resolveExportOrigin` in `packages/code-graph/src/resolve.ts`. The only other open code-graph tickets are #412 (boundary ceilings) and #423 (branch-level facts), and neither changes that lookup path, so this should land in its own pull request."
+							},
+							"error": null,
+							"usd": 0.0164734,
+							"ms": 7310,
+							"turns": 3,
+							"billed": 26391,
+							"context": 13219,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"468": {
+			"at": "47b49b6494e9d37bca01ba2ef29b7caefec0a32e",
+			"listed": [
+				467,
+				461,
+				458,
+				453,
+				452,
+				448,
+				431,
+				429,
+				428,
+				422,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket changes how code-graph's `--unreachable` query (packages/code-graph/src/query/unreachable.ts) and its entry-kind classification treat framework file conventions. None of the open tickets touch that code: the close ones are about structure-sweep pairs, the lowering stages, changesets, or the boundary ledger, so this lands as its own pull request."
+							},
+							"error": null,
+							"usd": 0.08645740000000002,
+							"ms": 6054,
+							"turns": 3,
+							"billed": 24473,
+							"context": 12218,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This change belongs in code-graph's reachability and entry classification (query/unreachable.ts and the entry kinds), where it would add framework file-convention entry points. None of the open tickets touch that code: they cover collapse/structure-sweep, data edges, lowering stages, changesets, backlog-sweep and tea. So it should land as its own pull request."
+							},
+							"error": null,
+							"usd": 0.0157365,
+							"ms": 11797,
+							"turns": 3,
+							"billed": 24488,
+							"context": 12226,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"473": {
+			"at": "0a65bf4e13889189933f953eaef5775f5c2aa433",
+			"listed": [
+				469,
+				468,
+				467,
+				448,
+				396,
+				395,
+				392,
+				391,
+				390,
+				389,
+				388,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is a one-sentence fix to the `--redact` paragraph in packages/structure-sweep/README.md (line 203). None of the open tickets touches redaction or alias resolution. The closest one, #467, changes how `pairs` handles the repo root in its scope check, which is a separate change."
+							},
+							"error": null,
+							"usd": 0.0823506,
+							"ms": 9334,
+							"turns": 3,
+							"billed": 23327,
+							"context": 11694,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This is a one-sentence fix to the `--redact` paragraph in the structure-sweep README (line 203). None of the listed tickets touches redaction or that paragraph: the nearest, #467, changes how `pairs` handles the repo root, and #395 and #396 cover candidate generation and `propose`."
+							},
+							"error": null,
+							"usd": 0.013742299999999999,
+							"ms": 5630,
+							"turns": 3,
+							"billed": 23094,
+							"context": 11534,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"575": {
+			"at": "5029103d86838076fb48d3d48b09e76e23525a87",
+			"listed": [
+				569,
+				568,
+				564,
+				563,
+				562,
+				561,
+				560,
+				559,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket moves per-test timeouts to the describe in code-graph's parity, deployables and syntax-errors test files. None of the open tickets touch test timeouts or those files, so it is a change of its own."
+							},
+							"error": null,
+							"usd": 0.08842260000000002,
+							"ms": 9701,
+							"turns": 3,
+							"billed": 24301,
+							"context": 12321,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket moves per-test timeouts onto the describe blocks of three code-graph test files, and maybe build-a-durable-agent.test.ts. None of the open tickets touches test timeouts. #559 is about the durable-agent tutorial's markdown wording, not the timeouts in its test file, so this work should land in its own pull request."
+							},
+							"error": null,
+							"usd": 0.0146645,
+							"ms": 5659,
+							"turns": 3,
+							"billed": 23996,
+							"context": 11966,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"682": {
+			"at": "626dc6f9e9d75c5a7c51d0d94d30775a0b7c033f",
+			"listed": [
+				670,
+				669,
+				668,
+				667,
+				666,
+				665,
+				643,
+				642,
+				639,
+				624,
+				621,
+				591,
+				564,
+				563,
+				562,
+				560,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket is a vocabulary rename across code-graph and tea, with a new ADR and a changeset for each package. Builders will want to land it as its own pull request. The nearest ticket, #591, also edits the entry schema in ledger.ts, but it adds a field for the issue that removes an entry, which is a separate change."
+							},
+							"error": null,
+							"usd": 0.10016489999999999,
+							"ms": 8491,
+							"turns": 3,
+							"billed": 26818,
+							"context": 13544,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket is its own change: a breaking rename of \"door\" across code-graph and tea, plus exporting the boundary-rules schema and deriving BOUNDARY_KINDS from the kind table, with a new ADR. The closest open ticket is #591, which adds a removal-issue field to the ledger entry schema in ledger.ts. Sharing that file is only a coincidence, so the two are better landed in separate pull requests."
+							},
+							"error": null,
+							"usd": 0.021822300000000003,
+							"ms": 8285,
+							"turns": 3,
+							"billed": 26704,
+							"context": 13409,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		},
+		"717": {
+			"at": "6b8d68e4c9d5ebca2810c9661156dbc683024a01",
+			"listed": [
+				714,
+				670,
+				643,
+				642,
+				639,
+				624,
+				621,
+				591,
+				564,
+				563,
+				562,
+				560,
+				558,
+				555,
+				335,
+				322,
+				318
+			],
+			"runs": [
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "#717 is a check at config load: a port-layout scope that lists only some of the port folders gets refused, and the unreachable port zone rows get removed. #714 adds a new import rule for apps that import a service's contract library directly, which is different logic in the same package. The ticket's idea of folding them together is only about touching the same files, so each should land in its own pull request."
+							},
+							"error": null,
+							"usd": 0.104785,
+							"ms": 8680,
+							"turns": 3,
+							"billed": 26356,
+							"context": 14062,
+							"reads": 1,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				},
+				{
+					"tries": [
+						{
+							"answer": {
+								"joins": null,
+								"why": "This ticket's fix goes in the port-layout zoning in rules.ts: refuse a scope that lists only some port folders, and drop the dead index/unknown rows from PORT_ZONES so unknownZone in analyze.ts can't build a wrong path. #714 adds a new rule for apps that import a contract library directly, which is library-level work in the libraries/shape code. The ticket's own idea to fold it into #714 is just about timing, not one shared change."
+							},
+							"error": null,
+							"usd": 0.0581466,
+							"ms": 19950,
+							"turns": 4,
+							"billed": 42903,
+							"context": 16094,
+							"reads": 2,
+							"model": "claude-haiku-5-5,claude-opus-5-5",
+							"problems": []
+						}
+					]
+				}
+			]
+		}
+	}
+}
