@@ -4,7 +4,16 @@ import {type Entry, type JobsOnHost, Ledger, Shell} from "@kampus/fabrika";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
-import {type AsksMsg, asksMachine, asksNow, asksOptions} from "../asks.ts";
+import {
+	type AsksMsg,
+	asksMachine,
+	asksNow,
+	asksOptions,
+	type Marks,
+	marksOf,
+	NO_MARKS,
+	readMarks,
+} from "../asks.ts";
 import {BUILD} from "../build-id.ts";
 import {
 	claims,
@@ -60,6 +69,13 @@ export interface DeskHome {
 	readonly forget: Effect.Effect<void>;
 }
 
+/** Where the person's marks on the asks are kept between starts of the host: asks.json, beside the desk. */
+export interface AsksHome {
+	/** The file's text, as written, or `null`: there is none. */
+	readonly kept: string | null;
+	readonly save: (marks: Marks) => Effect.Effect<void>;
+}
+
 /** One app attached. */
 interface Client {
 	send: (m: Down) => void;
@@ -99,6 +115,7 @@ export const serve = (options: {
 	/** The host's one job table (`openJobs`), handed to every tile's tsh. */
 	readonly jobs: JobsOnHost;
 	readonly desk: DeskHome;
+	readonly asks: AsksHome;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
 	/**
@@ -110,7 +127,15 @@ export const serve = (options: {
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, jobs, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
+		const {
+			history,
+			jobs,
+			desk: home,
+			asks: asksHome,
+			ours = PROTOCOL,
+			build = BUILD,
+			agents,
+		} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -169,11 +194,37 @@ export const serve = (options: {
 		};
 
 		// The asks (asks.ts): one count, read off the ledger, said to every app, page or not, so
-		// the app's Dock badge counts the same as the window's top bar.
-		const asks = yield* (yield* run(asksMachine, asksOptions)).ready;
+		// the app's Dock badge counts the same as the window's top bar. It starts on the person's
+		// marks kept from before; a file that does not read is said in the log, and none are kept.
+		const read = readMarks(asksHome.kept);
+		if (read.kind === "refused")
+			yield* Effect.logWarning(
+				`fabrika host: the asks' later and seen did not read back, so every ask counts and is new: ${read.why}`,
+			);
+		const marks = read.kind === "read" ? read.marks : NO_MARKS;
+		const asks = yield* (yield* run(asksMachine, asksOptions(marks))).ready;
 		const asksNowMsg = (): ToPage => ({type: "asks", now: asksNow(asks.getState())});
 		let saidAsks = asksNowMsg();
+		// The marks, written after each change that moves them, one write after another, so the
+		// file ends on the last change.
+		const writes = yield* Queue.unbounded<Marks>();
+		yield* Queue.take(writes).pipe(
+			Effect.flatMap(asksHome.save),
+			Effect.forever,
+			Effect.forkScoped,
+		);
+		let keptMarks = JSON.stringify(marks);
+		const keep = () => {
+			const now = marksOf(asks.getState());
+			const text = JSON.stringify(now);
+			if (text === keptMarks) return;
+			keptMarks = text;
+			Queue.offerUnsafe(writes, now);
+		};
+		// The first read may be in already: what it dropped is kept now, not at the next change.
+		keep();
 		asks.observe(() => {
+			keep();
 			const now = asksNowMsg();
 			if (same(now, saidAsks)) return;
 			saidAsks = now;

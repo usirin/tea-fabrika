@@ -110,7 +110,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. |
+| `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. The person's later and seen (`Marks`) come in as its flags from `asks.json`, and the host writes them back on each change (`src/host/serve.ts`). |
 | `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
@@ -199,7 +199,10 @@ When something is wrong, its word joins the top bar's right end, in red where it
   focuses the tile that shows its ticket; an ask whose ticket no tile shows is plain words. You
   answer in the ticket's own tile. `later` takes an ask out of the count until you bring it
   back. A new ask never moves focus; with the window not focused, the system notifies once.
-  Later and seen live in the host's memory: a host restart counts them again.
+  Later and seen are yours, not the ticket's: the host keeps them in your home's `asks.json`,
+  so a host restart keeps them, and two people on one shared ledger each keep their own. An
+  ask answered meanwhile drops out of the file at the host's first read. A file that does not
+  read starts with every ask counted and new, and the host's log says why.
 - **Every item is a button with a tooltip,** `name · key`, or the name alone when it has no key.
 - **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
   word; running and done are gray words.
@@ -409,7 +412,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
+  `desk.json`, `asks.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
   host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
@@ -453,8 +456,9 @@ Left for later, from Tuval's keys and the build:
 - **The frame's own gaps,** each a tracker ticket, built as its own change once it has a real
   source: the outbox count, `N to send` (ticket 101); answering from the asks list (ticket
   102); the agents item, today's cost, and keys and tsh words for the frame's items (ticket
-  103); the job and clock items in the bottom line (ticket 104); later and seen kept across a
-  host restart (ticket 105).
+  103); the job and clock items in the bottom line (ticket 104).
+- **Later and seen are kept per home, not per person.** The same person on two machines sets an
+  ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.

@@ -1,5 +1,5 @@
 import {Cause, Exit, Schema} from "effect";
-import {AsksNow} from "./asks.ts";
+import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {SHOWS} from "./desk/keys.ts";
 
@@ -73,9 +73,6 @@ const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** What waits on the person, as the host folded it (asks.ts): on the desk's port, to every app. */
 export const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
-
-/** An ask's key (asks.ts): short, on one line. */
-const AskKey = Schema.String.check(Schema.isPattern(/^\S{1,300}$/));
 
 /** A size on the page, in whole px: no screen is wider than this. */
 const Pixels = Schema.Int.check(

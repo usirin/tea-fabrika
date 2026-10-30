@@ -7,13 +7,12 @@ import {
 	propertyInvariant,
 	propertyTrace,
 	type Step,
-	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import type {MsgOf} from "@kampus/fabrika";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Asks, asksMachine, asksNow, load, waitingOf} from "./asks.ts";
+import {type Asks, asksMachine, asksNow, load, type Marks, waitingOf} from "./asks.ts";
 
 // The laws of the asks machine (asks.ts, `asksMachine`), on tea's pbt, judged from the frame's
 // ticket and not from the code:
@@ -25,6 +24,8 @@ import {type Asks, asksMachine, asksNow, load, waitingOf} from "./asks.ts";
 //   one read     the ledger is read once at a time, and news that came during a read is read
 //                next. The poll is off while a read is out.
 //   honest       a failed read says so, with why; the place read to never goes back.
+//   marks wait   the marks kept from before (the flags) stay until the ledger is read; then a
+//                read keeps exactly those whose asks wait, and later adds only an ask that waits.
 //
 // Any Msgs in any order feed them, as a broken world might send them: answers nobody asked for,
 // ticks, later and back on keys that wait and keys that do not.
@@ -34,7 +35,8 @@ type Msg = MsgOf<Machine>;
 type Load = ReturnType<typeof load>;
 type AsksStep = Step<Asks, Msg, Load>;
 
-const ctx = stubCtxThrowingProxy<undefined>();
+/** The flags: marks kept from before, some on asks that may wait, one on an ask that never does. */
+const ctx: Marks = {later: ["1/a-1", "9/a-9"], seen: ["2/a-1", "9/a-9"]};
 const OPTS = {numRuns: 300, seed: 1};
 const NOON = new Date(2026, 9, 30, 12).getTime();
 const malformed = {_tag: "malformed_result", issues: []} as const;
@@ -231,7 +233,28 @@ const neverBack = everyStep(
 	({prev, next}) => next.after >= prev.after,
 );
 
-const LAWS = [laterMoves, seenOnlyDot, oneRead, newsRead, pollOff, failureSaid, neverBack];
+const marksWait = everyStep(
+	"a read keeps exactly the marks whose asks wait, and later sets aside only what waits",
+	({prev, msg, next}) => {
+		const waiting = new Set(waitingOf(next.tickets, next.now).map((a) => a.key));
+		if (msg.type === "later")
+			return next.later.every((k) => prev.later.includes(k) || waiting.has(k));
+		if (msg.type !== "load_ok") return true;
+		const kept = (keys: readonly string[]) => keys.filter((k) => waiting.has(k));
+		return same(next.later, kept(prev.later)) && same(next.seen, kept(prev.seen));
+	},
+);
+
+const LAWS = [
+	laterMoves,
+	seenOnlyDot,
+	oneRead,
+	newsRead,
+	pollOff,
+	failureSaid,
+	neverBack,
+	marksWait,
+];
 
 const broken = (machine: Machine): readonly string[] =>
 	LAWS.filter((law) => {
@@ -282,6 +305,24 @@ const PLANTS = {
 			return [{...next, reach: s.reach, why: s.why}, cmds];
 		},
 	}),
+	/** A read keeps the marks of asks answered since. */
+	keepsAnswered: plant({
+		load_ok: (s, m) => {
+			const [next, cmds] = real.load_ok(s, m);
+			return [{...next, later: s.later, seen: s.seen}, cmds];
+		},
+	}),
+	/** A read forgets every mark, as the host did before it kept them. */
+	forgetsMarks: plant({
+		load_ok: (s, m) => {
+			const [next, cmds] = real.load_ok(s, m);
+			return [{...next, later: [], seen: []}, cmds];
+		},
+	}),
+	/** Later sets aside a key that waits on nothing. */
+	laterAnything: plant({
+		later: (s, m) => (s.later.includes(m.key) ? [s, []] : [{...s, later: [...s.later, m.key]}, []]),
+	}),
 	/** A read's last row is taken as is, even an older one. */
 	readsBack: plant({
 		load_ok: (s, m) => {
@@ -300,7 +341,7 @@ describe("the asks machine's laws", () => {
 
 	it("the lists reach each way a read can be, and each thing that waits", () => {
 		const reached = fc.sample(lists, OPTS).flatMap((msgs) => {
-			let s = asksMachine.init(null, undefined)[0];
+			let s = asksMachine.init(null, ctx)[0];
 			const seen: Asks[] = [s];
 			for (const m of msgs) {
 				s = applyCell<Asks, Msg, Load>(asksMachine, s, m)[0];
@@ -329,6 +370,9 @@ describe("the asks machine's laws", () => {
 			pollAlways: [pollOff.name],
 			keepsFailure: [failureSaid.name],
 			readsBack: [neverBack.name],
+			keepsAnswered: [marksWait.name],
+			forgetsMarks: [marksWait.name],
+			laterAnything: [marksWait.name],
 		});
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
 	});
