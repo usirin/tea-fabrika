@@ -1,5 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
+import {kind} from "../../program/program.ts";
 import {Counted, Stop, Tokens, ToolStatus, type Update} from "../agent/turn.ts";
 import type {Spend} from "../claude/draft.ts";
 
@@ -17,11 +18,11 @@ import type {Spend} from "../claude/draft.ts";
 //   ended 1 {stop: "end_turn"}   turns: [{n: 1, ..., end: {stop: "end_turn", answer: {n: 5}}}]
 //
 // The same for both providers: it folds the `Agents` service's updates
-// (../agent/turn.ts), never a provider's own events.
+// (../agent/turn.ts), never a provider's own events. Each program declares
+// it as its one machine, `conversationKind`, the way `trace` declares its own.
 
-/** The providers this program is built for, together. */
-export const PROVIDERS = ["claude", "codex"] as const;
-export const Provider = Schema.Literals(PROVIDERS);
+/** The providers a conversation can be opened on: one program each, in `programs/`. */
+export const Provider = Schema.Literals(["claude", "codex"]);
 export type Provider = typeof Provider.Type;
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -30,19 +31,22 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const EndStop = Schema.Union([Stop, Schema.Literal("failed")]);
 export type EndStop = typeof EndStop.Type;
 
-export const ToolSeen = Schema.Struct({
+const ToolSeen = Schema.Struct({
 	id: Schema.String,
 	title: Schema.String,
 	status: ToolStatus,
 });
-export const AskSeen = Schema.Struct({id: Schema.String, title: Schema.String});
+const AskSeen = Schema.Struct({id: Schema.String, title: Schema.String});
 
 /** A turn's end, the same for both providers. `usd` and `requests` are `null` where the provider does not say. */
 export class End extends Schema.Opaque<End>()(
 	Schema.Struct({
 		stop: EndStop,
-		/** The answer, read by the turn's schema. `null`: it did not fit, or the turn did not end on its own. */
-		answer: Schema.NullOr(Schema.Unknown),
+		/**
+		 * The agent's last JSON value, read by `--schema` when one was given. `null`: it did not fit,
+		 * or the turn did not end on its own. A plain value: the stage that asked decodes it.
+		 */
+		answer: Schema.NullOr(Schema.Json),
 		tokens: Tokens,
 		counted: Counted,
 		usd: Schema.NullOr(Schema.Finite),
@@ -105,7 +109,7 @@ export type ConversationMsg =
 	| {readonly type: "heard"; readonly n: number; readonly update: Update}
 	| {readonly type: "ended"; readonly n: number; readonly end: End};
 
-export const NONE: Conversation = {provider: null, session: null, told: 0, turns: []};
+const NONE: Conversation = {provider: null, session: null, told: 0, turns: []};
 
 const onTurn = (s: Conversation, n: number, change: (t: TurnSeen) => TurnSeen): Conversation => ({
 	...s,
@@ -165,4 +169,14 @@ export const conversation = defineMachine({
 		heard: (s, m) => [onTurn(s, m.n, (t) => fold(t, m.update)), []],
 		ended: (s, m) => [onTurn(s, m.n, (t) => ({...t, end: m.end})), []],
 	},
+});
+
+/** The machine as a program declares it: kept under the run, so a start after a kill reads it back. */
+export const conversationKind = kind({
+	machine: conversation,
+	state: Conversation,
+	parent: "main",
+	options: () => ({ctx: undefined}),
+	drawing: () => ({name: "conversation", steps: {}}),
+	status: Conversation.status,
 });

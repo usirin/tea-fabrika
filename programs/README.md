@@ -17,6 +17,9 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
   that replays the facts. It was `trace` until the job record.
 - [`trace`](./trace/README.md): one job's trace from its record, a bar per span, and every
   grouped row opening down to one step: its Msg, the state before and after, and its Cmds.
+- [`claude`](./claude/README.md) and [`codex`](./codex/README.md): a coding agent as a program,
+  each prompt a turn on one session through the `Agents` service. The two wire the same parts
+  from `@kampus/fabrika/agents/program`; only the provider differs.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.
