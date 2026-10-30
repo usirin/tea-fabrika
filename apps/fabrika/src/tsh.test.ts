@@ -565,7 +565,7 @@ describe("a program's window", () => {
 				);
 				const picked = s
 					.window(of("runs"))
-					.heard({type: "msg", msg: {type: "in", value: {kind: "choose", run: "r-2"}}});
+					.heard({type: "msg", msg: {type: "choose", value: {run: "r-2"}}});
 				const read = yield* s.until("trace read #7's record", () =>
 					s.seen.find(
 						(x) =>

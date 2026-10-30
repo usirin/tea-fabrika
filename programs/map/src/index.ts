@@ -11,7 +11,7 @@ import {Effect, Schema} from "effect";
 //
 //   tsh> map --ticket 7        its window takes over the tile
 //   // triage and plan done, approval waits on you, the six after it not run yet
-//   {kind: "quit"}             on `in`: it ends
+//   quit null                  it ends
 
 export const map = defineProgram({
 	name: "map",
@@ -19,10 +19,7 @@ export const map = defineProgram({
 		"The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.",
 	flags: {ticket: flag(TicketNumber, "The ticket whose steps light the map, by its number.")},
 	inputs: {
-		in: input(
-			Schema.Struct({kind: Schema.Literal("quit")}),
-			"Quit: the map ends. The window sends nothing else.",
-		),
+		quit: input(Schema.Null, "Stop. The window sends nothing else."),
 	},
 	outputs: {},
 	machines: {tickets: ticketsKind},
@@ -32,7 +29,7 @@ export const map = defineProgram({
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
 			yield* runtime.dispatch({type: "open", ticket: flags.ticket}).pipe(Effect.orDie);
 			yield* watch("tickets", "tickets", runtime);
-			yield* serve({in: () => end});
+			yield* serve({quit: () => end});
 			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
 			yield* runtime.done();
 		}).pipe(Effect.scoped),

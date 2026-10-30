@@ -12,10 +12,10 @@ Redux DevTools, and Jaeger's span detail. The design is
 // tsh> trace --id <its trace id>     the trace takes over the tile
 // tsh> runs --ticket 7 | trace       no flag: "pick a run" until an id comes on `id`; a newer one replaces it
 
-// What the window sends on `do`, and what the tile shows after:
-{kind: "toggle", row: "span:<tally's span>"}   // tally opens: "count total"
-{kind: "toggle", row: "machine:[…]"}           // count total opens: add 1, add 2, add 3
-{kind: "choose", row: "step:[…, 2]"}           // add 2's detail:
+// What the window sends, input by input, and what the tile shows after:
+toggle {row: "span:<tally's span>"}   // tally opens: "count total"
+toggle {row: "machine:[…]"}           // count total opens: add 1, add 2, add 3
+choose {row: "step:[…, 2]"}           // add 2's detail:
 // {msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
 //  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
 ```
@@ -72,7 +72,7 @@ job   seq --to 3 | tally        the tsh line's span
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id` (may be left out), inputs `do` (`toggle`, `choose`, `quit`) and `id` (a trace id, as `runs` sends). Its view is `Shown`. |
+| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id` (may be left out), inputs `toggle` (`{row}`), `choose` (`{row}`, or `{row: null}`), `quit` (`null`) and `id` (a trace id, as `runs` sends). Its view is `Shown`. |
 | | `src/machine.ts` | `trace`, the machine, and `read`, its one Cmd. Pure. |
 | | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: the record as rows. Pure. |
 | | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail. `changesOf`: a JSON Patch of two states. Pure. |

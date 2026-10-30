@@ -32,7 +32,7 @@ With no flag it waits for a ticket on its input. When that input ends, it keeps 
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/runs` | `src/index.ts` | `runs`, the program: flag `ticket` (left out, it waits), input `in` (`choose` a run, `quit`), input `ticket` (a ticket to lay out now), output `id`: the trace id of each run picked that has one. `traceIdOf` reads it off the run's `started`. Its view is the ticket's facts and the clock (`One`). |
+| `@tea-fabrika/runs` | `src/index.ts` | `runs`, the program: flag `ticket` (left out, it waits), inputs `choose` (`{run}`, a run picked) and `quit` (`null`), input `ticket` (a ticket to lay out now), output `id`: the trace id of each run picked that has one. `traceIdOf` reads it off the run's `started`. Its view is the ticket's facts and the clock (`One`). |
 | | `src/trace.ts` | `traceOf`, `axisOf`, `placeOf`, `ticksOf`, `stopsOf`: the facts folded into tracks up to a time. Pure. |
 | `@tea-fabrika/runs/window` | `src/window.tsx` | `RunsWindow`: the tracks, the ruler and the playhead. ← and → step from fact to fact; Home and End jump. |
 
