@@ -15,7 +15,7 @@ import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeli
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {headOf, lineOf} from "./head.ts";
-import {Author, type Do, type PullRequest, pullRequestsOf, tracker} from "./index.ts";
+import {Author, type Do, type PullRequest, pickOf, pullRequestsOf, tracker} from "./index.ts";
 import {type Shown, shownOf} from "./machine.ts";
 
 // The tracker with no window, on a ledger in memory: told what a window would send, it writes
@@ -330,6 +330,35 @@ describe("the tracker", () => {
 		});
 	});
 
+	it("sends the ticket the person picks, once a change, on its output ticket", async () => {
+		const ledger = memoryService();
+		const sent = await Effect.runPromise(
+			Effect.gen(function* () {
+				const sent: number[] = [];
+				const started = yield* start(
+					tracker,
+					{},
+					{ticket: (n) => sent.push(n)},
+					{id: "tracker:picks", storage: memoryStorage()},
+				);
+				if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+				const say = (d: Do): Effect.Effect<Word> => offer(started.run, "do", d);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say({kind: "file", title: "Docs typo", body: ""});
+				yield* say({kind: "open", ticket: 1});
+				yield* say({kind: "list"});
+				yield* say({kind: "open", ticket: 1});
+				yield* say({kind: "show", show: "all"});
+				yield* say({kind: "open", ticket: 2});
+				yield* say({kind: "quit"});
+				yield* started.run.ended;
+				return sent;
+			}).pipe(Effect.scoped, Effect.provide(services(ledger, OWNER))),
+		);
+		// The list in between picks nothing: 1 is still the pick, so 1 is sent once.
+		expect(sent).toEqual([1, 2]);
+	});
+
 	it("reads what its window sends, and refuses a blank title or an empty comment", () => {
 		expect(readInput(tracker, {type: "do", value: {kind: "close", ticket: 3}}).kind).toBe("read");
 		expect(readInput(tracker, {type: "do", value: {kind: "file", title: " ", body: ""}}).kind).toBe(
@@ -357,5 +386,15 @@ describe("the tracker", () => {
 		expect(readInput(tracker, {type: "do", value: {...changes, asks: "merge"}}).kind).toBe(
 			"refused",
 		);
+	});
+});
+
+describe("pickOf", () => {
+	it("is a new open only: the same ticket again, the list, or a write picks nothing", () => {
+		expect(pickOf({kind: "open", ticket: 7}, null)).toBe(7);
+		expect(pickOf({kind: "open", ticket: 7}, 3)).toBe(7);
+		expect(pickOf({kind: "open", ticket: 7}, 7)).toBeNull();
+		expect(pickOf({kind: "list"}, 7)).toBeNull();
+		expect(pickOf({kind: "close", ticket: 7}, null)).toBeNull();
 	});
 });

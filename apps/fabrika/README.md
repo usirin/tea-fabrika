@@ -104,7 +104,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
-| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
+| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
@@ -162,6 +162,11 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   new tiles beside it, in t2's place, each with a third of its space. In a row they become
   siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
   folded. Unfolding one takes space only from the line's other windows.
+- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the runs
+  both show #7; pick another, and both follow. Each sends the ticket it is on, by its number,
+  each time that changes ([the pipe the line carries](../../docs/direction/fold-not-tabs.md#the-pipe-the-line-carries)).
+  The line can go on: in `tracker | ticket | runs | trace`, a run picked in the runs opens its
+  job's trace in the fourth window.
 - **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
   A run alone has none.
 - **A line's other windows have no tsh.** Ctrl-C in one goes to the typed-in tile's tsh. A
@@ -175,6 +180,12 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
     hung-up terminal gives a shell. It does not stop them. The tile shows "closing" until they
     have all ended, then it goes. There is no timer.
   - Ctrl-B x on a closing tile asks `stop t2 now? (y/n)`. y stops them, and the tile goes.
+  - On one window of a line, y ends that one process: it gets the end of its inputs (`end`), and
+    its window goes when it is over. Its neighbours follow the pipes. In
+    `tracker | ticket | runs`, closing the ticket's window leaves the runs on the last ticket,
+    and the tracker's next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that
+    answered stopped`. Asked again, `stop t3 now?`, y stops the process (`kill`).
+  - The typed-in tile of a line holds its tsh: closing it ends tsh and every process of the line.
   - Closing a tile ends only what that tile's tsh started. A run shown in another tile is left
     alone. Its folder is deleted once it goes.
   - Ctrl-D in a tile's tsh closes that tile.
@@ -313,7 +324,7 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   on stderr and ends: open the app first.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
   the input's own description and its schema as JSON Schema (`tracker_do`, `ticket_do`,
-  `counter_press`).
+  `ticket_ticket`, `counter_press`).
   One more, `runs`, lists every program and its tools, the agent's own runs, and what runs in
   your tiles.
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
@@ -356,10 +367,11 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 
 ## What it does not do yet
 
-- **No real line of windows runs yet.** The app's programs have no outputs, so
-  `tracker | ticket | runs` does not pipe; the desk side is tested on its own.
-- **Closing one window of a line** (Ctrl-B x, y) takes its tile away, but its run goes on until
-  the line ends.
+- **One real line only.** `tracker | ticket | runs` is the one line whose programs pipe a
+  ticket, and `runs | trace` the one that pipes a run's trace id. The map takes no ticket from
+  a pipe yet; `trace` takes a trace id, never a ticket.
+- **An upstream ends on its next send, not at once.** With the ticket's window closed, the
+  tracker in `tracker | ticket | runs` looks alive until the next pick, then fails.
 
 - **The cursor moves one code point at a time.** It can stop between a letter and its accent,
   which readline steps over, or inside an emoji made of several.

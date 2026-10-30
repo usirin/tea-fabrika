@@ -219,6 +219,38 @@ describe("the tiles", {timeout: 20_000}, () => {
 		expect(seen.gone).not.toContain(`run:${run}`);
 	});
 
+	it("end one process of a line with `end`, and stop another with `kill`: the tile's tsh goes on", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				yield* d.tiles.open("t1");
+				d.type("t1", "tracker | ticket | runs\r");
+				const covered = yield* d.heard((m) => m.type === "covered");
+				const runs = covered.type === "covered" ? covered.runs : [];
+				const id = (program: string) => runs.find((r) => r.program === program)?.id ?? "";
+				// The ticket gets the end of its inputs, and ends on its own.
+				yield* d.tiles.end(id("ticket"));
+				yield* d.heard((m) => m.type === "over" && m.run === id("ticket"));
+				// The runs keep their input from the person open: they end only when stopped.
+				yield* d.tiles.kill(id("runs"));
+				yield* d.heard((m) => m.type === "over" && m.run === id("runs"));
+				// A process not running changes nothing.
+				yield* d.tiles.end(id("ticket"));
+				yield* d.tiles.kill("runs:none");
+				return {
+					programs: runs.map((r) => r.program),
+					ids: runs.map((r) => r.id),
+					told: [...d.told],
+				};
+			}).pipe(Effect.scoped),
+		);
+		const [tracker] = seen.ids;
+		expect(seen.programs).toEqual(["tracker", "ticket", "runs"]);
+		// The tracker still runs, and the tile's tsh with it: nothing told it is over, or ended.
+		expect(seen.told).not.toContainEqual({type: "over", run: tracker});
+		expect(seen.told.some((m) => m.type === "ended")).toBe(false);
+	});
+
 	it("share the history: a line typed in t1 is t2's Up", async () => {
 		const rows = await go(
 			Effect.gen(function* () {

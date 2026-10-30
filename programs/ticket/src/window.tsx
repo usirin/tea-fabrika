@@ -122,8 +122,9 @@ function AskCard(props: {
 	const [other, setOther] = useState<string | null>(null);
 	const [note, setNote] = useState("");
 	const saw = {title: page.opened.ticket.title, body: page.body};
+	const ticket = page.opened.ticket.number;
 	const answer = (pick: string, text: string) =>
-		send({type: "do", value: {kind: "answer", ask: ask.ask, pick, note: text, saw}});
+		send({type: "do", value: {kind: "answer", ticket, ask: ask.ask, pick, note: text, saw}});
 	return (
 		<section className="turnc you" aria-label="Whose turn">
 			<span className="m p you lg" aria-hidden="true">
@@ -501,14 +502,17 @@ function Activity(props: {
 	);
 }
 
-function Composer({send, saving}: {readonly send: Send; readonly saving: number}) {
+function Composer(props: {readonly ticket: number; readonly send: Send; readonly saving: number}) {
+	const {ticket, send, saving} = props;
 	const [text, setText] = useState("");
 	const body = text.trim();
 	const post = (changes: boolean) => {
 		if (body === "") return;
 		send({
 			type: "do",
-			value: changes ? {kind: "comment", body, asks: "changes"} : {kind: "comment", body},
+			value: changes
+				? {kind: "comment", ticket, body, asks: "changes"}
+				: {kind: "comment", ticket, body},
 		});
 		setText("");
 	};
@@ -558,12 +562,28 @@ function Composer({send, saving}: {readonly send: Send; readonly saving: number}
 	);
 }
 
-export function TicketWindow({view, send}: WindowProps<typeof ticket>) {
+/**
+ * The window, drawn afresh for each ticket it shows: a half-written comment or an opened row of
+ * #7 never shows on #3 when a pipe moves it there.
+ */
+export function TicketWindow(props: WindowProps<typeof ticket>) {
+	return <OneTicket key={props.view.number ?? 0} {...props} />;
+}
+
+function OneTicket({view, send}: WindowProps<typeof ticket>) {
 	const {number, page, now} = view;
-	if (number === null || !view.ready)
+	if (!view.ready)
 		return (
 			<div className="view ticket-view">
 				<p className="view-empty">Reading the ledger</p>
+			</div>
+		);
+	if (number === null)
+		return (
+			<div className="view ticket-view">
+				<p className="view-empty">
+					No ticket yet: pick one in the tracker, or start it with --ticket.
+				</p>
 			</div>
 		);
 	if (page === null)
@@ -620,7 +640,7 @@ export function TicketWindow({view, send}: WindowProps<typeof ticket>) {
 						</div>
 						<section aria-label="Activity">
 							<Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
-							<Composer send={send} saving={view.saving.length} />
+							<Composer ticket={number} send={send} saving={view.saving.length} />
 						</section>
 					</div>
 				</div>

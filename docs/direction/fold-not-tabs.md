@@ -174,19 +174,85 @@ minimum keeps every window readable and still in the picture, as a strip.
 
 **Cost:** a page message, `area`, with the workspace's size in pixels, and
 the desk's own copy of the page's strip and border sizes to work out what fits
-(`extents`). Those can drift from the CSS. A window tile has no tsh, so
-closing it with `y` takes the tile away but its run goes on until the line
-ends.
+(`extents`). Those can drift from the CSS.
 
 **How sure: 75%.** The doubts:
 
-- **No real line has run yet.** The app's programs have no outputs, so
-  `tracker | ticket | runs` cannot pipe today. The desk path is tested
-  straight and in the screenshots; tsh's side has only run single windows.
-- **Closing one window.** Whether `y` on a window should stop its run, or the
-  whole line. One real use settles it.
 - **The minimum.** 220 by 120 comes from the prototype. A desk on a laptop
   screen will show whether it folds too much.
+- **One line only so far.** `tracker | ticket | runs` is the one line whose
+  programs pipe a ticket (below), and it can go on to `| trace`. It ran in
+  the app on a test home, twice.
+
+## A line's windows close one by one
+
+**Decided 2026-10-25, applied here 2026-10-28.** The rule from
+[tiles, like tmux](./the-gui-is-electron-first.md#decided-2026-10-25-tiles-like-tmux)
+and [the host note](./the-host-keeps-terminals-and-jobs.md) is: `x` asks y or
+n, then ends what the tile holds, as tmux's `kill-pane`. A window of a line
+holds one process. So `y` ends that one process, and nothing else. Its
+neighbours follow the pipe rules, as in a Unix pipe whose middle stage dies.
+
+```ts
+// apps/fabrika/src/desk/desk.ts: y on a window
+const windowYes = (s: Open, tile: TileId, process: string): Step => {
+  if (!s.closing.includes(tile)) return [{...s, closing: [...s.closing, tile]}, [end({process})]];
+  const [next, cmds] = goneTile(s, tile);           // y again: "stop t3 now?"
+  return [next, [kill({process}), ...cmds]];
+};
+// end:  the process gets the end of its inputs, as closing its window does
+// kill: the process stops now
+// The tile goes when the process is over, as any window does.
+```
+
+What the line `tracker | ticket | runs` does when the ticket's window closes:
+
+| Process | What happens |
+|---|---|
+| ticket | its inputs end; it ends on its own, and its window goes |
+| tracker (upstream) | goes on; its next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that answered stopped` |
+| runs (downstream) | its input from the ticket ends; it keeps showing the last ticket, and ends when its own window closes |
+
+- **The typed-in tile is the line's.** Closing it ends tsh and every process
+  of the line, as before. Closing a window never closes it.
+- **Upstream ends on its next send, not at once.** That is SIGPIPE: a writer
+  learns its reader is gone when it writes. A tracker nobody picks in stays.
+- **Downstream keeps what it had.** Its input ended, so it shows the last
+  ticket it was sent, as `tail` prints what it read before its input closed.
+
+**Why:** the person closed one window. Ending more than that one process
+would take away windows they did not ask to close. The pipe rules already say
+what the neighbours do, so the desk needs no rule of its own for them.
+
+**Cost:** two more desk Cmds, `end` and `kill`, by process id, and a `kill`
+on each window's screen (`tsh.ts`). A tracker whose ticket window closed looks
+alive until its next pick, then fails with a line in the terminal.
+
+**How sure: 80%.** The doubt: whether a failed tracker should say so in its
+own window, not only in the terminal under it. A week of use would show.
+
+### The pipe the line carries
+
+Each program sends the ticket it is on, by its number, each time it changes:
+the latest pick, not a steady stream. The shell's fit check pairs them.
+
+```ts
+// programs/tracker: outputs
+ticket: output(TicketNumber, "The ticket the person picks, by its number ...")
+// programs/ticket: inputs and outputs
+inputs:  {do, ticket: input(TicketNumber, "A ticket to show now ...")}
+outputs: {ticket: output(TicketNumber, "The ticket it shows ...")}
+// programs/runs: inputs and outputs
+inputs:  {in, ticket: input(TicketNumber, "A ticket to lay out now ...")}
+outputs: {id: output(TraceId, "The trace id of each run picked ...")}   // for `| trace`
+```
+
+Each still runs alone: `ticket --ticket 7` and `runs --ticket 7` take the
+ticket as a flag, and with no flag they wait for one on their input. `trace`
+takes no ticket: it takes a trace id, so `tracker | ticket | runs | trace`
+opens the trace of a run picked in the runs. A ticket's writes name their
+ticket (`{kind: "comment", ticket: 7, body}`), so a comment typed on #7 never
+lands on #3 picked after it.
 
 ## What it cannot tell us
 
@@ -195,4 +261,7 @@ ends.
 - How a workspace reads with many strips side by side.
 - Whether some program's windows should open folded, apart from a line's
   windows past the minimum.
-- How a line reads once its programs truly pipe into each other.
+- How a line reads once people use it every day. It ran once, on a test home
+  with three tickets.
+- Whether a line whose middle closed should end its upstream at once, not on
+  its next send.

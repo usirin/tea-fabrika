@@ -46,7 +46,7 @@ export const PROGRAMS: {readonly [N in ProgramName]: ProgramNode & {readonly nam
 		name: "tracker",
 		at: "programs/tracker/src/index.ts",
 		ins: [port("do", "Do")],
-		outs: [],
+		outs: [port("ticket", "TicketNumber")],
 	},
 	plan: {
 		name: "plan",
