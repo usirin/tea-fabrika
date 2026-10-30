@@ -1591,6 +1591,10 @@ labelled precedent is among the 20 on 19 of 20 asks (#4236's is cut), first on
    in its top 3 on 17 of 20. What Jev adds is knowing when to stay quiet, and
    that is the part that does not hold yet.
 
+**The owner's pick (2026-10-30): parked.** Nothing is built until triage runs
+on real weeks. Then a fresh batch of asks, labelled before any call, goes
+through the sibling question at 0.9, with a date rule.
+
 ### What part 6 cannot tell us
 
 - **A blind number.** Same 104 asks as parts 4 and 5, and the sibling question
