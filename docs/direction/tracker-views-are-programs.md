@@ -347,7 +347,7 @@ One block of name and value pairs, as Linear's sidebar. Every value is a fold.
 | Branch | `started.log` or the PR's head | `v1-slice-1` |
 
 - **Check dots:** one per check, in GitHub's order with failures first, as the
-  merge box does. Green passed, red failed, amber running, grey skipped. The
+  merge box does. Green passed, red failed, amber running, gray skipped. The
   name shows on hover.
 - **The review result:** "no review yet", "approved by owner", "changes asked
   by owner". Only a person's counts, as `changesAsked` in
