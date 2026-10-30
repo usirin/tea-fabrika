@@ -50,7 +50,7 @@ beforeAll(async () => {
 	users.set("alice", {id: 7, keys: [await lineOf(alice)]});
 	users.set("bob", {id: 8, keys: [await lineOf(bob)]});
 	mf = new Miniflare(
-		ledgerOptions({
+		await ledgerOptions({
 			persist: false,
 			direct: 0,
 			// No cache: each login here is seen at the fake GitHub.
@@ -396,7 +396,7 @@ describe("a GitHub token", () => {
 	it("reaches the Worker as a binding and goes to GitHub as a bearer header", async () => {
 		const token = "github_pat_fake_for_the_test";
 		const withToken = new Miniflare(
-			ledgerOptions({
+			await ledgerOptions({
 				persist: false,
 				direct: 0,
 				door: {
@@ -425,7 +425,7 @@ describe("a GitHub token", () => {
 
 describe("a ledger with no door", () => {
 	it("refuses every request, with or without a credential", async () => {
-		const closed = new Miniflare(ledgerOptions({persist: false, direct: 0}));
+		const closed = new Miniflare(await ledgerOptions({persist: false, direct: 0}));
 		try {
 			await closed.ready;
 			const base = (await closed.unsafeGetDirectURL()).origin;
@@ -449,7 +449,11 @@ describe("a local door", () => {
 	it("knows its one person by the secret, and an agent token as an agent for them", async () => {
 		const secret = Redacted.make("fabrika_l_test-secret");
 		const local = new Miniflare(
-			ledgerOptions({persist: false, direct: 0, door: {kind: "local", person: "owner", secret}}),
+			await ledgerOptions({
+				persist: false,
+				direct: 0,
+				door: {kind: "local", person: "owner", secret},
+			}),
 		);
 		try {
 			await local.ready;

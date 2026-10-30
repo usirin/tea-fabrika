@@ -19,7 +19,7 @@ const t0 = performance.now();
 // Read as a `Redacted` and kept one: an empty or missing secret is none.
 const secret = Effect.runSync(Config.option(Config.Redacted("DOOR_SECRET")));
 const mf = new Miniflare(
-	ledgerOptions({
+	await ledgerOptions({
 		persist: process.env.PERSIST ?? false,
 		...(Option.isNone(secret)
 			? {}

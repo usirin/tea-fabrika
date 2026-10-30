@@ -37,7 +37,7 @@ let url = "";
 
 beforeAll(async () => {
 	mf = new Miniflare(
-		ledgerOptions({
+		await ledgerOptions({
 			persist: false,
 			direct: 0,
 			door: {kind: "local", person: "owner", secret: door},

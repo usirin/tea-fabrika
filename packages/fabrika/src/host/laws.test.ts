@@ -34,7 +34,7 @@ import {ledgerOptions} from "./worker-options.ts";
 const dir = mkdtempSync(join(tmpdir(), "tea-host-laws-"));
 let mf: Miniflare;
 beforeAll(async () => {
-	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
+	mf = new Miniflare(await ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
 });
 afterAll(async () => {

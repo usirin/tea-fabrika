@@ -39,7 +39,7 @@ export const startTwin = (o: TwinOptions) =>
 			Effect.tryPromise({
 				try: async () => {
 					const m = new Miniflare(
-						ledgerOptions({
+						await ledgerOptions({
 							persist: o.persist,
 							direct: o.port ?? 0,
 							door: {

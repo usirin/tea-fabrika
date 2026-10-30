@@ -31,15 +31,19 @@ export const COMPATIBILITY_DATE = "2026-07-01";
  * The Worker as one module: the Durable Object, its rules, the door, the SSH signatures it checks
  * and the `Keys` Layers. `cloudflare:*` is workerd's own, so it stays an import.
  *
- * The Worker is bundled once, so esbuild is stopped right after. `buildSync` keeps a worker
- * thread and esbuild's own process alive for the next call, and in the local ledger's child that
- * process sat idle at about 50 MB for as long as the ledger ran.
+ * The Worker is bundled once a process, and esbuild is stopped right after. Left running, its
+ * process sat idle at about 50 MB in the local ledger's child for as long as the ledger ran.
+ *
+ * `build`, not `buildSync`: `buildSync` starts esbuild's process from a worker thread, and `stop`
+ * ends that thread. esbuild then exits, but no thread is left to collect its exit (to reap it), so
+ * it stays in the process table as a zombie until this process ends: named `esbuild` on Linux,
+ * `<defunct>` on macOS. `build` starts it from this thread, which reaps it once `stop` ends it.
  */
-const modules = () => {
+const bundle = async () => {
 	const esbuild: typeof Esbuild = createRequire(import.meta.url)("esbuild");
 	const entry = LEDGER_ENTRY;
 	try {
-		const out = esbuild.buildSync({
+		const out = await esbuild.build({
 			entryPoints: [entry],
 			bundle: true,
 			format: "esm",
@@ -51,9 +55,18 @@ const modules = () => {
 		});
 		return [{type: "ESModule" as const, path: entry, contents: out.outputFiles[0]?.text ?? ""}];
 	} finally {
-		// The stop starts at once (the worker thread is ended); the promise it answers is settled.
-		void esbuild.stop();
+		await esbuild.stop();
 	}
+};
+
+/**
+ * Shared by every `ledgerOptions` in this process. One bundle at a time, too: `stop` ends
+ * esbuild's one process, so a second bundle running beside the first would be cut off.
+ */
+let bundled: ReturnType<typeof bundle> | undefined;
+const modules = () => {
+	bundled ??= bundle();
+	return bundled;
 };
 
 /** Where a shared door's keys come from. Only GitHub's today (`keys-github.ts`). */
@@ -146,10 +159,11 @@ export const ledgerBindings = (
 /**
  * The options `new Miniflare(...)` takes, typed by what is in them. Miniflare is an optional peer,
  * and its declarations do not pass `skipLibCheck: false`, so this package's declarations never name
- * them (experiment 108). `daemon.ts` hands these to `new Miniflare`, which checks them.
+ * them (experiment 108). `daemon.ts` hands these to `new Miniflare`, which checks them. A promise:
+ * the Worker is bundled first (above).
  */
-export const ledgerOptions = (o: LedgerOptions) => ({
-	modules: modules(),
+export const ledgerOptions = async (o: LedgerOptions) => ({
+	modules: await modules(),
 	modulesRoot: fileURLToPath(new URL(".", import.meta.url)),
 	compatibilityDate: COMPATIBILITY_DATE,
 	// The ledger's objects (one per project, one per person) and the jobs' records (one per job).

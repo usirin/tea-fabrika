@@ -89,7 +89,7 @@ const ledgerOf = async (options: Options) => {
 	])) as CryptoKeyPair;
 	const line = keyLineOf(new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey)));
 	const mf = new Miniflare(
-		options.ledgerOptions({
+		await options.ledgerOptions({
 			persist: false,
 			direct: 0,
 			door: {

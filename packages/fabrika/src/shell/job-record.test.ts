@@ -33,7 +33,11 @@ let url = "";
 
 beforeAll(async () => {
 	mf = new Miniflare(
-		ledgerOptions({persist: false, direct: 0, door: {kind: "local", person: "owner", secret}}),
+		await ledgerOptions({
+			persist: false,
+			direct: 0,
+			door: {kind: "local", person: "owner", secret},
+		}),
 	);
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;

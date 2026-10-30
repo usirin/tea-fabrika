@@ -2,7 +2,7 @@ import {execFileSync} from "node:child_process";
 import {mkdtempSync} from "node:fs";
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {basename, join} from "node:path";
 import {Duration, Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {LocalLedger, layerLocal} from "./local.ts";
@@ -37,13 +37,17 @@ describe("layerLocal", () => {
 	});
 });
 
-/** The names of the processes in group `pgid`, from `ps`. */
-const namesIn = (pgid: number) =>
-	execFileSync("ps", ["-A", "-o", "pgid=,comm="], {encoding: "utf8"})
+/**
+ * The names of the processes in group `pgid` other than its leader, from `ps`. A name is the last
+ * part of `comm`: a full path on macOS, the name alone on Linux. A process that ended and was not
+ * reaped is still listed: by its name on Linux, as `<defunct>` on macOS.
+ */
+const othersIn = (pgid: number) =>
+	execFileSync("ps", ["-A", "-o", "pid=,pgid=,comm="], {encoding: "utf8"})
 		.split("\n")
-		.map((line) => /^\s*(\d+)\s+(.*)$/.exec(line))
-		.filter((m) => m !== null && Number(m[1]) === pgid)
-		.map((m) => (m?.[2] ?? "").trim());
+		.map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
+		.filter((m) => m !== null && Number(m[2]) === pgid && Number(m[1]) !== pgid)
+		.map((m) => basename((m?.[3] ?? "").trim()));
 
 /** Watch a running local ledger for `ms`, with its cap read every 100 ms. */
 const watch = (capMb: number, ms: number) =>
@@ -55,7 +59,7 @@ const watch = (capMb: number, ms: number) =>
 			restarts: yield* local.restarts,
 			groupMb: yield* local.memoryMb,
 			workerdMb: yield* local.workerdMb,
-			names: namesIn(pid),
+			others: othersIn(pid),
 		};
 	}).pipe(
 		Effect.scoped,
@@ -77,8 +81,8 @@ describe("the memory cap", () => {
 		expect(seen.workerdMb).toBeLessThan(150);
 		expect(seen.groupMb).toBeGreaterThan(seen.workerdMb);
 		expect(seen.restarts).toBe(0);
-		expect(seen.names.some((n) => n.endsWith("workerd"))).toBe(true);
-		expect(seen.names.some((n) => n.includes("esbuild"))).toBe(false);
+		// Beside the child's own Node, workerd alone: esbuild has ended and been reaped.
+		expect(seen.others).toEqual(["workerd"]);
 	}, 30_000);
 
 	it("restarts the child when workerd passes it", async () => {
