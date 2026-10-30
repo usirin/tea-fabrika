@@ -26,8 +26,31 @@
 // 2), ONLY=<case id,case id>, SMOKE=1 (one open case of each of 5 kinds), DRY=1 prints the estimate,
 // MAX_USD (default 2) stops opus once its spend in the results file reaches it.
 //
-// Node at the edge, said out loud: `node:fs` for the data and cache files, as 162 does.
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+// Part 3: a brief may read the code (`code: read` in its head), at the commit on main before the
+// ticket was filed.
+//
+//   STEP=trees    the commit of every case, from a clone of phoenix at CLONE (read, never pushed)
+//   STEP=tune ALL=1  the brief on all 119 cases: the locked half was read in part 2, so it is spent.
+//                 For a brief that reads code, MAX_USD caps part 3's whole opus spend, exam included
+//   STEP=probe    one GPT sol turn in a code copy: the brief arrives, and the folder stays read-only
+//   STEP=exam     FRESH=<labelled set file>: one brief on one model, once, against 163-exam-bar.json
+//                 (EXAM_BAR); answers in results/163-exam.json. Refuses a second exam of a brief
+//                 hash and model on any set; a stopped exam goes on, on its own set only
+//   STEP=examtest the exam step on a tiny made-up set, through the real command with FAKE=1: $0
+//
+// Node at the edge, said out loud: `node:fs` for the data and cache files, as 162 does;
+// `node:child_process` for `git` on the clone and to run this script in the exam test.
+import {execFileSync} from "node:child_process";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
 import {
@@ -36,6 +59,9 @@ import {
 	type Brief,
 	briefOf,
 	type Case,
+	ExamBook,
+	exam,
+	examGate,
 	fakeSorter,
 	type Half,
 	KINDS,
@@ -46,13 +72,22 @@ import {
 	Split,
 	type Summary,
 	score,
+	setHashOf,
 	splitOf,
 	summarize,
 	verdictOf,
 } from "./lib/brief-eval.ts";
-import {casePrompt, liveSorter, type World} from "./lib/brief-eval-live.ts";
+import {
+	casePrompt,
+	codeLine,
+	liveSorter,
+	READ_USD,
+	treePool,
+	type World,
+} from "./lib/brief-eval-live.ts";
 import {allIssues, Cache, firstVersion, Truth} from "./lib/sort.ts";
 import {P_CAUGHT, P_FALSE_NO, P_KIND, PHOENIX_NOTE, truth92b} from "./lib/triage-135.ts";
+import {codexTurn} from "./lib/triage-codex.ts";
 
 const here = import.meta.dirname;
 const STEP = process.env.STEP ?? "report";
@@ -65,6 +100,27 @@ const BRIEFS = join(here, "163-briefs");
 const RESULTS = join(here, "results", "163-triage-brief-eval.json");
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-163-cache");
 const CACHE_FILE = join(CACHE, "p.json");
+/** Part 3: a clone of phoenix (read, never pushed), the commit of each case, and the code copies. */
+const CLONE = process.env.CLONE ?? join(CACHE, "phoenix");
+const AT_FILE = join(CACHE, "at.json");
+/**
+ * The code copies live outside home: Codex's box denies home, and Codex looks for AGENTS.md in the
+ * folders above its own, so a copy under this repo would hand it this repo's rules (field note).
+ */
+const TREES = process.env.TREES ?? join(realpathSync(tmpdir()), "exp-163-trees");
+/**
+ * Taken out of every code copy. Phoenix's own triage skill and triager: the brief being replaced,
+ * which a model could follow in place of the one under test. Its top AGENTS.md and CLAUDE.md:
+ * Codex loads AGENTS.md as rules on its own and the Agent SDK here loads none, so both get neither.
+ */
+const LEFT = [
+	"claude-plugins/fabrika/skills/triage",
+	"claude-plugins/fabrika/agents/triager.md",
+	"AGENTS.md",
+	"CLAUDE.md",
+];
+const EXAM_FILE = join(here, "results", "163-exam.json");
+const EXAM_BAR = process.env.EXAM_BAR ?? join(here, "163-exam-bar.json");
 
 const readJson = <T>(file: string, schema: Schema.Codec<T, unknown>): T =>
 	Schema.decodeUnknownSync(schema)(JSON.parse(readFileSync(file, "utf8")));
@@ -198,6 +254,45 @@ if (STEP === "fetch") {
 	process.exit(0);
 }
 
+// ---------------------------------------------------------------- around: trees (part 3)
+
+const AtFile = Schema.Record(Schema.String, Schema.String);
+const atMap = (): Record<string, string> =>
+	existsSync(AT_FILE) ? {...readJson(AT_FILE, AtFile)} : {};
+/** The last commit on phoenix's main before a moment, from the clone. Reads only. */
+const mainAt = (moment: string) =>
+	execFileSync(
+		"git",
+		["-C", CLONE, "rev-list", "-1", "--first-parent", `--before=${moment}`, "origin/main"],
+		{encoding: "utf8"},
+	).trim();
+/** Every ticket in the cache gets the commit it was filed against, kept in AT_FILE. */
+const fillAt = (tickets: readonly {n: number; createdAt: string}[]) => {
+	const at = atMap();
+	for (const t of tickets) {
+		if (at[t.n] !== undefined) continue;
+		const sha = mainAt(t.createdAt);
+		if (sha === "") throw new Error(`no commit on main before #${t.n}`);
+		at[t.n] = sha;
+	}
+	writeJson(AT_FILE, at);
+	return at;
+};
+
+if (STEP === "trees") {
+	if (!existsSync(join(CLONE, ".git"))) {
+		console.error(`no clone at ${CLONE}: gh repo clone ${REPO} <CLONE> -- --no-checkout`);
+		process.exit(1);
+	}
+	execFileSync("git", ["-C", CLONE, "fetch", "--quiet", "origin", "main"]);
+	const cache = readJson(CACHE_FILE, Cache);
+	const at = fillAt(cache.tickets);
+	console.log(
+		`${Object.keys(at).length} tickets, ${new Set(Object.values(at)).size} commits, in ${AT_FILE}`,
+	);
+	process.exit(0);
+}
+
 // ---------------------------------------------------------------- step 2: the bar
 
 const bar = readJson(BAR_FILE, Bar);
@@ -303,6 +398,61 @@ if (STEP === "selftest") {
 
 const opusSpent = () =>
 	records.filter((r) => r.model === "opus").reduce((s, r) => s + (r.usd ?? 0), 0);
+
+let book: ExamBook = existsSync(EXAM_FILE)
+	? readJson(EXAM_FILE, ExamBook)
+	: {entries: [], records: []};
+const usdOf = (rs: readonly RunRecord[]) =>
+	rs.filter((r) => r.model === "opus").reduce((s, r) => s + (r.usd ?? 0), 0);
+/** Part 3's opus spend, its cap's measure: every answer of a brief that reads code, and the exam. */
+const part3Spent = () => usdOf(records.filter((r) => r.code !== undefined)) + usdOf(book.records);
+
+/** The live world: the cache, and a code copy per case for a brief that reads code. */
+const worldOf = (cache: typeof Cache.Type, at: Record<string, string>): World => ({
+	tickets: cache.tickets,
+	all: cache.all,
+	notes: {[REPO]: PHOENIX_NOTE},
+	tree: treePool({
+		clone: CLONE,
+		root: TREES,
+		atOf: (c) => at[c.n],
+		keep: Number(process.env.KEEP_TREES ?? 6),
+		left: LEFT,
+	}),
+});
+
+/**
+ * Opus's dollars for `calls` calls. With no code, 162's estimate: a first call writes the prompt to
+ * the cache at twice the input price, a later one reads it; 4 characters a token, the SDK's own
+ * 4,500, 1,000 output. With code, the mean of the read-code calls made so far, or GUESS_USD before
+ * there are any.
+ */
+function estimateOf(
+	b: Brief,
+	world: World,
+	cases: readonly Case[],
+	runs: number,
+	calls: number,
+): number {
+	if (b.code === "read") {
+		const made = [...records, ...book.records].filter(
+			(r) => r.model === "opus" && r.code !== undefined && r.usd !== null,
+		);
+		const each =
+			made.length === 0
+				? Number(process.env.GUESS_USD ?? 0.2)
+				: made.reduce((s, r) => s + (r.usd ?? 0), 0) / made.length;
+		return calls * each;
+	}
+	const price = {in: 4e-6, out: 20e-6, read: 0.2e-6};
+	return cases.reduce((s, c) => {
+		const tokens = (b.text.length + casePrompt(world, c).length) / 4 + 4500;
+		return s + tokens * price.in * 2 + (runs - 1) * tokens * price.read + runs * 1000 * price.out;
+	}, 0);
+}
+
+const lineOf = (r: RunRecord) =>
+	`${r.case} ${r.said ?? r.error ?? "none"}${r.rule === null ? "" : `:${r.rule}`}${r.right === false ? " (wrong)" : ""} ${(r.ms / 1000).toFixed(1)} s${r.code === undefined ? "" : `, ${r.code.reads} reads`}${r.usd === null ? "" : `, $${r.usd.toFixed(4)}`}`;
 /** Five open cases, one of each of these kinds, the first of each in the split's order. */
 const SMOKE_KINDS: readonly Kind[] = [
 	"hard-no",
@@ -327,7 +477,9 @@ if (STEP === "tune" || STEP === "lock") {
 	}
 	const model = Schema.decodeUnknownSync(Model)(process.env.MODEL);
 	const only = process.env.ONLY?.split(",");
-	const ids = half === "open" ? split.open : split.locked;
+	// Part 3 tunes on all 119 cases (ALL=1): the locked half was read in part 2, so it is spent.
+	const all = STEP === "tune" && process.env.ALL === "1";
+	const ids = all ? [...split.open, ...split.locked] : half === "open" ? split.open : split.locked;
 	const smoke = SMOKE_KINDS.flatMap((k) => {
 		const c = ids.find((id) => set.cases.find((x) => x.id === id)?.kind === k);
 		return c === undefined ? [] : [c];
@@ -339,49 +491,324 @@ if (STEP === "tune" || STEP === "lock") {
 				? ids.filter((id) => only.includes(id))
 				: ids;
 	const cases = wanted.map((id) => set.cases.find((c) => c.id === id) as Case);
-	const cache = readJson(CACHE_FILE, Cache);
-	const world: World = {tickets: cache.tickets, all: cache.all, notes: {[REPO]: PHOENIX_NOTE}};
+	const world = worldOf(readJson(CACHE_FILE, Cache), atMap());
 	const runs = Number(process.env.RUNS ?? 2);
 	const MAX_USD = Number(process.env.MAX_USD ?? 2);
-	// 162's estimate for opus: a first call writes the prompt to the cache at twice the input price, a
-	// later one reads it; 4 characters a token, the SDK's own 4,500, 1,000 output.
-	const price = {in: 4e-6, out: 20e-6, read: 0.2e-6};
-	const estimate = cases.reduce((s, c) => {
-		const tokens = (brief.text.length + casePrompt(world, c).length) / 4 + 4500;
-		return s + tokens * price.in * 2 + (runs - 1) * tokens * price.read + runs * 1000 * price.out;
-	}, 0);
+	const spent = brief.code === "read" ? part3Spent : opusSpent;
+	const held = (c: Case) =>
+		records.filter(
+			(r) => r.case === c.id && r.brief === brief.id && r.hash === brief.hash && r.model === model,
+		).length;
+	const calls = cases.reduce((s, c) => s + Math.max(0, runs - held(c)), 0);
 	console.log(
-		`${brief.id} (${brief.hash}) on ${model}, ${half} half: ${cases.length} cases x ${runs}${model === "opus" ? `, about $${estimate.toFixed(2)} at list price; opus spent here so far $${opusSpent().toFixed(2)}, cap $${MAX_USD}` : ", on the ChatGPT plan"}`,
+		`${brief.id} (${brief.hash}) on ${model}, ${all ? "all" : half}: ${cases.length} cases x ${runs}, ${calls} calls to make${model === "opus" ? `, about $${estimateOf(brief, world, cases, runs, calls).toFixed(2)} at list price; spent so far $${spent().toFixed(2)}, cap $${MAX_USD}` : ", on the ChatGPT plan"}`,
 	);
 	if (process.env.DRY === "1") process.exit(0);
+	const concurrency = Number(process.env.CONCURRENCY ?? 2);
+	const halves: readonly Half[] = all ? ["open", "locked"] : [half];
+	let got = 0;
+	for (const h of halves) {
+		const mine = cases.filter((c) => !all || halfOf(c.id) === h);
+		const out = await Effect.runPromise(
+			score({
+				brief,
+				model,
+				cases: mine,
+				half: h,
+				runs,
+				have: records,
+				concurrency,
+				kept: (r) =>
+					Effect.sync(() => {
+						records.push(plain(r));
+						save();
+						console.log(lineOf(r));
+					}),
+				// Never start a call that could pass the cap.
+				stop: () =>
+					model === "opus" &&
+					spent() + (brief.code === "read" ? READ_USD : 0) * concurrency >= MAX_USD,
+			}).pipe(Effect.provide(liveSorter(world)), Effect.scoped),
+		);
+		got += out.length;
+	}
+	console.log(`${got} answers; spent $${spent().toFixed(2)}`);
+	process.exit(0);
+}
+
+// ---------------------------------------------------------------- the exam (part 3)
+
+/** A fake Sorter's answers for a set: right on every case but the first keep, which it closes. */
+const fakeAnswersOf = (cases: readonly Case[]): Record<string, Answer["triage"]> => {
+	const wrong = cases.find((c) => c.right === "keep")?.id;
+	return Object.fromEntries(
+		cases.map((c) => [
+			c.id,
+			(c.right === "close") !== (c.id === wrong)
+				? {answer: "close", rule: brief.rules[0] ?? "", of: null, why: "fake"}
+				: {answer: "keep", why: "fake"},
+		]),
+	);
+};
+
+if (STEP === "exam") {
+	const fresh = process.env.FRESH;
+	if (fresh === undefined) {
+		console.error("FRESH=<path to the fresh labelled set> is needed");
+		process.exit(1);
+	}
+	const examSet = readJson(fresh, LabelledSet);
+	const examBar = readJson(EXAM_BAR, Bar);
+	const model = Schema.decodeUnknownSync(Model)(process.env.MODEL);
+	const fake = process.env.FAKE === "1";
+	const examFile = process.env.EXAM_FILE ?? EXAM_FILE;
+	const held: ExamBook = existsSync(examFile)
+		? readJson(examFile, ExamBook)
+		: {entries: [], records: []};
+	const runs = Number(process.env.RUNS ?? 2);
+	const setId = setHashOf(examSet);
+	const gate = examGate(held, examBar, brief, model, setId);
+	console.log(
+		`exam: ${brief.id} (${brief.hash}) on ${model}, set ${setId} (${examSet.cases.length} cases x ${runs}): ${gate.go === "refuse" ? `refused: ${gate.why}` : gate.go}`,
+	);
+	if (gate.go === "refuse") process.exit(1);
+	let world: World | null = null;
+	if (!fake) {
+		// The fresh cases' text, the issue list and their commits, read-only, into the cache.
+		const cache = readJson(CACHE_FILE, Cache);
+		const tickets = [...cache.tickets];
+		for (const c of examSet.cases)
+			if (!tickets.some((t) => t.n === c.n)) tickets.push(await firstVersion(c.n, REPO));
+		const newest = Math.max(...examSet.cases.map((c) => c.n));
+		const listed = cache.all.some((e) => e.n >= newest) ? cache.all : await allIssues(REPO, 20_000);
+		writeFileSync(CACHE_FILE, JSON.stringify({tickets, all: listed}, null, "\t"));
+		if (brief.code === "read") {
+			execFileSync("git", ["-C", CLONE, "fetch", "--quiet", "origin", "main"]);
+			fillAt(tickets.filter((t) => examSet.cases.some((c) => c.n === t.n)));
+		}
+		world = worldOf({tickets, all: listed}, atMap());
+	}
+	// The cap counts all of part 3's opus spend, tuning included: $25, the owner's cap.
+	const MAX_USD = Number(process.env.MAX_USD ?? 25);
+	const calls = examSet.cases.length * runs;
+	if (model === "opus" && world !== null)
+		console.log(
+			`  about $${estimateOf(brief, world, examSet.cases, runs, calls).toFixed(2)} at list price; part 3 spent so far $${part3Spent().toFixed(2)}, cap $${MAX_USD}`,
+		);
+	if (process.env.DRY === "1") process.exit(0);
+	const concurrency = Number(process.env.CONCURRENCY ?? 2);
 	const got = await Effect.runPromise(
-		score({
+		exam({
+			book: held,
+			bar: examBar,
 			brief,
 			model,
-			cases,
-			half,
+			set: examSet,
 			runs,
-			have: records,
-			concurrency: Number(process.env.CONCURRENCY ?? 2),
-			kept: (r) =>
+			concurrency,
+			save: (b) =>
 				Effect.sync(() => {
-					records.push(plain(r));
-					save();
-					console.log(
-						`${r.case} ${r.said ?? r.error ?? "none"}${r.rule === null ? "" : `:${r.rule}`}${r.right === false ? " (wrong)" : ""} ${(r.ms / 1000).toFixed(1)} s${r.usd === null ? "" : `, $${r.usd.toFixed(4)}`}`,
-					);
+					const kept = {...b, records: b.records.map(plain)};
+					if (!fake) book = kept;
+					writeJson(examFile, Schema.encodeSync(ExamBook)(kept));
 				}),
-			stop: () => model === "opus" && opusSpent() >= MAX_USD,
-		}).pipe(Effect.provide(liveSorter(world)), Effect.scoped),
+			stop: () =>
+				!fake &&
+				model === "opus" &&
+				part3Spent() + (brief.code === "read" ? READ_USD : 0) * concurrency >= MAX_USD,
+			now: () => new Date().toISOString(),
+		}).pipe(
+			Effect.provide(world === null ? fakeSorter(fakeAnswersOf(examSet.cases)) : liveSorter(world)),
+			Effect.scoped,
+		),
 	);
-	console.log(`${got.length} answers; opus spent here $${opusSpent().toFixed(2)}`);
+	if (got.verdict === null) {
+		console.log("  stopped before every case had its runs: run again to go on, on the same set");
+		process.exit(2);
+	}
+	console.log(`  ${got.verdict.every((x) => x.pass) ? "PASS" : "FAIL"}`);
+	for (const x of got.verdict)
+		console.log(
+			`  ${x.pass ? "pass" : "FAIL"} ${x.metric} ${(100 * x.share).toFixed(0)}% (${x.is} ${(100 * x.value).toFixed(0)}%)`,
+		);
+	if (got.summary !== null) printSummary(got.summary);
 	process.exit(0);
+}
+
+if (STEP === "probe") {
+	// One GPT sol turn in a code copy, built as a read-code case is: does the brief arrive, and does
+	// the box keep the folder read-only? On the ChatGPT plan, no answer saved.
+	const c = set.cases[0] as Case;
+	const world = worldOf(readJson(CACHE_FILE, Cache), atMap());
+	const Probe = Schema.Struct({
+		ran: Schema.String,
+		after: Schema.String,
+		rules: Schema.Array(Schema.String),
+		files: Schema.Number,
+	});
+	// The sentence after "Keep is the safe answer." in the brief: only a model that got the brief knows it.
+	const after = (/Keep is the safe answer\. (\S+ \S+ \S+ \S+)/.exec(brief.text)?.[1] ?? "").trim();
+	const got = await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const tree = yield* (world.tree as NonNullable<World["tree"]>)(c);
+				const r = yield* Effect.promise(() =>
+					codexTurn(
+						// The prompt as solOnce builds it, with the check after it.
+						`${brief.text}\n\n${casePrompt(world, c)}\n\n${codeLine(tree)}\n\n# Before the real work: a check of your box\n\nDo not triage. Run this one command exactly, and copy what it prints into \`ran\`: \`chmod u+w . ; touch probe.txt ; echo exit=$?\`. Copy the sentence that follows "Keep is the safe answer." in your triage instructions into \`after\`, list the close rules they name in \`rules\`, and give what \`ls | wc -l\` counts in \`files\`.`,
+						Probe,
+						{name: "exp-163-probe", folder: tree.path, effort: "medium", reads: "code"},
+					),
+				);
+				return {r, wrote: existsSync(join(tree.path, "probe.txt"))};
+			}),
+		),
+	);
+	console.log(
+		JSON.stringify({answer: got.r.answer, error: got.r.error, commands: got.r.commands}, null, 2),
+	);
+	const checks: [string, boolean][] = [
+		["the brief arrived", after !== "" && got.r.answer?.after.startsWith(after) === true],
+		["its rules arrived", brief.rules.every((x) => got.r.answer?.rules.includes(x) === true)],
+		["it ran the write", got.r.commands.some((x) => x.includes("touch probe.txt"))],
+		["the folder stayed read-only", !got.wrote && /exit=[1-9]/.test(got.r.answer?.ran ?? "")],
+		["it could read the folder", (got.r.answer?.files ?? 0) > 3],
+	];
+	for (const [what, ok] of checks) console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
+	process.exit(checks.every(([, ok]) => ok) ? 0 : 1);
+}
+
+if (STEP === "examtest") {
+	// The exam step on a tiny made-up set, through the real command with FAKE=1, then the gate's
+	// cases in process. No model, no network, $0. Nothing outside a temp folder is written.
+	const dir = mkdtempSync(join(tmpdir(), "exp-163-examtest-"));
+	const pick = (k: Kind) => set.cases.find((c) => c.kind === k) as Case;
+	const tiny: LabelledSet = {
+		note: "a made-up exam set for the test",
+		left: [],
+		cases: [pick("hard-no"), pick("duplicate"), pick("built-random"), pick("security")],
+	};
+	const other: LabelledSet = {...tiny, cases: [pick("easy-no"), pick("built")]};
+	const approved: Bar = {...bar, status: "approved", approved: {by: "test", on: "2026-10-30"}};
+	const files = {
+		set: join(dir, "set.json"),
+		other: join(dir, "other.json"),
+		bar: join(dir, "bar.json"),
+		proposed: join(dir, "proposed.json"),
+		book: join(dir, "exam.json"),
+	};
+	writeJson(files.set, Schema.encodeSync(LabelledSet)(tiny));
+	writeJson(files.other, Schema.encodeSync(LabelledSet)(other));
+	writeJson(files.bar, approved);
+	writeJson(files.proposed, {...approved, status: "proposed", approved: null});
+	const cli = (env: Record<string, string>) => {
+		try {
+			const out = execFileSync(process.execPath, [join(here, "163-triage-brief-eval.ts")], {
+				env: {...process.env, STEP: "exam", FAKE: "1", EXAM_FILE: files.book, ...env},
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			return {code: 0, out};
+		} catch (e) {
+			const x = e as {status: number; stdout: string};
+			return {code: x.status, out: x.stdout};
+		}
+	};
+	const v = {BRIEF: BRIEF_ID, FRESH: files.set, EXAM_BAR: files.bar};
+	const first = cli({...v, MODEL: "sol"});
+	const again = cli({...v, MODEL: "sol"});
+	const elsewhere = cli({...v, MODEL: "sol", FRESH: files.other});
+	const opus = cli({...v, MODEL: "opus"});
+	const unapproved = cli({...v, MODEL: "opus", EXAM_BAR: files.proposed, BRIEF: "triage-v1"});
+	const kept = readJson(files.book, ExamBook);
+	// In process: an exam stopped part way goes on on its own set only.
+	const stopAfter = (n: number) => {
+		let seen = 0;
+		return () => seen++ >= n;
+	};
+	const job = {
+		bar: approved,
+		brief,
+		model: "sol" as const,
+		runs: 2,
+		concurrency: 1,
+		now: () => "2026-10-30T00:00:00Z",
+	};
+	const run = (b: ExamBook, s: LabelledSet, stop: () => boolean) => {
+		let last = b;
+		return Effect.runPromise(
+			exam({
+				...job,
+				book: b,
+				set: s,
+				stop,
+				save: (x) =>
+					Effect.sync(() => {
+						last = x;
+					}),
+			}).pipe(Effect.provide(fakeSorter(fakeAnswersOf(s.cases)))),
+		).then((r) => ({r, book: last}));
+	};
+	const empty: ExamBook = {entries: [], records: []};
+	const part = await run(empty, tiny, stopAfter(3));
+	const onOther = await run(part.book, other, () => false);
+	const rest = await run(part.book, tiny, () => false);
+	const failing = await Effect.runPromise(
+		exam({
+			...job,
+			book: empty,
+			set: tiny,
+			stop: () => false,
+			save: () => Effect.void,
+		}).pipe(Effect.provide(fakeSorter({}))),
+	);
+	const expect: [string, boolean][] = [
+		["the first exam runs and scores", first.code === 0 && /FAIL|PASS/.test(first.out)],
+		["the fake's one wrong close fails bad closes", /FAIL badClose/.test(first.out)],
+		[
+			"a second exam of the same brief and model is refused",
+			again.code === 1 && /scored once/.test(again.out),
+		],
+		[
+			"so is the same brief and model on another set",
+			elsewhere.code === 1 && /scored once/.test(elsewhere.out),
+		],
+		["another model gets its own shot", opus.code === 0],
+		[
+			"an unapproved exam bar is refused",
+			unapproved.code === 1 && /not approved/.test(unapproved.out),
+		],
+		[
+			"the book holds two finished entries and every answer",
+			kept.entries.length === 2 &&
+				kept.entries.every((e) => e.done !== null) &&
+				kept.records.length === 2 * 2 * tiny.cases.length,
+		],
+		["the book's records are exam records", kept.records.every((r) => r.half === "exam")],
+		["a stopped exam gives no verdict", part.r.verdict === null && part.book.records.length === 3],
+		["and is still open", part.book.entries[0]?.done === null],
+		[
+			"it cannot go on on another set",
+			onOther.r.refused !== null && /started on set/.test(onOther.r.refused),
+		],
+		[
+			"it goes on on its own set, asking only what is missing",
+			rest.r.verdict !== null && rest.book.records.length === 2 * tiny.cases.length,
+		],
+		["a call with no answer leaves the exam open", failing.verdict === null],
+		["two sets have two ids", setHashOf(tiny) !== setHashOf(other)],
+	];
+	rmSync(dir, {recursive: true, force: true});
+	for (const [what, ok] of expect) console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
+	process.exit(expect.every(([, ok]) => ok) ? 0 : 1);
 }
 
 // ---------------------------------------------------------------- around: field rows
 
 if (STEP === "field") {
-	for (const r of records)
+	// PART=3: only the answers of briefs that read code, part 3's own.
+	const rows = process.env.PART === "3" ? records.filter((r) => r.code !== undefined) : records;
+	for (const r of rows)
 		console.log(
 			JSON.stringify({
 				date: r.at.slice(0, 10),
@@ -390,9 +817,10 @@ if (STEP === "field") {
 				model: r.modelId,
 				effort: r.model === "sol" ? "medium" : null,
 				outcome: r.said === null ? "stopped" : "pass",
-				why: `experiment 163: brief ${r.brief} (${r.hash}) on the ${r.half} half, first title and body, no tools (run ${r.run}); said ${r.said}${r.rule === null ? "" : ` (${r.rule})`}, really ${set.cases.find((c) => c.id === r.case)?.right}; posted nothing`,
-				tokens: r.tokens.input + r.tokens.output,
-				tools: null,
+				why: `experiment 163: brief ${r.brief} (${r.hash}) on the ${r.half} half, first title and body, ${r.code === undefined ? "no tools" : `reading the code at ${r.code.at.slice(0, 12)}`} (run ${r.run}); said ${r.said}${r.rule === null ? "" : ` (${r.rule})`}, really ${set.cases.find((c) => c.id === r.case)?.right}; posted nothing`,
+				// The conversation's size at its last turn where known (opus reading code); else the call's total.
+				tokens: r.code?.context ?? r.tokens.input + r.tokens.output,
+				tools: r.code?.reads ?? null,
 				minutes: +(r.ms / 60000).toFixed(2),
 				note: null,
 				driver_caused: false,
@@ -407,9 +835,13 @@ if (STEP === "field") {
 
 // ---------------------------------------------------------------- step 6 and the report
 
-const pct = (x: number) => `${(100 * x).toFixed(0)}%`;
-const line = (name: string, c: Summary["badClose"]) =>
-	`  ${name}: ${c.k}/${c.n}${c.n === 0 ? "" : ` (${pct(c.k / c.n)}, 95% ${pct(c.lo)} to ${pct(c.hi)})`}`;
+// Functions, not constants: the exam step above prints with them before this line runs.
+function pct(x: number): string {
+	return `${(100 * x).toFixed(0)}%`;
+}
+function line(name: string, c: Summary["badClose"]): string {
+	return `  ${name}: ${c.k}/${c.n}${c.n === 0 ? "" : ` (${pct(c.k / c.n)}, 95% ${pct(c.lo)} to ${pct(c.hi)})`}`;
+}
 function printSummary(s: Summary): void {
 	console.log(line("bad closes, built tickets closed at least once", s.badClose));
 	console.log(line("bad closes, answers", s.badCloseAnswers));
@@ -471,4 +903,30 @@ for (const g of groups) {
 		);
 	if (process.env.WHY === "1")
 		for (const r of rs) console.log(`    ${r.case} run ${r.run}: ${r.why ?? r.error}`);
+}
+
+// Part 3 tunes on all 119 cases: each brief and model that read code, over every case it ran.
+const readers = [
+	...new Set(
+		records.filter((r) => r.code !== undefined).map((r) => `${r.brief}|${r.hash}|${r.model}`),
+	),
+];
+for (const g of readers) {
+	const [b, h, m] = g.split("|") as [string, string, string];
+	const rs = records.filter((r) => r.brief === b && r.hash === h && r.model === m);
+	const ran = set.cases.filter((c) => rs.some((r) => r.case === c.id));
+	const reads = rs.flatMap((r) => (r.code === undefined ? [] : [r.code.reads]));
+	console.log(
+		`\n${b} (${h}) on ${m}, every case it ran (part 3), ${ran.length} cases, ${rs.length} answers; ${(reads.reduce((s, x) => s + x, 0) / Math.max(1, reads.length)).toFixed(1)} reads an answer`,
+	);
+	printSummary(summarize(ran, rs));
+	for (const c of ran) {
+		const mine = rs.filter((r) => r.case === c.id);
+		if (mine.every((r) => r.right === true)) continue;
+		console.log(
+			`  wrong at least once: ${c.id} ${c.kind}, really ${c.right}: ${mine.map((r) => `${r.said ?? "none"}${r.rule === null ? "" : `:${r.rule}`}`).join(", ")}`,
+		);
+		if (process.env.WHY === "1")
+			for (const r of mine) console.log(`    run ${r.run}: ${r.why ?? r.error}`);
+	}
 }

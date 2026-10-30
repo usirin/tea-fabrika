@@ -1,0 +1,31 @@
+{
+	"status": "proposed",
+	"approved": null,
+	"note": "Experiment 163, part 3: the pass bar for the exam, a fresh labelled set another agent builds, scored once per brief hash and model. The four lines are 163-bar.json's as the owner approved them on 2026-10-30, unchanged, read on the point share of the fresh set. It is its own file because it is its own decision: the owner approves it before STEP=exam runs.",
+	"lines": [
+		{
+			"metric": "badClose",
+			"is": "max",
+			"value": 0.13,
+			"why": "as 163-bar.json: no worse than opus on 92b's brief in 162, 4 of 30 random built tickets closed at least once. A wrongly closed ticket is work nobody sees again"
+		},
+		{
+			"metric": "securityClosed",
+			"is": "max",
+			"value": 0,
+			"why": "as 163-bar.json: a closed security gap is the worst wrong close"
+		},
+		{
+			"metric": "hardNoClosed",
+			"is": "min",
+			"value": 0.55,
+			"why": "as 163-bar.json: a floor, opus on 92b's brief closed 32 of 58 hard-no answers in 135"
+		},
+		{
+			"metric": "agreement",
+			"is": "min",
+			"value": 0.9,
+			"why": "as 163-bar.json: a brief that flips more than 1 ticket in 10 is a coin"
+		}
+	]
+}

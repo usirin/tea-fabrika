@@ -4,7 +4,16 @@ The question: can we test a triage brief the way a brief-lab program would
 (ticket #62), with one labelled set, a locked half, an owner's bar and one
 scorer? Part 1 builds every piece and proves the harness on 5 cases. It does
 not score the brief. [Part 2](#part-2-tune-and-lock) tunes the brief on the
-open half and scores it once on the locked half.
+open half and scores it once on the locked half. [Part 3](#part-3-triage-reads-the-code)
+lets triage read the code and gets a brief ready for a fresh exam.
+
+**Part 3's answer: reading the code helps, and v5 is ready for the exam.**
+With read-only access to phoenix's code as it was on the day each ticket was
+filed, brief v5 on GPT sol closed 6 of 78 built tickets (bar: at most 13%),
+0 of 10 security tickets, 53 of 58 hard no's (bar: at least 55%) and gave the
+same verdict twice on 118 of 119. These are tuned numbers on all 119 cases, so
+the old locked half is spent and they are an upper bound. On opus, a 16-case
+sample got 14 right for $3.33. The exam on a fresh set has not run.
 
 **Part 2's answer: the tuned brief failed the bar.** Brief v3 was perfect on
 the open half on opus and closed 9 of 40 locked built tickets (bar: at most 5)
@@ -445,6 +454,170 @@ It does not change the decision: a brief that fails on one model is not taken.
   consistent there, or the line needs the code.
 - **Another day.** One run of each, one model id each, one Codex version.
 
+## Part 3: triage reads the code
+
+**Answer: yes, with the code in reach the brief clears every line of the bar on
+GPT sol, but only as a tuned score. v5 on all 119 cases, two runs: 6 of 78
+built tickets closed (8%), 0 of 10 security, 53 of 58 hard no's closed (91%),
+118 of 119 the same both runs. The old locked half is spent: v4 and v5 were
+written from misses on all 119. A fresh labelled set (another agent builds it)
+is the real test. The exam step is built and tested on a fake set, and it
+waits for the owner to approve its bar.**
+
+```ts
+// Part 3's shape: the same scorer, a code copy per case, and a one-shot exam.
+const brief = briefOf(read("163-briefs/triage-v5.md"));    // front matter "code: read"
+const at    = mainAt(ticket.createdAt);                     // last first-parent main commit before the ticket
+const tree  = yield* trees.get(at);                         // git archive, untarred, chmod a-w, in tmpdir
+const said  = yield* sorter.sort({brief, model, ticket, tree}); // opus: Read, Grep, Glob; sol: Codex, read-only
+// STEP=exam FRESH=<set>: examGate(book, examBar, brief, model, setHashOf(set))
+//   refuses an unapproved bar, a second shot for one brief hash and model, or a different set
+```
+
+### What changed from part 2
+
+- **Triage may read the code.** Part 2's rule "a fault found only by reading
+  the code has not happened" is gone. Each case gets phoenix as it was on
+  main when the ticket was filed, the way experiment 136 did. Opus gets Read,
+  Grep and Glob in that folder only (the sandbox hook from
+  `@kampus/fabrika/agents/sandbox`, read-only, at most 30 turns and $0.60).
+  GPT sol runs through Codex with the folder read-only and a 600 s limit.
+- **Each copy is cleaned before the model sees it.** Links, phoenix's own
+  triage skill and triager agent, and its top `AGENTS.md` and `CLAUDE.md` are
+  removed, so the brief under test is the only triage rule in reach. The
+  copies live in the system temp folder: Codex reads `AGENTS.md` from parent
+  folders, and a copy inside this repo would have handed it this repo's rules.
+- **A probe checked that the brief arrives.** One GPT sol turn quoted the
+  sentence after "Keep is the safe answer." from the brief, saw the rules,
+  read a file, and failed to write (`Operation not permitted`).
+- **Tuning used all 119 cases.** The owner's call, made after part 2's lock
+  read the locked half anyway. Each half is still scored with its own label.
+
+### The rounds
+
+| Round | Brief | Model | Bad closes (built) | Security closed | Hard no's closed | Agreement |
+|---|---|---|---|---|---|---|
+| smoke | v4 | opus | 0 of 3 | 0 of 1 | 1 of 1 | (1 run) |
+| 1 | v4 | GPT sol | 4 of 78 (5%) | 0 of 10 | 30 of 58 (52%) FAIL | 113 of 119 (95%) |
+| 2 | v5 | GPT sol | 6 of 78 (8%, 95% 4% to 16%) | 0 of 10 | 53 of 58 (91%) | 118 of 119 (99%) |
+| sample | v5 | opus | 1 of 6 | none in sample | 5 of 6 | (1 run) |
+
+Bar: bad closes at most 13%, security 0, hard no's at least 55%, agreement at
+least 90%. Two of the three allowed rounds were used.
+
+- **v4** (674 words) has three steps. First trace the claim to a live caller
+  and label it confirmed, not there, unreached or no code, with file and
+  line. Then test the close rules. Then answer, with a why that gives the
+  trace. "When the trace is unclear, keep." Hardening closes only when the
+  trace is not there or unreached and no run went wrong. Churn as in v3, plus
+  "for a removal, a search finds no use".
+- **v4's misses** were small faults the code confirmed and phoenix closed
+  anyway: a missing test for working code, a docblock, a message's wording, a
+  path that fires only after another failure. v4 kept them all, so it missed
+  the hard-no floor.
+- **v5** (801 words) adds a harm test. A confirmed fault still closes as
+  hardening when the harm is small: a missing or weak test, a fault behind
+  another failure, wording, a log line, a trace's parent, two places that each
+  work but differently. It keeps when the harm is serious: data lost,
+  duplicated or wrong; a feature failing on its normal path; a run or lane
+  stuck; a wrong verdict passed on. Churn now covers wrong docs, docblocks,
+  comments, decision records and agent instructions, kept only when a person
+  filed it or a step-by-step guide's step fails.
+- **v5's wrong closes:** 3047, 6314, 7750 (a hard yes), 7894 and 8672 as
+  hardening, 5416 as a duplicate, each in both runs. 7894 was closed as
+  "unreached" and 6314 as "not there", so the trace itself was wrong there;
+  3047 was a confirmed test gap that phoenix built. Of v3's 9 wrong locked
+  closes in part 2, v5 still closes 5 (5416, 6314, 7750, 7894, 8672); v4
+  closed 2.
+- **v5's wrong keeps:** 6818 (a duplicate), 8826 and 10138 (hard no's), both
+  runs.
+- **Opus on v5** ran a seeded sample of 20 cases (seed 1633, 10 keep and 10
+  close), one run. It stopped after 16 answers at its $5 run limit: 14 right,
+  wrong on 8826 (kept a hard no after 22 reads) and 5416 (the same duplicate
+  close). Median 9 reads and 16 s an answer, mean $0.21.
+- **GPT sol's cost:** median 20 s and 3 reads an answer; 21.9M input tokens
+  (16.9M cached) and 126k output for round 2, on the ChatGPT plan, no dollars.
+
+### The exam step
+
+`STEP=exam FRESH=<path> MODEL=<opus|sol> BRIEF=triage-v5` scores one brief on
+a fresh labelled set against `163-exam-bar.json`. The same four lines as
+`163-bar.json`, status `proposed`: it refuses to run until the owner approves
+it.
+
+- **One shot per brief hash and model.** The exam book
+  (`results/163-exam.json`) records each start. A finished pair refuses again.
+  A stopped exam resumes only on the same set (its hash); calls that got no
+  answer are retried, and the verdict is printed only when every case has its
+  runs.
+- **Fresh tickets are fetched** read-only (text, issue list, the main commit
+  at their filing). `DRY=1` prints the opus estimate and stops.
+- **The opus cap counts all of part 3**, tuning included: `MAX_USD`, default
+  $25. It stops before a call that could cross it.
+- **Tested on a fake set only:** `STEP=examtest`, 14 checks on a fake Sorter
+  and a 3-case fake set (unapproved bar refused, done refused, other set
+  refused, resume, retry, verdict). All 14 pass. The real fresh set was not
+  opened, looked for or built in this run.
+
+**Estimate for about 60 cases x 2 runs:**
+
+| Model | Per answer | 120 answers | Room left |
+|---|---|---|---|
+| opus | about $0.20 (mean of 21 read-code calls) | about $23.50 | $20.88 of $25 |
+| GPT sol | 0 dollars, about 20 s | about 40 min at 2 at once | ChatGPT plan weekly limit |
+
+Opus 60 x 2 does not fit what is left. One run on opus (about $12), or a
+raised cap, would.
+
+### Who did what
+
+- **This repo's harness:** the scorer, the code copies, the sandbox for both
+  models, briefs v4 and v5, and the exam step. Written in this run.
+- **Opus:** the Claude Agent SDK on its own login, `claude-opus-5-5`, Read,
+  Grep and Glob in a read-only copy, the brief as its system prompt.
+- **GPT sol:** `gpt-6.1-sol`, effort medium, through this repo's Codex adapter
+  (codex-cli 0.165.0) on the ChatGPT plan, the folder read-only, the brief
+  before the case, no OpenAI key.
+- **The labels are today's fabrika's**, as in parts 1 and 2. Nothing was
+  written to phoenix or to GitHub but this pull request, its adapter fix and
+  tracker notes.
+
+### Odd things found
+
+- **Codex's `:workspace` profile ignores a folder marked "read".** The first
+  probe ran `chmod u+w . ; touch probe.txt` in a folder our config called
+  read-only, and it worked. The fix: a read turn extends `:read-only`
+  instead. It is in the shared adapter (`codexConfig`'s new `access`), with
+  its own test, in its own pull request.
+- **Codex looks for `AGENTS.md` in every parent folder.** A copy under the
+  home folder failed with `Operation not permitted` on one; a copy in this
+  repo would have read this repo's rules.
+- **Phoenix was not consistent on small faults the code confirms.** Some
+  test gaps and wording fixes were closed, others built. v5's harm test is a
+  guess at the line; the 6 wrong closes sit right on it.
+
+### What part 3 means
+
+1. **Take v5 to the exam, on GPT sol first.** It is the only version that
+   cleared all four lines anywhere, and the exam costs nothing on the plan.
+   Confidence 65% that it passes there: the numbers are tuned, and 6 of 78 is
+   already half the bad-close line.
+2. **Opus needs a budget call before its exam.** One run fits; two do not.
+   Agreement on opus has not been measured, so one run leaves that line open.
+3. **Reading the code is worth its cost.** On sol it moved hard no's closed
+   from v3's text-only open-half 23 of 28 to 53 of 58 on all cases, at about
+   20 s an answer. Confidence 70%; part 2's v3 never ran on all 119, so the
+   comparison is across sets.
+
+### What part 3 cannot tell us
+
+- **How v5 does on cases it was not tuned on.** All 119 were seen; these
+  numbers are an upper bound. The exam answers this.
+- **Opus on all cases, and opus agreement.** Only 21 opus calls ran.
+- **Whether the labels are consistent.** The wrong closes sit where phoenix
+  itself went both ways.
+- **Another day.** One run of each, one model id each, one Codex version.
+
 ## Run it
 
 ```
@@ -460,6 +633,12 @@ STEP=lock MODEL=opus node experiments/163-triage-brief-eval.ts           # step 
 STEP=decide node experiments/163-triage-brief-eval.ts     # step 6: the locked numbers against the bar
 node experiments/163-triage-brief-eval.ts                 # the report; WHY=1 adds every answer's why
 STEP=field node experiments/163-triage-brief-eval.ts      # field/runs.jsonl rows, every record (part 2 added only its own date's rows)
+STEP=trees node experiments/163-triage-brief-eval.ts      # part 3: each case's main commit at filing, from a phoenix clone in runs/exp-163-cache (push off)
+STEP=probe BRIEF=triage-v5 node experiments/163-triage-brief-eval.ts     # part 3: one GPT sol turn: the brief arrives, the folder stays read-only
+STEP=tune ALL=1 MODEL=sol BRIEF=triage-v5 RUNS=2 node experiments/163-triage-brief-eval.ts   # part 3: all 119 cases with the code; MODEL=opus with DRY=1 first
+STEP=examtest node experiments/163-triage-brief-eval.ts   # part 3: the exam step on a 3-case fake set, 14 checks, $0
+STEP=exam FRESH=<set.json> MODEL=sol BRIEF=triage-v5 node experiments/163-triage-brief-eval.ts   # refuses until 163-exam-bar.json is approved; once per brief hash and model; DRY=1, MAX_USD=25
+STEP=field PART=3 node experiments/163-triage-brief-eval.ts   # part 3's rows only
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
