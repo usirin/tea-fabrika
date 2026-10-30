@@ -1,5 +1,6 @@
 import {call, Ledger} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
+import {dayLabel, dayOf} from "@kampus/pipeline/experiments/experiment";
 import {Experiments, experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {Cause, Effect, Layer, Option} from "effect";
 import {describe, expect, it} from "vitest";
@@ -42,23 +43,24 @@ describe("experiment", () => {
 		expect(
 			typeof markdown?.value === "string" && markdown.value.split("\n").filter((l) => l !== ""),
 		).toEqual([
-			"# 170: The experiments program",
-			"Date: 2026-10-30",
+			"# The experiments program",
+			`_170 · ${dayLabel("2026-10-30", dayOf(Date.now()))} · 1 run_`,
 			"**Answer.** Yes, on today's blocks.",
 			"## What we did",
 			"Read the old log.",
 			"## Runs",
-			"| Run | Id | Status | Dollars | Metrics |",
-			"|---|---|---|---|---|",
-			"| 170-1 | 170.ed1e1dcf9719 | finished | 0 | agreed 1 |",
+			"| Run | Status | Cost | Metrics | Id |",
+			"|---|---|--:|---|---|",
+			"| 170-1 | finished | $0 | agreed 1 | `170.ed1e1dcf9719` |",
 		]);
 	});
 
 	it("fails on a number the ledger does not have", async () => {
 		const called = await onLedger(call(experiment, {n: "404"}));
 		if (called.kind !== "called" || called.ended.kind !== "failed") throw new Error("it ended");
-		expect(Option.getOrUndefined(Cause.findErrorOption(called.ended.cause))).toMatchObject({
-			why: "no_experiment",
-		});
+		const failure = Option.getOrUndefined(Cause.findErrorOption(called.ended.cause));
+		expect(failure).toMatchObject({why: "no_experiment"});
+		// What tsh prints after `failed: `: the words, not the error's tag.
+		expect(failure instanceof Error && failure.message).toBe("no experiment 404 on the ledger");
 	});
 });

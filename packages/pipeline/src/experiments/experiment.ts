@@ -66,6 +66,55 @@ export const Item = Schema.String.check(
 
 /** A day, as the write-ups date them: `2026-10-30`. */
 export const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
+export type Day = typeof Day.Type;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A day as a person reads it, as Linear and GitHub write one: the year only when it is not this
+ * one.
+ *
+ *   dayLabel("2026-10-30", "2026-10-31")   "Oct 30"
+ *   dayLabel("2025-01-02", "2026-10-31")   "Jan 2, 2025"
+ */
+export const dayLabel = (day: Day, today: Day): string => {
+	const [year = "", month = "", date = ""] = day.split("-");
+	const short = `${MONTHS[Number(month) - 1] ?? month} ${Number(date)}`;
+	return year === today.slice(0, 4) ? short : `${short}, ${year}`;
+};
+
+/** The day of a time in milliseconds, in the person's own time zone. */
+export const dayOf = (ms: number): Day => {
+	const at = new Date(ms);
+	const two = (n: number) => String(n).padStart(2, "0");
+	return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+};
+
+/** A text cut to `width` characters, an ellipsis last when it is cut, and padded to `width`. */
+const column = (text: string, width: number): string =>
+	(text.length > width ? `${text.slice(0, width - 1)}…` : text).padEnd(width);
+
+/** A count with its noun: `1 run`, `2 runs`. */
+const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+/** The widest a terminal line gets, as tsh's own short form: 100 characters. */
+const LINE = 100;
+
+/** The most metrics a page's runs table shows in a row; the rest are counted. */
+const FEW = 4;
+
+/**
+ * A run's metrics in a few words, for a table cell: the first `FEW`, then how many more. The run's
+ * data keeps them all; `compare` shows them all.
+ *
+ *   fewMetrics({agreed: 0.9, usd: 0.04})   "agreed 0.9, usd 0.04"
+ *   fewMetrics({a: 1, b: 2, c: 3, d: 4, e: 5, f: 6})   "a 1, b 2, c 3, d 4 and 2 more"
+ */
+const fewMetrics = (metrics: Metrics): string => {
+	const all = Object.entries(metrics).map(([k, v]) => `${k} ${v}`);
+	const shown = all.slice(0, FEW).join(", ");
+	return all.length > FEW ? `${shown} and ${all.length - FEW} more` : shown;
+};
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Usd = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
@@ -277,25 +326,56 @@ export class Experiment extends Schema.Opaque<Experiment>()(
 		};
 	}
 
+	/** The latest run in a few words: `170-1 finished, agreed 0.9`; empty with no run. */
+	static latest(row: Experiment): string {
+		const l = row.latest;
+		if (l === null) return "";
+		const headline = l.headline === null ? "" : `, ${l.headline.key} ${l.headline.value}`;
+		return `${l.label} ${l.status}${headline}`;
+	}
+
+	/**
+	 * One row as one line for a terminal, in columns, as `gh issue list` prints: the number, the
+	 * title cut to fit, the day, the runs and the latest.
+	 *
+	 *   Experiment.toLine(row, "2026-10-30")
+	 *   // "170   The experiments program, on today's ledg…  Oct 30        1 run   170-1 finished"
+	 *
+	 * The columns are as wide as `ls -l` makes its date (`Oct 30, 2025`), and the line is cut at
+	 * 100 characters, as tsh cuts its own short form.
+	 */
+	static toLine(row: Experiment, today: Day): string {
+		const line = [
+			column(row.n, 4),
+			column(row.title, 44),
+			// As wide as `Oct 30, 2025`, so a row from another year keeps the columns.
+			column(row.date === null ? "" : dayLabel(row.date, today), 12),
+			column(counted(row.runs, "run"), 6),
+			Experiment.latest(row),
+		]
+			.join("  ")
+			.trimEnd();
+		return line.length > LINE ? `${line.slice(0, LINE - 1)}…` : line;
+	}
+
 	/**
 	 * The list as a markdown table, a view made from the rows, never read back.
 	 *
-	 *   | # | Title | Date | Runs | Latest |
-	 *   | 170 | The experiments program | 2026-10-30 | 1 | 170-1 finished, agreed 0.9 |
+	 *   | # | Title | Runs | Latest | Date |
+	 *   | 170 | The experiments program | 1 | 170-1 finished, agreed 0.9 | Oct 30 |
 	 */
-	static toMarkdown(rows: readonly Experiment[]): string {
+	static toMarkdown(rows: readonly Experiment[], today: Day): string {
 		const line = (r: Experiment) => {
-			const latest =
-				r.latest === null
-					? ""
-					: `${r.latest.label} ${r.latest.status}${r.latest.headline === null ? "" : `, ${r.latest.headline.key} ${r.latest.headline.value}`}`;
-			return `| ${r.n} | ${cell(r.title)} | ${r.date ?? ""} | ${r.runs} | ${cell(latest)} |`;
+			const day = r.date === null ? "" : dayLabel(r.date, today);
+			return `| ${r.n} | ${cell(r.title)} | ${r.runs} | ${cell(Experiment.latest(r))} | ${day} |`;
 		};
 		return [
 			"# Experiments",
 			"",
-			"| # | Title | Date | Runs | Latest |",
-			"|---|---|---|---|---|",
+			`${counted(rows.length, "experiment")}, by number.`,
+			"",
+			"| # | Title | Runs | Latest | Date |",
+			"|---|---|--:|---|---|",
 			...rows.map(line),
 			"",
 		].join("\n");
@@ -311,18 +391,35 @@ export class ExperimentPage extends Schema.Opaque<ExperimentPage>()(
 		runs: Schema.Array(RunRecord),
 	}),
 ) {
+	/** The page as one line for a terminal: the same columns as the list's row. */
+	static toLine(page: ExperimentPage, today: Day): string {
+		return Experiment.toLine(Experiment.fromPage(page), today);
+	}
+
 	/**
-	 * The page as markdown: the write-up's answer first, its sections, then a table of its runs.
-	 * A view made from the data, never read back (docs/direction/data-first-markdown-is-a-view.md).
+	 * The page as markdown: the title, a line of what it is (number, day, runs), the write-up's
+	 * answer first, its sections, then a table of its runs. A view made from the data, never read
+	 * back (docs/direction/data-first-markdown-is-a-view.md).
+	 *
+	 *   # The experiments program
+	 *
+	 *   _170 · Oct 30 · 2 runs_
+	 *
+	 *   **Answer.** Yes.
 	 */
-	static toMarkdown(page: ExperimentPage): string {
+	static toMarkdown(page: ExperimentPage, today: Day): string {
 		const w = page.writeUp;
-		const head = [`# ${page.n}: ${page.title}`, ""];
+		const day = w?.date === null || w?.date === undefined ? [] : [dayLabel(w.date, today)];
+		const head = [
+			`# ${page.title}`,
+			"",
+			`_${[page.n, ...day, counted(page.runs.length, "run")].join(" · ")}_`,
+			"",
+		];
 		const written =
 			w === null
 				? ["Nothing written yet.", ""]
 				: [
-						...(w.date === null ? [] : [`Date: ${w.date}`, ""]),
 						...(w.answer === "" ? [] : [`**Answer.** ${w.answer}`, ""]),
 						...w.sections.flatMap((s) => [
 							...(s.heading === "" ? [] : [`## ${s.heading}`, ""]),
@@ -336,15 +433,13 @@ export class ExperimentPage extends Schema.Opaque<ExperimentPage>()(
 				: [
 						"## Runs",
 						"",
-						"| Run | Id | Status | Dollars | Metrics |",
-						"|---|---|---|---|---|",
+						"| Run | Status | Cost | Metrics | Id |",
+						"|---|---|--:|---|---|",
 						...page.runs.map(
 							(r) =>
-								`| ${r.label} | ${r.run} | ${r.status} | ${r.usd ?? ""} | ${cell(
-									Object.entries(r.metrics)
-										.map(([k, v]) => `${k} ${v}`)
-										.join(", "),
-								)} |`,
+								`| ${r.label} | ${r.status} | ${r.usd === null ? "" : `$${r.usd}`} | ${cell(
+									fewMetrics(r.metrics),
+								)} | \`${r.run}\` |`,
 						),
 						"",
 					];
@@ -421,6 +516,15 @@ export class Comparison extends Schema.Opaque<Comparison>()(
 			cases,
 			same: items.length - cases.length,
 		};
+	}
+
+	/**
+	 * The comparison as one line for a terminal.
+	 *
+	 *   Comparison.toLine(c)   "77b-5 against 77b-6: 2 metrics, 1 case changed, 0 the same"
+	 */
+	static toLine(c: Comparison): string {
+		return `${c.a.label} against ${c.b.label}: ${counted(c.metrics.length, "metric")}, ${counted(c.cases.length, "case")} changed, ${c.same} the same`;
 	}
 
 	/** The comparison as markdown: a table of metrics, then a table of the cases that changed. */

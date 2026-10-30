@@ -1,12 +1,22 @@
 import {memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika";
 import {Effect, Fiber, Schema, Stream} from "effect";
+import {createElement} from "react";
+import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import {markdown} from "./index.ts";
 import {Root} from "./root.ts";
-import {keyed} from "./window.tsx";
+import {keyed, MarkdownWindow} from "./window.tsx";
 
-// The markdown program: a text read into blocks, its view following each text told, and the
-// window's keys.
+// The markdown program: a text read into a tree, its view following each text told, what its
+// window draws, and when it ends.
+
+const t = (value: string) => ({type: "text", value}) as const;
+const blocksOf = (text: string) => Root.fromMarkdown(text).children;
+/** The window's HTML for a text, as React draws it. */
+const drawn = (text: string) =>
+	renderToStaticMarkup(
+		createElement(MarkdownWindow, {view: Root.fromMarkdown(text), send: () => {}}),
+	);
 
 describe("Root.fromMarkdown", () => {
 	it("reads every block this repo writes, in mdast's names", () => {
@@ -20,36 +30,147 @@ describe("Root.fromMarkdown", () => {
 			"  more",
 			"- two",
 			"",
-			"1. first",
+			"3. third",
 			"",
 			"```ts",
 			"const a = 1;",
-			"",
 			"```",
 			"",
 			"> a quote",
-			"> goes on",
 			"",
 			"| Run | Note |",
-			"|---|---|",
+			"|---|--:|",
 			"| 170-1 | a \\| b |",
 			"",
 			"---",
 		].join("\n");
-		expect(Root.fromMarkdown(text).children).toEqual([
-			{type: "heading", depth: 1, text: "170: The experiments program"},
-			{type: "paragraph", text: "**Answer.** Yes, on today's blocks."},
-			{type: "list", ordered: false, items: ["one more", "two"]},
-			{type: "list", ordered: true, items: ["first"]},
-			{type: "code", lang: "ts", value: "const a = 1;\n"},
-			{type: "blockquote", text: "a quote\ngoes on"},
-			{type: "table", head: ["Run", "Note"], rows: [["170-1", "a | b"]]},
+		expect(blocksOf(text)).toEqual([
+			{type: "heading", depth: 1, children: [t("170: The experiments program")]},
+			{
+				type: "paragraph",
+				children: [{type: "strong", children: [t("Answer.")]}, t(" Yes,\non today's blocks.")],
+			},
+			{
+				type: "list",
+				ordered: false,
+				start: null,
+				spread: false,
+				children: [
+					{
+						type: "listItem",
+						checked: null,
+						children: [{type: "paragraph", children: [t("one\nmore")]}],
+					},
+					{type: "listItem", checked: null, children: [{type: "paragraph", children: [t("two")]}]},
+				],
+			},
+			{
+				type: "list",
+				ordered: true,
+				start: 3,
+				spread: false,
+				children: [
+					{
+						type: "listItem",
+						checked: null,
+						children: [{type: "paragraph", children: [t("third")]}],
+					},
+				],
+			},
+			{type: "code", lang: "ts", value: "const a = 1;"},
+			{type: "blockquote", children: [{type: "paragraph", children: [t("a quote")]}]},
+			{
+				type: "table",
+				align: [null, "right"],
+				children: [
+					[[t("Run")], [t("Note")]],
+					[[t("170-1")], [t("a | b")]],
+				],
+			},
 			{type: "thematicBreak"},
 		]);
 	});
 
+	it("reads inline marks: bold, italic, code, struck and links", () => {
+		expect(blocksOf("**b** *i* `c` ~~d~~ [l](https://example.com/a)")).toEqual([
+			{
+				type: "paragraph",
+				children: [
+					{type: "strong", children: [t("b")]},
+					t(" "),
+					{type: "emphasis", children: [t("i")]},
+					t(" "),
+					{type: "inlineCode", value: "c"},
+					t(" "),
+					{type: "delete", children: [t("d")]},
+					t(" "),
+					{type: "link", url: "https://example.com/a", children: [t("l")]},
+				],
+			},
+		]);
+	});
+
+	it("leaves out HTML, so a script never reaches the window", () => {
+		const text = "<script>alert(1)</script>\n\nSafe <img src=x onerror=alert(1)> text.";
+		expect(blocksOf(text)).toEqual([{type: "paragraph", children: [t("Safe "), t(" text.")]}]);
+		expect(drawn(text)).not.toMatch(/<script|<img|onerror/);
+	});
+
+	it.each([
+		"javascript:alert(1)",
+		"JAVASCRIPT:alert(1)",
+		"data:text/html,hi",
+		"file:///etc/hosts",
+		"./other.md",
+	])("keeps a link to %s as its text alone", (url) => {
+		expect(blocksOf(`[click](${url})`)).toEqual([{type: "paragraph", children: [t("click")]}]);
+		expect(drawn(`[click](${url})`)).not.toMatch(/<a |href/);
+	});
+
+	it("refuses a link that is not http or https in the data itself", () => {
+		const bad = {
+			type: "root",
+			children: [
+				{
+					type: "paragraph",
+					children: [{type: "link", url: "javascript:alert(1)", children: [t("x")]}],
+				},
+			],
+		};
+		expect(Schema.is(Root)(bad)).toBe(false);
+	});
+
+	it("reads an image as its alt text: the window loads nothing from outside", () => {
+		expect(blocksOf("![a chart](https://example.com/c.png)")).toEqual([
+			{type: "paragraph", children: [t("a chart")]},
+		]);
+	});
+
 	it("reads an empty text as no blocks", () => {
-		expect(Root.fromMarkdown("\n\n").children).toEqual([]);
+		expect(blocksOf("\n\n")).toEqual([]);
+	});
+});
+
+describe("MarkdownWindow", () => {
+	it("draws inline marks as elements, and a link that opens outside", () => {
+		const html = drawn("**b** *i* `c` [l](https://example.com/a)");
+		expect(html).toContain("<strong>b</strong>");
+		expect(html).toContain("<em>i</em>");
+		expect(html).toContain("<code>c</code>");
+		expect(html).toContain(
+			'<a href="https://example.com/a" title="https://example.com/a" target="_blank" rel="noreferrer">l</a>',
+		);
+	});
+
+	it("draws a tight list's items as lines, and a table's alignment", () => {
+		expect(drawn("- a\n- b")).toContain("<ul><li>a</li><li>b</li></ul>");
+		expect(drawn("| a | b |\n|---|--:|\n| 1 | 2 |")).toContain(
+			'<td style="text-align:right">2</td>',
+		);
+	});
+
+	it("says what to do when it has nothing to show", () => {
+		expect(drawn("")).toContain("Nothing to show yet");
 	});
 });
 
@@ -85,6 +206,34 @@ describe("markdown", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(shown).toEqual({lists: [["list"]], ended: "ended"});
+	});
+
+	/** How a run with no `--text` ends: its text told or not, then closed, then quit if it is still up. */
+	const endOf = (texts: readonly string[]) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const started = yield* start(
+					markdown,
+					{text: undefined},
+					{},
+					{id: "markdown:test", storage: memoryStorage()},
+				);
+				if (started.kind !== "running") return yield* Effect.die("markdown did not start");
+				for (const text of texts) yield* tell(started.run, "text", text);
+				started.close("text");
+				const early = yield* started.run.ended.pipe(Effect.timeoutOption("200 millis"));
+				if (early._tag === "Some") return {ended: early.value.kind, by: "close"};
+				yield* tell(started.run, "quit", {});
+				return {ended: (yield* started.run.ended).kind, by: "quit"};
+			}).pipe(Effect.scoped),
+		);
+
+	it("ends at once when its text closes with none told: the program before it failed", async () => {
+		expect(await endOf([])).toEqual({ended: "ended", by: "close"});
+	});
+
+	it("stays up after its text closes once a text came, until the window quits", async () => {
+		expect(await endOf(["# Hi"])).toEqual({ended: "ended", by: "quit"});
 	});
 
 	it("takes quit from its window and refuses what it does not know", () => {

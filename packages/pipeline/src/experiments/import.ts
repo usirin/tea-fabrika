@@ -24,7 +24,9 @@ import {Experiments} from "./experiments.ts";
 // The rules, each a guess about old files written by hand, counted so the guesses can be checked:
 //
 //   a write-up       `NN-title.md`; its title is its `# NN. Title` line; its sections are its
-//                    `## ` parts; its day and answer are its row in the README's table
+//                    `## ` parts; its day is its row in the README's table; its answer is its
+//                    own opening `**Answer.**` paragraph, taken out of its first part so a page
+//                    shows it once, else its row's answer
 //   a results file   its experiment is the number its name starts with, when that experiment has
 //                    a write-up; else the README row that names the file; else that number; else
 //                    the lowest-numbered script whose text names the file; else none
@@ -164,12 +166,22 @@ const readWriteUp = (name: string, text: string) => {
 	}
 	sections.push({heading: current.heading, text: current.lines.join("\n").trim()});
 	const fromName = name.replace(/\.md$/, "").replace(/^[^-]+-/, "");
+	// The write-up's own answer: the `**Answer.**` paragraph that opens it, taken out of the lead
+	// section, so a page shows it once.
+	const lead = sections[0];
+	const own = lead?.heading === "" ? ANSWER.exec(lead.text) : null;
+	if (lead !== undefined && own !== null)
+		sections[0] = {heading: "", text: lead.text.slice(own[0].length).trim()};
 	return {
 		title: fitsTitle(heading) ? heading : fromName.replaceAll("-", " "),
 		titled: fitsTitle(heading),
+		answer: own === null ? null : (own[1] ?? "").replace(/\s*\n\s*/g, " ").trim(),
 		sections: sections.filter((s) => s.heading !== "" || s.text !== ""),
 	};
 };
+
+/** A write-up's opening answer paragraph, up to its first blank line. */
+const ANSWER = /^\*\*Answer\.\*\*\s*([\s\S]*?)(?:\n\s*\n|$)/;
 
 /** A metric's name from its path: a part MLflow does not take becomes `_`. */
 const keyFrom = (path: readonly string[]): string | null => {
@@ -320,7 +332,12 @@ export function transform(files: {
 		experiments.set(n, {
 			n,
 			title: read.title,
-			writeUp: {date, answer: row?.answer ?? "", headline: null, sections: read.sections},
+			writeUp: {
+				date,
+				answer: read.answer ?? row?.answer ?? "",
+				headline: null,
+				sections: read.sections,
+			},
 		});
 	}
 	const named = new Map<string, string>();

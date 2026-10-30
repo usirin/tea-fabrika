@@ -12,7 +12,7 @@ import {experiment} from "@tea-fabrika/experiment";
 yield* call(experiment, {n: "170"});
 // {kind: "called", heard: [
 //   {name: "page", value: {n: "170", title: "The experiments program", writeUp: {...}, runs: [...]}},
-//   {name: "markdown", value: "# 170: The experiments program\n\nDate: 2026-10-30\n\n**Answer.** ..."}]}
+//   {name: "markdown", value: "# The experiments program\n\n_170 · Oct 30 · 1 run_\n\n**Answer.** ..."}]}
 
 yield* call(experiment, {n: "404"});
 // ended: failed, ExperimentsFailed {why: "no_experiment"}
@@ -20,7 +20,10 @@ yield* call(experiment, {n: "404"});
 
 ```text
 tsh> experiment --n 170 | markdown        the page, drawn in a window
+tsh> experiment --n 404 | markdown        tsh: experiment failed: no experiment 404 on the ledger
 ```
+
+![Experiment 170's page, drawn by markdown](docs/experiment.png)
 
 ## What's in it
 

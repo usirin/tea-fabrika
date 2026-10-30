@@ -1,9 +1,15 @@
 import type {WindowProps} from "@kampus/fabrika";
+import {Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef} from "react";
 import type {markdown} from "./index.ts";
-import type {Block} from "./root.ts";
+import type {Block, Inline} from "./root.ts";
 
-// The markdown program's window: its blocks drawn as HTML, one element each, in the page's own
-// order. It holds no state and sends only `quit`, on the `q` key, as less does.
+// The markdown program's window: its tree drawn as React elements, one per node, never as an HTML
+// string, so nothing in the text can become markup. It holds no state and sends only `quit`.
+//
+//   q              quit, as less does
+//   j / k          down and up a line; space and b a page; g and G the top and the end
+//   a link         opens in the person's own browser, through the app's one way out
+//                  (`target="_blank"`: main refuses the window and hands an http or https URL on)
 
 /**
  * Each value with a key made from what it reads and how many alike came before it, so two items
@@ -21,21 +27,97 @@ export const keyed = <T,>(values: readonly T[], text: (value: T) => string) => {
 	});
 };
 
-const same = (s: string) => s;
+const json = (value: unknown) => JSON.stringify(value);
 
 const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
-function Drawn({block}: {readonly block: Block}) {
+/** Inline nodes, drawn. */
+const Phrasing = ({nodes}: {readonly nodes: readonly Inline[]}): ReactNode =>
+	keyed(nodes, json).map(({key, value}) => inline(value, key));
+
+/** One inline node, drawn. */
+const inline = (node: Inline, key: string): ReactNode => {
+	switch (node.type) {
+		case "text":
+			return <Fragment key={key}>{node.value}</Fragment>;
+		case "inlineCode":
+			return <code key={key}>{node.value}</code>;
+		case "break":
+			return <br key={key} />;
+		case "strong":
+			return (
+				<strong key={key}>
+					<Phrasing nodes={node.children} />
+				</strong>
+			);
+		case "emphasis":
+			return (
+				<em key={key}>
+					<Phrasing nodes={node.children} />
+				</em>
+			);
+		case "delete":
+			return (
+				<del key={key}>
+					<Phrasing nodes={node.children} />
+				</del>
+			);
+		case "link":
+			return (
+				<a key={key} href={node.url} title={node.url} target="_blank" rel="noreferrer">
+					<Phrasing nodes={node.children} />
+				</a>
+			);
+	}
+};
+
+/** A tight list's item reads as a line, not a paragraph: its paragraphs drawn bare. */
+const Item = ({blocks, tight}: {readonly blocks: readonly Block[]; readonly tight: boolean}) =>
+	keyed(blocks, json).map(({key, value}) =>
+		tight && value.type === "paragraph" ? (
+			<Phrasing key={key} nodes={value.children} />
+		) : (
+			<Drawn key={key} block={value} />
+		),
+	);
+
+const Blocks = ({blocks}: {readonly blocks: readonly Block[]}) =>
+	keyed(blocks, json).map(({key, value}) => <Drawn key={key} block={value} />);
+
+const ALIGN = {left: "left", right: "right", center: "center"} as const;
+
+function Drawn({block}: {readonly block: Block}): ReactNode {
 	switch (block.type) {
 		case "heading": {
 			const H = HEADINGS[block.depth - 1] ?? "h6";
-			return <H>{block.text}</H>;
+			return (
+				<H>
+					<Phrasing nodes={block.children} />
+				</H>
+			);
 		}
 		case "paragraph":
-			return <p>{block.text}</p>;
+			return (
+				<p>
+					<Phrasing nodes={block.children} />
+				</p>
+			);
 		case "list": {
-			const items = keyed(block.items, same).map((k) => <li key={k.key}>{k.value}</li>);
-			return block.ordered ? <ol>{items}</ol> : <ul>{items}</ul>;
+			const items = keyed(block.children, json).map(({key, value: item}) => (
+				<li key={key} className={item.checked === null ? undefined : "markdown-task"}>
+					{item.checked === null ? null : (
+						<input
+							className="markdown-box"
+							type="checkbox"
+							checked={item.checked}
+							disabled
+							readOnly
+						/>
+					)}
+					<Item blocks={item.children} tight={!block.spread} />
+				</li>
+			));
+			return block.ordered ? <ol start={block.start ?? undefined}>{items}</ol> : <ul>{items}</ul>;
 		}
 		case "code":
 			return (
@@ -44,47 +126,119 @@ function Drawn({block}: {readonly block: Block}) {
 				</pre>
 			);
 		case "blockquote":
-			return <blockquote>{block.text}</blockquote>;
-		case "table":
+			return (
+				<blockquote>
+					<Blocks blocks={block.children} />
+				</blockquote>
+			);
+		case "table": {
+			const [head = [], ...rows] = block.children;
+			const align = (i: number) => {
+				const a = block.align[i];
+				return a === null || a === undefined ? undefined : {textAlign: ALIGN[a]};
+			};
 			return (
 				<table>
 					<thead>
 						<tr>
-							{keyed(block.head, same).map((k) => (
-								<th key={k.key}>{k.value}</th>
+							{keyed(head, json).map(({key, value}, i) => (
+								<th key={key} style={align(i)}>
+									<Phrasing nodes={value} />
+								</th>
 							))}
 						</tr>
 					</thead>
 					<tbody>
-						{keyed(block.rows, (r) => r.join("|")).map((row) => (
+						{keyed(rows, json).map((row) => (
 							<tr key={row.key}>
-								{keyed(row.value, same).map((k) => (
-									<td key={k.key}>{k.value}</td>
+								{keyed(row.value, json).map(({key, value}, i) => (
+									<td key={key} style={align(i)}>
+										<Phrasing nodes={value} />
+									</td>
 								))}
 							</tr>
 						))}
 					</tbody>
 				</table>
 			);
+		}
 		case "thematicBreak":
 			return <hr />;
 	}
 }
 
+/** The keys less reads, as scrolls of the page: by a line, by a page, or to an end. */
+const scrollOf = (key: string, page: HTMLElement): ScrollToOptions | null => {
+	const line = 40;
+	// A page less one line for the keys' line, and one kept on screen, as less keeps one.
+	const screen = page.clientHeight - 2 * line;
+	switch (key) {
+		case "j":
+		case "ArrowDown":
+			return {top: page.scrollTop + line};
+		case "k":
+		case "ArrowUp":
+			return {top: page.scrollTop - line};
+		case " ":
+		case "f":
+		case "PageDown":
+			return {top: page.scrollTop + screen};
+		case "b":
+		case "PageUp":
+			return {top: page.scrollTop - screen};
+		case "g":
+		case "Home":
+			return {top: 0};
+		case "G":
+		case "End":
+			return {top: page.scrollHeight};
+		default:
+			return null;
+	}
+};
+
 export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
+	// The page is the view, so it is the one box that scrolls in the tile (the app's window.css).
+	const page = useRef<HTMLElement>(null);
+	// The page takes the keys as it opens, as less does: q works without a click first.
+	useEffect(() => page.current?.focus(), []);
+	const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+		if (e.metaKey || e.ctrlKey || e.altKey) return;
+		if (e.key === "q") {
+			e.preventDefault();
+			send({type: "quit", value: {}});
+			return;
+		}
+		const to = scrollOf(e.key, e.currentTarget);
+		if (to === null) return;
+		e.preventDefault();
+		e.currentTarget.scrollTo(to);
+	};
 	return (
 		<article
+			ref={page}
 			className="markdown"
 			aria-label="markdown"
-			// biome-ignore lint/a11y/noNoninteractiveTabindex: the page takes the q key, as less does.
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: the page takes less's keys: q, j, k, space, g.
 			tabIndex={0}
-			onKeyDown={(e) => {
-				if (e.key === "q") send({type: "quit", value: {}});
-			}}
+			onKeyDown={onKeyDown}
 		>
-			{keyed(view.children, (b) => JSON.stringify(b)).map((k) => (
-				<Drawn key={k.key} block={k.value} />
-			))}
+			<div className="markdown-body">
+				<div className="markdown-page">
+					{view.children.length === 0 ? (
+						<p className="markdown-empty">
+							Nothing to show yet. Pipe text in, as <code>experiments | markdown</code>, or tell it{" "}
+							<code>text</code>.
+						</p>
+					) : (
+						<Blocks blocks={view.children} />
+					)}
+				</div>
+			</div>
+			<footer className="markdown-keys">
+				<kbd className="markdown-key">q</kbd> quit <kbd className="markdown-key">j</kbd>{" "}
+				<kbd className="markdown-key">k</kbd> scroll <kbd className="markdown-key">space</kbd> page
+			</footer>
 		</article>
 	);
 }

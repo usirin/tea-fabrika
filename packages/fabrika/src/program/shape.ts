@@ -96,7 +96,14 @@ export function capacityOf(capacity: number): number {
 	return capacity;
 }
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
-export type Output<T> = Declared<"output", T>;
+export interface Output<T> extends Declared<"output", T> {
+	/**
+	 * The value as one line for a person at a terminal, as Rust's `Display` is to its `Debug`:
+	 * the program's own form, where tsh's short form (`shortOf`) knows only the value's fields.
+	 * Left out, tsh prints the short form. A pipe, `$( )` and `tsh --json` never use it.
+	 */
+	readonly line?: (value: T) => string;
+}
 
 /** The payload type a declaration carries. */
 export type PayloadOf<D> = D extends {readonly shape: Shape<infer T>} ? T : never;
@@ -218,11 +225,21 @@ export const input = <T, const A extends Ack = "auto", const C extends boolean =
 	control: options?.control ?? (false as C),
 });
 
-/** Declare an output: a value the program sends while it runs, to anyone who listens. */
-export const output = <T>(schema: ShapeSchema<T>, description: string): Output<T> => ({
+/**
+ * Declare an output: a value the program sends while it runs, to anyone who listens.
+ * `{line}`: how tsh prints one to a person ({@link Output}'s `line`).
+ *
+ *   output(Experiment, "One experiment.", {line: Experiment.toLine})   // 170  The experiments…  Oct 30
+ */
+export const output = <T>(
+	schema: ShapeSchema<T>,
+	description: string,
+	options?: {readonly line?: (value: T) => string},
+): Output<T> => ({
 	direction: "output",
 	description: described(description),
 	shape: shapeOf(schema),
+	...(options?.line === undefined ? {} : {line: options.line}),
 });
 
 /** What fit answers. */

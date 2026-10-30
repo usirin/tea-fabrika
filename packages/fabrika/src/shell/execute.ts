@@ -185,7 +185,11 @@ function printers(
 			output,
 			output === skip
 				? (value: unknown) => taken?.(value)
-				: (value: unknown) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`),
+				: (value: unknown) =>
+						shell.print(
+							"out",
+							`${prefix(output)}${shown(value, shell.show, entry.program.outputs[output]?.line)}`,
+						),
 		]),
 	);
 }

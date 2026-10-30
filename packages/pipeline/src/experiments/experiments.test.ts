@@ -4,6 +4,8 @@ import {Deferred, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {
 	Comparison,
+	dayLabel,
+	dayOf,
 	Experiment,
 	ExperimentPage,
 	experimentName,
@@ -147,6 +149,9 @@ describe("Experiments on the ledger", () => {
 		const md = Comparison.toMarkdown(compared);
 		expect(md).toContain("# 170-1 against 170-2");
 		expect(md).toContain("## Cases that changed: 2, 1 the same");
+		expect(Comparison.toLine(compared)).toBe(
+			"170-1 against 170-2: 2 metrics, 2 cases changed, 1 the same",
+		);
 	});
 
 	it("lands a write sent again once, and refuses a log on an ended run", async () => {
@@ -335,20 +340,56 @@ describe("Experiments on the ledger", () => {
 				return yield* ex.open("170");
 			}),
 		);
-		const md = ExperimentPage.toMarkdown(page);
+		const md = ExperimentPage.toMarkdown(page, "2026-10-31");
 		expect(md.split("\n").slice(0, 7)).toEqual([
-			"# 170: The experiments program",
+			"# The experiments program",
 			"",
-			"Date: 2026-10-30",
+			"_170 · Oct 30 · 2 runs_",
 			"",
 			"**Answer.** Yes.",
 			"",
 			"## What was asked",
 		]);
-		expect(md).toContain(`| 170-2 | ${B} | finished | 0.03 | agreed 1 |`);
-		expect(Experiment.toMarkdown([Experiment.fromPage(page)])).toContain(
-			"| 170 | The experiments program | 2026-10-30 | 2 | 170-2 finished, agreed 1 |",
+		expect(md).toContain(`| 170-2 | finished | $0.03 | agreed 1 | \`${B}\` |`);
+		const row = Experiment.fromPage(page);
+		expect(Experiment.toMarkdown([row], "2026-10-31")).toContain(
+			"| 170 | The experiments program | 2 | 170-2 finished, agreed 1 | Oct 30 |",
 		);
+		expect(Experiment.toLine(row, "2026-10-31")).toBe(
+			`170   ${"The experiments program".padEnd(44)}  Oct 30        2 runs  170-2 finished, agreed 1`,
+		);
+		// Never wider than 100: the latest is cut last.
+		const long = {
+			...row,
+			latest: row.latest && {...row.latest, headline: {key: "k".repeat(60), value: 1}},
+		};
+		expect(Experiment.toLine(long, "2026-10-31")).toHaveLength(100);
+		expect(Experiment.toLine(long, "2026-10-31").endsWith("…")).toBe(true);
+		expect(ExperimentPage.toLine(page, "2026-10-31")).toBe(Experiment.toLine(row, "2026-10-31"));
+		// A run with many metrics shows its first four in the page's table, and counts the rest.
+		const many = {a: 1, b: 2, c: 3, d: 4, e: 5, f: 6};
+		const wide = {...page, runs: page.runs.map((r) => ({...r, metrics: many}))};
+		expect(ExperimentPage.toMarkdown(wide, "2026-10-31")).toContain(
+			"| a 1, b 2, c 3, d 4 and 2 more |",
+		);
+		expect(Experiment.toLine({...row, title: "x".repeat(60)}, "2027-01-02")).toBe(
+			`170   ${"x".repeat(43)}…  Oct 30, 2026  2 runs  170-2 finished, agreed 1`,
+		);
+	});
+});
+
+describe("dates and titles, as a person reads them", () => {
+	it.each([
+		["2026-10-30", "2026-10-31", "Oct 30"],
+		["2026-01-02", "2026-12-31", "Jan 2"],
+		["2025-12-31", "2026-01-01", "Dec 31, 2025"],
+	])("writes %s, seen on %s, as %s", (day, today, label) => {
+		expect(dayLabel(day, today)).toBe(label);
+	});
+
+	it("reads a time as the day it falls on here", () => {
+		expect(dayOf(new Date(2026, 9, 30, 23, 59).getTime())).toBe("2026-10-30");
+		expect(dayOf(new Date(2026, 0, 2, 0, 1).getTime())).toBe("2026-01-02");
 	});
 });
 

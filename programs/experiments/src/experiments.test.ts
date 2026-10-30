@@ -34,10 +34,33 @@ describe("experiments", () => {
 		const markdown = called.heard.at(-1)?.value;
 		expect(typeof markdown === "string" && markdown.split("\n").filter((l) => l !== "")).toEqual([
 			"# Experiments",
-			"| # | Title | Date | Runs | Latest |",
-			"|---|---|---|---|---|",
-			"| 09 | An old one |  | 0 |  |",
-			"| 170 | The experiments program |  | 1 | 170-1 finished, agreed 0.5 |",
+			"2 experiments, by number.",
+			"| # | Title | Runs | Latest | Date |",
+			"|---|---|--:|---|---|",
+			"| 09 | An old one | 0 |  |  |",
+			"| 170 | The experiments program | 1 | 170-1 finished, agreed 0.5 |  |",
 		]);
+	});
+
+	it("prints a row in tsh as one line in columns, a human day in place of a raw time", () => {
+		const row = {
+			n: "170",
+			title: "The experiments program, on today's ledger, with a title too long for its column",
+			date: "2026-10-30",
+			runs: 1,
+			latest: {
+				run: "170.ed1e1dcf9719",
+				label: "170-1",
+				at: 1793382842000,
+				status: "finished",
+				headline: {key: "agreed", value: 0.5},
+			},
+		} as const;
+		const line = experiments.outputs.row.line;
+		if (line === undefined) throw new Error("row has no line");
+		const printed = line(row);
+		expect(printed).toMatch(/^170 {3}The experiments program, on today's ledger,… {2}/);
+		expect(printed).toMatch(/ 1 run {3}170-1 finished, agreed 0\.5$/);
+		expect(printed).not.toContain("1793382842000");
 	});
 });

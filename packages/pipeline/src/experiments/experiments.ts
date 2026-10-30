@@ -79,7 +79,12 @@ export class ExperimentsFailed extends Schema.TaggedError<ExperimentsFailed>()(
 		/** What went wrong, in words. */
 		says: Schema.String,
 	},
-) {}
+) {
+	/** Its words, so tsh prints `failed: no experiment 404`, not the error's tag. */
+	override get message(): string {
+		return this.says;
+	}
+}
 
 type Call<A> = Effect.Effect<A, ExperimentsFailed>;
 

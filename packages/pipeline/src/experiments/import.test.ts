@@ -89,6 +89,24 @@ describe("transform", () => {
 			costNames: {totalUsd: 1},
 		});
 	});
+
+	it("takes a write-up's own answer paragraph over its row's, so a page shows it once", () => {
+		const text =
+			"# 01. The first one\n\n**Answer.** Yes,\non the blocks.\n\nThe rest.\n\n## How\n\nLike this.\n";
+		const old = transform({...files, writeUps: [{name: "01-a.md", text}]});
+		expect(old.experiments[0]?.writeUp).toMatchObject({
+			answer: "Yes, on the blocks.",
+			sections: [
+				{heading: "", text: "The rest."},
+				{heading: "How", text: "Like this."},
+			],
+		});
+		const only = transform({
+			...files,
+			writeUps: [{name: "01-a.md", text: "# 01. A\n\n**Answer.** Yes.\n\n## How\n\nSo.\n"}],
+		});
+		expect(only.experiments[0]?.writeUp?.sections).toEqual([{heading: "How", text: "So."}]);
+	});
 });
 
 describe("load", () => {

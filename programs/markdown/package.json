@@ -15,7 +15,10 @@
 	"dependencies": {
 		"@demlik/tea": "catalog:",
 		"@kampus/fabrika": "workspace:*",
-		"effect": "catalog:"
+		"effect": "catalog:",
+		"mdast-util-from-markdown": "catalog:",
+		"mdast-util-gfm": "catalog:",
+		"micromark-extension-gfm": "catalog:"
 	},
 	"peerDependencies": {
 		"react": "^19.0.0"
@@ -25,10 +28,13 @@
 		"@tea-fabrika/compare": "workspace:*",
 		"@tea-fabrika/experiment": "workspace:*",
 		"@tea-fabrika/experiments": "workspace:*",
+		"@types/mdast": "catalog:",
 		"@types/node": "catalog:",
 		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
 		"fast-check": "catalog:",
 		"react": "catalog:",
+		"react-dom": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

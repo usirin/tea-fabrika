@@ -5,6 +5,16 @@ import {shortOf, shown} from "./short.ts";
 const pr = "https://github.com/example/repo/pull/597";
 const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
 
+describe("a value as tsh prints it", () => {
+	it("uses its output's own line for a person, and the JSON whole for a script", () => {
+		const row = {n: "170", at: 1793382842000};
+		const line = (r: typeof row) => `${r.n}  Oct 30`;
+		expect(shown(row, "short", line)).toBe("170  Oct 30");
+		expect(shown(row, "short")).toBe("n 170  at 1793382842000");
+		expect(shown(row, "json", line)).toBe(JSON.stringify(row));
+	});
+});
+
 describe("a value as one short line", () => {
 	it("prints a text, a number and a list as they are, in one line", () => {
 		expect(shortOf("hello")).toBe("hello");

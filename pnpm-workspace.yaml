@@ -63,6 +63,12 @@ catalog:
   fast-check: 4.10.2
   # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
   ghostty-web: 0.4.0
+  # The markdown program's reader (programs/markdown): micromark, the CommonMark parser remark
+  # uses, with GitHub's tables, into mdast. MIT. No HTML is made: the window draws the tree itself.
+  '@types/mdast': 4.0.4
+  mdast-util-from-markdown: 2.1.0
+  mdast-util-gfm: 3.1.0
+  micromark-extension-gfm: 3.0.0
   miniflare: 4.20260730.0
   playwright: 1.64.1
   react: 19.3.1

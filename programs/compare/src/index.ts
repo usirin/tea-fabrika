@@ -8,7 +8,7 @@ import {Effect, Schema} from "effect";
 // It reads through the `Experiments` service and writes nothing.
 //
 //   tsh> compare --n 170
-//   comparison (170-1, 170-2, …)            metrics [{key: "agreed", a: 0.5, b: 1}], cases that changed
+//   comparison 170-1 against 170-2: 1 metric, 1 case changed, 0 the same     the data, as a line
 //   markdown # 170-1 against 170-2…         the same, as two tables
 //
 //   tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
@@ -40,6 +40,7 @@ export const compare = defineProgram({
 		comparison: output(
 			Comparison,
 			"Every metric in both runs, and the cases whose scores changed.",
+			{line: Comparison.toLine},
 		),
 		markdown: output(
 			Schema.String,

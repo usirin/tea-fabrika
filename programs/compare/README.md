@@ -25,7 +25,10 @@ yield* call(compare, {n: "171", a: undefined, b: undefined});
 ```text
 tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
 tsh> compare --n 170 --a 170.ed1e1dcf9719 --b 170-3
+compare comparison 170-1 against 170-3: 1 metric, 1 case changed, 2 the same
 ```
+
+![Two runs of 77b, compared and drawn by markdown](docs/compare.png)
 
 A run is named on the line by its label, `170-1`, as the tables show it, or by its id,
 `170.ed1e1dcf9719`, made from its key. A label is its place among the runs and is read against
