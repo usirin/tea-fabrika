@@ -60,7 +60,7 @@ const end: fc.Arbitrary<End> = fc.record({
 
 const table: MsgArbitraryTable<ConversationMsg> = {
 	opened: arbRecordMsg("opened", {
-		maker: fc.constantFrom("claude", "codex" as const),
+		provider: fc.constantFrom("claude", "codex" as const),
 		session: fc.constantFrom("claude/7", "codex/8"),
 	}),
 	told: arbRecordMsg("told", {prompt: text}),

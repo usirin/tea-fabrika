@@ -10,8 +10,8 @@ import {memorySessions} from "../agent/sessions.ts";
 import {Agents, noReaper, type Raw} from "../agent/turn.ts";
 import {rawOf} from "../claude/adapter.ts";
 import {rawOfLine} from "../codex/adapter.ts";
-import type {Maker} from "./conversation.ts";
-import {claudeRaws, codexRaws, fakeMakers, type Story} from "./fakes.ts";
+import type {Provider} from "./conversation.ts";
+import {claudeRaws, codexRaws, fakeProviders, type Story} from "./fakes.ts";
 import {
 	type AgentFlags,
 	agentProgram,
@@ -20,8 +20,8 @@ import {
 	typedAgentProgram,
 } from "./program.ts";
 
-// `claude` and `codex` as programs, on the two fake makers (./fakes.ts): the
-// same story told the way each maker tells it. Every test runs on both, so a
+// `claude` and `codex` as programs, on the two fake providers (./fakes.ts): the
+// same story told the way each provider tells it. Every test runs on both, so a
 // difference between them shows as a failing row, not as a branch nobody ran.
 
 const Sorted = Schema.Struct({
@@ -50,13 +50,13 @@ const story = (prompt: string): Story => ({
 });
 
 const world = () => {
-	const fakes = fakeMakers((turn) => story(turn.prompt));
+	const fakes = fakeProviders((turn) => story(turn.prompt));
 	const sessions = memorySessions();
 	const agents = makeAgents({adapters: fakes, sessions, reaper: noReaper});
 	return {fakes, agents};
 };
 
-const flagsOf = (more: Partial<AgentFlags> = {}): AgentFlags => ({
+const flags = (more: Partial<AgentFlags> = {}): AgentFlags => ({
 	folder: "/work/copy",
 	session: "sort/7",
 	model: undefined,
@@ -68,17 +68,17 @@ const flagsOf = (more: Partial<AgentFlags> = {}): AgentFlags => ({
 	...more,
 });
 
-const MAKERS: readonly Maker[] = ["claude", "codex"];
-const programOf = (maker: Maker) => (maker === "claude" ? claudeProgram : codexProgram);
+const PROVIDERS: readonly Provider[] = ["claude", "codex"];
+const program = (provider: Provider) => (provider === "claude" ? claudeProgram : codexProgram);
 
 /** One prompt, the input closed after it, as `claude -p` or `codex exec`: every output, in order. */
 type UntypedFlags = Given<(typeof claudeProgram)["flags"]>;
-const once = (maker: Maker, prompt: string, more: Partial<UntypedFlags> = {}, w = world()) =>
+const once = (provider: Provider, prompt: string, more: Partial<UntypedFlags> = {}, w = world()) =>
 	Effect.gen(function* () {
 		const called = yield* call(
-			programOf(maker),
-			{...flagsOf(more), answer: more.answer},
-			{told: {prompt: [prompt]}, keeping: {id: `${maker}:run`, storage: memoryStorage()}},
+			program(provider),
+			{...flags(more), answer: more.answer},
+			{told: {prompt: [prompt]}, keeping: {id: `${provider}:run`, storage: memoryStorage()}},
 		).pipe(Effect.provideService(Agents, w.agents));
 		if (called.kind !== "called") return yield* Effect.die(`refused: ${called.why}`);
 		return called.heard;
@@ -89,7 +89,7 @@ const until = (check: () => boolean) =>
 		while (!check()) yield* Effect.sleep(Duration.millis(2));
 	}).pipe(Effect.timeout("2 seconds"), Effect.orDie);
 
-describe("the fakes say what each real adapter makes of its maker's events", () => {
+describe("the fakes say what each real adapter makes of its provider's events", () => {
 	it("claude: the SDK's messages, through rawOf", () => {
 		const sdk = (m: Record<string, unknown>) =>
 			// biome-ignore lint/plugin: a fixture holds the few fields rawOf reads; the SDK's full type has dozens more
@@ -148,62 +148,76 @@ describe("the fakes say what each real adapter makes of its maker's events", () 
 });
 
 describe("claude and codex, at parity", () => {
-	it.live("the same outputs in the same order; only what the maker says of its cost differs", () =>
-		Effect.gen(function* () {
-			const answer = SORTED_JSON_SCHEMA;
-			const [c, x] = [
-				yield* once("claude", "sort #7", {answer}),
-				yield* once("codex", "sort #7", {answer}),
-			];
-			// Codex's answer is a message too: the program shows it as said, as the maker said it.
-			expect(c.map((h) => h.name)).toEqual(["started", "tool", "tool", "said", "ended"]);
-			expect(x.map((h) => h.name)).toEqual(["started", "tool", "tool", "said", "said", "ended"]);
-			const end = (heard: typeof c) => heard.find((h) => h.name === "ended")?.value;
-			expect(end(c)).toMatchObject({
-				turn: 1,
-				stop: "end_turn",
-				answer: GOOD,
-				counted: "turn",
-				usd: 0.012,
-				requests: 2,
-			});
-			expect(end(x)).toMatchObject({
-				turn: 1,
-				stop: "end_turn",
-				answer: GOOD,
-				counted: "turn",
-				usd: null,
-				requests: null,
-			});
-			expect(c[0]?.value).toEqual({maker: "claude", session: "sort/7", resumed: false, resent: 0});
-			expect(x[0]?.value).toEqual({maker: "codex", session: "sort/7", resumed: false, resent: 0});
-		}),
+	it.live(
+		"the same outputs in the same order; only what the provider says of its cost differs",
+		() =>
+			Effect.gen(function* () {
+				const answer = SORTED_JSON_SCHEMA;
+				const [c, x] = [
+					yield* once("claude", "sort #7", {answer}),
+					yield* once("codex", "sort #7", {answer}),
+				];
+				// Codex's answer is a message too: the program shows it as said, as the provider said it.
+				expect(c.map((h) => h.name)).toEqual(["started", "tool", "tool", "said", "ended"]);
+				expect(x.map((h) => h.name)).toEqual(["started", "tool", "tool", "said", "said", "ended"]);
+				const end = (heard: typeof c) => heard.find((h) => h.name === "ended")?.value;
+				expect(end(c)).toMatchObject({
+					turn: 1,
+					stop: "end_turn",
+					answer: GOOD,
+					counted: "turn",
+					usd: 0.012,
+					requests: 2,
+				});
+				expect(end(x)).toMatchObject({
+					turn: 1,
+					stop: "end_turn",
+					answer: GOOD,
+					counted: "turn",
+					usd: null,
+					requests: null,
+				});
+				expect(c[0]?.value).toEqual({
+					provider: "claude",
+					session: "sort/7",
+					resumed: false,
+					resent: 0,
+				});
+				expect(x[0]?.value).toEqual({
+					provider: "codex",
+					session: "sort/7",
+					resumed: false,
+					resent: 0,
+				});
+			}),
 	);
 
-	for (const maker of MAKERS)
-		it.live(`${maker}: a second start on the same session carries the maker's own session on`, () =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* once(maker, "sort #7", {}, w);
-				const again = yield* once(maker, "sort #7 again", {}, w);
-				expect(again[0]?.value).toMatchObject({resumed: true});
-				const seen = w.fakes[maker].seen.started;
-				expect(seen.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
-				expect(seen.map((t) => t.session)).toEqual(["sort/7", "sort/7"]);
-			}),
+	for (const provider of PROVIDERS)
+		it.live(
+			`${provider}: a second start on the same session carries the provider's own session on`,
+			() =>
+				Effect.gen(function* () {
+					const w = world();
+					yield* once(provider, "sort #7", {}, w);
+					const again = yield* once(provider, "sort #7 again", {}, w);
+					expect(again[0]?.value).toMatchObject({resumed: true});
+					const seen = w.fakes[provider].seen.started;
+					expect(seen.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
+					expect(seen.map((t) => t.session)).toEqual(["sort/7", "sort/7"]);
+				}),
 		);
 
-	for (const maker of MAKERS)
-		it.live(`${maker}: cancel by number, before the turn is read and while it runs`, () =>
+	for (const provider of PROVIDERS)
+		it.live(`${provider}: cancel by number, before the turn is read and while it runs`, () =>
 			Effect.gen(function* () {
 				const w = world();
 				const ended = ear<{readonly turn: number; readonly stop: string}>();
 				const said = ear<unknown>();
 				const started = yield* start(
-					programOf(maker),
-					{...flagsOf(), answer: undefined},
+					program(provider),
+					{...flags(), answer: undefined},
 					{ended: ended.hear, said: said.hear},
-					{id: `${maker}:cancel`, storage: memoryStorage()},
+					{id: `${provider}:cancel`, storage: memoryStorage()},
 				).pipe(Effect.provideService(Agents, w.agents));
 				if (started.kind !== "running") return yield* Effect.die("not started");
 				// Turn 2 cancelled before anyone told it; turn 1 hangs, and is cancelled while it runs.
@@ -220,9 +234,9 @@ describe("claude and codex, at parity", () => {
 					[2, "cancelled"],
 					[3, "end_turn"],
 				]);
-				// The service's stop runs at the end of every turn that reached the maker, cut or not; turn 2 never did.
-				expect(w.fakes[maker].seen.stopped).toBe(2);
-				expect(w.fakes[maker].seen.started.map((t) => t.prompt.split("\n")[0])).toEqual([
+				// The service's stop runs at the end of every turn that reached the provider, cut or not; turn 2 never did.
+				expect(w.fakes[provider].seen.stopped).toBe(2);
+				expect(w.fakes[provider].seen.started.map((t) => t.prompt.split("\n")[0])).toEqual([
 					"hang",
 					"sort #7 too",
 				]);
@@ -241,16 +255,16 @@ describe("claude and codex, at parity", () => {
 		}),
 	);
 
-	for (const maker of MAKERS)
-		it.live(`${maker}: an allow for an ask nothing waits on is said back, not lost`, () =>
+	for (const provider of PROVIDERS)
+		it.live(`${provider}: an allow for an ask nothing waits on is said back, not lost`, () =>
 			Effect.gen(function* () {
 				const w = world();
 				const asks = ear<unknown>();
 				const started = yield* start(
-					programOf(maker),
-					{...flagsOf(), answer: undefined},
+					program(provider),
+					{...flags(), answer: undefined},
 					{ask: asks.hear},
-					{id: `${maker}:ask`, storage: memoryStorage()},
+					{id: `${provider}:ask`, storage: memoryStorage()},
 				).pipe(Effect.provideService(Agents, w.agents));
 				if (started.kind !== "running") return yield* Effect.die("not started");
 				yield* tell(started.run, "allow", "ask-1");
@@ -260,9 +274,9 @@ describe("claude and codex, at parity", () => {
 			}),
 		);
 
-	for (const maker of MAKERS)
+	for (const provider of PROVIDERS)
 		it.live(
-			`${maker}: a start after a stop mid-turn keeps the conversation and sends the cut-off turn again`,
+			`${provider}: a start after a stop mid-turn keeps the conversation and sends the cut-off turn again`,
 			() =>
 				Effect.gen(function* () {
 					const w = world();
@@ -271,10 +285,10 @@ describe("claude and codex, at parity", () => {
 						Effect.gen(function* () {
 							const said = ear<unknown>();
 							const started = yield* start(
-								programOf(maker),
-								{...flagsOf(), answer: undefined},
+								program(provider),
+								{...flags(), answer: undefined},
 								{said: said.hear},
-								{id: `${maker}:kept`, storage},
+								{id: `${provider}:kept`, storage},
 							).pipe(Effect.provideService(Agents, w.agents));
 							if (started.kind !== "running") return yield* Effect.die("not started");
 							yield* tell(started.run, "prompt", "hang once");
@@ -287,55 +301,55 @@ describe("claude and codex, at parity", () => {
 					yield* Effect.scoped(
 						Effect.gen(function* () {
 							const started = yield* start(
-								programOf(maker),
-								{...flagsOf(), answer: undefined},
+								program(provider),
+								{...flags(), answer: undefined},
 								{started: hears.hear, ended: hears.hear},
-								{id: `${maker}:kept`, storage},
+								{id: `${provider}:kept`, storage},
 							).pipe(Effect.provideService(Agents, w.agents));
 							if (started.kind !== "running") return yield* Effect.die("not started");
 							yield* until(() => hears.values.length > 0);
-							// Sent again: the maker carries the session on, and the turn hangs again until cancelled.
-							yield* until(() => w.fakes[maker].seen.started.length === 2);
+							// Sent again: the provider carries the session on, and the turn hangs again until cancelled.
+							yield* until(() => w.fakes[provider].seen.started.length === 2);
 							yield* tell(started.run, "cancel", "now");
 							yield* until(() => hears.values.length === 2);
 						}),
 					);
 					expect(hears.values).toMatchObject([{resent: 1}, {stop: "cancelled"}]);
-					expect(w.fakes[maker].seen.started.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
+					expect(w.fakes[provider].seen.started.map((t) => t.resume)).toEqual([null, "fake-own-1"]);
 				}),
 		);
 });
 
 describe("the typed answer across the program boundary", () => {
 	const answer = SORTED_JSON_SCHEMA;
-	const typed = (maker: Maker) => typedAgentProgram(maker, Sorted, `${maker}-sort`);
-	const endOf = (maker: Maker, way: "A" | "B" | "C", prompt: string) =>
+	const typed = (provider: Provider) => typedAgentProgram(provider, Sorted, `${provider}-sort`);
+	const answered = (provider: Provider, way: "A" | "B" | "C", prompt: string) =>
 		Effect.gen(function* () {
 			const w = world();
 			if (way === "C") {
-				const called = yield* call(typed(maker), flagsOf(), {
+				const called = yield* call(typed(provider), flags(), {
 					told: {prompt: [prompt]},
 					keeping: {id: "c", storage: memoryStorage()},
 				}).pipe(Effect.provideService(Agents, w.agents));
 				if (called.kind !== "called") return yield* Effect.die("refused");
 				return called.heard.find((h) => h.name === "ended")?.value.answer;
 			}
-			const heard = yield* once(maker, prompt, way === "B" ? {answer} : {}, w);
+			const heard = yield* once(provider, prompt, way === "B" ? {answer} : {}, w);
 			const end = heard.find((h) => h.name === "ended")?.value as
 				| {readonly answer: unknown}
 				| undefined;
 			return end?.answer;
 		});
 
-	for (const maker of MAKERS)
-		it.live(`${maker}: a wrong label and a wrong ticket, each way`, () =>
+	for (const provider of PROVIDERS)
+		it.live(`${provider}: a wrong label and a wrong ticket, each way`, () =>
 			Effect.gen(function* () {
 				const rows: Record<string, readonly unknown[]> = {};
 				for (const way of ["A", "B", "C"] as const)
 					rows[way] = [
-						yield* endOf(maker, way, "sort #7"),
-						yield* endOf(maker, way, "bad label"),
-						yield* endOf(maker, way, "bad ticket"),
+						yield* answered(provider, way, "sort #7"),
+						yield* answered(provider, way, "bad label"),
+						yield* answered(provider, way, "bad ticket"),
 					];
 				// A: any JSON passes; the stage must check, and nothing makes it.
 				expect(rows.A).toEqual([GOOD, {label: "bogus", ticket: "#7"}, {label: "bug", ticket: "7"}]);
