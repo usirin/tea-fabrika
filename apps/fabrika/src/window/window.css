@@ -811,6 +811,8 @@ button:focus-visible {
 	background: var(--surface-sunken);
 	border-radius: var(--r);
 	line-height: 1.5;
+	/* This repo indents with tabs: four columns, as an editor shows them, not the browser's eight. */
+	tab-size: 4;
 	/* A long line wraps, as the page does: nothing inside the page scrolls on its own. */
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;

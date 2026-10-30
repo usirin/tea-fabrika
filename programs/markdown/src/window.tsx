@@ -1,7 +1,16 @@
 import type {WindowProps} from "@kampus/fabrika";
-import {Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef} from "react";
+import {
+	Fragment,
+	type KeyboardEvent,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useRef,
+	useSyncExternalStore,
+} from "react";
+import {type Colors, colorsNow, loadColors, onColors, type Span, wantsColors} from "./highlight.ts";
 import type {markdown} from "./index.ts";
-import type {Block, Inline} from "./root.ts";
+import type {Block, Code, Inline} from "./root.ts";
 
 // The markdown program's window: its tree drawn as React elements, one per node, never as an HTML
 // string, so nothing in the text can become markup. It holds no state and sends only `quit`.
@@ -10,6 +19,8 @@ import type {Block, Inline} from "./root.ts";
 //   j / k          down and up a line; space and b a page; g and G the top and the end
 //   a link         opens in the person's own browser, through the app's one way out
 //                  (`target="_blank"`: main refuses the window and hands an http or https URL on)
+//   ```ts          a fenced block with a language is colored (./highlight.ts): plain text at
+//                  once, colors when the highlighter has loaded, once for the page
 
 /**
  * Each value with a key made from what it reads and how many alike came before it, so two items
@@ -84,6 +95,58 @@ const Item = ({blocks, tight}: {readonly blocks: readonly Block[]; readonly tigh
 const Blocks = ({blocks}: {readonly blocks: readonly Block[]}) =>
 	keyed(blocks, json).map(({key, value}) => <Drawn key={key} block={value} />);
 
+/** One span of code: its text as a child, in its color, or bare in the page's ink. */
+const spanOf = (span: Span, key: string): ReactNode =>
+	span.color === null && !span.italic && !span.bold ? (
+		<Fragment key={key}>{span.text}</Fragment>
+	) : (
+		<span
+			key={key}
+			style={{
+				color: span.color ?? undefined,
+				fontStyle: span.italic ? "italic" : undefined,
+				fontWeight: span.bold ? 600 : undefined,
+			}}
+		>
+			{span.text}
+		</span>
+	);
+
+/**
+ * A fenced block, in color when `colors` is there and knows its language, else as plain text.
+ * The same characters either way, so coloring it moves nothing on the page.
+ */
+export function CodeBlock({block, colors}: {readonly block: Code; readonly colors: Colors | null}) {
+	const lines = useMemo(
+		() => (colors === null || block.lang === null ? null : colors(block.value, block.lang)),
+		[colors, block.value, block.lang],
+	);
+	return (
+		<pre>
+			<code data-lang={block.lang ?? undefined}>
+				{lines === null
+					? block.value
+					: keyed(lines, json).map(({key, value: line}, i) => (
+							<Fragment key={key}>
+								{i === 0 ? null : "\n"}
+								{keyed(line, json).map((span) => spanOf(span.value, span.key))}
+							</Fragment>
+						))}
+			</code>
+		</pre>
+	);
+}
+
+/** A fenced block: drawn plain at once, and asking for the colors only when it names a language. */
+function Fenced({block}: {readonly block: Code}) {
+	const colors = useSyncExternalStore(onColors, colorsNow, colorsNow);
+	const wants = wantsColors(block.lang);
+	useEffect(() => {
+		if (wants) void loadColors();
+	}, [wants]);
+	return <CodeBlock block={block} colors={wants ? colors : null} />;
+}
+
 const ALIGN = {left: "left", right: "right", center: "center"} as const;
 
 function Drawn({block}: {readonly block: Block}): ReactNode {
@@ -120,11 +183,7 @@ function Drawn({block}: {readonly block: Block}): ReactNode {
 			return block.ordered ? <ol start={block.start ?? undefined}>{items}</ol> : <ul>{items}</ul>;
 		}
 		case "code":
-			return (
-				<pre>
-					<code data-lang={block.lang ?? undefined}>{block.value}</code>
-				</pre>
-			);
+			return <Fenced block={block} />;
 		case "blockquote":
 			return (
 				<blockquote>

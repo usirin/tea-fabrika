@@ -1,11 +1,14 @@
 import {memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika";
+import * as highlights from "@pierre/highlights";
+import dimmed from "@pierre/highlights/themes/github-dark-dimmed";
 import {Effect, Fiber, Schema, Stream} from "effect";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {colorsOf} from "./highlight.ts";
 import {markdown} from "./index.ts";
 import {Root} from "./root.ts";
-import {keyed, MarkdownWindow} from "./window.tsx";
+import {CodeBlock, keyed, MarkdownWindow} from "./window.tsx";
 
 // The markdown program: a text read into a tree, its view following each text told, what its
 // window draws, and when it ends.
@@ -171,6 +174,44 @@ describe("MarkdownWindow", () => {
 
 	it("says what to do when it has nothing to show", () => {
 		expect(drawn("")).toContain("Nothing to show yet");
+	});
+
+	it("draws a code block plain as it opens, before the highlighter has loaded", () => {
+		expect(drawn("```ts\nconst a = 1;\n```")).toContain(
+			'<pre><code data-lang="ts">const a = 1;</code></pre>',
+		);
+	});
+});
+
+describe("CodeBlock", () => {
+	const colors = colorsOf(highlights, dimmed);
+	const block = (lang: string | null, value: string) => ({type: "code", lang, value}) as const;
+	const html = (lang: string | null, value: string) =>
+		renderToStaticMarkup(createElement(CodeBlock, {block: block(lang, value), colors}));
+
+	it("draws a language it knows as colored spans, the page's ink left bare", () => {
+		expect(html("ts", "const a = 1;")).toBe(
+			'<pre><code data-lang="ts"><span style="color:#f47067">const </span>a ' +
+				'<span style="color:#f47067">= </span><span style="color:#6cb6ff">1</span>;</code></pre>',
+		);
+	});
+
+	it("keeps each line on its own line", () => {
+		expect(html("ts", "const a = 1;\nconst b = 2;")).toContain(
+			';\n<span style="color:#f47067">const </span>b ',
+		);
+	});
+
+	it.each([null, "nope", "text"])("draws a block in %s as plain text, with no error", (lang) => {
+		expect(html(lang, "const a = 1;")).toBe(
+			`<pre><code${lang === null ? "" : ` data-lang="${lang}"`}>const a = 1;</code></pre>`,
+		);
+	});
+
+	it("draws a token's text as text, never as HTML", () => {
+		const out = html("html", "<script>alert(1)</script><img src=x onerror=alert(2)>");
+		expect(out).toContain("&lt;");
+		expect(out).not.toMatch(/<script|<img/);
 	});
 });
 

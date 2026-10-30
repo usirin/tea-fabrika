@@ -60,6 +60,9 @@ catalogs:
     '@opentelemetry/sdk-trace-base':
       specifier: 2.11.0
       version: 2.11.0
+    '@pierre/highlights':
+      specifier: 0.3.0
+      version: 0.3.0
     '@rslib/core':
       specifier: 1.0.3
       version: 1.0.3
@@ -971,6 +974,9 @@ importers:
       '@kampus/fabrika':
         specifier: workspace:*
         version: link:../../packages/fabrika
+      '@pierre/highlights':
+        specifier: 'catalog:'
+        version: 0.3.0
       effect:
         specifier: 'catalog:'
         version: 4.0.6
@@ -2824,6 +2830,9 @@ packages:
     resolution: {integrity: sha512-UqGPmo56KDfLlfXFAFIrNflHT8tFxWGEivWg3Zeyp4Uy2NlKN1FGPr6/BxcLGG3+kZ6Wp14g5Uj+n71boqZfiw==}
     cpu: [x64]
     os: [win32]
+
+  '@pierre/highlights@0.3.0':
+    resolution: {integrity: sha512-s6xZ/giPPrSeCO2w254GiysUXD4ditKMTOrl1vHynvPqP7VdlujYi01O9joxJ0T16XkoXGQMN6zkRi9+O8NCzg==}
 
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
@@ -6191,6 +6200,8 @@ snapshots:
 
   '@oxc-resolver/binding-win32-x64-msvc@11.24.2':
     optional: true
+
+  '@pierre/highlights@0.3.0': {}
 
   '@pondwader/socks5-server@1.0.10': {}
 

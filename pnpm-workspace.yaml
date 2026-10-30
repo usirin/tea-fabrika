@@ -39,6 +39,9 @@ catalog:
   '@opentelemetry/exporter-trace-otlp-http': 0.222.0
   '@opentelemetry/resources': 2.11.0
   '@opentelemetry/sdk-trace-base': 2.11.0
+  # The markdown window's code colors (programs/markdown): Pierre's highlighter, its lexers in one
+  # WebAssembly module. Apache-2.0, its themes MIT or Apache-2.0. Held exact: a beta.
+  '@pierre/highlights': 0.3.0
   '@rslib/core': 1.0.3
   # The mutation step (packages/pipeline/src/stages/mutation), held exact: experiment 124 ran 10.1.1.
   '@stryker-mutator/core': 10.1.1
