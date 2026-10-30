@@ -124,6 +124,10 @@ export async function codexTurn<A>(
 					session,
 					folder: at.folder,
 					prompt: `${NO_TOOLS}\n\n${prompt}`,
+					// Codex's own instructions and nothing added: the brief stays in the prompt, as it was
+					// before a turn had to name its system prompt (v1 slice 2, #154). Without it every turn
+					// failed at once, as experiment 163's part 2 found.
+					system: {_tag: "append", text: ""},
 					answer,
 					model: MODEL,
 					effort: at.effort,
