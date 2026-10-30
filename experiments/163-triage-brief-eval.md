@@ -1400,6 +1400,11 @@ is the security rule, then keep worth, then bundles.
    of the owner, but only if the owner does not read each wasted pull request.
    Confidence 70% in the trade as stated.
 
+**The owner's pick (2026-10-30): the first way, more asks with clean builds.**
+The ask budget stays open until triage runs on real weeks, and the pick is
+checked against those weeks. The security rule is the next piece to build. See
+[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md).
+
 ### What part 5 cannot tell us
 
 - **Any live number.** No triage model ran; every scenario rewrites part 4's
