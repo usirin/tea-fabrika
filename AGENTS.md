@@ -102,6 +102,17 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 
+`pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
+not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
+about 0% of what it finds is wrong: 4 findings, all right
+([Sweep the core](./docs/direction/sweep-the-core-rebuild-the-pipeline.md)),
+and blocking needs about 0% false alarms (Google CACM 2018).
+Check each finding by hand. If it is right, fix it: delete the code, or drop
+its `export`. If it is wrong, stop and tell the owner; that is a code-graph
+bug to file. The ledger only shrinks: the run prunes entries whose finding is
+gone, the one file `pnpm lint` changes, and CI fails until that is committed. Adding an entry is the owner's call, in a change of its own
+([Nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+
 ```sh
 pnpm format     # biome: format, sort imports and apply its safe fixes, in place
 ```

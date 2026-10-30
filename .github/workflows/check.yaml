@@ -34,6 +34,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # `pnpm lint` fails on a dead export the ledger does not name (code-graph 0.12.0:
+      # 0 of 4 findings wrong on 2026-10-29). It also prunes entries whose finding is
+      # gone; this step fails when that pruned ledger was not committed.
+      - name: dead exports ledger committed
+        run: git diff --exit-code -- unreachable-ledger.json
       # Experiment 117: each formal check is tied to the code it covers (promises/).
       # It fails when covered code changed and its record was not confirmed again, when
       # a check is red at this head, or when a planted break is not caught. A change to a

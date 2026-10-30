@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "id": "video/src/chapters/Ch05/kit.tsx:Canvas",
+      "kind": "dead",
+      "reason": "Right (2026-10-29): nothing calls it. Kept: the finished video is left as it is.",
+      "scope": "."
+    },
+    {
+      "id": "apps/fabrika/src/editor/cells.probe.ts:modelAnswersOf",
+      "kind": "only-called-from-tests",
+      "reason": "Right (2026-10-29): only tests call it. It is kept for them.",
+      "scope": "."
+    },
+    {
+      "id": "apps/fabrika/src/editor/grid.ts:gridOf",
+      "kind": "only-called-from-tests",
+      "reason": "Right (2026-10-29): only tests call it. It is kept for them.",
+      "scope": "."
+    },
+    {
+      "id": "apps/fabrika/src/editor/history.ts:memoryHistory",
+      "kind": "only-called-from-tests",
+      "reason": "Right (2026-10-29): only tests call it. It is kept for them.",
+      "scope": "."
+    }
+  ]
+}
