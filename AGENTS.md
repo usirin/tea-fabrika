@@ -102,6 +102,15 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 
+`pnpm lint:dead` lists exports nobody uses that `unreachable-ledger.json` does
+not name yet. It only advises: most of what it finds today is wrong
+([Sweep the core](./docs/direction/sweep-the-core-rebuild-the-pipeline.md)).
+Run it after a change that removes or renames exports. Check each finding by
+hand. If it is right, fix it: delete the code, or drop its `export`. If it is
+wrong, leave it for the owner. The ledger only shrinks: commit what the run
+prunes from it. Adding an entry is the owner's call, in a change of its own
+([Nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+
 ```sh
 pnpm format     # biome: format, sort imports and apply its safe fixes, in place
 ```
