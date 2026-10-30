@@ -1,27 +1,29 @@
-// Experiment 157: the login lives in the person's own locker. One Worker, three parts.
+// Experiment 157, round 2: the box holds the login, the GitHub Actions way. One Worker, two parts.
 //
 //   Locker "<person>"  a Durable Object per person: their Claude token and their Codex auth.json,
 //                      sealed with the Worker's secret. It lends auth.json to one Codex job at a
-//                      time, queues the next, and takes back the refreshed copy.
+//                      time, queues the next, takes back the copy the box leaves, and ends a loan
+//                      past its time with an alarm.
 //   Box "<id>"         a Durable Object per job with its own container (Cloudflare's Sandbox SDK
-//                      shape: `ctx.container` and `Files`), started with no internet.
-//   Outbound           every call a box makes lands here, with the box's person and id as props
-//                      the box cannot change. It is the allow list (`gate.ts`).
+//                      shape: `ctx.container` and `Files`), started with open internet.
 //
-//   person's app --key, once--> PUT /login ----------------------------> Locker "a"
-//   Box "a-1" --Files: auth.json in / out--------------------------------> Locker "a"
-//   container --anthropic.internal--> Outbound {person: "a"} --token-----> fake Anthropic
-//   container --chatgpt.internal----> Outbound --as sent (the box's own)--> fake OpenAI
+//   person's app --key, once--> POST /login -----------------------> Locker "a"
+//   Box "a-1" --CLAUDE_CODE_OAUTH_TOKEN in the job's env------------> claude in the container
+//   Box "a-1" --Files: auth.json in, then out----------------------> codex in the container
+//   container --straight out, nothing of ours in between-----------> the model and refresh hosts
 //
-// The Claude path is Cloudflare's own tutorial: a placeholder in the box, the token added by the
-// Worker. The Codex path is OpenAI's CI page as written: auth.json in before, back out after.
+// Claude takes the token the way anthropics/claude-code-action does. Codex follows OpenAI's CI
+// page as written. No handler of ours stands in a model call or a refresh call: experiment 148's
+// rule, our Worker never sees a real token on the wire.
+//
+// `Witness` is for measuring only: one step starts a box with no internet and every call caught,
+// to list each host the two programs call. It is not the shape.
 //
 // It runs in workerd under `wrangler dev`, with Docker for the boxes. Erasable TypeScript; its
 // only imports are its own folder's files, `cloudflare:workers` and `@cloudflare/sandbox`.
 
 import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {Files} from "@cloudflare/sandbox";
-import {claudeHeaders, headersBack, routeOf} from "./gate.ts";
 import {open, type Sealed, seal} from "./seal.ts";
 import {verify} from "./ticket.ts";
 
@@ -41,26 +43,28 @@ type Container = {
 type Storage = {
 	get<T>(key: string): Promise<T | undefined>;
 	put(key: string, value: unknown): Promise<void>;
+	setAlarm(at: number): Promise<void>;
+	deleteAlarm(): Promise<void>;
 };
 type Ns<T> = {getByName(name: string): T};
 type BoxCtx = {
 	readonly storage: Storage;
 	readonly container: Container;
-	readonly exports: {Outbound(o: {props: Props}): unknown};
+	readonly exports: {Witness(o: {props: {box: string}}): unknown};
 };
 
 type Env = {
 	/** Seals logins and signs the people's keys. On Cloudflare, a Worker secret. */
 	SECRET: string;
-	/** The fake OpenAI, for both the model and the refresh. */
-	OPENAI_UP: string;
-	ANTHROPIC_UP: string;
+	/**
+	 * Where the box's programs are pointed, by their own settings: the fakes, as the box sees them.
+	 * On Cloudflare both are left unset and the programs use their own hosts.
+	 */
+	CLAUDE_BASE?: string;
+	CODEX_BASE?: string;
 	LOCKER: Ns<Locker>;
 	BOX: Ns<Box>;
 };
-
-/** What the Outbound handler knows of a call: set by the box's object, never by the box. */
-type Props = {readonly person: string; readonly box: string; readonly catch: boolean};
 
 // ---------------------------------------------------------------- logins
 
@@ -91,9 +95,15 @@ const isClaude = (x: unknown): x is ClaudeLogin =>
 
 const log = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
 
-/** The box that holds the Codex login now. Kept in storage: an idle object is dropped from memory. */
-type Loan = {readonly box: string; readonly caught: boolean};
-type Counts = Record<"lent" | "queued" | "back" | "dropped" | "caught" | "refused", number>;
+/**
+ * The box that holds the Codex login now, and until when. Kept in storage: an idle object is
+ * dropped from memory (round 1 lost a loan that way).
+ */
+type Loan = {readonly box: string; readonly until: number};
+type Counts = Record<"lent" | "queued" | "back" | "dropped" | "ended" | "late" | "refused", number>;
+
+/** A loan's end time when the job does not say: longer than any job here. */
+const LOAN_MS = 10 * 60_000;
 
 /** One person's locker: their logins, and the one Codex loan at a time. */
 export class Locker extends DurableObject<Env> {
@@ -155,21 +165,30 @@ export class Locker extends DurableObject<Env> {
 		return ok;
 	}
 
-	/** The Claude token, for the Outbound handler of one of this person's Claude boxes. */
+	/** The Claude token, for the job's env in one of this person's Claude boxes. */
 	async claude(box: string): Promise<string | null> {
 		if (!(await this.boxIs(box, "claude"))) return null;
 		const login = await this.get("claude");
 		return isClaude(login) ? login.token : null;
 	}
 
-	/** Lend auth.json to a Codex box. A second job waits until the first gives it back. */
-	async lend(box: string, queue: boolean): Promise<{auth: AuthJson; waitedMs: number} | null> {
+	/**
+	 * Lend auth.json to a Codex box until `ms` from now. A second job waits until the first gives
+	 * it back, or until its loan ends.
+	 */
+	async lend(
+		box: string,
+		o: {queue: boolean; ms: number},
+	): Promise<{auth: AuthJson; waitedMs: number} | null> {
 		if (!(await this.boxIs(box, "codex"))) return null;
 		const t0 = Date.now();
-		if (queue && (await this.loan()) !== null) await this.count("queued");
-		while (queue && (await this.loan()) !== null) await new Promise<void>((r) => this.line.push(r));
+		if (o.queue && (await this.loan()) !== null) await this.count("queued");
+		while (o.queue && (await this.loan()) !== null)
+			await new Promise<void>((r) => this.line.push(r));
 		// Taken before any other wait, so no second job can slip in between.
-		await this.store.put("loan", {box, caught: false} satisfies Loan);
+		const until = Date.now() + o.ms;
+		await this.store.put("loan", {box, until} satisfies Loan);
+		await this.store.setAlarm(until);
 		const auth = await this.get("codex");
 		if (!isAuthJson(auth)) return null;
 		await this.count("lent");
@@ -178,59 +197,54 @@ export class Locker extends DurableObject<Env> {
 
 	private async release() {
 		await this.store.put("loan", null);
+		await this.store.deleteAlarm();
 		this.line.shift()?.();
 	}
 
 	/** The job ended: the box's copy of auth.json comes back, refreshed or not. */
 	async back(box: string, auth: unknown): Promise<string> {
 		const loan = await this.loan();
-		if (loan?.box !== box) return "not the box that holds the loan";
+		if (loan?.box !== box) {
+			await this.count("late");
+			return "not the box that holds the loan";
+		}
 		if (!isAuthJson(auth)) return "not a login";
 		await this.count("back");
-		// With `catch`, the locker already holds each refresh the box got: it keeps its own copy.
-		if (loan.caught) {
-			const now = await this.get("codex");
-			const same = isAuthJson(now) && now.tokens.refresh_token === auth.tokens.refresh_token;
-			await this.release();
-			return same ? "the same as caught" : "kept the caught copy";
-		}
 		await this.put("codex", auth);
 		await this.release();
 		return "kept";
 	}
 
-	/** The box died before it gave the login back: the locker keeps what it has. */
+	/** The box object saw its box die before it gave the login back: the locker keeps what it has. */
 	async drop(box: string): Promise<void> {
 		if ((await this.loan())?.box !== box) return;
 		await this.count("dropped");
 		await this.release();
 	}
 
-	/** The fix: the Outbound handler saw a refresh answer go to this box. Keep it now. */
-	async caught(box: string, answer: unknown): Promise<boolean> {
-		if ((await this.loan())?.box !== box) return false;
-		const a = typeof answer === "object" && answer !== null ? answer : {};
-		const access = "access_token" in a ? a.access_token : undefined;
-		const refresh = "refresh_token" in a ? a.refresh_token : undefined;
-		const id = "id_token" in a ? a.id_token : undefined;
-		const now = await this.get("codex");
-		if (!isAuthJson(now) || typeof access !== "string" || typeof refresh !== "string") return false;
-		const tokens = {
-			...now.tokens,
-			access_token: access,
-			refresh_token: refresh,
-			...(typeof id === "string" ? {id_token: id} : {}),
-		};
-		await this.put("codex", {...now, tokens, last_refresh: new Date().toISOString()});
-		await this.store.put("loan", {box, caught: true} satisfies Loan);
-		await this.count("caught");
-		return true;
+	/**
+	 * The loan end time. Nobody gave the login back or said the box died: the box object died too,
+	 * or lost track. The box is stopped, in case it still runs, so two boxes never hold the login at
+	 * once; the locker keeps what it has, and the next job in line goes.
+	 */
+	override async alarm(): Promise<void> {
+		const loan = await this.loan();
+		if (loan === null) return;
+		if (loan.until > Date.now()) {
+			await this.store.setAlarm(loan.until);
+			return;
+		}
+		log({at: "locker", ended: loan.box});
+		await this.count("ended");
+		await this.env.BOX.getByName(loan.box).kill();
+		await this.release();
 	}
 
-	/** Read by the driver: counts, and a login as it rests, sealed. */
+	/** Read by the driver: counts, the loan, and a login as it rests, sealed. */
 	async look(provider: Agent) {
 		return {
 			counts: (await this.store.get<Partial<Counts>>("counts")) ?? {},
+			loan: await this.loan(),
 			sealed: (await this.store.get<Sealed>(`login/${provider}`)) ?? null,
 		};
 	}
@@ -238,26 +252,42 @@ export class Locker extends DurableObject<Env> {
 
 // ---------------------------------------------------------------- the box
 
-/** The platform's CA for the HTTPS it ends. Every TLS client in the box is told to trust it. */
+/** The made-up name a caught box reaches the fakes by: the witness sends it on to 127.0.0.1. */
+const WITNESS_HOSTS: Readonly<Record<string, "CLAUDE_BASE" | "CODEX_BASE">> = {
+	"claude.fakes.internal": "CLAUDE_BASE",
+	"codex.fakes.internal": "CODEX_BASE",
+};
+/** The platform's CA for the HTTPS it ends, only for the witness step. */
 const CA = "/etc/cloudflare/certs/cloudflare-containers-ca.crt";
 const TRUST = {NODE_EXTRA_CA_CERTS: CA, SSL_CERT_FILE: CA, CURL_CA_BUNDLE: CA};
 const PATH = "/usr/local/bin:/usr/bin:/bin";
 const PROMPT = (run: string) =>
 	`Run the check you are given and say what it printed. [[run:${run}]]`;
 
-/** Codex with file storage, its ChatGPT login pointed at the made-up names. */
-const CODEX_CONFIG = (scheme: string) =>
+/** Where Claude Code reads a project's settings from: rules.ts's NO_PROJECT_CONFIG. */
+const NO_PROJECT_CONFIG = "/var/empty";
+/** rules.ts's AGENTS_MD: AGENTS.md is read beside CLAUDE.md. */
+const AGENTS_MD = {
+	"cc-plugin-agents-md@builtin": {options: {instructionFiles: "claude-md-and-agents-md"}},
+};
+
+/** Codex with file storage, its ChatGPT login pointed at `base` when set. */
+const codexConfig = (base: string | undefined) =>
 	[
 		'cli_auth_credentials_store = "file"',
-		`chatgpt_base_url = "${scheme}://chatgpt.internal/backend-api/"`,
-		'model_provider = "chatgpt"',
-		"[model_providers.chatgpt]",
-		'name = "chatgpt"',
-		`base_url = "${scheme}://chatgpt.internal/backend-api/codex"`,
-		'wire_api = "responses"',
-		"requires_openai_auth = true",
-		"request_max_retries = 1",
-		"stream_max_retries = 1",
+		...(base === undefined
+			? []
+			: [
+					`chatgpt_base_url = "${base}/backend-api/"`,
+					'model_provider = "chatgpt"',
+					"[model_providers.chatgpt]",
+					'name = "chatgpt"',
+					`base_url = "${base}/backend-api/codex"`,
+					'wire_api = "responses"',
+					"requires_openai_auth = true",
+					"request_max_retries = 1",
+					"stream_max_retries = 1",
+				]),
 		"[analytics]",
 		"enabled = false",
 		"[features]",
@@ -271,12 +301,17 @@ export interface Job {
 	readonly run: string;
 	/** The project the job works on: path to text. */
 	readonly files: Readonly<Record<string, string>>;
-	/** The fix: the Outbound handler keeps each refresh answer in the locker at once. */
-	readonly catch?: boolean;
 	/** False plants the mistake: two Codex jobs share the login at once. */
 	readonly queue?: boolean;
-	/** "https" or "http" for Codex's made-up names. */
-	readonly scheme?: string;
+	/** The Codex loan's end time, from when it is lent. */
+	readonly loanMs?: number;
+	/**
+	 * Planted: the box object dies with its box, so nothing tells the locker. Here the object stays
+	 * and only keeps quiet: it never drops the loan and never gives the login back.
+	 */
+	readonly quiet?: boolean;
+	/** The witness step: no internet, every call caught and its host written down. */
+	readonly witness?: boolean;
 }
 
 export interface Done {
@@ -287,6 +322,10 @@ export interface Done {
 	/** Codex only: how long the job waited for the login, and what the locker said on take-back. */
 	readonly waitedMs?: number;
 	readonly back?: string;
+	/** Codex only: when the take-back answered, for the window a refresh lives only in the box. */
+	readonly backAt?: number;
+	/** Codex only: when the job got the login, to set against the loan before it. */
+	readonly lentAt?: number;
 }
 
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -336,35 +375,58 @@ export class Box extends DurableObject<Env> {
 		return (await this.store.get<string>("person")) ?? null;
 	}
 
-	/** Start the container with no internet, every call it makes caught by Outbound. */
-	private async boot(caught: boolean): Promise<{person: string; box: string}> {
-		const person = (await this.store.get<string>("person")) ?? "";
+	/** Start the container with open internet; only the witness step catches its calls. */
+	private async boot(witness: boolean): Promise<void> {
 		const box = (await this.store.get<string>("box")) ?? "";
-		if (!this.c.running) this.c.start({image: this.c.images.box, enableInternet: false});
-		const out = this.out.Outbound({props: {person, box, catch: caught}});
-		try {
-			await this.c.interceptAllOutboundHttp(out);
-			await this.c.interceptOutboundHttps("*", out);
-		} catch (e) {
-			// No catch, no job: the next request starts a new container.
-			await this.c.destroy();
-			throw e;
+		if (this.c.running) return;
+		this.c.start({image: this.c.images.box, enableInternet: !witness});
+		if (witness) {
+			const out = this.out.Witness({props: {box}});
+			try {
+				await this.c.interceptAllOutboundHttp(out);
+				await this.c.interceptOutboundHttps("*", out);
+			} catch (e) {
+				await this.c.destroy();
+				throw e;
+			}
 		}
-		return {person, box};
 	}
 
 	async run(job: Job): Promise<Done> {
-		const {person, box} = await this.boot(job.catch === true);
+		const witness = job.witness === true;
+		const person = (await this.store.get<string>("person")) ?? "";
+		const box = (await this.store.get<string>("box")) ?? "";
 		const locker = this.env.LOCKER.getByName(person);
+		// A Codex job gets its login before its box starts: a job waiting in line holds no box.
+		const lent =
+			job.agent === "codex"
+				? await locker.lend(box, {queue: job.queue !== false, ms: job.loanMs ?? LOAN_MS})
+				: null;
+		if (job.agent === "codex" && lent === null)
+			return {ok: false, answer: null, error: "no login lent", ms: 0};
+		const lentAt = Date.now();
+		try {
+			await this.boot(witness);
+		} catch (e) {
+			if (job.quiet !== true) await locker.drop(box);
+			throw e;
+		}
 		const dir = `/work/${job.run}`;
 		const home = `${dir}/home`;
 		const copy = `${dir}/copy`;
+		const trust = witness ? TRUST : {};
+		// Locally the catch takes only port 80, and the fakes sit on other ports. So a caught box is
+		// pointed at a made-up name on port 80, and the witness sends it on to the fake.
+		const point = (base: string | undefined, as: string) => (witness ? `http://${as}` : base);
 		await this.files.mkdir(copy, {recursive: true});
 		await this.files.mkdir(`${home}/.codex`, {recursive: true});
 		for (const [path, body] of Object.entries(job.files))
 			await this.files.writeFile(`${copy}/${path}`, body);
 		const t0 = Date.now();
 		if (job.agent === "claude") {
+			const token = await locker.claude(box);
+			if (token === null) return {ok: false, answer: null, error: "no login for this box", ms: 0};
+			const base = point(this.env.CLAUDE_BASE, "claude.fakes.internal");
 			const p = await this.c.exec(
 				[
 					"claude",
@@ -379,6 +441,15 @@ export class Box extends DurableObject<Env> {
 					"--no-session-persistence",
 					"--max-turns",
 					"4",
+					// The CLI form of rules.ts's ownRules: the folder's rule files, none of its settings.
+					// biome-ignore lint/plugin/no-project-settings: this is ownRules written as Claude Code's flags, for a box that runs the CLI with no Agent SDK; the config root is the empty folder the Dockerfile makes
+					"--setting-sources",
+					"project",
+					// biome-ignore lint/plugin/no-project-settings: the same ownRules flags; the root is NO_PROJECT_CONFIG, root's and read-only, and the box runs as another user
+					"--project-config-root",
+					NO_PROJECT_CONFIG,
+					"--settings",
+					JSON.stringify({pluginConfigs: AGENTS_MD}),
 					"--",
 					PROMPT(job.run),
 				],
@@ -388,11 +459,12 @@ export class Box extends DurableObject<Env> {
 						PATH,
 						HOME: home,
 						CLAUDE_CONFIG_DIR: `${home}/.claude`,
-						ANTHROPIC_BASE_URL: "https://anthropic.internal",
-						CLAUDE_CODE_OAUTH_TOKEN: "box-holds-no-key",
+						// As anthropics/claude-code-action hands it to Claude Code.
+						CLAUDE_CODE_OAUTH_TOKEN: token,
+						...(base === undefined ? {} : {ANTHROPIC_BASE_URL: base}),
 						CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
 						IS_SANDBOX: "1",
-						...TRUST,
+						...trust,
 					},
 				},
 			);
@@ -411,13 +483,13 @@ export class Box extends DurableObject<Env> {
 				ms: Date.now() - t0,
 			};
 		}
-		const lent = await locker.lend(box, job.queue !== false);
 		if (lent === null) return {ok: false, answer: null, error: "no login lent", ms: 0};
 		const codexHome = `${home}/.codex`;
-		const scheme = job.scheme ?? "https";
+		const base = point(this.env.CODEX_BASE, "codex.fakes.internal");
 		await this.files.writeFile(`${codexHome}/auth.json`, JSON.stringify(lent.auth, null, 2));
-		await this.files.writeFile(`${codexHome}/config.toml`, CODEX_CONFIG(scheme));
+		await this.files.writeFile(`${codexHome}/config.toml`, codexConfig(base));
 		const ran = Date.now();
+		const dropIt = () => (job.quiet === true ? Promise.resolve() : locker.drop(box));
 		let o: Output;
 		try {
 			const p = await this.c.exec(
@@ -444,33 +516,39 @@ export class Box extends DurableObject<Env> {
 						PATH,
 						HOME: home,
 						CODEX_HOME: codexHome,
-						CODEX_REFRESH_TOKEN_URL_OVERRIDE: `${scheme}://auth.internal/oauth/token`,
-						...TRUST,
+						...(base === undefined
+							? {}
+							: {CODEX_REFRESH_TOKEN_URL_OVERRIDE: `${base}/oauth/token`}),
+						...trust,
 					},
 				},
 			);
 			o = await p.output();
 		} catch (e) {
 			// The box died with the login in it: nothing to take back.
-			await locker.drop(box);
+			await dropIt();
 			return {
 				ok: false,
 				answer: null,
 				error: `the box died: ${String(e).slice(0, 160)}`,
 				ms: Date.now() - ran,
 				waitedMs: lent.waitedMs,
-				back: "dropped",
+				back: job.quiet === true ? "nothing said" : "dropped",
 			};
 		}
 		const r = readCodex(text(o.stdout));
 		let back: string;
-		try {
-			const copyBack = await (await this.files.readFile(`${codexHome}/auth.json`)).text();
-			back = await locker.back(box, JSON.parse(copyBack));
-		} catch {
-			await locker.drop(box);
-			back = "dropped";
-		}
+		if (job.quiet === true) back = "nothing said";
+		else
+			try {
+				const copyBack = await (await this.files.readFile(`${codexHome}/auth.json`)).text();
+				// The box stops before the login goes back: the next job never shares it with this one.
+				await this.c.destroy();
+				back = await locker.back(box, JSON.parse(copyBack));
+			} catch {
+				await locker.drop(box);
+				back = "dropped";
+			}
 		const ok = o.exitCode === 0 && r.done && r.error === null;
 		return {
 			ok,
@@ -479,13 +557,16 @@ export class Box extends DurableObject<Env> {
 			ms: Date.now() - ran,
 			waitedMs: lent.waitedMs,
 			back,
+			backAt: Date.now(),
+			lentAt,
 		};
 	}
 
-	/** Run a Node script in the box, for the allow list and the timing probes. */
+	/** Run a Node script in the box, for the open internet and timing probes. */
 	async probe(script: string): Promise<{exit: number; out: string; err: string}> {
 		await this.boot(false);
-		const p = await this.c.exec(["node", "-e", script], {cwd: "/work", env: {PATH, ...TRUST}});
+		const base = {CLAUDE_BASE: this.env.CLAUDE_BASE ?? "", CODEX_BASE: this.env.CODEX_BASE ?? ""};
+		const p = await this.c.exec(["node", "-e", script], {cwd: "/work", env: {PATH, ...base}});
 		const o = await p.output();
 		return {exit: o.exitCode, out: text(o.stdout), err: text(o.stderr).slice(-500)};
 	}
@@ -496,7 +577,7 @@ export class Box extends DurableObject<Env> {
 		const p = await this.c.exec([
 			"sh",
 			"-c",
-			"tar -cf - /work /root /tmp 2>/dev/null; cat /proc/[0-9]*/environ /proc/[0-9]*/cmdline 2>/dev/null; true",
+			"tar -cf - /work /home /tmp 2>/dev/null; cat /proc/[0-9]*/environ /proc/[0-9]*/cmdline 2>/dev/null; true",
 		]);
 		return (await p.output()).stdout;
 	}
@@ -512,76 +593,41 @@ export class Box extends DurableObject<Env> {
 		const other = this.env.LOCKER.getByName(to);
 		return {
 			claude: (await other.claude(box)) !== null,
-			codex: (await other.lend(box, false)) !== null,
+			codex: (await other.lend(box, {queue: false, ms: 1_000})) !== null,
 		};
 	}
 }
 
-// ---------------------------------------------------------------- the box's calls
+// ---------------------------------------------------------------- the witness, for measuring
 
-const refuse = (status: number, why: string) =>
-	Response.json({error: {type: "permission_error", message: `outbound: ${why}`}}, {status});
-
-/** Every HTTP and HTTPS call a box makes. The props say whose box it is. */
-export class Outbound extends WorkerEntrypoint<Env, Props> {
+/**
+ * The witness step only: writes down the host and path of every call a box makes, never a header
+ * or a body. A call to the fakes goes on to them; any other host gets 403 and nothing else.
+ */
+export class Witness extends WorkerEntrypoint<Env, {box: string}> {
 	override async fetch(req: Request): Promise<Response> {
-		const t0 = Date.now();
-		const props = this.ctx.props;
 		const url = new URL(req.url);
-		const body = req.method === "GET" || req.method === "HEAD" ? "" : await req.text();
-		const route = routeOf(req.method, url, body);
-		const note = (o: Record<string, unknown>) =>
-			log({at: "outbound", person: props.person, host: url.hostname, ms: Date.now() - t0, ...o});
-		if (typeof route === "string") {
-			note({refused: route});
-			return refuse(403, route);
-		}
-		if (route.kind === "ping") return new Response("pong");
-		const locker = this.env.LOCKER.getByName(props.person);
-		if (route.kind === "claude") {
-			const t1 = Date.now();
-			const token = await locker.claude(props.box);
-			const lockerMs = Date.now() - t1;
-			if (token === null) {
-				note({refused: "no login for this box"});
-				return refuse(401, "no login for this box");
-			}
-			const t2 = Date.now();
-			const res = await fetch(`${this.env.ANTHROPIC_UP}${url.pathname}${url.search}`, {
-				method: "POST",
-				headers: claudeHeaders(req.headers, token),
-				body,
-			});
-			note({kind: "claude", status: res.status, lockerMs, upMs: Date.now() - t2});
-			return new Response(res.body, {status: res.status, headers: headersBack(res.headers)});
-		}
+		const up = WITNESS_HOSTS[url.hostname];
+		const fake = up !== undefined;
+		log({at: "witness", box: this.ctx.props.box, host: url.host, path: url.pathname, fake});
+		if (!fake) return new Response("witness: not a fake", {status: 403});
+		const base = (this.env[up] ?? "").replace("host.docker.internal", "127.0.0.1");
 		const headers = new Headers(req.headers);
 		headers.delete("host");
-		const t2 = Date.now();
-		const res = await fetch(`${this.env.OPENAI_UP}${url.pathname}`, {
-			method: "POST",
+		const body = req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
+		const res = await fetch(`${base}${url.pathname}${url.search}`, {
+			method: req.method,
 			headers,
 			body,
 		});
-		if (route.kind === "codex" || !props.catch || !res.ok) {
-			note({kind: route.kind, status: res.status, upMs: Date.now() - t2});
-			return new Response(res.body, {status: res.status, headers: headersBack(res.headers)});
-		}
-		// The fix: the refreshed login is in the locker before the box sees it.
-		const answer = await res.text();
-		let parsed: unknown = null;
-		try {
-			parsed = JSON.parse(answer);
-		} catch {
-			// Kept as it is: the box gets the answer either way.
-		}
-		const kept = await locker.caught(props.box, parsed);
-		note({kind: "token", status: res.status, upMs: Date.now() - t2, caught: kept});
-		return new Response(answer, {status: res.status, headers: headersBack(res.headers)});
+		return new Response(res.body, {status: res.status, headers: res.headers});
 	}
 }
 
 // ---------------------------------------------------------------- the front door
+
+const refuse = (status: number, why: string) =>
+	Response.json({error: {type: "permission_error", message: why}}, {status});
 
 const bearerOf = (req: Request) =>
 	/^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "")?.[1] ?? null;

@@ -1,27 +1,35 @@
 {
 	"experiment": 157,
-	"date": "2026-10-26",
+	"round": 2,
+	"shape": "the box holds the login; open internet; no handler of ours in a model or refresh call",
+	"date": "2026-10-27",
 	"versions": {
 		"wrangler": "4.153.0",
 		"sandbox": "@cloudflare/sandbox 1.0.3",
 		"codex": "codex-cli 0.163.0",
 		"claude": "@anthropic-ai/claude-code 2.1.310"
 	},
+	"fakesAsTheBoxSees": "http://host.docker.internal:<port>",
 	"startMs": 2510,
 	"steps": {
 		"claude": {
 			"kept": "kept",
-			"box": "a-06198af6",
-			"run": "a-06198af6-dvs5",
+			"box": "a-8fd788ca",
+			"run": "a-8fd788ca-qwxb",
 			"ok": true,
 			"right": true,
-			"ms": 15012,
+			"ms": 3493,
+			"startedAt": 1793085033997,
 			"error": null,
-			"dumped": 1864720,
+			"dumped": 42010,
+			"dumpedDuring": 43128,
 			"fake": {
 				"calls": 2,
 				"who": [
 					"a"
+				],
+				"why": [
+					"ok"
 				],
 				"answers": [
 					"tool",
@@ -31,16 +39,20 @@
 		},
 		"codex": {
 			"kept": "kept",
+			"dumpedDuring": 3689450,
 			"first": {
-				"box": "a-489f0724",
-				"run": "a-489f0724-hn5s",
+				"box": "a-2e868295",
+				"run": "a-2e868295-7z3f",
 				"ok": true,
 				"right": true,
-				"ms": 10081,
+				"ms": 6164,
 				"waitedMs": 1,
 				"back": "kept",
+				"backAt": 1793085045154,
+				"lentAt": 1793085038243,
+				"startedAt": 1793085038240,
 				"error": null,
-				"dumped": 3175440,
+				"dumped": 0,
 				"fake": {
 					"calls": 2,
 					"who": [
@@ -56,15 +68,18 @@
 				}
 			},
 			"second": {
-				"box": "a-376b17d4",
-				"run": "a-376b17d4-n2wr",
+				"box": "a-4a71009f",
+				"run": "a-4a71009f-uizu",
 				"ok": true,
 				"right": true,
-				"ms": 4105,
+				"ms": 3300,
 				"waitedMs": 0,
 				"back": "kept",
+				"backAt": 1793085049163,
+				"lentAt": 1793085045173,
+				"startedAt": 1793085045170,
 				"error": null,
-				"dumped": 3175440,
+				"dumped": 0,
 				"fake": {
 					"calls": 2,
 					"who": [
@@ -85,24 +100,20 @@
 					"what": "ok",
 					"gen": 1
 				}
-			]
+			],
+			"onlyInTheBoxMs": 5295
 		},
-		"kill": {
+		"deadLogin": {
 			"died": {
 				"ok": false,
 				"back": "dropped",
 				"error": ""
 			},
+			"killedMsAfterRefresh": 38,
 			"next": {
-				"box": "a-429783a3",
-				"run": "a-429783a3-09re",
 				"ok": false,
 				"right": false,
-				"ms": 2557,
-				"waitedMs": 0,
-				"back": "kept",
 				"error": "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
-				"dumped": 5284880,
 				"fake": {
 					"calls": 2,
 					"who": [
@@ -146,63 +157,55 @@
 			],
 			"dead": true
 		},
-		"killFixed": {
+		"loanEnds": {
+			"loanMs": 8000,
 			"died": {
 				"ok": false,
-				"back": "dropped",
-				"error": ""
+				"back": "nothing said"
 			},
+			"heldAfterDeath": true,
+			"endsMsAfterKill": 5235,
 			"next": {
-				"box": "a-7c973e99",
-				"run": "a-7c973e99-5w6o",
 				"ok": true,
 				"right": true,
-				"ms": 10485,
-				"waitedMs": 1,
-				"back": "kept",
-				"error": null,
-				"dumped": 3329040,
-				"fake": {
-					"calls": 2,
-					"who": [
-						"a"
-					],
-					"gens": [
-						6
-					],
-					"why": [
-						"ok"
-					],
-					"account": true
-				}
+				"waitedMs": 5233,
+				"lentMsAfterEnd": 13,
+				"error": null
 			},
-			"refreshes": [
-				{
-					"who": "a",
-					"what": "ok",
-					"gen": 5
-				}
-			],
-			"dead": false
+			"counts": {
+				"lent": 6,
+				"back": 4,
+				"dropped": 1,
+				"queued": 1,
+				"ended": 1
+			}
+		},
+		"loanNoEnd": {
+			"loanMs": 600000,
+			"nextStartedWithin20s": false,
+			"heldAfter20s": true
 		},
 		"queue": {
 			"one": {
-				"box": "a-c5103dbe",
-				"run": "a-c5103dbe-vj2f",
+				"box": "a-890ab96b",
+				"run": "a-890ab96b-siu6",
 				"ok": true,
 				"right": true,
-				"ms": 14228,
-				"waitedMs": 1,
+				"ms": 8454,
+				"waitedMs": 0,
 				"back": "kept",
+				"backAt": 1793085098214,
+				"lentAt": 1793085088670,
+				"startedAt": 1793085088663,
 				"error": null,
-				"dumped": 3329040,
+				"dumped": 0,
 				"fake": {
 					"calls": 2,
 					"who": [
 						"a"
 					],
 					"gens": [
-						8
+						7
 					],
 					"why": [
 						"ok"
@@ -211,22 +214,25 @@
 				}
 			},
 			"two": {
-				"box": "a-cc828945",
-				"run": "a-cc828945-6p70",
+				"box": "a-7c275543",
+				"run": "a-7c275543-qtsu",
 				"ok": true,
 				"right": true,
-				"ms": 14051,
-				"waitedMs": 14396,
+				"ms": 6317,
+				"waitedMs": 9244,
 				"back": "kept",
+				"backAt": 1793085105236,
+				"lentAt": 1793085098214,
+				"startedAt": 1793085088965,
 				"error": null,
-				"dumped": 3400720,
+				"dumped": 0,
 				"fake": {
 					"calls": 2,
 					"who": [
 						"a"
 					],
 					"gens": [
-						8
+						7
 					],
 					"why": [
 						"ok"
@@ -238,93 +244,10 @@
 				{
 					"who": "a",
 					"what": "ok",
-					"gen": 7
+					"gen": 6
 				}
 			],
 			"dead": false
-		},
-		"queuePlantedOff": {
-			"one": {
-				"box": "a-79f12280",
-				"run": "a-79f12280-jdga",
-				"ok": false,
-				"right": false,
-				"ms": 8676,
-				"waitedMs": 1,
-				"back": "not the box that holds the loan",
-				"error": "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
-				"dumped": 5551120,
-				"fake": {
-					"calls": 2,
-					"who": [
-						null
-					],
-					"gens": [
-						10
-					],
-					"why": [
-						"revoked"
-					],
-					"account": true
-				}
-			},
-			"two": {
-				"box": "a-a1228a7f",
-				"run": "a-a1228a7f-delr",
-				"ok": false,
-				"right": false,
-				"ms": 8601,
-				"waitedMs": 0,
-				"back": "kept",
-				"error": "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
-				"dumped": 5551120,
-				"fake": {
-					"calls": 2,
-					"who": [
-						null
-					],
-					"gens": [
-						9
-					],
-					"why": [
-						"revoked"
-					],
-					"account": true
-				}
-			},
-			"refreshes": [
-				{
-					"who": "a",
-					"what": "ok",
-					"gen": 9
-				},
-				{
-					"who": "a",
-					"what": "reused",
-					"gen": 9
-				},
-				{
-					"who": "a",
-					"what": "refused",
-					"gen": 9
-				},
-				{
-					"who": "a",
-					"what": "refused",
-					"gen": 9
-				},
-				{
-					"who": "a",
-					"what": "refused",
-					"gen": 9
-				},
-				{
-					"who": "a",
-					"what": "refused",
-					"gen": 10
-				}
-			],
-			"dead": true
 		},
 		"two": {
 			"claude": {
@@ -352,7 +275,7 @@
 						"a"
 					],
 					"gens": [
-						12
+						9
 					],
 					"why": [
 						"ok"
@@ -385,19 +308,13 @@
 				"loginForOther": 403,
 				"noKey": 401
 			},
-			"claims": {
-				"status": "200",
-				"who": [
-					"a"
-				]
-			},
 			"lockers": {
 				"a": {
-					"lent": 11,
-					"back": 8,
-					"dropped": 2,
-					"caught": 1,
-					"queued": 1
+					"lent": 9,
+					"back": 7,
+					"dropped": 1,
+					"queued": 2,
+					"ended": 1
 				},
 				"b": {
 					"lent": 1,
@@ -406,63 +323,82 @@
 				}
 			}
 		},
-		"allow": {
+		"open": {
 			"asked": {
-				"https example.com": 403,
-				"http example.com": 403,
-				"https chatgpt.internal models": 403,
-				"https anthropic.internal GET": 403,
-				"https anthropic.internal other model": 403,
-				"https anthropic.internal max_tokens": 403,
-				"https auth.internal other path": 403,
-				"http 127.0.0.1:8787": "failed: ECONNREFUSED",
-				"tcp 1.1.1.1:443": "opened, then closed, answer: none",
-				"tcp 1.1.1.1:80": "opened, then timed out, answer: HTTP/1.1 403 Forbidden",
-				"dns example.com": "resolved"
+				"fake anthropic, straight": 401,
+				"fake openai, straight": 404,
+				"https example.com": 200,
+				"dns example.com": "resolved",
+				"user id": 1000,
+				"write in /var/empty": "failed: EACCES",
+				"/var/empty holds": 0
 			},
-			"reachedFakes": {
-				"openai": 0,
-				"anthropic": 0
-			}
+			"fakeAnthropicSawStraight": 1,
+			"workerLogLinesAdded": 0
+		},
+		"witness": {
+			"claude": {
+				"ok": true,
+				"right": true,
+				"error": null,
+				"calls": [
+					"claude.fakes.internal/v1/messages"
+				]
+			},
+			"codex": {
+				"ok": true,
+				"right": true,
+				"error": null,
+				"calls": [
+					"codex.fakes.internal/oauth/token",
+					"codex.fakes.internal/backend-api/codex/models",
+					"codex.fakes.internal/backend-api/wham/accounts/check",
+					"codex.fakes.internal/backend-api/wham/settings/user",
+					"codex.fakes.internal/backend-api/codex/responses"
+				]
+			},
+			"notAFake": 0
 		},
 		"time": {
 			"roundTripMedianMs": {
-				"http": 27,
-				"https": 17.4
-			},
-			"workerOwnMedianMs": {
-				"claude": 2,
-				"codex": 1,
-				"token": 0
-			},
-			"lockerLookupMedianMs": 1,
-			"calls": {
-				"claude": 7,
-				"codex": 20,
-				"token": 16
+				"straightToFake": 4.2
 			}
 		}
 	},
 	"leaks": {
+		"worker": {
+			"log": {
+				"bytes": 17106,
+				"logins": 0,
+				"secret": 0
+			},
+			"storage": {
+				"files": 61,
+				"bytes": 5864016,
+				"hits": 0,
+				"secret": 0
+			},
+			"frontDoorSent": {
+				"calls": 84,
+				"logins": 0
+			},
+			"frontDoorAnswers": {
+				"calls": 81,
+				"logins": 0
+			},
+			"callLinesOutsideWitness": 0
+		},
 		"boxes": {
-			"count": 18,
-			"claudeTokenInAnyBox": 0,
+			"count": 20,
+			"claudeOfAInAsClaudeBoxes": 1,
+			"claudeOfAInAsClaudeBoxesAfterTheJob": 0,
+			"claudeOfBInAsBoxes": 0,
+			"claudeOfAInBsBoxes": 0,
+			"claudeInCodexBoxes": 0,
+			"codexOfAInAsCodexBoxes": 3,
 			"codexOfAInBsBoxes": 0,
 			"codexOfBInAsBoxes": 0,
-			"claudeOfBInAsBoxes": 0,
-			"codexOfAInAsCodexBoxes": 27,
 			"codexInClaudeBoxes": 0
-		},
-		"workerLog": {
-			"bytes": 27164,
-			"logins": 0,
-			"secret": 0
-		},
-		"persist": {
-			"files": 50,
-			"bytes": 5480968,
-			"hits": 0,
-			"secret": 0
 		}
 	}
 }
