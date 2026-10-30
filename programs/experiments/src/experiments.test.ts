@@ -14,7 +14,7 @@ describe("experiments", () => {
 				const service = yield* Experiments;
 				yield* service.create("170", "The experiments program");
 				yield* service.create("09", "An old one");
-				const run = yield* service.start("170", {params: {}, tags: {}, job: null});
+				const run = yield* service.start("170", {key: "test-1", params: {}, tags: {}, job: null});
 				yield* service.log(run, [{kind: "metric", key: "agreed", value: 0.5}]);
 				yield* service.end(run, {status: "finished", usd: 0.01, tokens: null});
 				return yield* call(experiments, {});

@@ -91,34 +91,34 @@ describe("transform", () => {
 });
 
 describe("load", () => {
-	it("writes the import through the service; a second load starts its runs again", async () => {
+	it("writes the import through the service; a second load writes nothing", async () => {
 		const ledger = memoryService();
 		const layer = experimentsOnLedger({kind: "agent", id: "import"}).pipe(
 			Layer.provide(Layer.succeed(Ledger, ledger)),
 		);
 		const old = transform(files);
-		const [listed, runs, again] = await Effect.runPromise(
+		const rows = ledger.read(0, 10_000, "experiments");
+		const [listed, runs, first, again, second] = await Effect.runPromise(
 			Effect.gen(function* () {
 				const experiments = yield* Experiments;
 				yield* load(old);
 				const listed = yield* experiments.list();
 				const runs = yield* experiments.runs("01");
+				const first = yield* rows;
 				yield* load(old);
-				return [listed, runs, yield* experiments.list()] as const;
+				return [listed, runs, first, yield* experiments.list(), yield* rows] as const;
 			}).pipe(Effect.provide(layer)),
 		);
 		expect(listed.map((e) => [e.n, e.runs])).toEqual([
 			["01", 2],
 			["02", 1],
 		]);
-		expect(runs.map((r) => [r.run, r.status, r.usd, r.metrics.agreed])).toEqual([
-			["01-1", "finished", 0.25, 0.5],
-			["01-2", "finished", null, 0.75],
+		expect(runs.map((r) => [r.run, r.key, r.status, r.usd, r.metrics.agreed])).toEqual([
+			["01-1", "import/experiments/results/01-a.json", "finished", 0.25, 0.5],
+			["01-2", "import/experiments/results/shared.json", "finished", null, 0.75],
 		]);
-		// Experiments and write-ups land once; runs have no key of their own, so they are new runs.
-		expect(again.map((e) => [e.n, e.runs])).toEqual([
-			["01", 4],
-			["02", 2],
-		]);
+		// Every write and every start sent again is the ledger's `dup`: the same list, no new row.
+		expect(again).toEqual(listed);
+		expect(second).toEqual(first);
 	});
 });

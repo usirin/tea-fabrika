@@ -1,5 +1,5 @@
 import {type Row, TraceId, Writer, writerOf} from "@kampus/fabrika";
-import {Option, Schema} from "effect";
+import {Equal, Option, Schema} from "effect";
 import {Title} from "../tickets/ticket.ts";
 
 // An experiment: one stream of facts on the ledger, with its own fold, apart from the tracker's
@@ -9,7 +9,7 @@ import {Title} from "../tickets/ticket.ts";
 //
 //   experiments/170/inbox   {type: "created", title: "The experiments program"}
 //                           {type: "written", date: "2026-10-30", answer: "...", headline: null, sections: [...]}
-//                           {type: "started", run: "170-1", params: {model: "jev"}, tags: {}, job: null}
+//                           {type: "started", key: "job-7f3a", params: {model: "jev"}, tags: {}, job: null}   run 170-1: the first start
 //                           {type: "logged", run: "170-1", what: {kind: "case", item: "ticket-41", output: "yes", scores: {agreed: 1}}}
 //                           {type: "logged", run: "170-1", what: {kind: "metric", key: "agreed", value: 0.9}}
 //                           {type: "ended", run: "170-1", status: "finished", usd: 0.04, tokens: {input: 9000, output: 300}}
@@ -75,8 +75,28 @@ export const WriteUp = Schema.Struct({
 });
 export type WriteUp = typeof WriteUp.Type;
 
-/** What a run starts with. `job`: the trace id of the job it runs in, when a host runs it. */
-export const RunPlan = Schema.Struct({params: Params, tags: Tags, job: Schema.NullOr(TraceId)});
+/**
+ * The caller's name for one run, one line: the same key on the same experiment is the same run,
+ * however often it is started. A job's trace id, an import's `import/<results file>`, or an id
+ * a person's start makes once, before its first try, and keeps for its retries.
+ */
+export const RunKey = Schema.String.check(
+	Schema.isNonEmpty(),
+	Schema.isMaxLength(256),
+	Schema.isPattern(/^[^\r\n]*$/),
+);
+
+/**
+ * What a run starts with: its key, its settings, and `job`, the trace id of the job it runs in,
+ * when a host runs it. The key is not optional, so a start that could not be sent again safely
+ * does not type.
+ */
+export const RunPlan = Schema.Struct({
+	key: RunKey,
+	params: Params,
+	tags: Tags,
+	job: Schema.NullOr(TraceId),
+});
 export type RunPlan = typeof RunPlan.Type;
 
 /** One thing a run logs: a metric, one case's result with its scores, or a file. */
@@ -104,7 +124,8 @@ export type RunEnd = typeof RunEnd.Type;
 export const Fact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("created"), title: Title}),
 	Schema.Struct({type: Schema.Literal("written"), ...WriteUp.fields}),
-	Schema.Struct({type: Schema.Literal("started"), run: RunId, ...RunPlan.fields}),
+	// No run id: the fold numbers a run by its place among the experiment's starts (see `step`).
+	Schema.Struct({type: Schema.Literal("started"), ...RunPlan.fields}),
 	Schema.Struct({type: Schema.Literal("logged"), run: RunId, what: RunLog}),
 	Schema.Struct({type: Schema.Literal("ended"), run: RunId, ...RunEnd.fields}),
 ]);
@@ -115,6 +136,8 @@ export class RunRecord extends Schema.Opaque<RunRecord>()(
 	Schema.Struct({
 		run: RunId,
 		experiment: ExperimentId,
+		/** The caller's name for it: started again with this key, it is this run. */
+		key: RunKey,
 		/** When it started, by the ledger's clock. */
 		at: Schema.Finite,
 		status: RunStatus,
@@ -144,6 +167,24 @@ export class RunRecord extends Schema.Opaque<RunRecord>()(
 		if (key !== null && named !== undefined) return {key, value: named};
 		const first = Object.entries(run.metrics)[0];
 		return first === undefined ? null : {key: first[0], value: first[1]};
+	}
+
+	/**
+	 * Whether the run started with this plan: the same key, params, tags and job, in any key order.
+	 * `plan` as the ledger keeps it, through JSON, so a field set to `undefined` is no field.
+	 */
+	static startedWith(run: RunRecord, plan: RunPlan): boolean {
+		return (
+			run.key === plan.key &&
+			Equal.equals(run.params, plan.params) &&
+			Equal.equals(run.tags, plan.tags) &&
+			run.job === plan.job
+		);
+	}
+
+	/** Whether the run ended this way: the same status, dollars and tokens. */
+	static endedWith(run: RunRecord, how: RunEnd): boolean {
+		return run.status === how.status && run.usd === how.usd && Equal.equals(run.tokens, how.tokens);
 	}
 }
 
@@ -431,9 +472,11 @@ export interface Folded {
 /** Why a run fact does not fit the runs before it, or `null` when it fits. */
 const misfit = (kept: Kept, fact: Fact): string | null => {
 	if (fact.type === "created" || fact.type === "written") return null;
-	const run = kept.page.runs.find((r) => r.run === fact.run);
 	if (fact.type === "started")
-		return run === undefined ? null : `run ${fact.run} started a second time`;
+		return kept.page.runs.some((r) => r.key === fact.key)
+			? `run key ${fact.key} started a second time`
+			: null;
+	const run = kept.page.runs.find((r) => r.run === fact.run);
 	if (run === undefined) return `run ${fact.run} ${fact.type}, but it never started`;
 	if (run.status !== "running") return `run ${fact.run} ${fact.type} after it ended`;
 	if (fact.type === "ended") return null;
@@ -443,6 +486,22 @@ const misfit = (kept: Kept, fact: Fact): string | null => {
 	if (what.kind === "case" && kept.cases.some((c) => c.run === fact.run && c.item === what.item))
 		return `run ${fact.run} logged case ${what.item} a second time`;
 	return null;
+};
+
+/**
+ * Whether the run holds this log already, by the name its message id is made of: the metric's
+ * key, the case's item, the file's path. What it holds under that name stands, as the ledger's
+ * `dup` keeps the first.
+ */
+export const holds = (kept: Kept, run: RunRecord, log: RunLog): boolean => {
+	switch (log.kind) {
+		case "metric":
+			return log.key in run.metrics;
+		case "case":
+			return kept.cases.some((c) => c.run === run.run && c.item === log.item);
+		case "artifact":
+			return run.artifacts.some((a) => a.path === log.path);
+	}
 };
 
 const withRun = (kept: Kept, run: RunId, change: (r: RunRecord) => RunRecord): Kept => ({
@@ -468,9 +527,15 @@ const step = (kept: Kept | undefined, entry: Entry): Kept | string => {
 			return {...kept, page: {...kept.page, writeUp}};
 		}
 		case "started": {
+			// A run's number is its place among the experiment's starts that fit, in the ledger's
+			// order: the third start is `170-3`. The start's message id is its key, so a start sent
+			// again is the ledger's `dup` and takes no number; two keys sent at once both land, and
+			// the ledger's order numbers them. Nobody picks a number, so two starts cannot pick the
+			// same one. The cost: a run's id is known only once its start has landed and been read.
 			const run: RunRecord = {
-				run: fact.run,
+				run: `${entry.experiment}-${kept.page.runs.length + 1}`,
 				experiment: entry.experiment,
+				key: fact.key,
 				at: entry.at,
 				status: "running",
 				params: fact.params,

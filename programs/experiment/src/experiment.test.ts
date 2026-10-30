@@ -18,7 +18,7 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 				headline: "agreed",
 				sections: [{heading: "What we did", text: "Read the old log."}],
 			});
-			const run = yield* service.start("170", {params: {}, tags: {}, job: null});
+			const run = yield* service.start("170", {key: "test-1", params: {}, tags: {}, job: null});
 			yield* service.log(run, [{kind: "metric", key: "agreed", value: 1}]);
 			yield* service.end(run, {status: "finished", usd: 0, tokens: null});
 			return yield* use;

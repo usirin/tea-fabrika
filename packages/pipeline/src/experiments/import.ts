@@ -405,11 +405,15 @@ export function transform(files: {
 		r.cases += result.cases.length;
 		r.metricsCut += result.cut;
 		const date = experiments.get(n)?.writeUp?.date;
+		const source = `experiments/results/${file.name}`;
 		runs.push({
 			n,
 			plan: {
+				// One results file is one run, so its path names the run: a second import starts no
+				// new one. A file read another way next time has another plan, and is refused.
+				key: `import/${source}`,
 				params: result.params,
-				tags: {source: `experiments/results/${file.name}`, ...(date ? {date} : {})},
+				tags: {source, ...(date ? {date} : {})},
 				job: null,
 			},
 			logs: [
@@ -419,7 +423,7 @@ export function transform(files: {
 					value,
 				})),
 				...result.cases,
-				{kind: "artifact", path: `experiments/results/${file.name}`},
+				{kind: "artifact", path: source},
 			],
 			end: {status: "finished", usd: result.usd, tokens: result.tokens},
 		});
@@ -445,7 +449,10 @@ export function transform(files: {
 	};
 }
 
-/** Load an import through `Experiments`: each experiment created and written, each run logged. */
+/**
+ * Load an import through `Experiments`: each experiment created and written, each run logged.
+ * Loaded again, nothing new lands: every write has its message id, and each run its key.
+ */
 export const load = (old: Import) =>
 	Effect.gen(function* () {
 		const experiments = yield* Experiments;

@@ -5,7 +5,8 @@
 //
 //   import   reads experiments/NN-*.md, experiments/README.md and experiments/results/*.json,
 //            read-only, and loads them through the `Experiments` service into a ledger in this
-//            process's memory. Never the shared ledger, never an app home. Prints the counts.
+//            process's memory. Never the shared ledger, never an app home. Prints the counts,
+//            then loads it all again and counts the rows that second load added: none, by keys.
 //   programs runs `experiments`, `experiment --n 167` and `compare` on that ledger, the real
 //            programs, and prints what each sent, cut to a few lines.
 //
@@ -79,9 +80,15 @@ const main = Effect.gen(function* () {
 	const loadMs = Math.round(performance.now() - t1);
 	const rows = yield* ledger.read(0, 1_000_000, "experiments");
 	const listed = yield* (yield* Experiments).list();
+	// The same import again: each run's key is its results file, so nothing new should land.
+	const t2 = performance.now();
+	yield* load(old);
+	const againMs = Math.round(performance.now() - t2);
+	const againRows = (yield* ledger.read(0, 1_000_000, "experiments")).length - rows.length;
 	console.log("import, into a ledger in memory:");
 	console.log(JSON.stringify(old.counts, null, 2));
 	console.log(`${rows.length} ledger rows; transform ${transformMs} ms, load ${loadMs} ms`);
+	console.log(`loaded again: ${againRows} new rows in ${againMs} ms`);
 	console.log(`${listed.length} experiments listed, ${old.runs.length} runs`);
 
 	// Old results of one experiment are often different measurements, not runs of one thing. Of
@@ -126,11 +133,12 @@ const main = Effect.gen(function* () {
 					tokenNames: Object.keys(old.counts.tokenNames).length,
 				},
 				ledgerRows: rows.length,
+				newRowsOnASecondLoad: againRows,
 				listed: listed.length,
 				runs: old.runs.length,
 				twoRunsOrMore: many.length,
 				lastTwoShareAMetric: sharing.length,
-				ms: {transform: transformMs, load: loadMs},
+				ms: {transform: transformMs, load: loadMs, loadAgain: againMs},
 				programs,
 			},
 			null,

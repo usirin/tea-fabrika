@@ -13,12 +13,13 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 		Effect.gen(function* () {
 			const experiments = yield* Experiments;
 			yield* experiments.create("170", "The experiments program");
-			for (const scores of [
+			for (const [i, scores] of [
 				[1, 0, 1],
 				[1, 1, 1],
 				[0, 1, 1],
-			]) {
-				const run = yield* experiments.start("170", {params: {}, tags: {}, job: null});
+			].entries()) {
+				const key = `test-${i + 1}`;
+				const run = yield* experiments.start("170", {key, params: {}, tags: {}, job: null});
 				yield* experiments.log(run, [
 					...scores.map((agreed, i) => ({
 						kind: "case" as const,
@@ -31,7 +32,7 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 				yield* experiments.end(run, {status: "finished", usd: null, tokens: null});
 			}
 			yield* experiments.create("171", "One run only");
-			yield* experiments.start("171", {params: {}, tags: {}, job: null});
+			yield* experiments.start("171", {key: "test-1", params: {}, tags: {}, job: null});
 			return yield* use;
 		}).pipe(
 			Effect.provide(

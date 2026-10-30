@@ -1,7 +1,8 @@
 # 170. The experiments program, on today's ledger (part 1)
 
 **Answer.** Yes, it builds from the blocks we have, with 16 gaps, none of them a blocker for
-part 1. An `Experiments` service keeps each experiment's facts on the ledger under
+part 1. One is closed since: a run now has a key from its caller, so a second import adds
+nothing. An `Experiments` service keeps each experiment's facts on the ledger under
 `experiments/<n>/inbox`, with its own fold. Four small programs read it: `experiments`,
 `experiment`, `compare` and `markdown`. The importer read the whole old log into a ledger in
 memory in about 0.6 seconds: 163 write-ups and 175 results files, of which 144 fit the run
@@ -13,7 +14,8 @@ model.
 // The whole idea: an experiment is a stream of facts; a run is a few of them; programs read the fold.
 const experiments = yield* Experiments;                       // on the ledger, or a ledger in memory
 yield* experiments.create("170", "The experiments program");
-const run = yield* experiments.start("170", {params: {model: "jev"}, tags: {}, job: null}); // "170-1"
+const plan = {key: "job-7f3a", params: {model: "jev"}, tags: {}, job: null};  // the key: the caller's
+const run = yield* experiments.start("170", plan);            // "170-1", and "170-1" again if sent again
 yield* experiments.log(run, [
 	{kind: "case", item: "ticket-41", output: "yes", scores: {agreed: 1}},
 	{kind: "metric", key: "agreed", value: 1},
@@ -32,9 +34,9 @@ starts an agent or spends money: that is part 2, after tracker #88, #89, #90 and
 
 | Part | Where | Lines |
 |---|---|---|
-| Facts, fold, run record, comparison, markdown views | `packages/pipeline/src/experiments/experiment.ts` | 538 |
-| `Experiments`, the service on the ledger | `packages/pipeline/src/experiments/experiments.ts` | 242 |
-| The importer: `transform` (files to facts) and `load` (through the service) | `packages/pipeline/src/experiments/import.ts` | 461 |
+| Facts, fold, run record, comparison, markdown views | `packages/pipeline/src/experiments/experiment.ts` | 603 |
+| `Experiments`, the service on the ledger | `packages/pipeline/src/experiments/experiments.ts` | 279 |
+| The importer: `transform` (files to facts) and `load` (through the service) | `packages/pipeline/src/experiments/import.ts` | 468 |
 | `experiments`, the list | `programs/experiments/` | 32 |
 | `experiment`, one page | `programs/experiment/` | 39 |
 | `compare`, two runs | `programs/compare/` | 63 |
@@ -57,7 +59,7 @@ export class Experiments extends Context.Service<Experiments, {
 	readonly create: (n: ExperimentId, title: string) => Call<void>;
 	readonly write: (n: ExperimentId, writeUp: WriteUp) => Call<void>;  // the write-up, as data
 	readonly open: (n: ExperimentId) => Call<ExperimentPage>;
-	readonly start: (n: ExperimentId, plan: RunPlan) => Call<RunId>;    // "170-1", "170-2", ...
+	readonly start: (n: ExperimentId, plan: RunPlan) => Call<RunId>;    // one run per plan.key: "170-1", ...
 	readonly log: (run: RunId, what: readonly RunLog[]) => Call<void>; // a batch, as MLflow's log_batch
 	readonly end: (run: RunId, how: RunEnd) => Call<void>;
 	readonly runs: (n: ExperimentId) => Call<readonly RunRecord[]>;
@@ -65,7 +67,7 @@ export class Experiments extends Context.Service<Experiments, {
 }>()("Experiments") {}
 
 type Call<A> = Effect.Effect<A, ExperimentsFailed>;
-// ExperimentsFailed {why: "unreachable" | "no_experiment" | "no_run" | "ended" | "refused" | "bad_fact", says}
+// ExperimentsFailed {why: "unreachable" | "no_experiment" | "no_run" | "ended" | "key_reused" | "refused" | "bad_fact", says}
 
 export const experimentsOnLedger: (writer: Writer) => Layer.Layer<Experiments, never, Ledger>;
 ```
@@ -73,10 +75,21 @@ export const experimentsOnLedger: (writer: Writer) => Layer.Layer<Experiments, n
 - In memory is the same layer over `memoryService()`, the ledger in memory. No second
   implementation was needed.
 - Every write has its own message id, so a write sent again lands once: `created`,
-  `written/<hash>`, `metric/<run>/<key>`, `case/<run>/<item>`, `artifact/<run>/<path>`,
-  `ended/<run>`.
-- A start is the exception. It takes the next free number, `started/<k>`, so a start sent
-  again is a second run. MLflow's `create_run` works the same way.
+  `written/<hash>`, `started/<key>`, `metric/<run>/<key>`, `case/<run>/<item>`,
+  `artifact/<run>/<path>`, `ended/<run>`.
+- A start's key comes from its caller, as a Stripe idempotency key does: a job's trace id, or
+  `import/<results file>` for an imported run. A caller with none, such as a person starting a
+  fresh run, makes one before its first try and keeps it for its retries. The key is a field of
+  `RunPlan` that is not optional, so a start without one does not type.
+- A run's number is not picked: the fold numbers runs in the order their starts land, so the
+  third start is `170-3`. Two starts with one key at once: the ledger keeps the first, the
+  second is its `dup`, and both read back the same run. Two keys at once: both land, and the
+  ledger's order numbers them. A test holds two starts until both have read, the worst order.
+- The same key with another plan fails `key_reused`, as Stripe refuses a key reused with other
+  parameters. Returning the first run instead would log the second plan's results under the
+  first plan's params.
+- A log or an end sent again after its run ended is no change, so a second import is all
+  `dup`s. A log the run does not hold yet, or an end another way, still fails `ended`.
 
 ## The facts
 
@@ -88,13 +101,13 @@ beside `experiments/170`.
 export const Fact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("created"), title: Title}),
 	Schema.Struct({type: Schema.Literal("written"), ...WriteUp.fields}),        // date, answer, headline, sections
-	Schema.Struct({type: Schema.Literal("started"), run: RunId, ...RunPlan.fields}), // params, tags, job
+	Schema.Struct({type: Schema.Literal("started"), ...RunPlan.fields}),         // key, params, tags, job; no run id
 	Schema.Struct({type: Schema.Literal("logged"), run: RunId, what: RunLog}),   // metric | case | artifact
 	Schema.Struct({type: Schema.Literal("ended"), run: RunId, ...RunEnd.fields}),  // status, usd, tokens
 ]);
 
 // What the fold makes of one run: what field/runs.jsonl holds by hand today, as one shape.
-class RunRecord { run; experiment; at; status; params; tags; metrics; usd; tokens; artifacts; job; ended }
+class RunRecord { run; experiment; key; at; status; params; tags; metrics; usd; tokens; artifacts; job; ended }
 // One case's result in a run: Langfuse's dataset run item and its scores.
 const CaseResult = Schema.Struct({run: RunId, item: Item, output: Schema.Unknown, scores: Metrics});
 ```
@@ -151,7 +164,7 @@ what was done instead.
 | The design's `Experiments` sketch | A way to put an experiment and its write-up on the ledger | Added `create` and `write` |
 | The sketch's `log`, one item | Thousands of cases per run: each `log` reads the run's stream to check it is still running | `log` takes a list, as MLflow's `log_batch` |
 | Ledger names | A run as a stream of its own | Refused: a name inside a registered name. A run is facts on its experiment's inbox, numbered by message id |
-| Ledger message ids | A start sent twice lands once | Not possible without a key from the caller. A second start is a second run; loading the import twice doubles its runs (a test shows it) |
+| Ledger message ids | A start sent twice lands once | Done: a key from the caller, `started/<key>`, and the fold numbers runs. A second load of the whole old log added 0 rows (tests and the script show it) |
 | Blobs (block 34) | Artifacts and big case outputs, by hash | Missing. An artifact is a repo path; a case output is kept whole in its fact |
 | JobRecord `summary` (block 32) | The run record's home | Not built. The run record lives in the fold; `job` is a trace id or `null`, `null` for every imported run |
 | `Traces` | A list of an experiment's runs, for `compare` | `Traces` reads one trace by id; `runs(n)` comes from the fold |
@@ -206,7 +219,8 @@ results file holds counts only, and the names of cost keys stay on the console.
 | Experiments with 2 or more runs | 19 | |
 | Of those, last two share a metric | 6 | The only ones `compare` can say much about |
 
-- 12,896 ledger rows; transform 306 ms, load 329 ms on one laptop, in one run.
+- 12,896 ledger rows; transform 283 ms, load 359 ms on one laptop, in one run. Loaded a second
+  time, in 573 ms, it added 0 rows: every start, log and end was already there.
 - The counts move as the log grows: experiment 157's second round landed during this work and
   added one results file, one run and one comparable experiment. The script reads the log as
   it is when it runs.
@@ -226,10 +240,13 @@ env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY node experiments/170-
   results fit the run record, but only 6 experiments have runs that compare. The old log is for
   reading. Cost: none now; the import can run once into the real ledger when the owner says so.
   How sure: 85%.
-- **Add an id for a run, from the caller.** Why: a retried start makes a second run, and a
-  second import doubles every run. `start(n, plan, {key})` with the key as the message id
-  closes it. Cost: one field and one test. How sure: 80%. The doubt: whether a run's key is
-  something the caller always has (a job's trace id would be).
+- **Done: an id for a run, from the caller.** A retried start made a second run, and a second
+  import doubled every run. Now `plan.key` is the message id `started/<key>`, and the fold
+  numbers runs in the order their starts land. The guess was "one field and one test"; it took
+  one field, the run number moved from the start fact to the fold, `log` and `end` learned to
+  take a write sent again after the run ended, three new tests and a law. The doubt that stays: no caller
+  today lacks a key, so the "make one before the first try" rule for a person's fresh run is
+  written down but not yet used by any program.
 - **One package for the three read-only programs, or none.** Why: each package costs more than
   its program. Cost: a move and a rename of imports. How sure: 60%. The doubt: the tracker's
   split put one program in each package on purpose, and the owner may want that rule kept. What
