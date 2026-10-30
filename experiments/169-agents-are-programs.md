@@ -91,13 +91,15 @@ interface Conversation { provider: "claude" | "codex"; session: string; told: nu
 ```
 
 - **Prompts queue.** Each prompt is a turn, run in order on one session.
+  Since the port to the mailbox (12), the run's mailbox is that queue.
 - **The input closing ends it.** A tile keeps `prompt` open: a chat. A parent
   tells one prompt and closes it: that is `claude -p` or `codex exec`. The
   program does the same thing in both.
 - **Restart.** The conversation is kept. A turn cut off by a kill is sent
   again on start (`resent` counts them). A known session id resumes (`resumed`).
 - **Cancel.** `cancel now` stops whatever turn runs when it is read. `cancel 2`
-  stops turn 2 now if it runs, or when it comes up. Cancel by id is how LSP
+  stops turn 2 now if it runs, or when it comes up. `cancel` is a control
+  input (12), so it is read at once while a turn runs. Cancel by id is how LSP
   does it (`$/cancelRequest`,
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest).
 - **The provider is the name.** BusyBox is one binary that acts by the name it is
@@ -222,6 +224,10 @@ fake providers:
   read in does not change the answer. That is why LSP cancels by id.
 - `cancel now` stays for a person at a tile, who means "what I see running".
   A stage should always cancel by number.
+- **Again on the mailbox (12):** PR 195 merged the mailbox. The same 50
+  trials per case per provider, on the ported programs, gave the same four
+  answers, 50 of 50. A control cancel skips the order on purpose, so the
+  mailbox does not fix `cancel now`; the number does.
 
 ## 7. Cost per stage
 
@@ -325,6 +331,8 @@ Two gaps to fix in the service, not in the program, the same on both providers:
 
 - **No permission asks.** Neither adapter ever sends `asked`, and the service
   has no path to answer one. `allow` and `refuse` are wired but dead.
+  They stay as they are until the proposed direction note in
+  [PR 194](https://github.com/usirin/tea-fabrika/pull/194) settles them as ledger facts.
 - **No chat turn without a schema.** `Turn.answer` is required, and
   `Schema.Json` makes the JSON Schema `{}`. Proposal: `answer: null` in `Turn`
   for a plain chat turn.
@@ -360,6 +368,57 @@ The owner rejected the first API: `agentProgram(provider)`,
   answers as the saved 50, and costs in the same range. The saved results file
   is the first version's, unchanged.
 
+## 12. The port to one mailbox (2026-10-30)
+
+[PR 195](https://github.com/usirin/tea-fabrika/pull/195) gave every program
+run one mailbox, served by `serve` with one handler per input. `chat` read
+each input as its own stream before; it serves now.
+
+```ts
+cancel: input(Cancel, "...", {control: true}),        // its own bound of 16, beside the order
+
+const handlers = {
+	prompt: (prompt) => told(prompt).pipe(Effect.andThen(runTurn)),  // the turn runs in the handler
+	allow: notWaiting,
+	refuse: notWaiting,
+	cancel: fork(cancel),                              // read at once, while a turn runs
+};
+yield* serve(handlers, {until: ["prompt"]});
+```
+
+- **The mailbox is the line of prompts.** The turn runs inside the `prompt`
+  handler, as tsh runs a line. A prompt told during a turn waits in the
+  mailbox, and `mailbox()` shows it. Past the program's capacity (1000) a
+  tell fails `MailboxFull`. The program's own unbounded queue is gone.
+- **`cancel` is a control input.** It must be read while a turn runs, and
+  the turn now runs inside `serve`. It is tsh's Ctrl-C again.
+- **Why not acp's shape.** 195 kept acp's cancel ordinary: its handlers only
+  queue work, and the turns run beside `serve`. That works, but it keeps a
+  second queue with no bound, and a full mailbox refuses the cancel. Here the
+  mailbox stays the one queue.
+- **`allow` and `refuse` are unchanged** (they wait on PR 194). They are
+  ordinary inputs, so one told during a turn is said back as `not_waiting`
+  once the turn ends. Nothing waits on them today (10).
+- **A turn a kill cut off** runs again first, in a fiber of its own, while
+  the mailbox is served, so a cancel reaches it. Every prompt waits for it.
+  If `prompt` closes first, `chat` keeps serving until that turn ends.
+
+**The proof** (`programs/claude/src/claude.test.ts` and
+`programs/codex/src/codex.test.ts`, the same test): turn 1 hangs. 1000 prompts
+are told behind it, `queued`, and the next one fails `MailboxFull`. Then
+`cancel now` answers `queued`, and turn 1 ends `cancelled`. With `cancel` made
+an ordinary input, that test fails `MailboxFull`, and the cancel-by-number
+test hangs: the cancel waits behind the turn it should stop. The restart test
+now runs twice, with `prompt` open and closed at the second start. Closed, the
+cancel still stops the resent turn and the run ends; without the second
+`serve`, that case hangs.
+
+**Measured again, fake providers, $0:** `order 50` gave the same four answers
+as 6. `cost 300` ran with the machine at load 18: the program's gap over
+`Agents.run` was about 1.2 to 1.8 ms a turn, against 0.8 ms before, but
+`Agents.run` alone was also 2 to 4 times slower than the saved run. The saved
+results file is left as it was.
+
 ## What this cannot tell us
 
 - One live prompt per provider. It shows the wiring, not quality or cost at
@@ -378,6 +437,8 @@ The owner rejected the first API: `agentProgram(provider)`,
   the provider as JSON Schema) never ran on a real provider.
 - Nothing shows yet that the decode's error text helps a sorter that is sent
   back: today a failed draft ends the stage, it does not retry.
+- The cost of the mailbox port is not measured cleanly: the rerun ran on a
+  loaded machine (12).
 
 ## Cost
 

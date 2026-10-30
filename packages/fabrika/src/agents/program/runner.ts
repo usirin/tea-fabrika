@@ -89,7 +89,7 @@ export const programRunner =
 						),
 					),
 				);
-				// A fresh run's line is empty: one value never finds it full.
+				// A fresh run's mailbox is empty: one value never finds it full.
 				yield* tell(started.run, "prompt", run.prompt).pipe(Effect.orDie);
 				// Stdin's end: one prompt, then the run ends after its turn, as `claude -p` does.
 				started.close("prompt");

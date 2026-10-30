@@ -5,12 +5,11 @@ import {
 	Exit,
 	Fiber,
 	JsonSchema,
-	Queue,
 	Schema,
 	SchemaRepresentation,
 	Stream,
 } from "effect";
-import type {Given, Io} from "../../program/program.ts";
+import {fork, type Given, type Io} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {
 	AgentFailed,
@@ -45,7 +44,11 @@ import {
 //   tell %1 cancel now                                whatever turn runs now
 //
 // The program never knows whether a person watches. It runs each prompt as a
-// turn until its `prompt` input closes, then ends. A tile keeps that input
+// turn until its `prompt` input closes, then ends. The run's mailbox is the
+// line of prompts: a prompt told while a turn runs waits there, in the order
+// told, and past the program's capacity a tell fails `MailboxFull`. A cancel
+// is a control input, as tsh's Ctrl-C is: it is handled at once while a turn
+// runs, and a mailbox full of prompts never refuses it. A tile keeps that input
 // open, which is a chat; a parent tells one prompt and closes it, which is
 // `claude -p` or `codex exec`. Its window is its view, the kept
 // conversation; whether a host draws it is the host's call (the write-up's
@@ -112,7 +115,11 @@ export const inputs = {
 	prompt: input(Schema.String, "A prompt: one turn, after the turns before it."),
 	allow: input(Schema.String, "The id of an ask waiting: allow it, once."),
 	refuse: input(Schema.String, "The id of an ask waiting: refuse it."),
-	cancel: input(Cancel, "A turn's number, or now: that turn is cancelled."),
+	cancel: input(
+		Cancel,
+		"A turn's number, or now: that turn is cancelled. Handled at once, while a turn runs.",
+		{control: true},
+	),
 };
 
 const Started = Schema.Struct({
@@ -236,45 +243,23 @@ export const chat = (
 		let running: {readonly n: number; readonly fiber: Fiber.Fiber<void, unknown>} | null = null;
 		/** Turns cancelled before they began: each ends `cancelled` when it comes up. */
 		const cancelled = new Set<number>();
-		yield* Effect.forkScoped(
-			io.inputs.cancel.pipe(
-				Stream.runForEach((c) =>
-					Effect.gen(function* () {
-						const now = running;
-						if (c === "now") {
-							if (now !== null) yield* Effect.forkScoped(Fiber.interrupt(now.fiber));
-							return;
-						}
-						if (now?.n === c) return yield* Effect.forkScoped(Fiber.interrupt(now.fiber));
-						const seen = kept.getState().turns.find((t) => t.n === c);
-						// A turn not told yet, or told and not ended: it is cancelled when it comes up.
-						if (seen === undefined || seen.end === null) cancelled.add(c);
-					}),
-				),
-			),
-		);
+		/** A cancel, read at once: the turn running now is stopped, and a later one when it comes up. */
+		const cancel = (c: typeof Cancel.Type) =>
+			Effect.gen(function* () {
+				const now = running;
+				if (c === "now" || now?.n === c) {
+					if (now !== null) yield* Effect.forkScoped(Fiber.interrupt(now.fiber));
+					return;
+				}
+				const seen = kept.getState().turns.find((t) => t.n === c);
+				// A turn not told yet, or told and not ended: it is cancelled when it comes up.
+				if (seen === undefined || seen.end === null) cancelled.add(c);
+			});
 		// Every ask is refused by the run's containment before anyone sees it (`dontAsk`, and Codex's
 		// approvals `never`): nothing waits on a person, so an allow or refuse is said back, not lost.
+		// Told while a turn runs, it is said back once the turn ends.
 		const notWaiting = (id: string) =>
 			send("ask", {turn: null, id, title: "", answer: "not_waiting"});
-		yield* Effect.forkScoped(io.inputs.allow.pipe(Stream.runForEach(notWaiting)));
-		yield* Effect.forkScoped(io.inputs.refuse.pipe(Stream.runForEach(notWaiting)));
-
-		// ---------------------------------------------------------------- the turns, one after another
-		const todo = yield* Queue.unbounded<TurnSeen | null>();
-		for (const t of cutOff) Queue.offerUnsafe(todo, t);
-		yield* Effect.forkScoped(
-			io.inputs.prompt.pipe(
-				Stream.runForEach((prompt) =>
-					Effect.gen(function* () {
-						yield* kept.dispatch({type: "told", prompt});
-						const told = kept.getState().turns.at(-1);
-						if (told !== undefined) Queue.offerUnsafe(todo, told);
-					}),
-				),
-				Effect.andThen(Queue.offer(todo, null)),
-			),
-		);
 
 		const finish = (n: number, end: End) =>
 			Effect.gen(function* () {
@@ -349,9 +334,25 @@ export const chat = (
 				return yield* finish(t.n, {...NO_END, stop: "failed", answer: null, ms, error});
 			}).pipe(Effect.withSpan(`${provider} turn`, {attributes: {"agent.turn": t.n}}));
 
-		for (;;) {
-			const next = yield* Queue.take(todo);
-			if (next === null) return;
-			yield* runTurn(next);
-		}
+		// ---------------------------------------------------------------- the turns, one after another
+		// A turn a kill cut off runs again first, while the mailbox is served, so a cancel reaches it.
+		const again = yield* Effect.forkScoped(
+			Effect.forEach(cutOff, runTurn, {concurrency: 1, discard: true}),
+		);
+		const handlers = {
+			// The turn runs in the handler: every prompt told meanwhile waits in the mailbox.
+			prompt: (prompt: string) =>
+				Effect.gen(function* () {
+					yield* Fiber.join(again);
+					yield* kept.dispatch({type: "told", prompt});
+					const told = kept.getState().turns.at(-1);
+					if (told !== undefined) yield* runTurn(told);
+				}),
+			allow: notWaiting,
+			refuse: notWaiting,
+			cancel: fork(cancel),
+		};
+		yield* io.serve(handlers, {until: ["prompt"]});
+		// `prompt` closed while the cut-off turn still runs: go on serving until it ends.
+		yield* Effect.raceFirst(Fiber.join(again), Effect.andThen(io.serve(handlers), Effect.never));
 	}).pipe(Effect.scoped);
