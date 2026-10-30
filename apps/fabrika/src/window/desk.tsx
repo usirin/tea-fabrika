@@ -52,6 +52,7 @@ import {
 	type FrameMsg,
 	frameUpdate,
 	INFO,
+	keyGoesTo,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
@@ -156,6 +157,8 @@ let ghostty: Ghostty | null = null;
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
+/** One of a run's own inputs, on its port, as its window sends them (View, below). */
+const toRun = (run: string, msg: unknown) => window.fabrika.send(`run:${run}`, {type: "msg", msg});
 
 /** Hear a run's view on its port, from now on. */
 const follow = (run: string) =>
@@ -335,8 +338,9 @@ const swallow = (e: KeyboardEvent) => {
 
 /**
  * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
- * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; while the palette is open,
- * its own box takes every key; Escape closes what lies over the desk.
+ * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; Escape closes what lies over
+ * the desk. While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
+ * never to a tile: if focus is not in it, the key is dropped and focus moves in.
  */
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
@@ -344,14 +348,22 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	const over = store.frame.over.kind;
-	if (over === "palette") return;
-	if (over !== "none" && e.key === "Escape") {
+	const over = store.frame.over;
+	if (over.kind !== "none" && e.key === "Escape") {
 		swallow(e);
 		return frameStep({type: "close"});
 	}
 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
 	if (name === null) return;
+	const open = store.desk?.at === "open" ? store.desk : null;
+	const desk = {armed: open?.prefix.armed ?? false, asking: open?.ask != null};
+	if (keyGoesTo(over, name, store.prefix, desk) === "over") {
+		const box = document.querySelector<HTMLElement>("[data-over]");
+		if (box === null || (e.target instanceof Element && box.contains(e.target))) return;
+		swallow(e);
+		(box.querySelector<HTMLElement>("input") ?? box).focus();
+		return;
+	}
 	const press = {
 		key: e.key,
 		code: e.code,
@@ -394,7 +406,7 @@ const noFocus = (e: ReactPointerEvent) => e.preventDefault();
 
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
 	const view = store.views.get(run);
-	const send = (msg: unknown) => window.fabrika.send(`run:${run}`, {type: "msg", msg});
+	const send = (msg: unknown) => toRun(run, msg);
 	const known = view === undefined ? undefined : WINDOWS.get(view.program);
 	return (
 		// Focus sits here when the tile is focused: the keys a view takes go to it alone.
@@ -689,9 +701,9 @@ function App(): ReactNode {
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
 	// desk is out of reach while the link is down, so focus goes back to it once the link is up,
-	// and while the palette is open, which has its own box; it goes back once that closes.
+	// and while something lies over it, which takes focus (pop.tsx); it goes back once that closes.
 	useLayoutEffect(() => {
-		if (focused === null || away || over === "palette") return;
+		if (focused === null || away || over !== "none") return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
@@ -711,6 +723,7 @@ function App(): ReactNode {
 		armed: open?.prefix.armed ?? false,
 		toHost,
 		toApp,
+		toRun,
 		step: frameStep,
 	};
 	const bare = store.frame.bare;
