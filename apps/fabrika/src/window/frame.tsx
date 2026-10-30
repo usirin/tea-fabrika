@@ -503,7 +503,7 @@ function Palette(props: FrameProps): ReactNode {
 	const run = (i: number) => {
 		const c = shown[i];
 		if (c === undefined) return;
-		props.toHost({type: "do", key: c.runs});
+		props.toHost({type: "run", key: c.runs});
 		step({type: "ran", key: c.key});
 	};
 	return (

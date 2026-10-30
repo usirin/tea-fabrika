@@ -102,7 +102,7 @@ import {
 //   {type: "go", tile: "t7"}           a tile anywhere, as an ask in the asks list is picked:
 //                                      its workspace comes forward and it is focused
 //   {type: "pick", workspace: "w2"}    a workspace clicked in the top bar
-//   {type: "do", key: "z"}             the palette ran a command: as Ctrl-B, then that key
+//   {type: "run", key: "z"}            the palette ran a command: as Ctrl-B, then that key
 //
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
@@ -184,7 +184,7 @@ export type DeskMsg =
 	/** This workspace comes forward. */
 	| {readonly type: "pick"; readonly workspace: string}
 	/** What this key does after the prefix, with no prefix pressed: the palette ran it. */
-	| {readonly type: "do"; readonly key: string};
+	| {readonly type: "run"; readonly key: string};
 
 /** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
@@ -544,7 +544,7 @@ const went = (s: Open, tile: TileId): Step => {
 };
 
 /** The palette ran a key's command: as after the prefix, with the prefix put down and no question up. */
-const done = (s: Open, key: string): Step => {
+const ran = (s: Open, key: string): Step => {
 	const binding = bindingOf(key);
 	if (binding === undefined) return [s, []];
 	return act({...s, prefix: DISARMED, ask: null}, binding.does);
@@ -742,7 +742,7 @@ export const deskMachine = defineMachine({
 		ended: onOpen((s, m) => goneTile(s, m.tile)),
 		go: onOpen((s, m) => went(s, m.tile)),
 		pick: onOpen((s, m) => picked(s, m.workspace)),
-		do: onOpen((s, m) => done(s, m.key)),
+		run: onOpen((s, m) => ran(s, m.key)),
 		show_ok: noop,
 		show_err: noop,
 		open_ok: noop,

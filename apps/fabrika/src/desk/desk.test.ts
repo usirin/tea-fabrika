@@ -247,11 +247,11 @@ describe("the desk, moved by the window's frame", () => {
 	});
 
 	it("runs a key's command from the palette as Ctrl-B and that key would", () => {
-		const viaPalette = fold([{type: "do", key: "|"}]);
+		const viaPalette = fold([{type: "run", key: "|"}]);
 		const viaKeys = fold(prefixed("|"));
 		expect(viaPalette.s).toEqual(viaKeys.s);
 		expect(viaPalette.cmds).toEqual(viaKeys.cmds);
-		expect(fold([{type: "do", key: "q"}]).s).toBe(start);
+		expect(fold([{type: "run", key: "q"}]).s).toBe(start);
 	});
 
 	it("asks the frame to show the asks, the keys and the info mode, and changes nothing else", () => {

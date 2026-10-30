@@ -209,7 +209,7 @@ export type ToApp = typeof ToApp.Type;
  *
  *   {type: "go", tile: "t7"}          an ask picked in the asks list: its tile, wherever it is
  *   {type: "pick", workspace: "w2"}   a workspace clicked in the top bar
- *   {type: "do", key: "z"}            the palette ran a binding, as Ctrl-B and that key
+ *   {type: "run", key: "z"}           the palette ran a binding, as Ctrl-B and that key
  *   {type: "later", key: "7/a-1"}     an ask set aside: out of the count, at the list's foot
  *   {type: "back", key: "7/a-1"}      and counted again
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
@@ -227,7 +227,7 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
 	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
-	Schema.Struct({type: Schema.Literal("do"), key: KeyName}),
+	Schema.Struct({type: Schema.Literal("run"), key: KeyName}),
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),

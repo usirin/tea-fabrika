@@ -112,7 +112,7 @@ const table: MsgArbitraryTable<Msg> = {
 	ended: arbRecordMsg("ended", {tile}),
 	go: arbRecordMsg("go", {tile}),
 	pick: arbRecordMsg("pick", {workspace: fc.constantFrom("w1", "w2", "w3", "w9")}),
-	do: arbRecordMsg("do", {key: fc.constantFrom(...after, "1", "2", "a", "?", "q")}),
+	run: arbRecordMsg("run", {key: fc.constantFrom(...after, "1", "2", "a", "?", "q")}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
 	show_err: failed(show.errType, showing),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
@@ -594,7 +594,7 @@ describe("the desk's laws", () => {
 			grabsA: [takesWhatItSays.name],
 			wakesUp: [takesWhatItSays.name, overStays.name],
 			closesSilently: [emptiesAtTheEnd.name],
-			// The saves law caught it too, by chance, until the frame's Msgs (go, pick, do) changed which
+			// The saves law caught it too, by chance, until the frame's Msgs (go, pick, run) changed which
 			// lists seed 1 makes; the law about y catches it on any list.
 			yesIsNo: [yesCloses.name],
 			// The tile the line was typed in is asked to close with no question of its own.
