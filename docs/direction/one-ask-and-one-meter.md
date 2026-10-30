@@ -13,7 +13,7 @@ experiment/170/run/3/inbox
   {type: "asked", ask: "spend-1", for: "spend", who: ["github:42"],
    shows: {run: "experiment/170/run/3", usd: 0.4, cases: 5, of: 120, model: "jev-1"},
    saw: "sha256:4be0…", picks: ["yes", "no", "never"], until: 1793400000000}     code
-  {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…"}   a person, never an agent
+  {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {in: "window"}}   a person, in the window or said in chat
 ledger.setLimits("experiment/170/run/3", {usd: 0.4, answer: 812})   // refused unless row 812 is that yes
 ledger.hold(fence, "case-1", {usd: 0.1})    // "ok", or "limit": the money is not there
 ledger.charge(fence, "case-1", {usd: 0.07}) // what the case really cost; it replaces the hold
@@ -146,6 +146,10 @@ const AskFact = Schema.Union([
 		note: Body,
 		saw: Hash,
 		with: Schema.optionalKey(Schema.Unknown), // the extra a kind's answer takes, such as "keep going 2 rounds"
+		via: Schema.Union([                       // where the person said it; a chat answer always names its session
+			Schema.Struct({in: Schema.Literal("window")}),
+			Schema.Struct({in: Schema.Literal("chat"), session: Id}),
+		]),
 	}),
 	/** Code takes the ask back: its run ended, its time ran out, or what it was about changed. */
 	Schema.Struct({
@@ -158,7 +162,8 @@ const AskFact = Schema.Union([
 
 - `asked` and `answered` are today's tracker facts, grown. `asked` gains `for`,
   `who`, `shows`, `saw` and `until`, and `shows` takes the place of `what`.
-  `answered` gains `with`, and its `text` is renamed `saw`. `withdrawn` is new.
+  `answered` gains `with` and `via`, and its `text` is renamed `saw`.
+  `withdrawn` is new.
 - `answered` is written with the message id `answer/<ask>`. The ledger's inbox
   keeps one event per message id, so a second answer to the same ask is a
   `dup` and writes nothing. The first answer wins by the ledger's own rule, not
@@ -193,6 +198,29 @@ const plan = Ask.define("plan", {
 - The window's ask box takes only `shows` and `picks`, the way `defineBrief`
   takes only its keys. It reads nothing else, so the hash of `shows` is the
   hash of what the person saw.
+
+### An answer said in chat
+
+```ts
+// A sketch. The person says yes to their agent session; the session writes it on their login.
+{type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…",
+ via: {in: "chat", session: "session-7f3a"}}
+// window and trace: "yes · said in chat · session-7f3a"
+```
+
+- Decided by the owner on 2026-10-30. A person often answers in a chat with
+  their own agent session, and that session writes the answer on the person's
+  login. That stays.
+- The fact says `via: {in: "chat", session}`. The schema makes a chat answer
+  without its session impossible. The window and the trace show "said in chat".
+- `saw` must still match. The session shows the ask's `shows` in the chat and
+  writes the hash of what it showed, so the same two hash checks apply.
+- This differs from the removed Judge path in one way that matters: the
+  person talks to their own session about this one ask, and the record says
+  so. A bot reading a comment thread is not that.
+- To be plain about it: the session still reads the person's words into a
+  pick. It does not stop a hijacked session from faking a yes. What it gives
+  is a visible mark that can be checked later against the session's own log.
 
 ### The one hash
 
@@ -239,7 +267,7 @@ const [s0, cmds] = ask.start(spend, {run: "experiment/170/run/3", usd: 0.4, case
 const s1 = ask.written(s0);
 // s1:   {phase: "waiting", ask}       listening on the run's inbox for `answer/spend-1`
 
-const s2 = ask.answered(s1, {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…"});
+const s2 = ask.answered(s1, {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {in: "window"}});
 // s2:   {phase: "answered", ask, answer}
 // next: Act setLimits("experiment/170/run/3", {usd: 0.4, answer: 812}), through `remember`
 ```
@@ -307,6 +335,7 @@ const jev = liveJev(key, {calls: 2_000}, meter.of(self))   // the dollar cap is 
 | `tickets/approval.ts` `changesRequested` | **Kept** | A different rule: a person's "request changes" after a yes takes it back. It now also writes `withdrawn {why: "changed"}`. |
 | Asks program kinds and `answered` (`pipeline/src/asks/`) | **Folded**: four kinds of the one ask; its answers move to `answered` with `saw` | It answers by version number and covers nothing else. Its fold, its packs and the owner desk keep working; they read the one shape. |
 | `combos.ts` `createAsk`, `Thread`, `Reply`, `/choice`, Judge reading | **Removed** once legacy's operator is gone; no new caller until then | A comment on a thread is written by a bot, not on a person's session, so it can never be a person's `answered`. A model reading a person's words into a pick is code writing a person's answer. Its one caller is in `legacy/`, which only shrinks. |
+| A yes said in chat, written by the person's agent session | **Kept**, marked `via: {in: "chat", session}` | It is how people answer today. The mark makes it visible and checkable instead of looking like a window answer. |
 | `combos.ts` `hashOf`, `covers` (`node:crypto`) | **Removed** with `createAsk` | `node:crypto` cannot load in the window or a worker; Web Crypto can. |
 | `acp` program `ask` output, `allow`, `refuse`, `--permissions` | **Folded**: `--permissions ask` writes `asked {for: "permission"}` on the run's name and listens for `answered`. The `ask` output stays as a view. The `allow` and `refuse` inputs go. | An input can be told by any program in a pipe. Only a fact from a person's session is a person's answer. |
 | `Agents` event `asked {id, title}` | **Kept**, grown with `tool` and `input` | The person must see what the yes allows, and the hash must cover the call's input, not its title. |
@@ -343,6 +372,7 @@ limit mid-turn -> hold refused: the turn never starts; charge past it: the run e
 3x over        -> the trial ends limit:usd at the yes; a new ask shows the measured price
 3x under       -> the rest of the yes is never held; a new ask for the rest shows the measured price
 two people     -> the first answer is written; the second is a dup and is shown "answered by"
+said in chat   -> answered with via {in: "chat", session}; shown "said in chat"
 late answer    -> the ask was withdrawn {why: "ended"}; the fold refuses the answer
 no person      -> no ask is written; the box's rules refuse the tool, reject_once
 ```
@@ -435,6 +465,10 @@ no person      -> no ask is written; the box's rules refuse the tool, reject_onc
   signs the person in and writes the fact on their session would keep that.
   Counting in `field/` how often answers came by comment would settle whether
   it is needed.
+- **Chat answers are the owner's call, not a lean.** The doubt is a hijacked
+  session writing a yes nobody said. Counting in `field/` how many `via chat`
+  answers match a line in the session's own log would show whether the mark is
+  enough.
 - **75% on a dollar limit that must point at a yes.** It makes an unapproved
   limit impossible, which no warning can. The doubt: one more rule in the
   ledger about one fact kind. The other way (a `spend` stage that only checks)
