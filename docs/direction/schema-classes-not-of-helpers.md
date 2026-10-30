@@ -24,7 +24,7 @@ export class OpenTicket extends Schema.Class<OpenTicket>("OpenTicket")({
 - **No new `somethingOf` names.** About 475 of them exist today, with about
   3,100 calls. They do not read like Effect, and the name says what comes out,
   not where it lives.
-- **Data with behaviour is a `Schema.Class`.** Its helpers are statics or
+- **Data with behavior is a `Schema.Class`.** Its helpers are statics or
   methods on the class, so domain logic lives on the domain object.
 - **A member of a union is a `Schema.TaggedClass`.** `_tag` earns its place only
   where something switches on it. A shape that is never in a union has no tag.
@@ -52,7 +52,7 @@ export class OpenTicket extends Schema.Class<OpenTicket>("OpenTicket")({
 
 - **`make` and the class constructor check the value and throw** when it does
   not fit; `makeOption` gives none instead. Today's `somethingOf` builders copy
-  fields with no check. So every swap to `make` is a behaviour change, kept in
+  fields with no check. So every swap to `make` is a behavior change, kept in
   its own pull request with its tests, apart from plain renames.
 - One sweep, package by package, after the `runs` to `timeline` rename lands.
 
