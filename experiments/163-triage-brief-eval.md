@@ -1,9 +1,16 @@
-# 163. The triage brief, made the tested way (part 1)
+# 163. The triage brief, made the tested way
 
 The question: can we test a triage brief the way a brief-lab program would
 (ticket #62), with one labelled set, a locked half, an owner's bar and one
 scorer? Part 1 builds every piece and proves the harness on 5 cases. It does
-not score the brief.
+not score the brief. [Part 2](#part-2-tune-and-lock) tunes the brief on the
+open half and scores it once on the locked half.
+
+**Part 2's answer: the tuned brief failed the bar.** Brief v3 was perfect on
+the open half on opus and closed 9 of 40 locked built tickets (bar: at most 5)
+and 1 of 5 locked security tickets (bar: 0). It fit the 58 cases it was tuned
+on. GPT sol has no locked score: the lock refused a second model on the same
+brief. Opus cost $17.96.
 
 **Answer: the pieces are built and the harness works on both models. 119
 labelled phoenix cases, split 58 open and 61 locked. Brief v1 is 388 words with
@@ -202,7 +209,7 @@ each, once per model. `STEP=tune SMOKE=1`.
   model's `why` with a colon before it saves, so the public file holds none.
   GPT sol wrote some in the smoke.
 
-## What this means
+## What part 1 means
 
 1. **The shape is ready for the program.** Every step has its own file in and
    out, the data has a schema, the scorer is a service with a fake, and a record
@@ -217,7 +224,7 @@ each, once per model. `STEP=tune SMOKE=1`.
 3. **Do not read anything into the 5 cases.** They prove the harness, not the
    brief. One GPT sol miss on 2 built tickets says nothing about its rate.
 
-## What it cannot tell us
+## What part 1 cannot tell us
 
 - **How good brief v1 is.** 5 cases, by design.
 - **Whether the labels are right.** Built means merged, not worth building, and
@@ -230,6 +237,214 @@ each, once per model. `STEP=tune SMOKE=1`.
 - **The cost of GPT sol.** The plan gives no price.
 - **Another day.** One Codex version, one model id, one SDK version.
 
+## Part 2: tune and lock
+
+Run on 2026-10-30, after the owner approved the bar as written.
+
+**Answer: brief v3 fails the bar on opus, and the failure is the finding.**
+Tuned on the open half, it closed 0 of 38 open built tickets and 26 of 28
+hard-no answers. On the locked half it closed 9 of 40 built tickets and 1 of 5
+security tickets. The two edits fit the 58 cases they were written from. GPT
+sol has no locked score, because the lock refuses a second run of one brief
+hash whatever the model. Opus cost $17.96 for 344 answers; GPT sol gave 338
+answers on the plan.
+
+```ts
+// A sketch of the STEP calls part 2 made, in order. Every version and every answer is kept.
+tune({brief: "triage-v1", model: "opus" | "sol", half: "open", runs: 2}); // 58 cases
+tune({brief: "triage-v2", model: "sol", half: "open", runs: 2});          // opus skipped: the budget
+tune({brief: "triage-v3", model: "sol" | "opus", half: "open", runs: 2});
+lock({brief: "triage-v3", model: "opus"});  // once: 61 cases x 2
+lock({brief: "triage-v3", model: "sol"});   // refused: "triage-v3 (a2c5afb17bfe) already ran on the locked half"
+decide();  // triage-v3 on opus: FAIL (badClose 23%, securityClosed 20%)
+```
+
+### The open half, per version and model
+
+58 cases, 2 runs each. Bad closes and security count tickets closed at least
+once; hard no's count answers; agreement counts tickets with the same verdict
+both runs. The bar's lines are in bold where a version misses them.
+
+| Brief, model | Bad closes (of 38) | Security (of 5) | Hard no's closed (of 28) | Agreement (of 58) |
+|---|---|---|---|---|
+| v1, opus | 3 (8%) | 0 | **15 (54%)** | 56 (97%) |
+| v1, GPT sol | **5 (13.2%)** | 0 | **8 (29%)** | 57 (98%) |
+| v2, GPT sol | 3 (8%) | 0 | 22 (79%) | 55 (95%) |
+| v3, GPT sol | 1 (3%) | 0 | 23 (82%) | 56 (97%) |
+| v3, opus | 0 (0%) | 0 | 26 (93%) | 58 (100%) |
+
+- **v1 missed the hard-no floor on both models.** Opus kept 7 hard no's at
+  least once, GPT sol 10 (and 2 easy no's). Most of them name a fault the filer found by reading
+  the code, and say it is narrow, low harm or unconfirmed (#7344, #8259,
+  #8327, #8501). v1's hardening rule says to keep "something broken today ...
+  even if no user has hit it yet", and both models did. GPT sol also kept two
+  agent-filed removals of unused code (#10144, #10214): v1's churn rule covers
+  words and records only.
+- **v1's wrong closes:** #2561 (a rate limit from a security audit), #2713 (a
+  type-only slice of a wider ticket), #8174 (a numbered story of an epic), and
+  on GPT sol also #6457 (a cost that lands when a flag turns on, as in part 1)
+  and #6003 (closed once as a duplicate).
+- **v2 changes the hardening rule only**, each line from those cases:
+  - a fault found only by reading the code, or one the ticket calls narrow,
+    low harm, non-blocking, unconfirmed or one that may never fire, has not
+    happened (#7344, #8259, #8327, #8501);
+  - keep when the ticket shows something going wrong in a real run, named or
+    with the steps (the old "broken today" line, made stricter);
+  - keep a cost that lands for sure once a planned change ships (#6457);
+  - keep a planned part of larger work: an epic's child, a numbered story, one
+    slice of a wider ticket (#2713, #8174);
+  - the security line also covers "nothing that bounds how much one user may
+    do" (#2561).
+- **v2 on GPT sol** closed far more hard no's (8 to 22) and fewer built
+  tickets (5 to 3), but closed two new built tickets as hardening: #8992 (a
+  fence a merged change took away) and #9196 (a false PASS a real gate run
+  only just did not post). It still kept #10144 and #10214.
+- **v3 adds three lines, from v2's misses:** keep a near miss in a real run
+  (#9196); keep a guard that a landed change took away (#8992); and churn also
+  covers an agent removing code, an export or an option nothing uses (#10144,
+  #10214).
+- **v2 never ran on opus.** At about $6 an open-half run, v1, v2 and v3 on
+  opus plus the lock would have passed $20. v2 and v3 went to GPT sol first,
+  for free, and only the better one went to opus.
+- **Every version is kept:** `163-briefs/triage-v1.md` (2ccebff3e7c1),
+  `triage-v2.md` (9efb4899ddae), `triage-v3.md` (a2c5afb17bfe), and every
+  answer in `results/163-triage-brief-eval.json`.
+
+### Why v3 was the final brief
+
+- **It was best on every line, on both models.** Against v1: hard no's 15 to
+  26 on opus and 8 to 23 on GPT sol, bad closes 3 to 0 and 5 to 1, agreement
+  the same or better.
+- **The doubt, named before the lock:** v2 and v3 were written from the open
+  half's misses and scored on the same cases, so their open numbers are an
+  upper bound. Five new lines on 58 cases can fit those cases. The lock was
+  the test of that doubt. v1 was the other choice: untuned, but under the
+  hard-no floor on both models, so it would have failed a bar line for sure.
+
+### The locked half: v3 on opus, against the bar
+
+61 cases, 2 runs each, run once. `STEP=decide`: **FAIL.**
+
+| Line | Bar | v3 on opus | Point share, Wilson 95% | Verdict |
+|---|---|---|---|---|
+| bad closes | at most 13% (5 of 40) | 9 of 40 built tickets | 23%, 12% to 38% | fail |
+| security closed | 0% (0 of 5) | 1 of 5 | 20%, 4% to 62% | fail |
+| hard no's closed | at least 55% (17 of 30) | 23 of 30 answers | 77%, 59% to 88% | pass |
+| agreement | at least 90% (55 of 61) | 60 of 61 tickets | 98%, 91% to 100% | pass |
+
+- **8 of the 9 wrong closes are hardening, and every one leans on the line v2
+  added.** The model quotes "found by reading the code", "Uncertain", "may be no bug at
+  all", "No live hole today", "latent rather than live", and closes. Phoenix
+  built these tickets: 2 of 17 built, 2 of 3 hard-yes, 3 of 15 random built,
+  and the security ticket, #3341 (CodeQL alerts, "not a production user-data
+  exposure"). The ninth, #5416, was closed as a duplicate of an earlier
+  ticket with the same fault in its title.
+- **So the open half's code-reading findings were mostly closed by phoenix,
+  and the locked half's were mostly built.** Nothing in the text separates
+  the two, which part 1's "needs the code" label already hinted. The edits
+  that won opus 11 more hard-no answers on the open half cost 8 built tickets
+  here.
+- **The locked misses on the other side:** 4 hard no's kept at least once
+  (#7216, a wrong comment, kept under churn's "wrong in substance"; #7986, a
+  guard a change removed, kept under v3's new line; #8826 and #8246), and one
+  duplicate kept because it is a numbered story (#2103).
+- **No tuning after this.** These numbers were read only after both lock
+  steps had run.
+
+### GPT sol's lock was refused
+
+`STEP=lock MODEL=sol` stopped at once with "triage-v3 (a2c5afb17bfe) already
+ran on the locked half: it is scored once". The guard checks the brief and
+its hash, not the model, so the first model's lock shuts the half for the
+second. The bar is per model, so this is a harness gap, not a rule. It was not
+worked around (field note 2026-10-30-03). Matching the model too is one more
+condition in the guard; that change to the exam's lock is the owner's call.
+It does not change the decision: a brief that fails on one model is not taken.
+
+### Two harness fixes on the way
+
+- **GPT sol failed on every call at first** (field note 2026-10-30-01). Since v1
+  slice 2, an agent turn must name its system prompt, and
+  `lib/triage-codex.ts` did not; experiments are outside the typecheck, so
+  nothing caught it. All 106 calls failed in 0 s with no spend. `codexTurn` now
+  passes `{_tag: "append", text: ""}`: Codex's own instructions and nothing
+  added, as 162 and part 1 ran. The 106 error records were taken out of the
+  results file, because a held record, even a failed one, stops a rerun from
+  asking again.
+- **Names in the saved answers:** five `why`s quoted a person's name from
+  ticket text (a test fixture and a database name). They are masked as
+  `[name]` in the results file.
+
+### What it cost
+
+| Run | Answers | Opus dollars | Input tokens (cached) | Output tokens |
+|---|---|---|---|---|
+| v1, opus, open (53 new cases) | 106 | $5.14 | 1,141,029 (643,873) | 46,368 |
+| v1, GPT sol, open | 106 | plan | 1,759,098 (360,192) | 19,297 |
+| v2, GPT sol, open | 116 | plan | 1,943,095 (626,048) | 21,912 |
+| v3, GPT sol, open | 116 | plan | 1,951,673 (883,328) | 20,501 |
+| v3, opus, open | 116 | $6.29 | 1,295,000 (653,374) | 45,397 |
+| v3, opus, locked | 122 | $6.53 | 1,450,458 (817,834) | 58,822 |
+| all of part 2 | 682 | $17.96 | 9,540,353 | 212,297 |
+
+- **The estimate was high by about 20%.** DRY=1 said $6.73 for v1's open run
+  ($5.14 real) and $7.92 for the lock ($6.53 real). The whole plan as first
+  estimated, three versions on opus and the lock, was about $29; running v2
+  on GPT sol only kept it under $20.
+- **Median time an answer:** opus about 4 s, GPT sol about 10 s.
+- `field/runs.jsonl` has one row per answer (682), with `tokens` and `billed`
+  both the call's input plus output: one call, no tools, so the two measures
+  are the same.
+
+### Who did what
+
+- **This repo's harness:** the set, the split, the bar check, the scorer, the
+  lock and the decide step, unchanged from part 1 but for the Codex fix. Briefs
+  v2 and v3 were written in this run, from the open half's misses only. The
+  locked half's cases, labels and answers were not opened until both lock
+  steps had run.
+- **Opus:** the Claude Agent SDK on its own login, `claude-opus-5-5`, no tools,
+  the brief as its system prompt, `TYPESAFE_API_KEY` unset.
+- **GPT sol:** `gpt-6.1-sol`, effort medium, through this repo's Codex adapter
+  (codex-cli 0.165.0) on the ChatGPT plan, the brief before the case, no
+  OpenAI key.
+- **The labels are today's fabrika's:** phoenix's own triage closed the no's,
+  its builders built the rest. Nothing was written to GitHub but this pull
+  request; the tracker ticket got a note at the start and one at the end.
+
+### What part 2 means
+
+1. **Do not take v3.** It fails two lines, and the worse one is the line the
+   bar calls the one that matters most. Confidence 90%: 9 of 40 is well past
+   5, and the low end of its interval, 12%, is near the line itself.
+2. **v1 is not a pass either.** On the open half it was under the hard-no
+   floor on both models. It was never scored on the locked half. The guard
+   would still let v1's hash run there once, but the choice to run it now is
+   made with v3's locked answers in view, so that is the owner's call. Any v4
+   written from here is not clean: the locked half's cases have been read.
+3. **The next brief needs a bigger or fresher set, not a third edit.** The
+   lesson is the classic one: tuning on 58 cases with 5 new lines fit those
+   cases. A next try should hold back part of the open half as its own check
+   before the lock, or add newly closed phoenix tickets as a fresh locked set.
+   Confidence 75%; the doubt is whether any text-only brief can tell the
+   code-reading findings phoenix closed from the ones it built.
+4. **Even a pass would mean less than it sounds.** On 40 to 61 tickets a pass
+   means "no worse than today on this sample", not "safe": 0 of 40 still
+   leaves an upper bound near 9%. When triage goes real (#53), it starts with
+   a person confirming every close.
+
+### What part 2 cannot tell us
+
+- **How GPT sol does on the locked half.** The lock refused it.
+- **How v2 does on opus.** It was skipped to stay in budget; v3 holds all of
+  v2's lines.
+- **Whether v1 would pass.** Its open numbers say no on the hard-no floor; the
+  locked half is spent for clean tuning now.
+- **Whether the labels draw a line text can see.** The open and locked halves
+  disagree on code-reading findings. Either phoenix's triage was not
+  consistent there, or the line needs the code.
+- **Another day.** One run of each, one model id each, one Codex version.
+
 ## Run it
 
 ```
@@ -240,10 +455,11 @@ STEP=bar node experiments/163-triage-brief-eval.ts        # step 2: the bar, as 
 STEP=brief node experiments/163-triage-brief-eval.ts      # step 3: BRIEF=triage-v1, its rules, hash and text
 STEP=selftest node experiments/163-triage-brief-eval.ts   # the scorer on a fake Sorter, $0
 STEP=tune MODEL=opus SMOKE=1 node experiments/163-triage-brief-eval.ts   # step 4; MODEL=sol; ONLY=, RUNS=2, DRY=1, MAX_USD=2
-STEP=lock MODEL=opus node experiments/163-triage-brief-eval.ts           # step 5: refuses until 163-bar.json is approved
+STEP=tune MODEL=sol BRIEF=triage-v3 RUNS=2 CONCURRENCY=2 node experiments/163-triage-brief-eval.ts   # part 2: the whole open half
+STEP=lock MODEL=opus node experiments/163-triage-brief-eval.ts           # step 5: refuses until 163-bar.json is approved, and a second run of one brief hash
 STEP=decide node experiments/163-triage-brief-eval.ts     # step 6: the locked numbers against the bar
 node experiments/163-triage-brief-eval.ts                 # the report; WHY=1 adds every answer's why
-STEP=field node experiments/163-triage-brief-eval.ts      # field/runs.jsonl rows
+STEP=field node experiments/163-triage-brief-eval.ts      # field/runs.jsonl rows, every record (part 2 added only its own date's rows)
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
