@@ -1,26 +1,28 @@
-# An agent run keeps its words in the trace, the way Langfuse does
+# An agent run keeps its content in the trace, the way Langfuse does
 
 Proposed 2026-10-29. An agent run is a conversation plus tool calls. Today its
 spans keep only names: `chat`, `execute_tool Read`. The proposal is that they
-also keep the words: each prompt, each reply, and each tool's input and
-result. The words live in the job's own record, beside its spans, and they are
-the one part of that record a person can wipe.
+also keep the content: each prompt, each reply, and each tool's input and
+result. "Content" is OpenTelemetry's word for this ("content capture"), and
+`input` and `output` are Langfuse's. The content lives in the job's own
+record, beside its spans, and it is the one part of that record a person can
+delete.
 
 ```ts
 // A sketch. One tool span of a review run, as the JobRecord keeps it.
 spans: { span: "7f2c…", name: "execute_tool Read", service: "review", start: 812, end: 840,
          tags: { "gen_ai.tool.name": "Read", "gen_ai.tool.call.id": "toolu_01…" } }
-words: { span: "7f2c…",
+content: { span: "7f2c…",
          input:  { file_path: "packages/pipeline/src/stages/review/reviewer.ts" },
          output: "import {Effect} from \"effect\";\n…" }
 
-// A person wipes one span's words. The span stays; the words become a row that says so.
-words: { span: "7f2c…", wiped: { by: "owner", at: 1730000000, why: "a key in .env was read" } }
+// A person deletes one span's content. The span stays; the content becomes a row that says so.
+content: { span: "7f2c…", deleted: { by: "owner", at: 1730000000, why: "a key in .env was read" } }
 ```
 
 ## Why
 
-- **The words are what a person reads.** "Why did review send it back?" is
+- **The content is what a person reads.** "Why did review send it back?" is
   answered by what the agent read and said, not by `execute_tool Read`.
 - **tea already writes them.** `agentSpans` in `@demlik/tea/otel` puts every
   input and output on its spans, in Langfuse's names
@@ -52,9 +54,9 @@ words: { span: "7f2c…", wiped: { by: "owner", at: 1730000000, why: "a key in .
   by tea, or by anything that writes Langfuse's names, shows the same way.
 - Nothing in trace imports from `agents/`.
 
-## Where the words live
+## Where the content lives
 
-- **In the JobRecord, in a `words` table beside `spans`,** keyed by span id.
+- **In the JobRecord, in a `content` table beside `spans`,** keyed by span id.
   One job's trace is still read from one place, so the conversation sits in
   order with the tsh line, the ticket and the review that started it
   ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md)).
@@ -77,46 +79,48 @@ words: { span: "7f2c…", wiped: { by: "owner", at: 1730000000, why: "a key in .
 The record keeps everything forever, so a secret that gets in stays in. Two
 guards, and neither is enough alone.
 
-- **Scrub what we know.** The harness's `mask` replaces the text of every
+- **Mask what we know.** The harness's `mask` (tea's and Langfuse's name for
+  it) replaces the text of every
   `Redacted` value the run holds
   ([secrets are Redacted](./secrets-are-redacted.md)) with `[redacted]`, then
   runs tea's own `maskBase64DataUris`. This catches the keys fabrika handed
   the agent.
-- **Wipe what we did not know.** A key the agent read from a file (`.env`,
-  a config) is not one fabrika holds, so the scrub misses it. That is why the
-  words sit in their own table: it is the one table in the JobRecord whose
-  rows can be cleared. A wipe empties a span's input and output, deletes any
-  blob it points to, and leaves the row with who wiped it, when and why. The
-  spans, steps and facts stay untouched, so "nothing is deleted" still holds
-  for everything a machine decided on.
-- **Only a person wipes.** No agent is offered a wipe, for the same reason no
-  agent answers a question the machine put to a person.
+- **Delete what we did not know.** A key the agent read from a file (`.env`,
+  a config) is not one fabrika holds, so the mask misses it. That is why the
+  content sits in its own table: it is the one table in the JobRecord whose
+  rows can be cleared. Deleting a span's content empties its input and
+  output, deletes any blob it points to, and leaves the row with who deleted
+  it, when and why, the way Langfuse lets a person delete a trace. The spans,
+  steps and facts stay untouched, so "nothing is deleted" still holds for
+  everything a machine decided on.
+- **Only a person deletes.** No agent is offered the delete, for the same
+  reason no agent answers a question the machine put to a person.
 
 | Case | What happens |
 |---|---|
-| The agent echoes a key fabrika gave it | the scrub writes `[redacted]` before the span leaves the host |
-| The agent reads a key from `.env` | it is kept; a person wipes that span's words |
+| The agent echoes a key fabrika gave it | the mask writes `[redacted]` before the span leaves the host |
+| The agent reads a key from `.env` | it is kept; a person deletes that span's content |
 | A tool returns a 5 MB log | `Blobs`, with a pointer in the row |
 | A tool returns a screenshot as base64 | tea's default mask drops it before export |
 | trace opens a Codex run | the same conversation view, if Codex's events reach `agentSpans` |
 
 ## What it costs
 
-- The rule "spans carry names and ids, never words" flips. Its tests flip
+- The rule "spans carry names and ids, never content" flips. Its tests flip
   with it: `KEPT_OUT` in `agents/trace/agent.ts`, the secret checks in
   `pipeline/src/trace/sdk-events.test.ts` and `acp/program.test.ts`. They
-  become "a known secret never reaches a span" instead of "no words do".
-- A `words` table, a wipe that only a person can call, and the `Blobs` move
+  become "a known secret never reaches a span" instead of "no content does".
+- A `content` table, a delete that only a person can call, and the `Blobs` move
   for big values.
 - More bytes per job. A review run of a few dozen tool calls is a few MB of
-  words. A Durable Object holds 10 GB, so this is far from the limit, but the
+  content. A Durable Object holds 10 GB, so this is far from the limit, but the
   `Blobs` bill grows with it.
 
 ## How sure
 
-- **80% on the shape** (words in the trace, in their own table, with a wipe).
-  The doubt: whether a person ever wipes in practice, or a leaked key is
-  rotated instead and the wipe is never used. A few weeks of real runs would
+- **80% on the shape** (content in the trace, in its own table, with a delete).
+  The doubt: whether a person ever deletes in practice, or a leaked key is
+  rotated instead and the delete is never used. A few weeks of real runs would
   show it.
 - **60% on Langfuse's names over OpenTelemetry's `gen_ai.*` names.** tea
   writes Langfuse's today, and the GenAI conventions are still marked
@@ -126,9 +130,9 @@ guards, and neither is enough alone.
 
 ## What this cannot tell us
 
-- Whether reading the words in a tile is better than opening the agent's own
+- Whether reading the content in a tile is better than opening the agent's own
   transcript. No one has used either view on a real ticket yet.
-- How often the scrub misses something. Only planted secrets in a few real
+- How often the mask misses something. Only planted secrets in a few real
   runs would show that.
 - Whether Codex's tool calls already reach the trace. That is read from the
   code in the first change, not guessed here.
