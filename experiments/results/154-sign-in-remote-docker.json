@@ -1,0 +1,343 @@
+{
+	"mode": "docker",
+	"when": "2026-10-27",
+	"tookMs": 86428,
+	"results": {
+		"signs in, refreshes while held, answers, forgets": {
+			"ok": true,
+			"detail": {
+				"signMs": 1445,
+				"length": 56,
+				"expires_in": 4,
+				"scopes": [
+					"openid",
+					"profile",
+					"email",
+					"offline_access",
+					"resource.invoke",
+					"chatgpt.tokens.use.direct"
+				],
+				"refreshes": 2,
+				"answer": {
+					"ev": "answer",
+					"text": "Hi there",
+					"input_tokens": 12,
+					"output_tokens": 2
+				},
+				"ended": {
+					"ev": "ended",
+					"at": "ended",
+					"why": "done",
+					"revoked": true
+				}
+			}
+		},
+		"the agent's commands find no pass and no refresh token": {
+			"ok": true,
+			"detail": {
+				"found": {
+					"access": [],
+					"refresh": [],
+					"code": []
+				},
+				"looked": {
+					"user": 1001,
+					"env": 1,
+					"procs": 0,
+					"memBytes": 0,
+					"refused": [
+						"node-MainThread environ: EACCES"
+					],
+					"files": 6667
+				}
+			}
+		},
+		"ending revoked the pass: every refresh token of the box is dead": {
+			"ok": true,
+			"detail": {
+				"tokens": 3
+			}
+		},
+		"a wrong verifier is refused": {
+			"ok": true,
+			"detail": {
+				"status": 400,
+				"body": {
+					"error": "invalid_grant"
+				}
+			}
+		},
+		"a code used twice is refused, and the pass it gave is revoked": {
+			"ok": true,
+			"detail": {
+				"first": 200,
+				"second": "invalid_grant",
+				"firstPassAfter": 401
+			}
+		},
+		"S256 is checked: the challenge is sha256 of the verifier": {
+			"ok": true,
+			"detail": null
+		},
+		"a forged code with another state: the app refuses it, the box ends": {
+			"ok": true,
+			"detail": {
+				"app": 400,
+				"box": "state_mismatch"
+			}
+		},
+		"the person says no: denied": {
+			"ok": true,
+			"detail": {
+				"ev": "ended",
+				"at": "ended",
+				"why": "denied",
+				"revoked": false
+			}
+		},
+		"nobody answers: timed out": {
+			"ok": true,
+			"detail": {
+				"ev": "ended",
+				"at": "ended",
+				"why": "timed_out",
+				"revoked": false
+			}
+		},
+		"two boxes at once: both sign in, on two new clients and two ports": {
+			"ok": true,
+			"detail": {
+				"clients": 2,
+				"ports": [
+					1455,
+					51548
+				]
+			}
+		},
+		"a saved client: no new client, no name hint, two passes that do not spoil each other": {
+			"ok": true,
+			"detail": {
+				"refreshes": [
+					1,
+					1
+				]
+			}
+		},
+		"a phone: the pasted callback signs the box in; a tampered one is refused": {
+			"ok": true,
+			"detail": {
+				"tampered": "state mismatch",
+				"pasted": "sent",
+				"ended": "done"
+			}
+		},
+		"told to end: it revokes and forgets at once": {
+			"ok": true,
+			"detail": {
+				"ended": {
+					"ev": "ended",
+					"at": "ended",
+					"why": "done",
+					"revoked": true
+				},
+				"liveAfter": 0
+			}
+		},
+		"finding: killed, no forget runs, and its last refresh token stays live at the server": {
+			"ok": true,
+			"detail": {
+				"liveAfterKill": 1
+			}
+		},
+		"a grant without chatgpt.tokens.use.direct is not kept, and is revoked at once": {
+			"ok": true,
+			"detail": {
+				"ended": "no_scope",
+				"issued": 1,
+				"liveAfter": 0
+			}
+		},
+		"port 1455 taken: another loopback port, signed in": {
+			"ok": true,
+			"detail": {
+				"heldByUs": true
+			}
+		},
+		"control: the probe finds a pass when it may read one": {
+			"ok": true,
+			"detail": {
+				"as": "root, the box's user: its memory",
+				"access": 6,
+				"refresh": 6
+			}
+		},
+		"way (b): no refresh token at all; the person is asked again when the pass runs out": {
+			"ok": true,
+			"detail": {
+				"signIns": 3,
+				"clicks": 3,
+				"refreshTokens": 0,
+				"newClients": 1,
+				"ended": {
+					"ev": "ended",
+					"at": "ended",
+					"why": "done",
+					"revoked": false
+				}
+			}
+		},
+		"finding, way (b): at the end nothing is revoked; the last pass lives out its life": {
+			"ok": true,
+			"detail": {
+				"lastPassLiveAfterEnd": true
+			}
+		},
+		"way (c): one sign-in on the person's machine lends two boxes passes across expiry": {
+			"ok": true,
+			"detail": {
+				"lender": {
+					"signIns": 1,
+					"refreshes": 2,
+					"lent": 9,
+					"revoked": 1
+				},
+				"lentTo": {
+					"b18": 5,
+					"b19": 4
+				}
+			}
+		},
+		"way (c): the agent's commands find no pass and no refresh token": {
+			"ok": true,
+			"detail": {
+				"hits": {
+					"access": [],
+					"refresh": []
+				},
+				"looked": {
+					"user": 1001,
+					"env": 1,
+					"procs": 0,
+					"memBytes": 0,
+					"refused": [
+						"node-MainThread environ: EACCES"
+					],
+					"files": 6667
+				}
+			}
+		},
+		"way (c): the ledger carries only sealed passes, and no refresh token ever reaches a box": {
+			"ok": true,
+			"detail": {
+				"sealedRows": 9
+			}
+		},
+		"way (c): a box's end leaves its last pass live; the person's revoke kills every pass lent": {
+			"ok": true,
+			"detail": {
+				"lastPassLiveAfterBoxEnd": true,
+				"revoked": true,
+				"liveAfterRevoke": 0
+			}
+		},
+		"way (c): a sealed pass opens only in its own box, for its own turn": {
+			"ok": true,
+			"detail": {
+				"own": true,
+				"otherBox": false,
+				"otherTurn": false
+			}
+		},
+		"way (c) control: the box's own user may find the pass, never a refresh token": {
+			"ok": true,
+			"detail": {
+				"as": "root, the box's user: its memory",
+				"access": 6,
+				"refresh": 0,
+				"lenderHoldsOne": true
+			}
+		},
+		"no pass, refresh token or verifier in ledger rows, logs or any file of the run": {
+			"ok": true,
+			"detail": {
+				"placesSearched": 27,
+				"files": 25,
+				"tokenHits": {
+					"access": {},
+					"refresh": {},
+					"verifier": {}
+				},
+				"codesFoundIn": {
+					"ledger rows": 14,
+					"file ledger/-Ledger/<hex>.sqlite-wal": 14
+				}
+			}
+		},
+		"counts": {
+			"trades": 17,
+			"refreshes": 10,
+			"revokes": 12,
+			"responses": 12,
+			"refused": 2,
+			"ledgerRows": 130,
+			"machine": [
+				{
+					"name": "first step: the want",
+					"ok": true
+				},
+				{
+					"name": "a port makes the offer",
+					"ok": true
+				},
+				{
+					"name": "a second port is dropped",
+					"ok": true
+				},
+				{
+					"name": "the right state trades",
+					"ok": true
+				},
+				{
+					"name": "a wrong state ends it",
+					"ok": true
+				},
+				{
+					"name": "a second code is dropped",
+					"ok": true
+				},
+				{
+					"name": "a denial with another state is not ours",
+					"ok": true
+				},
+				{
+					"name": "a code after the end is dropped",
+					"ok": true
+				},
+				{
+					"name": "a trade that lands after the end keeps it ending",
+					"ok": true
+				},
+				{
+					"name": "signed sets the refresh timer",
+					"ok": true
+				},
+				{
+					"name": "an old turn's timer does nothing",
+					"ok": true
+				},
+				{
+					"name": "no renewal key: the person is asked again, one round on",
+					"ok": true
+				},
+				{
+					"name": "a refused refresh ends it",
+					"ok": true
+				},
+				{
+					"name": "the state never holds a token field",
+					"ok": true
+				}
+			]
+		}
+	}
+}
