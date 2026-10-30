@@ -110,7 +110,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts every few seconds and folds what waits on the person, the agents running and today's cost. Main reads the same value off the desk port for the Dock badge and the notification. |
+| `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. |
 | `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
@@ -133,12 +133,12 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `1` to `9` | go to that workspace |
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
 | `a` | open the asks list, or close it |
-| `?` | every key, with its name and its tsh word |
+| `?` | every key, with its name |
 | `i` | info mode: the bottom line explains whatever the pointer is over; again to stop |
 | `B` | hide both bars; again to show them |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
 
-`Cmd-K` (no prefix) opens the palette: every command by name, its key and its tsh word. Type to
+`Cmd-K` (no prefix) opens the palette: every command by name, with its key. Type to
 narrow it, Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
 This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
 commands; programs' inputs join it later, from the same list that makes the agent tools.
@@ -167,15 +167,26 @@ ours opens with Cmd-K, as Linear's does.
 Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
 
 ```text
-● ● ●  1 #7   2 tsh   tracker | ticket | runs          2 ask you • · 1 agent · $0.42 today · host ok
+● ● ●  1 #7   2 tsh   tracker | ticket | runs                                            2 ask you •
 ...tiles...
 t2 ticket #7 · takes ticket · sends ticket · from tracker → runs                C-b i info · C-b ? keys
 ```
 
+When something is wrong, its word joins the top bar's right end, in red where it is broken:
+
+```text
+                                               2 ask you · ledger unreachable · host down · try again
+```
+
 - **The top bar is the whole desk:** the workspaces, the focused workspace's line, then what
-  needs you and how the parts are. On macOS it is the window's title bar (`hiddenInset`): the
-  system's three buttons sit in its first 84 px, its empty stretch moves the window, and its
-  items are buttons that never do. Other platforms keep the system's own frame above it.
+  needs you. On macOS it is the window's title bar (`hiddenInset`): the system's three buttons
+  sit in its first 84 px, its empty stretch moves the window, and its items are buttons that
+  never do. Other platforms keep the system's own frame above it.
+- **A part that works says nothing.** The host shows up only when it is not up: `connecting`,
+  `host down`, `host older`, `host restarting`, or the other link version. A click opens its few
+  lines, with the restart or Try again where one applies. The ledger shows up only when a read
+  failed, as `ledger unreachable`; a click says why. The asks it last read stay, drawn faint
+  while the host is down.
 - **The bottom line is where you are:** the focused tile, what it takes and sends, its
   neighbors in its line, and its running jobs. After Ctrl-B it lists the keys (`PREFIX`); your
   own close question is asked here (and in the tile's title bar), as tmux asks it. An agent's
@@ -183,11 +194,11 @@ t2 ticket #7 · takes ticket · sends ticket · from tracker → runs           
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
   each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
   and the asks list all read that one value. A click on the count opens the list; picking one
-  focuses the tile that shows its ticket. `later` takes an ask out of the count until you bring
-  it back. A new ask never moves focus; with the window not focused, the system notifies once.
+  focuses the tile that shows its ticket; an ask whose ticket no tile shows is plain words. You
+  answer in the ticket's own tile. `later` takes an ask out of the count until you bring it
+  back. A new ask never moves focus; with the window not focused, the system notifies once.
   Later and seen live in the host's memory: a host restart counts them again.
-- **Every item is a button with a tooltip,** `name · key · tsh: word`. tsh has no words for the
-  frame's commands yet: each tooltip says `(not yet)`.
+- **Every item is a button with a tooltip,** `name · key`, or the name alone when it has no key.
 - **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
   word; running and done are gray words.
 
@@ -437,9 +448,11 @@ Left for later, from Tuval's keys and the build:
 - **The rest of Tuval's keys:** `w` (pick a tile from a list), `:` (a command line), `r`
   (reload the config), `p` (the process board). Tuval's `a` (focus the list) is the asks list
   here.
-- **The frame's own gaps:** no answer from the asks list (you answer in the ticket's tile), no
-  key for the agents, sync and host items, and no outbox count: a ledger of the home's own says
-  nothing of sync, a shared one says `synced`, a failed read `ledger unreachable`.
+- **The frame's own gaps,** each a tracker ticket, built as its own change once it has a real
+  source: the outbox count, `N to send` (ticket 101); answering from the asks list (ticket
+  102); the agents item, today's cost, and keys and tsh words for the frame's items (ticket
+  103); the job and clock items in the bottom line (ticket 104); later and seen kept across a
+  host restart (ticket 105).
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.

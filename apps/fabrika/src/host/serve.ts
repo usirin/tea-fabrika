@@ -107,19 +107,9 @@ export const serve = (options: {
 	readonly build?: string | null | undefined;
 	/** The agents' socket (host/agents.ts), on a home that keeps its own ledger; none elsewhere. */
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
-	/** The ledger is a server's, not a file in the home: the frame says whether it is in sync. */
-	readonly shared?: boolean | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {
-			history,
-			jobs,
-			desk: home,
-			ours = PROTOCOL,
-			build = BUILD,
-			agents,
-			shared = false,
-		} = options;
+		const {history, jobs, desk: home, ours = PROTOCOL, build = BUILD, agents} = options;
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -180,7 +170,7 @@ export const serve = (options: {
 		// The asks (asks.ts): one count, read off the ledger, said to every app, page or not, so
 		// the app's Dock badge counts the same as the window's top bar.
 		const asks = yield* (yield* run(asksMachine, asksOptions)).ready;
-		const asksNowMsg = (): ToPage => ({type: "asks", now: asksNow(asks.getState(), shared)});
+		const asksNowMsg = (): ToPage => ({type: "asks", now: asksNow(asks.getState())});
 		let saidAsks = asksNowMsg();
 		asks.observe(() => {
 			const now = asksNowMsg();

@@ -11,7 +11,6 @@ import {
 } from "../desk/desk.ts";
 import {BINDINGS, PREFIX} from "../desk/keys.ts";
 import {
-	agentsWord,
 	askRow,
 	asksWord,
 	commandsOf,
@@ -20,11 +19,11 @@ import {
 	hereWord,
 	hostWord,
 	keyWord,
+	ledgerWord,
 	lineIn,
 	matching,
 	prefixLine,
 	questionWord,
-	syncWord,
 	ticketsShown,
 	tileOfTicket,
 	tipOf,
@@ -63,10 +62,7 @@ const SHOWN = new Map([["ticket:1", 7]]);
 const now = (over: Partial<AsksNow> = {}): AsksNow => ({
 	asks: [],
 	later: [],
-	agents: 0,
-	usd: 0,
 	reach: "ok",
-	shared: false,
 	why: null,
 	...over,
 });
@@ -101,14 +97,13 @@ describe("the frame's keys", () => {
 		expect(commands.find((c) => c.name === "zoom")).toEqual({
 			name: "zoom",
 			key: "C-b z",
-			tsh: "zoom (not yet)",
 			runs: "z",
 		});
 		expect(matching(commands, "zo").map((c) => c.name)).toEqual(["zoom"]);
-		expect(matching(commands, "ws 2").map((c) => c.name)).toEqual(["workspace 2"]);
+		expect(matching(commands, "workspace 2").map((c) => c.name)).toEqual(["workspace 2"]);
 	});
 
-	it("shows the real keys after Ctrl-B, and a tooltip says name, key and tsh word", () => {
+	it("shows the real keys after Ctrl-B, and a tooltip says the name and the key, if any", () => {
 		expect(prefixLine(TABLE)).toEqual([
 			{key: "N", name: "new"},
 			{key: "x", name: "close"},
@@ -117,8 +112,8 @@ describe("the frame's keys", () => {
 			{key: "|", name: "split"},
 			{key: "?", name: "keys"},
 		]);
-		expect(tipOf("asks", "C-b a")).toBe("asks · C-b a · tsh: asks (not yet)");
-		expect(tipOf("drag", null)).toBe("drag · no key · tsh: drag (not yet)");
+		expect(tipOf("asks", "C-b a")).toBe("asks · C-b a");
+		expect(tipOf("host", null)).toBe("host");
 	});
 });
 
@@ -137,27 +132,27 @@ describe("the top bar", () => {
 		expect(lineIn(activeOf(plain))).toEqual([]);
 	});
 
-	it("counts asks in words, and says agents and cost only from what the ledger holds", () => {
+	it("counts asks in words", () => {
 		expect(asksWord(0)).toBe("nothing asks you");
 		expect(asksWord(1)).toBe("1 asks you");
 		expect(asksWord(3)).toBe("3 ask you");
-		expect(agentsWord(now())).toBe("no agents");
-		expect(agentsWord(now({agents: 2, usd: 1.5}))).toBe("2 agents · $1.50 today");
-		expect(agentsWord(now({agents: 1}))).toBe("1 agent");
 	});
 
-	it("says nothing of sync for a ledger of its own, synced for a shared one, and a failed read as broken", () => {
-		expect(syncWord(now())).toBeNull();
-		expect(syncWord(now({shared: true}))).toEqual({word: "synced", broken: false});
-		expect(syncWord(now({reach: "failed", why: "refused"}))).toEqual({
+	it("says nothing of a ledger that answers, and a failed read as broken", () => {
+		expect(ledgerWord(now())).toBeNull();
+		expect(ledgerWord(now({reach: "reading"}))).toBeNull();
+		expect(ledgerWord(now({reach: "failed", why: "refused"}))).toEqual({
 			word: "ledger unreachable",
 			broken: true,
 		});
 	});
 
-	it("says the host in a word, broken only when it is down", () => {
-		expect(hostWord({kind: "up"}, true)).toEqual({word: "host ok", broken: false});
-		expect(hostWord({kind: "build", theirs: "a1", ours: "b2"}, true).broken).toBe(false);
+	it("says nothing of a host that is up, and the rest in a word, broken only when down", () => {
+		expect(hostWord({kind: "up"}, true)).toBeNull();
+		expect(hostWord({kind: "build", theirs: "a1", ours: "b2"}, true)).toEqual({
+			word: "host older",
+			broken: false,
+		});
 		expect(hostWord({kind: "reconnecting", why: "gone"}, true)).toEqual({
 			word: "host down",
 			broken: true,
@@ -166,7 +161,7 @@ describe("the top bar", () => {
 			word: "connecting",
 			broken: false,
 		});
-		expect(hostWord({kind: "stopped", why: "gone"}, true).word).toBe("host down");
+		expect(hostWord({kind: "stopped", why: "gone"}, true)?.word).toBe("host down");
 	});
 });
 

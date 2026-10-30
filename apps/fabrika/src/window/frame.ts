@@ -11,15 +11,16 @@ import type {LinkNow, ToWindow} from "../messages.ts";
 // the app said of the link. Plain data, no React, so each word is tested (frame.test.ts); the
 // page draws it (frame.tsx).
 //
-//   top      1 #7  2 tsh   tracker | ticket | runs   2 ask you •   1 agent · $0.25 today   host ok
+//   top      1 #7  2 tsh   tracker | ticket | runs                                    2 ask you •
 //   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
 //   Ctrl-B x close t2? (y/n)                                                 y closes · n keeps it
 //
 // The top bar is the whole desk; the bottom line is the tile you are in and the key you just
 // pressed (the frame's research, rule 1). Only "asks you" takes the accent, and only a broken part
-// takes the warning color, each with its word (rules 2 and 11). An agent's ask is never on the
-// bottom line: that line is yours.
+// takes the warning color, each with its word (rules 2 and 11). A part that works says nothing:
+// the host and the ledger show up in the top bar only when something is wrong with them. An
+// agent's ask is never on the bottom line: that line is yours.
 //
 // What the page itself keeps (the list open, the palette, the info mode, the bars hidden) is a
 // model and an update with no Cmd, Elm's `Browser.sandbox`: `frameUpdate` below. The desk's own
@@ -82,44 +83,9 @@ export const keyWord = (key: string): string => {
 export const bindingWord = (prefix: string, key: string): string =>
 	`${keyWord(prefix)} ${keyWord(key)}`;
 
-/**
- * The tsh word for each frame command: tsh has none of them yet, so each is the mockup's word,
- * listed for tsh to take (the pull request says so). One table, so a tooltip and the palette
- * say the same.
- */
-const TSH: Readonly<Record<string, string>> = {
-	split: "split",
-	"split down": "split down",
-	"focus left": "focus left",
-	"focus down": "focus down",
-	"focus up": "focus up",
-	"focus right": "focus right",
-	turn: "turn",
-	fold: "fold",
-	zoom: "zoom",
-	close: "close",
-	new: "new",
-	"previous workspace": "ws previous",
-	"next workspace": "ws next",
-	asks: "asks",
-	keys: "keys",
-	info: "info",
-	bars: "bars",
-	agents: "agents",
-	sync: "sync",
-	host: "host",
-};
-
-/** What tsh calls a command, and that tsh does not take it yet. */
-export const tshWord = (name: string): string => {
-	const pick = /^workspace (\d+)$/.exec(name);
-	const word = pick === null ? (TSH[name] ?? name) : `ws ${pick[1]}`;
-	return `${word} (not yet)`;
-};
-
-/** A frame item's tooltip: its name, its key and its tsh word, in that order (rules 9 and 10). */
+/** A frame item's tooltip: its name, then its key when it has one (rules 9 and 10). */
 export const tipOf = (name: string, key: string | null): string =>
-	`${name} · ${key ?? "no key"} · tsh: ${tshWord(name)}`;
+	key === null ? name : `${name} · ${key}`;
 
 /** The keys the bottom line shows after Ctrl-B: the ones used most, then `?` for all of them. */
 const SHOWN_AFTER_PREFIX = ["N", "x", "z", "f", "|", "?"];
@@ -135,7 +101,6 @@ export const prefixLine = (table: readonly Bound[]): readonly {key: string; name
 export interface Command {
 	readonly name: string;
 	readonly key: string;
-	readonly tsh: string;
 	/** The binding's key: the palette runs it as Ctrl-B and this key would. */
 	readonly runs: string;
 }
@@ -155,15 +120,15 @@ export const commandsOf = (
 		if (at !== null && Number(at[1]) > workspaces) return [];
 		if (seen.has(b.name)) return [];
 		seen.add(b.name);
-		return [{name: b.name, key: bindingWord(prefix, b.key), tsh: tshWord(b.name), runs: b.key}];
+		return [{name: b.name, key: bindingWord(prefix, b.key), runs: b.key}];
 	});
 };
 
-/** The commands whose name or tsh word holds every word typed, in the table's order. */
+/** The commands whose name holds every word typed, in the table's order. */
 export const matching = (commands: readonly Command[], query: string): readonly Command[] => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return commands.filter((c) => {
-		const text = `${c.name} ${c.tsh}`.toLowerCase();
+		const text = c.name.toLowerCase();
 		return words.every((w) => text.includes(w));
 	});
 };
@@ -225,12 +190,6 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
 export const asksWord = (n: number): string =>
 	n === 0 ? "nothing asks you" : `${n} ask${n === 1 ? "s" : ""} you`;
 
-/** What the agents item says: how many run now and what today's runs cost. */
-export const agentsWord = (now: AsksNow): string => {
-	const who = now.agents === 0 ? "no agents" : `${now.agents} agent${now.agents === 1 ? "" : "s"}`;
-	return now.usd > 0 ? `${who} · $${now.usd.toFixed(2)} today` : who;
-};
-
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
 export interface Said {
 	readonly word: string;
@@ -238,21 +197,20 @@ export interface Said {
 }
 
 /**
- * The ledger's item: nothing for a ledger that is a file in the home, as there is nothing to
- * sync; `synced` for a server's that answers; `ledger unreachable` when a read failed, either way.
- * No outbox exists yet, so nothing is ever "to send".
+ * The ledger's item: shown only when the last read failed, so the count may be old. A ledger
+ * that answers says nothing.
  */
-export const syncWord = (now: AsksNow): Said | null => {
-	if (now.reach === "failed") return {word: "ledger unreachable", broken: true};
-	if (!now.shared) return null;
-	return {word: now.reach === "ok" ? "synced" : "syncing", broken: false};
-};
+export const ledgerWord = (now: AsksNow): Said | null =>
+	now.reach === "failed" ? {word: "ledger unreachable", broken: true} : null;
 
-/** The host's item, one branch per kind of link: a kind left out does not compile. */
-export const hostWord = (link: LinkNow, attachedOnce: boolean): Said => {
+/**
+ * The host's item, one branch per kind of link: a kind left out does not compile. A host that is
+ * up says nothing; every other kind has a word, and its lines say what to do.
+ */
+export const hostWord = (link: LinkNow, attachedOnce: boolean): Said | null => {
 	switch (link.kind) {
 		case "up":
-			return {word: "host ok", broken: false};
+			return null;
 		case "build":
 			return {word: "host older", broken: false};
 		case "version":
@@ -326,10 +284,9 @@ export const INFO = {
 	segment: "a program in this workspace's line, shown in the tile named. A click focuses it.",
 	pipe: "a pipe: what the program before it sends goes into the one after it.",
 	asks: "asks: what agents ask you, and runs that are stuck. One count, the same as the Dock badge. A dot is one you have not seen. A click opens the list.",
-	agents:
-		"agents: the runs going now, read off the ledger, and what the runs that ended today cost.",
-	sync: "sync: whether the ledger answers. A shared ledger says synced; a broken one says so.",
-	host: "host: the process that runs every tile and job. Down, nothing new runs, and the tiles keep their last state.",
+	ledger:
+		"ledger: where the asks are read from. Unreachable, the count is the last one read. A click says why.",
+	host: "host: the process that runs every tile and job. Down, nothing new runs, and the tiles keep their last state. A click says what to do.",
 	again:
 		"try again: the app stopped reaching for the host after five minutes. A click starts it reaching again.",
 	drag: "an empty stretch to move the window by. A double-click zooms the window, as macOS does.",
@@ -353,7 +310,10 @@ export type Over =
 			readonly query: string;
 			readonly at: number;
 	  }
-	| {readonly kind: "item"; readonly what: "agents" | "sync" | "host"};
+	| {readonly kind: "item"; readonly what: Part};
+
+/** A part of the app the top bar names only when something is wrong with it. */
+export type Part = "ledger" | "host";
 
 export interface Frame {
 	readonly over: Over;
@@ -379,7 +339,7 @@ export type FrameMsg =
 	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`). */
 	| {readonly type: "show"; readonly what: Show}
 	| {readonly type: "palette"}
-	| {readonly type: "item"; readonly what: "agents" | "sync" | "host"}
+	| {readonly type: "item"; readonly what: Part}
 	| {readonly type: "query"; readonly query: string}
 	| {readonly type: "move"; readonly by: number; readonly of: number}
 	| {readonly type: "ran"; readonly key: string}

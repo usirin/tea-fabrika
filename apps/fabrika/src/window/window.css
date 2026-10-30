@@ -637,7 +637,7 @@ kbd {
 	align-items: center;
 }
 
-/* The host down: the asks and agents it last said are old news, drawn faint until it is back. */
+/* The host down: the asks it last said are old news, drawn faint until it is back. */
 .desk.lost .topbar .right > .fb {
 	opacity: 0.45;
 }
@@ -747,17 +747,13 @@ kbd {
 	text-decoration-color: var(--text-secondary);
 }
 
-.act.accent {
+.act.accent,
+.over .accent {
 	color: var(--turn);
 }
 
 .act.soft {
 	color: var(--text-muted);
-}
-
-.act[aria-disabled="true"] {
-	cursor: default;
-	text-decoration: none;
 }
 
 .act.foot {
@@ -808,7 +804,7 @@ kbd {
 	all: unset;
 	box-sizing: border-box;
 	display: grid;
-	grid-template-columns: 1fr 90px 220px;
+	grid-template-columns: 1fr auto;
 	gap: 10px;
 	width: 100%;
 	padding: 5px 14px;
@@ -822,15 +818,14 @@ kbd {
 	color: var(--text-primary);
 }
 
+/* The key sits at the row's right, quieter than the name, as a menu shows its shortcut. */
 .palette .k {
-	color: var(--text-primary);
+	color: var(--text-faint);
 }
 
-.palette .t {
-	overflow: hidden;
-	color: var(--text-faint);
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.palette .cmd.on .k,
+.palette .cmd:hover .k {
+	color: var(--text-secondary);
 }
 
 .palette .palf {

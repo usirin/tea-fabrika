@@ -3,7 +3,6 @@ import type {AsksNow} from "../asks.ts";
 import {activeOf, type Open} from "../desk/desk.ts";
 import type {FromPage, LinkNow, ToApp} from "../messages.ts";
 import {
-	agentsWord,
 	askRow,
 	asksWord,
 	type Bound,
@@ -14,12 +13,13 @@ import {
 	hereWord,
 	hostWord,
 	INFO,
+	ledgerWord,
 	lineIn,
 	matching,
+	type Part,
 	prefixLine,
 	questionWord,
 	type Shapes,
-	syncWord,
 	type TicketsShown,
 	tileOfTicket,
 	tipOf,
@@ -28,8 +28,8 @@ import {
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
-// them out. Every item is a button with a tooltip (`name · key · tsh: word`) and, in info mode,
-// a line of plain words (`data-info`). No item has a background: plain words, ` · ` between them.
+// them out. Every item is a button with a tooltip (`name · key`) and, in info mode, a line of
+// plain words (`data-info`). No item has a background: plain words, ` · ` between them.
 
 /** What the frame is drawn from, and how it sends. */
 export interface FrameProps {
@@ -83,12 +83,15 @@ function Item(props: {
 	);
 }
 
-/** The top bar: the whole desk. Workspaces, the line, then what needs you and how the parts are. */
+/**
+ * The top bar: the whole desk. Workspaces, the line, then what needs you, and a part of the app
+ * only when it is broken or old.
+ */
 export function TopBar(props: FrameProps): ReactNode {
 	const {desk, asks, step} = props;
 	const ws = desk === null ? null : activeOf(desk);
 	const line = ws === null ? [] : lineIn(ws);
-	const sync = asks === null ? null : syncWord(asks);
+	const ledger = asks === null ? null : ledgerWord(asks);
 	const host = hostWord(props.link, props.attachedOnce);
 	const count = asks?.asks.length ?? 0;
 	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
@@ -116,7 +119,7 @@ export function TopBar(props: FrameProps): ReactNode {
 				{line.map((s, i) => (
 					<span key={s.tile} className="seg-pair">
 						{i > 0 && (
-							<span className="pipe" data-info={INFO.pipe} title="pipe · tsh: |">
+							<span className="pipe" data-info={INFO.pipe} title="pipe">
 								|
 							</span>
 						)}
@@ -132,7 +135,7 @@ export function TopBar(props: FrameProps): ReactNode {
 					</span>
 				))}
 			</nav>
-			<div className="drag" data-info={INFO.drag} title="drag · no key · moves the window" />
+			<div className="drag" data-info={INFO.drag} title="drag to move the window" />
 			<div className="right">
 				{asks === null ? (
 					<span className="quiet">reading the ledger</span>
@@ -148,45 +151,34 @@ export function TopBar(props: FrameProps): ReactNode {
 						{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
 					</Item>
 				)}
-				{asks !== null && (
+				{ledger !== null && (
 					<>
 						<Sep />
 						<Item
-							name="agents"
+							name="ledger"
 							keyed={null}
-							info={INFO.agents}
-							onClick={() => step({type: "item", what: "agents"})}
+							info={INFO.ledger}
+							className="broken"
+							onClick={() => step({type: "item", what: "ledger"})}
 						>
-							{agentsWord(asks)}
+							{ledger.word}
 						</Item>
 					</>
 				)}
-				{sync !== null && (
-					<>
-						<Sep />
-						<Item
-							name="sync"
-							keyed={null}
-							info={INFO.sync}
-							className={sync.broken ? "broken" : undefined}
-							onClick={() => step({type: "item", what: "sync"})}
-						>
-							{sync.word}
-						</Item>
-					</>
-				)}
-				<Sep />
+				{host !== null && <Sep />}
 				{/* Said as a status, never an alert: a screen reader hears the host go and come back. */}
 				<span role="status" aria-label="the link to the host">
-					<Item
-						name="host"
-						keyed={null}
-						info={INFO.host}
-						className={host.broken ? "broken" : undefined}
-						onClick={() => step({type: "item", what: "host"})}
-					>
-						{host.word}
-					</Item>
+					{host !== null && (
+						<Item
+							name="host"
+							keyed={null}
+							info={INFO.host}
+							className={host.broken ? "broken" : undefined}
+							onClick={() => step({type: "item", what: "host"})}
+						>
+							{host.word}
+						</Item>
+					)}
 					{props.link.kind === "stopped" && (
 						<>
 							<Sep />
@@ -226,7 +218,10 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
-/** The asks list: each ask named by its tile and ticket; a pick focuses that tile. */
+/**
+ * The asks list: each ask named by its tile and ticket; a pick focuses that tile. An ask whose
+ * ticket no tile shows is words, not a button: there is nothing to focus.
+ */
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const {asks, desk, frame, step} = props;
 	const later = frame.over.kind === "asks" && frame.over.later;
@@ -247,19 +242,23 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 					const tile = tileOf(a.ticket);
 					return (
 						<li key={a.key}>
-							<button
-								type="button"
-								className="act accent"
-								title={tile === undefined ? "no tile shows this ticket" : `focus ${tile}`}
-								aria-disabled={tile === undefined}
-								onClick={() => {
-									if (tile === undefined) return;
-									props.toHost({type: "go", tile});
-									step({type: "close"});
-								}}
-							>
-								{askRow(a, tile)}
-							</button>
+							{tile === undefined ? (
+								<span className="accent" title="no tile shows this ticket">
+									{askRow(a, tile)}
+								</span>
+							) : (
+								<button
+									type="button"
+									className="act accent"
+									title={`focus ${tile}`}
+									onClick={() => {
+										props.toHost({type: "go", tile});
+										step({type: "close"});
+									}}
+								>
+									{askRow(a, tile)}
+								</button>
+							)}
 							<Sep />
 							<button
 								type="button"
@@ -310,29 +309,22 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 const JOBS_STOP =
 	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
 
-/** A few lines on one item of the top bar, under it: the agents, the ledger or the host. */
-function ItemLines(props: FrameProps & {readonly what: "agents" | "sync" | "host"}): ReactNode {
+/** A few lines on one item of the top bar, under it: the ledger or the host. */
+function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 	const {asks, link} = props;
 	const body = (): ReactNode => {
 		switch (props.what) {
-			case "agents":
-				return asks === null ? null : (
+			case "ledger":
+				return asks === null ? null : asks.reach === "failed" ? (
 					<>
-						<h2>{agentsWord(asks)}</h2>
+						<h2>The ledger is unreachable</h2>
+						<p>{asks.why}</p>
 						<p className="hint">
-							Read off the ledger: a run started and not ended, on an open ticket. The cost is the
-							runs that ended today.
+							The asks count is the last one read. It reads again every second.
 						</p>
 					</>
-				);
-			case "sync":
-				return asks === null ? null : (
-					<>
-						<h2>{syncWord(asks)?.word ?? "the ledger is this home's own"}</h2>
-						<p className="hint">
-							{asks.why ?? (asks.shared ? "The ledger server answers." : "Nothing to sync.")}
-						</p>
-					</>
+				) : (
+					<h2>The ledger answers</h2>
 				);
 			case "host":
 				return <HostLines link={link} first={!props.attachedOnce} toApp={props.toApp} />;
@@ -359,7 +351,7 @@ function HostLines(props: {
 	);
 	switch (link.kind) {
 		case "up":
-			return <h2>host ok</h2>;
+			return <h2>The host is up</h2>;
 		case "build":
 			return (
 				<>
@@ -487,7 +479,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 }
 
 /**
- * The palette (Cmd-K), or every key (C-b ?): each command, its key and its tsh word. Typing
+ * The palette (Cmd-K), or every key (C-b ?): each command and its key. Typing
  * narrows it, the arrows move, Enter runs the command as its key would, Escape closes it.
  */
 function Palette(props: FrameProps): ReactNode {
@@ -535,7 +527,6 @@ function Palette(props: FrameProps): ReactNode {
 						>
 							<span>{c.name}</span>
 							<span className="k">{c.key}</span>
-							<span className="t">tsh: {c.tsh}</span>
 						</button>
 					</li>
 				))}
