@@ -75,12 +75,17 @@
 
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-	--fs-title: 1.375rem;
-	--fs-head: 0.9375rem;
-	--fs-body: 0.8125rem;
-	--fs-prose: 0.875rem;
-	--fs-small: 0.75rem;
-	--fs-micro: 0.6875rem;
+	/*
+	 * The type scale, in px: each size is the number its name says (Linear's body is 13px, macOS's
+	 * 13pt). Not rem: the root below is 14px, so a rem size drew 12.5% small (tracker ticket 108).
+	 * type-scale.test.ts pins these six and refuses a rem anywhere in this file.
+	 */
+	--fs-title: 22px;
+	--fs-head: 15px;
+	--fs-body: 13px;
+	--fs-prose: 14px;
+	--fs-small: 12px;
+	--fs-micro: 11px;
 	--s-1: 4px;
 	--s-2: 8px;
 	--s-3: 12px;
@@ -124,6 +129,8 @@
 	--closed: oklch(0.72 0.12 300);
 	--alert: var(--stuck);
 	--sans: var(--font);
+	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale above
+	   does not read it. */
 	font-family: var(--mono);
 	font-size: 14px;
 	-webkit-font-smoothing: antialiased;
@@ -3154,10 +3161,13 @@ main.program:has(> .view) {
 	min-inline-size: 0;
 }
 
+/* A step's name never breaks; a tag that does not fit beside it goes under it ("test writer"). */
 .map-view .spot .n {
 	display: flex;
-	gap: 6px;
+	flex-wrap: wrap;
+	gap: 4px 6px;
 	align-items: center;
+	white-space: nowrap;
 	font: 500 var(--fs-small) var(--mono);
 	color: var(--text-primary);
 }
