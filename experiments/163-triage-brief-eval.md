@@ -8,6 +8,18 @@ open half and scores it once on the locked half. [Part 3](#part-3-triage-reads-t
 lets triage read the code and gets a brief ready for a fresh exam.
 [Part 4](#part-4-triage-in-two-close-on-a-fact-ask-on-worth) splits triage in
 two: close on a fact, ask the owner on worth.
+[Part 5](#part-5-fewer-asks-without-looser-closes) tries three ways to ask
+less, offline, on part 4's asks.
+
+**Part 5's answer: none of the three gets near 50 asks a week without breaking
+another line.** A code rule that sends every security ticket to the owner
+fixes opus's one security close (#3361) for one more ask. Bundling asks by
+area looks like 35% to 45% fewer decisions, but only 2 of 10 hand-checked
+bundles were one decision, so it saves about 5% to 10%. Following earlier
+rulings answers 0 of the 68 tickets it may answer (haiku and sonnet both).
+Keeping every worth ask cuts asks to about 48 to 87 a week, but builds 42% to
+48% of the tickets that should close (bar: 10%). It pays only if 30 s of the
+owner is worth more than about $1.60. Matcher spend $4.22 at list price.
 
 **Part 4's answer: wrong closes drop, and asks take their place.** Brief v6
 closes only on a fact it shows and asks the owner on worth and on every
@@ -1166,6 +1178,244 @@ approved;** the owner sets the numbers.
 - **Work on a branch with no pull request.** The copy cannot show it.
 - **Another day.** One run, one model id each, one Codex version.
 
+## Part 5: fewer asks without looser closes
+
+Run on 2026-10-30. Part 4 left 229 asks on 104 tickets, about 135 to 192 a
+week. The proposed bar's ask budget is about 50. Can we ask less without
+closing more wrongly? Everything here is offline, on part 4's saved answers:
+no triage model ran again.
+
+**Answer: no single idea, and not all three together, meets the bar.** The
+security rule is worth building: it removes the one security close for one
+ask. Bundling and precedents remove almost nothing once checked. Keeping worth
+asks is the only big cut, and it is a trade the owner has to choose: about 45%
+wrong keeps for about 100 fewer asks a week.
+
+```ts
+// Part 5's shape: four rewrites of part 4's answers, then the same bar.
+type Answer = { n: number; said: "close" | "keep" | "ask"; why: string; really: "close" | "keep"; security: boolean };
+
+const securityRule = (xs) => xs.map((a) => a.security && a.said !== "ask" ? { ...a, said: "ask", why: "security" } : a);
+const followRulings = (xs, rulingOf) => xs.map((a) =>
+  a.said !== "ask" || a.security || a.why === "security" ? a
+  : rulingOf(a.n) ? { ...a, said: rulingOf(a.n).verdict, why: "precedent" } : a);
+const keepWorth = (xs) => xs.map((a) => a.said === "ask" && a.why === "worth" ? { ...a, said: "keep", why: "cheap" } : a);
+// bundles do not change an answer; they change how many decisions the owner makes.
+
+// the one precedent both matchers found, on #6374 (asked as security, so not applied):
+{ kind: "rule", n: 6062, why: "Earlier #6062 asked for a takeover path for a stale claim left by a dead session, and it was closed not-planned under the #5752 ruling ..." }
+// phoenix built #6374 later: following that ruling would have been a wrong close.
+```
+
+### The security rule
+
+- **The rule:** any answer that is not ask, on a security ticket, becomes an
+  ask. Code, after the Draft, so the model cannot break it.
+- **What it changes:** opus's close on #3361 becomes an ask. Opus's wrong
+  closes go from 2 of 27 to 1 of 27, security closed from 1 to 0, asks from 32
+  to 33. GPT sol asked on every security ticket already, so nothing changes.
+- **Every scenario below applies it first.**
+- **How sure:** 95% on these numbers. But security here comes from the label,
+  which triage will not have. A real rule needs a security check of its own,
+  untested (part 4's point 4).
+
+### Bundle by area
+
+**The rule, fixed before any bundle was read:** two asks are one decision when
+they share a key. The keys of an ask are its own number, every number its body
+or trace names, each open pull request its trace names from its own list, and
+the first file path its trace names. Bundles are built greedily, the most
+shared key first, and each ask joins one bundle. Three windows: the whole set,
+each filing week, and a looser "chained" count (anything linked, even through
+a third ask) as the upper end.
+
+**The weekly number is a sketch.** The sets hold 4 or 5 asks a week; a real
+week has about 140. So the asked tickets of one model are drawn k at a time
+(40 draws each, seed 1635), bundled, and a power law fitted to that curve is
+read at the week's ask count.
+
+**The hand check:** 10 bundles of two or more, drawn with seed 1635 from GPT
+sol's run 1 on both sets (`STEP=groups`). One reader, me, asked: would one
+answer from the owner settle every ask in it?
+
+- **One decision, 2 of 10:** three leaks of the newcomer sandbox (#1810, #1811,
+  #3724: one ruling, "the sandbox holds on every path", settles all); two faults
+  in the same spawn-clear branch check (#7340, #7344).
+- **Not one decision, 8 of 10:** four unrelated faults that start at the same
+  entry file (pano `mutations.ts`); two tickets that only list the same open
+  pull request (#9611 and #9771, #10463 and #10418, #4208 and #4200, #6566 and
+  #6585); two chat window tickets (a clipped notice, a missing test); a CI
+  comment check and a test that skips `.tsx` files (same workflow file).
+- **So a file or a pull request says where the code is, not what the owner
+  must decide.** What bundling saves is scaled down to the 2 in 10 that held.
+
+| | GPT sol, 63 | GPT sol, 119 | Opus, 51 |
+|---|---|---|---|
+| asks a week (security rule) | 187 to 192 | 135 to 140 | 186 |
+| decisions, whole set (asks in the set) | 30 to 31 (41 to 42) | 41 (56 to 58) | 26 (33) |
+| decisions a week, rule as written | about 108 to 110 | about 83 to 86 | about 119 |
+| decisions a week, after the hand check | about 172 to 176 | about 125 to 129 | about 173 |
+
+- **How sure:** 60%. The hand check is 10 bundles, one reader. 2 of 10 could
+  be anything from about 1 in 20 to 1 in 2. The power law reads past the pool
+  (102 asked tickets for GPT sol, 32 for opus). A real week is denser in time,
+  so more links may hold; a second reader on 20 more bundles would settle it.
+
+### Follow past rulings
+
+**How:** for each of the 104 asked tickets, every phoenix issue settled before
+that ticket was filed (`closedAt` earlier than the filing) is a candidate.
+7,301 issues read read-only through `gh` (`STEP=ruled`): 3,295 built by a
+merged pull request, 2,162 closed not planned, 955 closed done with no pull
+request, 889 open. No issue was closed as a duplicate by GitHub's reason. The
+8 best lexical matches (tf-idf on titles; the asked ticket's title and body)
+go to a matcher with how each was settled and, if closed unbuilt, the note it
+was closed with (its last comment from before the close). The matcher answers
+`same`, `rule` (cite one) or `none`, and is told to pick none unless sure. A
+`rule` takes the earlier ticket's settling (built is keep, not planned is
+close); `same` closes. A precedent never answers a security ask, by label or
+by the model's own why.
+
+| Matcher | Tickets it may answer | Matched | Right | Wrong closes | Dollars at list price |
+|---|---|---|---|---|---|
+| claude-haiku-5-5 | 68 | 0 (1 more, on a security ask) | 0 | 0 (the security one would be wrong) | $0.25 |
+| claude-sonnet-5-5 | 68 | 0 (2 more, on security asks) | 0 (of the 2: 1 right, 1 wrong) | 0 | $3.97 |
+| lexical, top match at 0.3 or more, no model | 68 | 3 | 2 | 1 (#8992) | $0 |
+| lexical, at 0.4 or more | 68 | 1 | 1 | 0 | $0 |
+
+- **Phoenix's history holds almost no ruling that settles a later ticket.**
+  The best earlier matches are mostly built tickets on the same page or
+  module, with a different fault. The median best lexical score is 0.17.
+- **The one match both models made shows the risk.** #6374 (a killed seat
+  strands its lane claim) cites #6062, closed not planned under a class ruling
+  (#5752: a strand from a gone session is a person's job). Phoenix built #6374
+  later. A class ruling can be reversed, and an old match does not know.
+- **Sonnet's other match was right:** #10591 cites #10363, built, the same
+  owner-only check. A security ask, so it stays an ask.
+- **How sure:** 85% that matching on this history saves under 5% of asks.
+  The candidates are titles and closing notes only; a matcher shown the
+  earlier tickets' bodies might find more. Part 4's idea of a dated class
+  ruling, written by the owner, is a different thing and is not tested here.
+
+### Keep when it is cheap
+
+**The trade:** a worth ask kept without asking saves 30 s of the owner. It
+wastes a build when the ticket should have been closed, which is a share p of
+worth asks. Keeping wins when 30 s of the owner is worth more than p times a
+build. No hourly value is picked here.
+
+- **p:** GPT sol 50% of 119 worth asks, opus 45% of 20 (part 4's labels).
+- **A build:** $3.23 median, $1.73 to $7.68, over the 6 machine-driven
+  kamp-us/demlik lanes with dollars in `field/runs.jsonl` (machine rows
+  summed per lane). 25.4 agent minutes median, 1.8 to 45.9, over 18 demlik
+  lanes with builder, reviewer and shipper minutes.
+- **Break-even:** keeping beats asking if 30 s of the owner is worth more than
+  about **$1.60** (GPT sol $1.60, $0.86 to $3.81 over the build range; opus
+  $1.45). That is about $190 an hour.
+- **Asks removed a week:** at $0.25, $0.50 or $1 per 30 s, none (ask). At $2 or
+  $5, all worth asks: about 94 a week on GPT sol, 113 on opus.
+- **What it breaks:** wrong keeps go from 0% to 13% to 42% to 48% (opus 10 of
+  24, GPT sol 15 of 31 and 18 of 41). The proposed line is 10%.
+- **How sure:** 55%. The builds are demlik lanes, not phoenix; six lanes with
+  dollars. The dollars leave out the owner's own time on each wasted pull
+  request: if the owner reads every pull request, a wasted build costs more
+  owner time than the 30 s it saved, and the break-even does not hold at any
+  price. Timing the owner on a real batch of pull requests would settle it.
+
+### All together, against the bar
+
+GPT sol 2 runs, opus 1. Asks a week at 288 filings a week. Decisions a week
+after the hand check. Precedent adds nothing on either model, so "all three"
+is the security rule, then keep worth, then bundles.
+
+| Scenario | Asks a week (decisions) | Wrong closes | Security closed | Wrong keeps | Budget 50 |
+|---|---|---|---|---|---|
+| part 4 as it was | sol 135 to 192, opus 181 | sol 1/32, 3 to 6/78; opus 2/27 | opus 1 | sol up to 13%, opus 4% | fail |
+| security rule | sol 135 to 192, opus 186 | opus 1/27 | 0 | same | fail |
+| + bundles alone | (sol 125 to 176, opus 173) | same | 0 | same | fail |
+| + precedent alone (either model) | no change | same | 0 | same | fail |
+| + keep worth alone | sol 48 to 87, opus 73 | same | 0 | 42% to 48% | sol 119 only |
+| all three | sol 48 to 87 (45 to 81), opus 73 (67) | same | 0 | 42% to 48% | sol 119 only |
+
+- **Wrong closes, at most about 1 in 30:** GPT sol on the 63 passes (1 of 32);
+  on the 119 it fails (6 and 3 of 78), as in part 4. Opus is 1 of 27 after the
+  rule, just over 1 in 30. None of the ideas here touches a close.
+- **Security closed, 0:** passes everywhere once the rule is in.
+- **Wrong keeps, at most 10%:** fails as soon as worth asks are kept. Without
+  keep worth, GPT sol on the 63 is at 10% and 13% (part 4).
+- **Answerable, 12 of 15:** not measured again. Of part 4's 15 sampled asks, 7
+  were worth asks, which keep worth removes; 7 security asks and 1 unclear
+  stay. Whether the asks left are as easy to answer is not known.
+- **Ask budget, about 50:** only GPT sol on the 119 gets there, and only with
+  keep worth.
+- **Without bundles' paper numbers** (the rule as written, not hand-checked),
+  all three would read sol 34 to 56, opus 43. Those are the wrong numbers to
+  plan on; they stay here so the gap shows.
+
+### What it cost
+
+| Step | Calls | Dollars at list price |
+|---|---|---|
+| haiku matcher | 104 | $0.25 |
+| sonnet matcher | 104 | $3.97 |
+| issue states and closing notes (`gh`, read-only) | 74 pages, 7 batches | $0 |
+
+- **Wrong estimate, kept:** `DRY=1` said about $0.06 for haiku and $1.11 for
+  sonnet, from about four characters a token plus 3,000 tokens a call. Real:
+  about 10,100 tokens in a call and $0.0024 (haiku) and $0.038 (sonnet), about
+  4 times the guess. The cap of $5 held: $4.22 in all.
+- `field/runs.jsonl` has a row per matcher call (208); `field/notes.jsonl`
+  notes 2026-10-30-15 to 17.
+
+### Who did what
+
+- **This repo's harness:** the four rewrites, the bundle rule, the bar, the
+  week sketch and the break-even in `lib/fewer-asks.ts`; the matcher call in
+  `lib/fewer-asks-live.ts`; the steps in `163-fewer-asks.ts`.
+- **Matchers:** the Claude Agent SDK on its own login, `claude-haiku-5-5` and
+  `claude-sonnet-5-5`, no tools, no settings, the matcher brief as the system
+  prompt.
+- **Part 4's answers** (GPT sol and opus with brief v6) are the input; no
+  triage model ran. Build costs are from today's fabrika and this repo's
+  machine on kamp-us/demlik lanes. Phoenix was only read. Nothing was written
+  to phoenix. The matchers' saved whys are masked for names and hosts (none
+  came up).
+
+### What part 5 means
+
+1. **Build the security rule as a Check after triage's Draft.** It is a few
+   lines, it fixes the one break, and it costs one ask. Confidence 90% that it
+   is worth building; the open part is how triage knows a ticket is security
+   without the label.
+2. **Do not build precedent matching on phoenix's history.** It found 0 of 68,
+   and the one strong match it made would have been wrong because the old
+   ruling was reversed. Confidence 85%. If the owner wants to rule a class
+   once, keep it as a named, dated rule the owner can withdraw.
+3. **Group asks by area in the owner's batch view, but do not count it as
+   fewer decisions.** It may make reading faster; it does not merge answers.
+   Confidence 60% that grouping helps reading at all; untested.
+4. **The ask budget and the wrong-keep line cannot both hold with v6.** The
+   owner picks: about 130 to 190 asks a week at 10% wrong keeps, or about 50
+   to 90 at about 45%. Keeping is cheaper in dollars above about $1.60 per 30 s
+   of the owner, but only if the owner does not read each wasted pull request.
+   Confidence 70% in the trade as stated.
+
+### What part 5 cannot tell us
+
+- **Any live number.** No triage model ran; every scenario rewrites part 4's
+  answers.
+- **A blind number.** Same sets as part 4, both seen.
+- **What a real week bundles to.** The week count is a fitted sketch on about
+  14 weeks of thin data, and the hand check is 10 bundles by one reader.
+- **Whether an owner-written class ruling would work.** Phoenix's history has
+  few, and the one found was reversed. Only the owner writing rules on a real
+  week would tell.
+- **What a wasted phoenix build costs.** The build dollars are six demlik
+  lanes, and the owner's review time is not in them.
+- **Whether security can be known without the label.** The rule's numbers are
+  an upper bound.
+- **Another day.** One run of each matcher.
+
 ## Run it
 
 ```
@@ -1196,6 +1446,12 @@ STEP=report node experiments/163-triage-ask.ts             # part 4: the numbers
 STEP=load node experiments/163-triage-ask.ts               # part 4: phoenix's filing rate over 60 days, and asks a week
 STEP=sample node experiments/163-triage-ask.ts             # part 4: 15 asks, seed 1634, for the by-hand judgment
 STEP=field node experiments/163-triage-ask.ts              # part 4: field/runs.jsonl rows
+STEP=listprice node experiments/163-triage-ask.ts          # GPT sol's list-price dollars on 159 to 163's field rows
+STEP=ruled node experiments/163-fewer-asks.ts              # part 5: phoenix's issue states, through gh, read-only; run twice (the second reads closing notes)
+STEP=match MODEL=haiku DRY=1 node experiments/163-fewer-asks.ts   # part 5: the precedent matcher's estimate; drop DRY to run; MODEL=sonnet; MAX_USD=5 caps both together
+STEP=groups node experiments/163-fewer-asks.ts             # part 5: ten seeded bundles for the hand check
+STEP=report node experiments/163-fewer-asks.ts             # part 5: every scenario against the bar; writes results/163-fewer-asks.json
+STEP=field node experiments/163-fewer-asks.ts              # part 5: field/runs.jsonl rows, one per matcher call
 ```
 
 Run each with `TYPESAFE_API_KEY`, `OPENAI_API_KEY` and `CODEX_API_KEY` unset;
