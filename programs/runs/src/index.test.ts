@@ -58,7 +58,7 @@ describe("the runs program", () => {
 				started.close("ticket");
 				yield* Effect.sleep("20 millis");
 				const still = yield* until(() => true);
-				const word = yield* offer(started.run, "in", {kind: "quit"});
+				const word = yield* offer(started.run, "quit", null);
 				return {first, second, still, word, ended: (yield* started.run.ended).kind};
 			}).pipe(Effect.scoped),
 		);
@@ -78,7 +78,9 @@ describe("the runs program", () => {
 				const none = yield* until((o) => o.ready);
 				yield* offer(started.run, "ticket", 7);
 				const seven = yield* until((o) => o.ticket !== null);
-				started.close("in");
+				// The window's inputs end, as when its tile closes: so does the program.
+				started.close("choose");
+				started.close("quit");
 				return {none, seven, ended: (yield* started.run.ended).kind};
 			}).pipe(Effect.scoped),
 		);

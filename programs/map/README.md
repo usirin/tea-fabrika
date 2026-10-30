@@ -23,7 +23,7 @@ SPOTS.push;
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/map` | `src/index.ts` | `map`, the program: flag `ticket`, input `in` (quit). Its view is the ticket's facts and the clock (`One`). |
+| `@tea-fabrika/map` | `src/index.ts` | `map`, the program: flag `ticket`, input `quit` (`null`). Its view is the ticket's facts and the clock (`One`). |
 | | `src/map.ts` | `PROGRAMS`, `WIRES`, `LEDGER_CALLS`, `SPOTS`, `familyOf`: the map as data. |
 | `@tea-fabrika/map/window` | `src/window.tsx` | `MapWindow`: the React Flow canvas, its boxes, wires and legend. |
 

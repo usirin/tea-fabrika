@@ -89,20 +89,20 @@ describe("runs --ticket 7 | trace", () => {
 					),
 					Stream.runHead,
 				);
-				yield* offer(p.runs, "in", {kind: "choose", run: "r-3"});
-				yield* offer(p.runs, "in", {kind: "choose", run: "r-9"});
-				yield* offer(p.runs, "in", {kind: "choose", run: "r-2"});
+				yield* offer(p.runs, "choose", {run: "r-3"});
+				yield* offer(p.runs, "choose", {run: "r-9"});
+				yield* offer(p.runs, "choose", {run: "r-2"});
 				const read = yield* p.trace.machines.trace.changes.pipe(
 					Stream.filter((s) => s !== null),
 					Stream.filter((s) => s.read.at === "read"),
 					Stream.runHead,
 					Effect.map(Option.getOrThrow),
 				);
-				yield* offer(p.runs, "in", {kind: "quit"});
+				yield* offer(p.runs, "quit", null);
 				const runsEnded = (yield* p.runs.ended).kind;
 				// The pipe's end closes trace's `id`, not its window: it shows the record still.
 				const after = p.trace.machines.trace.state();
-				yield* offer(p.trace, "do", {kind: "quit"});
+				yield* offer(p.trace, "quit", null);
 				return {first, read, runsEnded, after, traceEnded: (yield* p.trace.ended).kind};
 			}).pipe(Effect.scoped),
 		);

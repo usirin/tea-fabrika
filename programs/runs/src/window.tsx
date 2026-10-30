@@ -352,7 +352,7 @@ function Tracks({view, send}: WindowProps<typeof runs>) {
 							chosen={chosen}
 							choose={(run) => {
 								// Picked, not let go: the run's trace id goes out on `id`, for `trace` to open.
-								if (chosen !== run) send({type: "in", value: {kind: "choose", run}});
+								if (chosen !== run) send({type: "choose", value: {run}});
 								setChosen(chosen === run ? null : run);
 							}}
 						/>
