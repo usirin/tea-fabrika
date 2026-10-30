@@ -53,7 +53,7 @@ Nothing was started.
   fields. Domain logic stays in the domain object.
 - **Drawing is a swappable service,** like Effect's `CliOutput.Formatter`, a
   `Context.Reference` with a default. Three drawings of the same data:
-  - **terminal:** the rustc drawing above, with colour, and a compact form
+  - **terminal:** the rustc drawing above, with color, and a compact form
     for a narrow tile;
   - **window:** the same diagnostic drawn in the tile;
   - **agent:** the `Diagnostic` itself as JSON through MCP, as rustc's
@@ -89,7 +89,7 @@ type Span = {start: number; end: number}; // characters in the line as typed
 // Sketch: the drawing service, after CliOutput.Formatter.
 type Draw = (d: Diagnostic) => string;
 const Drawing: Context.Reference<Draw> = Context.Reference("@kampus/fabrika/Drawing", {
-	defaultValue: () => terminal({colours: true, width: 80}),
+	defaultValue: () => terminal({colors: true, width: 80}),
 });
 // tsh asks for Drawing; the app's tile, a test and the MCP door each provide their own.
 ```
