@@ -13,6 +13,7 @@ import {
 	type Section,
 	sentence,
 	stopsOf,
+	textOf,
 	tipWait,
 } from "./pop.ts";
 import {Menu, type MenuProps, Palette, type PaletteProps, Panel} from "./pop.tsx";
@@ -186,11 +187,12 @@ describe("the palette's bold letters and the tooltip's wait", () => {
 });
 
 const noop = () => {};
-const menu = (sections: readonly Section[]) =>
+const menu = (sections: readonly Section[], from: MenuProps["from"] = "top") =>
 	renderToStaticMarkup(
 		createElement(Menu, {
 			id: "pop-asks",
 			label: "Asks",
+			from,
 			count: sections.reduce((n, s) => n + s.rows.length, 0),
 			sections,
 			foot: [{caps: ["↵"], name: "Open"}],
@@ -226,6 +228,58 @@ describe("the roles each one draws", () => {
 		expect(html).toContain("Nothing waits on you");
 		expect(html).toContain("A new ask shows here and in the top bar.");
 		expect(html).not.toContain("pop-foot");
+	});
+
+	it("draws a bare head with no count, and typed words in the calm line in mono", () => {
+		const html = renderToStaticMarkup(
+			createElement(Menu, {
+				id: "pop-jobs",
+				label: "Jobs",
+				from: "bottom",
+				count: null,
+				sections: [],
+				foot: [],
+				empty: {
+					title: "Nothing is running",
+					sub: [
+						{text: "There, ", typed: false},
+						{text: "jobs", typed: true},
+						{text: " lists them.", typed: false},
+					],
+				},
+				onAct: noop,
+				onSecond: noop,
+				onClose: noop,
+			} satisfies MenuProps),
+		);
+		expect(html).toContain('<div class="pop-head" aria-hidden="true">Jobs</div>');
+		expect(html).toContain("<span>There, </span><code>jobs</code><span> lists them.</span>");
+	});
+
+	it("draws typed words in mono, a titled section's heading, and a menu from the bottom line", () => {
+		const job: Row = {
+			id: "t2/%5",
+			icon: "running",
+			title: [{text: "sleep --ms 9000", typed: true}],
+			sub: [
+				{text: "%5", typed: true},
+				{text: " · t2", typed: false},
+			],
+			side: "2m",
+			second: null,
+		};
+		const others: Section = {id: "others", title: "Other tiles", fold: false, rows: [job]};
+		const html = menu([{...LIVE, rows: []}, others], "bottom");
+		expect(html).toContain("pop menu from-bottom");
+		expect(html).toContain("<code>sleep --ms 9000</code>");
+		expect(html).toContain("<code>%5</code><span> · t2</span>");
+		expect(html).toContain('<div class="pop-group" aria-hidden="true">Other tiles</div>');
+		expect(html).toContain('aria-label="Other tiles"');
+		expect(html).not.toContain("aria-keyshortcuts");
+		// A typed title is still found by its first letter.
+		const stops = stopsOf([others], new Set());
+		expect(menuKey(stops, null, {key: "s"})).toEqual({do: "move", to: "t2/%5"});
+		expect(textOf(job.title)).toBe("sleep --ms 9000");
 	});
 
 	it("keeps the Later rows a menu when nothing else waits", () => {

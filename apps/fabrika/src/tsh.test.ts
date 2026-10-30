@@ -10,6 +10,7 @@ import {Effect, FileSystem, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
+import type {TileJobs} from "./tile-jobs.ts";
 import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScreen} from "./tsh.ts";
 
 // One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
@@ -23,7 +24,7 @@ type Seen =
 	| {readonly kind: "line"; readonly runs: readonly string[]}
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
 	| {readonly kind: "close"; readonly run: string}
-	| {readonly kind: "running"; readonly count: number};
+	| {readonly kind: "running"; readonly count: number; readonly jobs: TileJobs};
 
 const session = (
 	opts: {
@@ -55,7 +56,7 @@ const session = (
 				// As a real view does: taking it away says `closed`, whoever took it away.
 				screen.closed();
 			},
-			running: (count) => seen.push({kind: "running", count}),
+			jobs: (jobs) => seen.push({kind: "running", count: jobs.running.length, jobs}),
 		};
 		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
 		const host = yield* startTsh({
@@ -349,8 +350,21 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(seen.open.placed).toBe("background");
-		expect(seen.counted).toEqual({kind: "running", count: 1});
-		expect(seen.none).toEqual({kind: "running", count: 0});
+		expect(seen.counted.kind === "running" && seen.counted.jobs.running).toEqual([
+			{n: 1, text: "counter", since: expect.any(Number), foreground: false},
+		]);
+		// It ended on its own, after `done`: the tile is told so, in a job record's words.
+		expect(seen.none.kind === "running" && seen.none.jobs).toEqual({
+			running: [],
+			ended: {
+				n: 1,
+				text: "counter",
+				how: "done",
+				since: expect.any(Number),
+				at: expect.any(Number),
+				foreground: false,
+			},
+		});
 		expect(seen.back[0]).toBe("tsh$ counter &");
 		expect(seen.back.at(-1)).toBe("tsh$");
 		expect(seen.rows).toContain("meanwhile");
@@ -425,6 +439,41 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(still).toBe("None");
+	});
+
+	it("tells the tile a job it waits for with no view, and how each job ended: stopped, failed", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				// One program, no view, in the foreground: tsh `call`s it, and holds no handle to it.
+				s.type("sleep --ms 600000\r");
+				const waiting = yield* s.until("the sleep, waited for", () =>
+					s.seen.find((x) => x.kind === "running" && x.count === 1),
+				);
+				s.type("\x03");
+				const stopped = yield* s.until("the sleep, stopped", () =>
+					s.seen.find((x) => x.kind === "running" && x.jobs.ended?.how === "stopped"),
+				);
+				yield* s.prompts(2);
+				s.type("false &\r");
+				const failed = yield* s.until("false, failed", () =>
+					s.seen.find((x) => x.kind === "running" && x.jobs.ended?.how === "failed"),
+				);
+				return {waiting, stopped, failed};
+			}).pipe(Effect.scoped),
+		);
+		const jobsOf = (x: (typeof seen)["waiting"]) => (x.kind === "running" ? x.jobs : null);
+		expect(jobsOf(seen.waiting)?.running).toEqual([
+			{n: 1, text: "sleep --ms 600000", since: expect.any(Number), foreground: true},
+		]);
+		expect(jobsOf(seen.stopped)).toMatchObject({
+			running: [],
+			ended: {n: 1, text: "sleep --ms 600000", how: "stopped", foreground: true},
+		});
+		expect(jobsOf(seen.failed)).toMatchObject({
+			running: [],
+			ended: {n: 2, text: "false", how: "failed", foreground: false},
+		});
 	});
 
 	it("does not open for a line tsh refuses", async () => {

@@ -107,7 +107,18 @@ const table: MsgArbitraryTable<Msg> = {
 		height: fc.integer({min: 0, max: 2000}),
 	}),
 	over: arbRecordMsg("over", {run: run.map((r) => r.id)}),
-	jobs: arbRecordMsg("jobs", {tile, running: fc.nat({max: 2})}),
+	jobs: arbRecordMsg("jobs", {
+		tile,
+		jobs: fc.nat({max: 2}).map((count) => ({
+			running: Array.from({length: count}, (_, i) => ({
+				n: i + 1,
+				text: "counter",
+				since: 0,
+				foreground: i === 0,
+			})),
+			ended: null,
+		})),
+	}),
 	closing: arbRecordMsg("closing", {tile}),
 	ended: arbRecordMsg("ended", {tile}),
 	go: arbRecordMsg("go", {tile}),
@@ -258,7 +269,7 @@ const booksTidy = everyStep(
 	({next: s}) =>
 		s.at === "over" ||
 		((s.ask === null || findTile(activeOf(s).layout, s.ask) !== null) &&
-			Object.keys(s.running).every((t) => whereIs(s, t) !== undefined) &&
+			Object.keys(s.jobs).every((t) => whereIs(s, t) !== undefined) &&
 			s.closing.every((t) => whereIs(s, t) !== undefined) &&
 			new Set(s.closing).size === s.closing.length),
 );
@@ -456,9 +467,9 @@ const PLANTS = {
 	countsTheGone: plant({
 		ended: (s, m) => {
 			const [next, cmds] = real.ended(s, m);
-			if (s.at !== "open" || next.at !== "open" || s.running[m.tile] === undefined)
-				return [next, cmds];
-			return [{...next, running: {...next.running, [m.tile]: s.running[m.tile] ?? 0}}, cmds];
+			const kept = s.at === "open" ? s.jobs[m.tile] : undefined;
+			if (next.at !== "open" || kept === undefined) return [next, cmds];
+			return [{...next, jobs: {...next.jobs, [m.tile]: kept}}, cmds];
 		},
 	}),
 	/** A new tile is made and its tsh never opened. */

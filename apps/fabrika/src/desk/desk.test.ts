@@ -1,5 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
+import type {TileJobs} from "../tile-jobs.ts";
 import {
 	activeOf,
 	claims,
@@ -19,6 +20,17 @@ import {findTile} from "./layout/index.ts";
 // The desk, folded by hand. Its laws, as property tests on tea's pbt, are in desk.laws.test.ts.
 
 const [start, booted] = deskMachine.init(null, undefined);
+
+/** A tile's jobs, as its tsh says them: `count` running, none ended. */
+const running = (count: number): TileJobs => ({
+	running: Array.from({length: count}, (_, i) => ({
+		n: i + 1,
+		text: "counter",
+		since: 0,
+		foreground: i === 0,
+	})),
+	ended: null,
+});
 
 /** Fold msgs through the desk from `from`, keeping every Cmd asked for. */
 const fold = (msgs: readonly DeskMsg[], from: Desk = start) => {
@@ -121,7 +133,7 @@ describe("the desk", () => {
 	});
 
 	it("gives a busy tile's programs the end of their inputs on y, and takes it away when its tsh ended", () => {
-		const busy = fold([...prefixed("|"), {type: "jobs", tile: "t2", running: 1}]).s;
+		const busy = fold([...prefixed("|"), {type: "jobs", tile: "t2", jobs: running(1)}]).s;
 		const yes = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], busy);
 		expect(ids(yes.s)).toEqual(["t1", "t2"]);
 		expect(opened(yes.s).closing).toEqual(["t2"]);
@@ -129,7 +141,7 @@ describe("the desk", () => {
 		// The programs ended, then tsh: the tile goes, and what is left of it is stopped.
 		const ended = fold(
 			[
-				{type: "jobs", tile: "t2", running: 0},
+				{type: "jobs", tile: "t2", jobs: running(0)},
 				{type: "ended", tile: "t2"},
 			],
 			yes.s,
@@ -571,7 +583,7 @@ describe("a line with several windows", () => {
 		const typed = fold(
 			[
 				{type: "covered", tile: "t2", runs: line},
-				{type: "jobs", tile: "t2", running: 1},
+				{type: "jobs", tile: "t2", jobs: running(1)},
 			],
 			beside(1440),
 		).s;

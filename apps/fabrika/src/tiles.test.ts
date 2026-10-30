@@ -76,11 +76,11 @@ describe("the tiles", {timeout: 20_000}, () => {
 				yield* d.tiles.open("t1");
 				yield* d.tiles.open("t2");
 				d.type("t1", "counter &\r");
-				yield* d.heard((m) => m.type === "jobs" && m.tile === "t1" && m.running === 1);
+				yield* d.heard((m) => m.type === "jobs" && m.tile === "t1" && m.jobs.running.length === 1);
 				d.type("t2", "jobs\r");
 				const two = yield* d.prompts("t2", 2);
 				d.type("t2", "tally &\r");
-				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.running === 1);
+				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.jobs.running.length === 1);
 				return {two, told: [...d.told], views: [...d.views], table: d.table()};
 			}).pipe(Effect.scoped),
 		);
@@ -93,7 +93,9 @@ describe("the tiles", {timeout: 20_000}, () => {
 		]);
 		// Each tile is told only of the jobs it started: t1's one, t2's one.
 		expect(
-			seen.told.flatMap((m) => (m.type === "jobs" && m.tile === "t1" ? [m.running] : [])),
+			seen.told.flatMap((m) =>
+				m.type === "jobs" && m.tile === "t1" ? m.jobs.running.map((j) => j.n) : [],
+			),
 		).not.toContain(2);
 		// `&` is a job in the background, as in bash: no tile opens, and nothing covers one.
 		expect(seen.told.map((m) => m.type).filter((t) => t !== "jobs")).toEqual([]);
@@ -173,7 +175,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 				const d = yield* desk();
 				yield* d.tiles.open("t2");
 				d.type("t2", "sleep --ms 600000 &\r");
-				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
+				yield* d.heard((m) => m.type === "jobs" && m.jobs.running.length === 1);
 				yield* d.tiles.close("t2");
 				d.told.length = 0;
 				const before = d.table();
@@ -199,7 +201,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 				d.type("t1", "counter\r");
 				const covered = yield* d.heard((m) => m.type === "covered");
 				d.type("t2", "tally &\r");
-				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.running === 1);
+				yield* d.heard((m) => m.type === "jobs" && m.tile === "t2" && m.jobs.running.length === 1);
 				yield* d.tiles.close("t2");
 				yield* d.heard((m) => m.type === "ended" && m.tile === "t2");
 				yield* d.tiles.stop("t2");
@@ -211,11 +213,10 @@ describe("the tiles", {timeout: 20_000}, () => {
 		const run = seen.covered.type === "covered" ? seen.covered.runs[0].id : "";
 		// t1's counter still covers t1: it is not over, and its port is still there.
 		expect(seen.told).not.toContainEqual({type: "over", run});
-		expect(seen.told.filter((m) => m.type === "jobs" && m.tile === "t1").at(-1)).toEqual({
-			type: "jobs",
-			tile: "t1",
-			running: 1,
-		});
+		const t1 = seen.told.filter((m) => m.type === "jobs" && m.tile === "t1").at(-1);
+		expect(t1?.type === "jobs" ? t1.jobs.running.map((j) => [j.n, j.text]) : []).toEqual([
+			[1, "counter"],
+		]);
 		expect(seen.gone).not.toContain(`run:${run}`);
 	});
 
@@ -286,7 +287,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 				const d = yield* desk();
 				yield* d.tiles.open("t1");
 				d.type("t1", "counter\r");
-				yield* d.heard((m) => m.type === "jobs" && m.running === 1);
+				yield* d.heard((m) => m.type === "jobs" && m.jobs.running.length === 1);
 				yield* d.heard((m) => m.type === "covered");
 				d.told.length = 0;
 				yield* d.tiles.open("t1");
@@ -306,7 +307,7 @@ describe("the tiles", {timeout: 20_000}, () => {
 					const d = yield* desk(storage);
 					yield* d.tiles.open("t1");
 					d.type("t1", "counter &\r");
-					yield* d.heard((m) => m.type === "jobs" && m.running === 1);
+					yield* d.heard((m) => m.type === "jobs" && m.jobs.running.length === 1);
 				}).pipe(Effect.scoped);
 				// The next start, on the same storage, and another tile.
 				const d = yield* desk(storage);

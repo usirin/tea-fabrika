@@ -435,8 +435,8 @@ const flow = async (app: ElectronApplication) => {
 	await prompted(page, "t1");
 	await until(
 		"t1's job on the bottom line",
-		() => page.locator(".bottomline .here").innerText(),
-		(t) => t === "t1 tsh · 1 running",
+		() => page.locator(".bottomline .job").innerText(),
+		(t) => /^%\d+ sleep --ms 600000 \d+s$/.test(t),
 	);
 	await prefixed(page, "x");
 	await askedIs(page, "close t1? (y/n)");

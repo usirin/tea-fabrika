@@ -356,7 +356,12 @@ const onKey = (e: KeyboardEvent) => {
 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
 	if (name === null) return;
 	const open = store.desk?.at === "open" ? store.desk : null;
-	const desk = {armed: open?.prefix.armed ?? false, asking: open?.ask != null};
+	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
+	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
+	const desk = {
+		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		asking: open?.ask != null,
+	};
 	if (keyGoesTo(over, name, store.prefix, desk) === "over") {
 		const box = document.querySelector<HTMLElement>("[data-over]");
 		if (box === null || (e.target instanceof Element && box.contains(e.target))) return;
