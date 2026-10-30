@@ -4,7 +4,7 @@ import type {AnyRun} from "../program/program.ts";
 import {viewOf} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import type {ProgramList} from "../shell/programs.ts";
-import {type Call, callOf, toolNameOf, toolsOf} from "./tools.ts";
+import {type Call, callOf, toolNamesOf, toolsOf} from "./tools.ts";
 
 // One agent's runs, as its MCP tools drive them: a tool call on an input goes to the agent's own
 // run of that program, started on its first call, as `post.ts` starts one tracker for a post.
@@ -13,7 +13,7 @@ import {type Call, callOf, toolNameOf, toolsOf} from "./tools.ts";
 // any other writer's do.
 //
 //   const drive = yield* driveFor({list, tiles: () => [{run: "tracker:1a2b", program: "tracker"}]});
-//   yield* drive.call("tracker_do", {value: {kind: "file", title: "Login fails", body: ""}})
+//   yield* drive.call("tracker_file", {value: {title: "Login fails", body: ""}})
 //   // {kind: "done", data: {program: "tracker", run: "tracker:agent:5c1e", word: "queued", view: {...}}}
 //   yield* drive.call("runs", {})
 //   // {kind: "done", data: {programs: [...], yours: [{program, run, view}], tiles: [{run, program}]}}
@@ -102,7 +102,7 @@ export const driveFor = (options: {
 			programs: [...list].map(([name, entry]) => ({
 				name,
 				description: entry.program.description,
-				tools: Object.keys(entry.program.inputs).map((input) => toolNameOf(name, input)),
+				tools: toolNamesOf(name, entry.program.inputs),
 			})),
 			yours: [...mine].map(([program, r]) => ({program, run: r.run.id, view: viewNow(r.run)})),
 			tiles: tiles(),

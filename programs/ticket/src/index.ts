@@ -47,6 +47,11 @@ export const Do = Schema.Union([
 		pick: Title,
 		note: Body,
 		saw: Text,
+	}).annotate({
+		description:
+			"Answer an open ask on the ticket: a pick, a note, and the title and body as seen. A person only.",
+		// Only a person answers, so an agent's tools hold no `ticket_answer`.
+		personOnly: true,
 	}),
 	Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber}),
 	Schema.Struct({kind: Schema.Literal("reopen"), ticket: TicketNumber}),

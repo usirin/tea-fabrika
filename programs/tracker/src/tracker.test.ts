@@ -74,7 +74,7 @@ describe("the tracker", () => {
 					const {run, say, until} = yield* session(ledger);
 					yield* until((s) => s.ready);
 					// The list hides closed tickets until it is asked to show them.
-					yield* say({kind: "show", show: "all"});
+					yield* say({kind: "query", status: "all"});
 					yield* say({kind: "file", title: "Login fails", body: "On main."});
 					yield* say({kind: "file", title: "Docs typo", body: ""});
 					yield* say({kind: "comment", ticket: 1, body: "Seen it too."});
@@ -90,9 +90,9 @@ describe("the tracker", () => {
 				// Started again: nothing was kept but the ledger.
 				const again = yield* Effect.gen(function* () {
 					const {say, until} = yield* session(ledger, "tracker:again");
-					yield* say({kind: "show", show: "all"});
+					yield* say({kind: "query", status: "all"});
 					const list = listed(yield* until((s) => s.ready && s.filter.show === "all"));
-					yield* say({kind: "open", ticket: 1});
+					yield* say({kind: "query", ticket: 1});
 					const page = (yield* until((s) => s.page.kind === "ticket")).page;
 					return {list, page};
 				}).pipe(Effect.scoped);
@@ -127,6 +127,40 @@ describe("the tracker", () => {
 		]);
 	});
 
+	// What is told is read in the order it was told. With an input per write, each its own queue
+	// before the run had one mailbox, a close told right after a file was sometimes read first.
+	it("reads a file and a close told back to back in that order", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session(ledger);
+				yield* until((s) => s.ready);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say({kind: "close", ticket: 1});
+				yield* say({kind: "quit"});
+				const ended = yield* run.ended;
+				const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
+				return {ended: ended.kind, kinds: rows.map((r) => r.kind)};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({ended: "ended", kinds: ["filed", "closed"]});
+	});
+
+	it("lands a write told right before quit", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say} = yield* session(ledger);
+				yield* say({kind: "file", title: "Login fails", body: ""});
+				yield* say({kind: "quit"});
+				const ended = yield* run.ended;
+				const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
+				return {ended: ended.kind, kinds: rows.map((r) => r.kind)};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({ended: "ended", kinds: ["filed"]});
+	});
+
 	it("shows a fact written from elsewhere, such as an agent's comment, once the poll sees it", async () => {
 		const ledger = memoryService();
 		const by = await Effect.runPromise(
@@ -140,7 +174,7 @@ describe("the tracker", () => {
 					writer: "agent:review",
 					data: {type: "commented", body: "Found the cause."},
 				});
-				yield* say({kind: "open", ticket: 1});
+				yield* say({kind: "query", ticket: 1});
 				const page = (yield* until(
 					(s) => s.page.kind === "ticket" && (s.page.opened?.ticket.timeline.length ?? 0) === 2,
 				)).page;
@@ -237,7 +271,7 @@ describe("the tracker", () => {
 				yield* say({kind: "file", title: "Login fails", body: ""});
 				yield* until((s) => listed(s).length === 1);
 				yield* ask(ledger);
-				yield* say({kind: "open", ticket: 1});
+				yield* say({kind: "query", ticket: 1});
 				const asking = yield* until((s) => (opened(s)?.asks.length ?? 0) === 1);
 				yield* say({kind: "comment", ticket: 1, body: "approve"});
 				const commented = yield* until((s) => (opened(s)?.ticket.timeline.length ?? 0) === 3);
@@ -311,9 +345,9 @@ describe("the tracker", () => {
 				const open = yield* until(
 					(s) => s.page.kind === "list" && s.page.counts.closed === 1 && s.github.read,
 				);
-				yield* say({kind: "find", text: "  LOGIN "});
+				yield* say({kind: "query", status: "open", find: "  LOGIN "});
 				const found = yield* until((s) => s.filter.find === "  LOGIN ");
-				yield* say({kind: "show", show: "closed"});
+				yield* say({kind: "query", status: "closed", find: "  LOGIN "});
 				const closed = yield* until((s) => s.filter.show === "closed");
 				const prsOn = (s: Shown) => (s.page.kind === "list" ? s.page.pullRequests : []);
 				return {
@@ -345,11 +379,11 @@ describe("the tracker", () => {
 				const say = (d: Do): Effect.Effect<Word> => offer(started.run, "do", d);
 				yield* say({kind: "file", title: "Login fails", body: ""});
 				yield* say({kind: "file", title: "Docs typo", body: ""});
-				yield* say({kind: "open", ticket: 1});
-				yield* say({kind: "list"});
-				yield* say({kind: "open", ticket: 1});
-				yield* say({kind: "show", show: "all"});
-				yield* say({kind: "open", ticket: 2});
+				yield* say({kind: "query", ticket: 1});
+				yield* say({kind: "query", status: "open"});
+				yield* say({kind: "query", ticket: 1});
+				yield* say({kind: "query", status: "all"});
+				yield* say({kind: "query", ticket: 2});
 				yield* say({kind: "quit"});
 				yield* started.run.ended;
 				return sent;
@@ -367,14 +401,16 @@ describe("the tracker", () => {
 		expect(
 			readInput(tracker, {type: "do", value: {kind: "comment", ticket: 1, body: "\n"}}).kind,
 		).toBe("refused");
-		expect(readInput(tracker, {type: "do", value: {kind: "open", ticket: 0}}).kind).toBe("refused");
-		expect(readInput(tracker, {type: "do", value: {kind: "show", show: "all"}}).kind).toBe("read");
-		expect(readInput(tracker, {type: "do", value: {kind: "show", show: "done"}}).kind).toBe(
-			"refused",
-		);
-		expect(
-			readInput(tracker, {type: "do", value: {kind: "find", text: "x".repeat(257)}}).kind,
-		).toBe("refused");
+		const query = (value: object) =>
+			readInput(tracker, {type: "do", value: {kind: "query", ...value}}).kind;
+		expect(query({ticket: 0})).toBe("refused");
+		expect(query({status: "all"})).toBe("read");
+		expect(query({status: "open", find: "login"})).toBe("read");
+		expect(query({status: "done"})).toBe("refused");
+		expect(query({status: "open", find: "x".repeat(257)})).toBe("refused");
+		// A query is a ticket or a filter, never both.
+		expect(query({ticket: 1, status: "all"})).toBe("refused");
+		expect(readInput(tracker, {type: "do", value: {kind: "quit"}}).kind).toBe("read");
 		const answer = {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw};
 		expect(readInput(tracker, {type: "do", value: answer}).kind).toBe("read");
 		expect(readInput(tracker, {type: "do", value: {...answer, pick: " "}}).kind).toBe("refused");
@@ -390,11 +426,11 @@ describe("the tracker", () => {
 });
 
 describe("pickOf", () => {
-	it("is a new open only: the same ticket again, the list, or a write picks nothing", () => {
-		expect(pickOf({kind: "open", ticket: 7}, null)).toBe(7);
-		expect(pickOf({kind: "open", ticket: 7}, 3)).toBe(7);
-		expect(pickOf({kind: "open", ticket: 7}, 7)).toBeNull();
-		expect(pickOf({kind: "list"}, 7)).toBeNull();
+	it("is a new ticket's query only: the same ticket again, the list, or a write picks nothing", () => {
+		expect(pickOf({kind: "query", ticket: 7}, null)).toBe(7);
+		expect(pickOf({kind: "query", ticket: 7}, 3)).toBe(7);
+		expect(pickOf({kind: "query", ticket: 7}, 7)).toBeNull();
+		expect(pickOf({kind: "query", status: "open"}, 7)).toBeNull();
 		expect(pickOf({kind: "close", ticket: 7}, null)).toBeNull();
 	});
 });

@@ -24,7 +24,7 @@ import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake
 //   // bridge  {"type":"handshake","version":1,"agent":"claude"}
 //   // host    {"type":"handshake","version":1}
 //   // client  tools/list                    toolsOf(programsFor({kind: "agent", id: "claude", for: "owner"}))
-//   // client  tools/call tracker_do {value: {kind: "file", title: "Login fails", body: ""}}
+//   // client  tools/call tracker_file {value: {title: "Login fails", body: ""}}
 //   //         the agent's own tracker files it, as agent:claude for:owner
 //
 // Who the agent is comes from the handshake alone, and the writer is made here, as an `Agent`:

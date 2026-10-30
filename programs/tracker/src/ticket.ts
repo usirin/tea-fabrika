@@ -22,18 +22,30 @@ import {Effect, Schema} from "effect";
 //   {kind: "answer", ticket: 3, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 //   // tracker/ticket/3/inbox  {type: "answered", ..., text: "sha256:…"}: the hash of what it saw
 
-/** One change a person asks for. Each becomes one fact: `file` a new ticket's `filed`. */
+/**
+ * One change a person asks for. Each becomes one fact: `file` a new ticket's `filed`. Each case's
+ * description is what an agent reads on its tool (`tracker_file`, ...); `answer` and
+ * `rate_duplicate` are `{personOnly: true}`, so an agent has no tool for either.
+ */
 export const Write = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("file"), title: Title, body: Body}),
+	Schema.Struct({kind: Schema.Literal("file"), title: Title, body: Body}).annotate({
+		description: "File a new ticket: its title and body. Writes its `filed`.",
+	}),
 	/** `asks: "changes"`: the "Request changes" button, not "Comment". */
 	Schema.Struct({
 		kind: Schema.Literal("comment"),
 		ticket: TicketNumber,
 		body: Said,
 		asks: Schema.optionalKey(Asks),
+	}).annotate({
+		description: 'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.',
 	}),
-	Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber}),
-	Schema.Struct({kind: Schema.Literal("reopen"), ticket: TicketNumber}),
+	Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber}).annotate({
+		description: "Close a ticket. Writes its `closed`.",
+	}),
+	Schema.Struct({kind: Schema.Literal("reopen"), ticket: TicketNumber}).annotate({
+		description: "Reopen a closed ticket. Writes its `reopened`.",
+	}),
 	/**
 	 * A click on an ask's box: one of its picks, the note typed beside it, and the ticket's title and
 	 * body as the person saw them, so the answer names the text it covers.
@@ -45,6 +57,10 @@ export const Write = Schema.Union([
 		pick: Title,
 		note: Body,
 		saw: Text,
+	}).annotate({
+		description:
+			"Answer an open ask on a ticket: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
+		personOnly: true,
 	}),
 	/** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
 	Schema.Struct({
@@ -52,6 +68,10 @@ export const Write = Schema.Union([
 		ticket: TicketNumber,
 		of: TicketNumber,
 		says: Says,
+	}).annotate({
+		description:
+			"Accept or dismiss a duplicate hint: is the ticket the same as `of`? A person only. Writes one `duplicate_rated`.",
+		personOnly: true,
 	}),
 ]);
 export type Write = typeof Write.Type;

@@ -12,12 +12,16 @@ lists it, so `tracker` typed in the app's tsh opens its window. The design is
 import {start, tell} from "@kampus/fabrika";
 import {Author, tracker} from "@tea-fabrika/tracker";
 
-// What its window sends, on its one input `do`:
+// What its window sends, on its one input `do`, read in the order told. Each write is one fact:
 yield* tell(run, "do", {kind: "file", title: "Login fails", body: "On main."});
 yield* tell(run, "do", {kind: "comment", ticket: 1, body: "Seen it too."});
 yield* tell(run, "do", {kind: "close", ticket: 1});
-yield* tell(run, "do", {kind: "show", show: "all"});      // open (the start), closed or all
-yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login", any case
+// `reopen {ticket}`, and a person's only: `answer {ticket, ask, pick, note, saw}` and
+// `rate_duplicate {ticket, of, says}`.
+// The query writes nothing: the list by status and title, or one ticket.
+yield* tell(run, "do", {kind: "query", status: "all", find: "login"});  // open (the start), closed or all
+yield* tell(run, "do", {kind: "query", ticket: 1});                      // ticket 1's page
+yield* tell(run, "do", {kind: "quit"});
 
 // What lands on the ledger, as the user the `Author` service names:
 //   tracker/ticket/1            registered: the number is taken
@@ -27,8 +31,8 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 
 // What it sends on its one output `ticket`: the ticket the person opens, by its number, each
 // time that changes. `tracker | ticket | runs` follows it; `tracker` alone prints each pick.
-yield* tell(run, "do", {kind: "open", ticket: 7});        // sends 7
-yield* tell(run, "do", {kind: "open", ticket: 7});        // sends nothing: the same pick
+yield* tell(run, "do", {kind: "query", ticket: 7});       // sends 7
+yield* tell(run, "do", {kind: "query", ticket: 7});       // sends nothing: the same pick
 
 // What its window is shown (`Shown`), once the facts are read back:
 // {ready: true, page: {kind: "list", tickets: [{number: 1, title: "Login fails", state: "closed",
@@ -41,7 +45,7 @@ yield* tell(run, "do", {kind: "open", ticket: 7});        // sends nothing: the 
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
+| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: one input `do`, a tagged union (`Do`: each write, `query`, `quit`), output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
 | | `src/ticket.ts` | What a person writes, pure: `Write` (a comment can ask for changes, an answer carries the text it saw) and `factOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
@@ -81,7 +85,13 @@ yield* tell(run, "do", {kind: "open", ticket: 7});        // sends nothing: the 
   so a pipe carries the latest pick. If the reader down the pipe has ended, that send fails and
   the tracker ends with it, as a Unix writer does on a closed pipe.
 - **Quit waits for writes.** `{kind: "quit"}` ends the program once every write asked for is on
-  the ledger.
+  the ledger. A run reads what it is told in the order told, so a write told before quit is
+  always read before it.
+- **An agent gets one tool per case, and none for `answer` or `rate_duplicate`.**
+  `@kampus/fabrika/mcp` splits `Do` into `tracker_file`, `tracker_query`, and so on. The
+  `answer` and `rate_duplicate` cases are `{personOnly: true}`, so there is no `tracker_answer`
+  and no `tracker_rate_duplicate`. The query is `{writes: false}`: its tool carries
+  `readOnlyHint`.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
   not in a title. Where a URL ends is GitHub's rule (`src/links.ts` has it whole): a trailing
   `.` `,` `:` `!` `?` `*` `_` `~` `'` `"` is left out, and so is a `)` that closes no `(`.

@@ -85,7 +85,7 @@ const timelineAt = (home: string, n: number) =>
 			if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
 			const view = viewOf(tracker);
 			if (view === undefined) return yield* Effect.die("the tracker has no view");
-			yield* offer(started.run, "do", {kind: "open", ticket: n});
+			yield* offer(started.run, "do", {kind: "query", ticket: n});
 			const shown = yield* started.run.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
 				Stream.map((s) => view.of(s) as Shown),

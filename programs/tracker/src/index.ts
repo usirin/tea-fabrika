@@ -23,13 +23,18 @@ import {Write} from "./ticket.ts";
 // them (./window.tsx). Its machine (./machine.ts) holds what was read and the writes on their way;
 // its cells (./ledger.ts) are the only code that reads or writes the ledger. No React here.
 //
+// It has one input, `do`, and its value is one tagged union, as an Elm program's message is: each
+// write, each one fact, the query, which writes nothing (as CQRS keeps commands, its word, apart
+// from queries), and quit. Its run's one mailbox reads what is told in the order it was told: a
+// close told right after a file is read after it, and a quit after the last write.
+//
 //   tsh> tracker                 in the fabrika app, its window takes over: the list, newest first
-//   {kind: "file", title: "Login fails", body: "On main."}     what the window sends, on `do`
+//   {kind: "file", title: "Login fails", body: "On main."}
 //   // ledger: tracker/ticket/1/inbox gets {type: "filed", ...} by user:owner; the list shows #1
 //   {kind: "quit"}               the tracker ends once its writes are on the ledger; tsh is back
 //
-//   {kind: "show", show: "all"}                                the list shows closed tickets too
-//   {kind: "find", text: "login"}                              and only titles with "login" in them
+//   {kind: "query", status: "all", find: "login"}   the list: closed tickets too, titles with "login"
+//   {kind: "query", ticket: 1}                      ticket 1's page
 //   {kind: "answer", ticket: 1, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 //   // a click on an open ask's box: tracker/ticket/1/inbox gets {type: "answered", ..., text:
 //   // "sha256:…"} by user:owner, the hash of the text the person saw
@@ -44,12 +49,16 @@ import {Write} from "./ticket.ts";
 // Its one output is the ticket the person picks (opens), sent each time the pick changes, so
 // `tracker | ticket | runs` shows the picked ticket in the next two windows:
 //
-//   {kind: "open", ticket: 7}    sends 7 on `ticket`
-//   {kind: "list"}, then {kind: "open", ticket: 7}   sends nothing: 7 is still the pick
-//   {kind: "open", ticket: 3}    sends 3
+//   {kind: "query", ticket: 7}    sends 7 on `ticket`
+//   {kind: "query", status: "open"}, then {kind: "query", ticket: 7}   sends nothing: 7 is still the pick
+//   {kind: "query", ticket: 3}    sends 3
 //
-// A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a box for each
-// open ask. Only a person answers: a tracker whose `Author` is an agent refuses the write.
+// An agent sees one MCP tool per case (`tracker_file`, `tracker_query`, ...): `@kampus/fabrika/mcp`
+// splits the union, the program does not. The query is `{writes: false}`, so its tool says it
+// only reads. A ticket's page shows its top line (./head.ts), one row per fact (./rows.ts), and a
+// box for each open ask. Only a person answers an ask or rates a duplicate hint: `answer` and
+// `rate_duplicate` are `{personOnly: true}`, so an agent has no tool for either, and a tracker
+// whose `Author` is an agent refuses the write all the same.
 //
 // It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and
 // `PullRequests` (./pull-requests.ts), the open pull requests shown beside the tickets: GitHub's,
@@ -89,44 +98,52 @@ export {type Summary, Write} from "./ticket.ts";
 export {tickets};
 
 /**
- * What the window does: go to the list or a ticket, pick what the list shows, change a ticket, or
- * quit. One input, so it all stays in order.
+ * The query: one ticket's page, or the list by status and a title search ("" or left out: every
+ * title). It writes nothing. A filter is sent whole, so a query never depends on the one before.
+ *
+ *   {kind: "query", ticket: 43}                       ticket 43's page
+ *   {kind: "query", status: "open", find: "login"}    the list: open tickets with "login" in the title
+ */
+export const Query = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("query"), ticket: TicketNumber}),
+	Schema.Struct({kind: Schema.Literal("query"), status: Show, find: Schema.optionalKey(Find)}),
+]).annotate({
+	description:
+		'Read tickets: {ticket: 43} opens one; {status: "open" | "closed" | "all", find?: "text"} lists them by status and title. Writes nothing.',
+	writes: false,
+});
+export type Query = typeof Query.Type;
+
+/**
+ * Everything the tracker is told, on its one input, in order: a write, the query, or quit. The
+ * run's mailbox reads nothing told before what was told ahead of it.
  */
 export const Do = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("list")}),
-	Schema.Struct({kind: Schema.Literal("open"), ticket: TicketNumber}),
-	Schema.Struct({kind: Schema.Literal("show"), show: Show}),
-	Schema.Struct({kind: Schema.Literal("find"), text: Find}),
-	Schema.Struct({kind: Schema.Literal("quit")}),
-	Write,
+	...Write.members,
+	Query,
+	Schema.Struct({kind: Schema.Literal("quit")}).annotate({
+		description: "Stop, once every write told before it is on the ledger.",
+	}),
 ]);
 export type Do = typeof Do.Type;
 
 /**
- * The ticket a `do` picks, when it is a new pick: opening a ticket that is not the last one
- * picked. Going back to the list picks nothing, so the last pick stands, as a selection does.
+ * The ticket a `do` picks, when it is a new pick: a query for one ticket that is not the last one
+ * picked. A query for the list picks nothing, so the last pick stands, as a selection does.
  *
- *   pickOf({kind: "open", ticket: 7}, null)   7
- *   pickOf({kind: "open", ticket: 7}, 7)      null: no change, nothing to send
- *   pickOf({kind: "list"}, 7)                 null
+ *   pickOf({kind: "query", ticket: 7}, null)              7
+ *   pickOf({kind: "query", ticket: 7}, 7)                 null: no change, nothing to send
+ *   pickOf({kind: "query", status: "open"}, 7)            null
  */
 export const pickOf = (d: Do, last: number | null): number | null =>
-	d.kind === "open" && d.ticket !== last ? d.ticket : null;
+	d.kind === "query" && "ticket" in d && d.ticket !== last ? d.ticket : null;
 
-/** What the machine is told for one `do`. A write gets its message id here, once. */
-const msgOf = (d: Exclude<Do, {readonly kind: "quit"}>): TrackerMsg => {
-	switch (d.kind) {
-		case "list":
-			return {type: "list"};
-		case "open":
-			return {type: "open", ticket: d.ticket};
-		case "show":
-			return {type: "show", show: d.show};
-		case "find":
-			return {type: "find", text: d.text};
-		default:
-			return {type: "write", id: crypto.randomUUID(), write: d};
-	}
+/** What the machine is told for one `do`, in order. A write gets its message id here, once. */
+const msgsOf = (d: Exclude<Do, {readonly kind: "quit"}>): readonly TrackerMsg[] => {
+	if (d.kind !== "query") return [{type: "write", id: crypto.randomUUID(), write: d}];
+	return "ticket" in d
+		? [{type: "open", ticket: d.ticket}]
+		: [{type: "list"}, {type: "show", show: d.status}, {type: "find", text: d.find ?? ""}];
 };
 
 /** How the machine runs: its cells and Subs, on the `Ledger`, `Author` and `PullRequests` services. */
@@ -175,7 +192,7 @@ export const tracker = defineProgram({
 	inputs: {
 		do: input(
 			Do,
-			"What the window does: list, open a ticket, show open, closed or all, find by title, file, comment, answer an ask, close, reopen, or quit.",
+			"What the tracker is told, in order: file, comment, close, reopen, answer an ask, query, or quit.",
 		),
 	},
 	outputs: {
@@ -196,7 +213,15 @@ export const tracker = defineProgram({
 					d.kind === "quit"
 						? end
 						: Effect.gen(function* () {
-								yield* runtime.dispatch(msgOf(d)).pipe(Effect.orDie);
+								// One message after another: a query's `list`, `show` and `find` land in that order.
+								yield* Effect.forEach(
+									msgsOf(d),
+									(msg) => runtime.dispatch(msg).pipe(Effect.orDie),
+									{
+										concurrency: 1,
+										discard: true,
+									},
+								);
 								// Sent after the window moved. Down a pipe whose reader has gone, this send fails
 								// and the tracker ends, as a writer on a closed Unix pipe does.
 								const picked = pickOf(d, last);

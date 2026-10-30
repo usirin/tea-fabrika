@@ -91,7 +91,7 @@ describe("the duplicate hint", () => {
 				const {say, until} = yield* session(ledger, scriptedJev({"Login fails": 0.91}, asked));
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "open", ticket: 4});
+				yield* say({kind: "query", ticket: 4});
 				const page = yield* until((s) => hintsOf(s).length > 0);
 				yield* say({kind: "quit"});
 				const rows = yield* ledger.readStream(streams("tracker/ticket/4").inbox);
@@ -178,7 +178,7 @@ describe("the duplicate hint", () => {
 				const {say, until} = yield* session(ledger, scriptedJev({"Login fails": 0.91}));
 				yield* until((s) => s.ready);
 				yield* fileFour(say);
-				yield* say({kind: "open", ticket: 4});
+				yield* say({kind: "query", ticket: 4});
 				yield* until((s) => hintsOf(s).length > 0);
 				yield* say({kind: "rate_duplicate", ticket: 4, of: 1, says: "accept"});
 				yield* until((s) => hintsOf(s)[0]?.says === "accept");

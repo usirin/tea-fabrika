@@ -26,9 +26,10 @@ import type {
 import {piecesOf} from "./links.ts";
 
 // The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
-// `do`. All it keeps is what a person is typing and which row is picked, so a half-written
-// ticket or comment survives a look at another page. Which tickets show, and the search, are the
-// machine's (`show`, `find`): this window only draws them and says when they change.
+// `do`: a write, the query, or quit. All it keeps is what a person is typing and which row is
+// picked, so a half-written ticket or comment survives a look at another page. Which tickets show,
+// and the search, are the machine's (`show`, `find`): this window only draws them and sends a
+// query when they change, with the whole filter: `{kind: "query", status: "closed", find: "login"}`.
 //
 //   the list     ↑ ↓ or j k pick a row, Enter opens it, c goes to the new ticket's title,
 //                o x a show open, closed or all tickets, / goes to the search, q quits
@@ -108,7 +109,7 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						find={find}
 						setFind={(text) => {
 							setFind(text);
-							act({kind: "find", text});
+							act({kind: "query", status: view.filter.show, find: text});
 						}}
 						draft={{title, body, setTitle, setBody}}
 						act={act}
@@ -120,6 +121,7 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						saving={view.saving}
 						draft={comments[page.number] ?? ""}
 						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
+						back={() => act({kind: "query", status: view.filter.show, find})}
 						act={act}
 					/>
 				)}
@@ -249,7 +251,7 @@ function ListPage(props: {
 		pick(next);
 		rows.current.get(next)?.focus();
 	};
-	const show = (s: Show) => act({kind: "show", show: s});
+	const show = (s: Show) => act({kind: "query", status: s, find: props.find});
 	/** The list's own keys, anywhere on the page but in a box being typed in. */
 	const onListKey = (e: KeyboardEvent) => {
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -381,7 +383,7 @@ function ListPage(props: {
 										tabIndex={row === picked ? 0 : -1}
 										aria-current={row === picked}
 										onFocus={() => pick(row)}
-										onClick={() => act({kind: "open", ticket: t.number})}
+										onClick={() => act({kind: "query", ticket: t.number})}
 									>
 										<StateGlyph state={t.state} />
 										<span className="tracker-number">{t.number}</span>
@@ -572,9 +574,11 @@ function TicketPage(props: {
 	readonly saving: readonly Write[];
 	readonly draft: string;
 	readonly setDraft: (text: string) => void;
+	/** Back to the list, with the filter it had. */
+	readonly back: () => void;
 	readonly act: Send;
 }) {
-	const {number, opened, saving, draft, setDraft, act} = props;
+	const {number, opened, saving, draft, setDraft, back, act} = props;
 	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
@@ -583,7 +587,6 @@ function TicketPage(props: {
 		(boxRef.current ?? backRef.current)?.focus();
 	}, [number]);
 
-	const back = () => act({kind: "list"});
 	/** Esc goes back to the list, from anywhere on the page. A comment half written stays. */
 	const onPageKey = (e: KeyboardEvent) => {
 		if (e.key !== "Escape") return;
@@ -843,7 +846,7 @@ function DuplicateHint(props: {
 					type="button"
 					className="tracker-hint-link"
 					onKeyDown={onKey}
-					onClick={() => act({kind: "open", ticket: hint.of})}
+					onClick={() => act({kind: "query", ticket: hint.of})}
 				>
 					#{hint.of}
 					{hint.title === null ? null : ` ${hint.title}`}

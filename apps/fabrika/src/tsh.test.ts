@@ -468,7 +468,7 @@ describe("a program's window", () => {
 				const pick = (ticket: number) =>
 					s
 						.window(picker.run)
-						.heard({type: "msg", msg: {type: "do", value: {kind: "open", ticket}}});
+						.heard({type: "msg", msg: {type: "do", value: {kind: "query", ticket}}});
 				const both = (n: number) =>
 					s.until(`ticket and runs on #${n}`, () =>
 						numberOf(s.seen, page.run) === n && numberOf(s.seen, trail.run) === n

@@ -46,6 +46,45 @@ export interface Shape<T> {
 	readonly problem: (value: unknown) => string | undefined;
 	/** Its JSON Schema, when the schema can give one. Without it, fit says `cannot_tell`. */
 	readonly json: JsonSchema | undefined;
+	/** Its cases, when it is a tagged union (an Effect one); `undefined` for any other shape. */
+	readonly cases: ReadonlyArray<Case> | undefined;
+}
+
+/**
+ * One case of a tagged union: every member whose tag field `key` holds `tag`. Its `json` and
+ * `problem` are of the case's other fields, the tag left out, and a value of the case is
+ * `{[key]: tag, ...fields}`. What it says of itself is its schema's own annotations:
+ *
+ *   Schema.Struct({kind: Schema.Literal("close"), ticket: TicketNumber})
+ *     .annotate({description: "Close a ticket."})
+ *   // {key: "kind", tag: "close", description: "Close a ticket.", writes: true,
+ *   //  personOnly: false, json: {type: "object", properties: {ticket: ...}, ...}, problem}
+ *
+ * A case may be a union itself, each member with the same tag: one case that takes either.
+ */
+export interface Case {
+	readonly key: string;
+	readonly tag: string;
+	readonly description: string | undefined;
+	/** `false` (`{writes: false}`): a value of it changes no data, only what the run shows. */
+	readonly writes: boolean;
+	/** `{personOnly: true}`: only a person sends it, never an agent. */
+	readonly personOnly: boolean;
+	readonly json: JsonSchema;
+	readonly problem: (fields: unknown) => string | undefined;
+}
+
+// The two things a case may say of itself, beyond its description, as Effect annotations. Not
+// `readOnly`: Effect copies that one into the JSON Schema, where it means something else.
+declare module "effect/Schema" {
+	namespace Annotations {
+		interface Annotations {
+			/** `false`: a value of it changes no data, only what the run shows. MCP's `readOnlyHint`. */
+			readonly writes?: boolean | undefined;
+			/** Only a person sends it: an agent's tools (`@kampus/fabrika/mcp`) have none for it. */
+			readonly personOnly?: boolean | undefined;
+		}
+	}
 }
 
 /** One thing a program takes in or sends out: its shape, and a sentence for people. */
@@ -119,21 +158,102 @@ export const jsonSchemaOf = (schema: Schema.Top): JsonSchema => {
 const isStandard = <T>(schema: ShapeSchema<T>): schema is StandardShape<T> =>
 	!Schema.isSchema(schema);
 
-function fromEffect<T>(schema: Schema.Codec<T, T>): Shape<T> {
-	// `toType` strips every encoding, at any depth, and keeps the same node when there is none.
-	if (SchemaAST.toType(schema.ast) !== schema.ast)
-		throw new Error("a shape only checks: this schema converts a value somewhere inside it");
+/** Why a value does not fit an Effect schema, in its own words. `undefined`: it fits. */
+const problemOf = (
+	schema: Schema.Codec<unknown, unknown>,
+): ((value: unknown) => string | undefined) => {
 	const decode = Schema.decodeUnknownExit(schema);
-	const problem = (value: unknown): string | undefined => {
+	return (value) => {
 		const exit = decode(value, {onExcessProperty: "error"});
 		if (Exit.isSuccess(exit)) return undefined;
 		const failure = Cause.squash(exit.cause);
 		return failure instanceof Error ? failure.message : String(failure);
 	};
+};
+
+/** A member of a union as the objects it is: itself, or each of its own members. */
+const objectsOf = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> | undefined => {
+	if (SchemaAST.isObjects(ast)) return [ast];
+	if (SchemaAST.isUnion(ast) && ast.types.every(SchemaAST.isObjects)) return ast.types;
+	return undefined;
+};
+
+/** The fields of a case that has none but its tag: `{}`, and nothing in it. */
+const NOTHING_ELSE = Schema.Record(Schema.String, Schema.Never);
+
+/** The string an object's `key` field always holds, if it is one fixed string. */
+const tagOf = (o: SchemaAST.Objects, key: PropertyKey): string | undefined => {
+	const field = o.propertySignatures.find((p) => p.name === key);
+	if (field === undefined || SchemaAST.isOptional(field.type)) return undefined;
+	return SchemaAST.isLiteral(field.type) && typeof field.type.literal === "string"
+		? field.type.literal
+		: undefined;
+};
+
+/**
+ * The cases of a union whose members each hold one fixed string in the same field, a different
+ * one each: the tag. The first field of the first member that is such a tag is the key. Any other
+ * schema has no cases.
+ */
+function casesOf(ast: SchemaAST.AST): ReadonlyArray<Case> | undefined {
+	if (!SchemaAST.isUnion(ast)) return undefined;
+	const members: Array<{ast: SchemaAST.AST; objects: ReadonlyArray<SchemaAST.Objects>}> = [];
+	for (const m of ast.types) {
+		const objects = objectsOf(m);
+		if (objects === undefined) return undefined;
+		members.push({ast: m, objects});
+	}
+	/** Each member with the one tag all its objects hold in `key`, or `undefined` if one has none. */
+	const taggedBy = (key: string) => {
+		const out: Array<(typeof members)[number] & {tag: string}> = [];
+		for (const m of members) {
+			const own = new Set(m.objects.map((o) => tagOf(o, key)));
+			const [tag] = own;
+			if (own.size !== 1 || tag === undefined) return undefined;
+			out.push({...m, tag});
+		}
+		return new Set(out.map((m) => m.tag)).size === out.length ? out : undefined;
+	};
+	for (const {name: key} of members[0]?.objects[0]?.propertySignatures ?? []) {
+		const tagged = typeof key === "string" ? taggedBy(key) : undefined;
+		if (typeof key !== "string" || tagged === undefined) continue;
+		return tagged.map(({ast: member, objects, tag}): Case => {
+			const fields = objects.map((o) => {
+				const left = o.propertySignatures.filter((p) => p.name !== key);
+				// Nothing left: `{}` alone. An empty `Objects` would take any value but null.
+				return left.length === 0 && o.indexSignatures.length === 0
+					? NOTHING_ELSE.ast
+					: new SchemaAST.Objects(left, o.indexSignatures);
+			});
+			const [one, ...more] = fields;
+			const rest = Schema.make<Schema.Codec<unknown, unknown>>(
+				one !== undefined && more.length === 0 ? one : new SchemaAST.Union(fields),
+			);
+			const said = SchemaAST.resolve(member);
+			return {
+				key,
+				tag,
+				description: SchemaAST.resolveDescription(member),
+				writes: said?.writes !== false,
+				personOnly: said?.personOnly === true,
+				json: jsonSchemaOf(rest),
+				problem: problemOf(rest),
+			};
+		});
+	}
+	return undefined;
+}
+
+function fromEffect<T>(schema: Schema.Codec<T, T>): Shape<T> {
+	// `toType` strips every encoding, at any depth, and keeps the same node when there is none.
+	if (SchemaAST.toType(schema.ast) !== schema.ast)
+		throw new Error("a shape only checks: this schema converts a value somewhere inside it");
+	const problem = problemOf(schema);
 	return {
 		check: (value): value is T => problem(value) === undefined,
 		problem,
 		json: jsonSchemaOf(schema),
+		cases: casesOf(schema.ast),
 	};
 }
 
@@ -159,6 +279,7 @@ function fromStandard<T>(schema: StandardShape<T>): Shape<T> {
 		check: (value): value is T => problem(value) === undefined,
 		problem,
 		json: undefined,
+		cases: undefined,
 	};
 }
 

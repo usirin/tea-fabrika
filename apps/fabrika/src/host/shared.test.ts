@@ -239,7 +239,7 @@ describe("two people on one ledger server", () => {
 				);
 				yield* b.say({kind: "comment", ticket: 1, body: "Seen it too."});
 
-				yield* a.say({kind: "open", ticket: 1});
+				yield* a.say({kind: "query", ticket: 1});
 				const shown = yield* a.until((s) => timelineOf(s).length === 2);
 				return timelineOf(shown);
 			}).pipe(Effect.scoped),
@@ -307,7 +307,7 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 				yield* me.say({kind: "file", title: "Slow build", body: ""});
 				yield* me.say({kind: "comment", ticket: 1, body: "Seen on main."});
 				yield* me.say({kind: "close", ticket: 2});
-				yield* me.say({kind: "open", ticket: 2});
+				yield* me.say({kind: "query", ticket: 2});
 				yield* me.until((s) => timelineOf(s).length === 2);
 			}).pipe(Effect.scoped),
 		);
@@ -323,7 +323,7 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 				yield* agent.until((s) => s.ready);
 				yield* agent.say({kind: "comment", ticket: 1, body: "Fixed in the next build."});
 				yield* agent.say({kind: "close", ticket: 1});
-				yield* agent.say({kind: "open", ticket: 1});
+				yield* agent.say({kind: "query", ticket: 1});
 				yield* agent.until((s) => timelineOf(s).length === 4);
 			}).pipe(Effect.scoped),
 		);
@@ -355,7 +355,7 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 		const seen = await run(
 			Effect.gen(function* () {
 				const b = yield* trackerAt(bobs, "tracker:bob");
-				yield* b.say({kind: "open", ticket: 1});
+				yield* b.say({kind: "query", ticket: 1});
 				return timelineOf(yield* b.until((s) => timelineOf(s).length === 4));
 			}).pipe(Effect.scoped),
 		);
