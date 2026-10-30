@@ -1,0 +1,738 @@
+{
+	"note": "Experiment 133b. Every closed kamp-us/phoenix ticket that ever carried `status:needs-info`, read from every issue's label events on 2026-10-24: 70 closed, one of them the triage self-test #44, left out as in 133. That leaves 69: the 15 that 133 drew, the other 36 of 133's 51, and 18 filed from #7852 on that 133's count never reached (`late`). Each ticket was read by hand from its first body, triage's comments and what came after, before any sort answer was seen. The fields follow 133's note. `end`: built (the asked-for work was done, mostly by a merged PR), no_answer, no (closed as not worth doing), duplicate (closed as a duplicate or as covered by another ticket), or ruled (the ticket asked an owner for a call, the call was made, nothing was left to build). `asked`: what the label waited on. `to`: who the ask was put to. `answered`: someone gave it; a batch sweep that closed stale tickets is not an answer. `who`: what the label waited on, by 133's own wording: the filer, the code (or the GitHub API), an owner's ruling on a real question, or an owner's permission only, where triage already knew its answer and a rule kept it from acting (no agent footer, no close authority in that run, no open milestone at that priority). `from`: where the fact the park turned on sat: issues (the board: a duplicate, a covering ticket, a standing ruling), code (source, CI, git or the API), owner, filer, or none (nothing beyond the ticket's text and a home). `changed`: that fact moved the end away from what the ticket's own text asks for (a refuted premise, or a ruling against it); later events that had nothing to do with the park, such as a product removed or a batch sweep, do not count. `of`: the tickets a duplicate or covered ticket belonged to, when the record names them. `why` is a few words.",
+	"late": [
+		7852, 7859, 7870, 7871, 7873, 7882, 7884, 7894, 7910, 8337, 8494, 8504, 8506, 8509, 8666, 8707,
+		9391, 9451
+	],
+	"needsInfo": {
+		"3535": {
+			"end": "no",
+			"asked": "a lint re-run on a fresh main",
+			"to": "filer",
+			"answered": true,
+			"who": "code",
+			"from": "code",
+			"changed": true,
+			"why": "main was green in CI, so the report came from a stale checkout; the closer re-read CI, the filer never ran it"
+		},
+		"3795": {
+			"end": "no",
+			"asked": "where the cited template folder lives, and whether that effort is sanctioned",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": true,
+			"why": "nothing the repo can see held the folder; an owner ruled the chase moot within 20 minutes, then closed the whole class"
+		},
+		"4067": {
+			"end": "no",
+			"asked": "any scope left, since the verb shipped before filing",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "code",
+			"changed": true,
+			"why": "triage found the verb shipped 32 minutes before filing; no footer, so no close; a re-triage from code closed it"
+		},
+		"4068": {
+			"end": "no",
+			"asked": "anything #4042 does not cover",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4042],
+			"why": "duplicate of open #4042; a later code read found a doc half left; killed in a batch"
+		},
+		"4174": {
+			"end": "no",
+			"asked": "whether a relayed owner ruling was real",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": true,
+			"why": "the owner refuted every relayed clause; retyped, then killed in a batch"
+		},
+		"4287": {
+			"end": "duplicate",
+			"asked": "an owner's close call: covered by #4284",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4284],
+			"why": "filed 4 minutes after #4284; no footer; closed once #4284's PR landed"
+		},
+		"4356": {
+			"end": "ruled",
+			"asked": "an owner's call between the two options the ticket named",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the ticket itself asked for the call; the founder made it"
+		},
+		"4525": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4465],
+			"why": "duplicate of #4465; no footer; closed on an owner's word"
+		},
+		"4646": {
+			"end": "built",
+			"asked": "whether a delegated batch order was real and a freeze lifted",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the chain of authority could not be read; the founder confirmed it and lifted the freeze; the batch ran"
+		},
+		"4729": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4520],
+			"why": "duplicate of #4520; closed when its fix landed"
+		},
+		"4739": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4683],
+			"why": "duplicate of #4683; the filer agreed and closed it"
+		},
+		"4797": {
+			"end": "built",
+			"asked": "whether the founder had picked it back up, and at what scope",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "parked after a founder deferral; picked back up; PR merged"
+		},
+		"4927": {
+			"end": "built",
+			"asked": "a ruling on the delivery shape, not yet made",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the label held a ruling that did not exist yet; ruled; the epic was built"
+		},
+		"5042": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4868],
+			"why": "duplicate of open #4868; closed once the owner ruled that the operator account files for agents"
+		},
+		"5098": {
+			"end": "duplicate",
+			"asked": "the human filer's close call",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5094],
+			"why": "duplicate of #5094, filed 40 minutes before; closed a minute later under the same ruling"
+		},
+		"5111": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4881],
+			"why": "duplicate of #4881; closed a minute later"
+		},
+		"5269": {
+			"end": "no",
+			"asked": "which of two clashing records stands",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": true,
+			"why": "a delegated ruling against the work and an open decision PR disagreed; the founder ruled against the work himself"
+		},
+		"5292": {
+			"end": "no",
+			"asked": "an owner's call on a class a standing ruling closes",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4481],
+			"why": "a bot sweep, the sixth of a class #4481 owns; no filer can reply; a re-check two days later closed it"
+		},
+		"5472": {
+			"end": "built",
+			"asked": "where the cited decision record lives, and its number",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the record never existed; the founder made the decision then; the doc edit was built"
+		},
+		"5473": {
+			"end": "no",
+			"asked": "where the cited decision record lives, and what the guard allows",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": true,
+			"why": "same missing record; a code read found 0 illegal sites; the founder ruled the guard unneeded"
+		},
+		"5820": {
+			"end": "duplicate",
+			"asked": "nothing: that triage run had no close authority",
+			"to": "anyone",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5802],
+			"why": "duplicate of #5802; closed 11 minutes later"
+		},
+		"5831": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5744],
+			"why": "duplicate of #5744, which owns the class; the instance was already repaired"
+		},
+		"5835": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5805],
+			"why": "duplicate of #5805, from the same session an hour apart"
+		},
+		"5837": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5744],
+			"why": "duplicate of #5744; the third of one pattern that night"
+		},
+		"5855": {
+			"end": "duplicate",
+			"asked": "an owner's close call, and anything to fold",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5845],
+			"why": "duplicate of #5845"
+		},
+		"5856": {
+			"end": "duplicate",
+			"asked": "close as a duplicate or keep, and what to fold",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5789],
+			"why": "duplicate of #5789, from the same session 2.5 hours before"
+		},
+		"5858": {
+			"end": "no",
+			"asked": "close as done by #4690 and #4703",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4690, 4703],
+			"why": "both halves were done elsewhere within a minute of filing"
+		},
+		"5859": {
+			"end": "duplicate",
+			"asked": "an owner's routing call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5639, 5755],
+			"why": "duplicate of #5639; triage said nothing needed the reporter"
+		},
+		"5872": {
+			"end": "no",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4481],
+			"why": "the seventh bot sweep of the class #4481 owns; closed in a batch sweep four days later"
+		},
+		"5881": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5802],
+			"why": "duplicate of #5802, the third instance; closed the next day"
+		},
+		"5910": {
+			"end": "no",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5490],
+			"why": "duplicate of #5490; the instance healed 40 seconds after filing; closed in a batch sweep"
+		},
+		"5941": {
+			"end": "no",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5818],
+			"why": "duplicate of #5818, which owns the counts; closed in a batch sweep"
+		},
+		"5942": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5772],
+			"why": "duplicate of #5772; closed 15 minutes later"
+		},
+		"5970": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5720],
+			"why": "covered by epic #5720; a batch sweep closed it as already done"
+		},
+		"5985": {
+			"end": "duplicate",
+			"asked": "an owner's close call",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5783],
+			"why": "duplicate of #5783, the same code path; an owner-approved re-triage closed it three weeks later"
+		},
+		"6395": {
+			"end": "duplicate",
+			"asked": "fold into #6035 or keep as a sibling",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"of": [6035],
+			"why": "near-duplicate with two parts #6035 did not cover; triage would not pick; closed without a word once later tickets fixed it"
+		},
+		"7852": {
+			"end": "duplicate",
+			"asked": "an owner's ruling on the prompt contract, and a home",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"of": [8018],
+			"why": "the contract was never ruled here; folded into #8018, filed later the same day"
+		},
+		"7859": {
+			"end": "built",
+			"asked": "which open milestone takes it",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; the founder opened a fitting campaign 15 days later; built"
+		},
+		"7870": {
+			"end": "no",
+			"asked": "which open milestone takes it",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; homed 15 days later, then the founder removed the whole product"
+		},
+		"7871": {
+			"end": "no",
+			"asked": "copy that says 'new post', or real edit in place; and a home",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the home came, the product call never did; the product was removed"
+		},
+		"7873": {
+			"end": "built",
+			"asked": "which running lane this blocks",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"why": "home park; the next day a new ticket took a blocked-by link on it; built"
+		},
+		"7882": {
+			"end": "built",
+			"asked": "share the design package's palette or keep an exception; a home",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the founder ruled 'share it' and widened intake the same day; built"
+		},
+		"7884": {
+			"end": "built",
+			"asked": "which open milestone takes it",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; the direction was already ruled; a new milestone took it; built"
+		},
+		"7894": {
+			"end": "built",
+			"asked": "which open milestone takes it, or which lane it blocks",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; the founder admitted it the same day; built"
+		},
+		"7910": {
+			"end": "built",
+			"asked": "which open milestone takes it",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; a fix PR was already linked before the park and merged 33 minutes later"
+		},
+		"8337": {
+			"end": "built",
+			"asked": "which token direction, and a home",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the founder picked a value per colour scheme three hours later; built"
+		},
+		"8494": {
+			"end": "built",
+			"asked": "a one-time intake exception, or wait",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; a new campaign was opened for it an hour later; built"
+		},
+		"8504": {
+			"end": "built",
+			"asked": "a one-time intake exception, or wait",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; triage itself withdrew a stale half of the report from code; built"
+		},
+		"8506": {
+			"end": "built",
+			"asked": "which retry policy, and an intake exception",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"why": "the policy was picked by an agent the founder delegated to; built"
+		},
+		"8509": {
+			"end": "built",
+			"asked": "a one-time intake exception, or wait",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; homed on the new campaign; built"
+		},
+		"8666": {
+			"end": "built",
+			"asked": "an intake exception",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; admitted four minutes later at a higher priority; built"
+		},
+		"8707": {
+			"end": "built",
+			"asked": "enter the running milestone now, or wait",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "none",
+			"changed": false,
+			"why": "home park; the founder admitted it two minutes later; built"
+		},
+		"9391": {
+			"end": "no",
+			"asked": "close as hardening that never failed, or keep",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": true,
+			"why": "triage leaned close at 70 to 75% but would not make the call; the founder closed it two weeks later"
+		},
+		"9451": {
+			"end": "duplicate",
+			"asked": "anything left, or close as fixed by #9450",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [9454, 9450],
+			"why": "the same crash as closed #9454, fixed in a release; the filer had confirmed the fix a week earlier; closed four minutes after the park"
+		}
+	},
+	"recheckNote": "The blind re-read of 133's 15. A fresh agent that had not seen 133's files classified them from the tickets alone, with 133's field words (`blind`). Then 133's labels were opened and every disagreement was read again by hand. The labels here are the result, by the same rules as `needsInfo`; 133's own labels stay in `133-truth.json`. `to`, `answered` and `of` were added last, from each ticket's park comment and close, by the same rules; the blind reader was not asked for them.",
+	"recheck": {
+		"1919": {
+			"end": "no_answer",
+			"to": "filer",
+			"answered": false,
+			"who": "filer",
+			"from": "filer",
+			"changed": false,
+			"blind": { "end": "no", "who": "filer", "changed": false },
+			"why": "one external link and an instruction to paste its content in; closed a minute after the park with no answer"
+		},
+		"4017": {
+			"end": "no",
+			"to": "anyone",
+			"answered": true,
+			"who": "code",
+			"from": "code",
+			"changed": false,
+			"blind": { "end": "no", "who": "code", "changed": true },
+			"why": "a code change landed after the first park and made the report right; re-triaged a chore with another fix; killed with its campaign"
+		},
+		"4065": {
+			"end": "duplicate",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4014],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #4014 from the first comment; no footer, so no close; its question was answerable from code, as the re-triage said"
+		},
+		"4579": {
+			"end": "duplicate",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4573],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "covered by #4573; no footer"
+		},
+		"4610": {
+			"end": "no",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "code",
+			"changed": true,
+			"blind": { "end": "no", "who": "owner_permission", "changed": true },
+			"why": "triage refuted the premise from code and git history itself, then parked for the human filer's call"
+		},
+		"4934": {
+			"end": "built",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_ruling",
+			"from": "owner",
+			"changed": false,
+			"blind": { "end": "built", "who": "owner_ruling", "changed": false },
+			"why": "held for a ruling the ticket named; ruled the next day"
+		},
+		"5056": {
+			"end": "duplicate",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4868],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #4868; no footer"
+		},
+		"5059": {
+			"end": "duplicate",
+			"to": "filer",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [4868],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #4868; no footer"
+		},
+		"5806": {
+			"end": "no",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "code",
+			"changed": true,
+			"blind": { "end": "no", "who": "owner_permission", "changed": true },
+			"why": "triage refuted the premise from the API timeline itself; the driver could not close; a batch sweep did"
+		},
+		"5878": {
+			"end": "duplicate",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5811],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #5811"
+		},
+		"5887": {
+			"end": "duplicate",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5829],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #5829"
+		},
+		"5945": {
+			"end": "duplicate",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5526],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "duplicate of #5526"
+		},
+		"6062": {
+			"end": "no",
+			"to": "owner",
+			"answered": true,
+			"who": "owner_permission",
+			"from": "issues",
+			"changed": false,
+			"of": [5752, 5795],
+			"blind": { "end": "duplicate", "who": "owner_permission", "changed": false },
+			"why": "a standing ruling said no to every fix it asked for, and open #5795 carries the rest"
+		},
+		"6363": {
+			"end": "no",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "code",
+			"changed": true,
+			"blind": { "end": "no", "who": "owner_permission", "changed": true },
+			"why": "triage found the premise false on main itself (filed from a branch) and named the parent epic; a bulk purge closed it"
+		},
+		"6382": {
+			"end": "duplicate",
+			"to": "owner",
+			"answered": false,
+			"who": "owner_permission",
+			"from": "code",
+			"changed": true,
+			"of": [6296],
+			"blind": { "end": "built", "who": "owner_permission", "changed": true },
+			"why": "triage found the premise false on main itself and recommended folding into parent #6296; a batch sweep closed it once the parent landed"
+		}
+	}
+}

@@ -288,3 +288,12 @@ const checkOnMain = gather("sort_premise", {
   as renamed.
 - **Sonnet at default effort only.** The pipeline's own runs have used haiku
   at low effort (experiment 111). That may fold even less.
+
+## Later
+
+- **2026-10-24: 133b read the other 36, plus 18 closed tickets this count
+  missed.** See [133b](./133b-needs-info-all-closed.md). Over all 69, the
+  filer never held a fact that changed the end, so part B's answer holds. A
+  blind re-read of the 15 here moved 5 of them from "the code" to "an owner's
+  permission only", by this write-up's own rule. The count above was wrong:
+  100 tickets ever had the label, 70 of them closed and 30 open.

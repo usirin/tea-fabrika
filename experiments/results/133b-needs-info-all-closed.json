@@ -1,0 +1,2150 @@
+{
+	"model": "sonnet",
+	"b": {
+		"3535": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Real lint failures on main block pnpm lint for most PRs; the ticket shows no merged fix and no other ticket covers it. The fix is mechanical: biome auto-fix for useOptionalChain plus a targeted fix or justified ignore for the template-curly case."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0533875,
+						"ms": 3159,
+						"tokens": 14285
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Real lint failures on main block pnpm lint for most PRs; the fixes are known (auto-fix useOptionalChain, handle the template-curly case). No open or closed ticket covers these, and nothing shows a merged fix."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.004439,
+						"ms": 2737,
+						"tokens": 14271
+					}
+				]
+			}
+		],
+		"3795": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The template's `decisions-index` hardcodes `.decisions` and crashes with an IoError when the directory is missing. The config schema already defines `project.documentationRoots.decisions`. This is a real bug in code this repo ships. The plan can carry the fix: resolve the root from config and handle an absent root explicitly."
+							}
+						},
+						"error": null,
+						"usd": 0.0573916,
+						"ms": 3685,
+						"tokens": 14689,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The portable adr skill and decisions-index hardcode `.decisions` and crash on an absent directory, though the config schema offers `project.documentationRoots.decisions`. It's a real bug in what the template ships. The fix is clear enough to plan: resolve the root from config and handle a missing directory explicitly. No open ticket or plan covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0058788,
+						"ms": 3591,
+						"tokens": 14677,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4067": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The write-code skill tells agents to run `pipeline-cli claim release`, but the CLI in this repo (packages/pipeline-cli) has no such verb. I found no other ticket for it, and no open plan covers it. The ticket leans toward adding the verb on top of the default-deny resolution `is-mine` already owns, so a plan can carry that."
+							}
+						},
+						"error": null,
+						"usd": 0.0622801,
+						"ms": 6617,
+						"tokens": 28906,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The skill tells agents to run `claim release`, but the CLI in this repo (packages/pipeline-cli) only ships `is-mine`. That is a real bug in what the repo ships, and no matching ticket exists; #3780 added the release step. The ticket leans toward implementing the verb on top of `is-mine`'s default-deny resolution, so a plan can carry that choice without an owner ruling."
+							}
+						},
+						"error": null,
+						"usd": 0.0068851,
+						"ms": 4940,
+						"tokens": 14122,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4068": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4042,
+								"why": "#4042 (open) reports the same problem: tracker apply-triage requires --type, so the needs-info transition can't use the verb. #4068 adds the --p flag and the TriageClassification shape, but it is the same defect and the same fix."
+							}
+						},
+						"error": null,
+						"usd": 0.0557249,
+						"ms": 3269,
+						"tokens": 14439,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4042,
+								"why": "#4042 (open) reports the same problem: tracker apply-triage requires --type, so the needs-info transition can't use the verb. #4068 adds more root-cause detail but asks for the same change."
+							}
+						},
+						"error": null,
+						"usd": 0.0049679,
+						"ms": 3713,
+						"tokens": 14441,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4174": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket asks for a founder ruling to be written down as a decision record (ADR 0075 path) so later agents don't arm pitch-guard or retro-pitch the backlog. That is a docs change, not a choice for an owner, because the founder has already ruled. No other ticket covers rollout sequencing: #4173 and #4172 are explicitly distinct."
+							}
+						},
+						"error": null,
+						"usd": 0.0580775,
+						"ms": 3525,
+						"tokens": 15414,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket asks for a founder ruling on pitch rollout (dormant, sweep off, no retro-pitch) to be written down as a decision record or in ADR 0210's rollout section. That is docs work, and no other ticket covers rollout sequencing. The founder has already decided, so no ruling is needed."
+							}
+						},
+						"error": null,
+						"usd": 0.0047645000000000005,
+						"ms": 3313,
+						"tokens": 15397,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4287": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4284,
+								"why": "#4284 reports the same problem: the triage rubric still confers `p1` from campaign membership and cites ADR 0214. #4287 asks for the same rewrite of the same file. I judged this from the ticket titles, since I couldn't open #4284's body."
+							}
+						},
+						"error": null,
+						"usd": 0.0514335,
+						"ms": 3585,
+						"tokens": 13648,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4284,
+								"why": "#4284 (open) reports the same problem: the triage rubric still confers p1 from campaign membership and cites ADR 0214. This ticket asks for the same Step 6 rewrite, so it duplicates #4284."
+							}
+						},
+						"error": null,
+						"usd": 0.0038522,
+						"ms": 3113,
+						"tokens": 13635,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4356": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "Does a disclosed analogical extension of a design law (e.g. Pillar 4's colour-alone rule applied to motion) carry the force of LAW in taste-skill provenance tables, or must it be classified CRAFT?",
+								"options": [
+									"LAW: a disclosed analogy to a design-law pillar is LAW, since it is the same accessibility defect in another modality",
+									"CRAFT: skills may not promote their own analogies to LAW (ADR 0194 firewall); any analogical extension is CRAFT until the manifest's pillar is widened",
+									"CRAFT for now, and separately widen Pillar 4 in the design-system manifest to cover motion so the row can become LAW through the manifest (ADR 0162)"
+								],
+								"why": "It is an explicit open founder decision between options, and it gates the seven phase-2 sibling skills. It is not a duplicate or a no-rule case, and a builder must not choose between the LAW and CRAFT readings."
+							}
+						},
+						"error": null,
+						"usd": 0.0576811,
+						"ms": 4825,
+						"tokens": 14642,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "Does a disclosed analogical extension of a design law (e.g. the motion row extending Pillar 4's color-alone rule) carry the force of LAW in taste-skill Provenance tables, or must it be CRAFT?",
+								"options": [
+									"LAW: a disclosed analogical extension carries LAW force, and the taste-library conventions record the rule so all seven phase-2 siblings follow it",
+									"CRAFT: a skill may not promote its own analogy to LAW (ADR 0194 firewall), so the row is reclassified CRAFT and the siblings follow suit",
+									"CRAFT for now, and widen Pillar 4 in the design-system manifest (ADR 0162) to cover motion, so the row can become LAW through a reviewable change"
+								],
+								"why": "This is an open decision question for the founder. It sets how ADR 0162 and ADR 0194 apply to the shared taste-skill template, and the seven phase-2 siblings (#3969–#3975) will copy the answer. A builder must not choose it. No duplicate or no-rule fits, and no open plan exists to join."
+							}
+						},
+						"error": null,
+						"usd": 0.0056302,
+						"ms": 5411,
+						"tokens": 14684,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4525": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4465,
+								"why": "#4465 already asks to add the \"derive-vs-relay\" glossary term coined by ADR 0228 to .glossary/TERMS.md. This ticket asks for the same row; the ADR 0229 sharpening can be carried on #4465."
+							}
+						},
+						"error": null,
+						"usd": 0.053475600000000005,
+						"ms": 3091,
+						"tokens": 13811,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4465,
+								"why": "#4465 is the open ticket \"Glossary: add derive-vs-relay (coined by ADR 0228, the extracted-script boundary test)\". It asks for the same .glossary/TERMS.md row, so this ticket duplicates it."
+							}
+						},
+						"error": null,
+						"usd": 0.0033292,
+						"ms": 2671,
+						"tokens": 13751,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4646": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ruling on #4642 is already made, so this is mechanical board work: close the 153 listed issues, cite the ruling, keep the three holds (#4466, #3965, #4180). No open plan covers it. #4621 is a campaign-level ledger, not this execution batch."
+							}
+						},
+						"error": null,
+						"usd": 0.054950500000000006,
+						"ms": 4386,
+						"tokens": 13930,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is mechanical work that has already been ruled on #4642. A builder closes the 153 issues, citing the ruling, and keeps the three holds (#4466, #3965, #4180). #4621 is a ledger for the same campaign, but it isn't the execution itself, so I didn't call this a duplicate of it."
+							}
+						},
+						"error": null,
+						"usd": 0.0067931,
+						"ms": 3975,
+						"tokens": 13881,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4729": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4520,
+								"why": "#4520 reports the same bug: a repeated --require flag on verdict gate keeps only one namespace and still reports enqueueable. It is still open, so this report belongs there."
+							}
+						},
+						"error": null,
+						"usd": 0.0528158,
+						"ms": 2740,
+						"tokens": 13731,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4520,
+								"why": "#4520 (open) already reports that a repeated --require on verdict gate keeps only one namespace and reports enqueueable past a failing namespace. #4729 describes the same defect."
+							}
+						},
+						"error": null,
+						"usd": 0.0047072,
+						"ms": 2781,
+						"tokens": 13723,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4739": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "scan-pr never fetches the PR description, which is the surface behind incident #3086. This is a real coverage gap in a shipped guard, and no other ticket covers it. The fix is clear and small: fetch pulls/<pr>, add a body arm to PrCommentKind, and feed .body through the existing matcher."
+							}
+						},
+						"error": null,
+						"usd": 0.052755500000000004,
+						"ms": 2904,
+						"tokens": 14106,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "scan-pr never fetches the PR description, which is the surface behind the #3086 leak incident. A leak there would pass green. The fix is clear: fetch repos/<repo>/pulls/<pr>, add a body arm to PrCommentKind, and feed .body through findCommentLeaks. No listed ticket covers it, and whether to scan the title too can be handled in the plan."
+							}
+						},
+						"error": null,
+						"usd": 0.0034065000000000002,
+						"ms": 2913,
+						"tokens": 14128,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4797": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "The effect bump is untracked (#4796 covers only typescript), and it invalidates the version-keyed effect patch. Whether the patch is still needed, needs re-deriving, or can be deleted is unknown. Someone has to read the patch against the target beta's source before the work can be planned."
+							}
+						},
+						"error": null,
+						"usd": 0.0556955,
+						"ms": 2850,
+						"tokens": 14868,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No ticket covers the effect bump. #4796 is only the typescript half, and no plan is open. The founder ruled to do it now, so it is real work. A builder can read the patch and the target source, then keep, re-derive or delete the patch inside the plan, so no ruling or separate research is needed."
+							}
+						},
+						"error": null,
+						"usd": 0.006443900000000001,
+						"ms": 4103,
+						"tokens": 15038,
+						"problems": []
+					}
+				]
+			}
+		],
+		"4927": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "The sweep admits it graded against brief titles only, not the brief bodies, so whether items 1–4 are already covered inline is unknown. That has to be read out of the briefs first. The finding then splits the items: 2 and 5 go to founder rulings and the rest go to plans."
+							}
+						},
+						"error": null,
+						"usd": 0.054466,
+						"ms": 5295,
+						"tokens": 13657,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "The sweep admits it graded only brief titles and map rulings, not the 14 brief bodies, and says a brief may already cover items 1–4. Someone has to read the briefs and v1 first to find which of the seven items are really uncovered. The finding then splits into plan tickets and rulings (items 2 and 5)."
+							}
+						},
+						"error": null,
+						"usd": 0.0064026000000000005,
+						"ms": 4424,
+						"tokens": 13497,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5042": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 reports the same defect: the branch-pin guard treats a finished lane from the same session or claim as live, so repair is permanently blocked. #4826 added the co-checkout row, and this ticket says that row is unreachable. Both are one lane-identity bug."
+							}
+						},
+						"error": null,
+						"usd": 0.0511135,
+						"ms": 3952,
+						"tokens": 13367,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4868,
+								"why": "#4868 reports the same defect. A branch-pin guard reads a finished same-session lane as live, so repair is permanently blocked. #5042 is that defect seen through the shared claim-token stamp. #4826 is the closed earlier version, which added the sanctioned co-checkout row."
+							}
+						},
+						"error": null,
+						"usd": 0.0065118,
+						"ms": 4617,
+						"tokens": 13354,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5098": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5094,
+								"why": "#5094 reports the same defect: the step0-cp-approval.sh script reads the cp-cardinality exit as a two-way if/else. #5098 asks for the same fix, which is to enumerate 0, 1 and any other exit as unknown."
+							}
+						},
+						"error": null,
+						"usd": 0.0469035,
+						"ms": 2840,
+						"tokens": 12598,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5094,
+								"why": "#5094 reports the same defect in step0-cp-approval.sh: the §CP discharge is read as a two-way if/else, so any non-zero cp-cardinality exit lands on the definite stop. Both tickets ask for the same change to the same script."
+							}
+						},
+						"error": null,
+						"usd": 0.0033427000000000005,
+						"ms": 2826,
+						"tokens": 12599,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5111": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4881,
+								"why": "#4881 (open) already reports that the review-gate head handle is keyed on the session, so concurrent reviewers share one handle and can act on a foreign worktree. This ticket reports the same root cause, with teardown deleting the other lane's tree as the observed result."
+							}
+						},
+						"error": null,
+						"usd": 0.0505475,
+						"ms": 2874,
+						"tokens": 13476,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 4881,
+								"why": "#4881 (open) already reports that the review-gate head handle is keyed on the session, so concurrent reviewers share it. This ticket reports the same root cause, and teardown deleting the other lane's worktree is a consequence of it."
+							}
+						},
+						"error": null,
+						"usd": 0.0035383000000000003,
+						"ms": 2691,
+						"tokens": 13466,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5269": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is the data half of the #5041 decision. It is a bounded, idempotent label pass with its rules already set (only unlabelled open triaged non-PR issues, paginated, counts reported), so it can go straight to a builder. #5041 is the decision ticket, so this isn't a duplicate of it."
+							}
+						},
+						"error": null,
+						"usd": 0.052523200000000006,
+						"ms": 4043,
+						"tokens": 13450,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is the concrete data half of the decision in #5041, which stays open as the decision ticket and is not a duplicate. The bounds are fully specified (no existing ready-for label, open and triaged and non-PR, idempotent, counts reported, paginated), so a builder can plan it with no further ruling."
+							}
+						},
+						"error": null,
+						"usd": 0.0055485000000000005,
+						"ms": 3461,
+						"tokens": 13393,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5292": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No earlier ticket or open plan covers this sweep's phrases. Most are n-gram noise, but a few look like real coined terms (audience fence, purpose axis, floor ship gate, front door, plan-epic ledger). Someone has to triage them and add glossary rows for the real ones, which is a docs change a builder can do."
+							}
+						},
+						"error": null,
+						"usd": 0.067384,
+						"ms": 4376,
+						"tokens": 16986,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The sweep found real coined terms (e.g. `purpose axis`, `audience fence`, `front door`, `floor ship gate`) with no `.glossary/TERMS.md` row. Each phrase needs triaging into add or dismiss, and the real ones need rows written. No earlier ticket or open plan covers this batch; #5274 covers only `eval record`."
+							}
+						},
+						"error": null,
+						"usd": 0.007798599999999999,
+						"ms": 4718,
+						"tokens": 17010,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5472": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A pattern doc still gives unqualified permission for raw statements that ADR 0275 now bans for writes. It needs a docs edit to split read from write. No duplicate or open plan covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0449955,
+						"ms": 2635,
+						"tokens": 12226,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A pattern doc edit is needed: the unqualified raw-statement guidance now contradicts ADR 0275 and no listed ticket or open plan covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0038064000000000006,
+						"ms": 2558,
+						"tokens": 12216,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5473": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The ticket asks for a new mechanical guard to enforce ADR 0275, which review currently holds alone. The scope is concrete, with the checks and the fail-closed rule named. No duplicate or open plan covers it. #5472 is a docs split, not this guard."
+							}
+						},
+						"error": null,
+						"usd": 0.0452235,
+						"ms": 2688,
+						"tokens": 12247,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Asks for a new mechanical guard enforcing ADR 0275, whose shape and scope are already specified. No duplicate or open plan covers it, so a builder can implement it."
+							}
+						},
+						"error": null,
+						"usd": 0.0025522,
+						"ms": 2324,
+						"tokens": 12218,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5820": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5802,
+								"why": "#5802 reports the same problem. The coder machine's ship state has only human:cp-approval as its park target, so non-approval stops, including generic blocks, name the wrong need."
+							}
+						},
+						"error": null,
+						"usd": 0.0463195,
+						"ms": 3236,
+						"tokens": 12464,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5802,
+								"why": "#5802 reports the same problem: from `ship`, the only reachable park is `human:cp-approval`, so non-approval stops misname who acts next. It asks for the same fix, a second route out of `ship`."
+							}
+						},
+						"error": null,
+						"usd": 0.0047921000000000005,
+						"ms": 2810,
+						"tokens": 12484,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5831": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5744,
+								"why": "#5744 already reports that already-filed issues with a level-2 Acceptance criteria heading are un-gateable and that nobody owns fixing them. #5771 is one more such issue, as #5737 is in #5827. The systemic source was filed as #5763 and is closed."
+							}
+						},
+						"error": null,
+						"usd": 0.0512372,
+						"ms": 5551,
+						"tokens": 12753,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"rule": "carried",
+								"reason": "duplicate: folded into another ticket that carries this work",
+								"why": "#5744 already carries the work of fixing already-filed issues that have a level-2 Acceptance criteria heading, and #5827 is the same defect on #5737. #5763 and #5659 already closed the systemic source, so this is one more instance of #5744."
+							}
+						},
+						"error": null,
+						"usd": 0.0083105,
+						"ms": 5141,
+						"tokens": 12744,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5835": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5805,
+								"why": "#5805 reports the same defect: a free-text in:body PR lookup returns PRs that only mention the issue number. This ticket is that defect showing up in `lane brief`, where it causes a spurious exit 20. I judged this from #5805's title alone and did not read its body."
+							}
+						},
+						"error": null,
+						"usd": 0.0494547,
+						"ms": 3980,
+						"tokens": 12677,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5805,
+								"why": "#5805 reports the same defect: a free-text in:body PR lookup returns PRs that only mention the issue number. This ticket is the `lane brief` instance of it, and the stricter-signal fix would go in the same lookup."
+							}
+						},
+						"error": null,
+						"usd": 0.006688,
+						"ms": 4273,
+						"tokens": 12719,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5837": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5744,
+								"why": "#5744 already covers already-filed issues with a level-2 Acceptance criteria heading that no gate can read, and asks who owns repairing them. #5735 is one more such issue, so it belongs there and doesn't need its own ticket."
+							}
+						},
+						"error": null,
+						"usd": 0.05172140000000001,
+						"ms": 5656,
+						"tokens": 12828,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a concrete, unresolved blocker: issue #5735's body has a level-2 heading, so PR #5833 can't get a verdict. Similar tickets (#5827, #5831) were filed one per issue, and #5744 covers the general class rather than this repair. The fix is to amend #5735's body so the block reads `### Acceptance criteria`, then re-run review on #5833."
+							}
+						},
+						"error": null,
+						"usd": 0.009130899999999999,
+						"ms": 5728,
+						"tokens": 12863,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5855": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5845,
+								"why": "#5845 reports the same problem: the shipped triage repair-criteria verb has no section in the triage contract.md. This ticket asks for the same fix, adding the column, section and 14 row."
+							}
+						},
+						"error": null,
+						"usd": 0.047990000000000005,
+						"ms": 2790,
+						"tokens": 12564,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5845,
+								"why": "#5845 (open) already reports that triage repair-criteria has no contract.md section, and asks for the same change: add the verb's column, section and 14 row to the triage contract."
+							}
+						},
+						"error": null,
+						"usd": 0.004607600000000001,
+						"ms": 2772,
+						"tokens": 12580,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5856": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5789,
+								"why": "#5789 (open) reports the same defect: ship enqueue arms the merge intent on a conflicted branch instead of refusing before the arm. This ticket is another live instance of it."
+							}
+						},
+						"error": null,
+						"usd": 0.049263999999999995,
+						"ms": 2855,
+						"tokens": 12827,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5789,
+								"why": "#5789 (open) already reports that ship enqueue arms the merge intent on a conflicted branch instead of refusing first. This ticket reports the same behavior, seen with mergeable_state dirty on PR #5804."
+							}
+						},
+						"error": null,
+						"usd": 0.0032946,
+						"ms": 2789,
+						"tokens": 12811,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5858": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "What should happen to #4690 now that the crew-chief-of-staff seat it targets was deleted by ADR 0279? Close it, or re-aim it at a surviving surface?",
+								"options": [
+									"Close #4690 as dissolved by ADR 0279, and let #4694 (the CLAUDE.md half) carry the output-format directive alone",
+									"Re-scope #4690 onto a surviving agent-definition surface, such as the fabrika agent shells, to decide whether the founder's output-format directive binds them"
+								],
+								"why": "This is a real, non-duplicate report. It shows #4690 is pickable but unbuildable, and ADR 0237 (PR #4703) depends on it. Whether to close it or re-aim it is a direction call for the owners, so a builder shouldn't pick."
+							}
+						},
+						"error": null,
+						"usd": 0.0524489,
+						"ms": 6623,
+						"tokens": 12874,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "#4690 is a still-open, pickable ticket aimed at a seat that ADR 0279 and commit ecfbdf8e deleted, and ADR 0237 leans on it. Someone needs to close it as dissolved or re-aim it at a surviving agent-definition surface. That is a bounded triage and ticket edit with a clear lean (close, or re-scope), so no owner ruling is needed first. No other ticket in the list covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0076759,
+						"ms": 4974,
+						"tokens": 12671,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5859": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5755,
+								"why": "This is the same problem as #5755: the prose check reds a PR for pre-existing lines in a markdown file the diff touches. Its fenced-example half also overlaps #5639, which covers link examples inside code spans. This ticket only adds one more file that shows the problem."
+							}
+						},
+						"error": null,
+						"usd": 0.0492775,
+						"ms": 4281,
+						"tokens": 12866,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5755,
+								"why": "This reports the same problem as #5755: the prose check reds a PR for pre-existing lines in a markdown file the diff touches. Its hunk-scoping option is that ticket's fix, and the fenced-example false positives are the same family as #5639."
+							}
+						},
+						"error": null,
+						"usd": 0.0057377999999999995,
+						"ms": 4150,
+						"tokens": 12889,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5872": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The glossary-drift sweep is designed to file tickets like this, and the ticket's own pointers say each phrase is either added to .glossary/TERMS.md or dismissed. Most of the 126 phrases are n-gram noise, but a few look like real coined terms (chore lane, closing-issue edge, wire section, lane brief, retry cap). Triaging them and writing definitions with the glossary skill is a docs change, so it needs a plan. No earlier ticket covers it and no plan is open."
+							}
+						},
+						"error": null,
+						"usd": 0.0773721,
+						"ms": 5938,
+						"tokens": 19259,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No earlier glossary-drift ticket appears, and no rule for a no fits. The sweep asks for a per-phrase decision to add to TERMS.md or dismiss. Most phrases are n-gram noise, but a few may be real coined terms (e.g. lane brief, closing-issue edge, chore workflow), so the glossary update is real work."
+							}
+						},
+						"error": null,
+						"usd": 0.0083058,
+						"ms": 4764,
+						"tokens": 19180,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5881": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5802,
+								"why": "#5802 already reports that human:cp-approval is the only human park reachable from ship, so stops that aren't approvals (such as a merge-queue ejection) get the wrong name and point to the wrong action. #5820 reports the same fold for a generic block."
+							}
+						},
+						"error": null,
+						"usd": 0.0481955,
+						"ms": 4829,
+						"tokens": 12280,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5802,
+								"why": "#5802 reports the same problem: the ship state's only human park is human:cp-approval, so non-approval stops such as a merge-queue ejection are named as an approval wait. This ticket adds a concrete example and the question of a neutral park name versus several park cells, which fits inside #5802."
+							}
+						},
+						"error": null,
+						"usd": 0.0068206,
+						"ms": 4511,
+						"tokens": 12281,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5910": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No listed ticket asks for a verb-level refusal of a type:decision claim, and #5866 is the issue carrying the bad label pair, not a ticket for this change. The build claim fence checks only ready-for:agent and never type:*, so a builder can win a claim on an issue it must refuse. The plan should make the type axis bind the claim and fix or explain the stray label."
+							}
+						},
+						"error": null,
+						"usd": 0.051704200000000006,
+						"ms": 5752,
+						"tokens": 13112,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No other ticket covers it. #5866 is about a repair claim on an ADR PR being refused, and #5842 is about a ruled decision parking. This one reports that no verb enforces the `type:decision` refusal and that the label pair on #5866 is reachable. The work is to make the claim verb refuse `type:decision` and fix or relabel #5866. The level-2 heading drift on #5866 is a known class that earlier tickets closed."
+							}
+						},
+						"error": null,
+						"usd": 0.008652,
+						"ms": 5837,
+						"tokens": 13277,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5941": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5818,
+								"why": "#5818 is open and covers the same problem: §13 states the fork set as a count, and that count has gone stale. This heading saying six where the body and corpus say five is an instance of that. Fixing the count in the same pass, or dropping it as #5818 proposes, resolves this ticket."
+							}
+						},
+						"error": null,
+						"usd": 0.0498792,
+						"ms": 5247,
+						"tokens": 12630,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5818,
+								"why": "#5818 is the open ticket about §13 stating the fork set as a count, a shape that has already gone stale. This heading saying six where the body and corpus say five is that same problem, and the fix for #5818 would remove or replace the count in the heading."
+							}
+						},
+						"error": null,
+						"usd": 0.0074225,
+						"ms": 5535,
+						"tokens": 12670,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5942": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5772,
+								"why": "#5772 already reports that `status bootstrap label-taxonomy` covers only a subset of the labels triage needs, so a bootstrapped repo cannot triage. The false-green `exists` here comes from the same narrow registry, and widening it fixes both."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0482628,
+						"ms": 3274,
+						"tokens": 12513
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5772,
+								"why": "#5772 already reports that label-taxonomy covers only a subset of the labels triage needs, so a bootstrapped repo cannot triage. This ticket is the same gap seen from the 'exists' side, and widening the registry fixes both."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0037483000000000004,
+						"ms": 3116,
+						"tokens": 12497
+					}
+				]
+			}
+		],
+		"5970": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Orphaned pipeline-cli verbs (drive-issue-flow, worktree-sweep's hook path, the v1 §CP gate family) still need a per-verb keep-or-retire pass, and nothing merged or open carries it. #5720 is about migrating CI guards, not these verbs. The plan can decide each verb and record the result in an ADR, with adversarial review for any removed enforcement surface."
+							}
+						},
+						"error": null,
+						"usd": 0.048884899999999995,
+						"ms": 4094,
+						"tokens": 12474,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Registered pipeline-cli verbs with no living caller are real cleanup left by #5937, and no other ticket carries this sweep. A builder can do it: for each verb, name a caller and keep it, or retire it. The §CP enforcement-surface question can be handled in the plan with adversarial review and an ADR."
+							}
+						},
+						"error": null,
+						"usd": 0.0061644000000000004,
+						"ms": 3738,
+						"tokens": 12448,
+						"problems": []
+					}
+				]
+			}
+		],
+		"5985": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5783,
+								"why": "#5783 reports the same failure: `build branch --resume` dead-ends because the branch is already checked out in an abandoned worktree. It is still open."
+							}
+						},
+						"error": null,
+						"usd": 0.0486719,
+						"ms": 2858,
+						"tokens": 12741,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "duplicate",
+								"of": 5783,
+								"why": "#5783 (open) reports the same failure: `build branch --resume` dead-ends because the branch is already checked out in an abandoned worktree. This ticket describes the same problem, hit on PR #5980."
+							}
+						},
+						"error": null,
+						"usd": 0.0032695000000000003,
+						"ms": 2511,
+						"tokens": 12758,
+						"problems": []
+					}
+				]
+			}
+		],
+		"6395": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real, reproducible dead-end: a repair round's `build branch --resume-lane` refuses when a finished lane's clean agent worktree still holds the branch. No open or closed ticket covers it. #6334, #6389 and #6392 touch nearby behavior but not this. The work (a never-`--force` retire verb, plus a refusal message that names the remove command) can be planned with a lean toward the safe-removal test."
+							}
+						},
+						"error": null,
+						"usd": 0.051171600000000005,
+						"ms": 4169,
+						"tokens": 13024,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real gap in fabrika-cli. A repair round's `build branch --resume-lane` is refused by a finished lane's leftover worktree, and that wastes a scarce builder spawn. No existing ticket covers it: #6334 is about committing on the branch and #6389 is about retiring superseded lane branches. The plan can lean on the cheaper fix, a refusal that names the remove command, and add a never-`--force` retire verb that reuses the `assembly-verb.ts` stance."
+							}
+						},
+						"error": null,
+						"usd": 0.0063098,
+						"ms": 4028,
+						"tokens": 12997,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7852": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No other ticket covers this. The source trace shows a real composition bug: the Pi prompt awaits the whole turn inside the actor's serial permit, so streamed events and interrupts wait behind it. The fix is to split accepting a prompt from finishing a turn in the agent contract, and the plan can start with the reproduction test."
+							}
+						},
+						"error": null,
+						"usd": 0.0484595,
+						"ms": 4157,
+						"tokens": 12762,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No other ticket covers this. It is a source-traced bug in how the Pi prompt interacts with the serial actor queue, and the fix is a contract change: separate accepting a prompt from finishing the turn, and keep serial transitions. A builder can start with the held-open-turn reproduction and then make that change."
+							}
+						},
+						"error": null,
+						"usd": 0.0050241,
+						"ms": 4302,
+						"tokens": 12781,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7859": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real race in PanoSubmitPage. Metadata can overwrite a title or body the user typed while the fetch was pending, because the emptiness check uses values captured before the await. No other ticket or plan covers it, and the fix is a code change plus a delayed-response test."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0464403,
+						"ms": 3750,
+						"tokens": 12133
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real race found in source: PanoSubmitPage passes render-captured title/body to prefillIfEmpty after awaiting the fetch, so edits typed meanwhile can be overwritten. No other ticket covers it, so it needs a fix (check current state at apply time) plus a delayed-response test."
+							}
+						},
+						"problems": [],
+						"error": null,
+						"usd": 0.0034543,
+						"ms": 3239,
+						"tokens": 12131
+					}
+				]
+			}
+		],
+		"7870": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug: the editor route searches only the newest 100 own posts, so an older valid draft shows as not found. The fix is an author-scoped direct lookup that keeps absent and foreign equivalent, and no other ticket covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0434495,
+						"ms": 2339,
+						"tokens": 11820,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug: the editor route finds an addressed draft only within the first 100 recent posts, so an older valid draft shows as not found. The fix is a clear author-scoped direct lookup that keeps absent and foreign equivalent. No duplicate or open plan covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0028106,
+						"ms": 2502,
+						"tokens": 11832,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7871": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "Mecmua says \"edit post\" for existing drafts and published posts, but save and publish create a fresh row, and a test pins that behavior. Should the wording change to match what happens, or should the behavior change to match the wording?",
+								"options": [
+									"Reword the UI copy (en and tr) to describe the real operation, such as \"copy\" or \"new post from this\", and keep fresh-row saves.",
+									"Make saves and publishes keep the post's ID, so an edit changes the original post. This reverses the pinned Mecmua.unit test and is a bigger change.",
+									"Leave both as they are and close the ticket as intended behavior."
+								],
+								"why": "The code is deliberate and tested, so the only open question is whether to change the copy or the persistence semantics. The ticket itself says that is a product decision, so an owner has to rule before a builder acts. I found no duplicate among the listed tickets."
+							}
+						},
+						"error": null,
+						"usd": 0.0481501,
+						"ms": 4874,
+						"tokens": 12186,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "ruling",
+								"ask": "The mecmua editor says 'edit post' for existing drafts and published posts, but save and publish always create a fresh row. Should the wording change to match, or should editing keep the post's identity?",
+								"options": [
+									"Change the copy so it describes what happens (for example 'new post from this'), and keep the fresh-row behavior",
+									"Make save and publish keep the existing post's identity, which changes the persistence semantics and the tests that pin distinct IDs",
+									"Keep the copy and the behavior as they are, and document that fresh-row saves are deliberate"
+								],
+								"why": "The fresh-row behavior is deliberate and tested, and the ticket says it does not authorize identity-preserving editing. An owner has to choose between fixing the wording and changing the semantics before anything is built."
+							}
+						},
+						"error": null,
+						"usd": 0.006838799999999999,
+						"ms": 4547,
+						"tokens": 12159,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7873": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The mechanism lands in #7691 with no rendered consumer, and no open ticket's criteria own the mount in Desk.tsx and StatusLine.tsx. #7696 explicitly must not build it, so this is new work and needs its own plan."
+							}
+						},
+						"error": null,
+						"usd": 0.046595500000000005,
+						"ms": 2613,
+						"tokens": 12599,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The mount of the desk inspector region and composed status bar in apps/tuval/src/shell/ui/ is real, unowned work: #7691 forbids it by criterion and #7696 consumes it. No open ticket or plan carries it, so it needs a plan and a builder."
+							}
+						},
+						"error": null,
+						"usd": 0.0028980000000000004,
+						"ms": 2753,
+						"tokens": 12607,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7882": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Tuval's palette duplicates the design CommandPalette that landed a day earlier. The founder already set the direction: bind to the design component, or amend ADR 0186 to say why not. The plan can compare the two prop surfaces, grow the design component for Tab completion, async candidates and placement, and rebase Tuval onto it. No other open ticket covers this."
+							}
+						},
+						"error": null,
+						"usd": 0.049147500000000004,
+						"ms": 3596,
+						"tokens": 12632,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Tuval's palette duplicates the a11y combobox that the design CommandPalette already ships, and the founder has said Tuval should bind to it or ADR 0186 should say why not. The work is to compare the two prop surfaces, grow the design component for what Tuval needs, and rebase Tuval onto it. No other ticket or plan covers this."
+							}
+						},
+						"error": null,
+						"usd": 0.0050641,
+						"ms": 3350,
+						"tokens": 12559,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7884": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The shell chrome's local token file still duplicates @kampus/design, and the founder has already said Tuval should share the design language. #7882 covers only the palette half, and #7854 is a narrower symptom, so this is separate work: move the shell onto the shared tokens as a scoped theme and delete the local file."
+							}
+						},
+						"error": null,
+						"usd": 0.0486938,
+						"ms": 3548,
+						"tokens": 12597,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The founder has already ruled that Tuval should share the design language. The work is to move the shell chrome onto @kampus/design tokens as a scoped theme, use design primitives where they exist, and delete the local tokens.css. #7882 covers only the palette half and #7854 is a separate portal-scope bug, so this is not a duplicate of either. No plan is open for it to join."
+							}
+						},
+						"error": null,
+						"usd": 0.0041849,
+						"ms": 3676,
+						"tokens": 12606,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7894": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "Boot still provides an empty WindowIndex under a comment whose premise is stale (the shell slice landed), so spell calls naming a real window fail NoSuchWindow. No other ticket covers this: #7774 is the same shape but for ShellDispatch, and #7755 is about workspace scoping. The fix is to build a WindowIndex over the live desk, so the work goes to a plan."
+							}
+						},
+						"error": null,
+						"usd": 0.049886,
+						"ms": 3947,
+						"tokens": 12814,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The boot code builds an empty WindowIndex under a comment that the ticket shows is stale, so any spell call naming a window is refused. The fix is clear: a live WindowIndex built from the desk, beside ShellDispatch.kernel. #7774 is the same shape but covers ShellDispatch, and #7755 concerns workspace membership in resolveScope, so neither is a duplicate. No plan is open."
+							}
+						},
+						"error": null,
+						"usd": 0.0046316,
+						"ms": 4048,
+						"tokens": 12816,
+						"problems": []
+					}
+				]
+			}
+		],
+		"7910": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a new regression from #7895: ShellDispatch.kernel pulls Processes.ts and its node:crypto import into the page bundle. #7836 was the same symptom from an earlier cause and is closed. Main is blank in the browser until it is fixed, and the fix is concrete: move the kernel layer out of dispatch.ts and add a page-entry import-graph test."
+							}
+						},
+						"error": null,
+						"usd": 0.0492955,
+						"ms": 4042,
+						"tokens": 12935,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "PR #7895 caused a new regression: main renders a blank desk because dispatch.ts now pulls node:crypto into the page bundle. #7836 was the same kind of failure but came from an earlier change and is closed. Fixing it means moving ShellDispatch.kernel out of dispatch.ts and adding a boundary test that walks the page entry's import graph."
+							}
+						},
+						"error": null,
+						"usd": 0.005119,
+						"ms": 3929,
+						"tokens": 12938,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8337": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "This is a real AA contrast bug in a shipped token: --danger is 2.96:1 as text in light, under the 4.5:1 floor. No other ticket covers it, and the fix is a token-layer change, either a per-scheme value or a split --danger-text role. The plan can pick one and sweep the other --danger text uses."
+							}
+						},
+						"error": null,
+						"usd": 0.0500275,
+						"ms": 3297,
+						"tokens": 13280,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real AA gap on a shipped surface (--danger at 2.96:1 as text in light), and no other ticket or open plan covers it. Two token-layer fixes are on the table (a per-scheme value or a split --danger-text role). The plan can pick one with a lean and sweep the other --danger text uses."
+							}
+						},
+						"error": null,
+						"usd": 0.0052065,
+						"ms": 3155,
+						"tokens": 13249,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8494": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It is a real bug with a clear fix: the 250 ms clock keeps running after the window has already timed out. No other ticket reports it, and no open plan covers it. The ticket also warns that the interval is the only thing that re-renders at the deadline, so the fix needs a one-shot wake-up at the deadline."
+							}
+						},
+						"error": null,
+						"usd": 0.0508071,
+						"ms": 4565,
+						"tokens": 12958,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"rule": "carried",
+								"reason": "duplicate: folded into another ticket that carries this work",
+								"why": "This is a review finding on PR #8489, the open change for #8280, which is still open. It is in the same file, SessionListWindow.tsx, and the same editing pass, so #8280's work carries it."
+							}
+						},
+						"error": null,
+						"usd": 0.0089883,
+						"ms": 6184,
+						"tokens": 13197,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8504": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug in Tuval's Pi code: the live path projects no row for a compaction summary, and the page path can leave the compaction row out of the page. #8503 covers a different row, a trimmed user prompt. The id-collision question can be settled in the plan, which leans toward projecting the compaction summary in the live path."
+							}
+						},
+						"error": null,
+						"usd": 0.049658600000000004,
+						"ms": 3630,
+						"tokens": 12870,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug in Tuval's own code: the live projection skips the compactionSummary message and the page path can exclude the compaction row. It is distinct from #8503, which is about a trimmed user prompt. A builder can plan it, with the id-collision check carried as a lean."
+							}
+						},
+						"error": null,
+						"usd": 0.0050008000000000006,
+						"ms": 3158,
+						"tokens": 12824,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8506": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "No other ticket covers it. The transcript source has no read deadline, so a dropped socket leaves the first page on Reading and the older-page button disabled with no way out. The fix is to give it the session list's deadline shape. Whether to surface the SocketError instead is an open question the plan can carry, leaning toward the deadline."
+							}
+						},
+						"error": null,
+						"usd": 0.051178799999999997,
+						"ms": 4391,
+						"tokens": 13139,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "It reports a real bug: the transcript source has no deadline, so a dead socket leaves the first page on reading forever and the older-page button disabled with no way out. No other ticket covers it, and the open question about whether to swallow SocketError can be carried in the plan with a lean toward giving the transcript source the list's deadline shape."
+							}
+						},
+						"error": null,
+						"usd": 0.0059542,
+						"ms": 3521,
+						"tokens": 13154,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8509": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real source-level gap: four pi adapter modules copy thrown-value text into typed error `detail`, the same shape #8010 removes from the Claude adapter. No duplicate or open plan covers it, and a documented pattern already exists to apply."
+							}
+						},
+						"error": null,
+						"usd": 0.0473895,
+						"ms": 2668,
+						"tokens": 12799,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real, concrete code change: apply the Claude adapter's exception-translation pattern from #8010 to four pi modules. No duplicate or open plan covers it, and the shape is already set by the pattern doc, so a builder can carry it."
+							}
+						},
+						"error": null,
+						"usd": 0.0027981000000000004,
+						"ms": 2636,
+						"tokens": 12796,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8666": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "It's a new finding, not a duplicate of the #8464 investigation. Nobody yet knows whether naturally generated rollouts hit the empty read, or what read-only readiness contract is safe without resuming. That has to be measured with the investigation's fixtures and the upstream code, and it ends in a finding."
+							}
+						},
+						"error": null,
+						"usd": 0.0496035,
+						"ms": 4374,
+						"tokens": 12600,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "This is a new finding from #8464, not a duplicate of it. Codex returns a successful empty history for an unprojected rollout, and Tuval's reader trusts it. Nobody yet knows a safe read-only readiness or failure contract, or whether upstream must guarantee projection. That has to be found out before any change is planned."
+							}
+						},
+						"error": null,
+						"usd": 0.0049806,
+						"ms": 3678,
+						"tokens": 12544,
+						"problems": []
+					}
+				]
+			}
+		],
+		"8707": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real latent defect in the agy wire reader: an absent num_turns defaults to 0 and picks the over-charging usage arm instead of failing closed. It is not a duplicate of #8695, which is the doubling defect the repair closed. The fix is clear: treat absent num_turns as unknown and fall back to the steps arm."
+							}
+						},
+						"error": null,
+						"usd": 0.0481881,
+						"ms": 3074,
+						"tokens": 12627,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real latent defect in the agy wire reader: an absent num_turns defaults to 0 and picks the over-charging arm instead of failing closed. It is a distinct, small code fix (make num_turns nullable and route unknown to the steps fallback). It is not the same as #8695, which covers the last-turn doubling after stop and restore."
+							}
+						},
+						"error": null,
+						"usd": 0.0030982,
+						"ms": 3063,
+						"tokens": 12629,
+						"problems": []
+					}
+				]
+			}
+		],
+		"9391": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug in shipped code: an inherited Object.prototype key as a snapshot version bypasses the undefined guard and crashes with an untyped defect instead of SnapshotRefused. No duplicate or open plan covers it, and the fix is a one-line hasOwn guard plus a unit test."
+							}
+						},
+						"error": null,
+						"usd": 0.047964,
+						"ms": 3713,
+						"tokens": 12572,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "A real bug in shipped code: an inherited Object.prototype key as snapshot version crashes migrateState with an untyped defect instead of SnapshotRefused. No duplicate or merged fix is shown, and the fix is a small guard plus a unit test."
+							}
+						},
+						"error": null,
+						"usd": 0.0028436000000000004,
+						"ms": 4139,
+						"tokens": 12558,
+						"problems": []
+					}
+				]
+			}
+		],
+		"9451": [
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The bug is in the package.json dependency pins of @kampus/fabrika-cli, which lives in this repo. The exact-pinned effect and platform-node let the transitive platform-node-shared float to rc.115, so every command fails on a fresh install. The fix is to pin it and add a packed-tarball smoke test. No other ticket or merged change covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.048639699999999994,
+						"ms": 5079,
+						"tokens": 12551,
+						"problems": []
+					}
+				]
+			},
+			{
+				"tries": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"partOf": null,
+								"why": "The published @kampus/fabrika-cli@0.7.0 fails to start on a fresh install because its exact effect pin leaves a transitive dependency free to resolve to a newer release. fabrika-cli lives in this repo, so the fix is here: pin platform-node-shared and add a packed-tarball smoke test. No other ticket covers it."
+							}
+						},
+						"error": null,
+						"usd": 0.0053159999999999995,
+						"ms": 3745,
+						"tokens": 12525,
+						"problems": []
+					}
+				]
+			}
+		]
+	}
+}
