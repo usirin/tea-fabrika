@@ -17,6 +17,14 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
   that replays the facts. It was `trace` until the job record.
 - [`trace`](./trace/README.md): one job's trace from its record, a bar per span, and every
   grouped row opening down to one step: its Msg, the state before and after, and its Cmds.
+- [`experiments`](./experiments/README.md): every experiment on the ledger, one row each, then
+  the list as markdown. No window.
+- [`experiment`](./experiment/README.md): one experiment, its write-up drawn from data, and its
+  runs. No window.
+- [`compare`](./compare/README.md): two runs of one experiment, metric by metric, then the
+  cases whose scores changed. No window.
+- [`markdown`](./markdown/README.md): draws any markdown it is told, as `glow` or `less` does,
+  in a window. `experiment --n 170 | markdown` draws a page.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.

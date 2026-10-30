@@ -15,8 +15,13 @@ import {
 	tell,
 	viewOf,
 } from "@kampus/fabrika";
+import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
+import {compare} from "@tea-fabrika/compare";
 import {counter} from "@tea-fabrika/counter";
+import {experiment} from "@tea-fabrika/experiment";
+import {experiments} from "@tea-fabrika/experiments";
 import {map} from "@tea-fabrika/map";
+import {markdown} from "@tea-fabrika/markdown";
 import {runs} from "@tea-fabrika/runs";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
@@ -174,7 +179,9 @@ export const RESET = "\x1bc";
  * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
  * ever the `author` handed here. And `trace`, one job's record: on records held in memory, the
  * `seq --to 3 | tally` example alone, until the host reaches the job's record
- * (packages/fabrika/src/host/traces.ts).
+ * (packages/fabrika/src/host/traces.ts). The three that read experiments (the list, one
+ * experiment, two runs compared), on the same ledger, read-only, and `markdown`, which draws what
+ * it is told (experiment 170).
  */
 export const appPrograms = (
 	ledger: Ledger["Service"],
@@ -186,6 +193,7 @@ export const appPrograms = (
 		Layer.succeed(Author, author),
 		Layer.succeed(PullRequests, pullRequests),
 	);
+	const read = experimentsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger)));
 	return [
 		listed(counter, Layer.empty),
 		listed(tracker, tickets),
@@ -193,6 +201,10 @@ export const appPrograms = (
 		listed(map, tickets),
 		listed(runs, tickets),
 		listed(trace, memoryTraces([TALLY_TRACE])),
+		listed(experiments, read),
+		listed(experiment, read),
+		listed(compare, read),
+		listed(markdown, Layer.empty),
 	];
 };
 

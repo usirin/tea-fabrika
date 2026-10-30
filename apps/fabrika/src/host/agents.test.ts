@@ -149,6 +149,9 @@ describe("an agent drives the app's programs through MCP", () => {
 			"runs_ticket",
 			"trace_do",
 			"trace_id",
+			// The experiments programs take no input; markdown takes a text and a quit.
+			"markdown_text",
+			"markdown_do",
 		]);
 		// The tool is the input: its description and its schema are the tracker's own `do`.
 		expect(seen.doTool?.description).toMatch(/^What the window does/);

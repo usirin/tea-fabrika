@@ -199,12 +199,24 @@ importers:
       '@tea-fabrika/ask-log':
         specifier: workspace:*
         version: link:packs/ask-log
+      '@tea-fabrika/compare':
+        specifier: workspace:*
+        version: link:programs/compare
       '@tea-fabrika/counter':
         specifier: workspace:*
         version: link:programs/counter
+      '@tea-fabrika/experiment':
+        specifier: workspace:*
+        version: link:programs/experiment
+      '@tea-fabrika/experiments':
+        specifier: workspace:*
+        version: link:programs/experiments
       '@tea-fabrika/map':
         specifier: workspace:*
         version: link:programs/map
+      '@tea-fabrika/markdown':
+        specifier: workspace:*
+        version: link:programs/markdown
       '@tea-fabrika/owner-desk':
         specifier: workspace:*
         version: link:packs/owner-desk
@@ -272,12 +284,24 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 'catalog:'
         version: 2.4.0
+      '@tea-fabrika/compare':
+        specifier: workspace:*
+        version: link:../../programs/compare
       '@tea-fabrika/counter':
         specifier: workspace:*
         version: link:../../programs/counter
+      '@tea-fabrika/experiment':
+        specifier: workspace:*
+        version: link:../../programs/experiment
+      '@tea-fabrika/experiments':
+        specifier: workspace:*
+        version: link:../../programs/experiments
       '@tea-fabrika/map':
         specifier: workspace:*
         version: link:../../programs/map
+      '@tea-fabrika/markdown':
+        specifier: workspace:*
+        version: link:../../programs/markdown
       '@tea-fabrika/runs':
         specifier: workspace:*
         version: link:../../programs/runs
@@ -787,6 +811,28 @@ importers:
         specifier: 'catalog:'
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
 
+  programs/compare:
+    dependencies:
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
   programs/counter:
     dependencies:
       '@demlik/tea':
@@ -811,6 +857,50 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.3.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
+  programs/experiment:
+    dependencies:
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
+  programs/experiments:
+    dependencies:
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -854,6 +944,49 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
+  programs/markdown:
+    dependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.6)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
+      '@tea-fabrika/compare':
+        specifier: workspace:*
+        version: link:../compare
+      '@tea-fabrika/experiment':
+        specifier: workspace:*
+        version: link:../experiment
+      '@tea-fabrika/experiments':
+        specifier: workspace:*
+        version: link:../experiments
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -1,0 +1,57 @@
+{
+	"date": "2026-10-30",
+	"counts": {
+		"writeUps": 163,
+		"experiments": 163,
+		"sharedNumbers": 0,
+		"inIndex": 160,
+		"withDate": 161,
+		"withAnswer": 160,
+		"titleFromName": 0,
+		"results": 175,
+		"notJson": 0,
+		"numbered": 117,
+		"noNumber": 58,
+		"placedByIndex": 0,
+		"placedByScript": 37,
+		"manyScripts": 3,
+		"unplaced": 21,
+		"noWriteUp": 1,
+		"fit": 144,
+		"noNumbers": 4,
+		"withCases": 108,
+		"withUsd": 39,
+		"withTokens": 1,
+		"metrics": 4624,
+		"cases": 7349,
+		"metricsCut": 20845,
+		"costNames": 24,
+		"tokenNames": 28
+	},
+	"ledgerRows": 12896,
+	"listed": 164,
+	"runs": 144,
+	"twoRunsOrMore": 19,
+	"lastTwoShareAMetric": 6,
+	"ms": {
+		"transform": 306,
+		"load": 329
+	},
+	"programs": [
+		{
+			"name": "experiments",
+			"values": 165,
+			"ms": 106
+		},
+		{
+			"name": "experiment --n 167",
+			"values": 2,
+			"ms": 20
+		},
+		{
+			"name": "compare --n 77b",
+			"values": 2,
+			"ms": 2
+		}
+	]
+}
