@@ -12,6 +12,7 @@
 		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
 		"lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
 		"lint:browser": "node packages/fabrika/browser-check.ts",
+		"lint:dead": "code-graph . --unreachable --ci",
 		"promises": "node packages/promises/src/main.ts",
 		"format": "biome check --write .",
 		"demo": "node legacy/src/demo.ts",
