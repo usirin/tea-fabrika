@@ -254,6 +254,9 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     page, and two runs side by side (experiment 170).
   - [`programs/markdown`](./programs/markdown/README.md), `@tea-fabrika/markdown`: draws any
     markdown it is told, in a window, as `glow` or `less` does.
+  - [`programs/claude`](./programs/claude/README.md), `@tea-fabrika/claude`, and
+    [`programs/codex`](./programs/codex/README.md), `@tea-fabrika/codex`: a coding agent as a
+    program, each prompt a turn on one session, its answer plain JSON.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.
