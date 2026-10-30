@@ -210,6 +210,48 @@ describe("text from tsh while the prompt is up", () => {
 	});
 });
 
+describe("a table from tsh", () => {
+	const table: Shell.Table = {
+		title: "Experiments",
+		note: "newest first",
+		total: 30,
+		columns: [
+			{header: "#", align: "left"},
+			{header: "TITLE", align: "left"},
+		],
+		cut: 1,
+		rows: [
+			[
+				{text: "171", tone: "muted"},
+				{text: "A title too long for a narrow tile, \x1b[2Jcut", tone: "plain"},
+			],
+		],
+		hints: [{line: "experiments --all", for: "for every row"}],
+	};
+
+	it("is laid out at the terminal's width, above the prompt, the title column cut", () => {
+		expect(seen([keys("ls"), {type: "table", table}], {cols: 40})).toEqual([
+			"",
+			"Experiments  30 · newest first",
+			"",
+			"  #     TITLE",
+			"  171   A title too long for a narrow t…",
+			"",
+			"29 more.  experiments --all for every",
+			"row.",
+			"",
+			"tsh$ ls|",
+		]);
+	});
+
+	it("is drawn in the app's colors, and no text in it can move the cursor or clear the screen", () => {
+		const {bytes} = run([{type: "table", table}], {cols: 80});
+		expect(bytes).toContain("\x1b[1;38;2;235;235;236mExperiments\x1b[0m");
+		expect(bytes).toContain("^[[2Jcut");
+		expect(bytes).not.toContain("\x1b[2J");
+	});
+});
+
 describe("history", () => {
 	const history = ["seq --to 3", "say hi", "counter"];
 

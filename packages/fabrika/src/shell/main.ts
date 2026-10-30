@@ -16,6 +16,7 @@ import {type ProgramList, Programs} from "./programs.ts";
 import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
+import {ANSI, paint, plain, type Table, tableLines} from "./table.ts";
 import {type Short, Shorten} from "./title.ts";
 import {endpointOf, tracing} from "./trace/otel.ts";
 import type {Viewing} from "./trace/view.ts";
@@ -46,7 +47,21 @@ import type {Viewing} from "./trace/view.ts";
 /** What tsh said, in its order. */
 type Said =
 	| {readonly kind: "printed"; readonly printed: Printed}
+	| {readonly kind: "table"; readonly table: Table}
 	| {readonly kind: "ready"; readonly ready: Ready};
+
+/** The width a table is laid out at when stdout is no terminal: tsh's short form's. */
+const NO_TERMINAL_WIDTH = 100;
+
+/**
+ * A table as this process draws it, as gh's IOStreams decides: on a terminal, at its width and in
+ * color, unless `NO_COLOR` is set (no-color.org); anywhere else, at 100 columns and plain.
+ */
+const tableText = (table: Table): string => {
+	const terminal = process.stdout.isTTY === true;
+	const lines = tableLines(table, terminal ? process.stdout.columns : NO_TERMINAL_WIDTH);
+	return terminal && process.env.NO_COLOR === undefined ? paint(lines, ANSI) : plain(lines);
+};
 
 type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly kind: "running"}>;
 
@@ -81,6 +96,7 @@ const startTsh = (
 			{show},
 			{
 				printed: (printed) => Queue.offerUnsafe(said, {kind: "printed", printed}),
+				table: (table) => Queue.offerUnsafe(said, {kind: "table", table}),
 				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
 			},
 			{id, storage: memoryStorage()},
@@ -124,16 +140,20 @@ const takeLock = (home: string) =>
 const write = (to: "out" | "err", text: string) =>
 	(to === "out" ? process.stdout : process.stderr).write(`${text}\n`);
 
+/** What tsh said that shows: a line on out or err, or a table on out. */
+const shownOf = (s: Exclude<Said, {readonly kind: "ready"}>) =>
+	s.kind === "printed" ? s.printed : {to: "out" as const, text: tableText(s.table)};
+
 /** Lines from a text or a file, or from stdin as they come; each told in order, then `line` closed. */
 const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: Source) =>
 	Effect.gen(function* () {
 		const last = yield* Ref.make(0);
 		const drawer = yield* Stream.fromQueue(said).pipe(
-			Stream.runForEach((s) =>
-				s.kind === "printed"
-					? Effect.sync(() => write(s.printed.to, s.printed.text))
-					: Ref.set(last, s.ready.status),
-			),
+			Stream.runForEach((s) => {
+				if (s.kind === "ready") return Ref.set(last, s.ready.status);
+				const shown = shownOf(s);
+				return Effect.sync(() => write(shown.to, shown.text));
+			}),
 			Effect.forkScoped,
 		);
 		const interrupt = interruptOf(started);
@@ -320,13 +340,14 @@ const terminal = (
 						if (waiting === 0) rl.prompt();
 						return;
 					}
+					const shown = shownOf(s);
 					if (waiting > 0) {
-						write(s.printed.to, s.printed.text);
+						write(shown.to, shown.text);
 						return;
 					}
 					// The prompt is up: draw the line above it, then the prompt and what is typed again.
 					clearRow();
-					write(s.printed.to, s.printed.text);
+					write(shown.to, shown.text);
 					if (search === null) rl.prompt(true);
 					else drawSearch(search);
 				}),

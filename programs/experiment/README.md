@@ -19,6 +19,8 @@ yield* call(experiment, {n: "404"});
 ```
 
 ```text
+tsh> experiment --n 170                   one line; the markdown is for a pipe or a window
+170  The experiments program  Oct 30 · 1 run
 tsh> experiment --n 170 | markdown        the page, drawn in a window
 tsh> experiment --n 404 | markdown        tsh: experiment failed: no experiment 404 on the ledger
 ```
@@ -34,3 +36,6 @@ tsh> experiment --n 404 | markdown        tsh: experiment failed: no experiment 
 - The markdown is made from the data each time (`ExperimentPage.toMarkdown`): the answer first,
   then the sections, then a table of runs. It is never kept.
 - No machine and no window, for the same reason as `experiments`.
+- In tsh the page prints as one line (`ExperimentPage.toLine`): its number, title, day and runs,
+  and how its last run stands when it is not finished. `markdown` prints only into a pipe or a
+  window (`person: "none"`). `--json` gets both whole.

@@ -25,11 +25,14 @@ export {type ProgramList, Programs, programList, statusOf} from "./programs.ts";
 // Ctrl-R, bash's reverse-i-search: a key in, the search after it out. For a line editor of an
 // app's own (apps/fabrika's), so tsh searches its history the same way in both.
 export * as Search from "./search.ts";
-// tsh itself, as a program: lines in, printed values out. Its two outputs' schemas too, for an
+// tsh itself, as a program: lines in, printed values out. Two of its outputs' schemas too, for an
 // app that builds its own schemas on them (apps/fabrika's pane view).
 export {Printed, Ready, tsh} from "./shell.ts";
 // How a value is shown on a line, and named in a trace's title.
 export type {Show} from "./short.ts";
 // Its own small programs: say, seq, double, upper, sleep, true, false, tally.
 export {SMALL} from "./small.ts";
+// A table for a person, as tsh hands it out on `table`: laid out by a terminal at its own width,
+// then painted in its own colors (apps/fabrika's line editor does both).
+export {type Palette, paint, type Table, tableLines} from "./table.ts";
 export {type Short, Shorten} from "./title.ts";

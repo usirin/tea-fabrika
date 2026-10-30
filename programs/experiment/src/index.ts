@@ -7,9 +7,8 @@ import {Clock, Effect, Schema} from "effect";
 // a view made from the data, and it ends. It reads through the `Experiments` service and writes
 // nothing.
 //
-//   tsh> experiment --n 170
-//   page 170   The experiments…  Oct 30  1 run    the write-up, as data, and its runs, as a line
-//   markdown # The experiments…            the page as markdown, once
+//   tsh> experiment --n 170                 one line for a person; the markdown is not printed
+//   170  The experiments program  Oct 30 · 1 run
 //
 //   tsh> experiment --n 170 | markdown      the page, drawn
 //
@@ -26,11 +25,13 @@ export const experiment = defineProgram({
 	inputs: {},
 	outputs: {
 		page: output(ExperimentPage, "The experiment: its title, its write-up as data, its runs.", {
-			line: (page) => ExperimentPage.toLine(page, dayOf(Date.now())),
+			person: {line: (page) => ExperimentPage.toLine(page, dayOf(Date.now()))},
 		}),
+		// For a pipe or a window: tsh prints it only into one.
 		markdown: output(
 			Schema.String,
 			"The page as markdown: the answer first, the sections, the runs.",
+			{person: "none"},
 		),
 	},
 	main: ({flags, send}) =>

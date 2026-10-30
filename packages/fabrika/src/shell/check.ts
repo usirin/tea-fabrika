@@ -1,5 +1,12 @@
 import type {Entry} from "../program/listed.ts";
-import {type Declared, type Flag, fit, mustBeGiven, type Shape} from "../program/shape.ts";
+import {
+	type Declared,
+	type Flag,
+	fit,
+	mustBeGiven,
+	type Output,
+	type Shape,
+} from "../program/shape.ts";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {
@@ -43,8 +50,16 @@ export interface Stage {
 	readonly wire: {readonly output: string; readonly input: string} | null;
 	/** The input the stage before feeds. `null` on the first stage. */
 	readonly fed: string | null;
+	/** `--all`: its table for a person shows every row, not one screen. */
+	readonly all: boolean;
 	readonly text: string;
 }
+
+/** Whether any output of the program shows a person a table: what `--all` is for. */
+export const hasTable = (entry: Entry): boolean =>
+	Object.values<Output<unknown>>(entry.program.outputs).some(
+		(o) => typeof o.person === "object" && "table" in o.person,
+	);
 
 export interface Line {
 	readonly stages: readonly [Stage, ...Stage[]];
@@ -207,12 +222,20 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 					`<${command.into.name} names the input a pipe feeds, and no pipe feeds this command`,
 				),
 			);
+		if (command.all !== null && !hasTable(entry))
+			stop(
+				no(
+					command.all.start,
+					`--all shows every row of a table, and ${entry.program.name} prints no table`,
+				),
+			);
 		return {
 			entry,
 			flags: flagsOf(command, entry, list, text),
 			told: toldOf(command, entry, fed, list, text),
 			wire,
 			fed,
+			all: command.all !== null,
 			text: text.slice(command.at.start, command.at.end),
 		};
 	});

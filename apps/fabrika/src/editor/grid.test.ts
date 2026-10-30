@@ -35,6 +35,10 @@ describe("the test grid", () => {
 	});
 
 	it("writes a CSI sequence it does not know out, so a test sees it", () => {
-		expect(gridOf("a\x1b[2Kb\x1b[31mc", 80).rows).toEqual(["a^[[2Kb^[[31mc"]);
+		expect(gridOf("a\x1b[2Kb\x1b[6nc", 80).rows).toEqual(["a^[[2Kb^[[6nc"]);
+	});
+
+	it("keeps the text of a colored run, and nothing of its colors", () => {
+		expect(gridOf("a\x1b[1;38;2;1;2;3mb\x1b[0mc", 80).rows).toEqual(["abc"]);
 	});
 });

@@ -16,6 +16,7 @@ import {
 	redrawRow,
 	shown,
 	spot,
+	table,
 } from "./screen.ts";
 
 // tsh's line editor, as a tea machine: keys in, the bytes a terminal draws out. It is what
@@ -44,7 +45,9 @@ import {
 //   keep {lines}        the history changed: keep it for the next start
 //
 // A text from tsh (`printed`) goes above the prompt: the prompt is taken away, the text written,
-// and the prompt drawn again under it, as a shell does with a background job's output.
+// and the prompt drawn again under it, as a shell does with a background job's output. A table
+// from tsh (`table`) goes the same way, laid out at the terminal's width and in color first, as
+// gh's printer asks its terminal for both.
 
 /** The line: what is before the cursor, and what is after it. */
 export interface Line {
@@ -95,6 +98,8 @@ export type EditorMsg =
 	| {readonly type: "size"; readonly cols: number}
 	/** tsh printed a line. */
 	| {readonly type: "printed"; readonly text: string}
+	/** tsh printed a table for a person: laid out here, at the terminal's width, and in color. */
+	| {readonly type: "table"; readonly table: Shell.Table}
 	/** tsh is done with a line: the prompt comes back. */
 	| {readonly type: "ready"}
 	/** tsh is gone. */
@@ -217,6 +222,15 @@ const say = (acc: Acc, ...parts: readonly Part[]): Acc => ({
 	...acc,
 	parts: [...acc.parts, ...parts],
 });
+
+/**
+ * Text from tsh, drawn above the prompt line: written where the cursor is when no prompt is up,
+ * or, over the prompt, the prompt taken away, the text written, and the prompt drawn under it.
+ */
+const above = (s: Editor, text: string): Acc =>
+	shownLine(s) === null
+		? say(start(s), text)
+		: say(start(s), backFrom(s) + CLEAR_BELOW + text + drawn(s));
 
 /** The prompt line of `s`, if it is on one row of the screen, and stays there when drawn again. */
 const inRow = (s: Editor): {readonly text: string; readonly at: number} | null => {
@@ -505,12 +519,8 @@ export const editor = defineMachine({
 			const cols = Math.max(1, m.cols);
 			return [{...s, cols, resized: s.resized || cols !== s.cols}, []];
 		},
-		printed: (s, m) => {
-			const text = shown(m.text) + NEWLINE;
-			if (shownLine(s) === null) return done(say(start(s), text));
-			// Over the prompt: take it away, write the text, and draw the prompt again under it.
-			return done(say(start(s), backFrom(s) + CLEAR_BELOW + text + drawn(s)));
-		},
+		printed: (s, m) => done(above(s, shown(m.text) + NEWLINE)),
+		table: (s, m) => done(above(s, table(m.table, s.cols) + NEWLINE)),
 		ready: (s) => {
 			if (s.mode.kind !== "busy") return done(start(s));
 			// The prompt, then what was typed ahead, as if typed at it.

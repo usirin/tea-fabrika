@@ -7,9 +7,8 @@ import {Effect, Schema} from "effect";
 // as data and then as markdown, and it ends. Left out, the two runs are the experiment's last two.
 // It reads through the `Experiments` service and writes nothing.
 //
-//   tsh> compare --n 170
-//   comparison 170-1 against 170-2: 1 metric, 1 case changed, 0 the same     the data, as a line
-//   markdown # 170-1 against 170-2…         the same, as two tables
+//   tsh> compare --n 170                    one line for a person; the markdown is not printed
+//   170-1 against 170-2: 1 metric, 1 case changed, 0 the same
 //
 //   tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
 //   tsh> compare --n 170 --a 170.49af0a19b683 --b 170-3     an id where a label may have moved
@@ -40,11 +39,13 @@ export const compare = defineProgram({
 		comparison: output(
 			Comparison,
 			"Every metric in both runs, and the cases whose scores changed.",
-			{line: Comparison.toLine},
+			{person: {line: Comparison.toLine}},
 		),
+		// For a pipe or a window: tsh prints it only into one.
 		markdown: output(
 			Schema.String,
 			"The comparison as markdown: a table of metrics, then of cases.",
+			{person: "none"},
 		),
 	},
 	main: ({flags, send}) =>

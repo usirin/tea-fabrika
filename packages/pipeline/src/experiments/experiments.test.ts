@@ -353,27 +353,27 @@ describe("Experiments on the ledger", () => {
 		expect(md).toContain(`| 170-2 | finished | $0.03 | agreed 1 | \`${B}\` |`);
 		const row = Experiment.fromPage(page);
 		expect(Experiment.toMarkdown([row], "2026-10-31")).toContain(
-			"| 170 | The experiments program | 2 | 170-2 finished, agreed 1 | Oct 30 |",
+			"| 170 | The experiments program | 2 | 170-2 finished, agreed 1 | Oct\u00a030 |",
 		);
-		expect(Experiment.toLine(row, "2026-10-31")).toBe(
-			`170   ${"The experiments program".padEnd(44)}  Oct 30        2 runs  170-2 finished, agreed 1`,
+		// One line for a person: the title whole, the day, the runs; a last run not over is said.
+		expect(ExperimentPage.toLine(page, "2026-10-31")).toBe(
+			"170  The experiments program  Oct 30 · 2 runs",
 		);
-		// Never wider than 100: the latest is cut last.
-		const long = {
-			...row,
-			latest: row.latest && {...row.latest, headline: {key: "k".repeat(60), value: 1}},
+		expect(ExperimentPage.toLine(page, "2027-01-02")).toBe(
+			"170  The experiments program  Oct 30, 2026 · 2 runs",
+		);
+		const failing = {
+			...page,
+			runs: page.runs.map((r, i) => (i === 1 ? {...r, status: "failed" as const} : r)),
 		};
-		expect(Experiment.toLine(long, "2026-10-31")).toHaveLength(100);
-		expect(Experiment.toLine(long, "2026-10-31").endsWith("…")).toBe(true);
-		expect(ExperimentPage.toLine(page, "2026-10-31")).toBe(Experiment.toLine(row, "2026-10-31"));
+		expect(ExperimentPage.toLine(failing, "2026-10-31")).toBe(
+			"170  The experiments program  Oct 30 · 2 runs, failed",
+		);
 		// A run with many metrics shows its first four in the page's table, and counts the rest.
 		const many = {a: 1, b: 2, c: 3, d: 4, e: 5, f: 6};
 		const wide = {...page, runs: page.runs.map((r) => ({...r, metrics: many}))};
 		expect(ExperimentPage.toMarkdown(wide, "2026-10-31")).toContain(
 			"| a 1, b 2, c 3, d 4 and 2 more |",
-		);
-		expect(Experiment.toLine({...row, title: "x".repeat(60)}, "2027-01-02")).toBe(
-			`170   ${"x".repeat(43)}…  Oct 30, 2026  2 runs  170-2 finished, agreed 1`,
 		);
 	});
 });

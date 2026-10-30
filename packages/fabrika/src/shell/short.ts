@@ -97,10 +97,8 @@ export function shortOf(value: unknown, width = WIDTH): string {
 export type Show = "short" | "json";
 
 /**
- * A value as tsh prints it. `line`: its output's own one-line form, used for a person in place of
- * the short form; a script, on `--json`, still gets the JSON whole.
+ * A value as tsh prints it when its output declares no form for a person (../program/person.ts):
+ * short, or the JSON whole for a script.
  */
-export const shown = (value: unknown, show: Show, line?: (value: any) => string): string => {
-	if (show === "json") return typeof value === "string" ? value : JSON.stringify(value);
-	return line === undefined ? shortOf(value) : line(value);
-};
+export const shown = (value: unknown, show: Show): string =>
+	show === "json" ? (typeof value === "string" ? value : JSON.stringify(value)) : shortOf(value);

@@ -77,6 +77,8 @@ export {diff as jsonPatchOf, type Json, type Op as JsonPatchOp} from "./program/
 export type {KeptFailed, KeptOptions} from "./program/kept.ts";
 export * from "./program/listed.ts";
 export * from "./program/mortal.ts";
+// How tsh shows an output's values to a person: one line each, a table, or nothing.
+export type {Hint, Person, TableCell, TableColumn, TableView, Tone} from "./program/person.ts";
 // A program's run, and how a host lists its flags, win over the supervisor's
 // and the storage's records of the same name.
 export type {Ended, Listed, Run, Started} from "./program/program.ts";

@@ -39,6 +39,7 @@ Everything but Node's storage is on the top level, `@kampus/fabrika`. Each file,
 |---|---|---|
 | `@kampus/fabrika` | `program.ts` | `defineProgram`, `kind`, `start`, `tell`, `offer`, `pipe`, `call`, `readFlags`, `withDefaults`, `listing`, `fork` and `end` for `serve`, the `MailboxFull` error, and the run types (`Run`, `Running`, `Ended`, `Mailbox`, ...) |
 | `@kampus/fabrika` | `shape.ts` | `flag`, `input` (with its `ack` and `control`), `output`, `defaulted`, `CAPACITY`, and `fit`, the check that one output fits another program's input |
+| `@kampus/fabrika` | `person.ts` | How tsh shows an output's values to a person: a table view, a line, or none (`Person`, `TableView`, `Tone`). One the terminal cannot draw is refused when the output is declared |
 | `@kampus/fabrika` | `listed.ts` | `listed(program, layer)`: a program packed with the services it asks for, as one entry a host can start |
 | `@kampus/fabrika` | `storage.ts` | `Storage`, where runs keep what must outlive the process: `memoryStorage`, `storageOf`, `folderStorage` |
 | `@kampus/fabrika/storage/node` | `storage-node.ts` | `fileStorage(dir)`: storage in a folder, over Node's file system |

@@ -90,15 +90,8 @@ export const dayOf = (ms: number): Day => {
 	return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
 };
 
-/** A text cut to `width` characters, an ellipsis last when it is cut, and padded to `width`. */
-const column = (text: string, width: number): string =>
-	(text.length > width ? `${text.slice(0, width - 1)}…` : text).padEnd(width);
-
 /** A count with its noun: `1 run`, `2 runs`. */
 const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
-
-/** The widest a terminal line gets, as tsh's own short form: 100 characters. */
-const LINE = 100;
 
 /** The most metrics a page's runs table shows in a row; the rest are counted. */
 const FEW = 4;
@@ -335,44 +328,22 @@ export class Experiment extends Schema.Opaque<Experiment>()(
 	}
 
 	/**
-	 * One row as one line for a terminal, in columns, as `gh issue list` prints: the number, the
-	 * title cut to fit, the day, the runs and the latest.
-	 *
-	 *   Experiment.toLine(row, "2026-10-30")
-	 *   // "170   The experiments program, on today's ledg…  Oct 30        1 run   170-1 finished"
-	 *
-	 * The columns are as wide as `ls -l` makes its date (`Oct 30, 2025`), and the line is cut at
-	 * 100 characters, as tsh cuts its own short form.
-	 */
-	static toLine(row: Experiment, today: Day): string {
-		const line = [
-			column(row.n, 4),
-			column(row.title, 44),
-			// As wide as `Oct 30, 2025`, so a row from another year keeps the columns.
-			column(row.date === null ? "" : dayLabel(row.date, today), 12),
-			column(counted(row.runs, "run"), 6),
-			Experiment.latest(row),
-		]
-			.join("  ")
-			.trimEnd();
-		return line.length > LINE ? `${line.slice(0, LINE - 1)}…` : line;
-	}
-
-	/**
-	 * The list as a markdown table, a view made from the rows, never read back.
+	 * The list as a markdown table, a view made from the rows, never read back. The rows come
+	 * newest first, as `experiments` sends them.
 	 *
 	 *   | # | Title | Runs | Latest | Date |
 	 *   | 170 | The experiments program | 1 | 170-1 finished, agreed 0.9 | Oct 30 |
 	 */
 	static toMarkdown(rows: readonly Experiment[], today: Day): string {
 		const line = (r: Experiment) => {
-			const day = r.date === null ? "" : dayLabel(r.date, today);
+			// One unit, as "10 kg" is: a no-break space keeps `Oct 30` on one line in a narrow column.
+			const day = r.date === null ? "" : dayLabel(r.date, today).replaceAll(" ", "\u00a0");
 			return `| ${r.n} | ${cell(r.title)} | ${r.runs} | ${cell(Experiment.latest(r))} | ${day} |`;
 		};
 		return [
 			"# Experiments",
 			"",
-			`${counted(rows.length, "experiment")}, by number.`,
+			`${counted(rows.length, "experiment")}, newest first.`,
 			"",
 			"| # | Title | Runs | Latest | Date |",
 			"|---|---|--:|---|---|",
@@ -391,9 +362,23 @@ export class ExperimentPage extends Schema.Opaque<ExperimentPage>()(
 		runs: Schema.Array(RunRecord),
 	}),
 ) {
-	/** The page as one line for a terminal: the same columns as the list's row. */
+	/**
+	 * The page as one line for a person at a terminal: the number, the title whole, then the facts
+	 * its markdown puts under the title, and how its last run stands when it is not over or did not
+	 * end well. The page itself is one `| markdown` away.
+	 *
+	 *   ExperimentPage.toLine(page, "2026-10-31")
+	 *   // "170  The experiments program  Oct 30 · 2 runs"
+	 *   // "171  Can the app host run the ledger…  Oct 30 · 1 run, running"
+	 */
 	static toLine(page: ExperimentPage, today: Day): string {
-		return Experiment.toLine(Experiment.fromPage(page), today);
+		const date = page.writeUp?.date ?? null;
+		const last = page.runs.at(-1)?.status;
+		const facts = [
+			...(date === null ? [] : [dayLabel(date, today)]),
+			`${counted(page.runs.length, "run")}${last === undefined || last === "finished" ? "" : `, ${last}`}`,
+		];
+		return `${page.n}  ${page.title}  ${facts.join(" · ")}`;
 	}
 
 	/**

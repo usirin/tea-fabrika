@@ -25,7 +25,7 @@ yield* call(compare, {n: "171", a: undefined, b: undefined});
 ```text
 tsh> compare --n 170 --a 170-1 --b 170-3 | markdown
 tsh> compare --n 170 --a 170.ed1e1dcf9719 --b 170-3
-compare comparison 170-1 against 170-3: 1 metric, 1 case changed, 2 the same
+170-1 against 170-3: 1 metric, 1 case changed, 2 the same
 ```
 
 ![Two runs of 77b, compared and drawn by markdown](docs/compare.png)
@@ -43,3 +43,5 @@ the runs just read; what compare asks the service for is the id.
 - A case is matched by its `item` in both runs. A case in one run only is a change.
 - Dollars are a metric row too, `usd`, when either run has them.
 - No machine and no window, for the same reason as `experiments`.
+- In tsh the comparison prints as one line (`Comparison.toLine`). `markdown` prints only into a
+  pipe or a window (`person: "none"`). `--json` gets both whole.

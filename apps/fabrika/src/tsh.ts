@@ -407,6 +407,7 @@ export const startTsh = (options: {
 			{show: "short"},
 			{
 				printed: (p) => toEditor({type: "printed", text: p.text}),
+				table: (table) => toEditor({type: "table", table}),
 				ready: () => toEditor({type: "ready"}),
 			},
 			{id: TSH, storage: memoryStorage()},
