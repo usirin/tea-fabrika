@@ -83,7 +83,7 @@ import {WINDOWS} from "./windows.tsx";
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 //
 // Around the desk is the window's frame (frame.tsx, its words in frame.ts): the top bar is the
-// whole desk (workspaces, the line, what asks you, the agents, the ledger, the host), and the
+// whole desk (workspaces, the line, what asks you, and the ledger or the host when broken), and the
 // bottom line is the tile you are in and the key you just pressed. Cmd-K opens the palette;
 // C-b a the asks list, C-b ? every key, C-b i the info mode, C-b B hides both bars.
 //
@@ -94,7 +94,7 @@ import {WINDOWS} from "./windows.tsx";
 // What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
 // one branch for each of its kinds, so a kind left out fails the typecheck:
 //
-//   up            the desk, nothing more: the top bar says host ok
+//   up            the desk, nothing more: the top bar says nothing of the host
 //   build         the desk: the top bar says host older, and its lines offer the restart
 //   version       no desk: both versions named, and the restart
 //   reconnecting  the desk dimmed: the top bar says host down, and its lines say why

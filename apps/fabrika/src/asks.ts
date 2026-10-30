@@ -34,9 +34,6 @@ import {Clock, Duration, Effect, Schema, Stream} from "effect";
 // "Later" and "seen" are the person's, not the ledger's: no fact says them. They live here, in
 // the host, so every window shows the same, and are lost when the host stops. A later lost brings
 // its ask back into the count: the count errs toward more, never toward less.
-//
-// The same fold says how many agent runs go now (a `started` with no `ended`, on an open ticket)
-// and what the runs that ended today cost (`ended.usd`), for the top bar's agents.
 
 /** One thing that waits on the person: an open ask, or a stuck run. */
 export const Ask = Schema.Struct({
@@ -57,18 +54,14 @@ export type Ask = typeof Ask.Type;
 
 /**
  * What the frame shows, from the ledger: the live asks (the count), oldest first, the ones set
- * aside, the agents running and today's cost, and whether the ledger answers.
+ * aside, and whether the ledger answers.
  *
  * `reach`: `reading` before the first read, `ok` once one worked, `failed` when the last failed.
- * `shared`: the ledger is a server's, not this home's own file, so "synced" means something.
  */
 export const AsksNow = Schema.Struct({
 	asks: Schema.Array(Ask),
 	later: Schema.Array(Ask),
-	agents: Schema.Int,
-	usd: Schema.Finite,
 	reach: Schema.Literals(["reading", "ok", "failed"]),
-	shared: Schema.Boolean,
 	/** Why the last read failed, in words, or `null`. */
 	why: Schema.NullOr(Schema.String),
 });
@@ -87,16 +80,15 @@ export interface Asks {
 	readonly later: readonly string[];
 	/** The keys the person has seen in the list. */
 	readonly seen: readonly string[];
-	/** The clock's last tick, and the start of that day, local time. 0: no tick yet. */
+	/** The clock's last tick, the time the tracker's head is read at. 0: no tick yet. */
 	readonly now: number;
-	readonly day: number;
 }
 
 export type AsksMsg =
 	| {readonly type: "moved"}
 	/** The poll could not read the ledger. */
 	| {readonly type: "failed"; readonly why: string}
-	| {readonly type: "tick"; readonly now: number; readonly day: number}
+	| {readonly type: "tick"; readonly now: number}
 	| {readonly type: "later"; readonly key: string}
 	| {readonly type: "back"; readonly key: string}
 	| {readonly type: "seen"};
@@ -110,7 +102,7 @@ export const load = Cmd.define("load", {
 
 /** The poll: rows after `after` are news; `failed`, and the first read that works is news too. */
 export type PollSub = Sub<"poll", {readonly after: number; readonly failed: boolean}>;
-/** The clock: the time and the day, once a minute. */
+/** The clock: the time, once a minute. */
 export type ClockSub = Sub<"clock", Record<string, never>>;
 
 type Step = readonly [Asks, readonly ReturnType<typeof load>[]];
@@ -124,7 +116,6 @@ const START: Asks = {
 	later: [],
 	seen: [],
 	now: 0,
-	day: 0,
 };
 
 /** Why a cell failed, in words. */
@@ -154,7 +145,7 @@ export const asksMachine = defineMachine({
 				? [{...s, load: "busy"}, [load({after: s.after})]]
 				: [{...s, load: "again"}, []],
 		failed: (s, m): Step => [{...s, reach: "failed", why: m.why}, []],
-		tick: (s, m): Step => [{...s, now: m.now, day: m.day}, []],
+		tick: (s, m): Step => [{...s, now: m.now}, []],
 		later: (s, m): Step =>
 			s.later.includes(m.key) ? [s, []] : [{...s, later: [...s.later, m.key]}, []],
 		back: (s, m): Step => [{...s, later: s.later.filter((k) => k !== m.key)}, []],
@@ -219,42 +210,13 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 		})
 		.sort((a, b) => a.at - b.at);
 
-/** The agent runs going now: started and not ended, on an open ticket. */
-export const agentsOf = (tickets: readonly Ticket[]): number =>
-	tickets
-		.filter((t) => t.state === "open")
-		.reduce((n, t) => {
-			const ended = new Set(
-				t.timeline.flatMap((e) => (e.fact.type === "ended" ? [e.fact.run] : [])),
-			);
-			return (
-				n + t.timeline.filter((e) => e.fact.type === "started" && !ended.has(e.fact.run)).length
-			);
-		}, 0);
-
-/** What the runs that ended since `day` cost, in dollars. */
-export const costSince = (tickets: readonly Ticket[], day: number): number =>
-	tickets.reduce(
-		(sum, t) =>
-			sum +
-			t.timeline.reduce(
-				(own, e) => own + (e.fact.type === "ended" && e.at >= day ? e.fact.usd : 0),
-				0,
-			),
-		0,
-	);
-
 /** The frame's view of the asks: one value, for the top bar, the badge and the list alike. */
-export const asksNow = (s: Asks, shared: boolean): AsksNow => {
+export const asksNow = (s: Asks): AsksNow => {
 	const all = waitingOf(s.tickets, s.now).map((a) => ({...a, seen: s.seen.includes(a.key)}));
 	return {
 		asks: all.filter((a) => !s.later.includes(a.key)),
 		later: all.filter((a) => s.later.includes(a.key)),
-		agents: agentsOf(s.tickets),
-		// Before the clock's first tick the day is not known: nothing is counted as today's.
-		usd: s.day === 0 ? 0 : costSince(s.tickets, s.day),
 		reach: s.reach,
-		shared,
 		why: s.why,
 	};
 };
@@ -329,17 +291,14 @@ export const pollRunner = (sub: PollSub) =>
 		Stream.take(1),
 	);
 
-/** How often the clock ticks: the day's cost turns over within a minute of midnight. */
+/** How often the clock ticks: the tracker's head reads the time, as its own list does. */
 export const CLOCK = Duration.minutes(1);
 
-/** The start of the day `now` is in, local time. */
-export const dayOf = (now: number): number => new Date(now).setHours(0, 0, 0, 0);
-
-/** `tick` with the time and the day, at once and then once a minute. */
+/** `tick` with the time, at once and then once a minute. */
 export const clockRunner = (_sub: ClockSub) =>
 	Stream.tick(CLOCK).pipe(
 		Stream.mapEffect(() => Clock.currentTimeMillis),
-		Stream.map((now): AsksMsg => ({type: "tick", now, day: dayOf(now)})),
+		Stream.map((now): AsksMsg => ({type: "tick", now})),
 	);
 
 /** How the machine runs: its cell and Subs, on the `Ledger` service. */

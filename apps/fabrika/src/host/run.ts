@@ -103,7 +103,6 @@ export const runHost = (options: {
 			ours,
 			build,
 			agents,
-			shared: !ownLedger,
 			jobs,
 			desk: {
 				kept,

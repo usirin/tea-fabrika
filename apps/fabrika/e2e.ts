@@ -755,32 +755,31 @@ const noInterrupts = (app: ElectronApplication) =>
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
 
-/** Where the window says the link: the host's word in the top bar, a status. */
+/** Where the window says the link: the host's word in the top bar, a status, empty while up. */
 const LINK = '[role="status"][aria-label="the link to the host"]';
 /**
  * From now on, note each change in what the window says of the link: a word may be up for a
- * moment only. "" is the host ok.
+ * moment only. "" is the host up.
  */
 const watchNotes = (page: Page) =>
 	page.evaluate((link) => {
 		const said: string[] = [""];
 		Object.assign(globalThis, {said});
 		new MutationObserver(() => {
-			const word = document.querySelector(link)?.textContent ?? "";
-			const text = word === "host ok" ? "" : word;
+			const text = document.querySelector(link)?.textContent ?? "";
 			if (said.at(-1) !== text) said.push(text);
 		}).observe(document.body, {childList: true, subtree: true, characterData: true});
 	}, LINK);
 /** The words the window said of the link since `watchNotes`, in order, with no "". */
 const notesSaid = (page: Page) =>
 	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
-/** What the window says of the link now, or "" for the host ok. */
+/** What the window says of the link now, or "" for the host up. */
 const noteNow = (page: Page) =>
 	page
 		.locator(LINK)
 		.textContent({timeout: 500})
 		.then(
-			(t) => (t === "host ok" ? "" : (t ?? "")),
+			(t) => t ?? "",
 			() => "",
 		);
 /** The host's few lines, opened from its word in the top bar, then closed again. */
@@ -796,10 +795,10 @@ const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: the host ok, and nothing dimmed. */
+/** The desk is back: nothing said of the host, and nothing dimmed. */
 const deskBack = (page: Page) =>
 	until(
-		"the desk back, the host ok",
+		"the desk back, the host up",
 		async () => [await noteNow(page), await page.locator(".desk.lost").count()] as const,
 		([word, lost]) => word === "" && lost === 0,
 	);

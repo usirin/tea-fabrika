@@ -2,10 +2,10 @@ import {applyCell} from "@demlik/tea";
 import type {MsgOf} from "@kampus/fabrika";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
-import {type Asks, asksMachine, asksNow, dayOf, keysOf, load, newAsks, noticeOf} from "./asks.ts";
+import {type Asks, asksMachine, asksNow, keysOf, load, newAsks, noticeOf} from "./asks.ts";
 
 // The asks count, folded from the ledger's facts as the tracker folds them: what waits on the
-// person, what was set aside, what was seen, the agents running and today's cost.
+// person, what was set aside, and what was seen.
 
 const owner = {kind: "user", id: "owner"} as const;
 const agent = (id: string) => ({kind: "agent", id, for: "owner"}) as const;
@@ -42,7 +42,7 @@ const loaded = (entries: readonly Entry[]): Asks => {
 	const cmd = first[0];
 	if (cmd === undefined) throw new Error("the machine starts with a load");
 	const [read] = step(start, load.ok(cmd, {entries, last: entries.length}, 0));
-	const [ticked] = step(read, {type: "tick", now: NOON + HOUR, day: dayOf(NOON)});
+	const [ticked] = step(read, {type: "tick", now: NOON + HOUR});
 	return ticked;
 };
 const HOUR = 60 * MINUTE;
@@ -65,7 +65,7 @@ const facts = entriesOf(
 
 describe("the asks", () => {
 	it("counts each open ask and each stuck run, oldest first, and nothing answered or closed", () => {
-		const now = asksNow(loaded(facts), false);
+		const now = asksNow(loaded(facts));
 		expect(now.asks.map((a) => [a.key, a.ticket, a.kind, a.what])).toEqual([
 			["7/a-1", 7, "ask", "approve plan"],
 			["8/stuck/r-1", 8, "stuck", "read failed"],
@@ -76,16 +76,16 @@ describe("the asks", () => {
 
 	it("takes an ask set aside out of the count, shows it as later, and brings it back", () => {
 		const [aside] = step(loaded(facts), {type: "later", key: "7/a-1"});
-		const now = asksNow(aside, false);
+		const now = asksNow(aside);
 		expect(now.asks.map((a) => a.key)).toEqual(["8/stuck/r-1"]);
 		expect(now.later.map((a) => a.key)).toEqual(["7/a-1"]);
 		const [back] = step(aside, {type: "back", key: "7/a-1"});
-		expect(asksNow(back, false).asks.map((a) => a.key)).toEqual(["7/a-1", "8/stuck/r-1"]);
+		expect(asksNow(back).asks.map((a) => a.key)).toEqual(["7/a-1", "8/stuck/r-1"]);
 	});
 
 	it("marks every ask seen once the list opens, and a newer one comes unseen", () => {
 		const [seen] = step(loaded(facts), {type: "seen"});
-		expect(asksNow(seen, false).asks.every((a) => a.seen)).toBe(true);
+		expect(asksNow(seen).asks.every((a) => a.seen)).toBe(true);
 		const more = entriesOf(
 			...facts.map((e) => [e.ticket, e.by, e.fact] as const),
 			asked(11, "a-2", "merge?"),
@@ -97,26 +97,12 @@ describe("the asks", () => {
 			busy,
 			load.ok(cmd, {entries: more.slice(facts.length), last: more.length}, 0),
 		);
-		const now = asksNow(read, false);
+		const now = asksNow(read);
 		expect(now.asks.map((a) => [a.key, a.seen])).toEqual([
 			["7/a-1", true],
 			["8/stuck/r-1", true],
 			["11/a-2", false],
 		]);
-	});
-
-	it("says the agents running on open tickets and what today's runs cost", () => {
-		const now = asksNow(loaded(facts), true);
-		expect(now.agents).toBe(1);
-		expect(now.usd).toBe(0.25);
-		expect(now.shared).toBe(true);
-		// The next day, yesterday's runs cost nothing today.
-		const [tomorrow] = step(loaded(facts), {
-			type: "tick",
-			now: NOON + 24 * HOUR,
-			day: dayOf(NOON + 24 * HOUR),
-		});
-		expect(asksNow(tomorrow, true).usd).toBe(0);
 	});
 
 	it("loads once at a time: news while a load is out asks for one more after it", () => {
@@ -133,7 +119,7 @@ describe("the asks", () => {
 	});
 
 	it("tells of an ask only once it is new, never on the first value after an attach", () => {
-		const now = asksNow(loaded(facts), false);
+		const now = asksNow(loaded(facts));
 		expect(newAsks(null, now)).toEqual([]);
 		expect(newAsks(new Set(["7/a-1"]), now).map((a) => a.key)).toEqual(["8/stuck/r-1"]);
 		expect(newAsks(keysOf(now), now)).toEqual([]);
@@ -148,7 +134,7 @@ describe("the asks", () => {
 
 	it("says the ledger failed, and keeps the count it had", () => {
 		const [failed] = step(loaded(facts), {type: "failed", why: "connection refused"});
-		const now = asksNow(failed, true);
+		const now = asksNow(failed);
 		expect(now.reach).toBe("failed");
 		expect(now.why).toBe("connection refused");
 		expect(now.asks).toHaveLength(2);

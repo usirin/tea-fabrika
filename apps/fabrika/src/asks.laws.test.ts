@@ -24,8 +24,7 @@ import {type Asks, asksMachine, asksNow, load, waitingOf} from "./asks.ts";
 //   seen         takes the dot away, never an ask.
 //   one read     the ledger is read once at a time, and news that came during a read is read
 //                next. The poll is off while a read is out.
-//   honest       nothing is counted as today's before the clock said what day it is; a failed
-//                read says so, with why; the place read to never goes back.
+//   honest       a failed read says so, with why; the place read to never goes back.
 //
 // Any Msgs in any order feed them, as a broken world might send them: answers nobody asked for,
 // ticks, later and back on keys that wait and keys that do not.
@@ -38,7 +37,6 @@ type AsksStep = Step<Asks, Msg, Load>;
 const ctx = stubCtxThrowingProxy<undefined>();
 const OPTS = {numRuns: 300, seed: 1};
 const NOON = new Date(2026, 9, 30, 12).getTime();
-const DAY = new Date(2026, 9, 30).getTime();
 const malformed = {_tag: "malformed_result", issues: []} as const;
 
 // ---------------------------------------------------------------- the facts a read brings
@@ -112,7 +110,7 @@ const table: MsgArbitraryTable<Msg> = {
 	failed: arbRecordMsg("failed", {why: fc.constantFrom("refused", "timed out")}),
 	tick: fc
 		.integer({min: 0, max: 3})
-		.map((h) => ({type: "tick", now: NOON + h * 3_600_000, day: DAY}) as const),
+		.map((h) => ({type: "tick", now: NOON + h * 3_600_000}) as const),
 	later: arbRecordMsg("later", {key}),
 	back: arbRecordMsg("back", {key}),
 	seen: arbConstantMsg("seen"),
@@ -157,8 +155,8 @@ const laterMoves = everyStep(
 	"later takes an ask out of the count, back brings it in, and neither changes what waits",
 	({prev, msg, next}) => {
 		if (msg.type !== "later" && msg.type !== "back") return true;
-		const before = asksNow(prev, false);
-		const after = asksNow(next, false);
+		const before = asksNow(prev);
+		const after = asksNow(next);
 		const waiting = keys([...after.asks, ...after.later]);
 		if (!same(keys([...before.asks, ...before.later]), waiting)) return false;
 		if (!waiting.includes(msg.key)) return true;
@@ -170,8 +168,8 @@ const laterMoves = everyStep(
 
 const seenOnlyDot = everyStep("seen takes the dot away and never an ask", ({prev, msg, next}) => {
 	if (msg.type !== "seen") return true;
-	const before = asksNow(prev, false);
-	const after = asksNow(next, false);
+	const before = asksNow(prev);
+	const after = asksNow(next);
 	return (
 		same(keys(before.asks), keys(after.asks)) &&
 		same(keys(before.later), keys(after.later)) &&
@@ -217,21 +215,10 @@ const pollOff = everyStep(
 	},
 );
 
-const noCostBeforeDay = everyTrace(
-	"nothing is counted as today's before the clock said what day it is",
-	(steps) => {
-		for (const {msg, next} of steps) {
-			if (msg.type === "tick") return true;
-			if (asksNow(next, false).usd !== 0) return false;
-		}
-		return true;
-	},
-);
-
 const failureSaid = everyStep(
 	"a failed read says so, with why, until a read works",
 	({msg, next}) => {
-		const now = asksNow(next, false);
+		const now = asksNow(next);
 		if (msg.type === "failed" || msg.type === "load_err")
 			return now.reach === "failed" && now.why !== null;
 		if (msg.type === "load_ok") return now.reach === "ok" && now.why === null;
@@ -244,16 +231,7 @@ const neverBack = everyStep(
 	({prev, next}) => next.after >= prev.after,
 );
 
-const LAWS = [
-	laterMoves,
-	seenOnlyDot,
-	oneRead,
-	newsRead,
-	pollOff,
-	noCostBeforeDay,
-	failureSaid,
-	neverBack,
-];
+const LAWS = [laterMoves, seenOnlyDot, oneRead, newsRead, pollOff, failureSaid, neverBack];
 
 const broken = (machine: Machine): readonly string[] =>
 	LAWS.filter((law) => {
@@ -297,14 +275,6 @@ const PLANTS = {
 			sub.type === "poll" ? {...sub, deps: (s: Asks) => ({after: s.after, failed: false})} : sub,
 		),
 	} as Machine,
-	/** The day is taken as known from the start. */
-	knowsTheDay: {
-		...asksMachine,
-		init: (flags, c) => {
-			const [s, cmds] = asksMachine.init(flags, c);
-			return [{...s, day: 1}, cmds];
-		},
-	} as Machine,
 	/** A read that worked keeps the last failure's words. */
 	keepsFailure: plant({
 		load_ok: (s, m) => {
@@ -342,9 +312,7 @@ describe("the asks machine's laws", () => {
 		expect(new Set(reached.map((s) => s.reach))).toEqual(new Set(["reading", "ok", "failed"]));
 		const kinds = reached.flatMap((s) => waitingOf(s.tickets, s.now).map((a) => a.kind));
 		expect(new Set(kinds)).toEqual(new Set(["ask", "stuck"]));
-		expect(reached.some((s) => s.later.length > 0 && asksNow(s, false).later.length > 0)).toBe(
-			true,
-		);
+		expect(reached.some((s) => s.later.length > 0 && asksNow(s).later.length > 0)).toBe(true);
 	});
 
 	it("each law is seen to fail on a planted mistake", () => {
@@ -359,7 +327,6 @@ describe("the asks machine's laws", () => {
 			readsTwice: [oneRead.name, newsRead.name],
 			forgetsNews: [newsRead.name],
 			pollAlways: [pollOff.name],
-			knowsTheDay: [noCostBeforeDay.name],
 			keepsFailure: [failureSaid.name],
 			readsBack: [neverBack.name],
 		});
