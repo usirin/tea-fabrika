@@ -20,7 +20,8 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
-| Change the machines | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#packages) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika`, a subpath such as `@kampus/fabrika/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
+| Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
+| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#packages) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika`, a subpath such as `@kampus/fabrika/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial: its README and its finished files | A folder there with a `package.json` whose `typecheck` covers the files, so a change to the package that breaks the tutorial fails `pnpm typecheck`. Run every step on a fresh clone before it lands. |
 | Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
@@ -32,6 +33,38 @@ asked.
 `experiments/`. Something that happened on a real ticket goes in `field/`. If a
 piece of knowledge about this project lives only in a chat or in an agent's
 private memory, it is in the wrong place: write it here.
+
+## Two versions, side by side
+
+A new version of fabrika is growing in `next/`, built on
+[the five layers](./docs/direction/a-local-first-sync-engine.md). Everything
+else (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`) is today's
+version. It keeps running for daily use until the new one takes each job over
+([clean slate](./docs/direction/clean-slate.md)).
+
+Before you read or change code, know which version your work is in. Your brief
+or ticket says so. If it does not, a fix to something in use is today's version,
+new design work is `next/`, and if you still cannot tell, ask.
+
+```text
+next/              what we are building, on the decisions in docs/direction
+everything else    what we use today, and a map of which jobs exist
+```
+
+- **A search finds both.** Check the path of every file you read before you
+  trust it. A name that exists in both can mean different things: a `rev` or a
+  `host` in today's code is not the same as in the decisions.
+- **Say which version a claim is about,** in every write-up, note and report.
+  "The host keeps X" is true of one version.
+- **In `next/`:** follow `docs/direction`, not today's code. Read today's code
+  and its tests to learn what jobs exist and what was learned, then rethink. Never
+  import it and never copy it across
+  ([rethink, do not port](./docs/direction/rethink-do-not-port.md)).
+- **In today's version:** only fixes that daily use or CI needs. No new features.
+- **When `next/` takes a job over,** the pull request that switches to it deletes
+  the old part. Its tests or laws are ported first.
+- `next/` is the lab until a person opens it for real work, so it may be rough. "No
+  rough first versions" (below) applies from then on.
 
 ## Before you design anything
 
