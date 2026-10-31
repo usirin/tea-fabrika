@@ -436,12 +436,7 @@ export function runDue(db: Db, now: number): Written[] {
 }
 
 /** The log after `fromPos`; with a prefix, only that stream and the streams under it. */
-export const read = (
-	db: Db,
-	fromPos: number,
-	limit: number,
-	prefix: string | null = null,
-): Row[] =>
+export const read = (db: Db, fromPos: number, limit: number, prefix: string | null = null): Row[] =>
 	prefix === null
 		? db.all("SELECT * FROM events WHERE pos > ? ORDER BY pos LIMIT ?", fromPos, limit)
 		: db.all(

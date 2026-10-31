@@ -43,24 +43,25 @@ const fact: fc.Arbitrary<Fact> = fc.oneof(
 		weight: 3,
 	},
 	{
-		arbitrary: fc.tuple(run, stage, outcome).map(
-			([r, s, o]): Fact => ({
-				type: "ended",
-				run: r,
-				stage: s,
-				outcome: o,
-				usd: 0.1,
-				input: 10,
-				output: 5,
-				turns: 3,
-			}),
-		),
+		arbitrary: fc.tuple(run, stage, outcome).map(([r, s, o]): Fact => ({
+			type: "ended",
+			run: r,
+			stage: s,
+			outcome: o,
+			usd: 0.1,
+			input: 10,
+			output: 5,
+			turns: 3,
+		})),
 		weight: 3,
 	},
 	{
-		arbitrary: ask.map(
-			(a): Fact => ({type: "asked", ask: a, what: `approve ${a}`, picks: [...PICKS]}),
-		),
+		arbitrary: ask.map((a): Fact => ({
+			type: "asked",
+			ask: a,
+			what: `approve ${a}`,
+			picks: [...PICKS],
+		})),
 		weight: 3,
 	},
 	{
@@ -70,15 +71,13 @@ const fact: fc.Arbitrary<Fact> = fc.oneof(
 		weight: 3,
 	},
 	{
-		arbitrary: fc.constantFrom("draft", "open", "merged", "closed").map(
-			(state): Fact => ({
-				type: "pr",
-				url: "https://github.com/o/r/pull/12",
-				state: state as "draft" | "open" | "merged" | "closed",
-				head: SHA,
-				checks: [],
-			}),
-		),
+		arbitrary: fc.constantFrom("draft", "open", "merged", "closed").map((state): Fact => ({
+			type: "pr",
+			url: "https://github.com/o/r/pull/12",
+			state: state as "draft" | "open" | "merged" | "closed",
+			head: SHA,
+			checks: [],
+		})),
 		weight: 2,
 	},
 	fc.constant<Fact>({type: "rated", finding: "f-1", says: "noise"}),

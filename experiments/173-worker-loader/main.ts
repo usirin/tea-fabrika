@@ -80,7 +80,7 @@ export const workerdRssKb = (): number => {
 	const mine = new Set([String(process.pid)]);
 	let total = 0;
 	// Walk the tree under this Node process; count every workerd in it.
-	for (let changed = true; changed; ) {
+	for (let changed = true; changed;) {
 		changed = false;
 		for (const [pid, ppid] of rows)
 			if (pid && ppid && mine.has(ppid) && !mine.has(pid)) {

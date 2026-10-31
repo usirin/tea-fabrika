@@ -600,13 +600,12 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 			raw
 				.link(fence, other)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<void, Fenced | NoProc> =>
-							r.ok
-								? Effect.void
-								: r.why === "noproc"
-									? Effect.fail(new NoProc({name: other}))
-									: Effect.fail(new Fenced({stream: other})),
+					Effect.flatMap((r): Effect.Effect<void, Fenced | NoProc> =>
+						r.ok
+							? Effect.void
+							: r.why === "noproc"
+								? Effect.fail(new NoProc({name: other}))
+								: Effect.fail(new Fenced({stream: other})),
 					),
 				),
 		unlink: (fence, other) => raw.unlink(fence, other).pipe(Effect.flatMap(flag(other))),
@@ -615,56 +614,52 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 			raw
 				.startChild(fence, child, after, limits ?? null)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<Started, Fenced | Denied | OverLimit> =>
-							r.ok
-								? Effect.succeed({incarnation: r.incarnation, started: r.started})
-								: r.why === "limit"
-									? Effect.fail(new OverLimit({name: child, over: r.over}))
-									: r.why === "denied"
-										? Effect.fail(new Denied({stream: child}))
-										: Effect.fail(new Fenced({stream: child})),
+					Effect.flatMap((r): Effect.Effect<Started, Fenced | Denied | OverLimit> =>
+						r.ok
+							? Effect.succeed({incarnation: r.incarnation, started: r.started})
+							: r.why === "limit"
+								? Effect.fail(new OverLimit({name: child, over: r.over}))
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: child}))
+									: Effect.fail(new Fenced({stream: child})),
 					),
 				),
 		hold: (fence, id, cost) =>
 			raw
 				.hold(fence, id, cost)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<{readonly dup: boolean}, Fenced | Denied | OverLimit> =>
-							r.ok
-								? Effect.succeed({dup: r.dup})
-								: r.why === "limit"
-									? Effect.fail(new OverLimit({name: r.over.at, over: r.over}))
-									: r.why === "denied"
-										? Effect.fail(new Denied({stream: id}))
-										: Effect.fail(new Fenced({stream: id})),
+					Effect.flatMap((r): Effect.Effect<{readonly dup: boolean}, Fenced | Denied | OverLimit> =>
+						r.ok
+							? Effect.succeed({dup: r.dup})
+							: r.why === "limit"
+								? Effect.fail(new OverLimit({name: r.over.at, over: r.over}))
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: id}))
+									: Effect.fail(new Fenced({stream: id})),
 					),
 				),
 		charge: (fence, id, cost) =>
 			raw
 				.charge(fence, id, cost)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<Charged, Fenced | Denied> =>
-							r.ok
-								? Effect.succeed({dup: r.dup, over: r.over})
-								: r.why === "denied"
-									? Effect.fail(new Denied({stream: id}))
-									: Effect.fail(new Fenced({stream: id})),
+					Effect.flatMap((r): Effect.Effect<Charged, Fenced | Denied> =>
+						r.ok
+							? Effect.succeed({dup: r.dup, over: r.over})
+							: r.why === "denied"
+								? Effect.fail(new Denied({stream: id}))
+								: Effect.fail(new Fenced({stream: id})),
 					),
 				),
 		setLimits: (name, limits, writer) =>
 			raw
 				.setLimits(name, limits, writer)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<Appended, Denied | UnknownName> =>
-							r.ok
-								? Effect.succeed({pos: r.pos, rev: r.rev, dup: false})
-								: r.why === "denied"
-									? Effect.fail(new Denied({stream: name}))
-									: Effect.fail(new UnknownName({stream: name})),
+					Effect.flatMap((r): Effect.Effect<Appended, Denied | UnknownName> =>
+						r.ok
+							? Effect.succeed({pos: r.pos, rev: r.rev, dup: false})
+							: r.why === "denied"
+								? Effect.fail(new Denied({stream: name}))
+								: Effect.fail(new UnknownName({stream: name})),
 					),
 				),
 		usage: raw.usage,
@@ -672,13 +667,12 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 			raw
 				.exitChild(fence, child, incarnation, signal, why)
 				.pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<"signalled" | "exited" | "noproc", Fenced | Denied> =>
-							r.ok
-								? Effect.succeed(r.how)
-								: r.why === "denied"
-									? Effect.fail(new Denied({stream: child}))
-									: Effect.fail(new Fenced({stream: child})),
+					Effect.flatMap((r): Effect.Effect<"signalled" | "exited" | "noproc", Fenced | Denied> =>
+						r.ok
+							? Effect.succeed(r.how)
+							: r.why === "denied"
+								? Effect.fail(new Denied({stream: child}))
+								: Effect.fail(new Fenced({stream: child})),
 					),
 				),
 		processInfo: raw.processInfo,

@@ -2,7 +2,6 @@ import {describe, expect, it} from "@effect/vitest";
 import {Clock, Effect, Layer, Logger, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
 import {TestClock} from "effect/testing";
-import {Keys} from "./keys.ts";
 import {
 	isLogin,
 	KEYS_CACHE_MS,
@@ -13,6 +12,7 @@ import {
 	numberOf,
 	TOKEN_REFUSED,
 } from "./keys-github.ts";
+import {Keys} from "./keys.ts";
 
 // GitHub's answer to `Keys`, against a fake api.github.com: what it asks, what it gives back, how
 // long it keeps an answer, and the token it sends. Nothing leaves this process. The door itself is

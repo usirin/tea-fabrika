@@ -80,7 +80,7 @@ const byNumber = new Map(issues.map((i) => [i.number, i]));
 // 1,000 results, so the oldest may be missed.
 const searched: {number: number; comments: {nodes: {body: string}[]}}[] = [];
 const query = `query($after:String){search(query:"repo:${REPO} is:issue is:closed \\"duplicate of\\" in:comments",type:ISSUE,first:50,after:$after){pageInfo{hasNextPage endCursor} nodes{... on Issue{number comments(first:30){nodes{body}}}}}}`;
-for (let after: string | null = null; ; ) {
+for (let after: string | null = null; ;) {
 	const page = gh<{
 		data: {search: {pageInfo: {hasNextPage: boolean; endCursor: string}; nodes: typeof searched}};
 	}>("api", "graphql", "-f", `query=${query}`, ...(after ? ["-f", `after=${after}`] : [])).data

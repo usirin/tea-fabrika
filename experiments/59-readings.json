@@ -505,7 +505,10 @@
 				[81, 84, "why", 14],
 				[86, 90, "judgment", 14]
 			],
-			"agents/reviewer.md": [[1, 6, "other", 0], [8, 11, "other", 0]]
+			"agents/reviewer.md": [
+				[1, 6, "other", 0],
+				[8, 11, "other", 0]
+			]
 		}
 	},
 	"repeats": {
@@ -524,7 +527,10 @@
 			},
 			{
 				"rule": "Give the wait a caller deadline above its budget (600000 ms and 480 s)",
-				"places": [["SKILL.md", 445, 464], ["contract.md", 800, 811]]
+				"places": [
+					["SKILL.md", 445, 464],
+					["contract.md", 800, 811]
+				]
 			},
 			{
 				"rule": "Do not run again what the checks already enforce",
@@ -561,7 +567,11 @@
 			},
 			{
 				"rule": "Read a skill file whole and a contract one heading at a time",
-				"places": [["SKILL.md", 332, 348], ["rubrics/skill.md", 3, 8], ["rubrics/skill.md", 61, 65]]
+				"places": [
+					["SKILL.md", 332, 348],
+					["rubrics/skill.md", 3, 8],
+					["rubrics/skill.md", 61, 65]
+				]
 			},
 			{
 				"rule": "A round that adds a criterion must end FAIL (exit 18)",
@@ -591,11 +601,18 @@
 			},
 			{
 				"rule": "Why an epic child's working copy is the wrong one, with the run that showed it",
-				"places": [["SKILL.md", 219, 228], ["contract.md", 1908, 1913], ["contract.md", 1992, 1997]]
+				"places": [
+					["SKILL.md", 219, 228],
+					["contract.md", 1908, 1913],
+					["contract.md", 1992, 1997]
+				]
 			},
 			{
 				"rule": "The temp file another lane overwrote",
-				"places": [["SKILL.md", 304, 309], ["contract.md", 1876, 1881]]
+				"places": [
+					["SKILL.md", 304, 309],
+					["contract.md", 1876, 1881]
+				]
 			},
 			{
 				"rule": "Never judge or post the review-ui kind",
@@ -609,19 +626,32 @@
 			},
 			{
 				"rule": "Pass on every class row that scope printed",
-				"places": [["SKILL.md", 48, 62], ["SKILL.md", 721, 738]]
+				"places": [
+					["SKILL.md", 48, 62],
+					["SKILL.md", 721, 738]
+				]
 			},
 			{
 				"rule": "Governance is never a way to end the run",
-				"places": [["SKILL.md", 558, 560], ["SKILL.md", 696, 704]]
+				"places": [
+					["SKILL.md", 558, 560],
+					["SKILL.md", 696, 704]
+				]
 			},
 			{
 				"rule": "Apply the writing-for-agents skill as written",
-				"places": [["SKILL.md", 260, 262], ["rubrics/doc.md", 38, 41], ["rubrics/skill.md", 79, 84]]
+				"places": [
+					["SKILL.md", 260, 262],
+					["rubrics/doc.md", 38, 41],
+					["rubrics/skill.md", 79, 84]
+				]
 			},
 			{
 				"rule": "End with two plain lines for the person",
-				"places": [["SKILL.md", 780, 786], ["rubrics/skill.md", 67, 75]]
+				"places": [
+					["SKILL.md", 780, 786],
+					["rubrics/skill.md", 67, 75]
+				]
 			}
 		]
 	}

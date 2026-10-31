@@ -10,8 +10,8 @@ import {
 	ship,
 } from "../stages/ship/machine.ts";
 import {CRITERIA, metAt, ON_TIP} from "../stages/ship/scripted.ts";
-import * as old from "./ship.ts";
 import * as pbt from "./ship-pbt.ts";
+import * as old from "./ship.ts";
 
 const OPTS = {numRuns: 2000, seed: 1};
 
@@ -80,9 +80,10 @@ describe("ship, as property tests", () => {
 			0,
 		);
 		const list = fc.constant([{type: "start" as const, pr: pbt.PR}, failedBeside]);
-		const once = pbt.TODAY.map(
-			(law): pbt.Property => ({name: law.name, run: (m, o) => pbt.holds(m, law, o, list)}),
-		);
+		const once = pbt.TODAY.map((law): pbt.Property => ({
+			name: law.name,
+			run: (m, o) => pbt.holds(m, law, o, list),
+		}));
 		expect(breaks(once, ship)).toEqual([]);
 		const [end] = applyCell<Ship, pbt.AnyShipMsg, ShipCmd>(
 			ship,

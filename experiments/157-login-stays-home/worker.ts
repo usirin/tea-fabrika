@@ -22,8 +22,8 @@
 // It runs in workerd under `wrangler dev`, with Docker for the boxes. Erasable TypeScript; its
 // only imports are its own folder's files, `cloudflare:workers` and `@cloudflare/sandbox`.
 
-import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {Files} from "@cloudflare/sandbox";
+import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {open, type Sealed, seal} from "./seal.ts";
 import {verify} from "./ticket.ts";
 

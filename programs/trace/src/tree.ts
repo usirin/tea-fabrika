@@ -147,21 +147,19 @@ export const treeOf = (trace: JobTrace): Node => {
 				wrong: span?.status === "error",
 				events: span?.events.map((e) => ({name: e.name, at: e.at})) ?? [],
 				of: {kind: "machine", run, machine: first.machine, id: first.id, steps, span},
-				children: steps.map(
-					(step, i): Node => ({
-						key: stepKey(step),
-						kind: "step",
-						name: msgName(step.msg),
-						note: `step ${step.n}`,
-						service,
-						from: step.at,
-						to: step.at,
-						wrong: false,
-						events: [],
-						of: {kind: "step", step, before: steps[i - 1] ?? null},
-						children: [],
-					}),
-				),
+				children: steps.map((step, i): Node => ({
+					key: stepKey(step),
+					kind: "step",
+					name: msgName(step.msg),
+					note: `step ${step.n}`,
+					service,
+					from: step.at,
+					to: step.at,
+					wrong: false,
+					events: [],
+					of: {kind: "step", step, before: steps[i - 1] ?? null},
+					children: [],
+				})),
 			};
 		});
 		return {nodes, used};

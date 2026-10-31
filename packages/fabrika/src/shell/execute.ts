@@ -517,15 +517,13 @@ const runStages = (
 			if (!got.ok) return {status: got.status, values: []};
 			read.push(got);
 		}
-		const records = runs.map(
-			({stage, run}, i): StageRecord => ({
-				program: stage.entry.program.name,
-				flags: read[i]?.flags ?? {},
-				run,
-				wire: stage.wire,
-				ended: false,
-			}),
-		);
+		const records = runs.map(({stage, run}, i): StageRecord => ({
+			program: stage.entry.program.name,
+			flags: read[i]?.flags ?? {},
+			run,
+			wire: stage.wire,
+			ended: false,
+		}));
 		const [head, ...tail] = records;
 		if (head === undefined) return {status: 0, values: []};
 		const background = mode.kind === "background";

@@ -58,7 +58,6 @@ import {gitWorktrees, issueThread} from "@tea-fabrika/wip/operator-live";
 import {Effect, Layer} from "effect";
 import {cliFabrika} from "./fabrika-cli.ts";
 import {jevKey, liveJev} from "./local.ts";
-import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
 import {
 	fieldRows,
 	knobsOf,
@@ -68,6 +67,7 @@ import {
 	operatorShipSubscribe,
 	operatorSubscribe,
 } from "./operator-host.ts";
+import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
 
 const need = (name: string) => {
 	const value = process.env[name];

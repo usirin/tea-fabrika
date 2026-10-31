@@ -663,7 +663,7 @@ function spearman(a: readonly number[], b: readonly number[]): number {
 	const ranks = (xs: readonly number[]) => {
 		const order = xs.map((x, i) => ({x, i})).sort((p, q) => p.x - q.x);
 		const out = new Array<number>(xs.length);
-		for (let k = 0; k < order.length; ) {
+		for (let k = 0; k < order.length;) {
 			let j = k;
 			while (j + 1 < order.length && order[j + 1]?.x === order[k]?.x) j++;
 			for (let m = k; m <= j; m++) out[order[m]?.i ?? 0] = (k + j) / 2;

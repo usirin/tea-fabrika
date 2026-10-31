@@ -14,15 +14,8 @@ import {recordOf, TICKET} from "@kampus/pipeline/stages/ship/scripted";
 import {Deferred, Effect, Exit, Layer, Path, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
-import {Fabrika} from "./fabrika.ts";
 import {fakeFabrika} from "./fabrika-scripted.ts";
-import {
-	createOperator,
-	defaultKnobs,
-	type Knobs,
-	type Operator,
-	type OperatorMsg,
-} from "./operator.ts";
+import {Fabrika} from "./fabrika.ts";
 import {
 	askShipOn,
 	forgetShipOn,
@@ -32,6 +25,13 @@ import {
 	operatorSubscribe,
 	type ShipRun,
 } from "./operator-host.ts";
+import {
+	createOperator,
+	defaultKnobs,
+	type Knobs,
+	type Operator,
+	type OperatorMsg,
+} from "./operator.ts";
 import {scriptedJev} from "./scripted.ts";
 import type {AskShipCmd, ForgetShipCmd} from "./turn.ts";
 

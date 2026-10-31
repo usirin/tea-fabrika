@@ -1,8 +1,8 @@
+import {counter} from "@tea-fabrika/counter";
 // Part 2, design B, for the repo's own programs/counter: its `count` machine as a pure step.
 // The program is imported as its author wrote it; the hands decide what `effect` is in the build
 // (the real one, or ./effect-stub.ts, which throws if the update touches Effect at run time).
 import {WorkerEntrypoint} from "cloudflare:workers";
-import {counter} from "@tea-fabrika/counter";
 import {seal, usedOf} from "./effect-stub.ts";
 import {sandboxOf} from "./sandbox.ts";
 

@@ -57,6 +57,14 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
 import {
+	casePrompt,
+	codeLine,
+	liveSorter,
+	READ_USD,
+	treePool,
+	type World,
+} from "./lib/brief-eval-live.ts";
+import {
 	type Answer,
 	type Asked,
 	Bar,
@@ -89,14 +97,6 @@ import {
 	summarize,
 	verdictOf,
 } from "./lib/brief-eval.ts";
-import {
-	casePrompt,
-	codeLine,
-	liveSorter,
-	READ_USD,
-	treePool,
-	type World,
-} from "./lib/brief-eval-live.ts";
 import {allIssues, Cache, firstVersion, Truth} from "./lib/sort.ts";
 import {P_CAUGHT, P_FALSE_NO, P_KIND, PHOENIX_NOTE, truth92b} from "./lib/triage-135.ts";
 import {codexTurn} from "./lib/triage-codex.ts";

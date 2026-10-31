@@ -406,9 +406,8 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 /** Settle the note whose Act this answers, and end when the run is over and none is left on its way. */
 function settled(s: Review, intent: string, state: "kept" | "failed"): Step {
 	if (s.phase !== "reviewing" && s.phase !== "judging") return stay(s);
-	const notes = s.notes.map(
-		(n): Noted =>
-			n.state === "asked" && n.asked.intent === intent ? {id: n.id, note: n.note, state} : n,
+	const notes = s.notes.map((n): Noted =>
+		n.state === "asked" && n.asked.intent === intent ? {id: n.id, note: n.note, state} : n,
 	);
 	if (s.phase === "reviewing") return [{...s, notes}, []];
 	return end(s, s.outcome, s.judgement, notes);

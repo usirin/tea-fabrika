@@ -55,9 +55,12 @@ export function demoFacts(): readonly Fact[] {
 	const reviewed: Fact[] = plans
 		.filter((p) => p.n === STUCK)
 		.flatMap(({ticket}) =>
-			[4, 3, 3, 3].map(
-				(open): Fact => ({type: "reviewed", plan: planOf(ticket), task: taskId("t1"), open}),
-			),
+			[4, 3, 3, 3].map((open): Fact => ({
+				type: "reviewed",
+				plan: planOf(ticket),
+				task: taskId("t1"),
+				open,
+			})),
 		);
 	const rulings: Fact[] = RULINGS.map(({ruling}) => ({type: "ruling_needed", ...ruling}));
 	return [

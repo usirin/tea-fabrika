@@ -23,7 +23,6 @@ import {existsSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
-import {type Brief, briefOf, ExamSet, LabelledSet} from "./lib/brief-eval.ts";
 import {
 	casePrompt,
 	type Heard,
@@ -34,6 +33,7 @@ import {
 	treePool,
 	type World,
 } from "./lib/brief-eval-live.ts";
+import {type Brief, briefOf, ExamSet, LabelledSet} from "./lib/brief-eval.ts";
 import {SOL, type Used, usdAt} from "./lib/list-price.ts";
 import {shuffled} from "./lib/review-rounds.ts";
 import {Cache} from "./lib/sort.ts";
@@ -175,28 +175,24 @@ if (STEP === "listprice") {
 const tuning = readJson(join(here, "163-set.json"), LabelledSet);
 const examSet = readJson(join(here, "163-exam-set.json"), ExamSet);
 const items: readonly Item[] = [
-	...tuning.cases.map(
-		(c): Item => ({
-			id: c.id,
-			repo: c.repo,
-			n: c.n,
-			set: "tuning",
-			kind: c.kind,
-			right: c.right,
-			security: c.kind === "security",
-		}),
-	),
-	...examSet.cases.map(
-		(c): Item => ({
-			id: c.id,
-			repo: c.repo,
-			n: c.n,
-			set: "exam",
-			kind: c.kind,
-			right: c.right,
-			security: c.security === true,
-		}),
-	),
+	...tuning.cases.map((c): Item => ({
+		id: c.id,
+		repo: c.repo,
+		n: c.n,
+		set: "tuning",
+		kind: c.kind,
+		right: c.right,
+		security: c.kind === "security",
+	})),
+	...examSet.cases.map((c): Item => ({
+		id: c.id,
+		repo: c.repo,
+		n: c.n,
+		set: "exam",
+		kind: c.kind,
+		right: c.right,
+		security: c.security === true,
+	})),
 ];
 const cache = readJson(join(CACHE, "p.json"), Cache);
 const at = readJson(AT_FILE, Schema.Record(Schema.String, Schema.String));

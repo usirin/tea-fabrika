@@ -18,6 +18,7 @@ import type {Brief} from "@kampus/pipeline/stages/sort/brief";
 import type {OpenPlan} from "@kampus/pipeline/stages/sort/services";
 import {Schema} from "effect";
 import {shuffled} from "./review-rounds.ts";
+import {barLines, readBar, withClauses} from "./sort-bar.ts";
 import {
 	type Earlier,
 	Run as PRunBase,
@@ -29,7 +30,6 @@ import {
 	Ticket,
 	Truth,
 } from "./sort.ts";
-import {barLines, readBar, withClauses} from "./sort-bar.ts";
 
 const here = join(import.meta.dirname, "..");
 

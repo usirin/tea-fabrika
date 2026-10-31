@@ -135,14 +135,12 @@ export function hostWorld(): World<Host, HostMsg, HostCmd> {
 			cmd.type === "claim"
 				? [
 						...FENCES.flatMap((fence) =>
-							INCARNATIONS.map(
-								(incarnation): HostMsg => ({
-									type: "claimed",
-									fence,
-									until: CLAIMED_UNTIL,
-									incarnation,
-								}),
-							),
+							INCARNATIONS.map((incarnation): HostMsg => ({
+								type: "claimed",
+								fence,
+								until: CLAIMED_UNTIL,
+								incarnation,
+							})),
 						),
 						{type: "held", waitMs: 400},
 						{type: "claim_failed"},

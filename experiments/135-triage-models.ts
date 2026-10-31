@@ -42,6 +42,7 @@ import {saidOf as dSaidOf, SortReply} from "@kampus/pipeline/stages/sort/answer"
 import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/brief";
 import {sorterOptions} from "@kampus/pipeline/stages/sort/sorter";
 import {Option, Schema} from "effect";
+import {median} from "./lib/sort-bar.ts";
 import {
 	allIssues,
 	Cache,
@@ -50,7 +51,6 @@ import {
 	sortOnce,
 	type Ticket,
 } from "./lib/sort.ts";
-import {median} from "./lib/sort-bar.ts";
 import {
 	BATCH,
 	CONTROLS,

@@ -12,9 +12,13 @@ const MINUTE = 60_000;
 
 /** A ticket from its facts, one minute apart, through the real fold. */
 const ticketOf = (...facts: readonly (readonly [Entry["by"], Fact])[]) => {
-	const entries = facts.map(
-		([by, fact], i): Entry => ({pos: i + 1, ticket: 3, by, at: i * MINUTE, fact}),
-	);
+	const entries = facts.map(([by, fact], i): Entry => ({
+		pos: i + 1,
+		ticket: 3,
+		by,
+		at: i * MINUTE,
+		fact,
+	}));
 	const {tickets, problems} = fold([], entries);
 	expect(problems).toEqual([]);
 	return tickets[0]?.timeline ?? [];

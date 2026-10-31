@@ -235,8 +235,8 @@ function entriesOf(
 					),
 				}
 			: typeof exports === "string" ||
-					Array.isArray(exports) ||
-					!Object.keys(exports as object).some((k) => k.startsWith("."))
+				  Array.isArray(exports) ||
+				  !Object.keys(exports as object).some((k) => k.startsWith("."))
 				? {".": exports}
 				: (exports as Record<string, unknown>);
 	return Object.entries(map).flatMap(([subpath, value]) => {

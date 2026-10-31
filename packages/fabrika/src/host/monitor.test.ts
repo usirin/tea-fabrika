@@ -87,16 +87,13 @@ const watcherProgram = (targets: readonly string[]) =>
 						ctx: undefined,
 						interpret: {
 							monitor: (cmd) =>
-								Effect.map(
-									self.monitor(cmd.ref, cmd.target),
-									(m): MonitorMsg => ({
-										type: "monitored",
-										ref: cmd.ref,
-										how: m.how === "on" ? "on" : m.how === "noproc" ? "noproc" : "failed",
-										incarnation: m.how === "on" ? m.incarnation : null,
-										at: Date.now(),
-									}),
-								),
+								Effect.map(self.monitor(cmd.ref, cmd.target), (m): MonitorMsg => ({
+									type: "monitored",
+									ref: cmd.ref,
+									how: m.how === "on" ? "on" : m.how === "noproc" ? "noproc" : "failed",
+									incarnation: m.how === "on" ? m.incarnation : null,
+									at: Date.now(),
+								})),
 						},
 						subscribe: {retries: (sub) => retries(sub.deps.list)},
 					},

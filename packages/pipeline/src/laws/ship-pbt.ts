@@ -200,15 +200,13 @@ export const table: MsgArbitraryTable<Msg> = {
 		),
 	ship_merge_err: heads.map((h) => merge.err(mergeOf(h), UNKNOWN, 0)),
 	ship_queue: fc.oneof(
-		heads.map(
-			(h): QueueMsg => ({
-				type: "ship_queue",
-				pr: PR,
-				head: h,
-				reading: "landed",
-				commit: `main-${h}`,
-			}),
-		),
+		heads.map((h): QueueMsg => ({
+			type: "ship_queue",
+			pr: PR,
+			head: h,
+			reading: "landed",
+			commit: `main-${h}`,
+		})),
 		heads.map((h): QueueMsg => ({type: "ship_queue", pr: PR, head: h, reading: "ejected"})),
 	),
 	ship_queue_overdue: arbRecordMsg("ship_queue_overdue", {pr, head: heads}),
@@ -736,25 +734,23 @@ export const ready: fc.Arbitrary<ShipFacts> = fc
 		// Older rows first: a fail at another head, or on the old words, does not count.
 		before: fc.subarray([rowOn(C2, "Z", "fail"), rowOn(C2, "A", "fail", 1)]),
 	})
-	.map(
-		({head, ticket, approval, kinds, before}): ShipFacts => ({
-			head,
-			state: "open",
-			ours: true,
-			ticket,
-			approval,
-			reviews: [
-				{kind: "review-code", verdict: "passed"},
-				...kinds.map((kind) => ({kind, verdict: "passed" as const})),
-			],
-			checks: "green",
-			mergeable: "clean",
-			comments: [],
-			main: ON_TIP,
-			criteria: CRITERIA,
-			verdicts: filed([...before, rowOn(C1, head), rowOn(C2, head)]),
-		}),
-	);
+	.map(({head, ticket, approval, kinds, before}): ShipFacts => ({
+		head,
+		state: "open",
+		ours: true,
+		ticket,
+		approval,
+		reviews: [
+			{kind: "review-code", verdict: "passed"},
+			...kinds.map((kind) => ({kind, verdict: "passed" as const})),
+		],
+		checks: "green",
+		mergeable: "clean",
+		comments: [],
+		main: ON_TIP,
+		criteria: CRITERIA,
+		verdicts: filed([...before, rowOn(C1, head), rowOn(C2, head)]),
+	}));
 
 /** A ready pull request's run: which way it lands, how the tidy-up goes, and noise between. */
 export const readyRuns = fc.record({

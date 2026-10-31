@@ -60,10 +60,8 @@ export class Issues extends Context.Service<
 	}
 >()("@kampus/fabrika/pipeline/Issues") {}
 
-const ok = (exited: {
-	readonly code: number;
-	readonly out: string;
-}): Effect.Effect<string, Failed> => (exited.code === 0 ? Effect.succeed(exited.out) : failed);
+const ok = (exited: {readonly code: number; readonly out: string}): Effect.Effect<string, Failed> =>
+	exited.code === 0 ? Effect.succeed(exited.out) : failed;
 
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
 const IssueRead = Schema.Struct({

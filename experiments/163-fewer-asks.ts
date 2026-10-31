@@ -18,6 +18,7 @@ import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {Schema} from "effect";
 import {ExamSet, LabelledSet, type Verdict} from "./lib/brief-eval.ts";
+import {claudeOnce} from "./lib/fewer-asks-live.ts";
 import {
 	type Answer,
 	type AskInfo,
@@ -41,7 +42,6 @@ import {
 	securityRule,
 	spread,
 } from "./lib/fewer-asks.ts";
-import {claudeOnce} from "./lib/fewer-asks-live.ts";
 import {HAIKU, SONNET, usdAt} from "./lib/list-price.ts";
 import {shuffled} from "./lib/review-rounds.ts";
 import {Cache} from "./lib/sort.ts";

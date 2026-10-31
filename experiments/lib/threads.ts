@@ -394,16 +394,14 @@ export async function fetchThreads(
 						  }
 						| undefined
 				)?.nodes ?? []
-			).map(
-				(r): ThreadReview => ({
-					url: r.url,
-					state: r.state,
-					at: r.submittedAt,
-					author: r.author?.login ?? "",
-					bot: r.author?.__typename === "Bot",
-					body: r.body,
-				}),
-			);
+			).map((r): ThreadReview => ({
+				url: r.url,
+				state: r.state,
+				at: r.submittedAt,
+				author: r.author?.login ?? "",
+				bot: r.author?.__typename === "Bot",
+				body: r.body,
+			}));
 			const thread: Thread = {
 				number: n,
 				kind,

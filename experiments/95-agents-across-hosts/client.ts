@@ -178,7 +178,7 @@ export const sender = (
 	const ends = new Map<string, number>();
 	return (inbox: string, kind: string, data: unknown): Effect.Effect<Sent> =>
 		Effect.gen(function* () {
-			for (let lost = 0; lost < tries; ) {
+			for (let lost = 0; lost < tries;) {
 				const r = yield* ledger
 					.append(inbox, ends.get(inbox) ?? 0, {kind, writer: o.holder, data}, o.fence, o.fenceOn)
 					.pipe(Effect.result);

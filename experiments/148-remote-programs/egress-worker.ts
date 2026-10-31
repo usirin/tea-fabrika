@@ -10,8 +10,8 @@
 //
 // No outbound handler in any. No token, no key, no model: the box only knocks on each door.
 
-import {DurableObject} from "cloudflare:workers";
 import {Container, ContainerProxy, getContainer} from "@cloudflare/containers";
+import {DurableObject} from "cloudflare:workers";
 
 export {ContainerProxy};
 

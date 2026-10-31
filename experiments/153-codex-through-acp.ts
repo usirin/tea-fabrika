@@ -617,7 +617,7 @@ const codexPids = (): number[] => {
 		.filter((p) => p.length >= 3)
 		.map(([pid, ppid, ...cmd]) => ({pid: Number(pid), ppid: Number(ppid), cmd: cmd.join(" ")}));
 	const mine = new Set([process.pid]);
-	for (let grew = true; grew; ) {
+	for (let grew = true; grew;) {
 		grew = false;
 		for (const r of rows)
 			if (mine.has(r.ppid) && !mine.has(r.pid)) {

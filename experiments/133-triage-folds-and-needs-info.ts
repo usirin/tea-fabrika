@@ -43,8 +43,8 @@ import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/
 import type {OpenPlan} from "@kampus/pipeline/stages/sort/services";
 import {sorterOptions} from "@kampus/pipeline/stages/sort/sorter";
 import {Option, Schema} from "effect";
-import {firstVersion, REPO_NOTE, SONNET_IN, SONNET_OUT, Ticket} from "./lib/sort.ts";
 import {median, pct} from "./lib/sort-bar.ts";
+import {firstVersion, REPO_NOTE, SONNET_IN, SONNET_OUT, Ticket} from "./lib/sort.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-133-cache");

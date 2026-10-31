@@ -2,6 +2,16 @@ import {readFileSync} from "node:fs";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {
+	codeHostWritesOn,
+	ENQUEUE_READ,
+	ENQUEUE_WRITE,
+	enqueueOn,
+	MERGE_READ,
+	MERGE_WRITE,
+	mergeOn,
+	rerunChecksOn,
+} from "./code-host-github-writes.ts";
+import {
 	checksSettledNow,
 	codeHostOn,
 	type Gh,
@@ -12,16 +22,6 @@ import {
 	queueStep,
 	queueNow as readQueue,
 } from "./code-host-github.ts";
-import {
-	codeHostWritesOn,
-	ENQUEUE_READ,
-	ENQUEUE_WRITE,
-	enqueueOn,
-	MERGE_READ,
-	MERGE_WRITE,
-	mergeOn,
-	rerunChecksOn,
-} from "./code-host-github-writes.ts";
 import {CodeHost, CodeHostWrites} from "./services.ts";
 import {shipSubscribe, shipTidyTree, shipWriteInterpret} from "./stages/ship/handlers.ts";
 import {launch, modeLine, type Parts, type Plan, planOf} from "./stages/ship/launch.ts";

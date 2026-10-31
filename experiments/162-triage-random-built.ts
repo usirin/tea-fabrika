@@ -41,6 +41,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Schema} from "effect";
 import {shuffled} from "./lib/review-rounds.ts";
+import {median} from "./lib/sort-bar.ts";
 import {
 	allIssues,
 	Cache,
@@ -53,7 +54,6 @@ import {
 	type Ticket,
 	Truth,
 } from "./lib/sort.ts";
-import {median} from "./lib/sort-bar.ts";
 import {
 	dBrief,
 	P_BAR_SECURITY,

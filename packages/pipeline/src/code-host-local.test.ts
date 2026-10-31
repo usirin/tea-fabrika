@@ -260,13 +260,11 @@ describe("a plan's task, reviewed on this machine as each head lands", () => {
 			{type: "planned", plan: PLAN, tickets: [ticketOf(PLAN)], data: PLAN_DATA, problems: []},
 		]);
 		const heads: string[] = [];
-		const reviewer = scriptedReviewer(
-			(brief): Drafted => ({
-				answer: "form",
-				form: brief.head === heads[0] ? failingC3(brief) : passing(brief),
-				...RAN,
-			}),
-		);
+		const reviewer = scriptedReviewer((brief): Drafted => ({
+			answer: "form",
+			form: brief.head === heads[0] ? failingC3(brief) : passing(brief),
+			...RAN,
+		}));
 		const host = localCodeHost(SETTINGS(world.task));
 		const services = Layer.mergeAll(host.layer, ledgerRecord, reviewer.layer).pipe(
 			Layer.provide(ledger.layer),

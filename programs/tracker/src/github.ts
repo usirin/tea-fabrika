@@ -43,12 +43,10 @@ export const gitHubPullRequests = (settings: GitHubSettings) =>
 				(repo) =>
 					host.pullRequests(repo).pipe(
 						Effect.map((list) => list.map((pr): PullRequest => ({repo, ...pr}))),
-						Effect.mapError(
-							(): PullRequestsUnreachable => ({
-								_tag: "unreachable",
-								why: `could not read ${nameOf(repo)}'s pull requests`,
-							}),
-						),
+						Effect.mapError((): PullRequestsUnreachable => ({
+							_tag: "unreachable",
+							why: `could not read ${nameOf(repo)}'s pull requests`,
+						})),
 					),
 				{concurrency: 1},
 			).pipe(Effect.map((lists) => lists.flat()));

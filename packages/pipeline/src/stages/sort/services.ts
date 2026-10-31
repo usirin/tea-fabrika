@@ -256,13 +256,11 @@ export const githubSortHost = (gh: Gh) =>
 					.repository.issues.nodes;
 				return nodes
 					.filter((n) => n.number !== ticket.number)
-					.map(
-						(n): Earlier => ({
-							number: n.number,
-							title: n.title,
-							state: n.state === "OPEN" ? "open" : "closed",
-							reason: n.state === "OPEN" ? null : reasonIn(n.comments.nodes.map((c) => c.body)),
-						}),
-					);
+					.map((n): Earlier => ({
+						number: n.number,
+						title: n.title,
+						state: n.state === "OPEN" ? "open" : "closed",
+						reason: n.state === "OPEN" ? null : reasonIn(n.comments.nodes.map((c) => c.body)),
+					}));
 			}),
 	});

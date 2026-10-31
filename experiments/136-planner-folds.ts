@@ -58,8 +58,8 @@ import {plannerOptions} from "@kampus/pipeline/stages/plan/planner";
 import type {Settings} from "@kampus/pipeline/stages/plan/services";
 import {removeLinks} from "@kampus/pipeline/stages/review/reviewer";
 import {Option, Schema} from "effect";
-import {firstVersion, Ticket} from "./lib/sort.ts";
 import {median, pct} from "./lib/sort-bar.ts";
+import {firstVersion, Ticket} from "./lib/sort.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-136-cache");

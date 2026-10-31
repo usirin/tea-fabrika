@@ -443,8 +443,12 @@ export interface Kit<F extends Flags, O extends Outputs, Ks extends Kinds> {
 }
 
 /** What `main` is handed. */
-export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ks extends Kinds>
-	extends Kit<F, O, Ks> {
+export interface Io<
+	F extends Flags,
+	I extends Inputs,
+	O extends Outputs,
+	Ks extends Kinds,
+> extends Kit<F, O, Ks> {
 	/** Show a machine that is not run through a ref (a table kept elsewhere) on the handle. */
 	readonly watch: Watch<Ks>;
 	/**
@@ -1860,14 +1864,12 @@ export interface Listing {
 const listed = (
 	declared: Readonly<Record<string, Flag<unknown> | Input<unknown> | Output<unknown>>>,
 ) =>
-	Object.entries(declared).map(
-		([name, d]): Listed => ({
-			name,
-			description: d.description,
-			schema: d.shape.json,
-			...("default" in d && d.default !== undefined ? {default: d.default} : {}),
-		}),
-	);
+	Object.entries(declared).map(([name, d]): Listed => ({
+		name,
+		description: d.description,
+		schema: d.shape.json,
+		...("default" in d && d.default !== undefined ? {default: d.default} : {}),
+	}));
 
 export const listing = (program: AnyProgram): Listing => ({
 	name: program.name,

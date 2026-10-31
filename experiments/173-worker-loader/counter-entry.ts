@@ -1,9 +1,9 @@
 // The repo's own programs/counter, loaded whole: @kampus/fabrika's defineProgram, its schemas
 // and its machine. Does the real thing load and step, not only a copy?
 
-import {WorkerEntrypoint} from "cloudflare:workers";
 import {applyCell} from "@demlik/tea";
 import {counter} from "@tea-fabrika/counter";
+import {WorkerEntrypoint} from "cloudflare:workers";
 import {Schema} from "effect";
 
 const count = counter.machines.count;

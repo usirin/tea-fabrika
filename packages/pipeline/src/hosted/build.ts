@@ -233,9 +233,8 @@ const childBuilder = (child: string, context: Context.Context<Self | Ledger>) =>
 	Builder.of({
 		build: (brief, settings) =>
 			askAgent(child, askId(brief), {brief, settings}, asWritten<BuildAnswer>()).pipe(
-				Effect.map(
-					(asked): BuildDrafted =>
-						asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
+				Effect.map((asked): BuildDrafted =>
+					asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
 				),
 				Effect.provideContext(context),
 			),

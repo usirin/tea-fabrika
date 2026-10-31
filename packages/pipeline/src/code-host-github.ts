@@ -1200,15 +1200,13 @@ export const readPullRequests =
 				"api",
 				`repos/${at.owner}/${at.name}/pulls?state=open&per_page=${MOST_PULL_REQUESTS}`,
 			]);
-			return listed.map(
-				(pr): PullRequest => ({
-					number: pr.number,
-					title: pr.title,
-					url: pr.html_url,
-					draft: pr.draft ?? false,
-					at: Date.parse(pr.updated_at) || 0,
-				}),
-			);
+			return listed.map((pr): PullRequest => ({
+				number: pr.number,
+				title: pr.title,
+				url: pr.html_url,
+				draft: pr.draft ?? false,
+				at: Date.parse(pr.updated_at) || 0,
+			}));
 		});
 
 /** The read side over one `gh`. */

@@ -93,15 +93,13 @@ const fact: fc.Arbitrary<Written> = fc.oneof(
 );
 /** A read's rows: facts on a few tickets, a minute apart from the hour before noon. */
 const entries = fc.array(fc.tuple(ticket, fact), {maxLength: 8}).map((rows) =>
-	rows.map(
-		([n, [by, f]], i): Entry => ({
-			pos: i + 1,
-			ticket: n,
-			by,
-			at: NOON - 3_600_000 + i * 60_000,
-			fact: f,
-		}),
-	),
+	rows.map(([n, [by, f]], i): Entry => ({
+		pos: i + 1,
+		ticket: n,
+		by,
+		at: NOON - 3_600_000 + i * 60_000,
+		fact: f,
+	})),
 );
 /** Keys that wait, and one that never does. */
 const key = fc.constantFrom("1/a-1", "1/a-2", "2/a-1", "2/stuck/r-1", "3/stuck/r-2", "9/a-9");
