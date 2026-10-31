@@ -56,14 +56,14 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 - **Only `ownRules` says where a Claude run's settings come from.**
   - `pnpm lint` refuses `settingSources` with a source in it, and any
     `projectConfigRoot`, anywhere but `rules.ts`
-    (`biome-plugins/no-project-settings.grit`).
+    (`oxlint-plugins/no-project-settings.ts`).
   - A stage's options for the Claude adapter cannot name them: its type
     refuses it.
   - A live run checks its options again, and the empty folder, before Claude
     Code starts. A refusal names the fix.
   - A run that loads the project's settings on purpose (an experiment that
     measures them, the old operator in `legacy/`) says why in a
-    `biome-ignore`.
+    `oxlint-disable-next-line`.
 
   ```ts
   const options = {...rest, settingSources: ["project"]};

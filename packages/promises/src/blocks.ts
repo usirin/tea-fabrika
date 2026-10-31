@@ -5,7 +5,7 @@
 //
 // It is a small scanner, not a parser. It tracks strings, template strings,
 // comments and bracket depth, and a statement starts on a line that begins,
-// at column 0, outside all of them. Code here is formatted by biome, so a
+// at column 0, outside all of them. Code here is formatted by oxfmt, so a
 // top-level statement always starts at column 0.
 //
 // Where it can be wrong: a regular expression literal with an unmatched

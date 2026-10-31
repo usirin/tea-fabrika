@@ -1,0 +1,314 @@
+// The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
+// diagnostic but the two advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
+	// Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
+	// oxlint-plugins/README.md.
+	"jsPlugins": ["./oxlint-plugins/index.ts"],
+	// Each rule is named here, so a new oxlint release adds none on its own.
+	"categories": { "correctness": "off" },
+	"options": { "reportUnusedDisableDirectives": "error" },
+	"ignorePatterns": [
+		"**/fixtures/**",
+		"**/experiments/results/**",
+		"blog/**",
+		"video/**",
+		"unreachable-ledger.json"
+	],
+	"rules": {
+		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
+		// wrong too often to block (experiment 125). Any other warning fails.
+		"fabrika/no-effect-promise": "warn",
+		"fabrika/no-raw-try-catch": "warn",
+
+		"fabrika/no-bare-tell": "error",
+		"fabrika/no-context-tag": "error",
+		"fabrika/no-data-taggederror": "error",
+		"fabrika/no-implicit-effect-concurrency": "error",
+		"fabrika/no-numeric-duration": "error",
+		"fabrika/no-throw-in-effect-gen": "error",
+		"fabrika/no-type-assertions": "error",
+
+		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
+		// out below (experiment 155). So are tests: they write the options' shape to check it, and
+		// none starts a live run.
+		"fabrika/no-project-settings": "error",
+		// A secret is read as a `Redacted`, never as a plain string from `process.env`
+		// (docs/direction/secrets-are-redacted.md). Experiments are left out below: they are outside
+		// this rule's first change, and README counts what it would find there.
+		"fabrika/no-secret-env": "error",
+		// `Redacted.value` only where a secret goes out. Each file left out below says why.
+		"fabrika/no-redacted-value": "error",
+
+		// Node runs the .ts files as they are, so a relative import names its file whole.
+		"fabrika/use-import-extensions": "error",
+
+		"eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+		"eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
+		"eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],
+		"eslint/no-unused-vars": [
+			"error",
+			{
+				"args": "all",
+				"varsIgnorePattern": "^_",
+				"argsIgnorePattern": "^_",
+				"caughtErrorsIgnorePattern": "^_",
+				"destructuredArrayIgnorePattern": "^_",
+				"ignoreRestSiblings": true
+			}
+		],
+		"eslint/no-use-before-define": [
+			"error",
+			{
+				"functions": false,
+				"classes": false,
+				"variables": false,
+				"enums": false,
+				"typedefs": false,
+				"ignoreTypeReferences": true
+			}
+		],
+		"eslint/prefer-const": ["error", { "ignoreReadBeforeAssign": true }],
+		"typescript/ban-ts-comment": [
+			"error",
+			{ "ts-ignore": true, "ts-expect-error": false, "ts-nocheck": false, "ts-check": false }
+		],
+		"typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
+		"typescript/no-empty-object-type": [
+			"error",
+			{ "allowObjectTypes": "always", "allowInterfaces": "always" }
+		],
+
+		// `x!` throws away the compiler's proof.
+		"typescript/no-non-null-assertion": "error",
+
+		"eslint/array-callback-return": "error",
+		"eslint/constructor-super": "error",
+		"eslint/default-case-last": "error",
+		"eslint/for-direction": "error",
+		"eslint/getter-return": "error",
+		"eslint/no-array-constructor": "error",
+		"eslint/no-async-promise-executor": "error",
+		"eslint/no-case-declarations": "error",
+		"eslint/no-class-assign": "error",
+		"eslint/no-compare-neg-zero": "error",
+		"eslint/no-cond-assign": "error",
+		"eslint/no-const-assign": "error",
+		"eslint/no-constant-condition": "error",
+		"eslint/no-constructor-return": "error",
+		"eslint/no-control-regex": "error",
+		"eslint/no-debugger": "error",
+		"eslint/no-dupe-class-members": "error",
+		"eslint/no-dupe-else-if": "error",
+		"eslint/no-dupe-keys": "error",
+		"eslint/no-duplicate-case": "error",
+		"eslint/no-empty-character-class": "error",
+		"eslint/no-empty-pattern": "error",
+		"eslint/no-eval": "error",
+		"eslint/no-ex-assign": "error",
+		"eslint/no-extra-boolean-cast": "error",
+		"eslint/no-extra-label": "error",
+		"eslint/no-func-assign": "error",
+		"eslint/no-global-assign": "error",
+		"eslint/no-import-assign": "error",
+		"eslint/no-inner-declarations": "error",
+		"eslint/no-irregular-whitespace": "error",
+		"eslint/no-label-var": "error",
+		"eslint/no-lone-blocks": "error",
+		"eslint/no-loss-of-precision": "error",
+		"eslint/no-misleading-character-class": "error",
+		"eslint/no-new-native-nonconstructor": "error",
+		"eslint/no-nonoctal-decimal-escape": "error",
+		"eslint/no-obj-calls": "error",
+		"eslint/no-proto": "error",
+		"eslint/no-prototype-builtins": "error",
+		"eslint/no-regex-spaces": "error",
+		"eslint/no-self-assign": "error",
+		"eslint/no-self-compare": "error",
+		"eslint/no-sequences": "error",
+		"eslint/no-setter-return": "error",
+		"eslint/no-shadow-restricted-names": "error",
+		"eslint/no-sparse-arrays": "error",
+		"eslint/no-template-curly-in-string": "error",
+		"eslint/no-this-before-super": "error",
+		"eslint/no-unneeded-ternary": "error",
+		"eslint/no-unreachable": "error",
+		"eslint/no-unsafe-finally": "error",
+		"eslint/no-unsafe-negation": "error",
+		"eslint/no-unsafe-optional-chaining": "error",
+		"eslint/no-unused-labels": "error",
+		"eslint/no-unused-private-class-members": "error",
+		"eslint/no-useless-backreference": "error",
+		"eslint/no-useless-catch": "error",
+		"eslint/no-useless-constructor": "error",
+		"eslint/no-useless-escape": "error",
+		"eslint/no-useless-rename": "error",
+		"eslint/no-with": "error",
+		"eslint/prefer-arrow-callback": "error",
+		"eslint/prefer-exponentiation-operator": "error",
+		"eslint/prefer-numeric-literals": "error",
+		"eslint/prefer-object-has-own": "error",
+		"eslint/prefer-regex-literals": "error",
+		"eslint/prefer-rest-params": "error",
+		"eslint/prefer-template": "error",
+		"eslint/radix": "error",
+		"eslint/require-yield": "error",
+		"eslint/use-isnan": "error",
+		"eslint/valid-typeof": "error",
+		"jsx-a11y/alt-text": "error",
+		"jsx-a11y/anchor-ambiguous-text": "error",
+		"jsx-a11y/anchor-has-content": "error",
+		"jsx-a11y/anchor-is-valid": "error",
+		"jsx-a11y/aria-activedescendant-has-tabindex": "error",
+		"jsx-a11y/aria-props": "error",
+		"jsx-a11y/aria-proptypes": "error",
+		"jsx-a11y/aria-role": "error",
+		"jsx-a11y/aria-unsupported-elements": "error",
+		"jsx-a11y/autocomplete-valid": "error",
+		"jsx-a11y/click-events-have-key-events": "error",
+		"jsx-a11y/heading-has-content": "error",
+		"jsx-a11y/html-has-lang": "error",
+		"jsx-a11y/iframe-has-title": "error",
+		"jsx-a11y/img-redundant-alt": "error",
+		"jsx-a11y/interactive-supports-focus": "error",
+		"jsx-a11y/label-has-associated-control": "error",
+		"jsx-a11y/lang": "error",
+		"jsx-a11y/media-has-caption": "error",
+		"jsx-a11y/mouse-events-have-key-events": "error",
+		"jsx-a11y/no-access-key": "error",
+		"jsx-a11y/no-aria-hidden-on-focusable": "error",
+		"jsx-a11y/no-autofocus": "error",
+		"jsx-a11y/no-distracting-elements": "error",
+		"jsx-a11y/no-interactive-element-to-noninteractive-role": "error",
+		"jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
+		"jsx-a11y/no-noninteractive-tabindex": "error",
+		"jsx-a11y/no-redundant-roles": "error",
+		"jsx-a11y/no-static-element-interactions": "error",
+		"jsx-a11y/role-has-required-aria-props": "error",
+		"jsx-a11y/role-supports-aria-props": "error",
+		"jsx-a11y/scope": "error",
+		"jsx-a11y/tabindex-no-positive": "error",
+		"oxc/approx-constant": "error",
+		"oxc/bad-min-max-func": "error",
+		"oxc/misrefactored-assign-op": "error",
+		"oxc/no-const-enum": "error",
+		"react/button-has-type": "error",
+		"react/jsx-key": "error",
+		"react/jsx-no-comment-textnodes": "error",
+		"react/jsx-no-duplicate-props": "error",
+		"react/jsx-no-script-url": "error",
+		"react/jsx-no-target-blank": "error",
+		"react/jsx-no-useless-fragment": "error",
+		"react/no-danger": "error",
+		"react/no-danger-with-children": "error",
+		"react/no-namespace": "error",
+		"react/no-render-return-value": "error",
+		"react/no-string-refs": "error",
+		"react/void-dom-elements-no-children": "error",
+		"typescript/adjacent-overload-signatures": "error",
+		"typescript/no-duplicate-enum-values": "error",
+		"typescript/no-empty-interface": "error",
+		"typescript/no-extra-non-null-assertion": "error",
+		"typescript/no-misused-new": "error",
+		"typescript/no-non-null-asserted-optional-chain": "error",
+		"typescript/no-this-alias": "error",
+		"typescript/no-unnecessary-type-constraint": "error",
+		"typescript/no-unsafe-declaration-merging": "error",
+		"typescript/no-useless-empty-export": "error",
+		"typescript/prefer-function-type": "error",
+		"typescript/prefer-literal-enum-member": "error",
+		"typescript/prefer-namespace-keyword": "error",
+		"unicorn/no-document-cookie": "error",
+		"unicorn/no-instanceof-array": "error",
+		"unicorn/no-static-only-class": "error",
+		"unicorn/no-thenable": "error",
+		"unicorn/no-useless-switch-case": "error",
+		"unicorn/prefer-array-flat-map": "error",
+		"unicorn/prefer-array-index-of": "error",
+		"unicorn/prefer-date-now": "error",
+		"unicorn/prefer-node-protocol": "error",
+		"unicorn/prefer-number-properties": "error",
+		"vitest/no-duplicate-hooks": "error",
+		"vitest/no-focused-tests": "error",
+		"vitest/no-identical-title": "error",
+		"typescript/no-wrapper-object-types": "error",
+		"typescript/no-unsafe-function-type": "error"
+	},
+	"overrides": [
+		{
+			// Test files only: an `expect` that sits only inside an `if` may never run.
+			// `!` is allowed here: a test that hits a missing value fails on its own.
+			"files": ["**/*.test.ts"],
+			"rules": {
+				"fabrika/no-expect-in-if": "error",
+				"typescript/no-non-null-assertion": "off",
+				// Tests hold made-up secrets and read them back to check them.
+				"fabrika/no-redacted-value": "off",
+				// Tests write the options' shape to check it, and none starts a live run.
+				"fabrika/no-project-settings": "off"
+			}
+		},
+		{
+			// Two React rules only where a window's React lives. In a .ts file a `use` or a `useKey`
+			// is Effect's or vitest's, not a hook: 19 of 19 fires there were false alarms. There is no
+			// JSX in a .ts file either: its one `children` prop is what `createElement`'s types ask.
+			"files": ["**/*.tsx"],
+			"rules": { "react/rules-of-hooks": "error", "react/no-children-prop": "error" }
+		},
+		{
+			// `ownRules` is the one place that says where a Claude run's settings come from.
+			"files": ["packages/fabrika/src/agents/claude/rules.ts"],
+			"rules": { "fabrika/no-project-settings": "off" }
+		},
+		{
+			// Experiments are records and stay as written. These rules are new to them and each fired
+			// there on a line that works; no-secret-env and no-redacted-value are left out because
+			// they are outside those rules' first change, counted in the README.
+			"files": ["experiments/**"],
+			"rules": {
+				"fabrika/no-secret-env": "off",
+				"fabrika/no-redacted-value": "off",
+				"eslint/prefer-template": "off",
+				"eslint/prefer-arrow-callback": "off",
+				"eslint/require-yield": "off"
+			}
+		},
+		{
+			// The bearer token as a WebSocket subprotocol: a browser socket sends no header.
+			"files": ["packages/fabrika/src/host/http.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// The door's secret in the ledger child's env, and in its locker file (mode 0600).
+			"files": ["packages/fabrika/src/host/local.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// The Worker's bindings: a one-way hash of the local secret, and GitHub's token.
+			"files": ["packages/fabrika/src/host/worker-options.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// A token's one-way hash, the only form the ledger keeps.
+			"files": ["packages/fabrika/src/host/door.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// A login's answer on the wire: the token goes to the one who logged in.
+			"files": ["packages/fabrika/src/host/durable-object.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// An SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
+			// takes a string) and kept from then on as a WebCrypto key that cannot be exported.
+			"files": ["packages/fabrika/src/host/signer.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// Jev's authorization header (the old factory).
+			"files": ["legacy/src/local.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		}
+	]
+}

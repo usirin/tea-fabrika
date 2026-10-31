@@ -138,25 +138,24 @@ describe("the empty folder a run reads settings from", () => {
 // ---------------------------------------------------------------- the lint rule
 
 const ROOT = fileURLToPath(new URL("../../../../../", import.meta.url));
-const BIOME = join(ROOT, "node_modules", ".bin", "biome");
+const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 
-/** The lines `pnpm lint`'s biome, with this repository's config, refuses in these files, as `name:line`. */
+/** The lines `pnpm lint`'s oxlint, with this repository's config, refuses in these files, as `name:line`. */
 const fires = (paths: readonly string[]): readonly string[] => {
-	const out = spawnSync(
-		BIOME,
-		["lint", "--reporter=json", "--max-diagnostics=200", ...paths.map((p) => relative(ROOT, p))],
-		{cwd: ROOT, encoding: "utf8"},
-	);
+	const out = spawnSync(OXLINT, ["--format=json", ...paths.map((p) => relative(ROOT, p))], {
+		cwd: ROOT,
+		encoding: "utf8",
+	});
 	const report = JSON.parse(out.stdout) as {
 		readonly diagnostics: readonly {
-			readonly category: string;
-			readonly message: string;
-			readonly location: {readonly path: string; readonly start: {readonly line: number}};
+			readonly code: string;
+			readonly filename: string;
+			readonly labels: readonly {readonly span: {readonly line: number}}[];
 		}[];
 	};
 	return report.diagnostics
-		.filter((d) => d.category === "plugin" && d.message.includes("ownRules"))
-		.map((d) => `${basename(d.location.path)}:${d.location.start.line}`)
+		.filter((d) => d.code === "fabrika(no-project-settings)")
+		.map((d) => `${basename(d.filename)}:${d.labels[0]?.span.line}`)
 		.sort();
 };
 
@@ -188,7 +187,7 @@ const PRELUDE = [
 ];
 
 describe("pnpm lint refuses the combination anywhere but rules.ts", () => {
-	// Planted beside this file, so the repository's own biome.jsonc and its rule are what run.
+	// Planted beside this file, so the repository's own .oxlintrc.json and its rule are what run.
 	const plant = mkdtempSync(join(import.meta.dirname, ".no-project-settings-plant-"));
 	afterAll(() => rmSync(plant, {recursive: true, force: true}));
 
