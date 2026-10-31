@@ -11,7 +11,7 @@ const SOURCE = [
 	"\tif (a > 0) {",
 	"\t\treturn `a template",
 	"} that has a brace and a line at column 0",
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: the source under test holds a template placeholder on purpose.
+	// oxlint-disable-next-line eslint/no-template-curly-in-string -- the source under test holds a template placeholder on purpose.
 	"${a}`;",
 	"\t}",
 	'\treturn "}";',

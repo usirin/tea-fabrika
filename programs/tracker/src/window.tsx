@@ -212,14 +212,14 @@ function ListPage(props: {
 	};
 
 	// Where the focus goes on coming to the list: the row picked, or the title when there is none.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only on coming to the list, not on every new view.
+	// only on coming to the list, not on every new view.
 	useEffect(() => {
 		if (picked === undefined) titleRef.current?.focus();
 		else rows.current.get(picked)?.focus();
 	}, []);
 
 	// A filter that hides the row in focus leaves the focus nowhere: it goes back to the list.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only when the rows shown change.
+	// only when the rows shown change.
 	useEffect(() => {
 		const at = document.activeElement;
 		if (at === null || at === document.body) toList();
@@ -582,7 +582,7 @@ function TicketPage(props: {
 	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only on opening a ticket.
+	// only on opening a ticket.
 	useEffect(() => {
 		(boxRef.current ?? backRef.current)?.focus();
 	}, [number]);
@@ -649,7 +649,7 @@ function TicketPage(props: {
 							<TimelineRow key={row.pos} row={row} onKey={onPageKey} />
 						))}
 						{pending.map((w, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: two pending comments may say the same thing; their order is all that tells them apart.
+							// two pending comments may say the same thing; their order is all that tells them apart.
 							<li key={i} className="tracker-entry tracker-pending">
 								<p className="tracker-meta">saving…</p>
 								{"body" in w ? <Body text={w.body} onKey={onPageKey} /> : null}
@@ -737,7 +737,7 @@ const Body = ({
 			piece.kind === "text" ? (
 				piece.text
 			) : (
-				// biome-ignore lint/suspicious/noArrayIndexKey: the pieces are cut fresh from one body and never move; their order is all there is.
+				// the pieces are cut fresh from one body and never move; their order is all there is.
 				<a key={i} href={piece.url} target="_blank" rel="noreferrer" onKeyDown={onKey}>
 					{piece.url}
 				</a>

@@ -247,7 +247,7 @@ describe("the tracker", () => {
 				const tickets = yield* Tickets;
 				const head = () => Effect.map(tickets.read(1), (t) => headOf(t.timeline, 0)._tag);
 				const refused = yield* Effect.flip(
-					// biome-ignore lint/plugin: the test plays a lane that lies to the compiler, to show the run-time check holds
+					// oxlint-disable-next-line fabrika/no-type-assertions -- the test plays a lane that lies to the compiler, to show the run-time check holds
 					tickets.write(1, "w/1", merged as unknown as CodeFact),
 				);
 				const afterLane = yield* head();

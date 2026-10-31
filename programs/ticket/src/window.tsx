@@ -91,7 +91,7 @@ export function Ticks({text}: {readonly text: string}) {
 		<>
 			{text.split("`").map((part, i) =>
 				i % 2 === 1 ? (
-					// biome-ignore lint/suspicious/noArrayIndexKey: the parts of one string, in order, never moved
+					// the parts of one string, in order, never moved
 					<span key={i} className="mono">
 						{part}
 					</span>

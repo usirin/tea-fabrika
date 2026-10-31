@@ -101,7 +101,7 @@ export const under = (root: number, rows: readonly Row[]): Row[] => {
 
 /** Send `signal` to a process (a pid) or a group (a negative pid). Gone already is fine. */
 const send = (target: number, signal: NodeJS.Signals | 0): boolean => {
-	// biome-ignore lint/plugin: process.kill throws for a process that is gone; that is the answer, not a failure
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- process.kill throws for a process that is gone; that is the answer, not a failure
 	try {
 		process.kill(target, signal);
 		return true;

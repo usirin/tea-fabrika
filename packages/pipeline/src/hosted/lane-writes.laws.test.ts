@@ -552,16 +552,16 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// A fact to an inbox gets a new id each try.
 	sentIdPerTry: () =>
 		plantFacts(
-			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${fact.type}` is that file's own template, written out as it is
+			// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a source file; `${fact.type}` is that file's own template, written out as it is
 			"steady(`send ${fact.type}`, ledger.send(inbox, id, event, o.hold?.fence));",
-			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${fact.type}` is that line's own template
+			// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a planted line; its `${fact.type}` is that line's own template
 			"steady(`send ${fact.type}`, Effect.suspend(() => ledger.send(inbox, crypto.randomUUID(), event, o.hold?.fence)));",
 		),
 	// The gate's rows get a new id each try. Lane 18 moved its retry into `steady`.
 	gateIdPerTry: () =>
 		plantGate(
 			'ledger.append(stream, "any", {kind, writer: o.holder, data, id}, o.fence),',
-			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${...}` is that line's own template
+			// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a planted line; its `${...}` is that line's own template
 			'Effect.suspend(() => ledger.append(stream, "any", {kind, writer: o.holder, data, id: `${id}:${Date.now()}`}, o.fence)),',
 		),
 	// The lease check does not look at whose lease it is.

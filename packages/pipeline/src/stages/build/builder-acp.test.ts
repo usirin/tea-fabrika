@@ -41,7 +41,7 @@ const ACP_PARENT = fileURLToPath(
 const scratch = () => realpathSync(mkdtempSync(join(tmpdir(), "builder-acp-")));
 
 const alive = (pid: number) => {
-	// biome-ignore lint/plugin: signal 0 throws for a process that is gone; that is the answer
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- signal 0 throws for a process that is gone; that is the answer
 	try {
 		process.kill(pid, 0);
 		return true;

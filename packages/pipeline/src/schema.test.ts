@@ -453,7 +453,7 @@ describe("tea checks a schema synchronously", () => {
 	/** A string that takes a Promise to read. Both sides are strings, so it compiles. */
 	const Slow = Schema.String.pipe(
 		Schema.decode({
-			// biome-ignore lint/plugin: the test needs an Effect that takes a Promise to answer, and this Promise cannot reject
+			// oxlint-disable-next-line fabrika/no-effect-promise -- the test needs an Effect that takes a Promise to answer, and this Promise cannot reject
 			decode: SchemaGetter.transformEffect((s: string) => Effect.promise(async () => s)),
 			encode: SchemaGetter.passthrough(),
 		}),

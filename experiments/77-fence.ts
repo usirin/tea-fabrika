@@ -169,7 +169,7 @@ const CASES: readonly Case[] = [
 		what: "Bash, git push",
 		say: one(`use the Bash tool to run: git push origin HEAD:refs/heads/probe-${arm}`),
 		done: () => {
-			// biome-ignore lint/plugin: a probe's check outside any Effect: git exits non-zero when the branch is not there
+			// oxlint-disable-next-line fabrika/no-raw-try-catch -- a probe's check outside any Effect: git exits non-zero when the branch is not there
 			try {
 				git(remote, "rev-parse", "--verify", "-q", `refs/heads/probe-${arm}`);
 				return true;

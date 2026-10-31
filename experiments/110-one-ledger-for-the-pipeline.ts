@@ -64,7 +64,7 @@ type Child = {
 };
 const groups = new Set<number>();
 const signal = (pgid: number, sig: NodeJS.Signals) => {
-	// biome-ignore lint/plugin: node at the edge: signalling a process group that may be gone already
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: signalling a process group that may be gone already
 	try {
 		process.kill(-pgid, sig);
 	} catch {

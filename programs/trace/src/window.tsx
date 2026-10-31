@@ -464,7 +464,7 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 	return (
 		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 			<Head view={view} drawn={true} />
-			{/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells. */}
+			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells. */}
 			<table className="wf" role="treegrid" aria-label="spans and steps" aria-readonly="true">
 				<colgroup>
 					<col className="wf-c-name" />

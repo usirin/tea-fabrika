@@ -149,7 +149,7 @@ const rssOf = (pgid: number) => {
 	};
 };
 const signal = (pgid: number, sig: NodeJS.Signals) => {
-	// biome-ignore lint/plugin: Node at the edge (see the header); a group already gone throws.
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- Node at the edge (see the header); a group already gone throws.
 	try {
 		process.kill(-pgid, sig);
 	} catch {
@@ -414,7 +414,7 @@ async function kill() {
 		const writers = Array.from({length: 8}, async (_, w) => {
 			for (let i = 1; !stop; i++) {
 				const id = `${k}.${w}.${i}`;
-				// biome-ignore lint/plugin: law 7 as in 93, on the Promise client; a kill ends a writer.
+				// oxlint-disable-next-line fabrika/no-raw-try-catch -- law 7 as in 93, on the Promise client; a kill ends a writer.
 				try {
 					const r = await c.append(STREAM, "any", {kind: "inc", writer: `w${w}`, id});
 					if (!r.ok) throw new Error(`append-any said ${r.why}`);
@@ -619,7 +619,7 @@ async function file() {
 
 const call = async <T>(url: string, method: string, args: unknown[]): Promise<T> => {
 	for (let i = 0; ; i++) {
-		// biome-ignore lint/plugin: the harness's own plain fetch, as in 94, retried while workerd restarts.
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- the harness's own plain fetch, as in 94, retried while workerd restarts.
 		try {
 			const res = await fetch(`${url}/${LEDGER}/${method}`, {
 				method: "POST",

@@ -86,7 +86,7 @@ const seconds = Math.round((Date.now() - started) / 1000);
 const messages = seen.join("\n");
 const form = drafted.answer === "built" ? JSON.stringify(drafted.built) : "";
 const inCopy = (() => {
-	// biome-ignore lint/plugin: a probe's check outside any Effect: grep exits 1 when nothing matches
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- a probe's check outside any Effect: grep exits 1 when nothing matches
 	try {
 		execFileSync("grep", ["-rl", "--exclude-dir=node_modules", "--exclude-dir=.git", token, tree]);
 		return true;

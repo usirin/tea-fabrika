@@ -279,7 +279,7 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 			ref={page}
 			className="markdown"
 			aria-label="markdown"
-			// biome-ignore lint/a11y/noNoninteractiveTabindex: the page takes less's keys: q, j, k, space, g.
+			// oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the page takes less's keys: q, j, k, space, g.
 			tabIndex={0}
 			onKeyDown={onKeyDown}
 		>

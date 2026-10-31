@@ -317,7 +317,7 @@ export const sdkRunner =
 							} as DraftMsg<N, O>);
 					};
 					const loop = (async () => {
-						// biome-ignore lint/plugin: a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg
+						// oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg
 						try {
 							for await (const m of q) {
 								more.seen?.(run, m);
@@ -349,7 +349,7 @@ export const sdkRunner =
 					return {q, live, loop};
 				}),
 				({q, live, loop}) =>
-					// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; the interrupt's failure is caught, both waits time out, and a throw from `close` is a bug
+					// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; the interrupt's failure is caught, both waits time out, and a throw from `close` is a bug
 					Effect.promise(async () => {
 						live.on = false;
 						if (!live.result) {

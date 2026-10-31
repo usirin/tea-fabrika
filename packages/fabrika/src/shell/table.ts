@@ -84,7 +84,7 @@ const oneLine = (text: string): string =>
 	text
 		.replace(/\s+/g, " ")
 		.trim()
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it takes out.
+		// oxlint-disable-next-line eslint/no-control-regex -- control characters are what it takes out.
 		.replace(/[\u0000-\u001f\u007f-\u009f]/g, "\u{fffd}");
 
 /**

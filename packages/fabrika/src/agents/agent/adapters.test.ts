@@ -39,7 +39,7 @@ import {type AdapterTurn, NO_LIMITS, NonBlank, noReaper, type SystemPrompt} from
 
 /** An SDK message with only the fields `rawOf` reads. */
 const sdk = (m: Record<string, unknown>): SDKMessage =>
-	// biome-ignore lint/plugin: a fixture holds the few fields rawOf reads; the SDK's full type has dozens more
+	// oxlint-disable-next-line fabrika/no-type-assertions -- a fixture holds the few fields rawOf reads; the SDK's full type has dozens more
 	m as unknown as SDKMessage;
 
 describe("claude: SDK messages", () => {

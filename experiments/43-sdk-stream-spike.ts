@@ -230,7 +230,7 @@ const agentRunner = (cwd: string, options: Options, resume: string | null) => (s
 				const live = {on: true, result: false};
 				note("query_opened", {session: resume ?? sub.deps.session, resume: resume !== null});
 				const loop = (async () => {
-					// biome-ignore lint/plugin: a plain loop over the SDK's stream, outside Effect on purpose: it keeps logging after the Sub closes, which is what this run measured
+					// oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain loop over the SDK's stream, outside Effect on purpose: it keeps logging after the Sub closes, which is what this run measured
 					try {
 						for await (const m of q) {
 							note(
@@ -251,7 +251,7 @@ const agentRunner = (cwd: string, options: Options, resume: string | null) => (s
 				return {q, live, loop};
 			}),
 			({q, live, loop}) =>
-				// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; the interrupt's failure is caught and both waits time out
+				// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; the interrupt's failure is caught and both waits time out
 				Effect.promise(async () => {
 					live.on = false;
 					note("sub_closed", {result_seen: live.result});
@@ -340,7 +340,7 @@ const base = (cwd: string, model: string): Options => ({
 	// Pre-approved, like `--allowedTools` today. Bash is left out on purpose: a
 	// call that is not pre-approved is the only kind canUseTool is asked about.
 	allowedTools: ["Read", "Glob", "Grep"],
-	// biome-ignore lint/plugin/no-project-settings: a spike from before experiment 155, kept as it ran; it loads a toy's own settings the way `claude -p` did then
+	// oxlint-disable-next-line fabrika/no-project-settings -- a spike from before experiment 155, kept as it ran; it loads a toy's own settings the way `claude -p` did then
 	settingSources: ["project"],
 	strictMcpConfig: true,
 	maxTurns: 30,
@@ -459,7 +459,7 @@ if (MODE === "observe") {
 				"--verbose",
 				"--model",
 				model,
-				// biome-ignore lint/plugin/no-project-settings: the `claude -p` side of the same spike, kept as it ran
+				// oxlint-disable-next-line fabrika/no-project-settings -- the `claude -p` side of the same spike, kept as it ran
 				"--setting-sources",
 				"project",
 				"--strict-mcp-config",
