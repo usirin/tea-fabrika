@@ -1,6 +1,7 @@
 import {execFile, spawn} from "node:child_process";
 import {mkdir, mkdtemp, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
 import {createRequire} from "node:module";
+import {createServer, type Socket} from "node:net";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
@@ -56,6 +57,9 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // socket that says hello with version 0. The app does not attach, and says so:
 //
 //   11 mismatch      "Not attached to the host", with both versions; that host still runs
+//
+// Then a host that only talks about asks, on a home of its own: with the list open, one ask leaves
+// as another arrives, and the page says the new one is seen, with the count the same.
 //
 // Then the link to the host drops while the app runs, on a home of its own, with seq's 60 lines
 // in t1 and counter in t2. Main's dialogs, dock bounce and focus are swapped for a list first,
@@ -799,6 +803,90 @@ const mismatch = async () => {
 	);
 };
 
+/**
+ * A host that only talks about asks: a Node server on the home's socket, in this script, so a run
+ * can hand the page one ask leaving as another arrives, in one line. A real host's read of the
+ * ledger can do that, but nothing can make it do so on cue.
+ */
+const askingHost = async (on: string) => {
+	const dir = join(on, "host");
+	await mkdir(dir, {recursive: true, mode: 0o700});
+	const heard: {readonly type: string; readonly m?: {readonly type: string}}[] = [];
+	const links: Socket[] = [];
+	const server = createServer((link) => {
+		links.push(link);
+		let held = "";
+		link.on("error", () => {});
+		link.on("data", (chunk) => {
+			const lines = `${held}${chunk}`.split("\n");
+			held = lines.pop() ?? "";
+			for (const line of lines) {
+				const m = JSON.parse(line);
+				if (m.type === "hello") link.write('{"type":"hello","version":1}\n');
+				else heard.push(m);
+			}
+		});
+	});
+	await new Promise<void>((resolve) => server.listen(join(dir, "sock"), resolve));
+	return {
+		heard,
+		toPage: (m: unknown) => {
+			for (const link of links) link.write(`${JSON.stringify({type: "to", port: "desk", m})}\n`);
+		},
+		stop: () => {
+			for (const link of links) link.destroy();
+			return new Promise<void>((resolve) => server.close(() => resolve()));
+		},
+	};
+};
+
+/**
+ * The asks list stays open while one ask leaves as another arrives. The count holds, but the new
+ * ask is seen, so the page says so, or the dot in the top bar stays on with the ask in plain view.
+ */
+const asksSwap = async () => {
+	const other = await mkdtemp(join(tmpdir(), "fabrika-asks-"));
+	const host = await askingHost(other);
+	const asks = (key: string, what: string, seen: boolean) => ({
+		type: "asks",
+		now: {
+			asks: [{key, ticket: 7, title: "Swap", what, kind: "ask", at: 1, seen}],
+			later: [],
+			reach: "ok",
+			why: null,
+		},
+	});
+	const seen = async () => host.heard.filter((m) => m.type === "on" && m.m?.type === "seen").length;
+	const app = await launch(other);
+	try {
+		const page = await app.firstWindow();
+		await until(
+			"the page to load",
+			async () => host.heard.some((m) => m.type === "page"),
+			(up) => up,
+		);
+		host.toPage(asks("7/a-1", "first ask", false));
+		host.toPage({type: "show", what: "asks"});
+		const list = page.locator("#pop-asks");
+		await list.getByText("First ask").waitFor();
+		await until("the first seen", seen, (n) => n === 1);
+		check("opening the asks list says its asks are seen", true);
+
+		host.toPage(asks("7/a-2", "second ask", false));
+		await list.getByText("Second ask").waitFor();
+		await until("a seen for the ask that took its place", seen, (n) => n === 2);
+		check("one ask leaving as another arrives, the count the same, says seen again", true);
+
+		// The host's answer to a seen: the same keys, now marked. Saying seen again would never end.
+		host.toPage(asks("7/a-2", "second ask", true));
+		await page.waitForTimeout(300);
+		check("the same asks marked seen say nothing more", (await seen()) === 2, await seen());
+	} finally {
+		await app.close().catch(() => {});
+		await host.stop();
+	}
+};
+
 /** Is `pid` a host of this build: its command line names this folder. Asked before any signal. */
 const ours = (pid: number) =>
 	promisify(execFile)("ps", ["-o", "command=", "-p", String(pid)]).then(
@@ -1176,6 +1264,7 @@ try {
 	);
 
 	await mismatch();
+	await asksSwap();
 	await reconnect();
 } finally {
 	// No person stops the host: there is no command for it. The run stops its own, by its pid.

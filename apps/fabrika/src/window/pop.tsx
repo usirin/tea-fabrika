@@ -4,6 +4,7 @@ import {
 	type ReactNode,
 	type RefObject,
 	useEffect,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -129,16 +130,17 @@ const useOverlay = (
 	into: () => void,
 	onClose: () => void,
 ) => {
+	const moveIn = useEffectEvent(into);
 	useLayoutEffect(() => {
 		const before = document.activeElement;
 		const el = box.current;
-		into();
+		moveIn();
 		return () => {
 			const now = document.activeElement;
 			const lost = now === null || now === document.body || el?.contains(now) === true;
 			if (lost && before instanceof HTMLElement && before.isConnected) before.focus();
 		};
-	}, []);
+	}, [box]);
 	useEffect(() => {
 		const down = (e: PointerEvent) => {
 			const t = e.target;
@@ -148,7 +150,7 @@ const useOverlay = (
 		};
 		document.addEventListener("pointerdown", down, true);
 		return () => document.removeEventListener("pointerdown", down, true);
-	}, [id, onClose]);
+	}, [box, id, onClose]);
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
@@ -211,10 +213,13 @@ export function Menu(props: MenuProps): ReactNode {
 	const active = activeIn(stops, at);
 	const domId = (stop: string) => `${props.id}-${stops.findIndex((s) => s.id === stop)}`;
 	useOverlay(box, props.id, () => box.current?.focus(), props.onClose);
+	const activeId = active?.id;
+	const showActive = useEffectEvent((stop: string) => {
+		document.getElementById(domId(stop))?.scrollIntoView({block: "nearest"});
+	});
 	useLayoutEffect(() => {
-		if (active !== undefined)
-			document.getElementById(domId(active.id))?.scrollIntoView({block: "nearest"});
-	}, [active?.id]);
+		if (activeId !== undefined) showActive(activeId);
+	}, [activeId]);
 	const run = (did: MenuDo) => {
 		switch (did.do) {
 			case "move":
@@ -512,9 +517,10 @@ export function Palette(props: PaletteProps): ReactNode {
 	const list = `${props.id}-list`;
 	const optionId = (i: number) => `${props.id}-o${i}`;
 	useOverlay(box, props.id, () => input.current?.focus(), props.onClose);
+	const picked = optionId(props.at);
 	useLayoutEffect(() => {
-		document.getElementById(optionId(props.at))?.scrollIntoView({block: "nearest"});
-	}, [props.at]);
+		document.getElementById(picked)?.scrollIntoView({block: "nearest"});
+	}, [picked]);
 	const total = props.sections.reduce((n, s) => n + s.options.length, 0);
 	let i = -1;
 	return (
