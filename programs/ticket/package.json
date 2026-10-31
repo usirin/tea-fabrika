@@ -20,7 +20,7 @@
 		"effect": "catalog:"
 	},
 	"peerDependencies": {
-		"react": "^19.0.0"
+		"react": "catalog:"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",

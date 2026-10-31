@@ -116,19 +116,19 @@
 		"zod": "catalog:"
 	},
 	"peerDependencies": {
-		"@agentclientprotocol/sdk": "^1.6.1",
-		"@anthropic-ai/claude-agent-sdk": "^0.3.296",
-		"@anthropic-ai/sandbox-runtime": "0.0.81",
-		"@demlik/tea": "^0.21.0",
-		"@effect/opentelemetry": "^4.0.0",
-		"@modelcontextprotocol/server": "^2.4.0",
-		"@opentelemetry/api": "^1.9.0",
-		"@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
-		"@opentelemetry/resources": "^2.11.0",
-		"@opentelemetry/sdk-trace-base": "^2.11.0",
-		"effect": "^4.0.0",
-		"esbuild": "^0.28.2",
-		"miniflare": "^4.20260730.0"
+		"@agentclientprotocol/sdk": "catalog:",
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@anthropic-ai/sandbox-runtime": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@effect/opentelemetry": "catalog:",
+		"@modelcontextprotocol/server": "catalog:",
+		"@opentelemetry/api": "catalog:",
+		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
+		"@opentelemetry/resources": "catalog:",
+		"@opentelemetry/sdk-trace-base": "catalog:",
+		"effect": "catalog:",
+		"esbuild": "catalog:",
+		"miniflare": "catalog:"
 	},
 	"peerDependenciesMeta": {
 		"@agentclientprotocol/sdk": {

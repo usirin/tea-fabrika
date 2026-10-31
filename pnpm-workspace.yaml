@@ -60,7 +60,7 @@ catalog:
   '@stryker-mutator/core': 10.1.1
   '@stryker-mutator/instrumenter': 10.1.1
   '@stryker-mutator/vitest-runner': 10.1.1
-  '@types/node': ^22.20.5
+  '@types/node': 22.20.5
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
   # Experiment 142's other terminals (experiments/142-web-terminals), held exact like ghostty-web.
@@ -91,10 +91,15 @@ catalog:
   react-dom: 19.3.1
   # Experiment 142: libghostty-vt on WebGPU. MIT.
   restty: 0.3.0
-  smol-toml: ^1.9.0
-  typescript: ^7.0.2
-  vitest: ^5.0.3
-  zod: ^4.6.5
+  smol-toml: 1.9.0
+  typescript: 7.0.2
+  vitest: 5.0.3
+  # The YAML parser oxlint-plugins/exact-versions.ts reads this file with. vite's optional peer, so already in the lockfile.
+  yaml: 2.9.1
+  zod: 4.6.5
+
+# `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
+savePrefix: ''
 
 onlyBuiltDependencies:
   - esbuild

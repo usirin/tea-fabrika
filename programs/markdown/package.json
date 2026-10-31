@@ -23,7 +23,7 @@
 		"micromark-extension-gfm": "catalog:"
 	},
 	"peerDependencies": {
-		"react": "^19.0.0"
+		"react": "catalog:"
 	},
 	"devDependencies": {
 		"@kampus/pipeline": "workspace:*",
