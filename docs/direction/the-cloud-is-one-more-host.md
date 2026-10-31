@@ -463,6 +463,22 @@ const view = {
   the runtime in the same turn as the step, so a crash leaves no gap. Elm's own
   way is a Cmd plus flags at start. The doubt is whether a real program wants
   more than that; the tracker in `next/` will settle it.
+- **A program never holds the log (decided 2026-10-31).** Each layer uses only
+  the one below it, so a fact goes program, app, coordination, data. A law checks
+  it: one layer down, and any exception is named with its reason. How a program
+  writes a fact others read is open. Lean, 70%: a `Topic` service in coordination,
+  named after `Phoenix.PubSub` topics, which owns who may write and who to wake.
+  The poke in D4 covers peers on a socket, not sleeping objects, so this fills
+  that gap too. The doubt is that it ends up a thin pass-through over the log.
+  The tracker in `next/` will settle it.
+
+  ```ts
+  // A sketch. The runtime gives this Layer, tied to this process.
+  const close = Effect.gen(function* () {
+  	const topic = yield* Topic;
+  	yield* topic.publish("tickets", {kind: "closed", ticket: 7});
+  });
+  ```
 - Not now: Relay. A study found it a second store, with no patches and its own
   schema bridge; Linear's own app uses a sync engine, not GraphQL. A later
   look: fate (react-fate), whose views are fragments without a GraphQL server.
