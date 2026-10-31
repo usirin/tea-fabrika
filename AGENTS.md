@@ -70,8 +70,9 @@ everything else    what we use today, and a map of which jobs exist
   writer, build, mutation step, one review, each by its own agent, with laws. No
   builder starts before an approved plan and tests that exist
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)).
-- **In today's version:** only fixes that daily use or CI needs, and the UX work the
-  owner picks. No new plumbing.
+- **In today's version:** fixes that daily use or CI needs, the UX work the owner
+  picks, and ideas the owner wants to try out there first. What a tryout teaches
+  goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
 - **When `next/` takes a job over,** the pull request that switches to it deletes
   the old part. Its tests or laws are ported first.
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No

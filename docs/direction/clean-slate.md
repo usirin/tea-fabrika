@@ -17,7 +17,7 @@ replaces the first rule (below, marked wrong) and the first order.*
 ```text
 main, while the new version grows
   next/           the new code, on brain and hands, importing nothing from the old
-  everything else today's version, in daily use, only fixed
+  everything else today's version, in daily use, and where ideas get tried out
   docs/direction  the decisions
   AGENTS.md       says which is which
 
@@ -40,7 +40,8 @@ problem this note set out to end. [AGENTS.md](../../AGENTS.md) tells agents how
 to work with that, and a written rule only helps an agent that reads it, so
 watch for agents reading the wrong version once they work in `next/`. If it
 happens, the settle is a check that fails, not a longer rule. The other risk is
-that the old version lives forever, so it gets only the fixes daily use needs.
+that the old version lives forever, so it takes only fixes, the UX work the owner
+picks and tryouts the owner asks for. Each tryout makes that risk a little bigger.
 
 ## Why
 
@@ -120,8 +121,11 @@ const order = [
 
 - **Experiments and field notes keep going where they go today,** as files, until
   a later step says otherwise.
-- **Today's version gets only fixes** that daily use or CI needs, and the UX work
-  the owner picks. No new plumbing. *Changed 2026-10-31: it said "no new features".*
+- **Today's version gets** fixes that daily use or CI needs, the UX work the owner
+  picks, and ideas the owner wants to try out there first, such as `claude` and
+  `codex` as programs. What a tryout teaches goes into `next/` as a lesson, rethought
+  and not copied. *Changed twice on 2026-10-31: it said "no new features", then "no
+  new plumbing".*
 - [AGENTS.md](../../AGENTS.md) tells agents which version is which.
 - `blog/`, `video/` and `singles/` are finished pieces and are not touched.
 
