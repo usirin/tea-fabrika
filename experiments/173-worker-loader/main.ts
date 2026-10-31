@@ -21,8 +21,8 @@ const pct = (xs: number[], p: number) => {
 	const s = [...xs].sort((a, b) => a - b);
 	return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))] ?? Number.NaN;
 };
-const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
-const summary = (xs: number[]) => ({
+export const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
+export const summary = (xs: number[]) => ({
 	p50: round(pct(xs, 50)),
 	p95: round(pct(xs, 95)),
 	mean: round(xs.reduce((a, b) => a + b, 0) / xs.length),
@@ -72,7 +72,7 @@ const bundle = async (entry: string, minify: boolean) => {
 	};
 };
 
-const workerdRssKb = (): number => {
+export const workerdRssKb = (): number => {
 	const rows = execFileSync("ps", ["-A", "-o", "pid=,ppid=,rss=,comm="], {encoding: "utf8"})
 		.split("\n")
 		.map((l) => l.trim().split(/\s+/))

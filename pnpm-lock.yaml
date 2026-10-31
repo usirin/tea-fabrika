@@ -529,6 +529,9 @@ importers:
       '@tea-fabrika/counter':
         specifier: workspace:*
         version: link:../../programs/counter
+      '@tea-fabrika/tracker':
+        specifier: workspace:*
+        version: link:../../programs/tracker
       effect:
         specifier: 'catalog:'
         version: 4.0.6
