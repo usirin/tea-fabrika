@@ -13,9 +13,12 @@ settings live in the same shape in their home. One name, two places, like
 ```text
 ~/.fabrika/                            the person's home for fabrika
   fabrika.toml                         their own settings: login, key file
+  packs/                               a shared cache of pack code, by commit
 acme/.fabrika/                         the repo's
   fabrika.toml                         which ledger, agents, checks, packs
+  fabrika.lock                         each pack's commit and code hash
   programs/deploy/                     the repo's own programs (proposed)
+  packs/deploy-kit/                    a pack this repo offers to others
 acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
 ```
 
@@ -74,6 +77,60 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
   is why Cargo keeps `Cargo.toml` in plain sight. We pick matching the home
   folder over that.
 
+## Where packs come from (2026-10-31)
+
+Decided: packs are dependencies, handled the way Cargo and Go handle theirs.
+The project names and pins them, a lockfile records exactly what was taken,
+and the home folder only caches the code.
+
+```toml
+# acme/widgets/.fabrika/fabrika.toml
+[pack.deploy-kit]
+from = "github:acme/tools"   # the repo the pack lives in
+ref = "v1.2"                 # a tag, a branch or a commit
+region = "eu"                # the pack's own setting; the pack checks it
+```
+
+```toml
+# acme/widgets/.fabrika/fabrika.lock, written by `fabrika pack add`, committed
+[[pack]]
+name = "deploy-kit"
+from = "github:acme/tools"
+commit = "9f3c2e1"
+hash = "sha256-4b1d..."      # the built code, checked when it is loaded
+```
+
+```text
+acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
+  pack.toml                             name = "deploy-kit", programs = ["src/deploy.ts"]
+  src/deploy.ts
+```
+
+- **Decided:**
+  - Any repo can offer packs, in `.fabrika/packs/<name>/`. There is no
+    catalog and no word for "a repo that offers packs": the repo's address is
+    the name, as a Go module path is. If browsing ever needs a word, it is
+    "source", as in apt.
+  - The project lists its packs in `.fabrika/fabrika.toml`, one
+    `[pack.<name>]` table each, with `from`, `ref` and the pack's own settings.
+  - `.fabrika/fabrika.lock` sits beside it, committed, like `Cargo.lock`:
+    each pack's commit and the hash of its built code. Two people on the
+    project run the same pack code.
+  - `~/.fabrika/packs/` only caches code, keyed by commit, like Go's module
+    cache. Projects pinned to the same commit share one copy.
+  - A pack only one person wants goes in `~/.fabrika/fabrika.toml`, with its
+    own lock in the home. When both name the same pack, the project's pin
+    wins.
+- **Open:**
+  - How the code runs: one sandbox per pack version, loaded by its hash, is
+    the lean (experiment 173, Worker Loader, still running).
+  - How a pinned pack learns that a newer version exists.
+  - Whether `ref` should allow a branch at all, or only a tag or a commit.
+- **Why:** packs today are npm packages loaded with Node's `import()`
+  (`packages/pipeline/src/asks/packs.ts`), which cannot work once programs
+  run in workerd. Copying how package managers already work means nothing new
+  to learn.
+
 ## What was decided
 
 - **Each repo fabrika works on has one `fabrika.toml`.** TOML, not JSON:
@@ -101,6 +158,9 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
 
   Packs depend on the repo: a UI pack fits a product repo, not a library.
   `tsh.toml` keeps only the shell's own settings.
+  **Changed 2026-10-31:** the `packs` list and npm names go. Each pack is one
+  `[pack.<name>]` table with `from` and `ref`, pinned in `fabrika.lock`
+  ([where packs come from](#where-packs-come-from-2026-10-31)).
 - **Only knobs a machine decides with are copied into a run** (2026-10-05).
   A Jev reader's floor is read when the reader is built, so a question asked
   again after a restart uses what the file says then. The machine never
