@@ -299,11 +299,38 @@ The seven open questions, each with its lean. Proposed, not decided.
     way GitHub's runner labels pick a machine. A Linux VM is one more computer
     with hands: its own files, Docker without a file-sharing layer, the same
     OS as the cloud.
-- **Open:** one object per program instance, or one per tree of programs.
-  Against one per instance: [experiment 145](../../experiments/145-many-objects.md)
-  put one object per lane and broke 11 of 27 ledger laws, and Cloudflare's own
-  rule is one object per unit of coordination. An experiment settles it: the
-  same small tree both ways, against the laws.
+- **Decided: single-purpose objects, plus one project object.** This answers
+  "one object per program instance, or one per tree".
+
+  ```ts
+  // A sketch. One Durable Object per name.
+  //   program:build:7   one program instance: its state, update, sleep and wake
+  //   job:7             one job's record
+  //   desk:<person>     one person's desk: its workspaces, settings, tsh history
+  //   terminal:t1       one terminal's bytes, ephemeral
+  //   presence          who is online and where, ephemeral
+  //   project           the ledger, slimmed: the log, claims, inboxes, the process tree
+  //
+  // build:7 crashes. One step inside the project object:
+  //   claim on #7 released + "exit" letter in the factory's inbox + build:7 off the tree
+  ```
+
+  - **Each thing gets its own object,** so no one object carries the whole
+    team, and a busy terminal never slows a claim.
+  - **Claims, inboxes and the process tree stay together** in the project
+    object, because one action often changes all three. When
+    [experiment 145](../../experiments/145-many-objects.md) split them, 11 of
+    27 ledger laws broke. Cloudflare's own rule is one object per unit of
+    coordination, and these three are one unit.
+  - **The project object is today's ledger, slimmed.** Program state, job
+    records, desks, terminals and presence move out of it.
+  - **Why it is not a bottleneck** (80%): Cloudflare's soft limit is about
+    1,000 requests a second per object, a team makes tens, and experiment 93
+    soaked at about 100 times a team's load with nothing lost. The doubt is a
+    very busy repo with many agents. The way out, if it gets hot, is an
+    outbox in each program object (about 900 to 1,300 lines).
+  - **Open:** whether the spend meter (`hold`, `charge`) stays in the project
+    object (60%, since a hold usually comes with a claim) or gets its own.
 - **What tea already ships** (`@demlik/tea/do`, 0.21.0, unused here so far):
   `stepHost` (the hands pull the next step while the object sleeps),
   `durableTimer`, `doEventSourcedStore`, `acceptDurableCommandSocket`
