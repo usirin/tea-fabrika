@@ -22,6 +22,13 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
 - **Decided:**
   - The repo's file is `.fabrika/fabrika.toml`, not `fabrika.toml` at the
     root.
+  - It has one spelling. No `.fabrika.toml`, no root `fabrika.toml`, no
+    table in `package.json`. Two spellings mean every reader, tool and agent
+    checks both, and when both exist one is edited while the other is read.
+    Ruff picks between its spellings by a fixed order without saying so; we
+    do not.
+  - `.fabrika.jsonc` (the review's `governed` and `ui` today) moves into the
+    folder too, so a repo's fabrika files sit in one place.
   - `~/.fabrika` is the one home. It replaces the app's own folder
     (Electron's `userData`), `~/.tsh` and `ledger.json`. `FABRIKA_HOME` stays,
     so a test can point at a home of its own.
