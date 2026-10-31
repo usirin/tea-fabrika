@@ -1,7 +1,7 @@
 import {Ledger, Shell} from "@kampus/fabrika";
 import {type InTile, serveAgent} from "@kampus/fabrika/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
-import {Effect} from "effect";
+import {Effect, type Scope} from "effect";
 import type {SocketServer} from "effect/socket";
 import {appPrograms} from "../tsh.ts";
 
@@ -35,10 +35,15 @@ const inTile = (port: string): InTile | null => {
 	return {run, program: at === -1 ? run : run.slice(0, at)};
 };
 
-/** Serve every agent that attaches to `server`, until the host stops. `ports` are the screens' names now. */
+/**
+ * Serve every agent that attaches to `server`, until the host stops. `ports` are the screens'
+ * names now. `attached` is said with each agent's name once its handshake is read, in the agent's
+ * scope: the host lists who is attached by it, for the top bar's agents (host/serve.ts).
+ */
 export const serveAgents = (
 	server: SocketServer.SocketServer["Service"],
 	ports: () => Iterable<string>,
+	attached: (name: string) => Effect.Effect<void, never, Scope.Scope>,
 ) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
@@ -49,6 +54,7 @@ export const serveAgents = (
 				person: person.id,
 				programsFor: (who) => Shell.programList(appPrograms(ledger, who, pullRequests)),
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
+				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>
 					Effect.logWarning("fabrika host: an agent's link failed", cause),

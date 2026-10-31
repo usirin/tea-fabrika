@@ -303,6 +303,7 @@ const flow = async (app: ElectronApplication) => {
 	await run(page, "t1", "seq --to 3 | double");
 	const answer = await prompted(page, "t1");
 	check("t1's tsh answers", answer.includes("double 2\ndouble 4\ndouble 6\ntsh$"), answer);
+	await quietAtRest(page);
 	await shot(page, "1-desk");
 
 	await prefixed(page, "|");
@@ -868,33 +869,90 @@ const noInterrupts = (app: ElectronApplication) =>
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
 
-/** Where the window says the link: the host's word in the top bar, a status, empty while up. */
+/** Where the window says the link: the host's word in the top bar, a status. */
 const LINK = '[role="status"][aria-label="the link to the host"]';
 /**
+ * What the host's item is named while the host is up. It shows an icon and no word, so the run
+ * reads the item's name (its `aria-label`), which is its word when it has one.
+ */
+const UP = "host up";
+/** The host's item: the first button of the link, before any Try again. */
+const HOST = `${LINK} button`;
+/**
  * From now on, note each change in what the window says of the link: a word may be up for a
- * moment only. "" is the host up.
+ * moment only.
  */
 const watchNotes = (page: Page) =>
-	page.evaluate((link) => {
-		const said: string[] = [""];
-		Object.assign(globalThis, {said});
-		new MutationObserver(() => {
-			const text = document.querySelector(link)?.textContent ?? "";
-			if (said.at(-1) !== text) said.push(text);
-		}).observe(document.body, {childList: true, subtree: true, characterData: true});
-	}, LINK);
-/** The words the window said of the link since `watchNotes`, in order, with no "". */
+	page.evaluate(
+		({host, up}) => {
+			const said: string[] = [up];
+			Object.assign(globalThis, {said});
+			new MutationObserver(() => {
+				const name = document.querySelector(host)?.getAttribute("aria-label") ?? "";
+				if (said.at(-1) !== name) said.push(name);
+			}).observe(document.body, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ["aria-label"],
+			});
+		},
+		{host: HOST, up: UP},
+	);
+/** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
-	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
-/** What the window says of the link now, or "" for the host up. */
+	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
+/** What the window says of the link now, by the host item's name, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
-		.locator(LINK)
-		.textContent({timeout: 500})
+		.locator(HOST)
+		.first()
+		.getAttribute("aria-label", {timeout: 500})
 		.then(
 			(t) => t ?? "",
 			() => "",
 		);
+/**
+ * A part that works says nothing: on a fresh home with nothing asking and no agent attached, the
+ * top bar's right end is the host's quiet icon alone, with no word and no `·`. C-b A and C-b S
+ * still open their lines, which say no agent is attached and that the ledger is this home's own.
+ */
+const quietAtRest = async (page: Page) => {
+	const said = await until(
+		"the top bar's right end quiet, the host up",
+		async () =>
+			[
+				(await page.locator(".topbar .right").textContent()) ?? "",
+				await noteNow(page),
+				await page.locator(".topbar .right svg").count(),
+			] as const,
+		([text, name, icons]) => text.trim() === "" && name === UP && icons === 1,
+	);
+	check("at rest the top bar says nothing but the host's icon", true, said);
+	const lines = async (key: string, label: string) => {
+		await prefixed(page, key);
+		const text = (await page.getByRole("dialog", {name: label}).textContent({timeout: 2000})) ?? "";
+		await prefixed(page, key);
+		await until(
+			`${label} closed`,
+			() => page.getByRole("dialog").count(),
+			(n) => n === 0,
+		);
+		return text;
+	};
+	const agents = await lines("A", "The agents");
+	check(
+		"C-b A at zero opens lines: none attached, and how",
+		agents.includes("No agent is attached") && agents.includes("fabrika mcp"),
+		agents,
+	);
+	const sync = await lines("S", "The sync");
+	check(
+		"C-b S on an own ledger opens lines: nothing to sync",
+		sync.includes("Nothing to sync"),
+		sync,
+	);
+};
 /** The host's few lines, opened from its word in the top bar, then closed again. */
 const hostLines = async (page: Page) => {
 	const host = page.locator(LINK).getByRole("button", {name: /^host /});
@@ -909,12 +967,18 @@ const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: nothing said of the host, and nothing dimmed. */
+/** The desk is back: the host's item is its quiet up icon with no word, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
 		"the desk back, the host up",
-		async () => [await noteNow(page), await page.locator(".desk.lost").count()] as const,
-		([word, lost]) => word === "" && lost === 0,
+		async () =>
+			[
+				await noteNow(page),
+				await page.locator(`${HOST} svg`).count(),
+				(await page.locator(HOST).first().textContent()) ?? "",
+				await page.locator(".desk.lost").count(),
+			] as const,
+		([name, icons, word, lost]) => name === UP && icons === 1 && word === "" && lost === 0,
 	);
 
 /**

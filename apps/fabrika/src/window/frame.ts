@@ -5,16 +5,17 @@ import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
 import {bindingOf, type Group, groupOf, type Show} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
-import type {LinkNow, ToWindow} from "../messages.ts";
+import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
-import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./pop.ts";
+import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentence} from "./pop.ts";
 
 // The window's frame, in words: what the top bar, the bottom line, the asks list and the palette
 // say, worked out from what the host sent (the desk, the keys, the programs, the asks) and what
 // the app said of the link. Plain data, no React, so each word is tested (frame.test.ts); the
 // page draws it (frame.tsx).
 //
-//   top      1 #7  2 tsh   tracker | ticket | runs                                    2 ask you •
+//   top      1 #7  2 tsh   tracker | ticket | runs                    2 ask you • · 1 agent · ✓
+//   at rest  1 #7  2 tsh   tracker | ticket | runs                                          ✓
 //   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
 //   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
@@ -25,10 +26,14 @@ import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./
 // table: `%3`, its line, how long it has run, and `+1` for each other job there. A job that just
 // ended says so for a short while (`done in 4s`), then the item clears; with nothing running it
 // says nothing. A click, or C-b J, lists the jobs: there is no trace to open for a job yet (the
-// app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you" takes the accent, and only a broken part
-// takes the warning color, each with its word (rules 2 and 11). A part that works says nothing:
-// the host and the ledger show up in the top bar only when something is wrong with them. An
-// agent's ask is never on the bottom line: that line is yours.
+// app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you"
+// takes the accent, and only a broken part takes the warning color, each with its word (rules 2
+// and 11). A part that works says nothing: no asks, no agents attached and a ledger in sync draw
+// no item at all, each a word only while it matters (`2 ask you`, `1 agent`, `syncing`, `ledger
+// unreachable`). The one exception is the host's quiet icon while it is up: the host runs on your
+// laptop, and its icon is where C-b H and a click land. Each opens a few lines under the bar's
+// right end (C-b a, C-b A, C-b S, C-b H, or the tsh words `asks`, `agents`, `sync`, `host`), with
+// or without its word. An agent's ask is never on the bottom line: that line is yours.
 //
 // What the page itself keeps (the list open, the palette, the info mode, the bars hidden) is a
 // model and an update with no Cmd, Elm's `Browser.sandbox`: `frameUpdate` below. The desk's own
@@ -44,11 +49,12 @@ export interface Shape {
 }
 export type Shapes = ReadonlyMap<string, Shape>;
 
-/** One binding of the desk's Ctrl-B table, as the host sent it. */
+/** One binding of the desk's Ctrl-B table, as the host sent it, with the tsh word that does the same. */
 export interface Bound {
 	readonly key: string;
 	readonly repeats: boolean;
 	readonly name: string;
+	readonly tsh: string;
 }
 
 /** The ticket a tile's run shows, by the run's id: what the ticket program's view said. */
@@ -104,7 +110,7 @@ export const prefixLine = (table: readonly Bound[]): readonly {key: string; name
 /** The palette's groups, in the order it shows them (desk/keys.ts, `groupOf`). */
 const GROUPS: readonly Group[] = ["tile", "focus", "workspace", "window"];
 
-/** One command of the palette: its name, its group, its key, and the binding it runs. */
+/** One command of the palette: its name, its group, its key, its tsh word, and the binding it runs. */
 export interface Command {
 	readonly name: string;
 	readonly group: Group;
@@ -112,6 +118,8 @@ export interface Command {
 	readonly key: string;
 	/** As keycaps, in the palette: `⌃B` `Z`. */
 	readonly caps: readonly Cap[];
+	/** What to type in a tile's tsh for the same: `zoom`, `split --to down`. */
+	readonly tsh: string;
 	/** The binding's key: the palette runs it as Ctrl-B and this key would. */
 	readonly runs: string;
 }
@@ -139,6 +147,7 @@ export const commandsOf = (
 				group: does === undefined ? "window" : groupOf(does),
 				key: bindingWord(prefix, b.key),
 				caps: capsOf(prefix, b.key),
+				tsh: b.tsh,
 				runs: b.key,
 			},
 		];
@@ -146,11 +155,11 @@ export const commandsOf = (
 	return GROUPS.flatMap((g) => all.filter((c) => c.group === g));
 };
 
-/** The commands whose name holds every word typed, in the table's order. */
+/** The commands whose name or tsh word holds every word typed, in the table's order. */
 export const matching = (commands: readonly Command[], query: string): readonly Command[] => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return commands.filter((c) => {
-		const text = c.name.toLowerCase();
+		const text = `${c.name} ${c.tsh}`.toLowerCase();
 		return words.every((w) => text.includes(w));
 	});
 };
@@ -208,9 +217,12 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
 	);
 };
 
-/** How the count of asks reads: `nothing asks you`, `1 asks you`, `3 ask you`. */
-export const asksWord = (n: number): string =>
-	n === 0 ? "nothing asks you" : `${n} ask${n === 1 ? "s" : ""} you`;
+/**
+ * The asks' item: `1 asks you`, `3 ask you`, or `null` when nothing asks you, as the Dock badge
+ * shows no `0`. Nothing to answer is not news; C-b a still opens the empty list.
+ */
+export const asksWord = (n: number): string | null =>
+	n === 0 ? null : `${n} ask${n === 1 ? "s" : ""} you`;
 
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
 export interface Said {
@@ -219,31 +231,96 @@ export interface Said {
 }
 
 /**
- * The ledger's item: shown only when the last read failed, so the count may be old. A ledger
- * that answers says nothing.
+ * The agents' item: how many agents are attached to the host's agents' socket now, or `null`
+ * when none is. Those are the agents at work on this desk: each drives the app's programs as tools
+ * (host/agents.ts). No agent attached is not news, on a home where one could attach or on one
+ * with no agents' socket (a home on a ledger server); C-b A still opens lines that say which.
  */
-export const ledgerWord = (now: AsksNow): Said | null =>
-	now.reach === "failed" ? {word: "ledger unreachable", broken: true} : null;
+export const agentsWord = (host: HostNow): string | null => {
+	const n = host.agents?.length ?? 0;
+	return n === 0 ? null : `${n} agent${n === 1 ? "" : "s"}`;
+};
 
 /**
- * The host's item, one branch per kind of link: a kind left out does not compile. A host that is
- * up says nothing; every other kind has a word, and its lines say what to do.
+ * The sync item, or `null` while the ledger is in sync. A ledger server's says `syncing` until
+ * the first read is in, then nothing: every write goes straight to the server, so none waits
+ * here. The home's own file has nothing to sync and says nothing. Either one that failed its last
+ * read says `ledger unreachable`, in red. C-b S opens its lines either way.
  */
-export const hostWord = (link: LinkNow, attachedOnce: boolean): Said | null => {
+export const syncWord = (now: AsksNow, ledger: LedgerLink): Said | null => {
+	if (now.reach === "failed") return {word: "ledger unreachable", broken: true};
+	if (ledger.kind === "own" || now.reach === "ok") return null;
+	return {word: "syncing", broken: false};
+};
+
+/**
+ * The shapes the host's item wears when something is wrong, each its own shape, never color
+ * alone: waiting (a dashed ring), needs a look (`!`), down (`x`). None is the up state's ring and
+ * check, so a host that is not up never looks up.
+ */
+export type HostShape = Extract<Icon, "later" | "stuck" | "failed">;
+
+/**
+ * The host's item. Up, it is a quiet icon and no word: a host that works is not news. Else it is
+ * a word, with a shape that says the kind of wrong, red only where it is broken. There is no value
+ * for an up host with a word, or a word with the up icon.
+ */
+export type HostItem =
+	| {readonly kind: "up"}
+	| {
+			readonly kind: "word";
+			readonly word: string;
+			readonly broken: boolean;
+			readonly shape: HostShape;
+	  };
+
+/** A host that is not up, said in a word with its shape. */
+const wrong = (word: string, broken: boolean, shape: HostShape): HostItem => ({
+	kind: "word",
+	word,
+	broken,
+	shape,
+});
+
+/**
+ * The host's item, one branch per kind of link: a kind left out does not compile. Only a host
+ * down or one that speaks another version is broken. Its lines say what to do.
+ */
+export const hostWord = (link: LinkNow, attachedOnce: boolean): HostItem => {
 	switch (link.kind) {
 		case "up":
-			return null;
+			return {kind: "up"};
 		case "build":
-			return {word: "host older", broken: false};
+			return wrong("host older", false, "stuck");
 		case "version":
-			return {word: "host speaks another version", broken: true};
+			return wrong("host speaks another version", true, "stuck");
 		case "reconnecting":
-			return attachedOnce ? {word: "host down", broken: true} : {word: "connecting", broken: false};
+			return attachedOnce
+				? wrong("host down", true, "failed")
+				: wrong("connecting", false, "later");
 		case "stopped":
-			return {word: "host down", broken: true};
+			return wrong("host down", true, "failed");
 		case "restarting":
-			return {word: "host restarting", broken: false};
+			return wrong("host restarting", false, "later");
 	}
+};
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A time on the local clock: `14:02` on the day of `now`, `Oct 29, 14:02` before it. */
+export const clockWord = (at: number, now: number): string => {
+	const t = new Date(at);
+	const hm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+	return t.toDateString() === new Date(now).toDateString()
+		? hm
+		: `${MONTHS[t.getMonth()]} ${t.getDate()}, ${hm}`;
+};
+
+/** What the host holds now, from the desk it sent: `3 tiles · 1 job running`. */
+export const holdsWord = (desk: Open): string => {
+	const tiles = desk.workspaces.reduce((n, ws) => n + tilesOf(ws).length, 0);
+	const running = Object.values(desk.jobs).reduce((n, j) => n + j.running.length, 0);
+	return `${tiles} tile${tiles === 1 ? "" : "s"} · ${running} job${running === 1 ? "" : "s"} running`;
 };
 
 // ---------------------------------------------------------------- the bottom line
@@ -550,9 +627,10 @@ export const INFO = {
 	segment: "a program in this workspace's line, shown in the tile named. A click focuses it.",
 	pipe: "a pipe: what the program before it sends goes into the one after it.",
 	asks: "asks: what agents ask you, and runs that are stuck. One count, the same as the Dock badge. A dot is one you have not seen. A click opens the list.",
-	ledger:
-		"ledger: where the asks are read from. Unreachable, the count is the last one read. A click says why.",
-	host: "host: the process that runs every tile and job. Down, nothing new runs, and the tiles keep their last state. A click says what to do.",
+	agents:
+		"agents: the agents attached to this host now, each driving the app's programs as tools. A click names them.",
+	sync: "sync: the ledger server this home reads, and whether it answers. Unreachable, the asks count is the last one read. A click says more.",
+	host: "host: the process that runs every tile and job. Down, nothing new runs, and the tiles keep their last state. A click says more, and what to do.",
 	again:
 		"try again: the app stopped reaching for the host after five minutes. A click starts it reaching again.",
 	drag: "an empty stretch to move the window by. A double-click zooms the window, as macOS does.",
@@ -583,8 +661,8 @@ export type Over =
 	  }
 	| {readonly kind: "item"; readonly what: Part};
 
-/** A part of the app the top bar names only when something is wrong with it. */
-export type Part = "ledger" | "host";
+/** A part of the app the top bar names, whose few lines open under it: a click, its key or its tsh word. */
+export type Part = "agents" | "sync" | "host";
 
 export interface Frame {
 	readonly over: Over;
@@ -624,9 +702,22 @@ export type FrameMsg =
 const toggle = (f: Frame, over: Over): Frame =>
 	f.over.kind === over.kind ? {...f, over: {kind: "none"}} : {...f, over};
 
-/** What a key after Ctrl-B shows: the asks list, the jobs list, every key, the info mode, or no bars. */
+/** An item's lines open, or close when they are open already. */
+const itemLines = (f: Frame, what: Part): Frame =>
+	f.over.kind === "item" && f.over.what === what
+		? {...f, over: {kind: "none"}}
+		: {...f, over: {kind: "item", what}};
+
+/**
+ * What a key after Ctrl-B shows: the asks list, the jobs list, every key, the info mode, no bars,
+ * or an item's lines.
+ */
 const shown = (f: Frame, what: Show): Frame => {
 	switch (what) {
+		case "agents":
+		case "sync":
+		case "host":
+			return itemLines(f, what);
 		case "asks":
 			return toggle(f, {kind: "asks"});
 		case "jobs":
@@ -665,9 +756,7 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "palette":
 			return toggle(f, {kind: "palette", title: "commands", query: "", at: 0});
 		case "item":
-			return f.over.kind === "item" && f.over.what === m.what
-				? {...f, over: {kind: "none"}}
-				: {...f, over: {kind: "item", what: m.what}};
+			return itemLines(f, m.what);
 		case "query":
 			return f.over.kind === "palette" ? {...f, over: {...f.over, query: m.query, at: 0}} : f;
 		case "move": {

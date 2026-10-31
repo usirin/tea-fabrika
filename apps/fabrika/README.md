@@ -137,11 +137,17 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `?` | every key, with its name |
 | `i` | info mode: the bottom line explains whatever the pointer is over; again to stop |
 | `B` | hide both bars; again to show them |
+| `A`, `S`, `H` | open the agents', sync or host lines under the top bar; again to close them |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
 
+The three item keys are capitals on purpose. Lowercase `h` is focus left, `a` is the asks list,
+and in tmux `s` lists the sessions. Capital `A`, `S` and `H` are free in tmux's default table, so
+a tmux hand never opens one by mistake.
+
 `Cmd-K` (no prefix) opens the palette: every command by name, in groups (Tile, Focus,
-Workspace, Window), with its keys as Mac keycaps (`⌃B` `Z`). Type to narrow it, the matched
-letters bold; Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
+Workspace, Window), its tsh word in mono on the line under the name, and its keys as Mac
+keycaps (`⌃B` `Z`) at the right. Type to narrow it, by name or by word, the matched letters
+bold; Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
 `C-b ?` opens the same list as "Keyboard shortcuts".
 This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
 commands; programs' inputs join it later, from the same list that makes the agent tools.
@@ -165,17 +171,49 @@ ours opens with Cmd-K, as Linear's does.
 - **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
   same, and Ctrl-B twice sends it on.
 
+### Every key is a tsh word too
+
+Each command after Ctrl-B is also a word in every tile's tsh (`src/desk/words.ts`), as tmux's
+keys are bound to its commands. A word does what its key does, from the tile it was typed in:
+that tile's workspace comes forward, the tile is focused, then the command runs.
+
+```text
+tsh$ split --to down            as C-b -
+tsh$ focus --to left            as C-b h; --to t3 goes to tile t3, as a click on it
+tsh$ workspace --to 2           as C-b 2; --to next, previous or new as C-b C-l, C-b C-h, C-b N
+tsh$ zoom                       as C-b z; turn, fold and close-tile as Space, f and x
+tsh$ agents                     as C-b A; sync, host, asks, keys, info and bars as the rest
+tsh$ focus --to t9
+tsh: focus failed: no tile t9
+```
+
+- **One table.** `wordOf` (`src/desk/keys.ts`) writes each binding's word. The palette, `C-b ?`
+  and every tooltip read it from the same table the host sends, and a test runs each word in a
+  real tsh and checks it tells the desk what its key does.
+- **A word that opens a part of the frame** (`agents`, `keys`, `info`) opens it on every app
+  attached, as a typed word has no window of its own.
+- **They are yours.** The agents' socket never lists them, so no agent moves the desk you look at.
+- `close-tile`, not `close`: tsh's own `close` takes a window away.
+- `C-b J`'s word is tsh's own `jobs`, which prints the same list in the tile. There is no second
+  `jobs`.
+
 ## The window's frame
 
 Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
 
 ```text
-● ● ●  1 #7   2 tsh   tracker | ticket | runs                                            2 ask you •
+● ● ●  1 #7   2 tsh   tracker | ticket | runs                                               ✓
 ...tiles...
 t2 ticket #7 · takes ticket · sends ticket · from tracker → runs                C-b i info · C-b ? keys
 ```
 
-When something is wrong, its word joins the top bar's right end, in red where it is broken:
+That is the bar at rest. A word joins its right end only while it matters:
+
+```text
+                                                                      2 ask you • · 1 agent · ✓
+```
+
+When something is wrong, its word says so, in red where it is broken:
 
 ```text
                                                2 ask you · ledger unreachable · host down · try again
@@ -185,11 +223,40 @@ When something is wrong, its word joins the top bar's right end, in red where it
   needs you. On macOS it is the window's title bar (`hiddenInset`): the system's three buttons
   sit in its first 84 px, its empty stretch moves the window, and its items are buttons that
   never do. Other platforms keep the system's own frame above it.
-- **A part that works says nothing.** The host shows up only when it is not up: `connecting`,
-  `host down`, `host older`, `host restarting`, or the other link version. A click opens its few
-  lines, with the restart or Try again where one applies. The ledger shows up only when a read
-  failed, as `ledger unreachable`; a click says why. The asks it last read stay, drawn faint
-  while the host is down.
+- **A part that works says nothing.** Nothing asking you, no agent attached and a ledger in
+  sync draw no item at all, as Linear leaves a working sync unsaid and the Dock shows no `0`
+  badge. Each item is a word only while it matters, and its key opens its lines either way.
+  The one exception is the host: while it is up it keeps a small faint icon, the one quiet
+  anchor that is always there. The host runs on your laptop, not in a cloud, so it is the part
+  most worth one glance, and its icon is where `C-b H` and a click land. Every item's lines open
+  under the bar's right end, where that icon sits.
+
+  | Item | At rest | While it matters | Key, tsh word |
+  |---|---|---|---|
+  | asks | nothing | `1 asks you`, `3 ask you`, in the accent, a dot for one not seen | `C-b a`, `asks` |
+  | agents | nothing | `1 agent`, `2 agents` | `C-b A`, `agents` |
+  | sync | nothing | `syncing` before a ledger server's first read; `ledger unreachable` in red | `C-b S`, `sync` |
+  | host | a faint ring with a check | `connecting`, `host down`, `host older`... each with its own shape | `C-b H`, `host` |
+
+  - **asks:** the one count (below). At zero, `C-b a` opens the empty list.
+  - **agents:** the agents attached on the host's MCP socket now. Its lines name each one and
+    since when, and how to attach one; at zero they say none is attached, and how. A home
+    connected to a ledger server has no agents' socket; `C-b A` there opens lines that say why.
+    No cost: an agent's spend is billed by its own harness, and nothing in the app meters it
+    yet (ticket 91 is the one meter).
+  - **sync:** a home connected to a ledger server says `syncing` until the first read is in,
+    then nothing. Every write goes straight to the server, so nothing waits to be sent and there
+    is no `N to send` (ticket 101 owns an outbox). A home with its own `ledger.sqlite` has nothing
+    to sync. Either kind says `ledger unreachable`, in red, once a read failed. `C-b S` opens its
+    lines at any time: the file or the server, and why a read failed.
+  - **host:** up, a small gray ring with a check and no word (`✓` above), still and faint, named
+    `host up` for a screen reader. Else a word with a shape of its own: `connecting` and `host
+    restarting` with a dashed ring, `host older` and the other link version with `!`, `host down`
+    with `x`. Its lines give the host's pid, since when it runs, its build, and the tiles and
+    jobs it holds; when it is not up, the restart or Try again where one applies.
+
+  The agents and sync items need the host reached; the asks it last read stay, drawn faint
+  while the host is down. Before the first read, the bar says `reading the ledger`.
 - **The bottom line is where you are:** the focused tile, what it takes and sends, its
   neighbors in its line, and its job. What it takes is the data a pipe can feed it,
   by tsh's own rule (`Shell.fedBy`: an input some program's output fits), never its commands:
@@ -230,9 +297,11 @@ When something is wrong, its word joins the top bar's right end, in red where it
   so a host restart keeps them, and two people on one shared ledger each keep their own. An
   ask answered meanwhile drops out of the file at the host's first read. A file that does not
   read starts with every ask counted and new, and the host's log says why.
-- **Every item is a button with a tooltip:** its name and its keys as keycaps (`Asks` `⌃B`
-  `A`), after the pointer rests 700 ms, at once within 300 ms of the last one, as Radix does;
-  keyboard focus shows it too. The bars themselves keep tmux's spelling, `C-b a`.
+- **Every item is a button with a tooltip:** its name, its keys as keycaps, and its tsh word in
+  mono (`Host` `⌃B` `⇧H` `host`; `tracker` `focus --to t3` for a program in the line), after the
+  pointer rests 700 ms, at once within 300 ms of the last one, as Radix does; keyboard focus
+  shows it too. The bars themselves keep tmux's spelling, `C-b a`. Try again has no word: it
+  starts a host, and tsh runs in the host.
 - **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
   word; running and done are gray words.
 
@@ -486,8 +555,7 @@ Left for later, from Tuval's keys and the build:
   here.
 - **The frame's own gaps,** each a tracker ticket, built as its own change once it has a real
   source: the outbox count, `N to send` (ticket 101); answering from the asks list (ticket
-  102); the agents item, today's cost, and keys and tsh words for the frame's items (ticket
-  103).
+  102); today's cost beside the agents, once one meter counts what agents spend (ticket 91).
 - **Later and seen are kept per home, not per person.** The same person on two machines sets an
   ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
 - **The job item opening the job's trace,** once the host keeps each job's record

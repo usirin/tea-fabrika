@@ -178,9 +178,10 @@ describe("the host", () => {
 		);
 		expect(tileIds(seen.desk)).toEqual(["t1"]);
 		// The asks go to every app, a page or not, as the ledger is read: so leave them out of the order.
-		expect(seen.first.filter((t) => t !== "asks").slice(0, 3)).toEqual([
+		expect(seen.first.filter((t) => t !== "asks").slice(0, 4)).toEqual([
 			"keys",
 			"programs",
+			"host",
 			"desk",
 		]);
 		expect(seen.first).toContain("asks");
@@ -267,6 +268,46 @@ describe("the host", () => {
 			}),
 		);
 		expect(row).toBe("tsh$ aXb");
+	});
+
+	it("moves the desk on every app from a word typed in a tile's tsh, and prints why it did not", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const a = yield* appOn(paths.sock);
+				const b = yield* appOn(paths.sock);
+				yield* a.wire.up;
+				yield* b.wire.up;
+				a.send({type: "page"});
+				b.send({type: "page"});
+				yield* until("t1's prompt", () => (a.rows("t1")[0] === "tsh$" ? true : undefined));
+				const said = a.page().find((m) => m.type === "host");
+				a.type("t1", "split\r");
+				const split = yield* until("the split on b", () =>
+					tileIds(b.desk()).length === 2 ? b.desk() : undefined,
+				);
+				a.type("t1", "focus --to t9\r");
+				const refused = yield* until("why", () =>
+					a.rows("t1").find((r) => r.startsWith("tsh: focus failed")),
+				);
+				a.type("t1", "agents\r");
+				const shown = yield* until("the agents' lines on b", () =>
+					b.page().find((m) => m.type === "show" && m.what === "agents"),
+				);
+				yield* host.stop;
+				return {said, split, refused, shown};
+			}),
+		);
+		// The home keeps its own ledger, so agents attach on its socket: none yet.
+		expect(seen.said).toMatchObject({
+			type: "host",
+			now: {pid: process.pid, ledger: {kind: "own"}, agents: []},
+		});
+		expect(tileIds(seen.split)).toEqual(["t1", "t2"]);
+		expect(seen.split.workspaces[0].focused).toBe("t2");
+		expect(seen.refused).toBe("tsh: focus failed: no tile t9");
+		expect(seen.shown).toEqual({type: "show", what: "agents"});
 	});
 
 	it("refuses an app of another version, says which, and runs on for the next app", async () => {

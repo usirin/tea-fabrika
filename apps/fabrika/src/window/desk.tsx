@@ -39,6 +39,7 @@ import {
 import {
 	type Attached,
 	type FromPage,
+	type HostNow,
 	type LinkNow,
 	readToPage,
 	readToWindow,
@@ -84,9 +85,10 @@ import {WINDOWS} from "./windows.tsx";
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 //
 // Around the desk is the window's frame (frame.tsx, its words in frame.ts): the top bar is the
-// whole desk (workspaces, the line, what asks you, and the ledger or the host when broken), and the
-// bottom line is the tile you are in and the key you just pressed. Cmd-K opens the palette;
-// C-b a the asks list, C-b ? every key, C-b i the info mode, C-b B hides both bars.
+// whole desk (workspaces, the line, what asks you, the agents on the host, the ledger's sync and
+// the host), and the bottom line is the tile you are in and the key you just pressed. Cmd-K opens
+// the palette; C-b a the asks list, C-b ? every key, C-b i the info mode, C-b B hides both bars,
+// C-b A, S and H the agents', sync and host lines.
 //
 // When the link to the host drops, the app reconnects (reconnect.ts) and the top bar says so, in
 // a word: the desk stays drawn, dimmed and out of reach. Nothing takes focus, and no dialog opens.
@@ -95,7 +97,7 @@ import {WINDOWS} from "./windows.tsx";
 // What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
 // one branch for each of its kinds, so a kind left out fails the typecheck:
 //
-//   up            the desk, nothing more: the top bar says nothing of the host
+//   up            the desk: the top bar shows the host's quiet icon, and no word
 //   build         the desk: the top bar says host older, and its lines offer the restart
 //   version       no desk: both versions named, and the restart
 //   reconnecting  the desk dimmed: the top bar says host down, and its lines say why
@@ -116,6 +118,8 @@ const store: {
 	shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
 	asks: AsksNow | null;
+	/** The host's own state: its process, its ledger, the agents on it; `null` until it says. */
+	host: HostNow | null;
 	/** What the frame shows over the desk, and its modes (frame.ts). */
 	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
@@ -130,6 +134,7 @@ const store: {
 	table: [],
 	shapes: new Map(),
 	asks: null,
+	host: null,
 	frame: FRAME,
 	link: {kind: "up"},
 	views: new Map(),
@@ -306,6 +311,9 @@ const heard = (raw: unknown) => {
 			return changed();
 		case "asks":
 			store.asks = m.now;
+			return changed();
+		case "host":
+			store.host = m.now;
 			return changed();
 		case "show":
 			return frameStep({type: "show", what: m.what});
@@ -719,6 +727,7 @@ function App(): ReactNode {
 		desk: open,
 		frame: store.frame,
 		asks: store.asks,
+		host: store.host,
 		link: store.link,
 		attachedOnce: store.attachedOnce,
 		prefix: store.prefix,

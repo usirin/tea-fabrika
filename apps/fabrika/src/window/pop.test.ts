@@ -300,8 +300,8 @@ describe("the roles each one draws", () => {
 					{
 						title: "Tile",
 						options: [
-							{id: "split", name: "split", caps: ["⌃B", "|"]},
-							{id: "zoom", name: "zoom", caps: ["⌃B", "Z"]},
+							{id: "split", name: "split down", word: "split --to down", caps: ["⌃B", "-"]},
+							{id: "zoom", name: "zoom", word: "zoom", caps: ["⌃B", "Z"]},
 						],
 					},
 				],
@@ -326,6 +326,12 @@ describe("the roles each one draws", () => {
 		expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
 		expect(html).toContain('<kbd class="cap">⌃B</kbd><kbd class="cap">Z</kbd>');
 		expect(html).toContain("2 commands");
+	});
+
+	it("puts each command's tsh word on the line under its name, in mono, its matched letters bold", () => {
+		const html = palette({query: "down"});
+		expect(html).toContain('<span class="name"><span>Split </span><mark>down</mark></span>');
+		expect(html).toContain('<code class="word"><span>split --to </span><mark>down</mark></code>');
 	});
 
 	it("says so when nothing matches, with no option picked", () => {

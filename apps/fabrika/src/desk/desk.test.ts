@@ -10,6 +10,7 @@ import {
 	deskMachine,
 	type Open,
 	questionOf,
+	refusedOf,
 	restore,
 	savedOf,
 	tilesOf,
@@ -266,17 +267,70 @@ describe("the desk, moved by the window's frame", () => {
 		expect(fold([{type: "run", key: "q"}]).s).toBe(start);
 	});
 
-	it("asks the frame to show the asks, the keys and the info mode, and changes nothing else", () => {
+	it("asks the frame to show the asks, the keys, the info mode and an item's lines, and changes nothing else", () => {
 		for (const [key, what] of [
 			["a", "asks"],
 			["?", "keys"],
 			["i", "info"],
 			["B", "bars"],
+			["A", "agents"],
+			["S", "sync"],
+			["H", "host"],
 		] as const) {
 			const {s, cmds} = fold(prefixed(key));
 			expect(cmds).toEqual([{type: "show", what}]);
 			expect(savedOf(opened(s))).toEqual(savedOf(opened(start)));
 		}
+	});
+});
+
+describe("the desk, moved by a word typed in tsh", () => {
+	it("does what the key does, from the tile it was typed in", () => {
+		const viaWord = fold([{type: "typed", tile: "t1", does: {kind: "zoom"}}]);
+		const viaKeys = fold(prefixed("z"));
+		expect(viaWord.s).toEqual(viaKeys.s);
+		expect(viaWord.cmds).toEqual(viaKeys.cmds);
+	});
+
+	it("brings the tile's workspace forward and focuses it first, with one save of both", () => {
+		// t1 in w1, t2 in w2, which is in front.
+		const two = fold(prefixed("N")).s;
+		const {s, cmds} = fold(
+			[{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}}],
+			two,
+		);
+		expect(opened(s).active).toBe("w1");
+		expect(ids(s)).toEqual(["t1", "t3"]);
+		expect(focus(s)).toBe("t3");
+		expect(cmds.map((c) => c.type)).toEqual(["open", "save"]);
+	});
+
+	it("puts an armed prefix down, and moves to a tile by name with focus --to", () => {
+		const armed = fold([...prefixed("|"), {type: "key", key: "<c-b>", at: 20}]).s;
+		const {s} = fold([{type: "typed", tile: "t2", does: {kind: "go", tile: "t1"}}], armed);
+		expect(focus(s)).toBe("t1");
+		const zoomed = fold([{type: "typed", tile: "t2", does: {kind: "zoom"}}], armed).s;
+		expect(opened(zoomed).prefix.armed).toBe(false);
+		expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
+	});
+
+	it("shows an item's lines on every page, and saves nothing", () => {
+		const {s, cmds} = fold([{type: "typed", tile: "t1", does: {kind: "show", what: "agents"}}]);
+		expect(cmds).toEqual([{type: "show", what: "agents"}]);
+		expect(s).toEqual(start);
+	});
+
+	it("says why a word does nothing: a tile gone, a tile or a workspace not there", () => {
+		const two = opened(fold(prefixed("N")).s);
+		expect(refusedOf(two, "t1", {kind: "zoom"})).toBeNull();
+		expect(refusedOf(two, "t9", {kind: "zoom"})).toBe("t9 is gone");
+		expect(refusedOf(two, "t1", {kind: "go", tile: "t7"})).toBe("no tile t7");
+		expect(refusedOf(two, "t1", {kind: "pick", at: 2})).toBeNull();
+		expect(refusedOf(two, "t1", {kind: "pick", at: 3})).toBe("no workspace 3: there are 2");
+		expect(refusedOf(opened(start), "t1", {kind: "pick", at: 2})).toBe(
+			"no workspace 2: there is 1",
+		);
+		expect(fold([{type: "typed", tile: "t9", does: {kind: "zoom"}}], two).s).toBe(two);
 	});
 });
 

@@ -35,7 +35,7 @@ import {
 //         onAct={open} onSecond={later} onClose={close} />        a menu: rows that each do something
 //   <Palette id="pop-palette" label="Commands" chip="t2 · ticket #1" ... />   a combobox in a modal dialog
 //   <Panel id="pop-lines" label="The host">...</Panel>             a few lines and a button
-//   const tip = useTip({name: "Asks", typed: false, caps: ["⌃B", "A"]}, quiet)   a tooltip
+//   const tip = useTip({name: "Asks", typed: false, caps: ["⌃B", "A"], word: "asks"}, quiet)   a tooltip
 //
 // Each takes focus when it opens, closes on a press outside it, and gives focus back where it
 // was. Escape is the page's (desk.tsx): it closes whatever is open. Only one is open at a time:
@@ -54,8 +54,8 @@ export function Caps(props: {readonly caps: readonly Cap[]}): ReactNode {
 	);
 }
 
-/** A row's state, as a shape and a color: never color alone. */
-function IconOf(props: {readonly icon: Icon}): ReactNode {
+/** A row's state, as a shape and a color: never color alone. The top bar's host item wears one too. */
+export function IconOf(props: {readonly icon: Icon}): ReactNode {
 	const ring = (extra: ReactNode, dashed = false) => (
 		<svg
 			className={`ic ic-${props.icon}`}
@@ -368,12 +368,39 @@ function EmptyLine(props: {readonly empty: Empty}): ReactNode {
 }
 
 /** A row's words: the typed pieces in mono (`<code>`), the rest in the UI's own font. */
-function WordsOf(props: {readonly words: Words}): ReactNode {
+export function WordsOf(props: {readonly words: Words}): ReactNode {
 	const {words} = props;
 	if (typeof words === "string") return words;
 	// A row's pieces never move: their place is their key.
 	return words.map((p, k) =>
 		p.typed ? <code key={k}>{p.text}</code> : <span key={k}>{p.text}</span>,
+	);
+}
+
+/**
+ * Rows in a panel: the same row as a menu's (icon, title, muted line, time at the right), but
+ * plain lines to read, not stops to act on, as the agents attached now.
+ */
+export function Lines(props: {readonly rows: readonly Row[]}): ReactNode {
+	return (
+		<ul className="pop-lines">
+			{props.rows.map((row) => (
+				<li key={row.id} className={`pop-row${row.sub === null ? "" : " two"}`}>
+					<span className="lead">{row.icon !== null && <IconOf icon={row.icon} />}</span>
+					<span className="text">
+						<span className="t">
+							<WordsOf words={row.title} />
+						</span>
+						{row.sub !== null && (
+							<span className="s">
+								<WordsOf words={row.sub} />
+							</span>
+						)}
+					</span>
+					{row.side !== null && <span className="side">{row.side}</span>}
+				</li>
+			))}
+		</ul>
 	);
 }
 
@@ -432,11 +459,24 @@ function MenuRow(props: {
 	);
 }
 
-/** One option of the palette: its name, as written, and its keys. */
+/**
+ * One option of the palette: its name, as written, the tsh word that does the same, and its keys.
+ * A row as a menu's is: the name its title, the word its muted line (typed, so in mono), the keys
+ * at its right.
+ */
 export interface Option {
 	readonly id: string;
 	readonly name: string;
+	readonly word: string;
 	readonly caps: readonly Cap[];
+}
+
+/** A name or a word in runs, the matched ones bold: `<mark>`. */
+function Marked(props: {readonly text: string; readonly query: string}): ReactNode {
+	// A text's runs never move: their place is their key.
+	return marked(props.text, props.query).map((r, k) =>
+		r.mark ? <mark key={k}>{r.text}</mark> : <span key={k}>{r.text}</span>,
+	);
 }
 
 export interface PaletteProps {
@@ -544,11 +584,13 @@ export function Palette(props: PaletteProps): ReactNode {
 										}}
 										onClick={() => props.onRun(n)}
 									>
-										<span className="name">
-											{marked(sentence(c.name), props.query).map((r, k) =>
-												// A name's runs never move: their place is their key.
-												r.mark ? <mark key={k}>{r.text}</mark> : <span key={k}>{r.text}</span>,
-											)}
+										<span className="text">
+											<span className="name">
+												<Marked text={sentence(c.name)} query={props.query} />
+											</span>
+											<code className="word">
+												<Marked text={c.word} query={props.query} />
+											</code>
 										</span>
 										<Caps caps={c.caps} />
 									</div>
@@ -592,11 +634,15 @@ export function Panel(props: {
 	);
 }
 
-/** What a tooltip says: a name, typed (a program's name, in mono) or not, and its keys. */
+/**
+ * What a tooltip says: a name, typed (a program's name, in mono) or not, its keys, and the tsh
+ * word that does the same, typed so in mono too. `null`: no word does it (Try again).
+ */
 export interface Tip {
 	readonly name: string;
 	readonly typed: boolean;
 	readonly caps: readonly Cap[];
+	readonly word: string | null;
 }
 
 /** When the last tooltip went, so the next one along shows at once (pop.ts, `tipWait`). */
@@ -613,12 +659,12 @@ const placeOf = (r: DOMRect) => ({
 });
 
 /**
- * A tooltip (WAI-ARIA `tooltip`) for one item: its name and its keys, after the pointer rests
+ * A tooltip (WAI-ARIA `tooltip`) for one item: its name, its keys and its tsh word, after the pointer rests
  * 700 ms (at once within 300 ms of the last one), or at once on keyboard focus. Escape, a press
  * or the pointer leaving hides it. `quiet`: something lies over the desk, or info mode explains
  * the item already, so it never shows.
  *
- *   const tip = useTip({name: "Asks", typed: false, caps: ["⌃B", "A"]}, quiet);
+ *   const tip = useTip({name: "Asks", typed: false, caps: ["⌃B", "A"], word: "asks"}, quiet);
  *   <button {...tip.on}>2 ask you</button>{tip.node}
  */
 export const useTip = (tip: Tip, quiet: boolean) => {
@@ -668,6 +714,7 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 						<div className="tip" id={id} role="tooltip" style={placeOf(at)}>
 							{tip.typed ? <code>{tip.name}</code> : <span>{tip.name}</span>}
 							{tip.caps.length > 0 && <Caps caps={tip.caps} />}
+							{tip.word !== null && <code className="word">{tip.word}</code>}
 						</div>,
 						document.body,
 					),

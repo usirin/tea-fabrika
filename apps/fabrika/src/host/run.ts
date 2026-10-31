@@ -65,7 +65,8 @@ export const runHost = (options: {
 		// Under the start lock (host/lock.ts), from the look at the socket until this host listens
 		// on it: a host started at the same moment waits, then finds this one answering.
 		// Agents get a socket only on a home that keeps its own ledger (host/agents.ts).
-		const ownLedger = Option.isNone(yield* connectionOf(home));
+		const connection = yield* connectionOf(home);
+		const ownLedger = Option.isNone(connection);
 		const {server, agents} = yield* Effect.scoped(
 			Effect.gen(function* () {
 				yield* holdLock(paths.lock, paths.dir);
@@ -119,6 +120,11 @@ export const runHost = (options: {
 			build,
 			agents,
 			jobs,
+			pid,
+			ledger: Option.match(connection, {
+				onNone: () => ({kind: "own"}) as const,
+				onSome: (c) => ({kind: "server", address: `${c.url}/${c.ledger}`, login: c.login}) as const,
+			}),
 			desk: {
 				kept,
 				save: (saved) =>

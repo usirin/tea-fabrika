@@ -38,6 +38,7 @@ const desk = (storage = memoryStorage()) =>
 				},
 				view: (run) => views.push(run),
 				gone: (name) => gone.push(name),
+				said: () => null,
 			},
 		}).pipe(
 			Effect.provideService(Ledger, memoryService()),

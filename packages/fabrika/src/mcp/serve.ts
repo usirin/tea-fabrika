@@ -6,7 +6,7 @@ import {
 	type Transport,
 } from "@modelcontextprotocol/server";
 import {serveStdio} from "@modelcontextprotocol/server/stdio";
-import {type Cause, Deferred, Effect, Queue, Schema, Stream} from "effect";
+import {type Cause, Deferred, Effect, Queue, Schema, type Scope, Stream} from "effect";
 import {Ndjson} from "effect/encoding";
 import {Socket} from "effect/socket";
 import type {Agent} from "../host/writer.ts";
@@ -43,6 +43,11 @@ export interface AgentOptions {
 	readonly tiles: () => readonly InTile[];
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
+	/**
+	 * The handshake was read: this agent is attached. Run in the agent's own scope, so a finalizer
+	 * added there runs as it goes. A host counts the agents on its socket by it.
+	 */
+	readonly attached?: (who: typeof Agent.Type) => Effect.Effect<void, never, Scope.Scope>;
 }
 
 const decodeHandshake = Schema.decodeUnknownOption(Handshake);
@@ -75,6 +80,7 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const {drive, tools} = yield* driveFor({list: programsFor(who), tiles});
+				if (options.attached !== undefined) yield* options.attached(who);
 				const server = new Server(info, {capabilities: {tools: {}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));
 				server.setRequestHandler("tools/call", (request) => {
