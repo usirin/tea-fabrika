@@ -261,12 +261,10 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 export const fedBy = (program: Entry["program"], list: readonly Entry[]): readonly string[] =>
 	Object.keys(program.inputs).filter((input) =>
 		list.some((from) =>
-			Object.keys(from.program.outputs).some(
-				(output) => {
-					const answer = fit(from.program.outputs[output], program.inputs[input]);
-					return answer === "fits" || answer === "takes_any";
-				},
-			),
+			Object.keys(from.program.outputs).some((output) => {
+				const answer = fit(from.program.outputs[output], program.inputs[input]);
+				return answer === "fits" || answer === "takes_any";
+			}),
 		),
 	);
 
