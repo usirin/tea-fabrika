@@ -54,8 +54,8 @@ export function Caps(props: {readonly caps: readonly Cap[]}): ReactNode {
 	);
 }
 
-/** A row's state, as a shape and a color: never color alone. */
-function IconOf(props: {readonly icon: Icon}): ReactNode {
+/** A row's state, as a shape and a color: never color alone. The top bar's host item wears one too. */
+export function IconOf(props: {readonly icon: Icon}): ReactNode {
 	const ring = (extra: ReactNode, dashed = false) => (
 		<svg
 			className={`ic ic-${props.icon}`}

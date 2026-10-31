@@ -249,21 +249,31 @@ describe("the top bar", () => {
 		);
 	});
 
-	it("says host ok of a host that is up, and the rest in a word, broken only when down", () => {
-		expect(hostWord({kind: "up"}, true)).toEqual({word: "host ok", broken: false});
-		expect(hostWord({kind: "build", theirs: "a1", ours: "b2"}, true)).toEqual({
-			word: "host older",
-			broken: false,
+	it("shows no word for a host that is up, and a word with its own shape for the rest", () => {
+		expect(hostWord({kind: "up"}, true)).toEqual({kind: "up"});
+		expect(hostWord({kind: "up"}, false)).toEqual({kind: "up"});
+		const word = (word: string, broken: boolean, shape: string) => ({
+			kind: "word",
+			word,
+			broken,
+			shape,
 		});
-		expect(hostWord({kind: "reconnecting", why: "gone"}, true)).toEqual({
-			word: "host down",
-			broken: true,
-		});
-		expect(hostWord({kind: "reconnecting", why: "gone"}, false)).toEqual({
-			word: "connecting",
-			broken: false,
-		});
-		expect(hostWord({kind: "stopped", why: "gone"}, true).word).toBe("host down");
+		expect(hostWord({kind: "build", theirs: "a1", ours: "b2"}, true)).toEqual(
+			word("host older", false, "stuck"),
+		);
+		expect(hostWord({kind: "version", theirs: 0, ours: 1}, true)).toEqual(
+			word("host speaks another version", true, "stuck"),
+		);
+		expect(hostWord({kind: "reconnecting", why: "gone"}, true)).toEqual(
+			word("host down", true, "failed"),
+		);
+		expect(hostWord({kind: "reconnecting", why: "gone"}, false)).toEqual(
+			word("connecting", false, "later"),
+		);
+		expect(hostWord({kind: "stopped", why: "gone"}, true)).toEqual(
+			word("host down", true, "failed"),
+		);
+		expect(hostWord({kind: "restarting"}, true)).toEqual(word("host restarting", false, "later"));
 	});
 });
 

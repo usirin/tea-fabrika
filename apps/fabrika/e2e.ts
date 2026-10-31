@@ -870,32 +870,43 @@ const interruptions = (app: ElectronApplication) =>
 
 /** Where the window says the link: the host's word in the top bar, a status. */
 const LINK = '[role="status"][aria-label="the link to the host"]';
-/** What the host's word says while the host is up. */
-const UP = "host ok";
+/**
+ * What the host's item is named while the host is up. It shows an icon and no word, so the run
+ * reads the item's name (its `aria-label`), which is its word when it has one.
+ */
+const UP = "host up";
+/** The host's item: the first button of the link, before any Try again. */
+const HOST = `${LINK} button`;
 /**
  * From now on, note each change in what the window says of the link: a word may be up for a
  * moment only.
  */
 const watchNotes = (page: Page) =>
 	page.evaluate(
-		({link, up}) => {
+		({host, up}) => {
 			const said: string[] = [up];
 			Object.assign(globalThis, {said});
 			new MutationObserver(() => {
-				const text = document.querySelector(link)?.textContent ?? "";
-				if (said.at(-1) !== text) said.push(text);
-			}).observe(document.body, {childList: true, subtree: true, characterData: true});
+				const name = document.querySelector(host)?.getAttribute("aria-label") ?? "";
+				if (said.at(-1) !== name) said.push(name);
+			}).observe(document.body, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ["aria-label"],
+			});
 		},
-		{link: LINK, up: UP},
+		{host: HOST, up: UP},
 	);
 /** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
 	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
-/** What the window says of the link now, or "" for none drawn. */
+/** What the window says of the link now, by the host item's name, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
-		.locator(LINK)
-		.textContent({timeout: 500})
+		.locator(HOST)
+		.first()
+		.getAttribute("aria-label", {timeout: 500})
 		.then(
 			(t) => t ?? "",
 			() => "",
@@ -914,12 +925,18 @@ const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: the top bar says host ok, and nothing is dimmed. */
+/** The desk is back: the host's item is its quiet up icon with no word, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
 		"the desk back, the host up",
-		async () => [await noteNow(page), await page.locator(".desk.lost").count()] as const,
-		([word, lost]) => word === UP && lost === 0,
+		async () =>
+			[
+				await noteNow(page),
+				await page.locator(`${HOST} svg`).count(),
+				(await page.locator(HOST).first().textContent()) ?? "",
+				await page.locator(".desk.lost").count(),
+			] as const,
+		([name, icons, word, lost]) => name === UP && icons === 1 && word === "" && lost === 0,
 	);
 
 /**

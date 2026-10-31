@@ -97,7 +97,7 @@ import {WINDOWS} from "./windows.tsx";
 // What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
 // one branch for each of its kinds, so a kind left out fails the typecheck:
 //
-//   up            the desk: the top bar says host ok
+//   up            the desk: the top bar shows the host's quiet icon, and no word
 //   build         the desk: the top bar says host older, and its lines offer the restart
 //   version       no desk: both versions named, and the restart
 //   reconnecting  the desk dimmed: the top bar says host down, and its lines say why

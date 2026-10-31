@@ -34,7 +34,7 @@ import {
 	workspaceName,
 } from "./frame.ts";
 import {type Cap, capsOf, type Hint, type Row, sentence, type Words} from "./pop.ts";
-import {type Empty, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
+import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -112,6 +112,8 @@ function Item(props: {
 	readonly word: string | null;
 	readonly quiet: boolean;
 	readonly info: string;
+	/** What a screen reader names it, when its words alone do not: an icon with no word. */
+	readonly label?: string;
 	readonly className?: string | undefined;
 	readonly current?: boolean;
 	readonly opens?: Opens;
@@ -133,6 +135,7 @@ function Item(props: {
 				type="button"
 				className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
 				data-info={props.info}
+				aria-label={props.label}
 				aria-current={props.current}
 				aria-haspopup={props.opens?.popup}
 				aria-expanded={props.opens?.open}
@@ -156,8 +159,9 @@ const reachedOf = (props: FrameProps): HostNow | null =>
 	props.host !== null && onHost(props.link) ? props.host : null;
 
 /**
- * The top bar: the whole desk. Workspaces, the line, then what needs you, the agents, the sync
- * and the host, each a gray word but where it is broken.
+ * The top bar: the whole desk. Workspaces, the line, then what needs you, the agents and the
+ * sync, each a gray word but where it is broken, and the host: a quiet icon while it is up, a
+ * word with its own shape when it is not.
  */
 export function TopBar(props: FrameProps): ReactNode {
 	const {desk, asks, step} = props;
@@ -282,11 +286,19 @@ export function TopBar(props: FrameProps): ReactNode {
 						word={wordFor(props, "host")}
 						quiet={quiet}
 						info={INFO.host}
-						className={host.broken ? "broken" : undefined}
+						label={host.kind === "up" ? "host up" : host.word}
+						className={host.kind === "word" && host.broken ? "host broken" : "host"}
 						opens={lines("host")}
 						onClick={() => step({type: "item", what: "host"})}
 					>
-						{host.word}
+						{host.kind === "up" ? (
+							<IconOf icon="done" />
+						) : (
+							<>
+								<IconOf icon={host.shape} />
+								{host.word}
+							</>
+						)}
 					</Item>
 					{props.link.kind === "stopped" && (
 						<>

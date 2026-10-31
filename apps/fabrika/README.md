@@ -202,7 +202,7 @@ tsh: focus failed: no tile t9
 Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
 
 ```text
-● ● ●  1 #7   2 tsh   tracker | ticket | runs              2 ask you • · 1 agent · host ok
+● ● ●  1 #7   2 tsh   tracker | ticket | runs              2 ask you • · 1 agent · ✓
 ...tiles...
 t2 ticket #7 · takes ticket · sends ticket · from tracker → runs                C-b i info · C-b ? keys
 ```
@@ -229,8 +229,10 @@ When something is wrong, its word says so, in red where it is broken:
     is no `N to send` (ticket 101 owns an outbox). A home with its own `ledger.sqlite` has nothing
     to sync and shows no sync word; its lines still open with `C-b S`. Either kind says `ledger
     unreachable`, in red, once a read failed; its lines say why.
-  - **host**: `host ok`, or `connecting`, `host down`, `host older`, `host restarting`, or the
-    other link version. Its lines give the host's pid, since when it runs, its build, and the
+  - **host**: while it is up, a small gray ring with a check and no word (`✓` above), still and
+    faint, as Linear leaves a working sync unsaid. Else a word with a shape of its own:
+    `connecting` and `host restarting` with a dashed ring, `host older` and the other link
+    version with `!`, `host down` with `x`. Its lines give the host's pid, since when it runs, its build, and the
     tiles and jobs it holds; when it is not up, the restart or Try again where one applies.
   The agents item shows only while the host is reached; the asks it last read stay, drawn faint
   while the host is down.

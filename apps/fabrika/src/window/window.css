@@ -658,6 +658,24 @@ kbd {
 	align-items: center;
 }
 
+/*
+ * The host's item: up, only its ring and check, in the bar's faint gray, still. Not up, the word
+ * follows a shape of its own (frame.ts, `HostShape`), in the item's color: faint, or red where it
+ * is broken. The icon is the bar's text size, so the bar keeps its height.
+ */
+.topbar .fb.host {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.topbar .fb.host .ic {
+	flex: none;
+	width: 1em;
+	height: 1em;
+	color: inherit;
+}
+
 /* The host down: the asks it last said are old news, drawn faint until it is back. */
 .desk.lost .topbar .right > .fb {
 	opacity: 0.45;

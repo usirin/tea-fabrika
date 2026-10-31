@@ -7,14 +7,14 @@ import {bindingOf, type Group, groupOf, type Show} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
-import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./pop.ts";
+import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentence} from "./pop.ts";
 
 // The window's frame, in words: what the top bar, the bottom line, the asks list and the palette
 // say, worked out from what the host sent (the desk, the keys, the programs, the asks) and what
 // the app said of the link. Plain data, no React, so each word is tested (frame.test.ts); the
 // page draws it (frame.tsx).
 //
-//   top      1 #7  2 tsh   tracker | ticket | runs        2 ask you • · 1 agent · synced · host ok
+//   top      1 #7  2 tsh   tracker | ticket | runs        2 ask you • · 1 agent · synced · ✓
 //   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
 //   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
@@ -27,8 +27,9 @@ import {type Cap, capsOf, type Piece, type Row, type Section, sentence} from "./
 // says nothing. A click, or C-b J, lists the jobs: there is no trace to open for a job yet (the
 // app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you"
 // takes the accent, and only a broken part takes the warning color, each with its word (rules 2
-// and 11). The agents, the sync and the host each say how they are in a gray word, and open a few
-// lines under them (C-b A, C-b S, C-b H, or the tsh words `agents`, `sync`, `host`). A home's own
+// and 11). The agents and the sync each say how they are in a gray word; the host is a quiet icon
+// while it is up, and a word only when it is not. Each opens a few lines under it (C-b A, C-b S,
+// C-b H, or the tsh words `agents`, `sync`, `host`). A home's own
 // ledger file has nothing to sync, and its sync says nothing until a read fails. An agent's ask is
 // never on the bottom line: that line is yours.
 //
@@ -249,23 +250,54 @@ export const syncWord = (now: AsksNow, ledger: LedgerLink): Said | null => {
 };
 
 /**
- * The host's item, one branch per kind of link: a kind left out does not compile. Each kind has a
- * word; only a host down or one that speaks another version is broken. Its lines say what to do.
+ * The shapes the host's item wears when something is wrong, each its own shape, never color
+ * alone: waiting (a dashed ring), needs a look (`!`), down (`x`). None is the up state's ring and
+ * check, so a host that is not up never looks up.
  */
-export const hostWord = (link: LinkNow, attachedOnce: boolean): Said => {
+export type HostShape = Extract<Icon, "later" | "stuck" | "failed">;
+
+/**
+ * The host's item. Up, it is a quiet icon and no word: a host that works is not news. Else it is
+ * a word, with a shape that says the kind of wrong, red only where it is broken. There is no value
+ * for an up host with a word, or a word with the up icon.
+ */
+export type HostItem =
+	| {readonly kind: "up"}
+	| {
+			readonly kind: "word";
+			readonly word: string;
+			readonly broken: boolean;
+			readonly shape: HostShape;
+	  };
+
+/** A host that is not up, said in a word with its shape. */
+const wrong = (word: string, broken: boolean, shape: HostShape): HostItem => ({
+	kind: "word",
+	word,
+	broken,
+	shape,
+});
+
+/**
+ * The host's item, one branch per kind of link: a kind left out does not compile. Only a host
+ * down or one that speaks another version is broken. Its lines say what to do.
+ */
+export const hostWord = (link: LinkNow, attachedOnce: boolean): HostItem => {
 	switch (link.kind) {
 		case "up":
-			return {word: "host ok", broken: false};
+			return {kind: "up"};
 		case "build":
-			return {word: "host older", broken: false};
+			return wrong("host older", false, "stuck");
 		case "version":
-			return {word: "host speaks another version", broken: true};
+			return wrong("host speaks another version", true, "stuck");
 		case "reconnecting":
-			return attachedOnce ? {word: "host down", broken: true} : {word: "connecting", broken: false};
+			return attachedOnce
+				? wrong("host down", true, "failed")
+				: wrong("connecting", false, "later");
 		case "stopped":
-			return {word: "host down", broken: true};
+			return wrong("host down", true, "failed");
 		case "restarting":
-			return {word: "host restarting", broken: false};
+			return wrong("host restarting", false, "later");
 	}
 };
 
