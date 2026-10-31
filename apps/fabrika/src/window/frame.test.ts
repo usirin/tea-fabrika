@@ -200,13 +200,13 @@ describe("the top bar", () => {
 		expect(lineIn(activeOf(plain))).toEqual([]);
 	});
 
-	it("counts asks in words", () => {
-		expect(asksWord(0)).toBe("nothing asks you");
+	it("counts asks in words, and says nothing when nothing asks you", () => {
+		expect(asksWord(0)).toBeNull();
 		expect(asksWord(1)).toBe("1 asks you");
 		expect(asksWord(3)).toBe("3 ask you");
 	});
 
-	it("counts the agents attached, and says nothing on a home where none can attach", () => {
+	it("counts the agents attached, and says nothing while none is", () => {
 		const host = (agents: HostNow["agents"]): HostNow => ({
 			pid: 4242,
 			since: 0,
@@ -214,7 +214,7 @@ describe("the top bar", () => {
 			ledger: {kind: "own"},
 			agents,
 		});
-		expect(agentsWord(host([]))).toBe("no agents");
+		expect(agentsWord(host([]))).toBeNull();
 		expect(agentsWord(host(null))).toBeNull();
 		expect(agentsWord(host([{name: "claude", since: 0}]))).toBe("1 agent");
 		expect(
@@ -227,10 +227,11 @@ describe("the top bar", () => {
 		).toBe("2 agents");
 	});
 
-	it("says a server's ledger synced once read, its own file nothing, and a failed read broken", () => {
+	it("says a server's ledger syncing until read, nothing once in sync, and a failed read broken", () => {
 		const server = {kind: "server", address: "https://ledger.example/w1", login: "owner"} as const;
 		expect(syncWord(now({reach: "reading"}), server)).toEqual({word: "syncing", broken: false});
-		expect(syncWord(now(), server)).toEqual({word: "synced", broken: false});
+		expect(syncWord(now(), server)).toBeNull();
+		expect(syncWord(now({reach: "reading"}), {kind: "own"})).toBeNull();
 		expect(syncWord(now(), {kind: "own"})).toBeNull();
 		const failed = {word: "ledger unreachable", broken: true};
 		expect(syncWord(now({reach: "failed", why: "refused"}), server)).toEqual(failed);

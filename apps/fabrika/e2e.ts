@@ -303,6 +303,7 @@ const flow = async (app: ElectronApplication) => {
 	await run(page, "t1", "seq --to 3 | double");
 	const answer = await prompted(page, "t1");
 	check("t1's tsh answers", answer.includes("double 2\ndouble 4\ndouble 6\ntsh$"), answer);
+	await quietAtRest(page);
 	await shot(page, "1-desk");
 
 	await prefixed(page, "|");
@@ -911,6 +912,47 @@ const noteNow = (page: Page) =>
 			(t) => t ?? "",
 			() => "",
 		);
+/**
+ * A part that works says nothing: on a fresh home with nothing asking and no agent attached, the
+ * top bar's right end is the host's quiet icon alone, with no word and no `·`. C-b A and C-b S
+ * still open their lines, which say no agent is attached and that the ledger is this home's own.
+ */
+const quietAtRest = async (page: Page) => {
+	const said = await until(
+		"the top bar's right end quiet, the host up",
+		async () =>
+			[
+				(await page.locator(".topbar .right").textContent()) ?? "",
+				await noteNow(page),
+				await page.locator(".topbar .right svg").count(),
+			] as const,
+		([text, name, icons]) => text.trim() === "" && name === UP && icons === 1,
+	);
+	check("at rest the top bar says nothing but the host's icon", true, said);
+	const lines = async (key: string, label: string) => {
+		await prefixed(page, key);
+		const text = (await page.getByRole("dialog", {name: label}).textContent({timeout: 2000})) ?? "";
+		await prefixed(page, key);
+		await until(
+			`${label} closed`,
+			() => page.getByRole("dialog").count(),
+			(n) => n === 0,
+		);
+		return text;
+	};
+	const agents = await lines("A", "The agents");
+	check(
+		"C-b A at zero opens lines: none attached, and how",
+		agents.includes("No agent is attached") && agents.includes("fabrika mcp"),
+		agents,
+	);
+	const sync = await lines("S", "The sync");
+	check(
+		"C-b S on an own ledger opens lines: nothing to sync",
+		sync.includes("Nothing to sync"),
+		sync,
+	);
+};
 /** The host's few lines, opened from its word in the top bar, then closed again. */
 const hostLines = async (page: Page) => {
 	const host = page.locator(LINK).getByRole("button", {name: /^host /});

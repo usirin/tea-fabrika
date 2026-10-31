@@ -202,9 +202,15 @@ tsh: focus failed: no tile t9
 Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
 
 ```text
-● ● ●  1 #7   2 tsh   tracker | ticket | runs              2 ask you • · 1 agent · ✓
+● ● ●  1 #7   2 tsh   tracker | ticket | runs                                               ✓
 ...tiles...
 t2 ticket #7 · takes ticket · sends ticket · from tracker → runs                C-b i info · C-b ? keys
+```
+
+That is the bar at rest. A word joins its right end only while it matters:
+
+```text
+                                                                      2 ask you • · 1 agent · ✓
 ```
 
 When something is wrong, its word says so, in red where it is broken:
@@ -217,25 +223,40 @@ When something is wrong, its word says so, in red where it is broken:
   needs you. On macOS it is the window's title bar (`hiddenInset`): the system's three buttons
   sit in its first 84 px, its empty stretch moves the window, and its items are buttons that
   never do. Other platforms keep the system's own frame above it.
-- **Three items say how the host is,** each from the host's own word (`host` in
-  `src/messages.ts`), and each opens a few lines under the top bar on a click or its key:
-  - **agents**: `no agents`, `1 agent`, `2 agents`: the agents attached on the host's MCP
-    socket now. Its lines name each one and since when, and how to attach one. A home connected
-    to a ledger server has no agents' socket and shows no agents word; `C-b A` there opens lines
-    that say why. No cost: an agent's spend is
-    billed by its own harness, and nothing in the app meters it yet (ticket 91 is the one meter).
-  - **sync**: on a home connected to a ledger server, `syncing` until the first read is in,
-    then `synced`. Every write goes straight to the server, so nothing waits to be sent and there
+- **A part that works says nothing.** Nothing asking you, no agent attached and a ledger in
+  sync draw no item at all, as Linear leaves a working sync unsaid and the Dock shows no `0`
+  badge. Each item is a word only while it matters, and its key opens its lines either way.
+  The one exception is the host: while it is up it keeps a small faint icon, the one quiet
+  anchor that is always there. The host runs on your laptop, not in a cloud, so it is the part
+  most worth one glance, and its icon is where `C-b H` and a click land. Every item's lines open
+  under the bar's right end, where that icon sits.
+
+  | Item | At rest | While it matters | Key, tsh word |
+  |---|---|---|---|
+  | asks | nothing | `1 asks you`, `3 ask you`, in the accent, a dot for one not seen | `C-b a`, `asks` |
+  | agents | nothing | `1 agent`, `2 agents` | `C-b A`, `agents` |
+  | sync | nothing | `syncing` before a ledger server's first read; `ledger unreachable` in red | `C-b S`, `sync` |
+  | host | a faint ring with a check | `connecting`, `host down`, `host older`... each with its own shape | `C-b H`, `host` |
+
+  - **asks:** the one count (below). At zero, `C-b a` opens the empty list.
+  - **agents:** the agents attached on the host's MCP socket now. Its lines name each one and
+    since when, and how to attach one; at zero they say none is attached, and how. A home
+    connected to a ledger server has no agents' socket; `C-b A` there opens lines that say why.
+    No cost: an agent's spend is billed by its own harness, and nothing in the app meters it
+    yet (ticket 91 is the one meter).
+  - **sync:** a home connected to a ledger server says `syncing` until the first read is in,
+    then nothing. Every write goes straight to the server, so nothing waits to be sent and there
     is no `N to send` (ticket 101 owns an outbox). A home with its own `ledger.sqlite` has nothing
-    to sync and shows no sync word; its lines still open with `C-b S`. Either kind says `ledger
-    unreachable`, in red, once a read failed; its lines say why.
-  - **host**: while it is up, a small gray ring with a check and no word (`✓` above), still and
-    faint, as Linear leaves a working sync unsaid. Else a word with a shape of its own:
-    `connecting` and `host restarting` with a dashed ring, `host older` and the other link
-    version with `!`, `host down` with `x`. Its lines give the host's pid, since when it runs, its build, and the
-    tiles and jobs it holds; when it is not up, the restart or Try again where one applies.
-  The agents item shows only while the host is reached; the asks it last read stay, drawn faint
-  while the host is down.
+    to sync. Either kind says `ledger unreachable`, in red, once a read failed. `C-b S` opens its
+    lines at any time: the file or the server, and why a read failed.
+  - **host:** up, a small gray ring with a check and no word (`✓` above), still and faint, named
+    `host up` for a screen reader. Else a word with a shape of its own: `connecting` and `host
+    restarting` with a dashed ring, `host older` and the other link version with `!`, `host down`
+    with `x`. Its lines give the host's pid, since when it runs, its build, and the tiles and
+    jobs it holds; when it is not up, the restart or Try again where one applies.
+
+  The agents and sync items need the host reached; the asks it last read stay, drawn faint
+  while the host is down. Before the first read, the bar says `reading the ledger`.
 - **The bottom line is where you are:** the focused tile, what it takes and sends, its
   neighbors in its line, and its job. What it takes is the data a pipe can feed it,
   by tsh's own rule (`Shell.fedBy`: an input some program's output fits), never its commands:

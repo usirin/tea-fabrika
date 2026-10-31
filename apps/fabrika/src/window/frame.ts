@@ -14,7 +14,8 @@ import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentenc
 // the app said of the link. Plain data, no React, so each word is tested (frame.test.ts); the
 // page draws it (frame.tsx).
 //
-//   top      1 #7  2 tsh   tracker | ticket | runs        2 ask you • · 1 agent · synced · ✓
+//   top      1 #7  2 tsh   tracker | ticket | runs                    2 ask you • · 1 agent · ✓
+//   at rest  1 #7  2 tsh   tracker | ticket | runs                                          ✓
 //   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
 //   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
@@ -27,11 +28,12 @@ import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentenc
 // says nothing. A click, or C-b J, lists the jobs: there is no trace to open for a job yet (the
 // app's `trace` reads records held in memory), so it does what tsh's `jobs` does. Only "asks you"
 // takes the accent, and only a broken part takes the warning color, each with its word (rules 2
-// and 11). The agents and the sync each say how they are in a gray word; the host is a quiet icon
-// while it is up, and a word only when it is not. Each opens a few lines under it (C-b A, C-b S,
-// C-b H, or the tsh words `agents`, `sync`, `host`). A home's own
-// ledger file has nothing to sync, and its sync says nothing until a read fails. An agent's ask is
-// never on the bottom line: that line is yours.
+// and 11). A part that works says nothing: no asks, no agents attached and a ledger in sync draw
+// no item at all, each a word only while it matters (`2 ask you`, `1 agent`, `syncing`, `ledger
+// unreachable`). The one exception is the host's quiet icon while it is up: the host runs on your
+// laptop, and its icon is where C-b H and a click land. Each opens a few lines under the bar's
+// right end (C-b a, C-b A, C-b S, C-b H, or the tsh words `asks`, `agents`, `sync`, `host`), with
+// or without its word. An agent's ask is never on the bottom line: that line is yours.
 //
 // What the page itself keeps (the list open, the palette, the info mode, the bars hidden) is a
 // model and an update with no Cmd, Elm's `Browser.sandbox`: `frameUpdate` below. The desk's own
@@ -215,9 +217,12 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
 	);
 };
 
-/** How the count of asks reads: `nothing asks you`, `1 asks you`, `3 ask you`. */
-export const asksWord = (n: number): string =>
-	n === 0 ? "nothing asks you" : `${n} ask${n === 1 ? "s" : ""} you`;
+/**
+ * The asks' item: `1 asks you`, `3 ask you`, or `null` when nothing asks you, as the Dock badge
+ * shows no `0`. Nothing to answer is not news; C-b a still opens the empty list.
+ */
+export const asksWord = (n: number): string | null =>
+	n === 0 ? null : `${n} ask${n === 1 ? "s" : ""} you`;
 
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
 export interface Said {
@@ -226,27 +231,26 @@ export interface Said {
 }
 
 /**
- * The agents' item: how many agents are attached to the host's agents' socket now. Those are the
- * agents at work on this desk: each drives the app's programs as tools (host/agents.ts). A home
- * with no agents' socket (one on a ledger server) has no word, as an own ledger has no sync word;
- * its lines still say why.
+ * The agents' item: how many agents are attached to the host's agents' socket now, or `null`
+ * when none is. Those are the agents at work on this desk: each drives the app's programs as tools
+ * (host/agents.ts). No agent attached is not news, on a home where one could attach or on one
+ * with no agents' socket (a home on a ledger server); C-b A still opens lines that say which.
  */
 export const agentsWord = (host: HostNow): string | null => {
-	if (host.agents === null) return null;
-	const n = host.agents.length;
-	return n === 0 ? "no agents" : `${n} agent${n === 1 ? "" : "s"}`;
+	const n = host.agents?.length ?? 0;
+	return n === 0 ? null : `${n} agent${n === 1 ? "" : "s"}`;
 };
 
 /**
- * The sync item: how the home's ledger is reached. A ledger server's says `syncing` until the
- * first read is in, then `synced`: every write goes straight to the server, so none waits here.
- * The home's own file has nothing to sync and says nothing. Either one that failed its last read
- * says `ledger unreachable`, in red.
+ * The sync item, or `null` while the ledger is in sync. A ledger server's says `syncing` until
+ * the first read is in, then nothing: every write goes straight to the server, so none waits
+ * here. The home's own file has nothing to sync and says nothing. Either one that failed its last
+ * read says `ledger unreachable`, in red. C-b S opens its lines either way.
  */
 export const syncWord = (now: AsksNow, ledger: LedgerLink): Said | null => {
 	if (now.reach === "failed") return {word: "ledger unreachable", broken: true};
-	if (ledger.kind === "own") return null;
-	return {word: now.reach === "ok" ? "synced" : "syncing", broken: false};
+	if (ledger.kind === "own" || now.reach === "ok") return null;
+	return {word: "syncing", broken: false};
 };
 
 /**

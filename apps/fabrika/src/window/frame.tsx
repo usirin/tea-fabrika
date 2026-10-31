@@ -159,9 +159,9 @@ const reachedOf = (props: FrameProps): HostNow | null =>
 	props.host !== null && onHost(props.link) ? props.host : null;
 
 /**
- * The top bar: the whole desk. Workspaces, the line, then what needs you, the agents and the
- * sync, each a gray word but where it is broken, and the host: a quiet icon while it is up, a
- * word with its own shape when it is not.
+ * The top bar: the whole desk. Workspaces, the line, then the asks, the agents and the sync, each
+ * drawn only while it has something to say, and the host: a quiet icon while it is up, a word with
+ * its own shape when it is not.
  */
 export function TopBar(props: FrameProps): ReactNode {
 	const {desk, asks, step} = props;
@@ -171,7 +171,7 @@ export function TopBar(props: FrameProps): ReactNode {
 	const agents = reached === null ? null : agentsWord(reached);
 	const sync = asks === null || reached === null ? null : syncWord(asks, reached.ledger);
 	const host = hostWord(props.link, props.attachedOnce);
-	const count = asks?.asks.length ?? 0;
+	const asking = asks === null ? null : asksWord(asks.asks.length);
 	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
 	const quiet = quietOf(props.frame);
 	const over = props.frame.over;
@@ -227,26 +227,32 @@ export function TopBar(props: FrameProps): ReactNode {
 			</nav>
 			<div className="drag" data-info={INFO.drag} />
 			<div className="right">
-				{asks === null ? (
-					<span className="quiet">reading the ledger</span>
-				) : (
-					<Item
-						name="asks"
-						caps={capsFor(props, "asks")}
-						word={wordFor(props, "asks")}
-						quiet={quiet}
-						info={INFO.asks}
-						className={count > 0 ? "accent" : undefined}
-						opens={{popup: "menu", id: POP.asks, open: over.kind === "asks"}}
-						onClick={() => step({type: "show", what: "asks"})}
-					>
-						{asksWord(count)}
-						{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
-					</Item>
+				{asks === null && (
+					<>
+						<span className="quiet">reading the ledger</span>
+						<Sep />
+					</>
+				)}
+				{asking !== null && (
+					<>
+						<Item
+							name="asks"
+							caps={capsFor(props, "asks")}
+							word={wordFor(props, "asks")}
+							quiet={quiet}
+							info={INFO.asks}
+							className="accent"
+							opens={{popup: "menu", id: POP.asks, open: over.kind === "asks"}}
+							onClick={() => step({type: "show", what: "asks"})}
+						>
+							{asking}
+							{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
+						</Item>
+						<Sep />
+					</>
 				)}
 				{agents !== null && (
 					<>
-						<Sep />
 						<Item
 							name="agents"
 							caps={capsFor(props, "agents")}
@@ -258,11 +264,11 @@ export function TopBar(props: FrameProps): ReactNode {
 						>
 							{agents}
 						</Item>
+						<Sep />
 					</>
 				)}
 				{sync !== null && (
 					<>
-						<Sep />
 						<Item
 							name="sync"
 							caps={capsFor(props, "sync")}
@@ -275,9 +281,9 @@ export function TopBar(props: FrameProps): ReactNode {
 						>
 							{sync.word}
 						</Item>
+						<Sep />
 					</>
 				)}
-				<Sep />
 				{/* Said as a status, never an alert: a screen reader hears the host go and come back. */}
 				<span role="status" aria-label="the link to the host">
 					<Item
@@ -578,13 +584,12 @@ function SyncLines(props: {readonly host: HostNow; readonly asks: AsksNow | null
 				{why}
 			</>
 		);
-	const word = asks === null ? null : syncWord(asks, ledger);
 	return (
 		<>
 			<h2 className={`pop-title${failed ? " broken" : ""}`}>
 				{failed
 					? "The ledger server is unreachable"
-					: word?.word === "synced"
+					: asks?.reach === "ok"
 						? "Synced with the ledger server"
 						: "Syncing with the ledger server"}
 			</h2>
