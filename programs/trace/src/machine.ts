@@ -11,21 +11,26 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //            then each id told on `id`. A newer id replaces the record shown, its open rows and
 //            its detail; the same id again changes nothing, unless it could not be read
 //   got      the record, read again: the first shows the job's row open, a later one keeps the
-//            rows open and the detail chosen. One for an id it no longer follows is dropped
+//            rows open and the detail chosen, and an end already read: a stale read that says the
+//            job runs keeps that end, and the rest of it applies. One for an id it no longer
+//            follows is dropped
 //   lost     the record could not be read: before the first read it says why, after it the last
 //            record read stays shown
 //   toggle   open a row that groups others, or close it: a job, a run, a machine run, a round,
 //            an agent's turns. A row that groups nothing, or is not in the record, changes nothing
 //   choose   show one row's detail: a span's tags and events, or a step's Msg, the state before
 //            and after, and its Cmds. `null` closes the detail
-//   tick     the time, while the record shown says its job has not ended. Anything else lets it go
+//   tick     the time, while the record shown says its job has not ended: an earlier tick keeps
+//            the later time, as a clock can step back. Anything else lets it go
 //
 //   replay(trace, {ctx: undefined, msgs: [{type: "look", id: TALLY_ID}]})
 //   // state.read {at: "reading", id}; subs [follow {id}]
 //   // then got: state.read {at: "read", trace, now: null}, open ["job"]: the job's row shows its runs
 //   // then got again, with one more span: the same rows open, the new span in its place
 //   // a job not ended: subs [follow {id}, tick {id}]; tick {now: 5000}: state.read.now 5000
+//   // then tick {now: 4000}: state.read.now still 5000
 //   // then got, its job ended: subs [follow {id}], state.read.now null
+//   // then got, stale, its job not ended: its spans and steps show, and the job's end stays
 //
 // Elm's answer for a value that changes on its own is a Sub, not a Cmd asked again: `Time.every`,
 // a websocket. The record changes while its job runs, so the machine follows it for as long as
@@ -58,7 +63,7 @@ export const Read = Schema.Union([
 	Schema.Struct({
 		at: Schema.Literal("read"),
 		trace: Kept,
-		/** Unix ms, from the last tick. `null`: its job ended or names no job, or no tick came yet. */
+		/** Unix ms, the latest tick told. `null`: its job ended or names no job, or no tick came yet. */
 		now: Schema.NullOr(Schema.Number),
 	}),
 	Schema.Struct({at: Schema.Literal("unread"), id: TraceId, why: Schema.String}),
@@ -118,6 +123,16 @@ export const firstOpen = (trace: Kept): readonly string[] =>
 	groupsOf(treeOf(trace)).has(JOB) ? [JOB] : [];
 
 /**
+ * A newer read of the record shown, with the end the record shown already says. The host writes an
+ * end once and reads come in order, so only a stale read can say otherwise; the rest of it applies.
+ */
+const keepingEnd = (shown: Kept, read: Kept): Kept => {
+	const ended = shown.job?.ended ?? null;
+	const job = read.job ?? shown.job;
+	return ended === null || job === null ? read : {...read, job: {...job, ended}};
+};
+
+/**
  * A newer read of the record shown: the rows open stay open, and the detail stays, where they
  * still are. A record that had nothing under its job yet (a job just begun, its spans not in)
  * showed no row to open or close, so the first read with something in it opens the job's row,
@@ -152,7 +167,7 @@ export const trace = defineMachine({
 					{read: {at: "read", trace: m.trace, now: null}, open: firstOpen(m.trace), chosen: null},
 					[],
 				];
-			return s.read.at === "read" ? [again(s, m.trace), []] : [s, []];
+			return s.read.at === "read" ? [again(s, keepingEnd(s.read.trace, m.trace)), []] : [s, []];
 		},
 		lost: (s, m): Step =>
 			s.read.at === "reading" && s.read.id === m.id
@@ -171,7 +186,7 @@ export const trace = defineMachine({
 		// A tick that was on its way when the job's end was read, or a newer id, is let go.
 		tick: (s, m): Step =>
 			s.read.at === "read" && isRunning(s.read.trace)
-				? [{...s, read: {...s.read, now: m.now}}, []]
+				? [{...s, read: {...s.read, now: Math.max(s.read.now ?? m.now, m.now)}}, []]
 				: [s, []],
 	},
 	subs: [

@@ -450,8 +450,9 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 		);
 
 	// A job begun with nothing in it yet: the word and the time in the head and one plain line under
-	// it, as Linear's empty states are. An axis or a bar would be a finished run that never was.
-	if (view.running !== null && view.rows.every((r) => !r.opens))
+	// it, as Linear's empty states are. An axis or a bar would be a finished run that never was. A
+	// job with only its line's span in has something to draw: its row, running to now.
+	if (view.running !== null && view.empty)
 		return (
 			<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 				<Head view={view} drawn={false} />

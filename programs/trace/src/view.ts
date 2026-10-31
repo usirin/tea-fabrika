@@ -141,6 +141,8 @@ export const Shown = Schema.Struct({
 	services: Schema.Array(Schema.String),
 	spans: Schema.Int,
 	steps: Schema.Int,
+	/** The record holds no run, no span and no step, or none is read yet. */
+	empty: Schema.Boolean,
 	rows: Schema.Array(Row),
 	chosen: Schema.NullOr(Detail),
 });
@@ -265,6 +267,7 @@ const waiting = {
 	services: [],
 	spans: 0,
 	steps: 0,
+	empty: true,
 	rows: [],
 	chosen: null,
 } as const;
@@ -301,6 +304,7 @@ export const shownOf = (s: Model): Shown => {
 				services: [...new Set(all.map((n) => n.service))],
 				spans: trace.spans.length,
 				steps: trace.steps.length,
+				empty: trace.runs.length + trace.spans.length + trace.steps.length === 0,
 				rows,
 				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero),
 			};

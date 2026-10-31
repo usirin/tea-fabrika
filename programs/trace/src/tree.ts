@@ -235,7 +235,8 @@ export const treeOf = (trace: JobTrace): Node => {
 	const [only] = roots;
 	// One root is the job's row when it is the line's own span, or when no job says otherwise. A
 	// span reaches the record only once it ends, so while a job runs its one root can be a run or a
-	// machine already over. The row keeps the job's line, whichever way it is drawn.
+	// machine already over. The row keeps the job's line, whichever way it is drawn. It covers the
+	// job's own time too, since a line's span can end long before its job does (`tally &`).
 	if (roots.length === 1 && only !== undefined && (trace.job === null || isLine(only))) {
 		const node = spanNode(only);
 		return {
@@ -243,6 +244,8 @@ export const treeOf = (trace: JobTrace): Node => {
 			key: JOB,
 			kind: "job",
 			name: trace.job?.text ?? node.name,
+			from: Math.min(node.from, trace.job?.started ?? node.from),
+			to: Math.max(node.to, trace.job?.ended?.at ?? node.to),
 			wrong: node.wrong || jobWrong,
 			children: [...node.children, ...alone].toSorted(byFrom),
 		};

@@ -30,7 +30,7 @@ Model, as Elm keeps it, so a second window on the same run shows the same rows o
 type Read =
 	| {at: "waiting"}
 	| {at: "reading"; id: TraceId}
-	| {at: "read"; trace: JobTrace; now: number | null} // now: the last tick, while the job runs
+	| {at: "read"; trace: JobTrace; now: number | null} // now: the latest tick, while the job runs
 	| {at: "unread"; id: TraceId; why: string};
 
 type Model = {read: Read; open: RowKey[]; chosen: RowKey | null};
@@ -52,9 +52,12 @@ type TickSub = Sub<"tick", {id: string}>;
 // ticking(model): {id} while the record read says `job.ended` is null, null once it says how it ended
 ```
 
-A job that has not ended says `running` in the head, and its time grows once a second (`TICK`). Its
-row runs to now, and the axis with it. With nothing in the record yet there is no axis and no bar:
-one line says so, as Linear's empty states do. An ended job shows its final time, with no tick.
+A job that has not ended says `running` in the head, and its time grows once a second (`TICK`). An
+earlier tick keeps the later time, so a clock that steps back never moves it back. Its row runs to
+now, and the axis with it. With no run, span or step in the record yet there is no axis and no bar:
+one line says so, as Linear's empty states do. With only the line's span in (`tally &`), its row is
+drawn, running to now. An ended job shows its final time, with no tick, and that time covers the
+job's own, however early the line's span ended.
 
 The job's row keeps the job's line as its name from start to end. It is tsh's row from the start,
 so `tsh` stays first in the legend and each program keeps its color when the line's span comes in.
@@ -63,9 +66,10 @@ The runner reads the record through `Traces.watch`: at once, then after each wri
 own records ring on each write; records behind the door are read again every second. It stops
 following 5 seconds after the job ended (`SETTLE`), once the last spans are in.
 
-A later `got` keeps the rows open and the detail chosen, if the new record still has them. A
-`got` for an id the machine no longer follows is dropped, so a slow answer never replaces a newer
-pick.
+A later `got` keeps the rows open and the detail chosen, if the new record still has them. Once the
+record shown says its job ended, a later `got` keeps that end and the rest of that read applies, so
+a stale read never makes a job look like it runs again. A `got` for an id the machine no longer
+follows is dropped, so a slow answer never replaces a newer pick.
 
 ## Its inputs
 
