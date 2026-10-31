@@ -137,6 +137,7 @@ export const trace = defineProgram({
 					quit: () => end,
 				},
 				{until: WINDOW},
+			);
 		}).pipe(Effect.scoped),
 });
 

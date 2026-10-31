@@ -1,4 +1,4 @@
-import {Effect, Layer, Schema, Stream} from "effect";
+import {Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {listed} from "../program/listed.ts";
 import {defineProgram} from "../program/program.ts";
@@ -69,7 +69,7 @@ const sink = defineProgram({
 	description: "Takes anything, and lets it go.",
 	inputs: {any: anyInput("Anything.")},
 	outputs: {},
-	main: ({inputs}) => Stream.runDrain(inputs.any),
+	main: ({serve}) => serve({any: () => Effect.void}),
 });
 const both = defineProgram({
 	name: "both",
