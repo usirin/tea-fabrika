@@ -6,6 +6,7 @@
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
 # experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
 # experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
+# next: the new design's first slice, growing beside today's code and importing none of it.
 packages:
   - apps/*
   - packages/*
@@ -17,6 +18,7 @@ packages:
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader
+  - next
 
 catalog:
   '@agentclientprotocol/sdk': 1.6.1
