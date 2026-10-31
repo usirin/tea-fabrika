@@ -44,6 +44,10 @@
 		// Node runs the .ts files as they are, so a relative import names its file whole.
 		"fabrika/use-import-extensions": "error",
 
+		// An ignore comment names its rules and says why. It blocks, and an ignore comment cannot
+		// silence it.
+		"fabrika/no-bare-disable": "error",
+
 		"eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
 		"eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
 		"eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],
@@ -75,15 +79,12 @@
 			{ "ts-ignore": true, "ts-expect-error": false, "ts-nocheck": false, "ts-check": false }
 		],
 		"typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
-		"typescript/no-empty-object-type": [
-			"error",
-			{ "allowObjectTypes": "always", "allowInterfaces": "always" }
-		],
+		"typescript/no-empty-object-type": "error",
 
 		// `x!` throws away the compiler's proof.
 		"typescript/no-non-null-assertion": "error",
 
-		"eslint/array-callback-return": "error",
+		"eslint/array-callback-return": ["error", { "checkForEach": true }],
 		"eslint/constructor-super": "error",
 		"eslint/default-case-last": "error",
 		"eslint/for-direction": "error",
@@ -126,7 +127,7 @@
 		"eslint/no-regex-spaces": "error",
 		"eslint/no-self-assign": "error",
 		"eslint/no-self-compare": "error",
-		"eslint/no-sequences": "error",
+		"eslint/no-sequences": ["error", { "allowInParentheses": false }],
 		"eslint/no-setter-return": "error",
 		"eslint/no-shadow-restricted-names": "error",
 		"eslint/no-sparse-arrays": "error",
@@ -250,11 +251,16 @@
 			}
 		},
 		{
-			// Two React rules only where a window's React lives. In a .ts file a `use` or a `useKey`
-			// is Effect's or vitest's, not a hook: 19 of 19 fires there were false alarms. There is no
-			// JSX in a .ts file either: its one `children` prop is what `createElement`'s types ask.
+			// In `packages/` and `experiments/`, a `.ts` file's `use` or `useKey` is Effect's or vitest's,
+			// not a hook: 19 of 19 fires there were false alarms. So hooks are checked in every window
+			// file, and in `.ts` only where windows live.
+			"files": ["**/*.tsx", "apps/**/*.ts", "programs/**/*.ts"],
+			"rules": { "react/rules-of-hooks": "error" }
+		},
+		{
+			// There is no JSX in a .ts file: its one `children` prop is what `createElement`'s types ask.
 			"files": ["**/*.tsx"],
-			"rules": { "react/rules-of-hooks": "error", "react/no-children-prop": "error" }
+			"rules": { "react/no-children-prop": "error" }
 		},
 		{
 			// `ownRules` is the one place that says where a Claude run's settings come from.
@@ -262,17 +268,10 @@
 			"rules": { "fabrika/no-project-settings": "off" }
 		},
 		{
-			// Experiments are records and stay as written. These rules are new to them and each fired
-			// there on a line that works; no-secret-env and no-redacted-value are left out because
-			// they are outside those rules' first change, counted in the README.
+			// no-secret-env and no-redacted-value are outside experiments, as they were under Biome:
+			// those two rules' first change left them out, and the README counts what they would find.
 			"files": ["experiments/**"],
-			"rules": {
-				"fabrika/no-secret-env": "off",
-				"fabrika/no-redacted-value": "off",
-				"eslint/prefer-template": "off",
-				"eslint/prefer-arrow-callback": "off",
-				"eslint/require-yield": "off"
-			}
+			"rules": { "fabrika/no-secret-env": "off", "fabrika/no-redacted-value": "off" }
 		},
 		{
 			// The bearer token as a WebSocket subprotocol: a browser socket sends no header.

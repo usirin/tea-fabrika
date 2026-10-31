@@ -9,13 +9,18 @@
 //
 // What it refuses: a relative `import`, `export ... from`, `import(...)`, `require(...)` or
 // `import x = require(...)`, when what it names is not a file and either has no extension at all,
-// is a folder, or becomes a file once an extension is added. A name with an extension that is not
-// on disk is left to the compiler: a `./thing.js` may be generated.
+// is a folder, becomes a file once an extension is added, or is the wrong extension of a file that
+// is there. That last one is `./thing.js` when only `thing.ts` exists: tsc accepts it, and Node then
+// fails with ERR_MODULE_NOT_FOUND.
+//
+// What it lets pass: a name with an extension when nothing by that name is on disk under any
+// extension. Lint cannot tell a typo from a file made by a build. `tsc` catches it where it runs, and
+// it does not run on `experiments/`.
 //
 // What it cannot see: a name built at run time (`import(name)`, or a template string), and an
 // `import("./thing")` written as a type, which Node never runs. It has no automatic fix.
 import {statSync} from "node:fs";
-import {dirname, resolve} from "node:path";
+import {dirname, extname, resolve} from "node:path";
 import type {CreateRule} from "@oxlint/plugins";
 import type {Node} from "./match.ts";
 
@@ -32,7 +37,8 @@ const namesItsFile = (from: string, written: string): boolean => {
 	const target = resolve(dirname(from), written);
 	if (isFile(target)) return true;
 	if (isFolder(target) || !HAS_EXTENSION.test(written)) return false;
-	return !EXTENSIONS.some((extension) => isFile(target + extension));
+	const stem = target.slice(0, -extname(target).length);
+	return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
 };
 
 export const useImportExtensions: CreateRule = {

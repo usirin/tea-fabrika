@@ -4,7 +4,7 @@
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {join, relative} from "node:path";
 import {afterAll, describe, expect, it} from "vitest";
 
@@ -154,6 +154,20 @@ const PLANTS: readonly Plant[] = [
 			['export const c = import("./thing");', true],
 			['export {d} from "./thing.ts";', false],
 			['export {e} from "effect";', false],
+			// Only `b.laws.ts` is there, so Node would not find either of these.
+			['export {f} from "./b.laws.js";', true],
+			['export {g} from "./b.laws.tsx";', true],
+			['export {h} from "./b.laws.ts";', false],
+		],
+	},
+	{
+		code: "fabrika(no-redacted-value)",
+		file: "planted.tsx",
+		prelude: ['import {Redacted} from "effect";', "declare const Other: {value: () => null};"],
+		lines: [
+			["export const a = <Redacted.value />;", true],
+			["export const b = <Redacted.value></Redacted.value>;", true],
+			["export const c = <Other.value />;", false],
 		],
 	},
 	// Biome's built-in rules that must not be lost in the move.
@@ -183,6 +197,30 @@ const PLANTS: readonly Plant[] = [
 			["export const a = 1;", false],
 		],
 	},
+	{
+		code: "eslint(no-sequences)",
+		prelude: [],
+		lines: [
+			["export const a = (1, 2);", true],
+			["export const b = [1, 2];", false],
+		],
+	},
+	{
+		code: "eslint(array-callback-return)",
+		prelude: ["declare const xs: number[];", "declare const f: (x: number) => void;"],
+		lines: [
+			["xs.forEach((x) => x);", true],
+			["xs.forEach((x) => { f(x); });", false],
+		],
+	},
+	{
+		code: "typescript(no-empty-object-type)",
+		prelude: [],
+		lines: [
+			["export declare const a: {};", true],
+			["export declare const b: {c: 1};", false],
+		],
+	},
 ];
 
 describe("each rule refuses what it is there to refuse", () => {
@@ -203,7 +241,13 @@ describe("each rule refuses what it is there to refuse", () => {
 	it("the plugin has one planted line or more for every rule it lists", async () => {
 		const {default: plugin} = await import("./index.ts");
 		const planted = new Set(PLANTS.map((p) => p.code));
-		const elsewhere = ["no-secret-env", "no-redacted-value", "no-project-settings"];
+		// `no-bare-disable` reports at the top of the file, so it has its own test below.
+		const elsewhere = [
+			"no-secret-env",
+			"no-redacted-value",
+			"no-project-settings",
+			"no-bare-disable",
+		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
 		);
@@ -248,5 +292,145 @@ describe("lint.ts, the first step of pnpm lint", () => {
 	it("fails when oxlint looked at nothing, so a clean run cannot be faked by a bad path", () => {
 		const out = lint(join(plant, "no-such-file.ts"));
 		expect(out.status).not.toBe(0);
+	});
+});
+
+const SECRET = "export const a = process.env.GITHUB_TOKEN;";
+
+describe("an ignore comment names its rules and says why", () => {
+	const run = (name: string, text: string) => {
+		const file = join(plant, name);
+		writeFileSync(file, text);
+		return spawnSync(process.execPath, ["oxlint-plugins/lint.ts", relative(ROOT, file)], {
+			cwd: ROOT,
+			encoding: "utf8",
+		});
+	};
+
+	it.each([
+		["no rule, the next line", `// oxlint-disable-next-line\n${SECRET}\n`],
+		["no reason", `// oxlint-disable-next-line fabrika/no-secret-env\n${SECRET}\n`],
+		["no rule, a reason", `// oxlint-disable-next-line -- why\n${SECRET}\n`],
+		["an empty reason", `// oxlint-disable-next-line fabrika/no-secret-env -- \n${SECRET}\n`],
+		["words but no dashes", `// oxlint-disable-next-line fabrika/no-secret-env why\n${SECRET}\n`],
+		["no rule, the whole file", `/* oxlint-disable */\n${SECRET}\n`],
+		["no rule, lower down", `\n\n/* oxlint-disable */\n${SECRET}\n`],
+		["no rule, this line", `${SECRET} // oxlint-disable-line\n`],
+		["a rule glued on", `/* oxlint-disablefabrika/no-secret-env */\n${SECRET}\n`],
+		["eslint, the whole file", `/* eslint-disable */\n${SECRET}\n`],
+		["eslint, the next line", `// eslint-disable-next-line\n${SECRET}\n`],
+		["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
+		[
+			"JSX",
+			`export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`,
+		],
+	])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
+		const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
+		expect(out.stdout).toContain("fabrika(no-bare-disable)");
+		expect(out.status).toBe(1);
+	});
+
+	it("says which line, since it reports at the top of the file", () => {
+		const out = run("line.ts", `\n\n// oxlint-disable-next-line\n${SECRET}\n`);
+		expect(out.stdout).toContain("on line 3");
+	});
+
+	it.each([
+		["one rule", `// oxlint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
+		["from here on", `/* oxlint-disable fabrika/no-secret-env -- why\n more why */\n${SECRET}\n`],
+		[
+			"two rules",
+			`// oxlint-disable-next-line fabrika/no-secret-env, no-debugger -- why\n${SECRET}\ndebugger;\n`,
+		],
+		["words that only mention it", `// the oxlint-disable comment\nexport const b = 1;\n`],
+	])("takes %s", (_name, text) => {
+		const out = run("named.ts", text);
+		expect(out.stdout).not.toContain("no-bare-disable");
+	});
+});
+
+describe("a plain file cannot take a folder out of the checks", () => {
+	const LINT = join(ROOT, "oxlint-plugins", "lint.ts");
+	const FORMAT = join(ROOT, "oxlint-plugins", "format.ts");
+	const inFolder = (files: Readonly<Record<string, string>>) => {
+		const folder = mkdtempSync(join(plant, "hide-"));
+		mkdirSync(join(folder, "sub"));
+		for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), text);
+		return folder;
+	};
+	const node = (script: string, cwd: string, ...args: readonly string[]) =>
+		spawnSync(process.execPath, [script, ...args], {cwd, encoding: "utf8"});
+
+	it.each([
+		["a .eslintignore", ".eslintignore", "sub/\n"],
+		["a nested .oxlintrc.json", "sub/.oxlintrc.json", "{}\n"],
+		["a nested oxlint.config.ts", "sub/oxlint.config.ts", "export default {};\n"],
+	])("oxlint still refuses a secret beside %s", (_name, file, text) => {
+		const cwd = inFolder({"sub/a.ts": `${SECRET}\n`, [file]: text});
+		const out = node(LINT, cwd, ".");
+		expect(out.stdout).toContain("fabrika(no-secret-env)");
+		expect(out.status).toBe(1);
+	});
+
+	it.each([
+		["a .prettierignore", ".prettierignore", "sub/\n"],
+		["a nested .oxfmtrc.json", "sub/.oxfmtrc.json", '{"ignorePatterns": ["**"]}\n'],
+	])("oxfmt still refuses unformatted code beside %s", (_name, file, text) => {
+		const cwd = inFolder({"sub/a.ts": "export   const a   = 1\n", [file]: text});
+		const out = node(FORMAT, cwd, "--check", ".");
+		expect(out.stdout).toContain("sub/a.ts");
+		expect(out.status).toBe(1);
+	});
+
+	it("oxfmt takes formatted code, so the two above fail for the right reason", () => {
+		const cwd = inFolder({"sub/a.ts": "export const a = 1;\n"});
+		expect(node(FORMAT, cwd, "--check", ".").status).toBe(0);
+	});
+
+	it("a .gitignore over a tracked file fails lint.ts, and names the file", () => {
+		const cwd = inFolder({"sub/a.ts": `${SECRET}\n`, "sub/.gitignore": "*\n"});
+		spawnSync("git", ["init", "-q"], {cwd});
+		spawnSync("git", ["add", "-f", "sub/a.ts"], {cwd});
+		const out = node(LINT, cwd, ".");
+		expect(out.stderr).toContain("sub/a.ts");
+		expect(out.status).toBe(2);
+	});
+});
+
+describe("rules that apply by path", () => {
+	const plantIn = (folder: string, text: string) => {
+		const at = mkdtempSync(join(ROOT, folder, ".plant-"));
+		const file = join(at, "planted.ts");
+		writeFileSync(file, text);
+		return {at, file};
+	};
+	const made: string[] = [];
+	afterAll(() => {
+		for (const at of made) rmSync(at, {recursive: true, force: true});
+	});
+
+	it.each([
+		["eslint(prefer-template)", 'export const f = (a: string) => a + "b";\n'],
+		["eslint(prefer-arrow-callback)", "export const a = [1].map(function (x) { return x; });\n"],
+		["eslint(require-yield)", "export const a = function* () { return 1; };\n"],
+	])("experiments/ is under %s", (code, text) => {
+		const {at, file} = plantIn("experiments", text);
+		made.push(at);
+		expect(fires(file, code)).toEqual([1]);
+	});
+
+	const HOOK =
+		'import {useState} from "react";\nexport const f = (x: number) => { if (x) useState(0); };\n';
+
+	it.each(["apps", "programs"])("a hook in a .ts file under %s/ is checked", (folder) => {
+		const {at, file} = plantIn(folder, HOOK);
+		made.push(at);
+		expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([2]);
+	});
+
+	it("a `use` in a .ts file under packages/ is left alone: it is Effect's, not a hook", () => {
+		const {at, file} = plantIn("packages", HOOK);
+		made.push(at);
+		expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([]);
 	});
 });

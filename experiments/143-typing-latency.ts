@@ -980,6 +980,7 @@ if (step === "run") {
 					const e2e = summary(hops.map((k) => k.e2e));
 					const page = summary(hops.map((k) => k.pageTotal));
 					console.log(
+						// oxlint-disable-next-line eslint/prefer-template -- an experiment is a record; this line stays as it ran.
 						`${name}: frame ${raw.frameMs} ms, page total p50 ${page.p50} p95 ${page.p95}` +
 							(trace ? `, end to end p50 ${e2e.p50} p95 ${e2e.p95}` : "") +
 							`, timeouts ${raw.timeouts}, aligned ${aligned} ${JSON.stringify(counts)}` +

@@ -58,7 +58,8 @@ function fix(id: string, p: Problem): readonly string[] {
 			return [
 				`Changed since it was confirmed at ${short(p.commit)}:`,
 				...indent(p.pieces, "  "),
-				`Look: git diff ${short(p.commit)} -- ${files.join(" ")}`,
+				// Not `git diff <commit>`: main lands by squash, so that commit is usually gone.
+				`Look: git log -p -- ${files.join(" ")}`,
 				"Read the promise against the new code. If it still says what the code does,",
 				`run: pnpm promises confirm ${id}`,
 				"If it does not, change the check first: that is an exam change, for the owner.",

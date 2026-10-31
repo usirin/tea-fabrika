@@ -17,9 +17,34 @@ interface Diagnostic {
 }
 
 const ROOT = join(import.meta.dirname, "..");
+
+// A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
+// walking into `node_modules`. Git keeps a tracked file tracked under a new `.gitignore`, so one line
+// in one could take a whole folder out of the checks. Only `.gitignore` files count here, not this
+// machine's own ignore list.
+const hidden = spawnSync("git", ["ls-files", "-ci", "--exclude-per-directory=.gitignore"], {
+	encoding: "utf8",
+	maxBuffer: 2 ** 30,
+});
+if (hidden.status !== 0 || hidden.stdout !== "") {
+	console.error(
+		`A .gitignore hides these tracked files from the lint and format checks. Change the .gitignore, or stop tracking them:\n${hidden.stdout}${hidden.stderr}`,
+	);
+	process.exit(2);
+}
+
+// The one config at the top of the repo, on purpose. On its own, oxlint obeys a config in any folder
+// and a `.eslintignore` where it runs, and either could take a folder out of the checks. The config's
+// own `ignorePatterns` still apply, and those are read in review.
 const ran = spawnSync(
 	join(ROOT, "node_modules", ".bin", "oxlint"),
-	["--format=json", ...process.argv.slice(2)],
+	[
+		`--config=${join(ROOT, ".oxlintrc.json")}`,
+		"--disable-nested-config",
+		"--no-ignore",
+		"--format=json",
+		...process.argv.slice(2),
+	],
 	{cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30},
 );
 

@@ -9,10 +9,14 @@ export type Node = ESTree.Node;
 
 /** `Context.Tag` for that plain member, `process.env.X` for a longer one. `null` for any other shape. */
 export const dotted = (node: Node): string | null => {
-	if (node.type === "Identifier") return node.name;
+	if (node.type === "Identifier" || node.type === "JSXIdentifier") return node.name;
 	if (node.type === "TSQualifiedName") {
 		const left = dotted(node.left);
 		return left === null ? null : `${left}.${node.right.name}`;
+	}
+	if (node.type === "JSXMemberExpression") {
+		const object = dotted(node.object);
+		return object === null ? null : `${object}.${node.property.name}`;
 	}
 	if (node.type !== "MemberExpression" || node.computed || node.optional) return null;
 	if (node.property.type !== "Identifier") return null;
@@ -105,5 +109,13 @@ export const banNames =
 			const message = name === null ? undefined : messages[name];
 			if (message !== undefined && !isWritten(node)) context.report({node, message});
 		};
-		return {MemberExpression: check, TSQualifiedName: check};
+		return {
+			MemberExpression: check,
+			TSQualifiedName: check,
+			// `<Redacted.value />`. The opening tag is enough: a closing tag says it a second time.
+			JSXMemberExpression(node) {
+				if ((node as Node & {readonly parent: Node}).parent.type !== "JSXClosingElement")
+					check(node);
+			},
+		};
 	};
