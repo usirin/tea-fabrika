@@ -7,6 +7,11 @@ note says what replaces its shape after that. The design draft below was
 added the same day. The owner walked it on 2026-10-30; the open questions
 now carry proposed answers (end of the note). Still proposed.
 
+*Changed 2026-10-30, later: a program is a Durable Object, run by the brain,
+with the hands doing its machine work. Open question 1 is answered: the brain
+is workerd on the laptop too. See
+[the brain and the hands](#decided-2026-10-30-the-brain-and-the-hands).*
+
 ```ts
 // A sketch. Every place fabrika runs is a host, and every host is the same kind of thing.
 type Where = "laptop" | "cloudflare"; // where it runs; nothing else differs
@@ -254,6 +259,66 @@ The seven open questions, each with its lean. Proposed, not decided.
   the host wake to renew it, which is what sleeping is meant to avoid.
   The doubt: a rare overlap during Cloudflare's own handover between
   machines, which only a live run would show.
+
+## Decided 2026-10-30: the brain and the hands
+
+```ts
+// A sketch, not built. Two parts, on every computer and on Cloudflare.
+//   brain   where programs run and keep state: workerd (Miniflare on a laptop,
+//           through Alchemy's local stage; Cloudflare when shared)
+//   hands   the Node.js part on each computer that does machine Cmds:
+//           files, git, Docker, agents, keys, the terminal
+//
+// One program instance is one Durable Object, its process:
+//   wake on a message or its alarm -> rebuild from storage -> update -> save -> sleep
+// What the program wants done on a computer is a Cmd, owed until the hands answer:
+{kind: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
+{kind: "done", id: "c-41", ok: {sha: "1a2b3c4"}}   // the hands' answer, a Msg to the program
+```
+
+- **Decided:**
+  - **A program instance is a Durable Object.** It is the program's process:
+    its own state, its `update`, sleep and wake. Most makers land on the same
+    shape, a virtual actor (wake, rebuild, one turn, save, sleep), and tea's
+    own `@demlik/tea/do` is built for it.
+  - **All machine work is a Cmd the hands do.** Files, git, Docker, agents,
+    keys and the terminal live on a computer, so a program never touches one.
+    It asks, and the hands answer with a Msg. Every step stays a message, so
+    every run can be watched and replayed.
+  - **The names are brain and hands.** The brain runs programs and keeps their
+    state; the hands act on a computer. "Runner" was dropped, since the hands
+    do not run programs. Where this note says "host", read "brain".
+  - **The brain is workerd everywhere,** the laptop included. Node runs only
+    the hands. This answers open question 1 above.
+- **Proposed:**
+  - The hands always dial the brain, never the reverse (85%): a Worker cannot
+    dial a laptop, and a laptop cannot be dialed from outside anyway.
+  - Hands talk to each other only through the brain (80%), as hosts meet only
+    on the ledger today.
+  - Each set of hands says what it `has`, and a Cmd says what it `needs`, the
+    way GitHub's runner labels pick a machine. A Linux VM is one more computer
+    with hands: its own files, Docker without a file-sharing layer, the same
+    OS as the cloud.
+- **Open:** one object per program instance, or one per tree of programs.
+  Against one per instance: [experiment 145](../../experiments/145-many-objects.md)
+  put one object per lane and broke 11 of 27 ledger laws, and Cloudflare's own
+  rule is one object per unit of coordination. An experiment settles it: the
+  same small tree both ways, against the laws.
+- **What tea already ships** (`@demlik/tea/do`, 0.21.0, unused here so far):
+  `stepHost` (the hands pull the next step while the object sleeps),
+  `durableTimer`, `doEventSourcedStore`, `acceptDurableCommandSocket`
+  (a socket that survives sleep), `sseHub`.
+- **What is missing:** a general program host, Subs that turn into the alarm,
+  one set of hands serving many objects, links and supervisors across objects,
+  and a window that mirrors a model kept in an object.
+- **Notes this changes:**
+  - [tea-host](./tea-host.md) and [the GUI is an Electron app first](./the-gui-is-electron-first.md):
+    a Node host no longer runs programs. Node is the hands.
+  - [Programs run in a box](./programs-run-in-a-box.md): the program is in
+    workerd now, so the box goes around the hands' work, not around the
+    program. Proposed.
+- **First experiment:** port the counter and one real program onto
+  `@demlik/tea/do`, with its laws, in Miniflare. $0.
 
 ## What it cannot tell us
 

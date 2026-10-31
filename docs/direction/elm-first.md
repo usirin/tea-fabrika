@@ -60,3 +60,32 @@ type Exception = {what: string; why: string; status: "decided" | "proposed"};
   it was an exploration, not a plan. What stays is that each stage is a program
   that runs alone and pipes, so a person can run one part again by hand
   (`build --ticket 7 | review`) and watch it.
+
+## Decided 2026-10-30: UI state lives in tea machines
+
+Every piece of state a window keeps lives in a tea machine, even state that
+belongs to one component: a draft comment, a picked row, a drag. A window
+uses `useMachine` from `@demlik/tea/react`, never React's `useState`.
+
+```tsx
+// A sketch. A comment box: the draft is a machine, not a useState.
+const Draft = machine({
+	init: {text: "", sending: false},
+	update: (m, msg) =>
+		msg.type === "typed" ? {...m, text: msg.text}
+		: msg.type === "send" ? [{...m, sending: true}, postComment(m.text)]
+		: msg.type === "sent" ? {text: "", sending: false}
+		: m,
+});
+const [draft, dispatch] = useMachine(Draft);
+// "typed" -> {text: "looks good", sending: false}; "send" -> sending: true, a Cmd out
+```
+
+- **Why:** `useState` is a loose function; a machine gives every change a
+  name, a typed Msg and one `update`. Agents follow that structure well,
+  every change can be watched, and a machine's laws can check it.
+- **Cost:** a few more lines per component. Today about 7 `useState` calls
+  remain, in the tracker and ticket windows and the frame.
+- **Manti's own parts** keep their Zag.js machines inside
+  ([UI on Manti](./ui-on-manti.md)). What our code keeps never lives in them.
+  Proposed.

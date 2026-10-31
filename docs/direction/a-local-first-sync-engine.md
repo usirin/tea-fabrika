@@ -93,6 +93,86 @@ has no single place that can say who was first.
   journal is LiveStore's Cloudflare sync server; a short test decides whether
   it carries our journal or we copy its design.
 
+## Decided 2026-10-30: four layers, central first
+
+```ts
+// A sketch. Bottom to top; each layer uses only the one below it.
+//   app     tea programs, Cmds, the brain and the hands, windows
+//   nodes   presence, inboxes, claims: streams on the ledger
+//   data    the ledger: one log per project, a Durable Object
+//   link    one framed, two-way channel: a WebSocket to the ledger
+//
+//   Mac hands  -- one socket -->  ledger  <-- one socket --  VM hands
+//                                   ^
+//                         programs (Durable Objects)
+interface Data {
+	append(stream: string, id: string, event: unknown): Effect.Effect<Rev>;
+	read(stream: string, after: Rev): Stream.Stream<Entry>;
+	wait(stream: string, after: Rev): Effect.Effect<Rev>; // the doorbell
+}
+```
+
+- **Decided:**
+  - **The layers are link, data, nodes and app.** Data sits under the
+    network, the way log designs (Kafka, Temporal) and sync engines (Linear,
+    Replicache, Zero, LiveStore) put it. LiveStore on Cloudflare is nearly the
+    same picture: one Durable Object per store is the hub, and every client
+    dials it.
+  - **Central first.** Every peer reads from the one ledger. Central makes
+    what is on screen easy to trust, and a screen that gets sloppy is the sign
+    to change it. The data layer's calls (`append`, `read`, `wait`) leave room
+    for a local copy later.
+- **Proposed:**
+  - **Split today's `Ledger` service by layer** (80%). It has about 25 calls
+    that mix all three: data (`append`, `read`, `readStream`, `readLast`),
+    nodes (`register`, `send`, `claim`, `renew`, `cancel`, `exit`, `monitor`,
+    `link`, `trapExit`, `startChild`, `processInfo`, `lease`) and app
+    (`hold`, `charge`, `setLimits`, `usage`). Three services, each on the one
+    below. Cost: 15 to 25 files, 10 to 20 agent hours.
+  - **One unrecorded lane on the same link** (75%), for "come read" pokes,
+    who is online, and fast streams such as terminal bytes. Replicache calls it
+    a poke, Yjs awareness, automerge-repo ephemeral messages. The doorbell
+    already is one (`durable-object.ts`). The rule: no app state is ever built
+    from it, so losing a frame breaks nothing.
+  - **Messages change state; RPC only asks the hub** (85%). A change is a
+    plain message with an id, written to the ledger, so a run can be replayed.
+    A call is a send, a reply-to and a deadline (`call.ts`). No live callbacks
+    across computers: Cap'n Web's own docs say saving one is like saving a file
+    descriptor.
+  - **A local read copy later** (70%), folded from the tail into SQLite, as
+    every sync engine keeps. The doubt: whether a laptop ever needs to read
+    offline enough to pay for it.
+  - **Who is online comes from open sockets,** not from writes. "Down" is
+    written once, when a socket closes and does not come back within a grace
+    time.
+- **A standard per layer, proposed:**
+
+  | Layer | Use | How sure |
+  |---|---|---|
+  | link | WebSocket; JSON lines on a Unix socket for the local app | 90% |
+  | version | the subprotocol `fabrika.v1`, then a hello that lists features | 75% |
+  | identity | SSH keys and SSH signatures; a peer's id is its key fingerprint | 80% |
+  | alive or not | WebSocket ping and pong, which do not wake the object | 80% |
+  | message shape | CloudEvents (`id`, `source`, `type`, `time`), after a short look | 60% |
+  | tracing | W3C `traceparent` in each message, OpenTelemetry out | 85% |
+  | asking the hub | Effect RPC, in place of the hand-made door wire | 65% |
+  | peer to peer calls | none: not Cap'n Web (no sleep, nothing saved), not A2A (needs a client it can dial) | 80% |
+
+- **The pieces exist, on three links:** the app's link has a hello with
+  versions and ports (`apps/fabrika/src/link.ts`), the door has real identity
+  (`door.ts`), and the doorbell has a push that survives sleep. The node layer
+  is mostly joining them into one link.
+- **Experiments that settle it,** all $0 on Miniflare and a local VM:
+  1. Three peers, one hub: Mac and VM each dial one object, 1,000 messages,
+     the object killed every 100. Time, lost, doubled.
+  2. Presence without writes: how fast the hub sees a stopped VM, and writes
+     per hour against a 5 s lease.
+  3. The unrecorded lane: a terminal's bytes as ledger appends against
+     relayed frames. Keystroke echo time and the hub's CPU.
+  4. A direct Mac-to-VM path, only if 3 shows the hub is too slow.
+  5. Effect RPC on a sleeping socket, and a replay of one peer's frames into
+     a fresh program.
+
 ## Why the design already allows it
 
 - **The `Ledger` is a service** ([the ledger behind a
