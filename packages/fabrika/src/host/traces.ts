@@ -1,4 +1,4 @@
-import {Context, Effect, Layer, Schema, Tracer} from "effect";
+import {Context, Duration, Effect, Layer, Schema, Stream, Tracer} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/storage.ts";
 
@@ -289,42 +289,79 @@ export class TraceUnread extends Schema.TaggedError<TraceUnread>()("TraceUnread"
 /** One job's record, read: the service the trace tile asks, so where the records live can change. */
 export class Traces extends Context.Service<
 	Traces,
-	{readonly read: (trace: string) => Effect.Effect<JobTrace, TraceUnread>}
+	{
+		readonly read: (trace: string) => Effect.Effect<JobTrace, TraceUnread>;
+		/**
+		 * The record now, then again after each write to it, for a reader that follows a job as it
+		 * goes. Writes that come while a read is out are read together, once. It ends only on a read
+		 * that fails.
+		 */
+		readonly watch: (trace: string) => Stream.Stream<JobTrace, TraceUnread>;
+	}
 >()("@kampus/fabrika/Traces") {}
 
-/** `Traces` over the records `calls` reaches. A trace nobody wrote reads as an empty record. */
-export const layerTraces = (calls: RecordCalls) =>
-	Layer.succeed(
-		Traces,
-		Traces.of({
-			read: (trace) =>
-				Effect.gen(function* () {
-					const id = yield* Schema.decodeUnknownEffect(TraceId)(trace);
-					const raw = yield* calls(id, {op: "read"}).pipe(
-						Effect.flatMap(decodeAs(RecordRead, "read")),
-					);
-					const storage = jobStorage(calls, id);
-					const runs: RunRecord[] = [];
-					for (const run of raw.runs) {
-						const record = yield* storage.record(run);
-						if (record !== null) runs.push(record);
-					}
-					return {
-						trace: id,
-						job: raw.job,
-						runs,
-						spans: raw.spans,
-						steps: raw.steps,
-						opened: raw.opened,
-					};
-				}).pipe(
-					Effect.mapError(
-						(e) =>
-							new TraceUnread({
-								trace,
-								message: "message" in e ? String(e.message) : String(e),
-							}),
-					),
-				),
-		}),
+/** How often a record that says nothing of its writes is read again while it is followed. */
+export const POLL = Duration.seconds(1);
+
+/**
+ * A record's change notifications, as a watch in etcd or Kubernetes, or Postgres's LISTEN/NOTIFY:
+ * one at once, then one after each write to it. Each is empty: it says only "read again". A
+ * changes stream listens before its first one, so no write between the first read and the next
+ * is missed.
+ */
+export type Changes = (trace: string) => Stream.Stream<void>;
+
+/** Changes for records that say nothing of their writes: at once, then every `POLL`. */
+export const polled: Changes = () => Stream.tick(POLL);
+
+/**
+ * A followed record: read at each change, the changes that came while a read was out folded into
+ * one, so a burst of writes costs one read, not one each.
+ */
+export const watchOn = <E>(
+	read: Effect.Effect<JobTrace, E>,
+	changes: Stream.Stream<void>,
+): Stream.Stream<JobTrace, E> =>
+	changes.pipe(
+		Stream.buffer({capacity: 1, strategy: "sliding"}),
+		Stream.mapEffect(() => read),
 	);
+
+/**
+ * `Traces` over the records `calls` reaches. A trace nobody wrote reads as an empty record.
+ * `changes`: when a followed record is read again. A host's own records send one on each write
+ * (`Records`, ./records.ts); records behind the door are polled.
+ */
+export const layerTraces = (calls: RecordCalls, changes: Changes = polled) =>
+	Layer.succeed(Traces, tracesOn(calls, changes));
+
+const tracesOn = (calls: RecordCalls, changes: Changes): Traces["Service"] => {
+	const read = (trace: string) =>
+		Effect.gen(function* () {
+			const id = yield* Schema.decodeUnknownEffect(TraceId)(trace);
+			const raw = yield* calls(id, {op: "read"}).pipe(Effect.flatMap(decodeAs(RecordRead, "read")));
+			const storage = jobStorage(calls, id);
+			const runs: RunRecord[] = [];
+			for (const run of raw.runs) {
+				const record = yield* storage.record(run);
+				if (record !== null) runs.push(record);
+			}
+			return {
+				trace: id,
+				job: raw.job,
+				runs,
+				spans: raw.spans,
+				steps: raw.steps,
+				opened: raw.opened,
+			};
+		}).pipe(
+			Effect.mapError(
+				(e) =>
+					new TraceUnread({
+						trace,
+						message: "message" in e ? String(e.message) : String(e),
+					}),
+			),
+		);
+	return Traces.of({read, watch: (trace) => watchOn(read(trace), changes(trace))});
+};

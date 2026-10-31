@@ -45,7 +45,10 @@ const table: MsgArbitraryTable<Msg> = {
 		background: fc.boolean(),
 		owner,
 	}),
-	stage_ended: arbRecordMsg("stage_ended", {run}),
+	stage_ended: arbRecordMsg("stage_ended", {
+		run,
+		how: fc.constantFrom("done", "failed", "stopped"),
+	}),
 	detached: arbRecordMsg("detached", {n: fc.option(n, {nil: null})}),
 	attached: arbRecordMsg("attached", {n, background: fc.boolean(), owner}),
 	foreground: arbRecordMsg("foreground", {n}),
@@ -482,12 +485,18 @@ describe("the job table's laws", () => {
 
 // ---------------------------------------------------------------- law: every reachable table is kept
 
-/** A stage as tsh writes it: flags are values a program took, so any JSON value, and wired or not. */
+/**
+ * A stage as tsh writes it: flags are values a program took, so any JSON value, and wired or not.
+ * Each value is one JSON keeps as it is: fast-check's `jsonValue` can give `-0`, which JSON writes
+ * as `0`, and a kept table is JSON.
+ */
 const flagged: fc.Arbitrary<StageRecord> = fc.record({
 	program: fc.constantFrom("counter", "seq", "say"),
-	flags: fc.dictionary(fc.constantFrom("to", "text", "ms", "pr"), fc.jsonValue({maxDepth: 2}), {
-		maxKeys: 3,
-	}),
+	flags: fc.dictionary(
+		fc.constantFrom("to", "text", "ms", "pr"),
+		fc.jsonValue({maxDepth: 2}).map((value): unknown => JSON.parse(JSON.stringify(value))),
+		{maxKeys: 3},
+	),
 	run,
 	wire: fc.option(fc.record({output: fc.constantFrom("n", "text"), input: fc.constant("n")}), {
 		nil: null,

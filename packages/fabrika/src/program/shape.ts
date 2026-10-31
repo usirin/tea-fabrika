@@ -89,6 +89,11 @@ export interface Input<T, A extends Ack = Ack, C extends boolean = boolean>
 	readonly writes: boolean;
 	/** `true` (`{personOnly: true}`): only a person tells it. An agent's MCP tools have none for it. */
 	readonly personOnly: boolean;
+	/**
+	 * `true`: it takes any value, and a pipe may feed it from any output that fits no typed
+	 * input of the program (`anyInput`). Only `anyInput` sets it, always with `Schema.Unknown`.
+	 */
+	readonly any?: true;
 }
 
 /**
@@ -244,6 +249,22 @@ export const input = <T, const A extends Ack = "auto", const C extends boolean =
 });
 
 /**
+ * Declare an input that takes any value: Elm's `Json.Decode.value`, JSON Schema's `{}`. A pipe
+ * feeds it from an output that fits no typed input of the program, so a program can stand in a
+ * line without caring what flows in it, as `cat > /dev/null` does on Unix. Its shape is
+ * `Schema.Unknown`. A program that takes `Schema.Unknown` through `input` is fed only by an
+ * output of that same shape: a plain `input` never takes anything by accident. It writes no
+ * data, and no agent gets a tool for it: what it is sent goes unread.
+ *
+ *   inputs: {any: anyInput("Anything on a pipe. Being in the line is enough.")}
+ *   // tsh> seq --to 3 | tally | trace     tally's total fits no typed input of trace: wired total → any
+ */
+export const anyInput = (description: string): Input<unknown, "auto", false> => ({
+	...input(Schema.Unknown, description, {writes: false}),
+	any: true,
+});
+
+/**
  * Declare an output: a value the program sends while it runs, to anyone who listens.
  * `{person}`: how tsh shows its values to a person ({@link Output}'s `person`, ./person.ts).
  *
@@ -261,8 +282,11 @@ export const output = <T, const H extends string = never>(
 	...(options?.person === undefined ? {} : {person: personOf(options.person)}),
 });
 
-/** What fit answers. */
-export type Fit = "fits" | "does_not_fit" | "cannot_tell";
+/**
+ * What fit answers. `takes_any`: the input takes any value (`anyInput`), and the output's shape
+ * is not its own. A wiring picks a `fits` first, and a `takes_any` only when nothing fits.
+ */
+export type Fit = "fits" | "takes_any" | "does_not_fit" | "cannot_tell";
 
 /** Keys that say something about a shape to people and never change what fits. */
 const NOTES = new Set(["description", "title", "examples", "default", "$comment", "documentation"]);
@@ -289,18 +313,20 @@ function bare(node: unknown): unknown {
  * once the notes for people are taken out, or the same as one member of an
  * input that is a union (`anyOf`), since a union takes each of its members,
  * as a TypeScript union takes each of its members. More fields does not fit,
- * fewer does not fit. A shape with no JSON Schema answers `cannot_tell`.
+ * fewer does not fit. A shape with no JSON Schema answers `cannot_tell`. An
+ * input made by `anyInput` answers `takes_any` for every other shape.
  */
 export function fit(
 	from: {readonly shape: Shape<unknown>},
-	into: {readonly shape: Shape<unknown>},
+	into: {readonly shape: Shape<unknown>; readonly any?: true},
 ): Fit {
 	const a = from.shape.json;
 	const b = into.shape.json;
-	if (a === undefined || b === undefined) return "cannot_tell";
+	if (a === undefined || b === undefined) return into.any === true ? "takes_any" : "cannot_tell";
 	const sent = structuralHash(bare(a));
 	const taken = [b, ...membersOf(b)];
-	return taken.some((shape) => structuralHash(bare(shape)) === sent) ? "fits" : "does_not_fit";
+	if (taken.some((shape) => structuralHash(bare(shape)) === sent)) return "fits";
+	return into.any === true ? "takes_any" : "does_not_fit";
 }
 
 /** The members of a union's JSON Schema; none for any other. */

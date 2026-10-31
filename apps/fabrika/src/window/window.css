@@ -3554,6 +3554,18 @@ main.program:has(> .view) {
 
 /* 4. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
 
+.trace-view .trace-running {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--text-secondary);
+}
+
+/* With no legend beside it, the trace id still sits at the head's far end. */
+.trace-view .trace-id:not(.legend + *) {
+	margin-inline-start: auto;
+}
+
 .trace-view .legend .swatch {
 	display: inline-block;
 	inline-size: 10px;
@@ -3657,6 +3669,8 @@ main.program:has(> .view) {
 	inset-block-start: 4px;
 	transform: translateX(-50%);
 	font-variant-numeric: tabular-nums;
+	/* Near the track's end the box has little room left: "40 ms" stays one line. */
+	white-space: nowrap;
 }
 
 .trace-view .wf-tick:first-child {

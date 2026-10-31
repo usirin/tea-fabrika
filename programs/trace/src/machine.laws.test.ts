@@ -11,18 +11,17 @@ import {
 import type {MsgOf} from "@kampus/fabrika";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {idOf, type Model, read, trace} from "./machine.ts";
+import {firstOpen, followed, idOf, isRunning, type Model, ticking, trace} from "./machine.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 
 // The trace machine's laws, on tea's pbt: after every step of any list of Msgs, from the real
-// init. The record's answers are drawn too, so one can come for a trace that was not asked for,
-// come twice, or never come.
+// init. The record's reads are drawn too, so one can come for a trace that is not followed, come
+// twice, come smaller than the one before, or never come.
 
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
-type ReadCmd = ReturnType<typeof read>;
-type TraceStep = Step<Model, Msg, ReadCmd>;
+type TraceStep = Step<Model, Msg, never>;
 
 const OTHER = "f".repeat(32);
 const id = fc.constantFrom(TALLY_ID, OTHER);
@@ -32,14 +31,28 @@ const row = fc.constantFrom(
 	"span:ffffffffffffffff",
 	"",
 );
+const runningJob = TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: null};
+/**
+ * The whole record, the record before tally's machine ran, or the job just begun with nothing
+ * under it: a read can hold fewer rows, or none. Two say the job has not ended, so a job can run,
+ * end and seem to run again.
+ */
+const record = fc.constantFrom(
+	TALLY_TRACE,
+	{...TALLY_TRACE, spans: TALLY_TRACE.spans.slice(0, 2), steps: []},
+	{...TALLY_TRACE, runs: [], spans: [], steps: []},
+	{...TALLY_TRACE, job: runningJob, runs: [], spans: [], steps: []},
+	{...TALLY_TRACE, job: runningJob, steps: TALLY_TRACE.steps.slice(0, 1)},
+);
 
-/** One entry per Msg type, the Cmd's answers too: leaving one out does not compile. */
+/** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
 	look: arbRecordMsg("look", {id}),
+	got: fc.tuple(id, record).map(([i, r]) => ({type: "got" as const, trace: {...r, trace: i}})),
+	lost: arbRecordMsg("lost", {id, why: fc.constant("gone")}),
 	toggle: arbRecordMsg("toggle", {row}),
 	choose: arbRecordMsg("choose", {row: fc.option(row, {nil: null})}),
-	read_ok: id.map((i) => read.ok(read({id: i}), {...TALLY_TRACE, trace: i}, 0)),
-	read_err: id.map((i) => read.err(read({id: i}), {_tag: "unread"}, 0)),
+	tick: arbRecordMsg("tick", {now: fc.nat()}),
 };
 const lists = fc.array(arbMsg(table), {maxLength: 30, size: "max"});
 const OPTS = {numRuns: 300, seed: 1};
@@ -51,10 +64,14 @@ interface Law {
 	readonly check: (machine: Machine) => void;
 }
 
-const every = (name: string, law: (step: TraceStep) => boolean): Law => ({
+const every = (name: string, law: (step: TraceStep, machine: Machine) => boolean): Law => ({
 	name,
-	check: (machine) => propertyInvariant(machine, ctx, lists, law, OPTS),
+	check: (machine) => propertyInvariant(machine, ctx, lists, (step) => law(step, machine), OPTS),
 });
+
+/** What one Sub asks for in a state. */
+const depsOf = (machine: Machine, type: "follow" | "tick", state: Model) =>
+	machine.subs?.find((sub) => sub.type === type)?.deps(state) ?? null;
 
 const openAreGroups = every(
 	"only a row that groups others is ever open, and only in a record that was read",
@@ -72,14 +89,55 @@ const chosenIsARow = every(
 		(next.read.at === "read" && findOf(treeOf(next.read.trace), next.chosen) !== undefined),
 );
 
-const oneRead = every(
-	"a record is asked for only by a look, for the id it named, if that id is not the one held or it could not be read",
-	({prev, msg, cmds}) =>
-		cmds.length === 0 ||
-		(cmds.length === 1 &&
-			msg.type === "look" &&
-			(idOf(prev.read) !== msg.id || prev.read.at === "unread") &&
-			cmds[0]?.id === msg.id),
+const followsWhatItHolds = every(
+	"it asks for nothing by Cmd, and follows the id it holds while it reads or shows it, and nothing else",
+	({next, cmds}, machine) => {
+		const want =
+			next.read.at === "reading" || next.read.at === "read" ? {id: idOf(next.read)} : null;
+		return (
+			cmds.length === 0 && JSON.stringify(depsOf(machine, "follow", next)) === JSON.stringify(want)
+		);
+	},
+);
+
+const ticksWhileItRuns = every(
+	"the clock is on while the record read says its job has not ended, and off otherwise",
+	({next}, machine) => {
+		const want =
+			next.read.at === "read" && isRunning(next.read.trace) ? {id: idOf(next.read)} : null;
+		return JSON.stringify(depsOf(machine, "tick", next)) === JSON.stringify(want);
+	},
+);
+
+const holdsTimeWhileItRuns = every(
+	"it holds the time only while the job runs, and the last tick's while it does",
+	({msg, next}) => {
+		if (next.read.at !== "read") return true;
+		if (!isRunning(next.read.trace)) return next.read.now === null;
+		return msg.type !== "tick" || next.read.now === msg.now;
+	},
+);
+
+const lookAgainIsNothing = every(
+	"a look at the id it holds changes nothing, unless that record could not be read",
+	({prev, msg, next}) =>
+		msg.type !== "look" || idOf(prev.read) !== msg.id || prev.read.at === "unread" || next === prev,
+);
+
+const againKeepsRows = every(
+	"a newer read of the record shown keeps the rows open and the detail chosen, where they still are",
+	({prev, msg, next}) => {
+		if (msg.type !== "got" || prev.read.at !== "read" || idOf(prev.read) !== msg.trace.trace)
+			return true;
+		const tree = treeOf(msg.trace);
+		const groups = groupsOf(tree);
+		// A record with nothing under its job had no row to keep: the next opens as a first read.
+		const shown = groupsOf(treeOf(prev.read.trace)).has(JOB);
+		const open = shown ? prev.open.filter((k) => groups.has(k)) : firstOpen(msg.trace);
+		const chosen =
+			prev.chosen !== null && findOf(tree, prev.chosen) !== undefined ? prev.chosen : null;
+		return JSON.stringify(next.open) === JSON.stringify(open) && next.chosen === chosen;
+	},
 );
 
 const newestWins: Law = {
@@ -109,7 +167,7 @@ const twiceIsNothing: Law = {
 			(steps, last) => {
 				const step = steps.at(-1);
 				if (step?.msg.type !== "toggle") return true;
-				const [again] = applyCell<Model, Msg, ReadCmd>(machine, last, step.msg);
+				const [again] = applyCell<Model, Msg, never>(machine, last, step.msg);
 				const was = new Set(step.prev.open);
 				return again.open.length === was.size && again.open.every((k) => was.has(k));
 			},
@@ -117,7 +175,17 @@ const twiceIsNothing: Law = {
 		),
 };
 
-const LAWS = [openAreGroups, chosenIsARow, oneRead, newestWins, twiceIsNothing];
+const LAWS = [
+	openAreGroups,
+	chosenIsARow,
+	followsWhatItHolds,
+	ticksWhileItRuns,
+	holdsTimeWhileItRuns,
+	lookAgainIsNothing,
+	againKeepsRows,
+	newestWins,
+	twiceIsNothing,
+];
 
 /** The names of the laws `machine` breaks. */
 const broken = (machine: Machine): readonly string[] =>
@@ -130,7 +198,7 @@ const broken = (machine: Machine): readonly string[] =>
 		}
 	}).map((law) => law.name);
 
-// Planted mistakes: the real machine with one cell changed.
+// Planted mistakes: the real machine with one cell, or its Sub, changed.
 const real = trace.update;
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...trace,
@@ -142,30 +210,50 @@ const PLANTS = {
 	opensAnything: plant({toggle: (s, m) => [{...s, open: [...s.open, m.row]}, []]}),
 	/** A choose takes any row. */
 	choosesAnything: plant({choose: (s, m) => [{...s, chosen: m.row}, []]}),
-	/** Every look reads the record again, the one held too. */
+	/** Every look starts over, on the record held too. */
 	readsEveryLook: plant({
-		look: (_, m) => [{read: {at: "reading", id: m.id}, open: [], chosen: null}, [read({id: m.id})]],
+		look: (_, m) => [{read: {at: "reading", id: m.id}, open: [], chosen: null}, []],
 	}),
-	/** The first look wins: a later id is never read. */
+	/** The first look wins: a later id is never followed. */
 	firstLookWins: plant({
 		look: (s, m) =>
-			s.read.at === "waiting"
-				? [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]]
-				: [s, []],
+			s.read.at === "waiting" ? [{...s, read: {at: "reading", id: m.id}}, []] : [s, []],
 	}),
-	/** An answer for an id it no longer reads still shows. */
+	/** A read for an id it no longer follows still shows. */
 	takesLateAnswers: plant({
-		read_ok: (s, m) =>
+		got: (s, m) =>
 			s.read.at === "reading"
-				? [{read: {at: "read", trace: m.value}, open: [JOB], chosen: null}, []]
-				: [s, []],
+				? [
+						{read: {at: "read", trace: m.trace, now: null}, open: firstOpen(m.trace), chosen: null},
+						[],
+					]
+				: real.got(s, m),
 	}),
 	/** A newer id keeps the old record's open rows. */
 	keepsOldRows: plant({
 		look: (s, m) =>
 			idOf(s.read) === m.id && s.read.at !== "unread"
 				? [s, []]
-				: [{...s, read: {at: "reading", id: m.id}}, [read({id: m.id})]],
+				: [{...s, read: {at: "reading", id: m.id}}, []],
+	}),
+	/** A newer read of the record shown starts its rows over. */
+	resetsOnEachRead: plant({
+		got: (s, m) =>
+			idOf(s.read) === m.trace.trace && (s.read.at === "reading" || s.read.at === "read")
+				? [
+						{read: {at: "read", trace: m.trace, now: null}, open: firstOpen(m.trace), chosen: null},
+						[],
+					]
+				: [s, []],
+	}),
+	/** A job read first with nothing under it stays closed once its runs come in. */
+	staysClosed: plant({
+		got: (s, m) => {
+			const [next, cmds] = real.got(s, m);
+			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) return [next, cmds];
+			const groups = groupsOf(treeOf(m.trace));
+			return [{...next, open: s.open.filter((k) => groups.has(k))}, cmds];
+		},
 	}),
 	/** A toggle only ever opens. */
 	neverCloses: plant({
@@ -173,6 +261,38 @@ const PLANTS = {
 			s.read.at === "read" && groupsOf(treeOf(s.read.trace)).has(m.row) && !s.open.includes(m.row)
 				? [{...s, open: [...s.open, m.row]}, []]
 				: [s, []],
+	}),
+	/** It goes on following a record it could not read, and asks again and again. */
+	followsWhatIsLost: {
+		...trace,
+		subs: [
+			{
+				type: "follow",
+				deps: (s: Model) => (s.read.at === "waiting" ? null : {id: idOf(s.read) ?? ""}),
+			},
+			{type: "tick", deps: ticking},
+		],
+	} as Machine,
+	/** The clock stays on after the job's end. */
+	ticksForever: {
+		...trace,
+		subs: [
+			{type: "follow", deps: followed},
+			{type: "tick", deps: (s: Model) => (s.read.at === "read" ? {id: s.read.trace.trace} : null)},
+		],
+	} as Machine,
+	/** A tick that comes after the job's end still sets the time. */
+	takesLateTicks: plant({
+		tick: (s, m) => (s.read.at === "read" ? [{...s, read: {...s.read, now: m.now}}, []] : [s, []]),
+	}),
+	/** The time held before the job's end stays after it. */
+	keepsTimeAfterEnd: plant({
+		got: (s, m) => {
+			const [next, cmds] = real.got(s, m);
+			return s.read.at === "read" && next.read.at === "read"
+				? [{...next, read: {...next.read, now: s.read.now}}, cmds]
+				: [next, cmds];
+		},
 	}),
 };
 
@@ -184,11 +304,17 @@ describe("the trace machine's laws", () => {
 	it("each law is seen to fail on a planted mistake", () => {
 		expect(broken(PLANTS.opensAnything)).toContain(openAreGroups.name);
 		expect(broken(PLANTS.choosesAnything)).toEqual([chosenIsARow.name]);
-		expect(broken(PLANTS.readsEveryLook)).toEqual([oneRead.name]);
+		expect(broken(PLANTS.readsEveryLook)).toEqual([lookAgainIsNothing.name]);
 		expect(broken(PLANTS.firstLookWins)).toEqual([newestWins.name]);
 		expect(broken(PLANTS.takesLateAnswers)).toEqual([newestWins.name]);
 		// The old rows are left over while the new record is read.
 		expect(broken(PLANTS.keepsOldRows)).toContain(openAreGroups.name);
+		expect(broken(PLANTS.resetsOnEachRead)).toEqual([againKeepsRows.name]);
+		expect(broken(PLANTS.staysClosed)).toEqual([againKeepsRows.name]);
 		expect(broken(PLANTS.neverCloses)).toEqual([twiceIsNothing.name]);
+		expect(broken(PLANTS.followsWhatIsLost)).toEqual([followsWhatItHolds.name]);
+		expect(broken(PLANTS.ticksForever)).toEqual([ticksWhileItRuns.name]);
+		expect(broken(PLANTS.takesLateTicks)).toEqual([holdsTimeWhileItRuns.name]);
+		expect(broken(PLANTS.keepsTimeAfterEnd)).toEqual([holdsTimeWhileItRuns.name]);
 	});
 });

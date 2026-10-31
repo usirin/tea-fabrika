@@ -13,6 +13,7 @@ import {
 	readInput,
 	Shell,
 	start,
+	Traces,
 	tell,
 	viewOf,
 } from "@kampus/fabrika";
@@ -26,8 +27,6 @@ import {markdown} from "@tea-fabrika/markdown";
 import {runs} from "@tea-fabrika/runs";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
-import {memoryTraces} from "@tea-fabrika/trace/memory";
-import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
@@ -181,16 +180,17 @@ export const RESET = "\x1bc";
  * The app's own programs: the counter, the four that read tickets (the tracker, and one
  * ticket's page, map and runs), packed to write as `author`: a tile's tsh lists
  * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
- * ever the `author` handed here. And `trace`, one job's record: on records held in memory, the
- * `seq --to 3 | tally` example alone, until the host reaches the job's record
- * (packages/fabrika/src/host/traces.ts). The three that read experiments (the list, one
- * experiment, two runs compared), on the same ledger, read-only, and `markdown`, which draws what
- * it is told (experiment 170).
+ * ever the `author` handed here. And `trace`, one job's record, read through the `traces` handed
+ * here: the host's own records of its jobs (host/run.ts), so `seq --to 3 | tally | trace` shows
+ * that line's job as it goes. The three that read experiments (the list, one experiment, two runs
+ * compared), on the same ledger, read-only, and `markdown`, which draws what it is told
+ * (experiment 170).
  */
 export const appPrograms = (
 	ledger: Ledger["Service"],
 	author: Author["Service"],
 	pullRequests: PullRequests["Service"],
+	traces: Traces["Service"],
 ): readonly Entry[] => {
 	const tickets = Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
@@ -204,7 +204,7 @@ export const appPrograms = (
 		listed(ticket, tickets),
 		listed(map, tickets),
 		listed(runs, tickets),
-		listed(trace, memoryTraces([TALLY_TRACE])),
+		listed(trace, Layer.succeed(Traces, traces)),
 		listed(experiments, read),
 		listed(experiment, read),
 		listed(compare, read),
@@ -302,6 +302,7 @@ export const startTsh = (options: {
 		const ledger = yield* Ledger;
 		const author = yield* Author;
 		const pullRequests = yield* PullRequests;
+		const traces = yield* Traces;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
 		/** The host's job table now, read off tsh as a run is seen. Set once tsh started; no run starts before. */
@@ -449,7 +450,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...tshList(appPrograms(ledger, author, pullRequests)), ...words].map((entry) =>
+			[...tshList(appPrograms(ledger, author, pullRequests, traces)), ...words].map((entry) =>
 				seenBy(entry, {
 					seen,
 					called: (run) => {
