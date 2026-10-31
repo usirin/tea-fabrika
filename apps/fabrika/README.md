@@ -558,8 +558,8 @@ Left for later, from Tuval's keys and the build:
   102); today's cost beside the agents, once one meter counts what agents spend (ticket 91).
 - **Later and seen are kept per home, not per person.** The same person on two machines sets an
   ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
-- **The job item opening the job's trace,** once the host keeps each job's record
-  (`packages/fabrika/src/host/traces.ts`) and the app's `trace` reads it. Today it lists the jobs.
+- **The job item opening the job's trace.** The host keeps each job's record and the app's
+  `trace` reads it (`packages/fabrika/src/host/records.ts`). Today the item lists the jobs.
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.

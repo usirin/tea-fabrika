@@ -8,9 +8,10 @@ import {
 	Traces,
 	type Word,
 } from "@kampus/fabrika";
-import {Effect, Layer, Option, Queue, Stream} from "effect";
+import {Deferred, Duration, Effect, Layer, Option, Queue, Stream} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
-import {trace} from "./index.ts";
+import {SETTLE, trace} from "./index.ts";
 import {memoryTraces} from "./memory.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {nodesOf, treeOf} from "./tree.ts";
@@ -200,6 +201,36 @@ describe("the trace program", () => {
 			[3, "add 2", false],
 			[3, "add 3", false],
 		]);
+	});
+
+	it("stops following once its job ended SETTLE ago, with no write left to wake it", async () => {
+		const ended: JobTrace = {
+			...TALLY_TRACE,
+			job: TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: {how: "done", at: 0}},
+		};
+		const stops = await Effect.runPromise(
+			Effect.gen(function* () {
+				const reads = yield* Queue.unbounded<JobTrace>();
+				const stopped = yield* Deferred.make<void>();
+				const growing = Layer.succeed(
+					Traces,
+					Traces.of({
+						read: () => Queue.take(reads),
+						watch: () =>
+							Stream.fromQueue(reads).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
+					}),
+				);
+				const {until} = yield* session([], TALLY_ID, growing);
+				yield* Queue.offer(reads, ended);
+				yield* until((s) => s.read === "read");
+				yield* TestClock.adjust(Duration.toMillis(SETTLE) - 1);
+				const early = yield* Deferred.isDone(stopped);
+				yield* TestClock.adjust(1);
+				yield* Deferred.await(stopped);
+				return {early};
+			}).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+		);
+		expect(stops.early).toBe(false);
 	});
 
 	it("takes anything on `any` and lets it go", async () => {

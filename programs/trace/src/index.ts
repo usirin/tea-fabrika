@@ -5,6 +5,7 @@ import {
 	end,
 	flag,
 	input,
+	type JobTrace,
 	jobTraceId,
 	kind,
 	TraceId,
@@ -58,23 +59,32 @@ const WINDOW = ["toggle", "choose", "quit"] as const;
  */
 export const SETTLE = Duration.seconds(5);
 
-/** Its job ended more than `SETTLE` ago: the record will not change again. */
-const settled = (t: {readonly job: {readonly ended: {readonly at: number} | null} | null}) =>
-	Effect.map(
-		Clock.currentTimeMillis,
-		(now) =>
-			t.job !== null && t.job.ended !== null && now - t.job.ended.at > Duration.toMillis(SETTLE),
+/**
+ * One read as a `got`, and, once its job has ended, `null` when `SETTLE` has passed since: nothing
+ * writes to the record then, so no later read would come to say so. A newer read replaces the wait.
+ */
+const gotThenSettled = (t: JobTrace): Stream.Stream<TraceMsg | null> => {
+	const got: Stream.Stream<TraceMsg | null> = Stream.make({type: "got", trace: t});
+	const ended = t.job?.ended ?? null;
+	if (ended === null) return got;
+	const wait = Effect.flatMap(Clock.currentTimeMillis, (now) =>
+		Effect.sleep(Duration.millis(Math.max(0, ended.at + Duration.toMillis(SETTLE) - now))),
 	);
+	return Stream.concat(got, Stream.fromEffect(Effect.as(wait, null)));
+};
 
-/** The record, followed through `Traces`: a `got` per read of it, and one `lost` if it cannot be read. */
+/**
+ * The record, followed through `Traces`: a `got` per read of it, until its job settled, and one
+ * `lost` if it cannot be read.
+ */
 const followRunner = (sub: FollowSub) =>
 	Stream.unwrap(
 		Effect.gen(function* () {
 			return (yield* Traces).watch(sub.deps.id);
 		}),
 	).pipe(
-		Stream.takeUntilEffect(settled),
-		Stream.map((t): TraceMsg => ({type: "got", trace: t})),
+		Stream.switchMap(gotThenSettled),
+		Stream.takeWhile((msg): msg is TraceMsg => msg !== null),
 		Stream.catchTag(
 			"TraceUnread",
 			(e): Stream.Stream<TraceMsg> => Stream.make({type: "lost", id: sub.deps.id, why: e.message}),
