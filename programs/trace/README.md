@@ -30,7 +30,7 @@ Model, as Elm keeps it, so a second window on the same run shows the same rows o
 type Read =
 	| {at: "waiting"}
 	| {at: "reading"; id: TraceId}
-	| {at: "read"; trace: JobTrace}
+	| {at: "read"; trace: JobTrace; now: number | null} // now: the last tick, while the job runs
 	| {at: "unread"; id: TraceId; why: string};
 
 type Model = {read: Read; open: RowKey[]; chosen: RowKey | null};
@@ -41,12 +41,23 @@ type TraceMsg =
 	| {type: "lost"; id: string; why: string} // it could not be read
 	| {type: "toggle"; row: string}        // open or close a row that groups others
 	| {type: "choose"; row: string | null} // show one row's detail; null closes it
+	| {type: "tick"; now: number}          // the time, while the job runs
 	;
 
 // No Cmd. The record changes while its job runs, so it is a Sub, as Elm's `Time.every` is:
 type FollowSub = Sub<"follow", {id: string}>;
 // followed(model): {id} while it reads or shows a record, null (no Sub) while waiting or unread
+// The time changes too, and that one is `Time.every`:
+type TickSub = Sub<"tick", {id: string}>;
+// ticking(model): {id} while the record read says `job.ended` is null, null once it says how it ended
 ```
+
+A job that has not ended says `running` in the head, and its time grows once a second (`TICK`). Its
+row runs to now, and the axis with it. With nothing in the record yet there is no axis and no bar:
+one line says so, as Linear's empty states do. An ended job shows its final time, with no tick.
+
+The job's row keeps the job's line as its name from start to end. It is tsh's row from the start,
+so `tsh` stays first in the legend and each program keeps its color when the line's span comes in.
 
 The runner reads the record through `Traces.watch`: at once, then after each write to it. A host's
 own records ring on each write; records behind the door are read again every second. It stops
@@ -98,8 +109,8 @@ job   seq --to 3 | tally        the tsh line's span
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id` (left out: its own line's job), inputs `toggle` (`{row}`), `choose` (`{row}`, or `{row: null}`), `quit` (`null`), `id` (a trace id, as `runs` sends) and `any` (anything else on a pipe, let go), and the `follow` runner over `Traces.watch`. Its view is `Shown`. |
-| | `src/machine.ts` | `trace`, the machine, and `followed`, the deps of its one Sub. Pure. |
+| `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flag `id` (left out: its own line's job), inputs `toggle` (`{row}`), `choose` (`{row}`, or `{row: null}`), `quit` (`null`), `id` (a trace id, as `runs` sends) and `any` (anything else on a pipe, let go), the `follow` runner over `Traces.watch`, and the `tick` runner. Its view is `Shown`. |
+| | `src/machine.ts` | `trace`, the machine, and `followed` and `ticking`, the deps of its two Subs. Pure. |
 | | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: the record as rows. Pure. |
 | | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail. `changesOf`: a JSON Patch of two states. Pure. |
 | `@tea-fabrika/trace/memory` | `src/memory.ts` | `memoryTraces(records)`: `Traces` over records in memory, for tests and shots. A watch reads once. |
@@ -121,6 +132,8 @@ The rows are a WAI-ARIA treegrid. One row holds the focus at a time.
   host's file storage. The steps and spans are there.
 - A home connected to a ledger server still keeps its records on the laptop.
 - trace open in its own line keeps that job running, so the follow stays live until trace quits.
+- A host that dies with a job running writes no end, so that record says `running`, and its time
+  grows, for as long as it is shown.
 - `runs --ticket 7 | trace` opens both windows side by side. A run picked whose job ran on
   another host, or whose record this laptop never kept, shows an empty record.
 - The record holds no ticket, so the trace draws no link to one. Opening the ticket program from

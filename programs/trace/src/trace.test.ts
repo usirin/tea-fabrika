@@ -257,7 +257,7 @@ describe("the trace program", () => {
 	it("shows the span detail of a run: its tags, its events, its record", () => {
 		const tally = keyOf(TALLY_TRACE, "tally");
 		const chosen = shownOf({
-			read: {at: "read", trace: TALLY_TRACE},
+			read: {at: "read", trace: TALLY_TRACE, now: null},
 			open: ["job"],
 			chosen: tally,
 		}).chosen;

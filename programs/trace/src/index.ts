@@ -17,6 +17,7 @@ import {
 	Model,
 	RowKey,
 	statusOf,
+	type TickSub,
 	type TraceMsg,
 	trace as traceMachine,
 } from "./machine.ts";
@@ -91,8 +92,25 @@ const followRunner = (sub: FollowSub) =>
 		),
 	);
 
-/** How the machine runs: its one Sub, on the `Traces` service. */
-export const traceOptions = {ctx: undefined, interpret: {}, subscribe: {follow: followRunner}};
+/**
+ * How often the time is told while a job runs: the window says it in whole seconds, so once a
+ * second is what it can show.
+ */
+export const TICK = Duration.seconds(1);
+
+/** The time, at once and then every `TICK`, as the tracker's clock tells it. */
+const tickRunner = (_sub: TickSub) =>
+	Stream.tick(TICK).pipe(
+		Stream.mapEffect(() => Clock.currentTimeMillis),
+		Stream.map((now): TraceMsg => ({type: "tick", now})),
+	);
+
+/** How the machine runs: following on the `Traces` service, and the clock. */
+export const traceOptions = {
+	ctx: undefined,
+	interpret: {},
+	subscribe: {follow: followRunner, tick: tickRunner},
+};
 
 /** The machine as the program declares it: kept nowhere, since the record keeps the trace. */
 export const traceKind = kind({
@@ -100,7 +118,7 @@ export const traceKind = kind({
 	state: Model,
 	parent: "main",
 	options: () => traceOptions,
-	drawing: () => ({name: "trace", steps: {follow: "follow the record"}}),
+	drawing: () => ({name: "trace", steps: {follow: "follow the record", tick: "tell the time"}}),
 	status: statusOf,
 });
 
@@ -151,6 +169,14 @@ export const trace = defineProgram({
 		}).pipe(Effect.scoped),
 });
 
-export {type FollowSub, followed, Model, Read, statusOf, type TraceMsg} from "./machine.ts";
+export {
+	type FollowSub,
+	followed,
+	Model,
+	Read,
+	statusOf,
+	type TickSub,
+	type TraceMsg,
+} from "./machine.ts";
 export {groupsOf, JOB, type Node, nodesOf, treeOf} from "./tree.ts";
 export {Change, changesOf, Detail, Row, Shown, shownOf} from "./view.ts";

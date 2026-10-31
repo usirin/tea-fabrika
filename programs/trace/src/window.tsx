@@ -1,6 +1,6 @@
 import type {WindowProps} from "@kampus/fabrika";
 import {Kbd} from "@manti-ui/react";
-import {Fragment, type KeyboardEvent} from "react";
+import {Fragment, type KeyboardEvent, type ReactNode} from "react";
 import type {trace} from "./index.ts";
 import type {Change, Detail, Row, Shown} from "./view.ts";
 
@@ -24,6 +24,9 @@ export const took = (ms: number): string => {
 	const s = Math.round(ms / 1000);
 	return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
+
+/** How long so far, in what one tick a second can show: `12 s`, `2m 05s`. */
+const soFar = (ms: number): string => (ms < 60_000 ? `${Math.floor(ms / 1000)} s` : took(ms));
 
 /** The ruler's ticks: a round step that gives at most six. */
 const ticksOf = (length: number): readonly number[] => {
@@ -92,7 +95,7 @@ function Bar({row, shown}: {readonly row: Row; readonly shown: Shown}) {
 				style={{insetInlineStart: `calc(${place(row.to, shown.length)} + 6px)`}}
 				aria-hidden="true"
 			>
-				{took(width)}
+				{row.kind === "job" && shown.running !== null ? soFar(width) : took(width)}
 			</span>
 		</>
 	);
@@ -303,6 +306,65 @@ function Opened({detail}: {readonly detail: Detail}) {
 	}
 }
 
+/**
+ * The head of a record shown: its line, then what is in it, the time and how the job stands, in
+ * that order from the first read to the last. `drawn`: false while there is nothing to count or
+ * to colour yet. The time is so far while the job runs, once a tick told it, and final after.
+ */
+function Head({view, drawn}: {readonly view: Shown; readonly drawn: boolean}) {
+	const {running} = view;
+	const time =
+		running === null ? took(view.length) : running.took === null ? "" : soFar(running.took);
+	const how = view.job?.ended?.how ?? "";
+	const parts: readonly ReactNode[] = [
+		...(drawn
+			? [
+					`${view.spans} ${view.spans === 1 ? "span" : "spans"}`,
+					`${view.steps} ${view.steps === 1 ? "step" : "steps"}`,
+				]
+			: []),
+		...(time === "" ? [] : [time]),
+		...(running === null ? [] : [<RunningWord key="running" />]),
+		...(how === "" ? [] : [how]),
+	];
+	return (
+		<div className="mapbar">
+			<span className="state">
+				<b className="mono">{view.title}</b>
+			</span>
+			<span className="faint">
+				{parts.map((part, i) => (
+					<Fragment key={String(i)}>
+						{i === 0 ? null : " · "}
+						{part}
+					</Fragment>
+				))}
+			</span>
+			{drawn ? (
+				<span className="legend" title="one colour per program">
+					{view.services.map((s) => (
+						<span key={s}>
+							<span className="swatch" style={{background: colourOf(view, s)}} aria-hidden="true" />
+							{s}
+						</span>
+					))}
+				</span>
+			) : null}
+			<span className="faint mono trace-id">trace {view.id}</span>
+		</div>
+	);
+}
+
+/** The word a running job carries, with the same quiet dot a live run has in the runs view. */
+function RunningWord() {
+	return (
+		<span className="trace-running">
+			<span className="dot run live" aria-hidden="true" />
+			running
+		</span>
+	);
+}
+
 /** The row elements of the grid, in order, for the keys to move between. */
 const rowsIn = (grid: Element | null): HTMLElement[] =>
 	grid === null ? [] : [...grid.querySelectorAll<HTMLElement>("[data-row]")];
@@ -387,28 +449,20 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 			</section>
 		);
 
+	// A job begun with nothing in it yet: the word and the time in the head and one plain line under
+	// it, as Linear's empty states are. An axis or a bar would be a finished run that never was.
+	if (view.running !== null && view.rows.every((r) => !r.opens))
+		return (
+			<section className="view trace-view" aria-label={`trace of ${view.title}`}>
+				<Head view={view} drawn={false} />
+				<p className="empty">Nothing in the record yet. Spans and steps show here as they come.</p>
+			</section>
+		);
+
 	const focusable = chosen ?? view.rows[0]?.key ?? null;
 	return (
 		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
-			<div className="mapbar">
-				<span className="state">
-					<b className="mono">{view.title}</b>
-				</span>
-				<span className="faint">
-					{view.spans} {view.spans === 1 ? "span" : "spans"} · {view.steps}{" "}
-					{view.steps === 1 ? "step" : "steps"} · {took(view.length)}
-					{view.job?.ended == null ? "" : ` · ${view.job.ended.how}`}
-				</span>
-				<span className="legend" title="one colour per program">
-					{view.services.map((s) => (
-						<span key={s}>
-							<span className="swatch" style={{background: colourOf(view, s)}} aria-hidden="true" />
-							{s}
-						</span>
-					))}
-				</span>
-				<span className="faint mono">trace {view.id}</span>
-			</div>
+			<Head view={view} drawn={true} />
 			{/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells. */}
 			<table className="wf" role="treegrid" aria-label="spans and steps" aria-readonly="true">
 				<colgroup>
