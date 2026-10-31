@@ -39,6 +39,11 @@ private memory, it is in the wrong place: write it here.
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
   with their reason; the first is tsh lines.
+- **Protocols first, and a browser is always a peer.** Name the protocol a
+  boundary speaks before its implementation. A protocol may not need what a
+  browser lacks: no Node, no Unix socket, no files, no WebSocket-level frames.
+  Ask of every design: could a browser tab be this peer? See
+  [`docs/direction/a-browser-is-always-a-peer.md`](./docs/direction/a-browser-is-always-a-peer.md).
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
