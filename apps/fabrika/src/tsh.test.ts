@@ -1,5 +1,13 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, openJobs, Shell, type Storage, streams} from "@kampus/fabrika";
+import {
+	type Entry,
+	Ledger,
+	memoryStorage,
+	openJobs,
+	Shell,
+	type Storage,
+	streams,
+} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
 import {fileStorage} from "@kampus/fabrika/storage/node";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
@@ -8,6 +16,8 @@ import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
 import {Effect, FileSystem, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
+import {deskWords} from "./desk/words.ts";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
 import type {TileJobs} from "./tile-jobs.ts";
@@ -35,6 +45,8 @@ const session = (
 		/** Shared with another host, as two tiles share it. */
 		readonly shared?: SharedHistory;
 		readonly ledger?: Ledger["Service"];
+		/** The desk's words, as a tile's tsh lists them (desk/words.ts); none by default. */
+		readonly words?: readonly Entry[];
 	} = {},
 ) =>
 	Effect.gen(function* () {
@@ -64,6 +76,7 @@ const session = (
 			jobs: yield* openJobs(opts.jobs ?? memoryStorage()),
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
+			words: opts.words ?? [],
 		}).pipe(
 			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
 			Effect.provideService(Author, {kind: "user", id: "owner"}),
@@ -753,5 +766,54 @@ describe("what is kept for the next start", () => {
 		// Then it ends on its own, so it leaves the table: `jobs` lists nothing.
 		expect(seen.rows.slice(-2)).toEqual(["tsh$ jobs", "tsh$"]);
 		expect(seen.rows).toContain("2");
+	});
+});
+
+describe("the desk's words", () => {
+	it("runs each key's word, which tells the desk what that key does", async () => {
+		const said: Does[] = [];
+		const words = [...BINDINGS.map((b) => wordOf(b.does)), "focus --to t3", "workspace --to 12"];
+		await go(
+			Effect.gen(function* () {
+				const s = yield* session({
+					words: deskWords((does) => {
+						said.push(does);
+						return null;
+					}),
+				});
+				for (const [i, word] of words.entries()) {
+					s.type(`${word}\r`);
+					yield* s.prompts(i + 2);
+				}
+			}).pipe(Effect.scoped),
+		);
+		// C-b J's word is tsh's own `jobs`, which prints the list in the tile and tells the desk nothing.
+		const toDesk = BINDINGS.filter((b) => wordOf(b.does) !== "jobs");
+		expect(toDesk).toHaveLength(BINDINGS.length - 1);
+		expect(said).toEqual([
+			...toDesk.map((b) => b.does),
+			{kind: "go", tile: "t3"},
+			{kind: "pick", at: 12},
+		]);
+	});
+
+	it("prints why the desk did nothing, and tells it nothing of a word it cannot read", async () => {
+		const said: Does[] = [];
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session({
+					words: deskWords((does) => {
+						said.push(does);
+						return does.kind === "go" ? `no tile ${does.tile}` : null;
+					}),
+				});
+				s.type("focus --to t9\r");
+				yield* s.prompts(2);
+				s.type("focus --to sideways\r");
+				return yield* s.prompts(3);
+			}).pipe(Effect.scoped),
+		);
+		expect(rows).toContain("tsh: focus failed: no tile t9");
+		expect(said).toEqual([{kind: "go", tile: "t9"}]);
 	});
 });

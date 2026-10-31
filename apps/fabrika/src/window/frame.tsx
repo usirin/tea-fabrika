@@ -1,23 +1,25 @@
 import {type ReactNode, useCallback, useEffect, useLayoutEffect, useState} from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
-import type {Group} from "../desk/keys.ts";
-import type {FromPage, LinkNow, ToApp} from "../messages.ts";
+import {type Group, wordOf} from "../desk/keys.ts";
+import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
 import {
+	agentsWord,
 	asksSections,
 	asksWord,
 	type Bound,
 	bindingWord,
+	clockWord,
 	commandsOf,
 	type Frame,
 	type FrameMsg,
 	hereWord,
+	holdsWord,
 	hostWord,
 	INFO,
 	type JobItem,
 	jobItem,
 	jobsList,
-	ledgerWord,
 	lineIn,
 	matching,
 	nowhereNote,
@@ -26,16 +28,17 @@ import {
 	prefixLine,
 	questionWord,
 	type Shapes,
+	syncWord,
 	type TicketsShown,
 	tileWord,
 	workspaceName,
 } from "./frame.ts";
-import {type Cap, capsOf, type Hint, type Row, sentence} from "./pop.ts";
-import {type Empty, Menu, Palette, Panel, useTip} from "./pop.tsx";
+import {type Cap, capsOf, type Hint, type Row, sentence, type Words} from "./pop.ts";
+import {type Empty, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
-// them out. Every item is a button with a tooltip (its name and keys, pop.tsx) and, in info mode,
+// them out. Every item is a button with a tooltip (its name, keys and tsh word, pop.tsx) and, in info mode,
 // a line of plain words (`data-info`). No item has a background: plain words, ` · ` between them.
 // The bars stay monospace, as a terminal's status line; what opens over the desk is drawn by
 // pop.tsx, in the program windows' own font (docs/direction/popovers.md).
@@ -53,6 +56,8 @@ export interface FrameProps {
 	readonly desk: Open | null;
 	readonly frame: Frame;
 	readonly asks: AsksNow | null;
+	/** The host as it says of itself: its process, its ledger, its agents. `null` until it says. */
+	readonly host: HostNow | null;
 	readonly link: LinkNow;
 	/** A desk came once: a link down after it is the host down, not a first connect. */
 	readonly attachedOnce: boolean;
@@ -83,6 +88,10 @@ const capsFor = (props: FrameProps, name: string): readonly Cap[] => {
 	return bound === undefined ? [] : capsOf(props.prefix, bound.key);
 };
 
+/** The tsh word of a name's binding, or `null`. */
+const wordFor = (props: FrameProps, name: string): string | null =>
+	props.table.find((b) => b.name === name)?.tsh ?? null;
+
 /** No tooltip shows while something lies over the desk, or while info mode explains the item. */
 const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info;
 
@@ -99,6 +108,8 @@ function Item(props: {
 	/** The name is a typed word, a program's: its tooltip draws it in mono. */
 	readonly typed?: boolean;
 	readonly caps: readonly Cap[];
+	/** The tsh word that does the same, typed in a tile; `null` for Try again, which no word does. */
+	readonly word: string | null;
 	readonly quiet: boolean;
 	readonly info: string;
 	readonly className?: string | undefined;
@@ -112,6 +123,7 @@ function Item(props: {
 			name: props.typed === true ? props.name : sentence(props.name),
 			typed: props.typed === true,
 			caps: props.caps,
+			word: props.word,
 		},
 		props.quiet,
 	);
@@ -136,15 +148,24 @@ function Item(props: {
 	);
 }
 
+/** The host's own words are its own: while the app is not attached, they may be old, and are not shown. */
+const onHost = (link: LinkNow): boolean => link.kind === "up" || link.kind === "build";
+
+/** The host as it said last, while the app is on it; else `null`. */
+const reachedOf = (props: FrameProps): HostNow | null =>
+	props.host !== null && onHost(props.link) ? props.host : null;
+
 /**
- * The top bar: the whole desk. Workspaces, the line, then what needs you, and a part of the app
- * only when it is broken or old.
+ * The top bar: the whole desk. Workspaces, the line, then what needs you, the agents, the sync
+ * and the host, each a gray word but where it is broken.
  */
 export function TopBar(props: FrameProps): ReactNode {
 	const {desk, asks, step} = props;
 	const ws = desk === null ? null : activeOf(desk);
 	const line = ws === null ? [] : lineIn(ws);
-	const ledger = asks === null ? null : ledgerWord(asks);
+	const reached = reachedOf(props);
+	const agents = reached === null ? null : agentsWord(reached);
+	const sync = asks === null || reached === null ? null : syncWord(asks, reached.ledger);
 	const host = hostWord(props.link, props.attachedOnce);
 	const count = asks?.asks.length ?? 0;
 	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
@@ -165,6 +186,7 @@ export function TopBar(props: FrameProps): ReactNode {
 							key={w.id}
 							name={`workspace ${i + 1}`}
 							caps={i < 9 ? capsOf(props.prefix, String(i + 1)) : []}
+							word={wordOf({kind: "pick", at: i + 1})}
 							quiet={quiet}
 							info={INFO.workspace}
 							current={w.id === desk.active}
@@ -188,6 +210,7 @@ export function TopBar(props: FrameProps): ReactNode {
 							name={s.program}
 							typed
 							caps={[]}
+							word={wordOf({kind: "go", tile: s.tile})}
 							quiet={quiet}
 							info={INFO.segment}
 							className={`seg${s.focused ? " on" : ""}`}
@@ -206,6 +229,7 @@ export function TopBar(props: FrameProps): ReactNode {
 					<Item
 						name="asks"
 						caps={capsFor(props, "asks")}
+						word={wordFor(props, "asks")}
 						quiet={quiet}
 						info={INFO.asks}
 						className={count > 0 ? "accent" : undefined}
@@ -216,44 +240,61 @@ export function TopBar(props: FrameProps): ReactNode {
 						{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
 					</Item>
 				)}
-				{ledger !== null && (
+				{agents !== null && (
 					<>
 						<Sep />
 						<Item
-							name="ledger"
-							caps={[]}
+							name="agents"
+							caps={capsFor(props, "agents")}
+							word={wordFor(props, "agents")}
 							quiet={quiet}
-							info={INFO.ledger}
-							className="broken"
-							opens={lines("ledger")}
-							onClick={() => step({type: "item", what: "ledger"})}
+							info={INFO.agents}
+							opens={lines("agents")}
+							onClick={() => step({type: "item", what: "agents"})}
 						>
-							{ledger.word}
+							{agents}
 						</Item>
 					</>
 				)}
-				{host !== null && <Sep />}
+				{sync !== null && (
+					<>
+						<Sep />
+						<Item
+							name="sync"
+							caps={capsFor(props, "sync")}
+							word={wordFor(props, "sync")}
+							quiet={quiet}
+							info={INFO.sync}
+							className={sync.broken ? "broken" : undefined}
+							opens={lines("sync")}
+							onClick={() => step({type: "item", what: "sync"})}
+						>
+							{sync.word}
+						</Item>
+					</>
+				)}
+				<Sep />
 				{/* Said as a status, never an alert: a screen reader hears the host go and come back. */}
 				<span role="status" aria-label="the link to the host">
-					{host !== null && (
-						<Item
-							name="host"
-							caps={[]}
-							quiet={quiet}
-							info={INFO.host}
-							className={host.broken ? "broken" : undefined}
-							opens={lines("host")}
-							onClick={() => step({type: "item", what: "host"})}
-						>
-							{host.word}
-						</Item>
-					)}
+					<Item
+						name="host"
+						caps={capsFor(props, "host")}
+						word={wordFor(props, "host")}
+						quiet={quiet}
+						info={INFO.host}
+						className={host.broken ? "broken" : undefined}
+						opens={lines("host")}
+						onClick={() => step({type: "item", what: "host"})}
+					>
+						{host.word}
+					</Item>
 					{props.link.kind === "stopped" && (
 						<>
 							<Sep />
 							<Item
 								name="try again"
 								caps={[]}
+								word={null}
 								quiet={quiet}
 								info={INFO.again}
 								onClick={() => props.toApp({type: "again"})}
@@ -409,32 +450,141 @@ function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
 const JOBS_STOP =
 	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
 
-/** A few lines on one item of the top bar, under it: the ledger or the host. */
+/** Each item's panel, as a screen reader names it. */
+const LINES_LABEL: Readonly<Record<Part, string>> = {
+	agents: "The agents",
+	sync: "The sync",
+	host: "The host",
+};
+
+/** A few lines on one item of the top bar, under it: the agents, the sync or the host. */
 function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
-	const {asks, link, step} = props;
+	const {link, step} = props;
 	const close = useCallback(() => step({type: "close"}), [step]);
+	const host = reachedOf(props);
+	const now = Date.now();
 	const body = (): ReactNode => {
-		switch (props.what) {
-			case "ledger":
-				return asks === null ? null : asks.reach === "failed" ? (
-					<>
-						<h2 className="pop-title broken">The ledger is unreachable</h2>
-						{asks.why !== null && <code className="pop-why">{asks.why}</code>}
-						<p className="pop-text">
-							The asks count is the last one read. It reads again every second.
-						</p>
-					</>
-				) : (
-					<h2 className="pop-title">The ledger answers</h2>
-				);
-			case "host":
-				return <HostLines link={link} first={!props.attachedOnce} toApp={props.toApp} />;
-		}
+		if (props.what === "host")
+			return (
+				<HostLines
+					link={link}
+					first={!props.attachedOnce}
+					toApp={props.toApp}
+					host={host}
+					desk={props.desk}
+					now={now}
+				/>
+			);
+		if (host === null)
+			return (
+				<>
+					<h2 className="pop-title">The app is not on the host</h2>
+					<p className="pop-text">Once it is back, this says what the host says.</p>
+				</>
+			);
+		return props.what === "agents" ? (
+			<AgentsLines host={host} now={now} />
+		) : (
+			<SyncLines host={host} asks={props.asks} />
+		);
 	};
 	return (
-		<Panel id={POP.lines} label={props.what === "host" ? "The host" : "The ledger"} onClose={close}>
+		<Panel id={POP.lines} label={LINES_LABEL[props.what]} onClose={close}>
 			{body()}
 		</Panel>
+	);
+}
+
+/** How an agent attaches, said under its list, its command typed. */
+const ATTACH: Words = [
+	{text: "An agent attaches with ", typed: false},
+	{text: "fabrika mcp --as claude", typed: true},
+	{
+		text: ", under its own name. It drives the app's programs as tools; it never answers an ask.",
+		typed: false,
+	},
+];
+
+/** Each agent attached to the host now, a row each: its name, and since when. */
+function AgentsLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
+	const {agents} = props.host;
+	if (agents === null)
+		return (
+			<>
+				<h2 className="pop-title">No agents attach here</h2>
+				<p className="pop-text">
+					This home reads a ledger server, and its host has no agents' socket. Agents attach only on
+					a home that keeps its own ledger.
+				</p>
+			</>
+		);
+	return (
+		<>
+			<h2 className="pop-title">
+				{agents.length === 0
+					? "No agent is attached"
+					: `${agents.length} agent${agents.length === 1 ? " is" : "s are"} attached`}
+			</h2>
+			<Lines
+				rows={agents.map((a, i) => ({
+					id: `${a.name}-${a.since}-${i}`,
+					icon: "running",
+					title: sentence(a.name),
+					sub: null,
+					side: `since ${clockWord(a.since, props.now)}`,
+					second: null,
+				}))}
+			/>
+			<p className="pop-text">
+				<WordsOf words={ATTACH} />
+			</p>
+		</>
+	);
+}
+
+/** Which ledger the home reads, and how its last read went. */
+function SyncLines(props: {readonly host: HostNow; readonly asks: AsksNow | null}): ReactNode {
+	const {ledger} = props.host;
+	const {asks} = props;
+	const failed = asks?.reach === "failed";
+	const why = failed && (
+		<>
+			{asks.why !== null && <code className="pop-why">{asks.why}</code>}
+			<p className="pop-text">The asks count is the last one read. It reads again every second.</p>
+		</>
+	);
+	if (ledger.kind === "own")
+		return (
+			<>
+				<h2 className={`pop-title${failed ? " broken" : ""}`}>
+					{failed ? "The ledger is unreachable" : "This home keeps its own ledger"}
+				</h2>
+				<p className="pop-text">
+					<code>ledger.sqlite</code>, in the app's home. Nothing to sync: every fact is written
+					here.
+				</p>
+				{why}
+			</>
+		);
+	const word = asks === null ? null : syncWord(asks, ledger);
+	return (
+		<>
+			<h2 className={`pop-title${failed ? " broken" : ""}`}>
+				{failed
+					? "The ledger server is unreachable"
+					: word?.word === "synced"
+						? "Synced with the ledger server"
+						: "Syncing with the ledger server"}
+			</h2>
+			<p className="pop-text">
+				<code>{ledger.address}</code>, as {ledger.login}
+			</p>
+			{why || (
+				<p className="pop-text">
+					Every write goes straight to the server, so none waits here. It reads again every second.
+				</p>
+			)}
+		</>
 	);
 }
 
@@ -447,19 +597,44 @@ function Do(props: {readonly onClick: () => void; readonly children: ReactNode})
 	);
 }
 
-/** The host, in a few lines: what the old corner notes said, now under its item. */
+/** The host, in a few lines: its process when it is up; else what the old corner notes said. */
 function HostLines(props: {
 	readonly link: LinkNow;
 	readonly first: boolean;
 	readonly toApp: (m: ToApp) => void;
+	readonly host: HostNow | null;
+	readonly desk: Open | null;
+	readonly now: number;
 }): ReactNode {
-	const {link, first} = props;
+	const {link, first, host} = props;
 	const restart = (
 		<Do onClick={() => props.toApp({type: "restart"})}>Stop the old host and start this one</Do>
 	);
 	switch (link.kind) {
 		case "up":
-			return <h2 className="pop-title">The host is up</h2>;
+			return (
+				<>
+					<h2 className="pop-title">The host is up</h2>
+					{host !== null && (
+						<p className="pop-text">
+							Process {host.pid}, since {clockWord(host.since, props.now)},{" "}
+							{host.build === null ? (
+								"no build named"
+							) : (
+								<>
+									build <code>{host.build}</code>
+								</>
+							)}
+							.
+						</p>
+					)}
+					{props.desk !== null && <p className="pop-text">{holdsWord(props.desk)}</p>}
+					<p className="pop-text">
+						It runs every tile and job. Quitting the app leaves it running; the next start attaches
+						to it.
+					</p>
+				</>
+			);
 		case "build":
 			return (
 				<>
@@ -582,6 +757,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 				<Item
 					name="info"
 					caps={capsFor(props, "info")}
+					word={wordFor(props, "info")}
 					quiet={quiet}
 					info={INFO.info}
 					onClick={() => props.step({type: "show", what: "info"})}
@@ -592,6 +768,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 				<Item
 					name="keys"
 					caps={capsFor(props, "keys")}
+					word={wordFor(props, "keys")}
 					quiet={quiet}
 					info={INFO.keys}
 					opens={{
@@ -640,6 +817,7 @@ function JobWord(props: FrameProps & {readonly job: JobItem}): ReactNode {
 		<Item
 			name="jobs"
 			caps={capsFor(props, "jobs")}
+			word={wordFor(props, "jobs")}
 			quiet={quietOf(frame)}
 			info={INFO.job}
 			className="job"
@@ -702,7 +880,7 @@ function CommandPalette(props: FrameProps): ReactNode {
 				title: GROUP_TITLE[g],
 				options: shown
 					.filter((c) => c.group === g)
-					.map((c) => ({id: c.name, name: c.name, caps: c.caps})),
+					.map((c) => ({id: c.name, name: c.name, word: c.tsh, caps: c.caps})),
 			}))}
 			at={at}
 			count={countWord(shown.length, keys)}

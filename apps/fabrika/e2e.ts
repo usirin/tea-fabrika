@@ -868,25 +868,30 @@ const noInterrupts = (app: ElectronApplication) =>
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
 
-/** Where the window says the link: the host's word in the top bar, a status, empty while up. */
+/** Where the window says the link: the host's word in the top bar, a status. */
 const LINK = '[role="status"][aria-label="the link to the host"]';
+/** What the host's word says while the host is up. */
+const UP = "host ok";
 /**
  * From now on, note each change in what the window says of the link: a word may be up for a
- * moment only. "" is the host up.
+ * moment only.
  */
 const watchNotes = (page: Page) =>
-	page.evaluate((link) => {
-		const said: string[] = [""];
-		Object.assign(globalThis, {said});
-		new MutationObserver(() => {
-			const text = document.querySelector(link)?.textContent ?? "";
-			if (said.at(-1) !== text) said.push(text);
-		}).observe(document.body, {childList: true, subtree: true, characterData: true});
-	}, LINK);
-/** The words the window said of the link since `watchNotes`, in order, with no "". */
+	page.evaluate(
+		({link, up}) => {
+			const said: string[] = [up];
+			Object.assign(globalThis, {said});
+			new MutationObserver(() => {
+				const text = document.querySelector(link)?.textContent ?? "";
+				if (said.at(-1) !== text) said.push(text);
+			}).observe(document.body, {childList: true, subtree: true, characterData: true});
+		},
+		{link: LINK, up: UP},
+	);
+/** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
-	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
-/** What the window says of the link now, or "" for the host up. */
+	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
+/** What the window says of the link now, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
 		.locator(LINK)
@@ -909,12 +914,12 @@ const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: nothing said of the host, and nothing dimmed. */
+/** The desk is back: the top bar says host ok, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
 		"the desk back, the host up",
 		async () => [await noteNow(page), await page.locator(".desk.lost").count()] as const,
-		([word, lost]) => word === "" && lost === 0,
+		([word, lost]) => word === UP && lost === 0,
 	);
 
 /**

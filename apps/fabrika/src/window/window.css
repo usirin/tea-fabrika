@@ -1041,6 +1041,13 @@ kbd {
 	color: var(--text-muted);
 }
 
+/* Rows to read in a panel (the agents attached): a menu's rows, with no stop to act on. */
+.pop-lines {
+	margin: 0 -8px 8px;
+	padding: 0;
+	list-style: none;
+}
+
 .pop-why {
 	display: block;
 	margin: 0 0 8px;
@@ -1155,25 +1162,40 @@ kbd {
 	padding: 0 8px;
 }
 
+/* A command: its name over its tsh word (two lines, as a menu's row), its keys at the right. */
 .pop-cmd {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	height: 34px;
+	height: var(--row-2h);
 	padding: 0 10px;
 	border-radius: var(--r);
 	color: var(--text-secondary);
 	cursor: default;
 }
 
-.pop-cmd .name {
+.pop-cmd .text {
+	display: grid;
 	flex: 1;
+	min-width: 0;
+}
+
+.pop-cmd .word {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .pop-cmd mark {
 	background: none;
 	color: var(--text-primary);
 	font-weight: 600;
+}
+
+.pop-cmd .word mark {
+	color: var(--text-secondary);
 }
 
 .pop-cmd.on {
@@ -1215,6 +1237,11 @@ kbd {
 
 .tip code {
 	font-family: var(--mono);
+}
+
+/* The tsh word that does the same, quieter than the name. */
+.tip .word {
+	color: var(--text-muted);
 }
 
 /* Centred while it fits; in a short tile it starts at the top, so its scroll reaches all of it. */

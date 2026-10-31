@@ -9,30 +9,34 @@ import {
 	deskMachine,
 	type Open,
 } from "../desk/desk.ts";
-import {BINDINGS, PREFIX} from "../desk/keys.ts";
+import {BINDINGS, PREFIX, wordOf} from "../desk/keys.ts";
+import type {HostNow} from "../messages.ts";
 import type {JobEnded} from "../tile-jobs.ts";
 import {
+	agentsWord,
 	agoWord,
 	asksSections,
 	asksWord,
+	clockWord,
 	commandsOf,
 	ENDED_SHOWN_MS,
 	FRAME,
 	type Frame,
 	frameUpdate,
 	hereWord,
+	holdsWord,
 	hostWord,
 	jobItem,
 	jobsList,
 	keyGoesTo,
 	keyWord,
-	ledgerWord,
 	lineIn,
 	matching,
 	nowhereNote,
 	opensOf,
 	prefixLine,
 	questionWord,
+	syncWord,
 	ticketsShown,
 	tileOfTicket,
 	tookWord,
@@ -47,7 +51,12 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
 };
-const TABLE = BINDINGS.map((b) => ({key: b.key, repeats: b.repeats, name: b.name}));
+const TABLE = BINDINGS.map((b) => ({
+	key: b.key,
+	repeats: b.repeats,
+	name: b.name,
+	tsh: wordOf(b.does),
+}));
 const SHAPES = new Map([
 	["tracker", {takes: [], sends: ["ticket"]}],
 	["ticket", {takes: ["ticket"], sends: ["ticket"]}],
@@ -108,11 +117,25 @@ describe("the frame's keys", () => {
 			group: "tile",
 			key: "C-b z",
 			caps: ["⌃B", "Z"],
+			tsh: "zoom",
 			runs: "z",
 		});
 		expect(commands.find((c) => c.name === "new")?.caps).toEqual(["⌃B", "⇧N"]);
+		expect(commands.find((c) => c.name === "agents")).toEqual({
+			name: "agents",
+			group: "window",
+			key: "C-b A",
+			caps: ["⌃B", "⇧A"],
+			tsh: "agents",
+			runs: "A",
+		});
 		expect(matching(commands, "zo").map((c) => c.name)).toEqual(["zoom"]);
 		expect(matching(commands, "workspace 2").map((c) => c.name)).toEqual(["workspace 2"]);
+		// The tsh word finds it too: `--to down` is split down's and focus down's.
+		expect(matching(commands, "--to down").map((c) => c.name)).toEqual([
+			"split down",
+			"focus down",
+		]);
 	});
 
 	it("groups the commands as the palette shows them: tile, focus, workspace, then the window's own", () => {
@@ -137,9 +160,16 @@ describe("the frame's keys", () => {
 			"keys",
 			"info",
 			"bars",
+			"agents",
+			"sync",
+			"host",
 		]);
 		// A key this page's table does not know, from a newer host, is still listed, with the window's own.
-		const newer = commandsOf(PREFIX, [...TABLE, {key: "w", repeats: false, name: "pick"}], 1);
+		const newer = commandsOf(
+			PREFIX,
+			[...TABLE, {key: "w", repeats: false, name: "pick", tsh: "pick"}],
+			1,
+		);
 		expect(newer.at(-1)).toMatchObject({name: "pick", group: "window", caps: ["⌃B", "W"]});
 	});
 
@@ -176,17 +206,51 @@ describe("the top bar", () => {
 		expect(asksWord(3)).toBe("3 ask you");
 	});
 
-	it("says nothing of a ledger that answers, and a failed read as broken", () => {
-		expect(ledgerWord(now())).toBeNull();
-		expect(ledgerWord(now({reach: "reading"}))).toBeNull();
-		expect(ledgerWord(now({reach: "failed", why: "refused"}))).toEqual({
-			word: "ledger unreachable",
-			broken: true,
+	it("counts the agents attached, and says nothing on a home where none can attach", () => {
+		const host = (agents: HostNow["agents"]): HostNow => ({
+			pid: 4242,
+			since: 0,
+			build: null,
+			ledger: {kind: "own"},
+			agents,
 		});
+		expect(agentsWord(host([]))).toBe("no agents");
+		expect(agentsWord(host(null))).toBeNull();
+		expect(agentsWord(host([{name: "claude", since: 0}]))).toBe("1 agent");
+		expect(
+			agentsWord(
+				host([
+					{name: "claude", since: 0},
+					{name: "codex", since: 1},
+				]),
+			),
+		).toBe("2 agents");
 	});
 
-	it("says nothing of a host that is up, and the rest in a word, broken only when down", () => {
-		expect(hostWord({kind: "up"}, true)).toBeNull();
+	it("says a server's ledger synced once read, its own file nothing, and a failed read broken", () => {
+		const server = {kind: "server", address: "https://ledger.example/w1", login: "owner"} as const;
+		expect(syncWord(now({reach: "reading"}), server)).toEqual({word: "syncing", broken: false});
+		expect(syncWord(now(), server)).toEqual({word: "synced", broken: false});
+		expect(syncWord(now(), {kind: "own"})).toBeNull();
+		const failed = {word: "ledger unreachable", broken: true};
+		expect(syncWord(now({reach: "failed", why: "refused"}), server)).toEqual(failed);
+		expect(syncWord(now({reach: "failed", why: "locked"}), {kind: "own"})).toEqual(failed);
+	});
+
+	it("writes a time as a clock today and with its day before, and what the host holds", () => {
+		const at = new Date(2026, 9, 30, 9, 5).getTime();
+		expect(clockWord(at, new Date(2026, 9, 30, 17, 0).getTime())).toBe("09:05");
+		expect(clockWord(at, new Date(2026, 9, 31, 8, 0).getTime())).toBe("Oct 30, 09:05");
+		expect(holdsWord(fold([]))).toBe("1 tile · 0 jobs running");
+		expect(holdsWord(lined)).toBe("3 tiles · 0 jobs running");
+		const two = [1, 2].map((n) => ({n, text: "sleep --ms 9000", since: 0, foreground: false}));
+		expect(holdsWord(fold([{type: "jobs", tile: "t1", jobs: {running: two, ended: null}}]))).toBe(
+			"1 tile · 2 jobs running",
+		);
+	});
+
+	it("says host ok of a host that is up, and the rest in a word, broken only when down", () => {
+		expect(hostWord({kind: "up"}, true)).toEqual({word: "host ok", broken: false});
 		expect(hostWord({kind: "build", theirs: "a1", ours: "b2"}, true)).toEqual({
 			word: "host older",
 			broken: false,
@@ -199,7 +263,7 @@ describe("the top bar", () => {
 			word: "connecting",
 			broken: false,
 		});
-		expect(hostWord({kind: "stopped", why: "gone"}, true)?.word).toBe("host down");
+		expect(hostWord({kind: "stopped", why: "gone"}, true).word).toBe("host down");
 	});
 });
 
@@ -539,5 +603,17 @@ describe("the frame's own state", () => {
 		const bare = frameUpdate(FRAME, {type: "show", what: "bars"});
 		expect(bare.bare).toBe(true);
 		expect(frameUpdate(bare, {type: "show", what: "bars"}).bare).toBe(false);
+	});
+
+	it("opens an item's lines by its key or a click, and the same again closes them", () => {
+		const agents = frameUpdate(FRAME, {type: "show", what: "agents"});
+		expect(agents.over).toEqual({kind: "item", what: "agents"});
+		const host = frameUpdate(agents, {type: "item", what: "host"});
+		expect(host.over).toEqual({kind: "item", what: "host"});
+		expect(frameUpdate(host, {type: "show", what: "host"}).over).toEqual({kind: "none"});
+		expect(frameUpdate(FRAME, {type: "show", what: "sync"}).over).toEqual({
+			kind: "item",
+			what: "sync",
+		});
 	});
 });

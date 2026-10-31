@@ -2,7 +2,9 @@ import {type JobsOnHost, Ledger} from "@kampus/fabrika";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Exit, Scope} from "effect";
 import type {DeskMsg} from "./desk/desk.ts";
+import type {Does} from "./desk/keys.ts";
 import type {TileId} from "./desk/layout/index.ts";
+import {deskWords} from "./desk/words.ts";
 import type {SharedHistory} from "./editor/history.ts";
 import type {ToTerminal} from "./messages.ts";
 import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from "./tsh.ts";
@@ -21,6 +23,8 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //   // t1 runs `tracker | ticket`: each view gets its port as it begins, and once both have, the
 //   //                            desk is told the line: {type: "covered", tile: "t1", runs: [tracker, ticket]}
 //   // t1 runs `tally &`:         nothing is shown: a job in the background, as in bash
+//   // t1 runs `zoom`:            a desk word (desk/words.ts): edge.said("t1", {kind: "zoom"}),
+//   //                            and what it answers, if not null, is why the word failed
 //   yield* tiles.close("t1")      t1's tsh and its programs get the end of their inputs; nothing stops
 //   // they end, then tsh does:   the desk is told {type: "ended", tile: "t1"}
 //   yield* tiles.stop("t1")       what still runs in t1 stops, its port goes, and the jobs t1
@@ -49,6 +53,11 @@ export type TileNews = Extract<DeskMsg, {readonly type: "covered" | "over" | "jo
 export interface Edge {
 	/** Tell the desk, beside the tiles in the host. */
 	readonly tell: (m: TileNews) => void;
+	/**
+	 * A desk word typed in this tile's tsh (desk/words.ts): the desk does it from this tile, or
+	 * answers why it cannot.
+	 */
+	readonly said: (tile: TileId, does: Does) => string | null;
 	/** A tile's terminal: give the page a port for it, named `tile:<id>`. A second call is a fresh port. */
 	readonly terminal: (tile: TileId, screen: Screen<ToTerminal>) => void;
 	/** A run's view: give the page a port for it, named `run:<id>`. */
@@ -138,6 +147,7 @@ export const startTiles = (options: {
 					tile,
 					jobs,
 					history,
+					words: deskWords((does) => edge.said(tile, does)),
 					runs: {
 						began: (run, program, placed, screen) => {
 							const one: Live = {tile, program, placed, screen};

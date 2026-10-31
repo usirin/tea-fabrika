@@ -281,16 +281,22 @@ const ownIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): readonly Sh
 const runningIn = (table: Shell.Jobs | null, mine: ReadonlySet<string>): number =>
 	ownIn(table, mine).filter((job) => job.state === "running").length;
 
-/** Start a tile's tsh: it shows the host's `jobs`, and the line editor keeps its history in `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its `PullRequests`. */
+/**
+ * Start a tile's tsh: it shows the host's `jobs`, and the line editor keeps its history in
+ * `history`. The tracker writes on the `Ledger` it is given, and reads pull requests from its
+ * `PullRequests`. `words` are the desk's commands as this tile's own programs (desk/words.ts):
+ * listed here and nowhere else, so only the person at this tile types them.
+ */
 export const startTsh = (options: {
 	/** The tile this tsh is in: the owner of every job it begins or attaches, in the host's table. */
 	readonly tile: TileId;
 	readonly jobs: JobsOnHost;
 	readonly history: SharedHistory;
 	readonly runs: Runs;
+	readonly words: readonly Entry[];
 }) =>
 	Effect.gen(function* () {
-		const {tile, history, runs} = options;
+		const {tile, history, runs, words} = options;
 		const jobs: JobsOnHost = {...options.jobs, owner: tile};
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
@@ -443,7 +449,7 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			tshList(appPrograms(ledger, author, pullRequests)).map((entry) =>
+			[...tshList(appPrograms(ledger, author, pullRequests)), ...words].map((entry) =>
 				seenBy(entry, {
 					seen,
 					called: (run) => {

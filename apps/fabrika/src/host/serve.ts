@@ -21,14 +21,21 @@ import {
 	type DeskCmd,
 	type DeskMsg,
 	deskMachine,
+	refusedOf,
 	restore,
 	type Saved,
 	takenNow,
 } from "../desk/desk.ts";
-import {BINDINGS, PREFIX} from "../desk/keys.ts";
+import {BINDINGS, PREFIX, wordOf} from "../desk/keys.ts";
 import type {SharedHistory} from "../editor/history.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
-import {type FromPage, readFromPage, type ToPage} from "../messages.ts";
+import {
+	type AgentOn,
+	type FromPage,
+	type LedgerLink,
+	readFromPage,
+	type ToPage,
+} from "../messages.ts";
 import {startTiles} from "../tiles.ts";
 import {appPrograms, type Screen, tshList} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
@@ -45,12 +52,18 @@ import {serveAgents} from "./agents.ts";
 //
 //   app   hello {version: 1}               link.ts: the handshake; another version is refused. The
 //                                          host's hello back names its build, for the app to compare
-//   app   page                             a page loaded: it is sent the Ctrl-B table, the desk,
-//                                          then a port for each tile's terminal and each run shown
+//   app   page                             a page loaded: it is sent the Ctrl-B table, the host's
+//                                          own state, the desk, then a port for each tile's
+//                                          terminal and each run shown
 //   app   on {port: "desk", m: {type: "press", id: 0, key: "<c-b>"}}
 //   host  to {port: "desk", m: {type: "desk", desk, takes: {all: true, keys: []}}}   to every page
 //   host  to {port: "desk", m: {type: "answer", id: 0, took: true}}                  to that page
 //   app   on {port: "tile:t1", m: {type: "keys", data: "l"}}                         to t1's tsh
+//   t1    zoom                             a desk word typed in t1's tsh (desk/words.ts): the desk
+//                                          steps as on C-b z from t1, and every page is shown it
+//   host  to {port: "desk", m: {type: "host", now: {pid, since, build, ledger, agents}}}
+//                                          to every page, as an agent attaches on the MCP socket
+//                                          or goes: the top bar's agents, sync and host
 //   app   away                             the window closed: nothing more is shown to it
 //
 // Every page attached is shown the same desk, and each tile's screen on all of them, as every
@@ -85,11 +98,11 @@ interface Client {
 	readonly shown: Map<string, () => void>;
 }
 
-/** What the page is sent first: the desk's Ctrl-B table, each key with its name. */
+/** What the page is sent first: the desk's Ctrl-B table, each key with its name and its tsh word. */
 const KEYS: ToPage = {
 	type: "keys",
 	prefix: PREFIX,
-	table: BINDINGS.map((b) => ({key: b.key, repeats: b.repeats, name: b.name})),
+	table: BINDINGS.map((b) => ({key: b.key, repeats: b.repeats, name: b.name, tsh: wordOf(b.does)})),
 };
 
 /**
@@ -125,6 +138,10 @@ export const serve = (options: {
 	readonly build?: string | null | undefined;
 	/** The agents' socket (host/agents.ts), on a home that keeps its own ledger; none elsewhere. */
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
+	/** The host's process id, for the host's lines in the top bar. */
+	readonly pid: number;
+	/** Which ledger the home reads and writes, for the sync lines (host/connection.ts). */
+	readonly ledger: LedgerLink;
 }) =>
 	Effect.gen(function* () {
 		const {
@@ -139,6 +156,7 @@ export const serve = (options: {
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
+		const since = clock.currentTimeMillisUnsafe();
 		const warn = (what: string) => {
 			Effect.runForkWith(services)(Effect.logWarning(`fabrika host: ${what}`));
 		};
@@ -175,15 +193,18 @@ export const serve = (options: {
 		};
 		/**
 		 * Step the desk. A `show` is said to the page whose key asked for it (`from`), at once, as
-		 * tmux's `list-keys` shows on the client that pressed: it changes nothing on the host.
+		 * tmux's `list-keys` shows on the client that pressed: it changes nothing on the host. A
+		 * desk word typed in a tile's tsh has no page of its own, so it is said to `every` page.
 		 */
-		const step = (msg: DeskMsg, from?: Client) => {
+		const step = (msg: DeskMsg, from?: Client | "every") => {
 			const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg);
 			const changed = next !== desk;
 			desk = next;
 			for (const c of cmds) {
 				if (c.type !== "show") Queue.offerUnsafe(queue, c);
-				else if (from?.page === true) toPage(from, {type: "show", what: c.what});
+				else
+					for (const to of from === "every" ? clients : from === undefined ? [] : [from])
+						if (to.page) toPage(to, {type: "show", what: c.what});
 			}
 			return changed;
 		};
@@ -236,6 +257,41 @@ export const serve = (options: {
 		const ledger = yield* Ledger;
 		const programs = programsOf(appPrograms(ledger, yield* Author, yield* PullRequests));
 
+		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
+		// loads, and to every page as an agent attaches or goes. Each agent on the socket is one
+		// entry, by a number of its own, so two of one name are two.
+		const attached = new Map<number, AgentOn>();
+		let nextAgent = 0;
+		const hostNow = (): ToPage => ({
+			type: "host",
+			now: {
+				pid: options.pid,
+				since,
+				build,
+				ledger: options.ledger,
+				agents:
+					agents === undefined ? null : [...attached.values()].sort((a, b) => a.since - b.since),
+			},
+		});
+		const tellHost = () => {
+			const now = hostNow();
+			for (const client of clients) if (client.page) toPage(client, now);
+		};
+		const agentCame = (name: string) =>
+			Effect.acquireRelease(
+				Effect.sync(() => {
+					const n = nextAgent++;
+					attached.set(n, {name, since: clock.currentTimeMillisUnsafe()});
+					tellHost();
+					return n;
+				}),
+				(n) =>
+					Effect.sync(() => {
+						attached.delete(n);
+						tellHost();
+					}),
+			).pipe(Effect.asVoid);
+
 		/** A screen to show: on every page now, and on each page that loads after. The same screen again changes nothing. */
 		const add = (name: string, screen: Screen<unknown>) => {
 			if (screens.get(name) === screen) return;
@@ -260,6 +316,12 @@ export const serve = (options: {
 			edge: {
 				tell: (m) => {
 					if (step(m)) shout();
+				},
+				said: (tile, does) => {
+					const why = refusedOf(desk, tile, does);
+					if (why !== null) return why;
+					if (step({type: "typed", tile, does}, "every")) shout();
+					return null;
 				},
 				terminal: (tile, screen) => add(`tile:${tile}`, screen),
 				view: (run, screen) => add(`run:${run}`, screen),
@@ -305,7 +367,7 @@ export const serve = (options: {
 		begin(home.kept);
 		yield* Queue.take(queue).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
 		if (agents !== undefined)
-			yield* serveAgents(agents, () => screens.keys()).pipe(
+			yield* serveAgents(agents, () => screens.keys(), agentCame).pipe(
 				Effect.catchCause((cause) =>
 					Effect.logError("fabrika host: the agents' socket failed", cause),
 				),
@@ -369,6 +431,7 @@ export const serve = (options: {
 					client.page = true;
 					toPage(client, KEYS);
 					toPage(client, programs);
+					toPage(client, hostNow());
 					toPage(client, saidAsks);
 					toPage(client, deskNow());
 					for (const [name, screen] of screens) showTo(client, name, screen);
