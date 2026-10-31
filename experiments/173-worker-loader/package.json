@@ -1,0 +1,15 @@
+{
+	"name": "@tea-fabrika/exp-173-worker-loader",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 173's harness: a tea program bundled on the hands side and loaded into a core Durable Object with Worker Loader, in Miniflare. Only the experiment uses it.",
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/fabrika": "workspace:*",
+		"@tea-fabrika/counter": "workspace:*",
+		"effect": "catalog:",
+		"esbuild": "catalog:",
+		"miniflare": "catalog:"
+	}
+}
