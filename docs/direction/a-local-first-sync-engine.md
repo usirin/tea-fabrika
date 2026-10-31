@@ -122,10 +122,13 @@ interface Data {
     what is on screen easy to trust, and a screen that gets sloppy is the sign
     to change it. The data layer's calls (`append`, `read`, `wait`) leave room
     for a local copy later.
-  - **One unrecorded lane on the same link,** for "come read" pokes, who is
-    online, and fast streams such as terminal bytes. Replicache calls it a
-    poke, Yjs awareness, automerge-repo ephemeral messages. The doorbell
-    already is one (`durable-object.ts`). The rule: **show it, never save it,
+  - **One ephemeral lane on the same link,** for pokes ("come read"),
+    presence (who is online, where) and fast streams such as terminal bytes.
+    The names are the industry's: automerge-repo and Liveblocks say
+    ephemeral, Replicache says poke, Supabase Realtime says broadcast and
+    presence. Its delivery is at-most-once; a ledger send is at-least-once,
+    made safe by its id. The doorbell already is one (`durable-object.ts`).
+    The rule: **show it, never save it,
     never decide with it.** A window may draw who is online; no lane, claim or
     ledger write ever depends on a frame from this lane, so losing one breaks
     nothing. It is not local state: local state stays in one program on one
@@ -135,7 +138,7 @@ interface Data {
     ```ts
     // recorded: lands in the ledger, can be replayed
     {kind: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
-    // unrecorded: may be lost, nothing breaks
+    // ephemeral: at-most-once, may be lost, nothing breaks
     {kind: "poke", stream: "counter:1/inbox", rev: 41}
     {kind: "presence", peer, at: "tile:t1"}
     {kind: "bytes", port: "tile:t1", data: "l"}
@@ -181,7 +184,7 @@ interface Data {
      the object killed every 100. Time, lost, doubled.
   2. Presence without writes: how fast the hub sees a stopped VM, and writes
      per hour against a 5 s lease.
-  3. The unrecorded lane: a terminal's bytes as ledger appends against
+  3. The ephemeral lane: a terminal's bytes as ledger appends against
      relayed frames. Keystroke echo time and the hub's CPU.
   4. A direct Mac-to-VM path, only if 3 shows the hub is too slow.
   5. Effect RPC on a sleeping socket, and a replay of one peer's frames into
