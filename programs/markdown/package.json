@@ -15,6 +15,7 @@
 	"dependencies": {
 		"@demlik/tea": "catalog:",
 		"@kampus/fabrika": "workspace:*",
+		"@manti-ui/react": "catalog:",
 		"@pierre/highlights": "catalog:",
 		"effect": "catalog:",
 		"mdast-util-from-markdown": "catalog:",

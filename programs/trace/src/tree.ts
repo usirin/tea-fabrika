@@ -66,8 +66,11 @@ const runOf = (s: Span): string | null => {
 	return typeof run === "string" ? run : null;
 };
 
-/** A run's program, from its id: `tally-5d02c7a1` is tally's. For a run no span names. */
-const programOf = (run: string) => run.replace(/-[^-]*$/, "");
+/** The span of a whole line, as tsh tags it. */
+const isLine = (s: Span) => s.tags[ATTR.line] !== undefined;
+
+/** A run's program, from its id: `tally-5d02c7a1` or `tally:5d02c7a1`. For a run no span names. */
+const programOf = (run: string) => run.replace(/[-:][^-:]*$/, "");
 
 const byFrom = (a: Node, b: Node) => a.from - b.from;
 
@@ -215,7 +218,8 @@ export const treeOf = (trace: JobTrace): Node => {
 				key: `run:${run}`,
 				kind: "run",
 				name: programOf(run),
-				note: `${run}, no span`,
+				// While the job runs, its span is only not in yet: a span comes in once it ends.
+				note: trace.job !== null && trace.job.ended === null ? run : `${run}, no span`,
 				service: programOf(run),
 				from: at,
 				to: Math.max(at, ...owned.map((m) => m.to)),
@@ -229,12 +233,19 @@ export const treeOf = (trace: JobTrace): Node => {
 	const roots = kids.get(null) ?? [];
 	const jobWrong = trace.job?.ended?.how === "failed";
 	const [only] = roots;
-	if (roots.length === 1 && only !== undefined) {
+	// One root is the job's row when it is the line's own span, or when no job says otherwise. A
+	// span reaches the record only once it ends, so while a job runs its one root can be a run or a
+	// machine already over. The row keeps the job's line, whichever way it is drawn. It covers the
+	// job's own time too, since a line's span can end long before its job does (`tally &`).
+	if (roots.length === 1 && only !== undefined && (trace.job === null || isLine(only))) {
 		const node = spanNode(only);
 		return {
 			...node,
 			key: JOB,
 			kind: "job",
+			name: trace.job?.text ?? node.name,
+			from: Math.min(node.from, trace.job?.started ?? node.from),
+			to: Math.max(node.to, trace.job?.ended?.at ?? node.to),
 			wrong: node.wrong || jobWrong,
 			children: [...node.children, ...alone].toSorted(byFrom),
 		};
@@ -247,7 +258,9 @@ export const treeOf = (trace: JobTrace): Node => {
 		kind: "job",
 		name: trace.job?.text ?? "job",
 		note: "",
-		service: children[0]?.service ?? "tsh",
+		// tsh told the host of this job, and its own span says so when it ends. So the row is tsh's
+		// from the start, and each program keeps its color when that span comes in.
+		service: trace.job === null ? (children[0]?.service ?? "tsh") : "tsh",
 		from,
 		to: Math.max(from, trace.job?.ended?.at ?? from, ...children.map((c) => c.to)),
 		wrong: jobWrong || children.some((c) => c.wrong),

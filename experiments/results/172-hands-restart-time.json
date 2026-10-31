@@ -1,0 +1,585 @@
+{
+	"node:cold,crash,brain,hop": {
+		"runtime": "node",
+		"node": "v26.12.0",
+		"runs": 20,
+		"date": "2026-10-30",
+		"cold": {
+			"firstOnNewHome": 158,
+			"toHello": {
+				"n": 20,
+				"min": 147.6,
+				"median": 158.2,
+				"p95": 164.4,
+				"max": 171.1
+			}
+		},
+		"crash": [
+			{
+				"size": 10,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 2.028,
+					"median": 2.213,
+					"p95": 2.753,
+					"max": 4.415
+				},
+				"jitter": {
+					"n": 20,
+					"min": 2.513,
+					"median": 236.5,
+					"p95": 418.5,
+					"max": 428
+				},
+				"listen": {
+					"n": 20,
+					"min": 153.4,
+					"median": 154.7,
+					"p95": 156.2,
+					"max": 156.5
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 2.794,
+					"median": 12.7,
+					"p95": 23.3,
+					"max": 26.6
+				},
+				"attach": {
+					"n": 20,
+					"min": 157.5,
+					"median": 167.1,
+					"p95": 179.4,
+					"max": 181.4
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 162.8,
+					"median": 399.4,
+					"p95": 585,
+					"max": 602.6
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 160,
+					"median": 169.5,
+					"p95": 181.6,
+					"max": 183.8
+				},
+				"caught": {
+					"n": 20,
+					"min": 0.348,
+					"median": 0.377,
+					"p95": 0.524,
+					"max": 0.528
+				},
+				"total": {
+					"n": 20,
+					"min": 162.9,
+					"median": 400.8,
+					"p95": 586.2,
+					"max": 604.1
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			},
+			{
+				"size": 1000,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 2.106,
+					"median": 2.393,
+					"p95": 2.97,
+					"max": 4.116
+				},
+				"jitter": {
+					"n": 20,
+					"min": 24.5,
+					"median": 342.9,
+					"p95": 457.6,
+					"max": 462.9
+				},
+				"listen": {
+					"n": 20,
+					"min": 153.5,
+					"median": 155.6,
+					"p95": 157.4,
+					"max": 206.9
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 10.8,
+					"median": 41.7,
+					"p95": 54.4,
+					"max": 55
+				},
+				"attach": {
+					"n": 20,
+					"min": 185.8,
+					"median": 197.9,
+					"p95": 210.7,
+					"max": 217.7
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 214.8,
+					"median": 543.1,
+					"p95": 664,
+					"max": 671.1
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 188.1,
+					"median": 200.3,
+					"p95": 212.9,
+					"max": 220
+				},
+				"caught": {
+					"n": 20,
+					"min": 1.054,
+					"median": 1.208,
+					"p95": 1.481,
+					"max": 1.597
+				},
+				"total": {
+					"n": 20,
+					"min": 216.9,
+					"median": 544.6,
+					"p95": 665.7,
+					"max": 672.8
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			},
+			{
+				"size": 10000,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 3.73,
+					"median": 4.086,
+					"p95": 4.331,
+					"max": 4.916
+				},
+				"jitter": {
+					"n": 20,
+					"min": 3.952,
+					"median": 298.2,
+					"p95": 475,
+					"max": 479.9
+				},
+				"listen": {
+					"n": 20,
+					"min": 153.5,
+					"median": 154.5,
+					"p95": 208,
+					"max": 255
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 278.8,
+					"median": 305.3,
+					"p95": 324,
+					"max": 334.9
+				},
+				"attach": {
+					"n": 20,
+					"min": 452,
+					"median": 463.6,
+					"p95": 497.3,
+					"max": 533.9
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 462.2,
+					"median": 765.9,
+					"p95": 956.5,
+					"max": 973.4
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 456.9,
+					"median": 467.8,
+					"p95": 501.4,
+					"max": 537.7
+				},
+				"caught": {
+					"n": 20,
+					"min": 16.4,
+					"median": 19.6,
+					"p95": 21.9,
+					"max": 21.9
+				},
+				"total": {
+					"n": 20,
+					"min": 482.1,
+					"median": 786.4,
+					"p95": 977,
+					"max": 992.1
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			}
+		],
+		"brain": {
+			"inproc": {
+				"coldToAnswer": {
+					"n": 20,
+					"min": 207.6,
+					"median": 213.5,
+					"p95": 235,
+					"max": 238
+				},
+				"workerdUnderHands": [
+					1
+				],
+				"survived": 20,
+				"watchMs": 3000,
+				"answeredAfterWatch": 20,
+				"restartSamePort": {
+					"ready": 0,
+					"exited": 20,
+					"timeout": 0
+				},
+				"killToBrainGone": null
+			},
+			"daemon": {
+				"coldToAnswer": {
+					"n": 20,
+					"min": 449.5,
+					"median": 463,
+					"p95": 481.6,
+					"max": 483.6
+				},
+				"workerdUnderHands": [
+					1
+				],
+				"survived": 0,
+				"watchMs": 3000,
+				"answeredAfterWatch": 0,
+				"restartSamePort": {
+					"ready": 0,
+					"exited": 0,
+					"timeout": 0
+				},
+				"killToBrainGone": {
+					"n": 20,
+					"min": 235.2,
+					"median": 261.7,
+					"p95": 263.9,
+					"max": 264.6
+				}
+			}
+		},
+		"hop": {
+			"messages": 2000,
+			"viaHost": {
+				"n": 2000,
+				"min": 0.021,
+				"median": 0.035,
+				"p95": 0.064,
+				"max": 0.455
+			},
+			"viaSocket": {
+				"n": 2000,
+				"min": 0.01,
+				"median": 0.02,
+				"p95": 0.031,
+				"max": 0.868
+			},
+			"inProcess": {
+				"n": 2000,
+				"min": 0.001,
+				"median": 0.001,
+				"p95": 0.001,
+				"max": 0.014
+			}
+		},
+		"leftover": 0
+	},
+	"electron:cold,crash": {
+		"runtime": "electron",
+		"node": "v24.22.0",
+		"runs": 20,
+		"date": "2026-10-30",
+		"cold": {
+			"firstOnNewHome": 191,
+			"toHello": {
+				"n": 20,
+				"min": 182.5,
+				"median": 186.2,
+				"p95": 199.4,
+				"max": 225.3
+			}
+		},
+		"crash": [
+			{
+				"size": 10,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 2.945,
+					"median": 3.2,
+					"p95": 5.289,
+					"max": 5.631
+				},
+				"jitter": {
+					"n": 20,
+					"min": 2.513,
+					"median": 236.5,
+					"p95": 418.5,
+					"max": 428
+				},
+				"listen": {
+					"n": 20,
+					"min": 204.5,
+					"median": 205.8,
+					"p95": 208.9,
+					"max": 210.4
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 2.61,
+					"median": 3.122,
+					"p95": 3.927,
+					"max": 9.799
+				},
+				"attach": {
+					"n": 20,
+					"min": 207.4,
+					"median": 209.6,
+					"p95": 213.6,
+					"max": 215.6
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 213.8,
+					"median": 447.5,
+					"p95": 632.8,
+					"max": 641.6
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 210.6,
+					"median": 214.2,
+					"p95": 216.6,
+					"max": 218.8
+				},
+				"caught": {
+					"n": 20,
+					"min": 0.349,
+					"median": 0.383,
+					"p95": 0.529,
+					"max": 0.822
+				},
+				"total": {
+					"n": 20,
+					"min": 214,
+					"median": 448.5,
+					"p95": 633.9,
+					"max": 642.2
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			},
+			{
+				"size": 1000,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 3.1,
+					"median": 3.443,
+					"p95": 4.003,
+					"max": 4.206
+				},
+				"jitter": {
+					"n": 20,
+					"min": 24.5,
+					"median": 342.9,
+					"p95": 457.6,
+					"max": 462.9
+				},
+				"listen": {
+					"n": 20,
+					"min": 204.8,
+					"median": 206.9,
+					"p95": 208.8,
+					"max": 256.2
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 2.779,
+					"median": 11,
+					"p95": 31.5,
+					"max": 31.8
+				},
+				"attach": {
+					"n": 20,
+					"min": 208.1,
+					"median": 218.8,
+					"p95": 240.6,
+					"max": 259.2
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 237,
+					"median": 554.7,
+					"p95": 686.2,
+					"max": 690.4
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 211.2,
+					"median": 222.4,
+					"p95": 244,
+					"max": 262.7
+				},
+				"caught": {
+					"n": 20,
+					"min": 1.021,
+					"median": 1.177,
+					"p95": 1.428,
+					"max": 1.498
+				},
+				"total": {
+					"n": 20,
+					"min": 238.8,
+					"median": 556.1,
+					"p95": 687.3,
+					"max": 692.1
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			},
+			{
+				"size": 10000,
+				"killToSocketEnd": {
+					"n": 20,
+					"min": 3.913,
+					"median": 4.55,
+					"p95": 5.212,
+					"max": 5.437
+				},
+				"jitter": {
+					"n": 20,
+					"min": 3.952,
+					"median": 298.2,
+					"p95": 475,
+					"max": 479.9
+				},
+				"listen": {
+					"n": 20,
+					"min": 204.3,
+					"median": 206,
+					"p95": 208.2,
+					"max": 209
+				},
+				"listenToHello": {
+					"n": 20,
+					"min": 253.2,
+					"median": 263,
+					"p95": 276,
+					"max": 286.6
+				},
+				"attach": {
+					"n": 20,
+					"min": 458.9,
+					"median": 469.1,
+					"p95": 485,
+					"max": 494.7
+				},
+				"killToHello": {
+					"n": 20,
+					"min": 469.4,
+					"median": 777.4,
+					"p95": 943.3,
+					"max": 979.4
+				},
+				"killToHelloNoJitter": {
+					"n": 20,
+					"min": 463.3,
+					"median": 474.2,
+					"p95": 490.4,
+					"max": 499.4
+				},
+				"caught": {
+					"n": 20,
+					"min": 16.8,
+					"median": 20.7,
+					"p95": 24.7,
+					"max": 25.6
+				},
+				"total": {
+					"n": 20,
+					"min": 488.5,
+					"median": 802.4,
+					"p95": 964,
+					"max": 1002.9
+				},
+				"hostChildren": 0,
+				"childrenLeft": 0,
+				"childrenLeftNames": []
+			}
+		],
+		"leftover": 0
+	},
+	"node:brain": {
+		"runtime": "node",
+		"node": "v26.12.0",
+		"runs": 3,
+		"date": "2026-10-30",
+		"brain": {
+			"inproc": {
+				"coldToAnswer": {
+					"n": 3,
+					"min": 209.3,
+					"median": 214.3,
+					"p95": 238.4,
+					"max": 238.4
+				},
+				"workerdUnderHands": [
+					1
+				],
+				"survived": 3,
+				"watchMs": 30000,
+				"answeredAfterWatch": 3,
+				"restartSamePort": {
+					"ready": 0,
+					"exited": 3,
+					"timeout": 0
+				},
+				"killToBrainGone": null
+			},
+			"daemon": {
+				"coldToAnswer": {
+					"n": 3,
+					"min": 449.4,
+					"median": 458.8,
+					"p95": 465.9,
+					"max": 465.9
+				},
+				"workerdUnderHands": [
+					1
+				],
+				"survived": 0,
+				"watchMs": 30000,
+				"answeredAfterWatch": 0,
+				"restartSamePort": {
+					"ready": 0,
+					"exited": 0,
+					"timeout": 0
+				},
+				"killToBrainGone": {
+					"n": 3,
+					"min": 237.8,
+					"median": 261.8,
+					"p95": 262.4,
+					"max": 262.4
+				}
+			}
+		},
+		"leftover": 0
+	}
+}

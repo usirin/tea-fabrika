@@ -60,6 +60,8 @@ export * as Monitor from "./host/monitor.ts";
 // Moving a project: the plan on the laptop, the import window on the server's door.
 export * from "./host/move.ts";
 export * from "./host/observer.ts";
+// Where a host keeps its jobs' records, and how its table, steps and spans fill them.
+export * from "./host/records.ts";
 export * from "./host/rules.ts";
 export * from "./host/signer.ts";
 export {type KeyFile, keyFileOf, keyFileText, keyLineOf, keyOnly} from "./host/sshsig.ts";

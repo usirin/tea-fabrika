@@ -35,6 +35,7 @@ import {
 	tilesOf,
 	whereIs,
 } from "./desk.ts";
+import {BINDINGS} from "./keys.ts";
 import {checkTree, findTile, quiet, tiles, unfold} from "./layout/index.ts";
 
 // The desk's laws, on tea's pbt: after every step of any list of Msgs, from the real init. Keys,
@@ -122,6 +123,14 @@ const table: MsgArbitraryTable<Msg> = {
 	closing: arbRecordMsg("closing", {tile}),
 	ended: arbRecordMsg("ended", {tile}),
 	go: arbRecordMsg("go", {tile}),
+	// A tsh word, typed in a tile that is there or not: any key's command, or a move to a tile.
+	typed: arbRecordMsg("typed", {
+		tile,
+		does: fc.oneof(
+			fc.constantFrom(...BINDINGS.map((b) => b.does)),
+			tile.map((to) => ({kind: "go", tile: to}) as const),
+		),
+	}),
 	pick: arbRecordMsg("pick", {workspace: fc.constantFrom("w1", "w2", "w3", "w9")}),
 	run: arbRecordMsg("run", {key: fc.constantFrom(...after, "1", "2", "a", "?", "q")}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
@@ -593,11 +602,13 @@ describe("the desk's laws", () => {
 			forgetsToOpen: [opensAndStops.name, splitOpens.name],
 			closesTwice: [closesOnce.name],
 			// An id given twice makes a split that does not split, and a kept desk that does not read.
+			// Since the typed words (seed 1's lists changed), a tile with a twin id that ended stays too.
 			mintsTwice: [
 				whole.name,
 				opensAndStops.name,
 				freshIds.name,
 				savesChanges.name,
+				endedGoes.name,
 				splitOpens.name,
 				comesBack.name,
 			],

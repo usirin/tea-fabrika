@@ -4,10 +4,138 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 [blog post 10](../../blog/10-knobs-in-a-file.md); the first code is
 `legacy/src/settings.ts`.
 
+## Where the files live (2026-10-30)
+
+Decided: the repo's file moves into a `.fabrika/` folder, and a person's own
+settings live in the same shape in their home. One name, two places, like
+`.claude/` and `~/.claude`.
+
+```text
+~/.fabrika/                            the person's home for fabrika
+  fabrika.toml                         their own settings: login, key file
+  packs/                               a shared cache of pack code, by commit
+acme/.fabrika/                         the repo's
+  fabrika.toml                         which ledger, agents, checks, packs
+  fabrika.lock                         each pack's commit and code hash
+  programs/deploy/                     the repo's own programs (proposed)
+  packs/deploy-kit/                    a pack this repo offers to others
+acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
+```
+
+- **Decided:**
+  - The repo's file is `.fabrika/fabrika.toml`, not `fabrika.toml` at the
+    root.
+  - It has one spelling. No `.fabrika.toml`, no root `fabrika.toml`, no
+    table in `package.json`. Two spellings mean every reader, tool and agent
+    checks both, and when both exist one is edited while the other is read.
+    Ruff picks between its spellings by a fixed order without saying so; we
+    do not.
+  - `.fabrika.jsonc` (the review's `governed` and `ui` today) moves into the
+    folder too, so a repo's fabrika files sit in one place.
+  - `~/.fabrika` is the one home. It replaces the app's own folder
+    (Electron's `userData`), `~/.tsh` and `ledger.json`. `FABRIKA_HOME` stays,
+    so a test can point at a home of its own.
+  - `ledger.json` goes. Its ledger address and name are the project's, so
+    they go in the repo's file. Its login and key file are the person's, so
+    they go in `~/.fabrika/fabrika.toml`.
+  - `tsh.toml` folds into the two files the same way.
+  - State is not settings. The desk and the asks live on the ledger, not in
+    either folder.
+- **Proposed, for monorepos:**
+  - The nearest `.fabrika/fabrika.toml` above where a run starts wins. Files
+    above it are not merged in on their own. A file inherits only when it says
+    so, with `extends`. This is what people already know from Ruff (`extend`),
+    Biome 2 and Turborepo (`extends` with `"//"` for the repo root) and
+    tsconfig. Ruff's docs set it against ESLint's old automatic merge.
+
+    ```toml
+    # apps/web/.fabrika/fabrika.toml (a sketch)
+    extends = "//"        # take the repo root's file first; leave it out to stand alone
+
+    [agents.build]
+    model = "sol"         # this package's own pick, over the root's
+    ```
+
+  - Why not merge every file up the tree, as Cargo and EditorConfig do: a
+    file read alone tells you what it does, and an edit higher up never
+    changes a package that did not ask for it.
+  - A key that only makes sense once per repo, like `[ledger]`, fails to load
+    in a nested file, and is always read from the root. The mistake cannot be
+    made, rather than warned about.
+  - Open: whether `extends` takes only `"//"`, or a path to any other file as
+    Ruff and tsconfig allow.
+  - Repo programs are read from the default branch only, like the settings,
+    so a lane cannot change the code that judges it.
+  - Opening a repo whose programs you have not run before asks you to trust
+    it first, like `mise trust` or VS Code's workspace trust. A program runs
+    in workerd and can only ask for Cmds, so it never touches the computer
+    directly.
+- **Not built yet.** `packages/pipeline/src/settings-source.ts` still reads
+  `fabrika.toml` at the root, and `.fabrika.jsonc` still sits beside it. Both
+  move into the folder when the code does.
+- **Doubt:** a hidden folder is harder to find than a file at the root, which
+  is why Cargo keeps `Cargo.toml` in plain sight. We pick matching the home
+  folder over that.
+
+## Where packs come from (2026-10-31)
+
+Decided: packs are dependencies, handled the way Cargo and Go handle theirs.
+The project names and pins them, a lockfile records exactly what was taken,
+and the home folder only caches the code.
+
+```toml
+# acme/widgets/.fabrika/fabrika.toml
+[pack.deploy-kit]
+from = "github:acme/tools"   # the repo the pack lives in
+ref = "v1.2"                 # a tag, a branch or a commit
+region = "eu"                # the pack's own setting; the pack checks it
+```
+
+```toml
+# acme/widgets/.fabrika/fabrika.lock, written by `fabrika pack add`, committed
+[[pack]]
+name = "deploy-kit"
+from = "github:acme/tools"
+commit = "9f3c2e1"
+hash = "sha256-4b1d..."      # the built code, checked when it is loaded
+```
+
+```text
+acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
+  pack.toml                             name = "deploy-kit", programs = ["src/deploy.ts"]
+  src/deploy.ts
+```
+
+- **Decided:**
+  - Any repo can offer packs, in `.fabrika/packs/<name>/`. There is no
+    catalog and no word for "a repo that offers packs": the repo's address is
+    the name, as a Go module path is. If browsing ever needs a word, it is
+    "source", as in apt.
+  - The project lists its packs in `.fabrika/fabrika.toml`, one
+    `[pack.<name>]` table each, with `from`, `ref` and the pack's own settings.
+  - `.fabrika/fabrika.lock` sits beside it, committed, like `Cargo.lock`:
+    each pack's commit and the hash of its built code. Two people on the
+    project run the same pack code.
+  - `~/.fabrika/packs/` only caches code, keyed by commit, like Go's module
+    cache. Projects pinned to the same commit share one copy.
+  - A pack only one person wants goes in `~/.fabrika/fabrika.toml`, with its
+    own lock in the home. When both name the same pack, the project's pin
+    wins.
+- **Open:**
+  - How the code runs: one sandbox per pack version, loaded by its hash, is
+    the lean (experiment 173, Worker Loader, still running).
+  - How a pinned pack learns that a newer version exists.
+  - Whether `ref` should allow a branch at all, or only a tag or a commit.
+- **Why:** packs today are npm packages loaded with Node's `import()`
+  (`packages/pipeline/src/asks/packs.ts`), which cannot work once programs
+  run in workerd. Copying how package managers already work means nothing new
+  to learn.
+
 ## What was decided
 
 - **Each repo fabrika works on has one `fabrika.toml`.** TOML, not JSON:
-  real comments, sections, no braces to balance.
+  real comments, sections, no braces to balance. Since 2026-10-30 it lives
+  at `.fabrika/fabrika.toml` (above).
 - **A knob is a number, a name, or a pick between paths the code already has
   and tests.** Floors, limits, a model name.
 - **The order of the steps stays in code.** No `steps = [...]`, no `when = "..."`.
@@ -30,6 +158,9 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 
   Packs depend on the repo: a UI pack fits a product repo, not a library.
   `tsh.toml` keeps only the shell's own settings.
+  **Changed 2026-10-31:** the `packs` list and npm names go. Each pack is one
+  `[pack.<name>]` table with `from` and `ref`, pinned in `fabrika.lock`
+  ([where packs come from](#where-packs-come-from-2026-10-31)).
 - **Only knobs a machine decides with are copied into a run** (2026-10-05).
   A Jev reader's floor is read when the reader is built, so a question asked
   again after a restart uses what the file says then. The machine never

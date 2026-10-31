@@ -5,6 +5,10 @@ terminal and every job, each with its own id, and a tile only shows one. Any
 tile, in any window, can attach to a terminal or a job that is already running.
 The layout is the app's, the way i3 arranges windows it does not own.
 
+*See also [the desktop layer](./the-desktop-layer.md) (2026-10-31): the
+brain now keeps these, a tile shows one process, and focus stays per
+workspace, so the shared front job here still holds.*
+
 ```ts
 // A sketch. The host keeps this, one per host process.
 type Host = {

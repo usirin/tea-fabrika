@@ -8,6 +8,8 @@ import {describe, expect, it} from "vitest";
 // computes each size as the browser does: a px size is itself, a rem size is that many roots.
 
 const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
+/** fabrika's theme on Manti's tokens: Manti's parts draw their text from it. */
+const THEME = readFileSync(join(import.meta.dirname, "theme.css"), "utf8");
 
 /** Each innermost rule of a stylesheet: its selector and its declarations, comments gone. */
 const rulesOf = (css: string) =>
@@ -58,6 +60,25 @@ describe("the type scale", () => {
 
 	it("names no rem, so the root's size moves nothing on its own", () => {
 		expect(remsOf(CSS)).toEqual([]);
+		expect(remsOf(THEME)).toEqual([]);
+	});
+
+	// Manti's own text sizes are rem for a 16px root; on ours each would draw 12.5% small, as ours
+	// once did. The theme sets these six from our scale, so a Manti part draws our px; Manti's
+	// 3xl to 5xl are multiples of its base, so they follow it.
+	it("sets each of Manti's text sizes from our scale", () => {
+		const root = rulesOf(THEME).find((r) => r.selector === ":root");
+		const sizes = Object.fromEntries(
+			[...(root?.says ?? [])].filter(([name]) => /^--manti-text-(xs|sm|base|lg|\d?xl)$/.test(name)),
+		);
+		expect(sizes).toEqual({
+			"--manti-text-xs": "var(--fs-micro)",
+			"--manti-text-sm": "var(--fs-small)",
+			"--manti-text-base": "var(--fs-body)",
+			"--manti-text-lg": "var(--fs-prose)",
+			"--manti-text-xl": "var(--fs-head)",
+			"--manti-text-2xl": "var(--fs-title)",
+		});
 	});
 
 	it("catches the old fault: rem sizes for a 16px root, on a 14px root", () => {

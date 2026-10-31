@@ -119,6 +119,38 @@ export type Lost = typeof Lost.Type;
 export const LinkNow = Schema.Union([Found, Lost]);
 export type LinkNow = typeof LinkNow.Type;
 
+/** A time on the host's clock, in milliseconds since 1970. */
+const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+/** An agent attached to the host's agents' socket now (host/agents.ts): its name, and since when. */
+export const AgentOn = Schema.Struct({name: Schema.String, since: Millis});
+export type AgentOn = typeof AgentOn.Type;
+
+/**
+ * Which ledger the home's host reads and writes (host/connection.ts): the home's own file, or a
+ * ledger server, by its address and the login the host signs in as.
+ */
+export const LedgerLink = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("own")}),
+	Schema.Struct({kind: Schema.Literal("server"), address: Schema.String, login: Schema.String}),
+]);
+export type LedgerLink = typeof LedgerLink.Type;
+
+/**
+ * The host, as it says of itself (host/serve.ts): its process, when it started, its build, its
+ * ledger, and the agents attached now. `agents` is `null` on a home with no agents' socket: one
+ * connected to a ledger server (host/agents.ts).
+ */
+export const HostNow = Schema.Struct({
+	pid: Schema.Int.check(Schema.isGreaterThan(0)),
+	since: Millis,
+	/** Its build (build-id.ts), or `null`: it names none, as a host built before builds were named. */
+	build: Schema.NullOr(Schema.String),
+	ledger: LedgerLink,
+	agents: Schema.NullOr(Schema.Array(AgentOn)),
+});
+export type HostNow = typeof HostNow.Type;
+
 /**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
  * the page draws what it is sent and nothing else. `keys` is the desk's Ctrl-B table, sent once
@@ -138,21 +170,34 @@ export type LinkNow = typeof LinkNow.Type;
  * by its inputs' and outputs' names, sent once as the page loads. `asks` is what waits on the
  * person (asks.ts), sent each time it changes, to every app attached, with a page or not: the
  * app's main reads it for the Dock badge. `show` is what a key the page sent asks the frame to
- * show (desk.ts, `show`), sent to that page alone, before its answer.
+ * show (desk.ts, `show`), sent to that page alone, before its answer; a desk word typed in a
+ * tile's tsh (desk/words.ts) asks it of every page. `host` is the host as it says of itself, sent
+ * as a page loads and each time an agent attaches or goes.
  *
  *   {type: "programs", programs: [{name: "ticket", takes: ["ticket"], sends: ["ticket"]}]}
  *   {type: "asks", now: {asks: [{key: "7/a-1", ticket: 7, what: "approve plan", ...}], ...}}
  *   {type: "show", what: "keys"}
+ *   {type: "host", now: {pid: 4121, since: 1793400000000, build: "3f9a0c21b7d4",
+ *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("keys"),
 		prefix: KeyName,
-		/** `name`: the one word the frame calls the binding by (desk/keys.ts). */
+		/**
+		 * `name`: the one word the frame calls the binding by; `tsh`: the line that does the same
+		 * from a tile's tsh (desk/keys.ts, `wordOf`).
+		 */
 		table: Schema.Array(
-			Schema.Struct({key: KeyName, repeats: Schema.Boolean, name: Schema.String}),
+			Schema.Struct({
+				key: KeyName,
+				repeats: Schema.Boolean,
+				name: Schema.String,
+				tsh: Schema.String,
+			}),
 		),
 	}),
+	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
 	Schema.Struct({
 		type: Schema.Literal("programs"),
 		programs: Schema.Array(

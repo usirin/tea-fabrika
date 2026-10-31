@@ -1,0 +1,139 @@
+/*
+ * fabrika's theme on Manti UI (docs/direction/ui-on-manti.md). Manti draws every part from its
+ * --manti-* tokens; this file sets them from our own values, the names in window.css's :root, so
+ * a Manti part looks like the rest of the app and nothing of Manti's own palette shows. It is
+ * unlayered, so it wins over Manti's layered defaults without !important.
+ *
+ * Dark only, as the app is. Light would set each color below as light-dark(<light>, <dark>), with
+ * a light ramp for --n-* and --a-*, and drop color-scheme: dark from window.css.
+ */
+:root {
+	/* Type: Inter for the UI, mono only for typed things; the px scale of window.css. */
+	--manti-font-sans: var(--font);
+	--manti-font-mono: var(--mono);
+	--manti-text-xs: var(--fs-micro);
+	--manti-text-sm: var(--fs-small);
+	--manti-text-base: var(--fs-body);
+	--manti-text-lg: var(--fs-prose);
+	--manti-text-xl: var(--fs-head);
+	--manti-text-2xl: var(--fs-title);
+
+	/* Surfaces, text and lines. */
+	--manti-bg: var(--surface-sunken);
+	--manti-bg-subtle: var(--surface);
+	--manti-surface: var(--surface);
+	--manti-surface-raised: var(--surface-raised);
+	--manti-surface-sunken: var(--surface-sunken);
+	--manti-overlay: var(--scrim);
+	--manti-border: var(--border);
+	--manti-border-strong: var(--border-strong);
+	--manti-text: var(--text-primary);
+	--manti-text-muted: var(--text-muted);
+	--manti-text-subtle: var(--text-faint);
+	--manti-link: var(--turn);
+	--manti-fill-subtle: var(--surface-hover);
+	--manti-fill: var(--surface-hover);
+	--manti-fill-strong: var(--surface-selected);
+	--manti-focus-ring: var(--focus);
+	--manti-focus-ring-width: 2px;
+	--manti-focus-ring-offset: 2px;
+	--manti-selection-bg: var(--a-5);
+	--manti-selection-text: var(--text-primary);
+
+	/* What each color means is ours: the accent is "your turn" and nothing else. */
+	--manti-accent-fill: var(--turn-fill);
+	--manti-text-on-accent: var(--turn-fg);
+	--manti-danger-text: var(--stuck);
+	--manti-danger-icon: var(--stuck);
+	--manti-danger-border: var(--stuck);
+	--manti-warning-text: var(--running);
+
+	/* Popovers: opaque, as ours are, with no glass. */
+	--manti-panel-tint: var(--pop-bg);
+	--manti-panel-tint-strong: var(--pop-bg);
+	--manti-panel-tint-pressed: var(--surface-hover);
+	--manti-panel-border: var(--pop-edge);
+	--manti-panel-blur: none;
+
+	/* Shape and room: px, never rem, since the root is 14px (type-scale.test.ts). */
+	--manti-radius-xs: var(--r-sm);
+	--manti-radius-sm: var(--r);
+	--manti-radius-md: var(--r-lg);
+	--manti-radius-lg: var(--r-xl);
+	--manti-radius-xl: var(--r-xl);
+	--manti-radius-2xl: var(--r-xl);
+	--manti-space-1: var(--s-1);
+	--manti-control-height-sm: 28px;
+	--manti-control-height-md: var(--row-h);
+	--manti-control-height-lg: var(--row-2h);
+
+	/* Motion: our one curve and our fast step. */
+	--manti-duration-fast: var(--fast);
+	--manti-ease-smooth: var(--ease-out);
+	--manti-ease-soft: var(--ease-out);
+}
+
+/*
+ * Manti's reset and its body rule are for Manti's parts. The app's own parts were drawn on the
+ * browser's defaults, so outside a Manti part (an element with data-scope, and all inside it)
+ * each property the reset sets goes back to the browser's, as Manti's integration guide says:
+ * exclude Manti parts from the reset. Each rule is :where(), so any rule of the app's wins. A part
+ * that moves onto Manti leaves this list by itself; the list shrinks to nothing as the move ends.
+ */
+:where(:not([data-scope], [data-scope] *)),
+:where(:not([data-scope], [data-scope] *))::before,
+:where(:not([data-scope], [data-scope] *))::after {
+	box-sizing: revert;
+	margin: revert;
+}
+
+:where(img, picture, video, canvas, svg):where(:not([data-scope], [data-scope] *)) {
+	display: revert;
+	max-width: revert;
+}
+
+:where(button, input, textarea, select):where(:not([data-scope], [data-scope] *)) {
+	font: revert;
+	color: revert;
+}
+
+:where(button):where(:not([data-scope], [data-scope] *)) {
+	background: revert;
+	border: revert;
+}
+
+:where(h1, h2, h3, h4, h5, h6):where(:not([data-scope], [data-scope] *)) {
+	font-size: revert;
+	font-weight: revert;
+}
+
+:where(a):where(:not([data-scope], [data-scope] *)) {
+	color: revert;
+	text-decoration: revert;
+}
+
+:where(html) {
+	tab-size: revert;
+}
+
+/* The body takes the root's font and line height, as before, not Manti's base for it. */
+:where(body) {
+	font: inherit;
+	text-rendering: revert;
+}
+
+/* A keycap: our size and border, in the UI's own sans, as Linear's are (popovers.md). */
+[data-scope="kbd"][data-part="root"] {
+	--manti-kbd-radius: var(--r-sm);
+	--manti-kbd-padding-x: var(--s-1);
+	--manti-kbd-padding-y: 0;
+	--manti-kbd-font-size: var(--fs-micro);
+	--manti-kbd-border-width: 1px;
+	box-sizing: border-box;
+	min-width: 17px;
+	height: 17px;
+	background: transparent;
+	color: var(--text-muted);
+	font-family: var(--manti-font-sans);
+	line-height: 1;
+}

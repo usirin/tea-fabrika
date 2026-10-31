@@ -1,6 +1,7 @@
 import type {WindowProps} from "@kampus/fabrika";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import {endedAs} from "@kampus/pipeline/stages/status";
+import {Kbd} from "@manti-ui/react";
 import {stepWords} from "@tea-fabrika/tracker";
 import {type KeyboardEvent, type PointerEvent, useRef, useState} from "react";
 import type {runs} from "./index.ts";
@@ -376,10 +377,9 @@ function Tracks({view, send}: WindowProps<typeof runs>) {
 			<div className="arr-foot">
 				{chosen === null ? null : <Chosen trace={shown} run={chosen} />}
 				<p className="note">
-					Drag the playhead, or focus it and use <span className="kbd">←</span>{" "}
-					<span className="kbd">→</span> to step from fact to fact. <span className="kbd">End</span>{" "}
-					goes back to now. Like Elm's debugger, the runs are replayed from the facts up to that
-					time.
+					Drag the playhead, or focus it and use <Kbd>←</Kbd> <Kbd>→</Kbd> to step from fact to
+					fact. <Kbd>End</Kbd> goes back to now. Like Elm's debugger, the runs are replayed from the
+					facts up to that time.
 				</p>
 			</div>
 		</section>

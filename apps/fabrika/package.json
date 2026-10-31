@@ -19,6 +19,8 @@
 		"@effect/platform-node": "catalog:",
 		"@kampus/fabrika": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
+		"@manti-ui/react": "catalog:",
+		"@manti-ui/styles": "catalog:",
 		"@modelcontextprotocol/server": "catalog:",
 		"@tea-fabrika/compare": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",

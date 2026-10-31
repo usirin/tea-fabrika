@@ -17,6 +17,7 @@
 		"@demlik/tea": "catalog:",
 		"@kampus/fabrika": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
+		"@manti-ui/react": "catalog:",
 		"effect": "catalog:"
 	},
 	"peerDependencies": {

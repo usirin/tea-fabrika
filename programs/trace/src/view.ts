@@ -1,6 +1,6 @@
 import {Job, type Json, jsonPatchOf, type Span, type Step} from "@kampus/fabrika";
 import {Schema} from "effect";
-import type {Model} from "./machine.ts";
+import {isRunning, type Model} from "./machine.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
@@ -133,12 +133,16 @@ export const Shown = Schema.Struct({
 	/** The job's line, or its root span's name. */
 	title: Schema.String,
 	job: Schema.NullOr(Job),
-	/** The axis: milliseconds from the job's start to its last moment. Never 0. */
+	/** Set while the job has not ended. `took`: how long so far, `null` before the first tick. */
+	running: Schema.NullOr(Schema.Struct({took: Schema.NullOr(Schema.Number)})),
+	/** The axis: milliseconds from the job's start to its last moment, or to now if it runs. Never 0. */
 	length: Schema.Number,
 	/** Every service, in the order first seen: a service's colour is its place here. */
 	services: Schema.Array(Schema.String),
 	spans: Schema.Int,
 	steps: Schema.Int,
+	/** The record holds no run, no span and no step, or none is read yet. */
+	empty: Schema.Boolean,
 	rows: Schema.Array(Row),
 	chosen: Schema.NullOr(Detail),
 });
@@ -258,10 +262,12 @@ const waiting = {
 	why: null,
 	title: "",
 	job: null,
+	running: null,
 	length: 1,
 	services: [],
 	spans: 0,
 	steps: 0,
+	empty: true,
 	rows: [],
 	chosen: null,
 } as const;
@@ -277,10 +283,14 @@ export const shownOf = (s: Model): Shown => {
 			return {read: "unread", id: s.read.id, ...waiting, why: s.read.why};
 		case "read": {
 			const trace = s.read.trace;
-			const root = treeOf(trace);
+			const tree = treeOf(trace);
+			const {now} = s.read;
+			// While the job runs its row runs to now, and the axis with it.
+			const root = now === null ? tree : {...tree, to: Math.max(tree.to, now)};
 			const all = nodesOf(root);
 			const zero = Math.min(...all.map((n) => n.from));
 			const end = Math.max(...all.map((n) => n.to));
+			const length = Math.max(1, end - zero);
 			const chosen = s.chosen === null ? undefined : findOf(root, s.chosen);
 			const rows = flatten(root, new Set(s.open), zero);
 			return {
@@ -289,10 +299,12 @@ export const shownOf = (s: Model): Shown => {
 				id: trace.trace,
 				title: trace.job?.text ?? root.name,
 				job: trace.job,
-				length: Math.max(1, end - zero),
-				services: [...new Set([root.service, ...trace.spans.map((x) => x.service)])],
+				running: isRunning(trace) ? {took: now === null ? null : length} : null,
+				length,
+				services: [...new Set(all.map((n) => n.service))],
 				spans: trace.spans.length,
 				steps: trace.steps.length,
+				empty: trace.runs.length + trace.spans.length + trace.steps.length === 0,
 				rows,
 				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero),
 			};

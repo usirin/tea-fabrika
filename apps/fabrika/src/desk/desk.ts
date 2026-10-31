@@ -105,6 +105,13 @@ import {
 //   {type: "pick", workspace: "w2"}    a workspace clicked in the top bar
 //   {type: "run", key: "z"}            the palette ran a command: as Ctrl-B, then that key
 //
+// And a tile's tsh moves it, by a command's tsh word (desk/words.ts), as `tmux resize-pane -Z`
+// typed in a pane zooms that pane:
+//
+//   zoom, typed in t2              {type: "typed", tile: "t2", does: {kind: "zoom"}}: t2 is
+//                                  focused, its workspace comes forward, and it zooms, as C-b z
+//   focus --to t9, with no t9      `refusedOf` says "no tile t9" first, and the desk is not told
+//
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
 
@@ -185,7 +192,9 @@ export type DeskMsg =
 	/** This workspace comes forward. */
 	| {readonly type: "pick"; readonly workspace: string}
 	/** What this key does after the prefix, with no prefix pressed: the palette ran it. */
-	| {readonly type: "run"; readonly key: string};
+	| {readonly type: "run"; readonly key: string}
+	/** A command's tsh word, typed in this tile's tsh: it does what its key does, from this tile. */
+	| {readonly type: "typed"; readonly tile: TileId; readonly does: Does};
 
 /** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
@@ -473,6 +482,8 @@ const act = (s: Open, does: Does): Step => {
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
 			return [next, keep(next)];
 		}
+		case "go":
+			return went(s, does.tile);
 		case "fold":
 			return folded(s, ws, ws.focused);
 		case "turn": {
@@ -534,7 +545,7 @@ const picked = (s: Open, id: string): Step => {
  * workspace comes forward; a zoom on another tile goes, so the tile is drawn; a question asked is
  * answered no, as a click answers it.
  */
-const went = (s: Open, tile: TileId): Step => {
+const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
 	const ws = whereIs(s, tile);
 	if (ws === undefined) return [s, []];
 	if (s.active === ws.id && ws.focused === tile && s.ask === null) return [s, []];
@@ -549,6 +560,40 @@ const ran = (s: Open, key: string): Step => {
 	const binding = bindingOf(key);
 	if (binding === undefined) return [s, []];
 	return act({...s, prefix: DISARMED, ask: null}, binding.does);
+};
+
+/**
+ * Why a tsh word typed in `tile` would do nothing it was asked to, or `null`: it names a tile or a
+ * workspace that is not there. A key never can, so a key has no such answer; a word says it, as
+ * `tmux select-pane -t %9` says "can't find pane". Asked before the desk is told.
+ */
+export const refusedOf = (s: Desk, tile: TileId, does: Does): string | null => {
+	if (s.at !== "open" || whereIs(s, tile) === undefined) return `${tile} is gone`;
+	if (does.kind === "go" && whereIs(s, does.tile) === undefined) return `no tile ${does.tile}`;
+	const n = s.workspaces.length;
+	if (does.kind === "pick" && does.at > n)
+		return `no workspace ${does.at}: there ${n === 1 ? "is 1" : `are ${n}`}`;
+	return null;
+};
+
+/**
+ * A command's tsh word, typed in `tile`: as its key, from that tile. The tile is focused and its
+ * workspace comes forward first, as the keys you type into a tile come from it; then the command
+ * acts, with the prefix put down and no question up. A word that moves focus to a tile goes there
+ * straight.
+ */
+const typed = (s: Open, tile: TileId, does: Does): Step => {
+	if (whereIs(s, tile) === undefined) return [s, []];
+	if (does.kind === "go") return went(s, does.tile);
+	const [here, moved] = went(s, tile);
+	const ready =
+		here.prefix.armed || here.ask !== null ? {...here, prefix: DISARMED, ask: null} : here;
+	const [next, cmds] = act(ready, does);
+	if (next.at !== "open") return [next, cmds];
+	// One save, of the desk after both: the move to the tile, and what the command changed.
+	const others = cmds.filter((c) => c.type !== "save");
+	const saved = moved.length > 0 || others.length !== cmds.length;
+	return [next, saved ? [...others, ...keep(next)] : others];
 };
 
 /** What a key comes to: the desk's (with its step), or the focused tile's, as if the desk were not there. */
@@ -744,6 +789,7 @@ export const deskMachine = defineMachine({
 		go: onOpen((s, m) => went(s, m.tile)),
 		pick: onOpen((s, m) => picked(s, m.workspace)),
 		run: onOpen((s, m) => ran(s, m.key)),
+		typed: onOpen((s, m) => typed(s, m.tile, m.does)),
 		show_ok: noop,
 		show_err: noop,
 		open_ok: noop,

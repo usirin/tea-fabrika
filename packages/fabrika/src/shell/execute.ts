@@ -1,6 +1,7 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {JobTable} from "../host/host-jobs.ts";
 import type {Job, JobsMsg, Owner, StageRecord} from "../host/jobs.ts";
+import type {JobEnd} from "../host/traces.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import type {TableView} from "../program/person.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
@@ -363,7 +364,9 @@ const watchEnds = (
 					Effect.tap((ended) =>
 						Effect.sync(() => shell.live.delete(r.run.id)).pipe(
 							Effect.andThen(
-								refusedEnd(ended) ? stopAll : note(shell, {type: "stage_ended", run: r.run.id}),
+								refusedEnd(ended)
+									? stopAll
+									: note(shell, {type: "stage_ended", run: r.run.id, how: jobEnd(ended)}),
 							),
 						),
 					),
@@ -383,6 +386,9 @@ const watchEnds = (
 		);
 		return watcher;
 	});
+
+/** How a run ended, in the words a job's record keeps. */
+const jobEnd = (ended: Ended<unknown>): JobEnd => (ended.kind === "ended" ? "done" : ended.kind);
 
 /** The job's number in the table, found by the run id of its first stage. */
 const numberOf = (shell: Shell, run: string): number =>
@@ -569,7 +575,11 @@ const runStages = (
 					stopOn: PubSub.take(signal),
 				});
 			}).pipe(Effect.scoped);
-			yield* note(shell, {type: "stage_ended", run: only.record.run});
+			yield* note(shell, {
+				type: "stage_ended",
+				run: only.record.run,
+				how: called.kind === "bad_shape" ? "failed" : jobEnd(called.ended),
+			});
 			if (called.kind === "bad_shape") {
 				shell.print(
 					"err",
@@ -587,7 +597,8 @@ const runStages = (
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
 			yield* Scope.close(jobScope, Exit.void);
 			// The job leaves the table now: the stages that never started never end.
-			for (const record of records) yield* note(shell, {type: "stage_ended", run: record.run});
+			for (const record of records)
+				yield* note(shell, {type: "stage_ended", run: record.run, how: "failed"});
 			shell.print("err", `tsh: ${started.why}`);
 			return {status: 1, values: []};
 		}

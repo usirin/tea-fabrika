@@ -488,12 +488,6 @@ main.program > [role="alert"] {
 	color: var(--border-strong);
 }
 
-kbd {
-	padding: 0 4px;
-	border: 1px solid var(--faint);
-	border-radius: 3px;
-}
-
 .starting {
 	margin: 16px;
 	color: var(--faint);
@@ -523,7 +517,8 @@ kbd {
  * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
  * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
  * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
- * the window is moved by it, and its buttons take no drag.
+ * the window is moved by it, and its buttons take no drag. No line under the top bar or over the
+ * bottom line: the tiles' own edges already end the desk there.
  */
 .topbar,
 .bottomline {
@@ -540,7 +535,6 @@ kbd {
 .topbar {
 	position: relative;
 	height: 34px;
-	border-bottom: 1px solid var(--border-faint);
 	-webkit-app-region: drag;
 	app-region: drag;
 }
@@ -658,6 +652,24 @@ kbd {
 	align-items: center;
 }
 
+/*
+ * The host's item: up, only its ring and check, in the bar's faint gray, still. Not up, the word
+ * follows a shape of its own (frame.ts, `HostShape`), in the item's color: faint, or red where it
+ * is broken. The icon is the bar's text size, so the bar keeps its height.
+ */
+.topbar .fb.host {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.topbar .fb.host .ic {
+	flex: none;
+	width: 1em;
+	height: 1em;
+	color: inherit;
+}
+
 /* The host down: the asks it last said are old news, drawn faint until it is back. */
 .desk.lost .topbar .right > .fb {
 	opacity: 0.45;
@@ -678,7 +690,6 @@ kbd {
 	justify-content: space-between;
 	gap: var(--s-4);
 	height: 26px;
-	border-top: 1px solid var(--surface-hover);
 	color: var(--text-muted);
 }
 
@@ -787,26 +798,11 @@ kbd {
 	}
 }
 
-/* Keycaps, in the UI's own sans, as Linear's are. */
+/* Keycaps in a row: each one is Manti's Kbd, sized in theme.css. */
 .caps {
 	display: inline-flex;
 	gap: 3px;
 	align-items: center;
-}
-
-.cap {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	box-sizing: border-box;
-	min-width: 17px;
-	height: 17px;
-	padding: 0 4px;
-	border: 1px solid var(--border);
-	border-radius: var(--r-sm);
-	background: transparent;
-	color: var(--text-muted);
-	font: 500 var(--fs-micro) / 1 var(--font);
 }
 
 /* A menu, or a panel: under the top bar's right end, where its item is. */
@@ -1041,6 +1037,13 @@ kbd {
 	color: var(--text-muted);
 }
 
+/* Rows to read in a panel (the agents attached): a menu's rows, with no stop to act on. */
+.pop-lines {
+	margin: 0 -8px 8px;
+	padding: 0;
+	list-style: none;
+}
+
 .pop-why {
 	display: block;
 	margin: 0 0 8px;
@@ -1155,19 +1158,30 @@ kbd {
 	padding: 0 8px;
 }
 
+/* A command: its name over its tsh word (two lines, as a menu's row), its keys at the right. */
 .pop-cmd {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	height: 34px;
+	height: var(--row-2h);
 	padding: 0 10px;
 	border-radius: var(--r);
 	color: var(--text-secondary);
 	cursor: default;
 }
 
-.pop-cmd .name {
+.pop-cmd .text {
+	display: grid;
 	flex: 1;
+	min-width: 0;
+}
+
+.pop-cmd .word {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .pop-cmd mark {
@@ -1176,12 +1190,16 @@ kbd {
 	font-weight: 600;
 }
 
+.pop-cmd .word mark {
+	color: var(--text-secondary);
+}
+
 .pop-cmd.on {
 	background: var(--row-on);
 	color: var(--text-primary);
 }
 
-.pop-cmd.on .cap {
+.pop-cmd.on [data-scope="kbd"] {
 	border-color: var(--border-strong);
 	color: var(--text-secondary);
 }
@@ -1215,6 +1233,11 @@ kbd {
 
 .tip code {
 	font-family: var(--mono);
+}
+
+/* The tsh word that does the same, quieter than the name. */
+.tip .word {
+	color: var(--text-muted);
 }
 
 /* Centred while it fits; in a short tile it starts at the top, so its scroll reaches all of it. */
@@ -1536,20 +1559,6 @@ button:focus-visible {
 	font-size: var(--fs-micro);
 }
 
-.markdown-key {
-	min-width: 1.4em;
-	padding: 0 4px;
-	border: 1px solid var(--line);
-	border-radius: 4px;
-	background: var(--raised);
-	font: inherit;
-	text-align: center;
-}
-
-.markdown-key + .markdown-key {
-	margin-left: -2px;
-}
-
 /*
  * The tracker's window (programs/tracker/src/window.tsx). Its colours are the app's tokens, at the
  * top of this file: a program has no theme of its own. Calm on purpose: one column, the app's
@@ -1594,22 +1603,6 @@ button:focus-visible {
 .tracker h2,
 .tracker h3 {
 	margin: 0;
-}
-
-.tracker kbd {
-	display: inline-block;
-	min-width: 1.5em;
-	padding: 0 4px;
-	box-sizing: border-box;
-	border: 1px solid var(--line);
-	border-bottom-width: 2px;
-	border-radius: 4px;
-	background: var(--raised);
-	color: var(--faint);
-	font: inherit;
-	font-size: 11px;
-	line-height: 16px;
-	text-align: center;
 }
 
 .tracker small {
@@ -2183,19 +2176,6 @@ main.program:has(> .view) {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	min-inline-size: 0;
-}
-
-.view .kbd {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-inline-size: 18px;
-	block-size: 18px;
-	padding-inline: 4px;
-	border-radius: var(--r-sm);
-	box-shadow: inset 0 0 0 1px var(--border);
-	font: 500 var(--fs-micro) / 1 var(--font);
-	color: var(--text-muted);
 }
 
 .view .cmd {
@@ -3573,6 +3553,18 @@ main.program:has(> .view) {
 
 /* 4. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
 
+.trace-view .trace-running {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--text-secondary);
+}
+
+/* With no legend beside it, the trace id still sits at the head's far end. */
+.trace-view .trace-id:not(.legend + *) {
+	margin-inline-start: auto;
+}
+
 .trace-view .legend .swatch {
 	display: inline-block;
 	inline-size: 10px;
@@ -3676,6 +3668,8 @@ main.program:has(> .view) {
 	inset-block-start: 4px;
 	transform: translateX(-50%);
 	font-variant-numeric: tabular-nums;
+	/* Near the track's end the box has little room left: "40 ms" stays one line. */
+	white-space: nowrap;
 }
 
 .trace-view .wf-tick:first-child {

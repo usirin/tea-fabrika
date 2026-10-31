@@ -1,4 +1,5 @@
 import type {WindowProps} from "@kampus/fabrika";
+import {Kbd} from "@manti-ui/react";
 import {
 	Fragment,
 	type KeyboardEvent,
@@ -295,8 +296,7 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 				</div>
 			</div>
 			<footer className="markdown-keys">
-				<kbd className="markdown-key">q</kbd> quit <kbd className="markdown-key">j</kbd>{" "}
-				<kbd className="markdown-key">k</kbd> scroll <kbd className="markdown-key">space</kbd> page
+				<Kbd>q</Kbd> quit <Kbd>j</Kbd> <Kbd>k</Kbd> scroll <Kbd>space</Kbd> page
 			</footer>
 		</article>
 	);

@@ -1,6 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {Effect, Schema, SchemaTransformation} from "effect";
 import {runTraceId} from "../program/trace-id.ts";
+import type {JobEnd} from "./traces.ts";
 
 // A host's job table (./host-jobs.ts opens it; tsh shows it). It holds what a
 // job is (its line, and for each program in it the program's name, its flags,
@@ -99,7 +100,8 @@ export type JobsMsg =
 			readonly background: boolean;
 			readonly owner: Owner;
 	  }
-	| {readonly type: "stage_ended"; readonly run: string}
+	/** `how`: how that program's run ended, which the job's record keeps (./records.ts). */
+	| {readonly type: "stage_ended"; readonly run: string; readonly how: JobEnd}
 	/** `n`: one job, whose start again did not go; `null`: every job. */
 	| {readonly type: "detached"; readonly n: number | null}
 	/** Started again by `owner`'s tsh: the job is that tsh's from now on, wherever it began. */

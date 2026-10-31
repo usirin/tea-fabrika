@@ -2,15 +2,17 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Shell} from "@kampus/fabrika";
+import {Shell, Traces} from "@kampus/fabrika";
 import {callOf, toolsOf} from "@kampus/fabrika/mcp";
 import {memoryService} from "@kampus/fabrika/memory";
 import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
+import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, FileSystem, Layer, Path, Schedule, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Down} from "../link.ts";
+import {readToPage} from "../messages.ts";
 import {appPrograms} from "../tsh.ts";
 import {appWire} from "../wire.ts";
 import {runHost} from "./run.ts";
@@ -72,7 +74,18 @@ const trackerInTile = Effect.gen(function* () {
 	/** A click in the person's window: one input's value, as the window sends it. */
 	const click = (type: string, value: unknown) =>
 		wire.send({type: "on", port, m: {type: "msg", msg: {type, value}}});
-	return {home, paths, shown, click};
+	/** The agents the top bar was told of last, by name. */
+	const agentsNow = () => {
+		const last = got
+			.flatMap((m) => {
+				if (m.type !== "to" || m.port !== "desk") return [];
+				const read = readToPage(m.m);
+				return read.kind === "read" && read.msg.type === "host" ? [read.msg.now] : [];
+			})
+			.at(-1);
+		return last?.agents?.map((a) => a.name);
+	};
+	return {home, paths, shown, click, agentsNow};
 });
 
 /** An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. */
@@ -116,6 +129,11 @@ const agentsList = () =>
 			memoryService(),
 			{kind: "agent", id: "claude", for: "owner"},
 			{open: Effect.succeed([])},
+			Effect.runSync(
+				Effect.gen(function* () {
+					return yield* Traces;
+				}).pipe(Effect.provide(memoryTraces([]))),
+			),
 		),
 	);
 
@@ -196,6 +214,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			}),
 		);
 		expect(seen.mode).toBe(0o600);
+		// The programs' inputs and no more: no desk word (split, zoom, agents) moves the person's desk.
 		expect(seen.tools.tools.map((t) => t.name)).toEqual([
 			"runs",
 			"counter_press",
@@ -292,5 +311,30 @@ describe("an agent drives the app's programs through MCP", () => {
 		expect(textOf(seen.bad)).toMatch(/does not fit/);
 		expect(seen.rows.map((r: {type: string}) => r.type)).toEqual(["filed"]);
 		expect(seen.asUser).toMatch(/fabrika mcp: .*never a person's/);
+	});
+
+	it("is counted in the top bar while attached, and the count goes down as it goes", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const app = yield* trackerInTile;
+				const before = app.agentsNow();
+				const two = yield* Effect.gen(function* () {
+					yield* agentOn(app.home, "claude");
+					yield* agentOn(app.home, "codex");
+					return yield* until("two agents", () => {
+						const now = app.agentsNow();
+						return now?.length === 2 ? now : undefined;
+					});
+				}).pipe(Effect.scoped);
+				const after = yield* until("none", () => {
+					const now = app.agentsNow();
+					return now?.length === 0 ? now : undefined;
+				});
+				return {before, two, after};
+			}),
+		);
+		expect(seen.before).toEqual([]);
+		expect(seen.two).toEqual(["claude", "codex"]);
+		expect(seen.after).toEqual([]);
 	});
 });
