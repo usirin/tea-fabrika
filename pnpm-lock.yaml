@@ -223,6 +223,12 @@ importers:
       '@tea-fabrika/ask-log':
         specifier: workspace:*
         version: link:packs/ask-log
+      '@tea-fabrika/claude':
+        specifier: workspace:*
+        version: link:programs/claude
+      '@tea-fabrika/codex':
+        specifier: workspace:*
+        version: link:programs/codex
       '@tea-fabrika/compare':
         specifier: workspace:*
         version: link:programs/compare
@@ -855,6 +861,62 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.6(effect@4.0.6)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
+  programs/claude:
+    dependencies:
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.6)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
+  programs/codex:
+    dependencies:
+      '@kampus/fabrika':
+        specifier: workspace:*
+        version: link:../../packages/fabrika
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.6)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
