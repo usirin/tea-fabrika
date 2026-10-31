@@ -80,7 +80,7 @@ type Host = {
 };
 const groups = new Set<number>();
 const signal = (pgid: number, sig: NodeJS.Signals) => {
-	// biome-ignore lint/plugin: node at the edge: signalling a process group that may be gone already
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: signalling a process group that may be gone already
 	try {
 		process.kill(-pgid, sig);
 	} catch {
@@ -815,7 +815,7 @@ const realRuns = async () => {
 		real.stoppedAtBudget = over();
 	} finally {
 		for (const n of [planNumber, ...Object.values(tickets)]) {
-			// biome-ignore lint/plugin: node at the edge: an issue closed already answers with an error
+			// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: an issue closed already answers with an error
 			try {
 				takeBack(n);
 				ghSandbox(["issue", "close", String(n), "-R", SANDBOX, "--reason", "not planned"]);

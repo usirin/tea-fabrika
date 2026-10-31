@@ -442,10 +442,10 @@ export class Box extends DurableObject<Env> {
 					"--max-turns",
 					"4",
 					// The CLI form of rules.ts's ownRules: the folder's rule files, none of its settings.
-					// biome-ignore lint/plugin/no-project-settings: this is ownRules written as Claude Code's flags, for a box that runs the CLI with no Agent SDK; the config root is the empty folder the Dockerfile makes
+					// oxlint-disable-next-line fabrika/no-project-settings -- this is ownRules written as Claude Code's flags, for a box that runs the CLI with no Agent SDK; the config root is the empty folder the Dockerfile makes
 					"--setting-sources",
 					"project",
-					// biome-ignore lint/plugin/no-project-settings: the same ownRules flags; the root is NO_PROJECT_CONFIG, root's and read-only, and the box runs as another user
+					// oxlint-disable-next-line fabrika/no-project-settings -- the same ownRules flags; the root is NO_PROJECT_CONFIG, root's and read-only, and the box runs as another user
 					"--project-config-root",
 					NO_PROJECT_CONFIG,
 					"--settings",

@@ -129,7 +129,7 @@ const credentialEnv = (credential: Credential, workspace: Workspace): Record<str
 		case "none":
 			return {};
 		case "claude":
-			// biome-ignore lint/plugin: the lent login goes out here, into the box's env
+			// oxlint-disable-next-line fabrika/no-redacted-value -- the lent login goes out here, into the box's env
 			return {CLAUDE_CODE_OAUTH_TOKEN: Redacted.value(credential.token)};
 		case "codex":
 			return {CODEX_HOME: codexHome(workspace)};
@@ -164,7 +164,7 @@ export const keysOf = (parent: Env, more: readonly Redacted.Redacted<string>[] =
 		const value = parent[name];
 		return value === undefined || value === "" ? [] : [value];
 	}),
-	// biome-ignore lint/plugin: the keys stay in the host; refuseKeys needs their text to search a launch for them
+	// oxlint-disable-next-line fabrika/no-redacted-value -- the keys stay in the host; refuseKeys needs their text to search a launch for them
 	...more.map(Redacted.value).filter((value) => value !== ""),
 ];
 
@@ -183,7 +183,7 @@ export const refuseKeys = (
 		return Effect.fail(new SandboxError({why: "key_in_sandbox", what: named}));
 	const lent =
 		job.credential._tag === "codex"
-			? // biome-ignore lint/plugin: the lent auth.json stays in the host here; its text is searched for the keys
+			? // oxlint-disable-next-line fabrika/no-redacted-value -- the lent auth.json stays in the host here; its text is searched for the keys
 				[["credential", Redacted.value(job.credential.auth)] as const]
 			: [];
 	const places: readonly (readonly [string, string])[] = [
@@ -218,7 +218,7 @@ const workspaceOf = (job: Job) =>
 		if (job.credential._tag === "codex") {
 			yield* fs.makeDirectory(codexHome(workspace));
 			const file = path.join(codexHome(workspace), "auth.json");
-			// biome-ignore lint/plugin: the lent auth.json goes out here, into the box's home, mode 0600
+			// oxlint-disable-next-line fabrika/no-redacted-value -- the lent auth.json goes out here, into the box's home, mode 0600
 			yield* fs.writeFileString(file, Redacted.value(job.credential.auth), {mode: 0o600});
 		}
 		return workspace;

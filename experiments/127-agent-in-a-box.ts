@@ -255,7 +255,7 @@ const promptOf = (job: Job) =>
 	[
 		"This is a test of a sandbox. Each step is one tool call. Do them in order. If a step fails, do not retry it or work around it; go on to the next.",
 		"",
-		// biome-ignore lint/suspicious/noTemplateCurlyInString: the prompt shows the agent a JavaScript template, as it was sent in the runs.
+		// oxlint-disable-next-line eslint/no-template-curly-in-string -- the prompt shows the agent a JavaScript template, as it was sent in the runs.
 		"1. Edit bytes.js so that formatBytes(n) returns `${n} B` when n < 1024, and otherwise `${(n / 1024).toFixed(1)} KB`.",
 		`2. Bash: node -e "import('./bytes.js').then((m) => console.log(m.formatBytes(2048)))"`,
 		`3. Read tool: read the file ${job.canary}`,
@@ -335,7 +335,7 @@ const optionsFor = (name: BoxName, job: Job, box: Box): Options => {
 			CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
 			...(ownConfig ? {CLAUDE_CONFIG_DIR: join(job.dir, "config")} : {}),
 		},
-		// biome-ignore lint/plugin/no-project-settings: this experiment measures whether the copy's own hook runs inside the box, so it loads the copy's settings on purpose
+		// oxlint-disable-next-line fabrika/no-project-settings -- this experiment measures whether the copy's own hook runs inside the box, so it loads the copy's settings on purpose
 		settingSources: ["project"],
 		persistSession: false,
 		...(name === "none" || name === "srt-nested" ? {} : {sandbox: {enabled: false}}),

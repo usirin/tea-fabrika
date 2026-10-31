@@ -86,7 +86,7 @@ type Host = {
 };
 const groups = new Set<number>();
 const signal = (pgid: number, sig: NodeJS.Signals) => {
-	// biome-ignore lint/plugin: node at the edge: signalling a process group that may be gone already
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: signalling a process group that may be gone already
 	try {
 		process.kill(-pgid, sig);
 	} catch {
@@ -747,14 +747,14 @@ const realRuns = async () => {
 		if (buildTicket === null) return;
 		for (const pr of opened) {
 			const n = pr.slice(pr.lastIndexOf("/") + 1);
-			// biome-ignore lint/plugin: node at the edge: a pull request closed already answers with an error
+			// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: a pull request closed already answers with an error
 			try {
 				ghSandbox(["pr", "close", n, "-R", SANDBOX, "--delete-branch"]);
 			} catch {
 				// closed already
 			}
 		}
-		// biome-ignore lint/plugin: node at the edge: a branch that is gone already answers with an error
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: a branch that is gone already answers with an error
 		try {
 			ghSandbox(["api", "-X", "DELETE", `repos/${SANDBOX}/git/refs/heads/build/${buildNumber}`]);
 		} catch {

@@ -38,7 +38,7 @@ export const under = (root: number, map: ReadonlyMap<number, number>): number[] 
 };
 
 const isAlive = (pid: number) => {
-	// biome-ignore lint/plugin: signal 0 asks only whether the process is there; a throw is the answer "no"
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- signal 0 asks only whether the process is there; a throw is the answer "no"
 	try {
 		process.kill(pid, 0);
 		return true;
@@ -48,7 +48,7 @@ const isAlive = (pid: number) => {
 };
 
 const killOne = (pid: number) => {
-	// biome-ignore lint/plugin: a process that ended between the check and the kill throws; that is the goal reached
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- a process that ended between the check and the kill throws; that is the goal reached
 	try {
 		process.kill(pid, "SIGKILL");
 	} catch {

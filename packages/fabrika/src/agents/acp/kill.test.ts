@@ -67,7 +67,7 @@ const kept = (home: string): Session | null => {
 	let newest: {readonly opened: number; readonly count: number; readonly body: string} | null =
 		null;
 	for (const name of readdirSync(dir).filter((n) => /%2Fmachine%2Fsession%2F/.test(n))) {
-		// biome-ignore lint/plugin: a plain read of a file tsh may be writing right now; a torn one is expected, and `null` says so
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain read of a file tsh may be writing right now; a torn one is expected, and `null` says so
 		try {
 			const slot = JSON.parse(readFileSync(join(dir, name), "utf8"));
 			if (

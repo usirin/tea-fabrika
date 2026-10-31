@@ -266,7 +266,7 @@ const table = () => {
 	console.log("A fresh npm repository with no fabrika.toml:");
 	for (const line of bare) console.log(`  ${line}`);
 	const got = ROWS.map((row) => {
-		// biome-ignore lint/plugin: node at the edge: a fixture that throws is a finding, counted, not a stop
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: a fixture that throws is a finding, counted, not a stop
 		try {
 			return {...judge(row), crashed: false};
 		} catch (cause) {

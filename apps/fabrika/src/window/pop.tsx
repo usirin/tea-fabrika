@@ -288,7 +288,7 @@ export function Menu(props: MenuProps): ReactNode {
 			)}
 			{props.sections.map((section, i) =>
 				section.rows.length === 0 && !section.fold ? null : (
-					// biome-ignore lint/a11y/useSemanticElements: a menu's items are grouped with role group, by WAI-ARIA's menu pattern; a fieldset groups form fields, not menu items.
+					// a menu's items are grouped with role group, by WAI-ARIA's menu pattern; a fieldset groups form fields, not menu items.
 					<div
 						key={section.id}
 						className={`pop-section${i > 0 ? " ruled" : ""}`}
@@ -296,7 +296,7 @@ export function Menu(props: MenuProps): ReactNode {
 						aria-label={section.title ?? props.label}
 					>
 						{section.fold && (
-							// biome-ignore lint/a11y/useKeyWithClickEvents: the menu's own box takes the keys (aria-activedescendant); this is its row for the pointer.
+							// oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the menu's own box takes the keys (aria-activedescendant); this is its row for the pointer.
 							<div
 								id={domId(foldId(section.id))}
 								className={`pop-fold${active?.id === foldId(section.id) ? " on" : ""}`}
@@ -414,7 +414,7 @@ function MenuRow(props: {
 }): ReactNode {
 	const {row, on} = props;
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: the menu's own box takes the keys (aria-activedescendant); this is its row for the pointer.
+		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the menu's own box takes the keys (aria-activedescendant); this is its row for the pointer.
 		<div
 			id={props.id}
 			className={`pop-row${row.sub === null ? "" : " two"}${on ? " on" : ""}`}
@@ -560,7 +560,7 @@ export function Palette(props: PaletteProps): ReactNode {
 						</div>
 					)}
 					{props.sections.map((s) => (
-						// biome-ignore lint/a11y/useSemanticElements: options in a listbox are grouped with role group, by WAI-ARIA's listbox pattern; a fieldset groups form fields, not options.
+						// options in a listbox are grouped with role group, by WAI-ARIA's listbox pattern; a fieldset groups form fields, not options.
 						<div key={s.title} role="group" aria-labelledby={`${props.id}-${s.title}`}>
 							<div className="pop-group" id={`${props.id}-${s.title}`} role="presentation">
 								{s.title}
@@ -569,7 +569,7 @@ export function Palette(props: PaletteProps): ReactNode {
 								i += 1;
 								const n = i;
 								return (
-									// biome-ignore lint/a11y/useKeyWithClickEvents: the text box takes the keys (aria-activedescendant); this is its option for the pointer.
+									// oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the text box takes the keys (aria-activedescendant); this is its option for the pointer.
 									<div
 										key={c.id}
 										id={optionId(n)}
