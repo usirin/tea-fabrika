@@ -1,0 +1,772 @@
+{
+	"when": "2026-10-31",
+	"versions": {
+		"node": "v26.12.0"
+	},
+	"builds": {
+		"sharedModules": {
+			"effect@4.0.6-1a12e33e16e3.js": {
+				"bytes": 895663,
+				"gzip": 281523,
+				"buildMs": 54.8,
+				"parts": {
+					"effect": 893161,
+					"own code": 0
+				}
+			},
+			"effect-Cause@4.0.6-bc9c21eeba5f.js": {
+				"bytes": 2637,
+				"gzip": 856,
+				"buildMs": 0,
+				"parts": {
+					"facade": 2637
+				}
+			},
+			"effect-Effect@4.0.6-0ffc5b94e8a6.js": {
+				"bytes": 9032,
+				"gzip": 2908,
+				"buildMs": 0,
+				"parts": {
+					"facade": 9032
+				}
+			},
+			"effect-Exit@4.0.6-a6c139babbbd.js": {
+				"bytes": 1002,
+				"gzip": 444,
+				"buildMs": 0,
+				"parts": {
+					"facade": 1002
+				}
+			},
+			"effect-Function@4.0.6-5e00aece4723.js": {
+				"bytes": 780,
+				"gzip": 391,
+				"buildMs": 0,
+				"parts": {
+					"facade": 780
+				}
+			},
+			"effect-persistence@4.0.6-dceb458475ca.js": {
+				"bytes": 407,
+				"gzip": 242,
+				"buildMs": 0,
+				"parts": {
+					"facade": 407
+				}
+			},
+			"effect-process@4.0.6-355dc82b5ffa.js": {
+				"bytes": 181,
+				"gzip": 148,
+				"buildMs": 0,
+				"parts": {
+					"facade": 181
+				}
+			},
+			"tea@0.21.0-603dd3a87600.js": {
+				"bytes": 31586,
+				"gzip": 11967,
+				"buildMs": 6.3,
+				"parts": {
+					"@demlik/tea": 30159,
+					"own code": 0
+				}
+			},
+			"tea-effect@0.21.0-1a56443385f3.js": {
+				"bytes": 265,
+				"gzip": 196,
+				"buildMs": 0,
+				"parts": {
+					"facade": 265
+				}
+			},
+			"fabrika@0.0.0-671b966b44b5.js": {
+				"bytes": 649902,
+				"gzip": 161765,
+				"buildMs": 19.7,
+				"parts": {
+					"zod": 453331,
+					"@kampus/fabrika": 192476,
+					"own code": 0
+				}
+			},
+			"probe@0-a78bef133688.js": {
+				"bytes": 37,
+				"gzip": 57,
+				"buildMs": 2.1,
+				"parts": {
+					"own code": 18
+				}
+			}
+		},
+		"singleTally": {
+			"bytes": 423339,
+			"gzip": 135093,
+			"buildMs": 58.9,
+			"parts": {
+				"effect": 399522,
+				"@demlik/tea": 21480,
+				"own code": 2195
+			}
+		},
+		"singleCounter": {
+			"bytes": 579204,
+			"gzip": 186209,
+			"buildMs": 67.4,
+			"parts": {
+				"effect": 442218,
+				"@kampus/fabrika": 111900,
+				"@demlik/tea": 23792,
+				"the program": 795,
+				"own code": 368
+			}
+		},
+		"splitTally": {
+			"bytes": 2380,
+			"gzip": 1213,
+			"buildMs": 3.5,
+			"parts": {
+				"own code": 2335
+			}
+		},
+		"splitCounter": {
+			"bytes": 1508,
+			"gzip": 846,
+			"buildMs": 3.1,
+			"parts": {
+				"the program": 1012,
+				"own code": 461
+			}
+		},
+		"splitProbe": {
+			"bytes": 305,
+			"gzip": 234,
+			"buildMs": 1.7,
+			"parts": {
+				"own code": 270
+			}
+		},
+		"pureCounterRealEffect": {
+			"bytes": 579655,
+			"gzip": 187093,
+			"buildMs": 54.1,
+			"parts": {
+				"effect": 442226,
+				"@kampus/fabrika": 111900,
+				"@demlik/tea": 23797,
+				"the program": 795,
+				"own code": 615,
+				"the stub": 191
+			}
+		},
+		"pureTrackerRealEffect": {
+			"bytes": 610367,
+			"gzip": 197672,
+			"buildMs": 75.9,
+			"parts": {
+				"effect": 442472,
+				"@kampus/fabrika": 112776,
+				"@demlik/tea": 27539,
+				"the program": 17761,
+				"@kampus/pipeline": 8908,
+				"own code": 589,
+				"the stub": 191
+			}
+		},
+		"pureCounter": {
+			"bytes": 140963,
+			"gzip": 49435,
+			"buildMs": 22.6,
+			"parts": {
+				"@kampus/fabrika": 111150,
+				"@demlik/tea": 23643,
+				"stubbed names": 3980,
+				"the program": 791,
+				"the stub": 752,
+				"own code": 610
+			}
+		},
+		"pureTracker": {
+			"bytes": 171304,
+			"gzip": 59616,
+			"buildMs": 42.2,
+			"parts": {
+				"@kampus/fabrika": 112058,
+				"@demlik/tea": 27389,
+				"the program": 17665,
+				"@kampus/pipeline": 8838,
+				"stubbed names": 3981,
+				"the stub": 752,
+				"own code": 584
+			}
+		},
+		"pureCounterNoFabrika": {
+			"bytes": 17405,
+			"gzip": 5197,
+			"buildMs": 6.9,
+			"parts": {
+				"stubbed names": 12309,
+				"@demlik/tea": 2968,
+				"the program": 777,
+				"the stub": 729,
+				"own code": 586
+			}
+		},
+		"pureCounterMachine": {
+			"bytes": 3154,
+			"gzip": 1523,
+			"buildMs": 4.6,
+			"parts": {
+				"@demlik/tea": 2238,
+				"own code": 698,
+				"the stub": 182
+			}
+		},
+		"pureCounterMachineRealEffect": {
+			"bytes": 3154,
+			"gzip": 1523,
+			"buildMs": 4.7,
+			"parts": {
+				"@demlik/tea": 2238,
+				"own code": 698,
+				"the stub": 182
+			}
+		},
+		"pureTrackerNoFabrika": {
+			"bytes": 67226,
+			"gzip": 23252,
+			"buildMs": 17.8,
+			"parts": {
+				"@demlik/tea": 27139,
+				"the program": 17599,
+				"stubbed names": 12309,
+				"@kampus/pipeline": 8806,
+				"the stub": 752,
+				"own code": 584
+			}
+		},
+		"core": {
+			"bytes": 316722
+		}
+	},
+	"loads": [
+		{
+			"name": "an empty program (the floor)",
+			"loadedBytesPerVersion": 282,
+			"sentFirstBytes": 282,
+			"sentNextBytes": 283,
+			"coldMs": {
+				"p50": 1,
+				"p95": 2,
+				"mean": 1.25,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 59632,
+				"after": 83040,
+				"perVersionKb": 1170
+			}
+		},
+		{
+			"name": "single tally (part 1)",
+			"loadedBytesPerVersion": 423348,
+			"sentFirstBytes": 423348,
+			"sentNextBytes": 423349,
+			"coldMs": {
+				"p50": 28,
+				"p95": 29,
+				"mean": 27.8,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 78384,
+				"after": 217888,
+				"perVersionKb": 6975
+			}
+		},
+		{
+			"name": "split tally, shared modules the same bytes",
+			"loadedBytesPerVersion": 929903,
+			"sentFirstBytes": 929903,
+			"sentNextBytes": 2390,
+			"coldMs": {
+				"p50": 62,
+				"p95": 69,
+				"mean": 61.35,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 68640,
+				"after": 314896,
+				"perVersionKb": 12313
+			}
+		},
+		{
+			"name": "split tally, shared modules new bytes each version (control)",
+			"loadedBytesPerVersion": 929939,
+			"sentFirstBytes": 929939,
+			"sentNextBytes": 929943,
+			"coldMs": {
+				"p50": 61,
+				"p95": 63,
+				"mean": 60.9,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 102848,
+				"after": 323280,
+				"perVersionKb": 11022
+			}
+		},
+		{
+			"name": "single counter (part 1)",
+			"loadedBytesPerVersion": 579213,
+			"sentFirstBytes": 579213,
+			"sentNextBytes": 579214,
+			"coldMs": {
+				"p50": 40,
+				"p95": 43,
+				"mean": 40.25,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 87872,
+				"after": 264608,
+				"perVersionKb": 8837
+			}
+		},
+		{
+			"name": "split counter",
+			"loadedBytesPerVersion": 1579522,
+			"sentFirstBytes": 1579522,
+			"sentNextBytes": 1519,
+			"coldMs": {
+				"p50": 78,
+				"p95": 82,
+				"mean": 78.25,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 76416,
+				"after": 404528,
+				"perVersionKb": 16406
+			}
+		},
+		{
+			"name": "pure counter, real Effect",
+			"loadedBytesPerVersion": 579665,
+			"sentFirstBytes": 579665,
+			"sentNextBytes": 579666,
+			"coldMs": {
+				"p50": 41,
+				"p95": 45,
+				"mean": 40.95,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 85488,
+				"after": 272816,
+				"perVersionKb": 9366
+			}
+		},
+		{
+			"name": "pure counter, no Effect",
+			"loadedBytesPerVersion": 140972,
+			"sentFirstBytes": 140972,
+			"sentNextBytes": 140973,
+			"failed": "Error: cold: Error: Failed to start Worker: Uncaught Error: a shape only checks: this schema converts a value somewhere inside it   at program@0-c42ec90e6c1c.js:1:16437 in Ri"
+		},
+		{
+			"name": "pure counter, its machine module alone",
+			"loadedBytesPerVersion": 3164,
+			"sentFirstBytes": 3164,
+			"sentNextBytes": 3165,
+			"coldMs": {
+				"p50": 1,
+				"p95": 2,
+				"mean": 1.4,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 56656,
+				"after": 80064,
+				"perVersionKb": 1170
+			}
+		},
+		{
+			"name": "pure tracker, real Effect",
+			"loadedBytesPerVersion": 610377,
+			"sentFirstBytes": 610377,
+			"sentNextBytes": 610378,
+			"coldMs": {
+				"p50": 43,
+				"p95": 47,
+				"mean": 43.75,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 81888,
+				"after": 281952,
+				"perVersionKb": 10003
+			}
+		},
+		{
+			"name": "pure tracker, no Effect",
+			"loadedBytesPerVersion": 171313,
+			"sentFirstBytes": 171313,
+			"sentNextBytes": 171314,
+			"failed": "Error: cold: Error: Failed to start Worker: Uncaught Error: a shape only checks: this schema converts a value somewhere inside it   at program@0-98baf98e9124.js:1:26858 in ac"
+		},
+		{
+			"name": "pure tracker, no Effect, no fabrika",
+			"loadedBytesPerVersion": 67236,
+			"sentFirstBytes": 67236,
+			"sentNextBytes": 67237,
+			"coldMs": {
+				"p50": 4,
+				"p95": 5,
+				"mean": 3.6,
+				"n": 20
+			},
+			"rssKb": {
+				"before": 62496,
+				"after": 106624,
+				"perVersionKb": 2206
+			}
+		}
+	],
+	"sent": {
+		"firstVersion": {
+			"sent": 4,
+			"bytes": 929904
+		},
+		"nextVersion": {
+			"sent": 1,
+			"bytes": 2390
+		},
+		"otherProgramSameLibs": {
+			"sent": 4,
+			"bytes": 651998
+		},
+		"otherProcessSameVersion": {
+			"sent": 4,
+			"bytes": 929904
+		}
+	},
+	"parity": {
+		"counter": {
+			"threw": "Error: Failed to start Worker:"
+		},
+		"counter effect touched": "Error: effect: Error: Failed to start Worker:\nUncaught Error: a shape only checks: this schema converts a value somewhere inside it\n  at program@0-4a2ab3847c08.js:1:16437 in Ri\n  at program@0-4a2ab384",
+		"tracker": {
+			"threw": "Error: Failed to start Worker:"
+		},
+		"tracker effect touched": "Error: effect: Error: Failed to start Worker:\nUncaught Error: a shape only checks: this schema converts a value somewhere inside it\n  at program@0-f4eb48c7f149.js:1:26858 in ac\n  at program@0-f4eb48c7",
+		"counterNoFabrika": {
+			"threw": "Error: the program touched Effect at run time: @kampus/fabrika:defineProgram.machines.count.machine.init"
+		},
+		"counterNoFabrika effect touched": {
+			"init": [
+				"effect:Schema.Literals x1",
+				"effect:Schema.Struct x1",
+				"@kampus/fabrika:input x1",
+				"@kampus/fabrika:output x1",
+				"@kampus/fabrika:kind x1",
+				"@kampus/fabrika:defineProgram x1"
+			],
+			"run": [
+				"@kampus/fabrika:defineProgram.machines.count.machine.init x1"
+			]
+		},
+		"counterMachine": {
+			"steps": 6,
+			"sameAsNode": true,
+			"lastStatus": "5 so far",
+			"lastCmds": []
+		},
+		"counterMachine effect touched": {
+			"init": [],
+			"run": []
+		},
+		"trackerNoFabrika": {
+			"steps": 13,
+			"sameAsNode": true,
+			"lastStatus": "20 open, 0 closed",
+			"lastCmds": []
+		},
+		"trackerNoFabrika effect touched": {
+			"init": [
+				"effect:Schema.Struct x73",
+				"effect:Schema.Literal x31",
+				"effect:Schema.NullOr x23",
+				"effect:Schema.Array x23",
+				"effect:Schema.Union x12",
+				"effect:Schema.toStandardSchemaV1 x12",
+				"effect:Schema.Literals x11",
+				"effect:Context.Service x10",
+				"effect:Schema.String.check x9",
+				"effect:Schema.isPattern x8",
+				"@kampus/fabrika:input x8",
+				"effect:Schema.TaggedStruct x7",
+				"effect:Schema.isGreaterThanOrEqualTo x6",
+				"effect:Schema.optionalKey x5",
+				"effect:Schema.Int.check x4",
+				"effect:Schema.isMaxLength x3",
+				"effect:Schema.NonEmptyArray x3",
+				"effect:Schema.optional x3",
+				"effect:Data.TaggedError x2",
+				"effect:Schema.Finite.check x2",
+				"effect:Duration.minutes x2",
+				"effect:Schema.isTrimmed x1",
+				"effect:Schema.isNonEmpty x1",
+				"effect:Schema.String.check.check x1",
+				"effect:Schema.isLessThanOrEqualTo x1",
+				"effect:Schema.fromJsonString x1",
+				"effect:Schema.decodeUnknownOption x1",
+				"effect:Schema.Record x1",
+				"effect:Duration.seconds x1",
+				"@kampus/fabrika:kind x1",
+				"@kampus/fabrika:output x1",
+				"@kampus/fabrika:defineProgram x1"
+			],
+			"run": []
+		},
+		"trackerTrace": {
+			"msgs": [
+				"load_ok",
+				"pull_requests_ok",
+				"tick",
+				"show",
+				"find",
+				"open",
+				"list",
+				"write",
+				"save_ok",
+				"duplicates_ok",
+				"save_hints_ok",
+				"quit"
+			],
+			"duplicatesAsked": true
+		}
+	},
+	"schemasAsData": {
+		"docBytes": {
+			"counter Press": 221,
+			"counter Shown": 399,
+			"tracker Tracker": 63517,
+			"tracker Write": 10442,
+			"tracker File": 1598,
+			"tracker Comment": 1360,
+			"tracker OneTicket": 589
+		},
+		"notData": {},
+		"expected": {
+			"counter Press": [
+				true,
+				true,
+				false,
+				false,
+				false
+			],
+			"counter Shown": [
+				true,
+				false,
+				false,
+				false
+			],
+			"tracker Tracker": [
+				true,
+				false,
+				false
+			],
+			"tracker Write": [
+				true,
+				false,
+				false,
+				true,
+				false,
+				false,
+				true
+			],
+			"tracker File": [
+				true,
+				false,
+				false
+			],
+			"tracker Comment": [
+				true,
+				false
+			],
+			"tracker OneTicket": [
+				true,
+				false,
+				false
+			]
+		},
+		"rebuilt": {
+			"counter Press": [
+				true,
+				true,
+				false,
+				false,
+				false
+			],
+			"counter Shown": [
+				true,
+				false,
+				false,
+				false
+			],
+			"tracker Tracker": [
+				true,
+				false,
+				false
+			],
+			"tracker Write": [
+				true,
+				false,
+				false,
+				true,
+				false,
+				false,
+				true
+			],
+			"tracker File": [
+				true,
+				false,
+				false
+			],
+			"tracker Comment": [
+				true,
+				false
+			],
+			"tracker OneTicket": [
+				true,
+				false,
+				false
+			]
+		},
+		"agree": true
+	},
+	"benchInObject": {
+		"tally, single bundle (part 1)": {
+			"perStepUs": [
+				27,
+				28,
+				31
+			],
+			"stateBytes": 19
+		},
+		"tally, split modules": {
+			"perStepUs": [
+				30,
+				31,
+				28
+			],
+			"stateBytes": 19
+		},
+		"counter, single bundle (part 1)": {
+			"perStepUs": [
+				29,
+				28,
+				33
+			],
+			"stateBytes": 10
+		},
+		"counter, pure step, the core decodes the press": {
+			"perStepUs": [
+				28,
+				28,
+				28
+			],
+			"stateBytes": 10
+		},
+		"counter, pure step, no decode": {
+			"perStepUs": [
+				33,
+				28,
+				27
+			],
+			"stateBytes": 10
+		},
+		"tracker, pure step, 20 tickets": {
+			"perStepUs": [
+				114,
+				113,
+				114
+			],
+			"stateBytes": 4814
+		},
+		"the core decodes one Write, no step": {
+			"perStepUs": [
+				0.31,
+				0.31,
+				0.31
+			],
+			"stateBytes": 58
+		},
+		"the core decodes one press, no step": {
+			"perStepUs": [
+				0.05,
+				0.06,
+				0.05
+			],
+			"stateBytes": 6
+		},
+		"counter, the update alone in Node": {
+			"perStepUs": [
+				0.07,
+				0.06,
+				0.05
+			]
+		},
+		"tracker, the update alone in Node, 20 tickets": {
+			"perStepUs": [
+				0.22,
+				0.21,
+				0.21
+			]
+		}
+	},
+	"sharedState": {
+		"splitProbe": {
+			"version1": [
+				1,
+				2,
+				3
+			],
+			"version2": 1,
+			"oneCopyAcrossVersions": false
+		},
+		"pureByVersion": {
+			"answers": [
+				{
+					"calls": 8014,
+					"born": 1793437496355
+				},
+				{
+					"calls": 8015,
+					"born": 1793437496355
+				}
+			],
+			"oneIsolate": true
+		},
+		"pureByProcess": {
+			"answers": [
+				{
+					"calls": 1,
+					"born": 1793437497934
+				},
+				{
+					"calls": 1,
+					"born": 1793437497937
+				},
+				{
+					"calls": 2,
+					"born": 1793437497934
+				}
+			],
+			"apart": true,
+			"sameAgainForX": true
+		}
+	}
+}

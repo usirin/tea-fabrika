@@ -1,0 +1,275 @@
+{
+	"when": "2026-10-31",
+	"versions": {
+		"node": "v26.12.0"
+	},
+	"bundle": {
+		"tally": {
+			"bytes": 966361,
+			"gzip": 201488,
+			"firstBuildMs": 85.7,
+			"warmBuildMs": 53.1,
+			"hash": "16afe2d64f01a0c1d6c841a5b0e33d4834be452617c082c01036d649f500d2cf",
+			"sameBytesTwice": true,
+			"parts": {
+				"effect": 904667,
+				"@demlik/tea": 46585,
+				"own code": 3401
+			}
+		},
+		"tallyMinified": {
+			"bytes": 423339,
+			"gzip": 135093,
+			"buildMs": 66.7,
+			"hash": "bb8c3ac12241bfb5eb7eaf7696a2526d9ee662187df647416fbc13c377b96937",
+			"parts": {
+				"effect": 399522,
+				"@demlik/tea": 21480,
+				"own code": 2195
+			}
+		},
+		"programsCounterMinified": {
+			"bytes": 579204,
+			"gzip": 186209,
+			"buildMs": 86.3,
+			"parts": {
+				"effect": 442218,
+				"@kampus/fabrika": 111900,
+				"@demlik/tea": 23792,
+				"own code": 1163
+			}
+		},
+		"core": {
+			"bytes": 972888,
+			"buildMs": 46.5
+		}
+	},
+	"hashCheck": {
+		"kept": false,
+		"why": "hash_mismatch",
+		"real": "e4c7f0365a76034f48058fda873fe3187e6d56092ada9d8780c03af1bb36bf1e"
+	},
+	"load": {
+		"coldMs": {
+			"p50": 38,
+			"p95": 46,
+			"mean": 38.1,
+			"n": 20
+		},
+		"coldMinifiedMs": {
+			"p50": 29,
+			"p95": 31,
+			"mean": 28.95,
+			"n": 20
+		},
+		"warm": {
+			"getAndCallMs": 0.028,
+			"getOnlyMs": 0.0011,
+			"sameIsolate": true,
+			"calls": 1001
+		},
+		"workerdRssKb": {
+			"before": 136512,
+			"after": 395424,
+			"isolates": 40,
+			"perIsolateKb": 6473
+		}
+	},
+	"shared": {
+		"x": {
+			"calls": 1002,
+			"born": 1793435551459
+		},
+		"y": {
+			"calls": 1003,
+			"born": 1793435551459
+		},
+		"oneIsolate": true
+	},
+	"benchInObject": {
+		"direct pad 0": {
+			"steps": 100000,
+			"perStepUs": [
+				0.08,
+				0.03,
+				0.03
+			],
+			"n": 100000
+		},
+		"isolate pad 0": {
+			"steps": 1000,
+			"perStepUs": [
+				34,
+				28,
+				29
+			],
+			"n": 1000
+		},
+		"direct pad 10000": {
+			"steps": 100000,
+			"perStepUs": [
+				0.07,
+				0.04,
+				0.03
+			],
+			"n": 100000
+		},
+		"isolate pad 10000": {
+			"steps": 1000,
+			"perStepUs": [
+				36,
+				37,
+				35
+			],
+			"n": 1000
+		},
+		"direct pad 100000": {
+			"steps": 100000,
+			"perStepUs": [
+				0.05,
+				0.05,
+				0.04
+			],
+			"n": 100000
+		},
+		"isolate pad 100000": {
+			"steps": 1000,
+			"perStepUs": [
+				60,
+				66,
+				62
+			],
+			"n": 1000
+		},
+		"facet pad 0 (a SQLite write each step)": {
+			"perStepUs": [
+				111,
+				68,
+				65
+			]
+		}
+	},
+	"singleStepFromNodeMs": {
+		"noop": {
+			"p50": 0.534,
+			"p95": 0.874,
+			"mean": 0.604,
+			"n": 1000
+		},
+		"direct": {
+			"p50": 0.537,
+			"p95": 0.826,
+			"mean": 0.628,
+			"n": 1000
+		},
+		"isolate": {
+			"p50": 0.606,
+			"p95": 0.922,
+			"mean": 0.69,
+			"n": 1000
+		},
+		"facet": {
+			"p50": 0.727,
+			"p95": 1.237,
+			"mean": 0.822,
+			"n": 1000
+		}
+	},
+	"isolation": {
+		"none": {
+			"env": [
+				"LEDGER"
+			],
+			"fetch": "refused: Error: This worker is not permitted to access the internet via global functions like fetch(). It must use capabilities (such as bindings in 'env') to talk to th",
+			"fetchLocal": "refused: Error: This worker is not permitted to access the internet via global functions like fetch(). It must use capabilities (such as bindings in 'env') to talk to th",
+			"connect": "refused: Error: This worker is not permitted to access the internet via global functions like fetch(). It must use capabilities (such as bindings in 'env') to talk to th",
+			"webSocket": "refused: Error: This worker is not permitted to access the internet via global functions like fetch(). It must use capabilities (such as bindings in 'env') to talk to th",
+			"cache": "refused: Error: No Cache was configured",
+			"process": "undefined",
+			"require": "undefined",
+			"crypto": "ok: 36",
+			"ledger": "ok: {\"by\":\"process:a\",\"text\":\"hello\",\"claimed\":null}",
+			"ledgerForged": "ok: {\"by\":\"process:a\",\"text\":\"hi\",\"claimed\":\"process:other\"}"
+		},
+		"gate": {
+			"env": [
+				"LEDGER"
+			],
+			"fetch": "ok: 403",
+			"fetchLocal": "ok: 403",
+			"connect": "refused: TypeError: Incoming CONNECT on a worker not supported",
+			"webSocket": "ok: {}",
+			"cache": "refused: Error: No Cache was configured",
+			"process": "undefined",
+			"require": "undefined",
+			"crypto": "ok: 36",
+			"ledger": "ok: {\"by\":\"process:a\",\"text\":\"hello\",\"claimed\":null}",
+			"ledgerForged": "ok: {\"by\":\"process:a\",\"text\":\"hi\",\"claimed\":\"process:other\"}"
+		},
+		"limits": {
+			"spin 50 ms with cpuMs 10": "ran, 1562576 turns",
+			"spin 500 ms with cpuMs 10": "ran, 15922407 turns"
+		},
+		"coreKeys": [
+			"code:16afe2d64f0",
+			"code:bb8c3ac1224"
+		]
+	},
+	"spin": {
+		"spinMs": 301.6,
+		"sameProcessNoopMs": 272.2,
+		"otherProcessIsolateStepMs": 272.2,
+		"otherProcessDirectStepMs": 272.2
+	},
+	"effect": {
+		"inIsolate": {
+			"n": 42,
+			"pad": ""
+		},
+		"inCore": {
+			"n": 42,
+			"pad": ""
+		},
+		"refused": "refused: Error: SchemaError"
+	},
+	"programsCounter": {
+		"describe": {
+			"name": "counter",
+			"description": "Counts presses of +1 until done, and says the count. It has a window.",
+			"inputs": [
+				"press"
+			]
+		},
+		"model": {
+			"n": 3
+		},
+		"status": "3 so far"
+	},
+	"facets": {
+		"seen": {
+			"n": 5,
+			"keys": [
+				"model"
+			]
+		},
+		"coreKeys": [
+			"code:16afe2d64f0",
+			"code:6ff0d25c12c",
+			"core-only"
+		],
+		"afterUpgrade": {
+			"n": 5,
+			"keys": [
+				"model"
+			]
+		},
+		"oldStub": "refused: Error: upgraded",
+		"afterRestart": {
+			"n": 5,
+			"keys": [
+				"model"
+			]
+		},
+		"firstCallAfterRestartMs": 116.5
+	}
+}
