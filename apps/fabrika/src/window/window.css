@@ -517,7 +517,8 @@ main.program > [role="alert"] {
  * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
  * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
  * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
- * the window is moved by it, and its buttons take no drag.
+ * the window is moved by it, and its buttons take no drag. No line under the top bar or over the
+ * bottom line: the tiles' own edges already end the desk there.
  */
 .topbar,
 .bottomline {
@@ -534,7 +535,6 @@ main.program > [role="alert"] {
 .topbar {
 	position: relative;
 	height: 34px;
-	border-bottom: 1px solid var(--border-faint);
 	-webkit-app-region: drag;
 	app-region: drag;
 }
@@ -690,7 +690,6 @@ main.program > [role="alert"] {
 	justify-content: space-between;
 	gap: var(--s-4);
 	height: 26px;
-	border-top: 1px solid var(--surface-hover);
 	color: var(--text-muted);
 }
 
