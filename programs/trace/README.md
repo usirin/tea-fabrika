@@ -2,10 +2,13 @@
 
 One job's trace in a tile of its own. It reads the job's record through the `Traces` service and
 draws it as a waterfall: one bar per span, nested by parent, one colour per program, and the
-events as dots. Every row that groups others opens, down to one step. A step shows its Msg, the
-state before and after, what changed, and the Cmds it started. The models are Elm's debugger,
+events as dots. Every row that groups others opens, down to one step. A step shows what changed
+first, then its Msg, the state after and the Cmds it started. The models are Elm's debugger,
 Redux DevTools, and Jaeger's span detail. The design is
-[A JobRecord holds each host job](../../docs/direction/a-job-record-holds-its-trace.md).
+[A JobRecord holds each host job](../../docs/direction/a-job-record-holds-its-trace.md); the look
+is [The trace window](../../docs/direction/the-trace-window.md).
+
+![The step add 2 open beside the waterfall, in one tile](docs/trace-step-one-tile.png)
 
 ```ts
 // tsh> seq --to 3 | tally | trace    no flag: its own line's job, followed live as it goes
@@ -16,9 +19,12 @@ Redux DevTools, and Jaeger's span detail. The design is
 toggle {row: "span:<tally's span>"}   // tally opens: "count total"
 toggle {row: "machine:[…]"}           // count total opens: add 1, add 2, add 3
 choose {row: "step:[…, 2]"}           // add 2's detail:
-// {msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
+// {name: "add 2", n: 2, of: 3, msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
 //  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
 ```
+
+The first read chooses the job's row, so the tile opens with the job's facts beside the waterfall,
+as Honeycomb and LangSmith select the root span.
 
 ## The program, types first
 
@@ -114,6 +120,25 @@ The rows are a WAI-ARIA treegrid. One row holds the focus at a time.
 - → opens a closed row, or moves into an open one. ← closes an open row, or moves to its parent.
 - Enter and Space do what a click does: a grouped row opens or closes and shows its detail, a
   leaf shows its detail, and a second press hides it.
+- Esc closes the detail.
+
+## The window
+
+The detail sits beside the waterfall when the tile is 880px wide or more, as Linear's side peek
+does, and under it when narrower, as Chrome DevTools does. It stays in sight as the tile scrolls.
+At 560px the row notes go, at 420px the legend goes.
+
+| Layout | Shot |
+|---|---|
+| One tile, the job chosen | [trace-waterfall-one-tile.png](docs/trace-waterfall-one-tile.png) |
+| One tile, a step | [trace-step-one-tile.png](docs/trace-step-one-tile.png) |
+| One tile, a span | [trace-span-one-tile.png](docs/trace-span-one-tile.png) |
+| Side by side | [waterfall](docs/trace-waterfall-side-by-side.png), [step](docs/trace-step-side-by-side.png) |
+| Stacked | [trace-step-stacked.png](docs/trace-step-stacked.png) |
+| 2x2 | [trace-step-grid-2x2.png](docs/trace-step-grid-2x2.png) |
+| 1024x700 window | [trace-step-small-window-1024x700.png](docs/trace-step-small-window-1024x700.png) |
+| Its own line's job, beside runs, before a pick | [trace-own-job-side-by-side.png](docs/trace-own-job-side-by-side.png) |
+| An empty record | [beside runs](docs/trace-empty-record-side-by-side.png), [one tile](docs/trace-empty-record-one-tile.png) |
 
 ## Not done
 

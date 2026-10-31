@@ -114,6 +114,15 @@ const againKeepsRows = every(
 	},
 );
 
+const firstReadShowsTheJob = every(
+	"a first read of the record followed shows the job's detail, as a trace viewer selects the root",
+	({prev, msg, next}) =>
+		msg.type !== "got" ||
+		prev.read.at !== "reading" ||
+		idOf(prev.read) !== msg.trace.trace ||
+		next.chosen === JOB,
+);
+
 const newestWins: Law = {
 	name: "the id held is the last one looked at, and a record read is that id's",
 	check: (machine) =>
@@ -155,6 +164,7 @@ const LAWS = [
 	followsWhatItHolds,
 	lookAgainIsNothing,
 	againKeepsRows,
+	firstReadShowsTheJob,
 	newestWins,
 	twiceIsNothing,
 ];
@@ -195,7 +205,7 @@ const PLANTS = {
 	takesLateAnswers: plant({
 		got: (s, m) =>
 			s.read.at === "reading"
-				? [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: null}, []]
+				? [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: JOB}, []]
 				: real.got(s, m),
 	}),
 	/** A newer id keeps the old record's open rows. */
@@ -209,7 +219,7 @@ const PLANTS = {
 	resetsOnEachRead: plant({
 		got: (s, m) =>
 			idOf(s.read) === m.trace.trace && (s.read.at === "reading" || s.read.at === "read")
-				? [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: null}, []]
+				? [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: JOB}, []]
 				: [s, []],
 	}),
 	/** A job read first with nothing under it stays closed once its runs come in. */
@@ -219,6 +229,13 @@ const PLANTS = {
 			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) return [next, cmds];
 			const groups = groupsOf(treeOf(m.trace));
 			return [{...next, open: s.open.filter((k) => groups.has(k))}, cmds];
+		},
+	}),
+	/** A first read shows no detail: the side panel opens empty. */
+	choosesNothingFirst: plant({
+		got: (s, m) => {
+			const [next, cmds] = real.got(s, m);
+			return [s.read.at === "reading" ? {...next, chosen: null} : next, cmds];
 		},
 	}),
 	/** A toggle only ever opens. */
@@ -255,6 +272,7 @@ describe("the trace machine's laws", () => {
 		expect(broken(PLANTS.keepsOldRows)).toContain(openAreGroups.name);
 		expect(broken(PLANTS.resetsOnEachRead)).toEqual([againKeepsRows.name]);
 		expect(broken(PLANTS.staysClosed)).toEqual([againKeepsRows.name]);
+		expect(broken(PLANTS.choosesNothingFirst)).toEqual([firstReadShowsTheJob.name]);
 		expect(broken(PLANTS.neverCloses)).toEqual([twiceIsNothing.name]);
 		expect(broken(PLANTS.followsWhatIsLost)).toEqual([followsWhatItHolds.name]);
 	});

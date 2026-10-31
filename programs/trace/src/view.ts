@@ -70,7 +70,10 @@ export const Detail = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("span"),
 		key: Schema.String,
+		/** The row's name: a run's is its program's. */
 		name: Schema.String,
+		/** The span's own name, as OpenTelemetry and Jaeger call it an operation's: `run`, `chat`. */
+		op: Schema.String,
 		service: Schema.String,
 		span: Schema.String,
 		parent: Schema.NullOr(Schema.String),
@@ -99,10 +102,14 @@ export const Detail = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("step"),
 		key: Schema.String,
+		/** How its Msg reads in one line: `add 2`. */
+		name: Schema.String,
 		run: Schema.String,
 		machine: Schema.String,
 		id: Schema.String,
 		n: Schema.Int,
+		/** How many steps its machine run has. */
+		of: Schema.Int,
 		at: Schema.Number,
 		msg: Schema.Unknown,
 		/** `start`: the first step, whose state before is the machine's start, which no row keeps. */
@@ -195,13 +202,21 @@ const flatten = (root: Node, open: ReadonlySet<string>, zero: number): Row[] => 
 	return out;
 };
 
-const stepDetail = (key: string, step: Step, before: Step | null, zero: number): Detail => ({
+const stepDetail = (
+	node: Node,
+	step: Step,
+	before: Step | null,
+	of: number,
+	zero: number,
+): Detail => ({
 	kind: "step",
-	key,
+	key: node.key,
+	name: node.name,
 	run: step.run,
 	machine: step.machine,
 	id: step.id,
 	n: step.n,
+	of,
 	at: step.at - zero,
 	msg: step.msg,
 	before: before === null ? {kind: "start"} : {kind: "kept", state: before.state},
@@ -215,7 +230,7 @@ const detailOf = (
 	trace: Extract<Model["read"], {readonly at: "read"}>["trace"],
 	zero: number,
 ): Detail => {
-	const record = trace.runs.find((r) => r.run === node.note || `run:${r.run}` === node.key);
+	const record = node.run === null ? undefined : trace.runs.find((r) => r.run === node.run);
 	const run =
 		record === undefined ? null : {run: record.run, status: record.status, flags: record.flags};
 	const job = node.kind === "job" ? trace.job : null;
@@ -225,7 +240,8 @@ const detailOf = (
 			return {
 				kind: "span",
 				key: node.key,
-				name: of.span.name,
+				name: node.name,
+				op: of.span.name,
 				service: of.span.service,
 				span: of.span.span,
 				parent: of.span.parent,
@@ -248,7 +264,7 @@ const detailOf = (
 				state: of.steps.at(-1)?.state ?? null,
 			};
 		case "step":
-			return stepDetail(node.key, of.step, of.before, zero);
+			return stepDetail(node, of.step, of.before, of.of, zero);
 		case "group":
 			return {kind: "group", key: node.key, name: node.name, size: node.children.length, run, job};
 	}

@@ -3571,28 +3571,106 @@ main.program:has(> .view) {
 	}
 }
 
-/* 4. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
+/*
+ * 4. The trace: one job's waterfall, as Jaeger and Honeycomb draw one, and the chosen row's
+ * detail beside it, as Linear's side peek sits; under it in a narrow tile, as Chrome DevTools puts
+ * its details (docs/direction/the-trace-window.md). The view is the one box that scrolls: the
+ * detail stays in sight by `position: sticky`, never by a scrollbar of its own.
+ */
 
-.trace-view .legend .swatch {
-	display: inline-block;
-	inline-size: 10px;
-	block-size: 10px;
+.trace-view .tr-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--s-1) var(--s-3);
+	padding: var(--s-3) var(--s-4) var(--s-2);
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.trace-view .tr-title {
+	min-inline-size: 0;
+	max-inline-size: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 500 var(--fs-body) / 1.4 var(--mono);
+	color: var(--text-primary);
+}
+
+.trace-view .tr-facts {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.trace-view .tr-facts > * + *::before {
+	content: "·";
+	margin-inline-end: var(--s-2);
+	color: var(--text-faint);
+}
+
+.trace-view .tr-legend {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--s-3);
+	margin-inline-start: auto;
+}
+
+.trace-view .tr-legend > span {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.trace-view .tr-sw {
+	inline-size: 8px;
+	block-size: 8px;
 	border-radius: 2px;
 }
 
+.trace-view .tr-id {
+	margin-inline-start: auto;
+	font-size: var(--fs-micro);
+}
+
+.trace-view .tr-legend ~ .tr-id {
+	margin-inline-start: 0;
+}
+
+.trace-view .tr-body {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-content: start;
+	flex: 1 0 auto;
+}
+
+/* The waterfall. */
+
+/* `start`: a tall detail beside it never stretches the rows. */
 .trace-view .wf {
-	inline-size: calc(100% - 2 * var(--s-4));
-	margin: var(--s-2) var(--s-4) var(--s-3);
+	align-self: start;
+	inline-size: 100%;
 	table-layout: fixed;
 	border-collapse: collapse;
 }
 
 .trace-view .wf-c-name {
-	inline-size: 34%;
+	inline-size: 38%;
+}
+
+.trace-view .wf th,
+.trace-view .wf td {
+	padding: 0;
+	text-align: start;
+	vertical-align: middle;
+	font-weight: 400;
 }
 
 .trace-view .wf-row {
-	block-size: 26px;
+	block-size: 28px;
 	cursor: default;
 }
 
@@ -3609,24 +3687,17 @@ main.program:has(> .view) {
 	outline-offset: -2px;
 }
 
-.trace-view .wf th,
-.trace-view .wf td {
-	padding: 0;
-	text-align: start;
-	vertical-align: middle;
-	font-weight: 400;
-}
-
 .trace-view .wf-head {
-	block-size: 22px;
+	block-size: 24px;
 	color: var(--text-faint);
 	font-size: var(--fs-micro);
-	border-block-end: 1px solid var(--border-faint);
+	box-shadow: inset 0 -1px 0 var(--border-faint);
 }
 
 .trace-view .wf-name {
 	overflow: hidden;
 	white-space: nowrap;
+	padding-inline: var(--s-4) var(--s-2);
 	color: var(--text-secondary);
 }
 
@@ -3637,73 +3708,94 @@ main.program:has(> .view) {
 	min-inline-size: 0;
 }
 
-.trace-view th.wf-name {
-	padding-inline-start: 6px;
-}
-
 .trace-view .wf-caret {
-	inline-size: 10px;
+	display: inline-grid;
+	place-items: center;
+	inline-size: 12px;
 	flex: none;
 	color: var(--text-faint);
-	font-size: var(--fs-micro);
+	transition: transform var(--fast) var(--ease-out);
+}
+
+.trace-view .wf-caret.open {
+	transform: rotate(90deg);
 }
 
 .trace-view .wf-swatch {
 	inline-size: 3px;
-	block-size: 14px;
+	block-size: 12px;
 	flex: none;
 	border-radius: 1px;
+}
+
+.trace-view .wf-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-inline-size: 0;
+}
+
+.trace-view .wf-row.sel .wf-label {
+	color: var(--text-primary);
 }
 
 .trace-view .wf-note {
 	overflow: hidden;
 	text-overflow: ellipsis;
+	flex: 0 1 auto;
 	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.trace-view .wf-bad {
+	flex: none;
+	font-size: var(--fs-micro);
+	font-weight: 500;
+	color: var(--stuck);
+}
+
+.trace-view .wf-lane {
+	padding-inline-end: var(--s-4);
 }
 
 .trace-view .wf-track {
 	position: relative;
-	block-size: 26px;
-	margin-inline-end: 64px;
+	block-size: 28px;
+	margin-inline-end: 52px;
+}
+
+/* The ruler's lines, under every row: one each tick, as Jaeger draws them. */
+.trace-view tbody .wf-track {
+	background-image: linear-gradient(to right, var(--border-faint) 1px, transparent 1px);
+	background-size: var(--grid) 100%;
 }
 
 .trace-view .wf-head .wf-track {
-	block-size: 22px;
+	block-size: 24px;
 }
 
 .trace-view .wf-tick {
 	position: absolute;
-	inset-block-start: 4px;
-	transform: translateX(-50%);
+	inset-block-start: 5px;
+	padding-inline-start: 4px;
 	font-variant-numeric: tabular-nums;
-	/* Near the track's end the box has little room left: "40 ms" stays one line. */
 	white-space: nowrap;
-}
-
-.trace-view .wf-tick:first-child {
-	transform: none;
 }
 
 .trace-view .wf-span {
 	position: absolute;
-	inset-block: 7px;
-	border-radius: 3px;
-	opacity: 0.85;
-}
-
-.trace-view .wf-span.wrong {
-	opacity: 1;
+	inset-block: 9px;
+	border-radius: 2px;
+	opacity: 0.9;
 }
 
 .trace-view .wf-dot {
 	position: absolute;
 	inset-block-start: 50%;
-	inline-size: 5px;
-	block-size: 5px;
-	margin: -2.5px 0 0 -2.5px;
+	inline-size: 4px;
+	block-size: 4px;
+	margin: -2px 0 0 -2px;
 	border-radius: 50%;
-	background: var(--surface-sunken);
-	box-shadow: 0 0 0 1px var(--text-primary);
+	background: rgb(0 0 0 / 0.5);
 }
 
 .trace-view .wf-took {
@@ -3712,145 +3804,317 @@ main.program:has(> .view) {
 	transform: translateY(-50%);
 	font-size: var(--fs-micro);
 	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
 
 .trace-view .wf-mark {
 	position: absolute;
 	inset-block-start: 50%;
-	inline-size: 9px;
-	block-size: 9px;
-	margin: -4.5px 0 0 -4.5px;
+	inline-size: 8px;
+	block-size: 8px;
+	margin: -4px 0 0 -4px;
 	transform: rotate(45deg);
 	border-radius: 1px;
 }
 
-.trace-view .wf-detail {
+/* The detail: under the waterfall in a narrow tile, beside it in a wide one. */
+
+.trace-view .pk {
+	box-shadow: inset 0 1px 0 var(--border-faint);
+	margin-block-start: var(--s-3);
+}
+
+.trace-view .pk-in {
 	display: grid;
-	gap: var(--s-2);
-	margin: var(--s-1) 0 var(--s-3) var(--s-6);
-	padding: var(--s-3);
-	border-radius: var(--r-lg);
-	background: var(--surface-raised);
-	box-shadow: inset 0 0 0 1px var(--border-faint);
+	gap: var(--s-4);
+	padding: var(--s-3) var(--s-4) var(--s-5);
 	font-size: var(--fs-small);
 }
 
-.trace-view .wf-detail h4 {
-	margin: var(--s-1) 0 0;
-	font: 600 var(--fs-micro) / 1.4 var(--font);
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--text-faint);
+@container main (min-width: 880px) {
+	.trace-view .tr-body.peeking {
+		grid-template-columns: minmax(0, 1fr) clamp(320px, 36%, 480px);
+	}
+
+	.trace-view .tr-body.peeking .wf-c-name {
+		inline-size: 42%;
+	}
+
+	.trace-view .pk {
+		align-self: stretch;
+		margin-block-start: 0;
+		box-shadow: inset 1px 0 0 var(--border-faint);
+	}
+
+	.trace-view .pk-in {
+		position: sticky;
+		inset-block-start: 0;
+	}
 }
 
-.trace-view .wf-detail-h {
-	margin: 0;
-	color: var(--text-secondary);
+.trace-view .pk-h {
+	display: flex;
+	gap: var(--s-2);
+	align-items: flex-start;
 }
 
-.trace-view .wf-detail-h b {
+.trace-view .pk-t {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.trace-view .pk-h h3 {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--s-2);
+	font: 500 var(--fs-head) / 1.35 var(--font);
 	color: var(--text-primary);
-	font-weight: 600;
-}
-
-.trace-view .wf-detail p,
-.trace-view .wf-detail ul,
-.trace-view .wf-detail ol {
-	margin: 0;
-}
-
-.trace-view .wf-detail ul,
-.trace-view .wf-detail ol {
-	padding-inline-start: var(--s-4);
-}
-
-.trace-view .wf-json {
-	margin: 0;
-}
-
-.trace-view .wf-json figcaption {
-	margin-block-end: 2px;
-	font: 600 var(--fs-micro) / 1.4 var(--font);
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--text-faint);
-}
-
-.trace-view .wf-json pre,
-.trace-view .wf-detail code {
-	margin: 0;
-	padding: 2px 6px;
-	border-radius: var(--r-sm);
-	background: var(--surface-sunken);
-	font: 400 var(--fs-small) / 1.5 var(--mono);
-	color: var(--text-primary);
-	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
-.trace-view .wf-json pre {
-	display: block;
-	padding: var(--s-1) var(--s-2);
+.trace-view .pk-sub {
+	margin-block-start: 2px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
 }
 
-.trace-view .wf-states {
+.trace-view .pk-bad {
+	font-size: var(--fs-small);
+	font-weight: 500;
+	color: var(--stuck);
+}
+
+.trace-view .pk-x {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	place-items: center;
+	flex: none;
+	inline-size: 24px;
+	block-size: 24px;
+	margin: -2px -6px 0 0;
+	border-radius: var(--r);
+	color: var(--text-faint);
+}
+
+.trace-view .pk-x:hover {
+	background: var(--surface-hover);
+	color: var(--text-secondary);
+}
+
+.trace-view .pk-s {
+	display: grid;
+	gap: var(--s-1);
+	min-inline-size: 0;
+}
+
+.trace-view .pk-s h4 {
+	margin: 0;
+	font: 500 var(--fs-small) / 1.4 var(--font);
+	color: var(--text-muted);
+}
+
+.trace-view .pk-kv {
+	grid-template-columns: 84px minmax(0, 1fr);
+}
+
+.trace-view .pk-sel {
+	user-select: all;
+}
+
+.trace-view .pk-chs,
+.trace-view .pk-cmds,
+.trace-view .pk-evs {
+	display: grid;
+	gap: var(--s-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.trace-view .pk-cmds > li + li {
+	padding-block-start: var(--s-1);
+	box-shadow: inset 0 1px 0 var(--border-faint);
+}
+
+.trace-view .pk-ch-l {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
 	gap: var(--s-2);
 }
 
-.trace-view .wf-diff li.replace,
-.trace-view .wf-diff li.add {
-	color: var(--done);
+.trace-view .pk-path {
+	font-family: var(--mono);
+	color: var(--text-secondary);
 }
 
-.trace-view .wf-diff li.remove {
-	color: var(--stuck);
+.trace-view .pk-was {
+	font: 400 var(--fs-small) / 1.5 var(--mono);
+	color: var(--text-muted);
 }
 
-.trace-view .wf-bad {
-	color: var(--stuck);
-	font-weight: 600;
+.trace-view .pk-ev {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr);
+	gap: 0 var(--s-2);
 }
 
-.trace-view .wf-tags {
+.trace-view .pk-at {
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.trace-view .pk-evt {
+	grid-column: 2;
+	overflow-wrap: anywhere;
+}
+
+.trace-view .pk-tags {
+	inline-size: 100%;
 	border-collapse: collapse;
-	font-size: var(--fs-small);
+	font: 400 var(--fs-small) / 1.6 var(--mono);
 }
 
-.trace-view .wf-tags th,
-.trace-view .wf-tags td {
-	padding: 1px var(--s-3) 1px 0;
+.trace-view .pk-tags th,
+.trace-view .pk-tags td {
+	padding: 0 var(--s-3) 0 0;
 	text-align: start;
 	vertical-align: top;
 	font-weight: 400;
 	overflow-wrap: anywhere;
 }
 
-.trace-view .wf-tags th {
+.trace-view .pk-tags th {
+	inline-size: 1%;
+	white-space: nowrap;
 	color: var(--text-faint);
 }
 
-.trace-view .wf-tags td {
+.trace-view .pk-tags td {
 	color: var(--text-primary);
 }
 
-.trace-view > .note {
-	margin: 0 var(--s-4) var(--s-4);
+.trace-view .pk-meta {
+	font-size: var(--fs-micro);
+	color: var(--text-faint);
+	overflow-wrap: anywhere;
 }
 
-@container main (max-width: 760px) {
-	.trace-view .wf {
-		inline-size: calc(100% - 2 * var(--s-2));
-		margin-inline: var(--s-2);
+/* A value as a tree: one key per line, the changed ones marked, as Elm's debugger draws a Model. */
+
+.trace-view .tv {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font: 400 var(--fs-small) / 1.6 var(--mono);
+	min-inline-size: 0;
+}
+
+.trace-view .tv-l {
+	display: flex;
+	gap: var(--s-2);
+	margin-inline: calc(-1 * var(--s-1));
+	padding-inline-end: var(--s-1);
+	border-radius: var(--r-sm);
+}
+
+/* Each line pads its own depth inline, so the first step in is the line's own small inset. */
+.trace-view .tv-l > :first-child {
+	margin-inline-start: var(--s-1);
+}
+
+.trace-view .tv-l.changed {
+	background: var(--surface-selected);
+}
+
+.trace-view .tv-k {
+	flex: none;
+	color: var(--text-faint);
+}
+
+.trace-view .tv-v {
+	min-inline-size: 0;
+	color: var(--text-primary);
+	overflow-wrap: anywhere;
+}
+
+.trace-view .tv-v:is(.null, .boolean, .empty) {
+	color: var(--text-muted);
+}
+
+.trace-view .tv-i {
+	font: 400 var(--fs-small) / 1.5 var(--mono);
+	color: var(--text-primary);
+	overflow-wrap: anywhere;
+}
+
+.trace-view .pk-ch.remove .tv-i {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
+/* A trace with nothing to draw: a short title and one line, in the middle, as Linear's empty views. */
+
+.trace-view .tr-empty {
+	display: grid;
+	gap: var(--s-1);
+	margin: auto;
+	max-inline-size: 46ch;
+	padding: var(--s-6) var(--s-4);
+	text-align: center;
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	text-wrap: pretty;
+}
+
+.trace-view .tr-empty-t {
+	font: 500 var(--fs-body) / 1.4 var(--font);
+	color: var(--text-secondary);
+}
+
+.trace-view .tr-empty-id {
+	margin-block-start: var(--s-1);
+	font-size: var(--fs-micro);
+}
+
+.trace-view .tr-empty.bad .tr-empty-t {
+	color: var(--stuck);
+}
+
+/* A narrow tile drops words before numbers: the notes, then the legend, never a bar. */
+@container main (max-width: 560px) {
+	.trace-view .tr-head {
+		padding-inline: var(--s-3);
 	}
 
 	.trace-view .wf-c-name {
-		inline-size: 40%;
+		inline-size: 44%;
+	}
+
+	.trace-view .wf-name {
+		padding-inline-start: var(--s-3);
+	}
+
+	.trace-view .wf-lane {
+		padding-inline-end: var(--s-3);
 	}
 
 	.trace-view .wf-note {
 		display: none;
+	}
+
+	.trace-view .pk-in {
+		padding-inline: var(--s-3);
+	}
+}
+
+@container main (max-width: 420px) {
+	.trace-view .tr-legend {
+		display: none;
+	}
+
+	.trace-view .tr-id {
+		margin-inline-start: auto;
 	}
 }

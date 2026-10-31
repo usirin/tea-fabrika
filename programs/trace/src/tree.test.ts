@@ -71,7 +71,7 @@ describe("treeOf", () => {
 		});
 		expect(shape(tree)).toEqual({"job job": ["span lane", "run build", "span orphan"]});
 		const run = tree.children.find((c) => c.kind === "run");
-		expect([run?.note, run?.wrong]).toEqual(["build-r7, no span", true]);
+		expect([run?.note, run?.run, run?.wrong]).toEqual(["no span", "build-r7", true]);
 	});
 
 	it("marks a span with an error status as wrong, and the only grouped rows open", () => {

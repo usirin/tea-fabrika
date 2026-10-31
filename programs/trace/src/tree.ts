@@ -30,7 +30,13 @@ export type Of =
 			readonly steps: readonly Step[];
 			readonly span: Span | null;
 	  }
-	| {readonly kind: "step"; readonly step: Step; readonly before: Step | null}
+	| {
+			readonly kind: "step";
+			readonly step: Step;
+			readonly before: Step | null;
+			/** How many steps its machine run has. */
+			readonly of: number;
+	  }
 	| {readonly kind: "group"};
 
 export interface Node {
@@ -38,8 +44,13 @@ export interface Node {
 	readonly key: string;
 	readonly kind: Kind;
 	readonly name: string;
-	/** Said beside the name, fainter: a run's id, a step's number. */
+	/**
+	 * Said beside the name, fainter, only where it adds what the rows under it do not: a machine
+	 * run's step count, an agent's tool calls, a run with no span. Ids are the detail's, not the row's.
+	 */
 	readonly note: string;
+	/** The run this row stands for, when it stands for one: its record's key. */
+	readonly run: string | null;
 	/** Whose it is: one colour per service, as a trace viewer lists spans. */
 	readonly service: string;
 	/** Unix ms. A step is a moment: `from` is `to`. */
@@ -90,6 +101,7 @@ const leaf = (s: Span): Node => ({
 	kind: "span",
 	name: s.name,
 	note: "",
+	run: null,
 	service: s.service,
 	from: s.start,
 	to: s.end,
@@ -138,6 +150,7 @@ export const treeOf = (trace: JobTrace): Node => {
 				kind: "machine",
 				name: `${first.machine} ${first.id}`,
 				note: `${steps.length} ${steps.length === 1 ? "step" : "steps"}`,
+				run: null,
 				service,
 				from: span?.start ?? first.at,
 				to: span?.end ?? last.at,
@@ -149,13 +162,14 @@ export const treeOf = (trace: JobTrace): Node => {
 						key: stepKey(step),
 						kind: "step",
 						name: msgName(step.msg),
-						note: `step ${step.n}`,
+						note: "",
+						run: null,
 						service,
 						from: step.at,
 						to: step.at,
 						wrong: false,
 						events: [],
-						of: {kind: "step", step, before: steps[i - 1] ?? null},
+						of: {kind: "step", step, before: steps[i - 1] ?? null, of: steps.length},
 						children: [],
 					}),
 				),
@@ -173,6 +187,7 @@ export const treeOf = (trace: JobTrace): Node => {
 			kind: "turns",
 			name: `${chats} ${chats === 1 ? "turn" : "turns"}`,
 			note: tools === 0 ? "" : `${tools} tool ${tools === 1 ? "call" : "calls"}`,
+			run: null,
 			service: parent.service,
 			from: Math.min(...turns.map((t) => t.start)),
 			to: Math.max(...turns.map((t) => t.end)),
@@ -194,7 +209,7 @@ export const treeOf = (trace: JobTrace): Node => {
 			...leaf(s),
 			kind: run === null ? "span" : "run",
 			name: run === null ? s.name : s.service,
-			note: run ?? "",
+			run,
 			wrong: s.status === "error" || (run !== null && failed.has(run)),
 			children: [
 				...owned.nodes,
@@ -215,7 +230,8 @@ export const treeOf = (trace: JobTrace): Node => {
 				key: `run:${run}`,
 				kind: "run",
 				name: programOf(run),
-				note: `${run}, no span`,
+				note: "no span",
+				run,
 				service: programOf(run),
 				from: at,
 				to: Math.max(at, ...owned.map((m) => m.to)),
@@ -247,6 +263,7 @@ export const treeOf = (trace: JobTrace): Node => {
 		kind: "job",
 		name: trace.job?.text ?? "job",
 		note: "",
+		run: null,
 		service: children[0]?.service ?? "tsh",
 		from,
 		to: Math.max(from, trace.job?.ended?.at ?? from, ...children.map((c) => c.to)),

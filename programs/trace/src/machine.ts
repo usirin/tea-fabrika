@@ -10,8 +10,9 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //   look     follow the job's record (`follow`): its own line's job at the start, or the flag's,
 //            then each id told on `id`. A newer id replaces the record shown, its open rows and
 //            its detail; the same id again changes nothing, unless it could not be read
-//   got      the record, read again: the first shows the job's row open, a later one keeps the
-//            rows open and the detail chosen. One for an id it no longer follows is dropped
+//   got      the record, read again: the first shows the job's row open and its detail chosen,
+//            as Honeycomb and LangSmith select a trace's root; a later one keeps the rows open
+//            and the detail chosen. One for an id it no longer follows is dropped
 //   lost     the record could not be read: before the first read it says why, after it the last
 //            record read stays shown
 //   toggle   open a row that groups others, or close it: a job, a run, a machine run, a round,
@@ -128,7 +129,7 @@ export const trace = defineMachine({
 		got: (s, m): Step => {
 			if (idOf(s.read) !== m.trace.trace) return [s, []];
 			if (s.read.at === "reading")
-				return [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: null}, []];
+				return [{read: {at: "read", trace: m.trace}, open: firstOpen(m.trace), chosen: JOB}, []];
 			return s.read.at === "read" ? [again(s, m.trace), []] : [s, []];
 		},
 		lost: (s, m): Step =>

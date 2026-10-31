@@ -65,14 +65,15 @@ describe("the trace program", () => {
 				yield* say("toggle", {row: tally});
 				yield* say("toggle", {row: count});
 				yield* say("choose", {row: add2});
-				const opened = yield* until((s) => s.chosen !== null);
+				const opened = yield* until((s) => s.chosen?.key === add2);
 				yield* say("quit", null);
 				return {first, opened, ended: (yield* run.ended).kind};
 			}).pipe(Effect.scoped),
 		);
 
-		// As it first opens: the job's row is open, its two runs show, closed.
+		// As it first opens: the job's row is open and its detail shows, its two runs closed.
 		expect(seen.first.title).toBe("seq --to 3 | tally");
+		expect(seen.first.chosen?.key).toBe("job");
 		expect(seen.first.rows.map((r) => [r.depth, r.name, r.open])).toEqual([
 			[0, "seq --to 3 | tally", true],
 			[1, "seq", false],
@@ -92,10 +93,12 @@ describe("the trace program", () => {
 		expect(seen.opened.chosen).toEqual({
 			kind: "step",
 			key: add2,
+			name: "add 2",
 			run: "tally-5d02c7a1",
 			machine: "count",
 			id: "total",
 			n: 2,
+			of: 3,
 			at: 6,
 			msg: {type: "add", n: 2},
 			before: {kind: "kept", state: {total: 1}},
@@ -113,7 +116,7 @@ describe("the trace program", () => {
 				const {say, until} = yield* session([TALLY_TRACE], TALLY_ID);
 				yield* until((s) => s.read === "read");
 				yield* say("choose", {row: add1});
-				return (yield* until((s) => s.chosen !== null)).chosen;
+				return (yield* until((s) => s.chosen?.key === add1)).chosen;
 			}).pipe(Effect.scoped),
 		);
 		expect(chosen?.kind === "step" && [chosen.before, chosen.after, chosen.changes]).toEqual([
@@ -135,7 +138,8 @@ describe("the trace program", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(shown.rows.map((r) => [r.name, r.open])).toEqual([["seq --to 3 | tally", false]]);
-		expect(shown.chosen).toBeNull();
+		// The job's detail, chosen at the first read, stays: a row the record does not hold changes nothing.
+		expect(shown.chosen?.key).toBe("job");
 	});
 
 	it("with no flag, shows its own trace; an id on `id` replaces it, and a newer id replaces that and its open rows", async () => {
