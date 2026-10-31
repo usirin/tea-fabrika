@@ -189,6 +189,12 @@ describe("serve, cut off from the ledger", () => {
 				link.down = false;
 				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
 				yield* until(Effect.map(countOf, (n) => n === 20));
+				// The renew that writes `lease_resumed` comes on its own clock, up to one retry (100 ms)
+				// after the link is back: the 20th count can land first.
+				const resumed = Effect.map(ledger.readStream("counter:1"), (rs) =>
+					rs.some((r) => r.kind === "lease_resumed"),
+				);
+				yield* until(resumed);
 				const n = yield* countOf;
 				const kinds = (yield* ledger.readStream("counter:1")).map((r) => r.kind);
 				yield* Scope.close(scope, Exit.void);
