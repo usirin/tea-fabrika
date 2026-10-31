@@ -94,8 +94,11 @@ const followsWhatItHolds = every(
 	({next, cmds}, machine) => {
 		const want =
 			next.read.at === "reading" || next.read.at === "read" ? {id: idOf(next.read)} : null;
+		const subs = (machine.subs ?? []).map((sub) => sub.type).toSorted();
 		return (
-			cmds.length === 0 && JSON.stringify(depsOf(machine, "follow", next)) === JSON.stringify(want)
+			cmds.length === 0 &&
+			JSON.stringify(subs) === JSON.stringify(["follow", "tick"]) &&
+			JSON.stringify(depsOf(machine, "follow", next)) === JSON.stringify(want)
 		);
 	},
 );
@@ -110,11 +113,13 @@ const ticksWhileItRuns = every(
 );
 
 const holdsTimeWhileItRuns = every(
-	"it holds the time only while the job runs, and the last tick's while it does",
-	({msg, next}) => {
+	"it holds the time only while the job runs, and a tick moves it to the later time, never back",
+	({prev, msg, next}) => {
 		if (next.read.at !== "read") return true;
 		if (!isRunning(next.read.trace)) return next.read.now === null;
-		return msg.type !== "tick" || next.read.now === msg.now;
+		if (msg.type !== "tick") return true;
+		const before = prev.read.at === "read" ? prev.read.now : null;
+		return next.read.now === Math.max(before ?? msg.now, msg.now);
 	},
 );
 
@@ -285,6 +290,25 @@ const PLANTS = {
 	takesLateTicks: plant({
 		tick: (s, m) => (s.read.at === "read" ? [{...s, read: {...s.read, now: m.now}}, []] : [s, []]),
 	}),
+	/** A tick takes any time, later or earlier, written out so it stays this way. */
+	takesAnyTime: plant({
+		tick: (s, m) =>
+			s.read.at === "read" && isRunning(s.read.trace)
+				? [{...s, read: {...s.read, now: m.now}}, []]
+				: [s, []],
+	}),
+	/** A tick does nothing, so the time never moves. */
+	frozenClock: plant({tick: (s) => [s, []]}),
+	/** A second follow, on another id. */
+	secondFollow: {
+		...trace,
+		subs: [...(trace.subs ?? []), {type: "follow", deps: () => ({id: OTHER})}],
+	} as Machine,
+	/** A second clock, on another id. */
+	secondClock: {
+		...trace,
+		subs: [...(trace.subs ?? []), {type: "tick", deps: () => ({id: OTHER})}],
+	} as Machine,
 	/** The time held before the job's end stays after it. */
 	keepsTimeAfterEnd: plant({
 		got: (s, m) => {
@@ -316,5 +340,12 @@ describe("the trace machine's laws", () => {
 		expect(broken(PLANTS.ticksForever)).toEqual([ticksWhileItRuns.name]);
 		expect(broken(PLANTS.takesLateTicks)).toEqual([holdsTimeWhileItRuns.name]);
 		expect(broken(PLANTS.keepsTimeAfterEnd)).toEqual([holdsTimeWhileItRuns.name]);
+		expect(broken(PLANTS.takesAnyTime)).toEqual([holdsTimeWhileItRuns.name]);
+		expect(broken(PLANTS.frozenClock)).toEqual([holdsTimeWhileItRuns.name]);
+	});
+
+	it("the follow law fails on any Sub beyond the two it names", () => {
+		expect(broken(PLANTS.secondFollow)).toContain(followsWhatItHolds.name);
+		expect(broken(PLANTS.secondClock)).toContain(followsWhatItHolds.name);
 	});
 });

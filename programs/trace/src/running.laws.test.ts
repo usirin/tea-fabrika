@@ -28,8 +28,9 @@ import {type Shown, shownOf} from "./view.ts";
 // the choice to draw no axis are in the component, not in pure code. These laws reach as far as
 // `shownOf`, the facts that choice reads. A window that ignores those facts passes here.
 //
-// Each law below has a planted break it must catch. KNOWN laws fail on the real code today, so they
-// sit under `it.fails`: fix the code, and the test turns red until `it.fails` becomes `it`.
+// Each law below has a planted break it must catch. The plants of `endStays`, `tickNeverBack` and
+// `finalCoversJob` are written out by hand, not built on the real cells, so they keep the behavior
+// those laws forbid however the real code changes.
 
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
@@ -167,6 +168,16 @@ const tickOnlyMovesTime = every(
 		(shown(next) === shown(prev) && next.open === prev.open && next.chosen === prev.chosen),
 );
 
+/** Shortest run on 9ebb87c: look A, got A not ended, a tick, an earlier tick. A clock can step back. */
+const tickNeverBack = every(
+	"a tick never moves a running job's time back",
+	({prev, msg, next}, {show}) => {
+		const before = show(prev).running?.took ?? null;
+		const after = show(next).running?.took ?? null;
+		return msg.type !== "tick" || before === null || after === null || after >= before;
+	},
+);
+
 // Promise 2
 
 const clockOnlyWhileRunning = every(
@@ -178,7 +189,7 @@ const clockOnlyWhileRunning = every(
 	},
 );
 
-/** The list the follow law used to hold by asking for one Sub: nothing else can keep ticking. */
+/** Nothing else can keep ticking. */
 const onlyTwoSubs = every(
 	"the machine holds one follow Sub and one clock Sub, and no other",
 	(_, {machine}) =>
@@ -198,6 +209,21 @@ const finalFromRecord = every(
 		if (record === null || record.job?.ended == null) return true;
 		const final = show(next);
 		return final.running === null && final.length === show(fresh(record)).length;
+	},
+);
+
+/**
+ * Shortest run on 9ebb87c: look A, got A, whose job ended 10 s in but whose only span is the line's,
+ * over at 14 ms: the head says 14 ms and the job's detail says 10 s. A background job lands here if
+ * its runs' spans never came.
+ */
+const finalCoversJob = every(
+	"an ended job's final time is never shorter than its job's own time",
+	({next}, {show}) => {
+		const ended = shown(next)?.job ?? null;
+		return (
+			ended === null || ended.ended === null || show(next).length >= ended.ended.at - ended.started
+		);
 	},
 );
 
@@ -232,6 +258,20 @@ const emptyDrawsNothing = every(
 const lateTickIsNothing = every(
 	"a tick when no job is running changes nothing",
 	({prev, msg, next}) => msg.type !== "tick" || runs(prev) || next === prev,
+);
+
+/**
+ * Shortest run on 9ebb87c: look A, got A ended, got A not ended: it looks like it runs again, and
+ * the clock Sub comes back on. The host writes an end once (`WHERE how IS NULL`) and reads come in
+ * order, so only a stale read can do this.
+ */
+const endStays = every(
+	"once the record shown says its job ended, a read of that record cannot make it run again",
+	({prev, msg, next}) =>
+		msg.type !== "got" ||
+		shown(prev)?.trace !== msg.trace.trace ||
+		shown(prev)?.job?.ended == null ||
+		!runs(next),
 );
 
 // Promise 5
@@ -294,57 +334,17 @@ const LAWS: readonly Law[] = [
 	timeOnceTold,
 	readKeepsTime,
 	tickOnlyMovesTime,
+	tickNeverBack,
 	clockOnlyWhileRunning,
 	onlyTwoSubs,
 	overHoldsNoTime,
 	finalFromRecord,
+	finalCoversJob,
 	emptyDrawsNothing,
 	lateTickIsNothing,
+	endStays,
 	timeMoves,
 ];
-
-// Laws the real code breaks today, each with its shortest run. Nothing here is loosened to pass.
-
-/**
- * Promise 4. look A, got A ended, got A not ended: it looks like it runs again, and the clock Sub
- * comes back on. The host writes an end once (`WHERE how IS NULL`) and reads come in order, so only
- * a stale read can do this, and today nothing in the machine stops one.
- */
-const endStays = every(
-	"once the record shown says its job ended, a read of that record cannot make it run again",
-	({prev, msg, next}) =>
-		msg.type !== "got" ||
-		shown(prev)?.trace !== msg.trace.trace ||
-		shown(prev)?.job?.ended == null ||
-		!runs(next),
-);
-
-/** Promise 1. look A, got A not ended, a tick, an earlier tick: the time goes back. A clock can. */
-const tickNeverBack = every(
-	"a tick never moves a running job's time back",
-	({prev, msg, next}, {show}) => {
-		const before = show(prev).running?.took ?? null;
-		const after = show(next).running?.took ?? null;
-		return msg.type !== "tick" || before === null || after === null || after >= before;
-	},
-);
-
-/**
- * Promise 2. look A, got A, whose job ended 10 s in but whose only span is the line's, over at 14 ms:
- * the head says 14 ms and the job's detail says 10 s. The job's row, on the line's span, leaves
- * `job.ended` out. A background job lands here if its runs' spans never came.
- */
-const finalCoversJob = every(
-	"an ended job's final time is never shorter than its job's own time",
-	({next}, {show}) => {
-		const ended = shown(next)?.job ?? null;
-		return (
-			ended === null || ended.ended === null || show(next).length >= ended.ended.at - ended.started
-		);
-	},
-);
-
-const KNOWN: readonly Law[] = [endStays, tickNeverBack, finalCoversJob];
 
 const breaks = (law: Law, world: World): boolean => {
 	try {
@@ -354,9 +354,6 @@ const breaks = (law: Law, world: World): boolean => {
 		return true;
 	}
 };
-
-const broken = (world: World, laws: readonly Law[] = LAWS): readonly string[] =>
-	laws.filter((law) => breaks(law, world)).map((law) => law.name);
 
 // Planted mistakes: the real machine with one cell or Sub changed, or the real view with one fact.
 
@@ -418,6 +415,14 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 			},
 		}),
 	],
+	[
+		tickNeverBack,
+		"a tick takes any time, later or earlier",
+		inMachine({
+			tick: (s, m) =>
+				s.read.at === "read" && runs(s) ? [{...s, read: {...s.read, now: m.now}}, []] : [s, []],
+		}),
+	],
 	[clockOnlyWhileRunning, "the clock is never on, so no tick ever comes", inClock(() => null)],
 	[
 		clockOnlyWhileRunning,
@@ -449,6 +454,17 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 	],
 	[finalFromRecord, "the view reads a clock after the end", viewWithClock()],
 	[
+		finalCoversJob,
+		"an ended job's final time comes from its spans alone",
+		inView((s, view) => {
+			const record = shown(s);
+			if (record?.job?.ended == null || record.spans.length === 0) return view;
+			const from = Math.min(...record.spans.map((span) => span.start));
+			const to = Math.max(...record.spans.map((span) => span.end));
+			return {...view, length: Math.max(1, to - from)};
+		}),
+	],
+	[
 		emptyDrawsNothing,
 		"an empty record's view holds a made-up row under the job",
 		inView((_, view) => {
@@ -473,6 +489,16 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		}),
 	],
 	[
+		endStays,
+		"each read of the id held replaces the record, whatever it says",
+		inMachine({
+			got: (s, m) =>
+				(s.read.at === "reading" ? s.read.id : shown(s)?.trace) === m.trace.trace
+					? [fresh(m.trace), []]
+					: [s, []],
+		}),
+	],
+	[
 		timeMoves,
 		"a tick does nothing: the machine that passes by never doing anything",
 		inMachine({tick: (s) => [s, []]}),
@@ -489,36 +515,6 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 	],
 ];
 
-/**
- * The real machine with each known failure fixed, kept here only to show those laws can pass, and
- * can pass with all the others. It is a sketch for the tests, not a design.
- */
-const KEPT: World = {
-	machine: {
-		...trace,
-		update: {
-			...real,
-			got: (s, m) =>
-				shown(s)?.trace === m.trace.trace &&
-				shown(s)?.job?.ended != null &&
-				m.trace.job?.ended === null
-					? [s, []]
-					: real.got(s, m),
-			tick: (s, m) =>
-				s.read.at === "read" && runs(s)
-					? [{...s, read: {...s.read, now: Math.max(s.read.now ?? m.now, m.now)}}, []]
-					: [s, []],
-		},
-	},
-	show: (s) => {
-		const view = shownOf(s);
-		const ended = shown(s)?.job ?? null;
-		return ended === null || ended.ended === null
-			? view
-			: {...view, length: Math.max(view.length, ended.ended.at - ended.started)};
-	},
-};
-
 describe("a running job's laws", () => {
 	it.each(LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
 		law.check(REAL);
@@ -527,19 +523,7 @@ describe("a running job's laws", () => {
 	it.each(PLANTS.map(([law, what, world]) => [law.name, what, law, world] as const))(
 		"%s: seen to fail when %s",
 		(_, __, law, world) => {
-			expect(broken(world)).toContain(law.name);
+			expect(breaks(law, world)).toBe(true);
 		},
 	);
-});
-
-describe("known failures: the real code breaks these today", () => {
-	for (const law of KNOWN) {
-		it.fails(law.name, () => {
-			law.check(REAL);
-		});
-	}
-
-	it("they can pass, and with every other law, on a machine that keeps these promises", () => {
-		expect(broken(KEPT, [...LAWS, ...KNOWN])).toEqual([]);
-	});
 });
