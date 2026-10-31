@@ -122,6 +122,25 @@ interface Data {
     what is on screen easy to trust, and a screen that gets sloppy is the sign
     to change it. The data layer's calls (`append`, `read`, `wait`) leave room
     for a local copy later.
+  - **One unrecorded lane on the same link,** for "come read" pokes, who is
+    online, and fast streams such as terminal bytes. Replicache calls it a
+    poke, Yjs awareness, automerge-repo ephemeral messages. The doorbell
+    already is one (`durable-object.ts`). The rule: **show it, never save it,
+    never decide with it.** A window may draw who is online; no lane, claim or
+    ledger write ever depends on a frame from this lane, so losing one breaks
+    nothing. It is not local state: local state stays in one program on one
+    computer, and this lane moves between computers. Neither goes in the
+    ledger.
+
+    ```ts
+    // recorded: lands in the ledger, can be replayed
+    {kind: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
+    // unrecorded: may be lost, nothing breaks
+    {kind: "poke", stream: "counter:1/inbox", rev: 41}
+    {kind: "presence", peer, at: "tile:t1"}
+    {kind: "bytes", port: "tile:t1", data: "l"}
+    ```
+
 - **Proposed:**
   - **Split today's `Ledger` service by layer** (80%). It has about 25 calls
     that mix all three: data (`append`, `read`, `readStream`, `readLast`),
@@ -129,11 +148,6 @@ interface Data {
     `link`, `trapExit`, `startChild`, `processInfo`, `lease`) and app
     (`hold`, `charge`, `setLimits`, `usage`). Three services, each on the one
     below. Cost: 15 to 25 files, 10 to 20 agent hours.
-  - **One unrecorded lane on the same link** (75%), for "come read" pokes,
-    who is online, and fast streams such as terminal bytes. Replicache calls it
-    a poke, Yjs awareness, automerge-repo ephemeral messages. The doorbell
-    already is one (`durable-object.ts`). The rule: no app state is ever built
-    from it, so losing a frame breaks nothing.
   - **Messages change state; RPC only asks the hub** (85%). A change is a
     plain message with an id, written to the ledger, so a run can be replayed.
     A call is a send, a reply-to and a deadline (`call.ts`). No live callbacks
