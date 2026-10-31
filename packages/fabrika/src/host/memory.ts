@@ -549,7 +549,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	/** The name and its parents, up to the top. */
 	const chain = (name: string): [string, Proc][] => {
 		const out: [string, Proc][] = [];
-		for (let at: string | null = name; at !== null; ) {
+		for (let at: string | null = name; at !== null;) {
 			const p = names.get(at);
 			if (p === undefined || out.some(([n]) => n === at)) break;
 			out.push([at, p]);

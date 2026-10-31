@@ -21,9 +21,10 @@ export function sessionWorld(): World<Session, Msg, Cmd> {
 			{type: "opened", agent: "codex", id: "s-2"},
 			{type: "told", prompt: "p"},
 			// The prompt whose turn is running, one waiting behind it, and one never told.
-			...[...s.waiting.slice(0, 2).map((w) => w.n), s.told + 1].map(
-				(n): Msg => ({type: "ended", n}),
-			),
+			...[...s.waiting.slice(0, 2).map((w) => w.n), s.told + 1].map((n): Msg => ({
+				type: "ended",
+				n,
+			})),
 		],
 		answers: () => [],
 	};
@@ -48,12 +49,10 @@ export function sessionLaws<S extends Session>(): readonly Law<S, Msg, Cmd>[] {
 				? null
 				: `waiting ${ns.join(", ")} after ${next.turns} turns`;
 		}),
-		law<S, Msg, Cmd>(
-			"a turn ends only for the prompt whose turn is running",
-			({prev, msg, next}) =>
-				next.turns > prev.turns && !(msg.type === "ended" && msg.n === prev.waiting[0]?.n)
-					? `${msg.type} ended a turn while ${prev.waiting[0]?.n ?? "no prompt"} was running`
-					: null,
+		law<S, Msg, Cmd>("a turn ends only for the prompt whose turn is running", ({prev, msg, next}) =>
+			next.turns > prev.turns && !(msg.type === "ended" && msg.n === prev.waiting[0]?.n)
+				? `${msg.type} ended a turn while ${prev.waiting[0]?.n ?? "no prompt"} was running`
+				: null,
 		),
 	];
 }

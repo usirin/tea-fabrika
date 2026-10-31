@@ -3,8 +3,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {Fabrika} from "./fabrika.ts";
 import {cliFabrika} from "./fabrika-cli.ts";
+import {Fabrika} from "./fabrika.ts";
 
 // The adapter's own rules: how each verb's stdout and exit code become a typed
 // answer. A stand-in binary answers from a table, keyed by the start of its

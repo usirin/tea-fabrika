@@ -285,7 +285,7 @@ function runIn(machine: Machine, world: World): Trace {
 	/** When a tail event written at `t` reaches the host: once its network is back. */
 	const reach = (t: number) => {
 		let at = t;
-		for (let d = drops.find((x) => x.from <= at && at < x.from + x.len); d !== undefined; ) {
+		for (let d = drops.find((x) => x.from <= at && at < x.from + x.len); d !== undefined;) {
 			at = d.from + d.len;
 			d = drops.find((x) => x.from <= at && at < x.from + x.len);
 		}
@@ -319,7 +319,7 @@ function runIn(machine: Machine, world: World): Trace {
 		const last = queue.pop();
 		if (top === undefined || last === undefined || queue.length === 0) return top;
 		queue[0] = last;
-		for (let i = 0; ; ) {
+		for (let i = 0; ;) {
 			const l = 2 * i + 1;
 			const r = l + 1;
 			const m = r < queue.length && sooner(r, l) ? r : l;

@@ -22,9 +22,12 @@ export function runsWorld(): World<Runs, Msg, Cmd> {
 		outside: () =>
 			HEADS.flatMap((asked) =>
 				[...HEADS, null].flatMap((at) =>
-					(["green", "red"] as const).map(
-						(state): Msg => ({type: "ran", asked, at, results: [{name: "test", state}]}),
-					),
+					(["green", "red"] as const).map((state): Msg => ({
+						type: "ran",
+						asked,
+						at,
+						results: [{name: "test", state}],
+					})),
 				),
 			),
 		answers: () => [],

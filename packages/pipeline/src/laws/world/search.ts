@@ -527,7 +527,7 @@ function fairWalk(
 					const t = g.to.at(e);
 					if (goal(t)) {
 						const path = [e];
-						for (let at = id; at !== a; ) {
+						for (let at = id; at !== a;) {
 							const step = back.get(at);
 							if (step === undefined) break;
 							path.push(step.edge);

@@ -156,9 +156,7 @@ export type HostSub =
 export const START: Host = {phase: "watching", waitMs: 0, tries: 0};
 
 /** The fence the program runs under, or `null`: it is off. The laws read this same function. */
-export const programOf = (
-	s: Host,
-): {readonly fence: number; readonly incarnation: number} | null =>
+export const programOf = (s: Host): {readonly fence: number; readonly incarnation: number} | null =>
 	s.phase === "owning" ? {fence: s.fence, incarnation: s.incarnation} : null;
 
 /** The renew clock, or `null`: off. It runs while owning and while exiting. */

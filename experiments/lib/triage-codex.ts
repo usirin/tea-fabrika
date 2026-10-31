@@ -20,8 +20,8 @@ import {nextTry} from "@kampus/pipeline/combos";
 import {saidOf as dSaidOf, SortReply} from "@kampus/pipeline/stages/sort/answer";
 import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/brief";
 import {Effect, Exit, Schema, Stream} from "effect";
-import {Cache, type Earlier, SortAnswer as PSortAnswer, type Ticket} from "./sort.ts";
 import {median} from "./sort-bar.ts";
+import {Cache, type Earlier, SortAnswer as PSortAnswer, type Ticket} from "./sort.ts";
 import {
 	BATCH,
 	CONTROLS,

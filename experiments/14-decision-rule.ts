@@ -37,19 +37,18 @@ const unique = <T>(items: readonly T[], key: (item: T) => string) => [
 	...new Map(items.map((item) => [key(item), item])).values(),
 ];
 
-const enriched =
-	await load<
-		readonly {
-			goal: string;
-			criteria: readonly {
-				text: string;
-				source: string;
-				wrong: boolean;
-				empty: boolean;
-				tests: number;
-			}[];
-		}[]
-	>("enricher-criteria.json");
+const enriched = await load<
+	readonly {
+		goal: string;
+		criteria: readonly {
+			text: string;
+			source: string;
+			wrong: boolean;
+			empty: boolean;
+			tests: number;
+		}[];
+	}[]
+>("enricher-criteria.json");
 const fooling = unique(
 	await load<readonly {toy: string; criterion: string; source: string; truth: string}[]>(
 		"bad-tests.json",
@@ -69,31 +68,25 @@ const items: Item[] = [
 	...enriched.flatMap((run) =>
 		run.criteria
 			.filter((c) => c.tests > 0)
-			.map(
-				(c): Item => ({
-					set: "fit",
-					good: !c.wrong && !c.empty,
-					state: {about: run.goal, criterion: c.text, test: c.source},
-					hasAbout: true,
-				}),
-			),
+			.map((c): Item => ({
+				set: "fit",
+				good: !c.wrong && !c.empty,
+				state: {about: run.goal, criterion: c.text, test: c.source},
+				hasAbout: true,
+			})),
 	),
-	...fooling.map(
-		(r): Item => ({
-			set: "fit",
-			good: r.truth === "checks",
-			state: {about: titles[r.toy], criterion: r.criterion, test: r.source},
-			hasAbout: true,
-		}),
-	),
-	...handBuilt.map(
-		(r): Item => ({
-			set: "holdout",
-			good: r.truth === "checks",
-			state: {about: titles[r.toy], criterion: r.criterion, test: r.test},
-			hasAbout: true,
-		}),
-	),
+	...fooling.map((r): Item => ({
+		set: "fit",
+		good: r.truth === "checks",
+		state: {about: titles[r.toy], criterion: r.criterion, test: r.source},
+		hasAbout: true,
+	})),
+	...handBuilt.map((r): Item => ({
+		set: "holdout",
+		good: r.truth === "checks",
+		state: {about: titles[r.toy], criterion: r.criterion, test: r.test},
+		hasAbout: true,
+	})),
 ];
 
 const asked = items.flatMap((item) => Array.from({length: REPEATS}, () => item));

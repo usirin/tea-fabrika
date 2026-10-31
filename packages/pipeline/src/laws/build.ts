@@ -99,9 +99,14 @@ export function buildWorld(options: {readonly echoes?: boolean} = {}): World<Bui
 				},
 				{type: "resume"},
 				...runs.flatMap((run): Msg[] => [
-					...Object.values(BUILTS).map(
-						(built): Msg => ({type: "build_built", ticket: "T", round: 1, run, built, ran: noRun}),
-					),
+					...Object.values(BUILTS).map((built): Msg => ({
+						type: "build_built",
+						ticket: "T",
+						round: 1,
+						run,
+						built,
+						ran: noRun,
+					})),
 					{type: "build_failed", ticket: "T", round: 1, run, why: "broke", error: null, ran: noRun},
 				]),
 			];

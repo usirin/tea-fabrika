@@ -226,14 +226,12 @@ export const fakeSortHost = (fake: string) =>
 				Effect.map((all) =>
 					all
 						.filter((i) => i.number !== ticket.number)
-						.map(
-							(i): Earlier => ({
-								number: i.number,
-								title: i.title,
-								state: i.state,
-								reason: i.state === "open" ? null : reasonIn(i.comments),
-							}),
-						),
+						.map((i): Earlier => ({
+							number: i.number,
+							title: i.title,
+							state: i.state,
+							reason: i.state === "open" ? null : reasonIn(i.comments),
+						})),
 				),
 			),
 	});

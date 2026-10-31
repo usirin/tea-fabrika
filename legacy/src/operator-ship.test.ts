@@ -8,6 +8,13 @@ import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
 import {
+	fieldRows,
+	operatorInterpret,
+	operatorShipInterpret,
+	operatorShipSubscribe,
+	operatorSubscribe,
+} from "./operator-host.ts";
+import {
 	createOperator,
 	defaultKnobs,
 	type Knobs,
@@ -15,13 +22,6 @@ import {
 	type OperatorMsg,
 	updateWith,
 } from "./operator.ts";
-import {
-	fieldRows,
-	operatorInterpret,
-	operatorShipInterpret,
-	operatorShipSubscribe,
-	operatorSubscribe,
-} from "./operator-host.ts";
 import {scriptedJev} from "./scripted.ts";
 import {shipLine} from "./turn.ts";
 

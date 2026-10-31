@@ -51,7 +51,7 @@ const alive = (pid: number) => {
 };
 
 const until = async (ok: () => boolean, ms: number) => {
-	for (const end = Date.now() + ms; Date.now() < end; ) {
+	for (const end = Date.now() + ms; Date.now() < end;) {
 		if (ok()) return true;
 		await new Promise((r) => setTimeout(r, 100));
 	}

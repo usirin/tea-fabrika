@@ -174,9 +174,8 @@ const handlers = (o: {
 	const builder = Builder.of({
 		build: (brief, settings) =>
 			ask(brief, settings).pipe(
-				Effect.map(
-					(asked): BuildDrafted =>
-						asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
+				Effect.map((asked): BuildDrafted =>
+					asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
 				),
 				Effect.provideContext(o.context),
 			),

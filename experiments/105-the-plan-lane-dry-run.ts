@@ -483,7 +483,7 @@ const run = async (spec: RunSpec) => {
 		Effect.gen(function* () {
 			const l = yield* Ledger;
 			const out: string[] = [];
-			for (let from = 0; ; ) {
+			for (let from = 0; ;) {
 				const page = yield* l.read(from, 500, "pipeline");
 				for (const row of page) if (row.kind === "judged") out.push(row.writer);
 				if (page.length < 500) return out;

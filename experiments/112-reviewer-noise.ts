@@ -180,15 +180,13 @@ const runPair = (pair: Pair) =>
 						),
 						found: report.criteria.flatMap((c) =>
 							c.from === "review"
-								? c.findings.map(
-										(f): Found => ({
-											from: f.from,
-											kind: f.kind,
-											fault: f.fault,
-											wants: f.wants,
-											at: f.at,
-										}),
-									)
+								? c.findings.map((f): Found => ({
+										from: f.from,
+										kind: f.kind,
+										fault: f.fault,
+										wants: f.wants,
+										at: f.at,
+									}))
 								: [],
 						),
 						problems: report.problems,

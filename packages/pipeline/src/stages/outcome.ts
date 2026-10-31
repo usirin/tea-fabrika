@@ -70,13 +70,13 @@ export type Name<O extends AnyOutcome> = O extends {readonly kind: "done"}
 				readonly kind: "send";
 				readonly to: infer T extends string;
 				readonly why: infer Y extends string;
-			}
+		  }
 		? `send:${T}:${Y}`
 		: O extends {
 					readonly kind: "ask";
 					readonly who: infer P extends string;
 					readonly for: infer F extends string;
-				}
+			  }
 			? `ask:${P}:${F}`
 			: O extends {readonly kind: "skip" | "stuck"; readonly why: infer Y extends string}
 				? `${O["kind"]}:${Y}`

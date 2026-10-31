@@ -14,8 +14,8 @@
 //                              parks, ship, coverage, replay, spend, runs
 import {existsSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {hasRecipe, PARK_ROUTE, ParkCause, ROUTES, routeOf} from "../legacy/src/fabrika.ts";
 import {NEXT} from "../legacy/src/fabrika-scripted.ts";
+import {hasRecipe, PARK_ROUTE, ParkCause, ROUTES, routeOf} from "../legacy/src/fabrika.ts";
 import {
 	BOARD_TERMINALS,
 	type CompiledLane,

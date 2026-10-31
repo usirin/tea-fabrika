@@ -492,9 +492,8 @@ describe("pipe: one program's output into another's input", () => {
 				return {from, to: yield* target.run.ended, said: said.values};
 			}).pipe(Effect.scoped),
 		);
-	const why = (
-		ended: {readonly kind: string; readonly cause?: Cause.Cause<unknown>} | undefined,
-	) => (ended?.cause === undefined ? "" : String(Cause.squash(ended.cause)));
+	const why = (ended: {readonly kind: string; readonly cause?: Cause.Cause<unknown>} | undefined) =>
+		ended?.cause === undefined ? "" : String(Cause.squash(ended.cause));
 
 	it("each value flows through, and when the upstream ends the downstream input closes and it ends on its own", async () => {
 		const seen = await piped(echo, ["one", "two", "three"]);

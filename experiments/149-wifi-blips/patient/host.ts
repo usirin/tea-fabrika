@@ -390,9 +390,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					Effect.map((x): Charging => ({how: "ok", dup: x.dup, over: x.over})),
 					Effect.retry({schedule: Schedule.spaced(Duration.millis(100)), while: isUnreachable}),
 					Effect.catchTag("LedgerUnreachable", () => Effect.die("charge: retry ended")),
-					Effect.catch(
-						(e): Effect.Effect<Charging> =>
-							Effect.succeed(e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
+					Effect.catch((e): Effect.Effect<Charging> =>
+						Effect.succeed(e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
 					),
 					Effect.uninterruptible,
 				),
