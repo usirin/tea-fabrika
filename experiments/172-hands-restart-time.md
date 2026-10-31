@@ -18,7 +18,8 @@ the orphan by hand. Today's daemon shape (`packages/fabrika/src/host/daemon.ts`,
 Miniflare in a child that watches its parent) does die with the hands, in about
 0.26 s, 20 of 20. It then costs a fresh brain start of about 0.46 s.
 
-**For L3:** talking to the brain only through the window's own hands is cheap. A
+**For L3** (its lean was replaced on 2026-10-31, see Leans): talking to the
+brain only through the window's own hands is cheap. A
 crash costs under a second, and the app already restarts the hands by itself.
 That holds only if the brain's lifetime is tied to the hands on purpose. Either
 kill it with them (today's daemon guard), or let the new hands adopt the brain
@@ -196,6 +197,11 @@ not matter for L3.
   second, the app already restarts the hands, and the hop is free. Cost:
   nothing new, as long as the brain is guarded (next lean). Confidence 85%. The
   doubt is a heavy desk, which I did not test.
+  **Replaced 2026-10-31, after this was written:** every window, Electron's
+  too, now dials the brain over its own WebSocket and signs its hello; it does
+  not talk through the hands. What this experiment still settles: the hands
+  own the local brain's life, so a hands crash must take the brain down with
+  it, or the new hands adopt it (the next lean).
 - **Never run Miniflare unguarded inside the hands.** Why: its workerd outlives
   a crash and blocks the next brain's port, 20 of 20. Cost: the daemon's
   250 ms ppid guard, or a guard of our own around in-process Miniflare.
