@@ -3,6 +3,10 @@
 Decided 2026-10-22. Written down the same day, after a cleanup was proposed
 that this rules out.
 
+*Changed 2026-10-30, proposed: the core is rebuilt too, not swept in place,
+and the old code is deleted as each new piece lands. See
+[clean slate](./clean-slate.md).*
+
 ```text
 the core      program, host, shell, agents, ledger     swept in place, then copied to kamp-us/fabrika
 the pipeline  packages/pipeline                         not swept: rebuilt small on the swept core
