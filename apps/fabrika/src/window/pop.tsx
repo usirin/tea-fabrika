@@ -1,3 +1,4 @@
+import {Kbd} from "@manti-ui/react";
 import {
 	type KeyboardEvent,
 	type ReactNode,
@@ -41,14 +42,12 @@ import {
 // was. Escape is the page's (desk.tsx): it closes whatever is open. Only one is open at a time:
 // the frame holds one `over` (frame.ts).
 
-/** Keycaps, in the UI's own font, with the Mac's glyphs: `⌃B` `A`. */
+/** Keycaps, Manti's, in the UI's own font, with the Mac's glyphs: `⌃B` `A` (theme.css). */
 export function Caps(props: {readonly caps: readonly Cap[]}): ReactNode {
 	return (
 		<span className="caps">
 			{props.caps.map((c) => (
-				<kbd key={c} className="cap">
-					{c}
-				</kbd>
+				<Kbd key={c}>{c}</Kbd>
 			))}
 		</span>
 	);

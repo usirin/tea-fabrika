@@ -324,7 +324,10 @@ describe("the roles each one draws", () => {
 		expect(html).toContain('id="pop-palette-list" role="listbox"');
 		expect(html.match(/role="option"/g)).toHaveLength(2);
 		expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
-		expect(html).toContain('<kbd class="cap">⌃B</kbd><kbd class="cap">Z</kbd>');
+		// Each key is Manti's keycap: its part names are the hook theme.css styles it by.
+		const cap = (key: string) =>
+			`<kbd data-scope="kbd" data-part="root" data-size="sm">${key}</kbd>`;
+		expect(html).toContain(`${cap("⌃B")}${cap("Z")}`);
 		expect(html).toContain("2 commands");
 	});
 

@@ -35,6 +35,11 @@ catalog:
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
+  # The app's UI (apps/fabrika, programs/*/window): Manti UI, Zag.js state machines and a token
+  # contract of CSS custom properties, set from our own values (docs/direction/ui-on-manti.md).
+  # MIT. Held exact: 0.x, a minor can break.
+  '@manti-ui/react': 0.13.0
+  '@manti-ui/styles': 0.13.0
   '@opentelemetry/api': 1.9.1
   '@opentelemetry/exporter-trace-otlp-http': 0.222.0
   '@opentelemetry/resources': 2.11.0
@@ -87,6 +92,11 @@ catalog:
 overrides:
   '@effect/platform-node-shared': 4.0.6
 
-# Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
 patchedDependencies:
+  # Manti's type files name each relative import without its `.js`, which only a bundler's
+  # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`
+  # (`./components` becomes `./components/index.js`) and changes no code. Drop it when Manti
+  # ships full paths.
+  '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
+  # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
