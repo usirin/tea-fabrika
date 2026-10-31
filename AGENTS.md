@@ -44,6 +44,16 @@ private memory, it is in the wrong place: write it here.
   browser lacks: no Node, no Unix socket, no files, no WebSocket-level frames.
   Ask of every design: could a browser tab be this peer? See
   [`docs/direction/a-browser-is-always-a-peer.md`](./docs/direction/a-browser-is-always-a-peer.md).
+- **The data shape comes first.** Weigh it before anything else, and ask of
+  every design: what fact is lost forever if we don't record it now? A fact
+  that exists only when something is written (who, when on their own clock,
+  what they saw, why) goes in now, even if nothing reads it yet. A field can be
+  added to a schema later; the entries written before it never get it. Derived
+  things (durations, views, summaries) can wait, since they rebuild from the
+  log. Before you say "add it later", say whether later loses data. If a fact
+  is recorded but must not be trusted, keep it out of the deciding code's
+  types. Example: a ledger entry keeps the peer's own clock as `said` from day
+  one, but leases and limits use only the referee's `at`.
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
