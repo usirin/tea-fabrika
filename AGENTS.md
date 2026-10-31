@@ -195,3 +195,8 @@ Write-ups are read by busy people, some of them not native English speakers.
   app: Playwright on Electron, with `FABRIKA_HOME` set to a test home of its
   own in a temp folder, never your real one. Look at each shot, and say in the
   PR what looks broken, empty or wrong.
+- **Shoot more than one layout.** A window that looks right in one wide tile
+  can break at half or a quarter. Mockups and PR shots show each key state in
+  at least: one tile filling the window, two tiles side by side, two stacked,
+  a 2x2 grid, and a small app window (about 1024x700). Name each shot by state
+  and layout, and say what squeezes or breaks in each.
