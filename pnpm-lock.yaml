@@ -585,6 +585,49 @@ importers:
         specifier: 'catalog:'
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
 
+  next:
+    dependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.6)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260730.0
+      playwright:
+        specifier: 'catalog:'
+        version: 1.64.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.1))
+
   packages/fabrika:
     dependencies:
       '@effect/platform-node':

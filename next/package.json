@@ -1,0 +1,29 @@
+{
+	"name": "@fabrika/next",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The first slice of the new fabrika: five layers, two tiles, one ledger in Miniflare, windows that mirror and fold on their own.",
+	"scripts": {
+		"dev": "node dev.ts",
+		"e2e": "node e2e.ts",
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"effect": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"esbuild": "catalog:",
+		"fast-check": "catalog:",
+		"miniflare": "catalog:",
+		"playwright": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
