@@ -32,11 +32,28 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
   - State is not settings. The desk and the asks live on the ledger, not in
     either folder.
 - **Proposed, for monorepos:**
-  - The nearest `.fabrika/` above where a run starts wins. It builds on the
-    ones above it, up to the repo root, the way Biome 2 (`"root": false`) and
-    Turborepo (`"extends": ["//"]`) nest their files.
+  - The nearest `.fabrika/fabrika.toml` above where a run starts wins. Files
+    above it are not merged in on their own. A file inherits only when it says
+    so, with `extends`. This is what people already know from Ruff (`extend`),
+    Biome 2 and Turborepo (`extends` with `"//"` for the repo root) and
+    tsconfig. Ruff's docs set it against ESLint's old automatic merge.
+
+    ```toml
+    # apps/web/.fabrika/fabrika.toml (a sketch)
+    extends = "//"        # take the repo root's file first; leave it out to stand alone
+
+    [agents.build]
+    model = "sol"         # this package's own pick, over the root's
+    ```
+
+  - Why not merge every file up the tree, as Cargo and EditorConfig do: a
+    file read alone tells you what it does, and an edit higher up never
+    changes a package that did not ask for it.
   - A key that only makes sense once per repo, like `[ledger]`, fails to load
-    in a nested file. The mistake cannot be made, rather than warned about.
+    in a nested file, and is always read from the root. The mistake cannot be
+    made, rather than warned about.
+  - Open: whether `extends` takes only `"//"`, or a path to any other file as
+    Ruff and tsconfig allow.
   - Repo programs are read from the default branch only, like the settings,
     so a lane cannot change the code that judges it.
   - Opening a repo whose programs you have not run before asks you to trust
