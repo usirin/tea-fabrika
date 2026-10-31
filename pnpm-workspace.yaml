@@ -90,6 +90,10 @@ catalog:
   vitest: ^5.0.3
   zod: ^4.6.5
 
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+
 # The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
   '@effect/platform-node-shared': 4.0.6
