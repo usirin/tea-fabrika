@@ -322,8 +322,12 @@ The seven open questions, each with its lean. Proposed, not decided.
     [experiment 145](../../experiments/145-many-objects.md) split them, 11 of
     27 ledger laws broke. Cloudflare's own rule is one object per unit of
     coordination, and these three are one unit.
-  - **The project object is today's ledger, slimmed.** Program state, job
-    records, desks, terminals and presence move out of it.
+  - **The project object is today's ledger, nearly unchanged.** Its calls
+    already cover the log, claims, inboxes, the process tree and the meter.
+    The new objects take what lives on one laptop today, so nobody else can
+    see it: program state (the Node host's memory), job records
+    (`storage/jobs/`), the desk (`desk.json` and the history file) and the
+    terminal (the app's own link). Presence has no home yet.
   - **Why it is not a bottleneck** (80%): Cloudflare's soft limit is about
     1,000 requests a second per object, a team makes tens, and experiment 93
     soaked at about 100 times a team's load with nothing lost. The doubt is a
