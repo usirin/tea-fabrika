@@ -182,8 +182,6 @@ describe("claude", () => {
 					length: CAPACITY,
 					inputs: {
 						prompt: {length: CAPACITY, waiting: 0},
-						allow: none,
-						refuse: none,
 						cancel: none,
 					},
 				},
@@ -200,23 +198,11 @@ describe("claude", () => {
 		}),
 	);
 
-	it.live("an allow for an ask nothing waits on is said back, not lost", () =>
-		Effect.gen(function* () {
-			const w = world();
-			const asks = ear<unknown>();
-			const started = yield* start(
-				claude,
-				flags(),
-				{ask: asks.hear},
-				{id: "claude:ask", storage: memoryStorage()},
-			).pipe(Effect.provideService(Agent.Agents, w.agents));
-			if (started.kind !== "running") return yield* Effect.die("not started");
-			yield* tell(started.run, "allow", "ask-1");
-			const [heard] = yield* asks.upTo(1);
-			expect(heard).toEqual({turn: null, id: "ask-1", title: "", answer: "not_waiting"});
-			yield* started.stop;
-		}),
-	);
+	// Any program in a pipe can tell an input, so no input answers an ask: a person's answer is a
+	// fact from their own session (docs/direction/one-ask-and-one-meter.md, proposed).
+	it("no input answers an ask: only a prompt and a cancel are told", () => {
+		expect(Object.keys(claude.inputs)).toEqual(["prompt", "cancel"]);
+	});
 
 	// `prompt` closed at the second start: `serve` returns at once, and the cancel must still reach the resent turn.
 	for (const closed of [false, true])

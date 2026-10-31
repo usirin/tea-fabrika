@@ -113,8 +113,6 @@ export type AgentFlags = Given<typeof flags>;
 /** The inputs of both programs. */
 export const inputs = {
 	prompt: input(Schema.String, "A prompt: one turn, after the turns before it."),
-	allow: input(Schema.String, "The id of an ask waiting: allow it, once."),
-	refuse: input(Schema.String, "The id of an ask waiting: refuse it."),
 	cancel: input(
 		Cancel,
 		"A turn's number, or now: that turn is cancelled. Handled at once, while a turn runs.",
@@ -137,13 +135,16 @@ const Tool = Schema.Struct({
 	title: Schema.String,
 	status: ToolStatus,
 });
+/**
+ * A permission ask a turn made. The run's containment refuses it at once, so the answer is
+ * always `refused`. No input answers an ask: a person's answer is a fact from their own session
+ * (docs/direction/one-ask-and-one-meter.md, proposed), and any program in a pipe can tell an input.
+ */
 const AskOut = Schema.Struct({
-	/** `null`: an allow or refuse for an ask no turn made. */
-	turn: Schema.NullOr(Count),
+	turn: Count,
 	id: Schema.String,
 	title: Schema.String,
-	/** `refused`: the contained run refused it at once. `not_waiting`: nothing waits on that id. */
-	answer: Schema.Literals(["refused", "not_waiting"]),
+	answer: Schema.Literal("refused"),
 });
 const EndedOut = Schema.Struct({
 	turn: Count,
@@ -163,7 +164,7 @@ export const outputs = {
 	started: output(Started, "Once per start: our session, and whether the provider carries it on."),
 	said: output(Said, "One whole message the agent said in a turn."),
 	tool: output(Tool, "A tool call, as it starts and as it ends."),
-	ask: output(AskOut, "A permission ask, and how it was answered."),
+	ask: output(AskOut, "A permission ask a turn made, refused at once by the run's containment."),
 	ended: output(
 		EndedOut,
 		"Each turn's end: why it stopped, its answer as JSON or null, its tokens and dollars.",
@@ -238,7 +239,7 @@ export const chat = (
 			limits,
 		});
 
-		// ---------------------------------------------------------------- cancels and asks
+		// ---------------------------------------------------------------- cancels
 		/** The turn running now, so a cancel can reach it. */
 		let running: {readonly n: number; readonly fiber: Fiber.Fiber<void, unknown>} | null = null;
 		/** Turns cancelled before they began: each ends `cancelled` when it comes up. */
@@ -255,12 +256,6 @@ export const chat = (
 				// A turn not told yet, or told and not ended: it is cancelled when it comes up.
 				if (seen === undefined || seen.end === null) cancelled.add(c);
 			});
-		// Every ask is refused by the run's containment before anyone sees it (`dontAsk`, and Codex's
-		// approvals `never`): nothing waits on a person, so an allow or refuse is said back, not lost.
-		// Told while a turn runs, it is said back once the turn ends.
-		const notWaiting = (id: string) =>
-			send("ask", {turn: null, id, title: "", answer: "not_waiting"});
-
 		const finish = (n: number, end: End) =>
 			Effect.gen(function* () {
 				yield* kept.dispatch({type: "ended", n, end});
@@ -281,6 +276,8 @@ export const chat = (
 				if (heard._tag === "said") yield* send("said", {turn: n, text: heard.text});
 				if (heard._tag === "tool")
 					yield* send("tool", {turn: n, id: heard.id, title: heard.title, status: heard.status});
+				// Every ask is refused by the run's containment before anyone sees it (`dontAsk`, and
+				// Codex's approvals `never`): nothing waits on a person.
 				if (heard._tag === "asked")
 					yield* send("ask", {turn: n, id: heard.id, title: heard.title, answer: "refused"});
 			});
@@ -348,8 +345,6 @@ export const chat = (
 					const told = kept.getState().turns.at(-1);
 					if (told !== undefined) yield* runTurn(told);
 				}),
-			allow: notWaiting,
-			refuse: notWaiting,
 			cancel: fork(cancel),
 		};
 		yield* io.serve(handlers, {until: ["prompt"]});
