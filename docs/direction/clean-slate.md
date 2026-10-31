@@ -90,7 +90,7 @@ code differs from OTP are fixed on the way.
 // A sketch of the order. Each step is one or more pull requests in next/.
 const order = [
 	"finish the decisions",        // done 2026-10-31: all five layers
-	"a first slice",               // two counters through all five layers, in a browser tab
+	"a first slice",               // two counters through all five layers, in a browser tab; changed: see every-update-builds-every-layer.md
 	"the tracker",                 // real tickets on the new ledger, read only first
 	"the new core",                // the project object, gateways, program objects, the hands, each with its laws
 	"programs, one at a time",     // the old copy goes in the pull request that switches to the new one
