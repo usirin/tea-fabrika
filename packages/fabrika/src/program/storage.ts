@@ -640,16 +640,23 @@ export function storageOf<E>(
  * A storage in memory: it outlives a run in this process, not the process.
  * Each value is kept as JSON text and read back as a copy, so a test that
  * kills a run and starts it again sees only what was saved, never a live
- * object.
+ * object. `steps`: where each machine step goes, if anywhere.
  */
-export const memoryStorage = (): Storage => storageOf(KeyValueStore.layerMemory);
+export const memoryStorage = (steps?: StepLog): Storage =>
+	storageOf(KeyValueStore.layerMemory, steps);
 
 /**
  * A storage in a folder, through `fileSystem`: one file per slot, its name
  * the key's. Any `FileSystem` fits: Node's (`./storage-node.ts`), or one in a
- * browser, with no change here.
+ * browser, with no change here. `steps`: where each machine step goes, as
+ * `storageOf` takes it; a host hands its jobs' records here (../host/records.ts).
  */
-export const folderStorage = (dir: string, fileSystem: Layer.Layer<FileSystem.FileSystem>) =>
+export const folderStorage = (
+	dir: string,
+	fileSystem: Layer.Layer<FileSystem.FileSystem>,
+	steps?: StepLog,
+) =>
 	storageOf(
 		KeyValueStore.layerFileSystem(dir).pipe(Layer.provide(fileSystem), Layer.provide(Path.layer)),
+		steps,
 	);

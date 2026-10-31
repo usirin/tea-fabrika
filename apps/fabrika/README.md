@@ -279,9 +279,9 @@ When something is wrong, its word says so, in red where it is broken:
   so a tile that runs nothing opens straight on Other tiles. `↑` `↓` or `J` `K` move, `↵`
   focuses the tile the job runs in, `Esc` or a click outside closes it and gives focus back.
   With nothing running anywhere, the head has no count and one calm line says so, with tsh's
-  `jobs` and `attach %n`. There is no
-  trace to open for a job yet: the app's `trace` reads only records held in memory, until the
-  host keeps each job's record.
+  `jobs` and `attach %n`. The host keeps each
+  job's record now, and `trace` at the end of a line follows its own, but a row here does not
+  open a job's trace yet: that is a change of its own.
 - **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
   each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
   and the asks list all read that one value. A click on the count, or `C-b a`, opens the list,
@@ -558,8 +558,8 @@ Left for later, from Tuval's keys and the build:
   102); today's cost beside the agents, once one meter counts what agents spend (ticket 91).
 - **Later and seen are kept per home, not per person.** The same person on two machines sets an
   ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
-- **The job item opening the job's trace,** once the host keeps each job's record
-  (`packages/fabrika/src/host/traces.ts`) and the app's `trace` reads it. Today it lists the jobs.
+- **The job item opening the job's trace.** The host keeps each job's record and the app's
+  `trace` reads it (`packages/fabrika/src/host/records.ts`). Today the item lists the jobs.
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.

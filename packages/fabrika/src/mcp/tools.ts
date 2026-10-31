@@ -34,7 +34,8 @@ import type {ProgramList} from "../shell/programs.ts";
 // the top, where the `$ref`s inside it point.
 //
 // An input whose schema gives no JSON Schema (a Standard Schema from outside Effect) has no tool:
-// an agent could not be told what it takes.
+// an agent could not be told what it takes. Nor does an input that takes anything (`anyInput`):
+// it lets what it is sent go unread, so a tool for it would do nothing.
 
 /** One tool, in the spec's words. */
 export interface Tool {
@@ -82,7 +83,9 @@ const toolInputsOf = (
 }> =>
 	Object.entries<Inputs[string]>(inputs).flatMap(([input, declared]) => {
 		const json = declared.shape.json;
-		return json === undefined || declared.personOnly ? [] : [{input, declared, json}];
+		return json === undefined || declared.personOnly || declared.any === true
+			? []
+			: [{input, declared, json}];
 	});
 
 /** The names of a program's tools, in the order `toolsOf` lists them. */

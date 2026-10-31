@@ -1,5 +1,6 @@
 import {Ledger, memoryStorage, openJobs} from "@kampus/fabrika";
 import {memoryService} from "@kampus/fabrika/memory";
+import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
@@ -44,6 +45,7 @@ const desk = (storage = memoryStorage()) =>
 			Effect.provideService(Ledger, memoryService()),
 			Effect.provideService(Author, {kind: "user", id: "owner"}),
 			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
+			Effect.provide(memoryTraces([])),
 		);
 		const rows = (tile: string) => gridOf(bytes.get(tile) ?? "", 80, 1000).rows;
 		const type = (tile: string, data: string) => screens.get(tile)?.heard({type: "keys", data});

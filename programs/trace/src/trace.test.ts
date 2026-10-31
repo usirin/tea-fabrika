@@ -5,11 +5,13 @@ import {
 	type PayloadOf,
 	readInput,
 	start,
+	Traces,
 	type Word,
 } from "@kampus/fabrika";
-import {Effect, Option, Stream} from "effect";
+import {Deferred, Duration, Effect, Layer, Option, Queue, Stream} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
-import {trace} from "./index.ts";
+import {SETTLE, trace} from "./index.ts";
 import {memoryTraces} from "./memory.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {nodesOf, treeOf} from "./tree.ts";
@@ -28,7 +30,11 @@ const keyOf = (record: JobTrace, name: string): string => {
 	return found.key;
 };
 
-const session = (records: readonly JobTrace[], id: string | undefined) =>
+const session = (
+	records: readonly JobTrace[],
+	id: string | undefined,
+	traces: Layer.Layer<Traces> = memoryTraces(records),
+) =>
 	Effect.gen(function* () {
 		const started = yield* start(trace, {id}, {}, {id: "trace:test", storage: memoryStorage()});
 		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
@@ -46,7 +52,7 @@ const session = (records: readonly JobTrace[], id: string | undefined) =>
 				Effect.map(Option.getOrThrow),
 			);
 		return {run, say, until};
-	}).pipe(Effect.provide(memoryTraces(records)));
+	}).pipe(Effect.provide(traces));
 
 describe("the trace program", () => {
 	it("opens tally, count total, add 2: total 1 before, 3 after, and no Cmds", async () => {
@@ -133,25 +139,109 @@ describe("the trace program", () => {
 		expect(shown.chosen).toBeNull();
 	});
 
-	it("with no flag, waits for an id on `id`; a newer id replaces the record and its open rows", async () => {
+	it("with no flag, shows its own trace; an id on `id` replaces it, and a newer id replaces that and its open rows", async () => {
 		const other = "f".repeat(32);
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {run, say, until} = yield* session([TALLY_TRACE], undefined);
-				const waiting = yield* until(() => true);
+				const own = yield* until((s) => s.read === "read");
 				yield* offer(run, "id", TALLY_ID);
-				const first = yield* until((s) => s.read === "read");
+				const first = yield* until((s) => s.read === "read" && s.id === TALLY_ID);
 				yield* say("toggle", {row: keyOf(TALLY_TRACE, "tally")});
 				yield* until((s) => s.rows.length === 4);
 				yield* offer(run, "id", other);
 				const next = yield* until((s) => s.read === "read" && s.id === other);
-				return {waiting, first, next};
+				return {own, first, next};
 			}).pipe(Effect.scoped),
 		);
-		expect([seen.waiting.read, seen.waiting.id]).toEqual(["waiting", null]);
+		// Its own run's trace: a trace id, and in memory nobody wrote it.
+		expect(seen.own.id).toMatch(/^[0-9a-f]{32}$/);
+		expect(seen.own.id).not.toBe(TALLY_ID);
 		expect([seen.first.id, seen.first.title]).toEqual([TALLY_ID, "seq --to 3 | tally"]);
 		// Nobody wrote the other trace: the job's row alone, and tally's open row is gone with its record.
 		expect(seen.next.rows.map((r) => [r.kind, r.name])).toEqual([["job", "job"]]);
+	});
+
+	it("follows a record as its job goes: each newer read keeps the rows open", async () => {
+		const tally = keyOf(TALLY_TRACE, "tally");
+		const count = keyOf(TALLY_TRACE, "count total");
+		const job = TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: null};
+		/** The record while tally counts: its first step kept, the job not ended. */
+		const early: JobTrace = {...TALLY_TRACE, job, steps: TALLY_TRACE.steps.slice(0, 1)};
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const reads = yield* Queue.unbounded<JobTrace>();
+				const growing = Layer.succeed(
+					Traces,
+					Traces.of({read: () => Queue.take(reads), watch: () => Stream.fromQueue(reads)}),
+				);
+				const {say, until} = yield* session([], TALLY_ID, growing);
+				yield* Queue.offer(reads, early);
+				yield* until((s) => s.read === "read");
+				yield* say("toggle", {row: tally});
+				yield* say("toggle", {row: count});
+				const first = yield* until((s) => s.rows.some((r) => r.key === count && r.open));
+				yield* Queue.offer(reads, TALLY_TRACE);
+				const later = yield* until((s) => s.rows.some((r) => r.name === "add 3"));
+				return {first, later};
+			}).pipe(Effect.scoped),
+		);
+		const named = (s: Shown) => s.rows.map((r) => [r.depth, r.name, r.open]);
+		expect(named(seen.first).slice(3)).toEqual([
+			[2, "count total", true],
+			[3, "add 1", false],
+		]);
+		// The newer read's steps came in under count total, which stayed open, as tally did.
+		expect(named(seen.later)).toEqual([
+			[0, "seq --to 3 | tally", true],
+			[1, "seq", false],
+			[1, "tally", true],
+			[2, "count total", true],
+			[3, "add 1", false],
+			[3, "add 2", false],
+			[3, "add 3", false],
+		]);
+	});
+
+	it("stops following once its job ended SETTLE ago, with no write left to wake it", async () => {
+		const ended: JobTrace = {
+			...TALLY_TRACE,
+			job: TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: {how: "done", at: 0}},
+		};
+		const stops = await Effect.runPromise(
+			Effect.gen(function* () {
+				const reads = yield* Queue.unbounded<JobTrace>();
+				const stopped = yield* Deferred.make<void>();
+				const growing = Layer.succeed(
+					Traces,
+					Traces.of({
+						read: () => Queue.take(reads),
+						watch: () =>
+							Stream.fromQueue(reads).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
+					}),
+				);
+				const {until} = yield* session([], TALLY_ID, growing);
+				yield* Queue.offer(reads, ended);
+				yield* until((s) => s.read === "read");
+				yield* TestClock.adjust(Duration.toMillis(SETTLE) - 1);
+				const early = yield* Deferred.isDone(stopped);
+				yield* TestClock.adjust(1);
+				yield* Deferred.await(stopped);
+				return {early};
+			}).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+		);
+		expect(stops.early).toBe(false);
+	});
+
+	it("takes anything on `any` and lets it go", async () => {
+		const word = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, until} = yield* session([TALLY_TRACE], TALLY_ID);
+				yield* until((s) => s.read === "read");
+				return yield* offer(run, "any", {total: 6});
+			}).pipe(Effect.scoped),
+		);
+		expect(word).toBe("queued");
 	});
 
 	it("reads a trace nobody wrote as an empty record: the job's row alone", async () => {
@@ -167,7 +257,7 @@ describe("the trace program", () => {
 	it("shows the span detail of a run: its tags, its events, its record", () => {
 		const tally = keyOf(TALLY_TRACE, "tally");
 		const chosen = shownOf({
-			read: {at: "read", trace: TALLY_TRACE},
+			read: {at: "read", trace: TALLY_TRACE, now: null},
 			open: ["job"],
 			chosen: tally,
 		}).chosen;
@@ -196,5 +286,7 @@ describe("the trace program", () => {
 		);
 		expect(readInput(trace, {type: "id", value: TALLY_ID}).kind).toBe("read");
 		expect(readInput(trace, {type: "id", value: "not-a-trace"}).kind).toBe("refused");
+		expect(readInput(trace, {type: "any", value: {total: 6}}).kind).toBe("read");
+		expect(readInput(trace, {type: "any", value: null}).kind).toBe("read");
 	});
 });

@@ -63,7 +63,7 @@ const traceWith = (names: readonly string[]): Model => {
 		return found.key;
 	});
 	return {
-		read: {at: "read", trace: TALLY_TRACE},
+		read: {at: "read", trace: TALLY_TRACE, now: null},
 		open: ["job", ...keys.slice(0, -1)],
 		chosen: keys.at(-1) ?? null,
 	};
@@ -78,7 +78,7 @@ const views = {
 	1: {type: "view", program: "ticket", data: Schema.encodeSync(Shown)(shownOf(state))},
 	2: {type: "view", program: "map", data: Schema.encodeSync(One)(oneOf(state))},
 	3: {type: "view", program: "runs", data: Schema.encodeSync(One)(oneOf(state))},
-	4: traceView({read: {at: "read", trace: TALLY_TRACE}, open: ["job"], chosen: null}),
+	4: traceView({read: {at: "read", trace: TALLY_TRACE, now: null}, open: ["job"], chosen: null}),
 	5: traceView(traceWith(["tally", "count total", "add 2"])),
 	6: {
 		type: "view",
