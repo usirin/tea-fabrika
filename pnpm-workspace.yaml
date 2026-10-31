@@ -6,12 +6,14 @@
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
 # experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
 # experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
+# oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 packages:
   - apps/*
   - packages/*
   - programs/*
   - packs/*
   - docs/tutorials/*
+  - oxlint-plugins
   - wip
   - legacy
   - experiments/142-web-terminals
@@ -26,7 +28,6 @@ catalog:
   '@anthropic-ai/claude-agent-sdk': 0.3.296
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
-  '@biomejs/biome': ^2.4.15
   '@demlik/code-graph': 0.12.0
   '@demlik/structure-sweep': 0.3.9
   '@demlik/tea': 0.21.0
@@ -42,6 +43,11 @@ catalog:
   # MIT. Held exact: 0.x, a minor can break.
   '@manti-ui/react': 0.13.0
   '@manti-ui/styles': 0.13.0
+  # Lint and format (docs/direction/oxlint-and-oxfmt.md). Held exact: oxlint's JS plugins are alpha,
+  # oxfmt is 0.x, and a new version can change what fires or how a file prints.
+  oxfmt: 0.75.0
+  oxlint: 1.90.0
+  '@oxlint/plugins': 1.90.0
   '@opentelemetry/api': 1.9.1
   '@opentelemetry/exporter-trace-otlp-http': 0.222.0
   '@opentelemetry/resources': 2.11.0

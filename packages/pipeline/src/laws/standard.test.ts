@@ -103,8 +103,7 @@ export function withoutLaws(root: string, specs: ReadonlyMap<string, number>): r
 				const specced = specs.get(file) ?? 0;
 				if (specced !== count)
 					out.push(
-						`${file} makes ${count} machine(s) and has no ${laws} beside it` +
-							(specced > 0 ? `, and ${specced} spec(s) in specs.ts` : ""),
+						`${file} makes ${count} machine(s) and has no ${laws} beside it${specced > 0 ? `, and ${specced} spec(s) in specs.ts` : ""}`,
 					);
 				continue;
 			}

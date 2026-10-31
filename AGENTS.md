@@ -151,13 +151,13 @@ everything else    what we use today, and a map of which jobs exist
 
 ```sh
 pnpm typecheck
-pnpm lint       # biome: format, imports and lint rules, changing nothing
+pnpm lint       # oxlint and oxfmt: lint rules, format and imports, changing nothing
 pnpm test
 ```
 
 All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
-patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when it reports nothing: a warning fails it too.
+patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The two advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 `pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
@@ -174,14 +174,16 @@ gone, the one file `pnpm lint` changes, and CI fails until that is committed. Ad
 ([Nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
 
 ```sh
-pnpm format     # biome: format, sort imports and apply its safe fixes, in place
+pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, in place
 ```
 
-Run `pnpm format` first, so a diff holds only what was meant. The settings are
-in `biome.jsonc`: tabs, 100 columns, and the lint rules of the pipeline this
-repo rebuilds, with its custom rules copied into `biome-plugins/`. Never switch
-a rule off to pass. A `// biome-ignore` is for a line where the code is right
-and the rule does not fit, and its reason says why in plain words.
+Run `pnpm format` first, so a diff holds only what was meant. The format settings
+are in `.oxfmtrc.json`: tabs, 100 columns. The lint rules are in `.oxlintrc.json`:
+the rules of the pipeline this repo rebuilds, with its custom rules in
+`oxlint-plugins/`. Why these two tools:
+[oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off
+to pass. A `// oxlint-disable-next-line <rule> -- <why>` is for a line where the
+code is right and the rule does not fit, and its reason says why in plain words.
 
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid

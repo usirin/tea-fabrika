@@ -7,8 +7,8 @@
 // nothing guards it. So it is called only in a short list of edge files, each
 // of them where the secret goes out: a header or a socket's subprotocol, a
 // one-way hash, a child's env, the locker file the secret is kept in, the wire
-// answer of a login. biome.jsonc names those files, each with its reason, and
-// leaves them out of this rule.
+// answer of a login. `.oxlintrc.json` names those files, each with its reason, and
+// turns this rule off for them.
 //
 // What it refuses, anywhere else: `Redacted.value`, called (`Redacted.value(t)`)
 // or handed on as a function (`xs.map(Redacted.value)`). Tests are left out
@@ -16,16 +16,16 @@
 //
 // What it cannot see: `value` imported under its own name from
 // "effect/Redacted", and a secret that never was a `Redacted`
-// (no-secret-env.grit covers the env reads).
+// (no-secret-env.ts covers the env reads).
 //
-// This repo's own rule, not a copy from phoenix. It blocks. Fires when it was
-// added are in biome-plugins/README.md.
-language js;
+// This repo's own rule, not a copy. It blocks. Fires when it was
+// added are in oxlint-plugins/README.md.
+import type {CreateRule} from "@oxlint/plugins";
+import {banNames} from "./match.ts";
 
-`Redacted.value` as $out where {
-	register_diagnostic(
-		span = $out,
-		message = "`Redacted.value` turns a secret back into a plain string that prints, logs and saves as itself. Keep the `Redacted` until the line that sends it, in one of the edge files biome.jsonc lists for no-redacted-value.grit, with its reason (docs/direction/secrets-are-redacted.md).",
-		severity = "error"
-	)
-}
+export const noRedactedValue: CreateRule = {
+	create: banNames({
+		"Redacted.value":
+			"`Redacted.value` turns a secret back into a plain string that prints, logs and saves as itself. Keep the `Redacted` until the line that sends it, in one of the edge files `.oxlintrc.json` lists for fabrika/no-redacted-value, with its reason (docs/direction/secrets-are-redacted.md).",
+	}),
+};

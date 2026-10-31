@@ -1,5 +1,5 @@
-// `pnpm lint` refuses a secret read from `process.env` as plain text (no-secret-env.grit), and a
-// `Redacted.value` outside the edge files biome.jsonc lists (no-redacted-value.grit). Each planted
+// `pnpm lint` refuses a secret read from `process.env` as plain text (no-secret-env.ts), and a
+// `Redacted.value` outside the edge files .oxlintrc.json lists (no-redacted-value.ts). Each planted
 // line says whether the rule must refuse it. docs/direction/secrets-are-redacted.md.
 import {spawnSync} from "node:child_process";
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
@@ -8,28 +8,27 @@ import {fileURLToPath} from "node:url";
 import {afterAll, describe, expect, it} from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const BIOME = join(ROOT, "node_modules", ".bin", "biome");
+const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 
-/** The lines `pnpm lint`'s biome, with this repository's config, refuses in these files, by rule. */
+/** The lines `pnpm lint`'s oxlint, with this repository's config, refuses in these files, by rule. */
 const fires = (paths: readonly string[]) => {
-	const out = spawnSync(
-		BIOME,
-		["lint", "--reporter=json", "--max-diagnostics=200", ...paths.map((p) => relative(ROOT, p))],
-		{cwd: ROOT, encoding: "utf8"},
-	);
+	const out = spawnSync(OXLINT, ["--format=json", ...paths.map((p) => relative(ROOT, p))], {
+		cwd: ROOT,
+		encoding: "utf8",
+	});
 	const report = JSON.parse(out.stdout) as {
 		readonly diagnostics: readonly {
-			readonly category: string;
-			readonly message: string;
-			readonly location: {readonly path: string; readonly start: {readonly line: number}};
+			readonly code: string;
+			readonly filename: string;
+			readonly labels: readonly {readonly span: {readonly line: number}}[];
 		}[];
 	};
-	const where = (says: string) =>
+	const where = (rule: string) =>
 		report.diagnostics
-			.filter((d) => d.category === "plugin" && d.message.includes(says))
-			.map((d) => `${basename(d.location.path)}:${d.location.start.line}`)
+			.filter((d) => d.code === `fabrika(${rule})`)
+			.map((d) => `${basename(d.filename)}:${d.labels[0]?.span.line}`)
 			.sort();
-	return {env: where("Config.Redacted"), value: where("`Redacted.value` turns")};
+	return {env: where("no-secret-env"), value: where("no-redacted-value")};
 };
 
 /** Each line of a planted file, and whether no-secret-env must refuse it. */
@@ -75,7 +74,7 @@ const PRELUDE = [
 const lineOf = (i: number) => `planted.ts:${PRELUDE.length + i + 1}`;
 
 describe("pnpm lint keeps secrets in their Redacted", () => {
-	// Planted beside this file, so the repository's own biome.jsonc and its rules are what run.
+	// Planted beside this file, so the repository's own .oxlintrc.json and its rules are what run.
 	const plant = mkdtempSync(join(import.meta.dirname, ".redacted-plant-"));
 	afterAll(() => rmSync(plant, {recursive: true, force: true}));
 	const lines = [...ENV, ...VALUE];
