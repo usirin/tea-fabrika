@@ -1,6 +1,7 @@
 import type {WindowProps, Writer} from "@kampus/fabrika";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
+import {Kbd} from "@manti-ui/react";
 import {
 	type Head,
 	lineOf,
@@ -460,8 +461,8 @@ function Activity(props: {
 				<h2>Activity</h2>
 				<span className="faint">{rows.length}</span>
 				<span className="hint">
-					<span className="kbd">J</span>
-					<span className="kbd">K</span> move <span className="kbd">↵</span> open
+					<Kbd>J</Kbd>
+					<Kbd>K</Kbd> move <Kbd>↵</Kbd> open
 				</span>
 			</div>
 			<ol className="acts-l" onKeyDown={walk}>
@@ -538,8 +539,8 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 						`saving ${saving}`
 					) : (
 						<>
-							<span className="kbd">⌘</span>
-							<span className="kbd">↵</span> to send
+							<Kbd>⌘</Kbd>
+							<Kbd>↵</Kbd> to send
 						</>
 					)}
 				</span>

@@ -14,7 +14,8 @@ import {bundlesOf, common} from "./bundles.ts";
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
-//   dist/desk.html, dist/window.css   the page's stylesheet, React Flow's base rules first
+//   dist/desk.html, dist/window.css   the page's stylesheet: Manti UI's, React Flow's base rules,
+//                      then fabrika's theme on Manti's tokens and the app's own rules
 //
 // Every bundle gets the same build id, as the define `FABRIKA_BUILD` (src/build-id.ts): the first
 // 12 hex of a SHA-256 over every source file the four bundles are made from, by name and bytes. So
@@ -34,6 +35,9 @@ const here = import.meta.dirname;
 
 /** React Flow's base rules: the map's canvas needs them, and the app's styles go on top. */
 const FLOW_CSS = "@xyflow/react/dist/base.css";
+
+/** Manti UI's stylesheet: its parts, in cascade layers, so the app's unlayered rules win. */
+const MANTI_CSS = "@manti-ui/styles/index.css";
 
 const bundle = (options: BuildOptions) =>
 	Effect.tryPromise({
@@ -69,12 +73,16 @@ const program = Effect.gen(function* () {
 				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
 			),
 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
-			// One stylesheet, as the page's policy serves only that: React Flow's own rules for the
-			// map program's canvas first, then the app's, which restyle them.
+			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
+			// Flow's own rules for the map program's canvas, then fabrika's theme, which sets Manti's
+			// tokens from the app's values, and the app's rules, which restyle the rest.
 			Effect.gen(function* () {
-				const flow = yield* fs.readFileString(fileURLToPath(import.meta.resolve(FLOW_CSS)));
+				const read = (pkg: string) => fs.readFileString(fileURLToPath(import.meta.resolve(pkg)));
+				const manti = yield* read(MANTI_CSS);
+				const flow = yield* read(FLOW_CSS);
+				const theme = yield* fs.readFileString(at("src/window/theme.css"));
 				const own = yield* fs.readFileString(at("src/window/window.css"));
-				yield* fs.writeFileString(at("dist/window.css"), `${flow}\n${own}`);
+				yield* fs.writeFileString(at("dist/window.css"), `${manti}\n${flow}\n${theme}\n${own}`);
 			}),
 		],
 		{concurrency: "unbounded", discard: true},

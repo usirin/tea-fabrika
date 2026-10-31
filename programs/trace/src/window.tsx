@@ -1,4 +1,5 @@
 import type {WindowProps} from "@kampus/fabrika";
+import {Kbd} from "@manti-ui/react";
 import {Fragment, type KeyboardEvent} from "react";
 import type {trace} from "./index.ts";
 import type {Change, Detail, Row, Shown} from "./view.ts";
@@ -474,10 +475,9 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 				</tbody>
 			</table>
 			<p className="note">
-				Click a row, or use <span className="kbd">↑</span> <span className="kbd">↓</span> to move,{" "}
-				<span className="kbd">→</span> <span className="kbd">←</span> to open and close, and{" "}
-				<span className="kbd">Enter</span> to open a row's detail. Every step opens to its Msg, the
-				state before and after, and its Cmds.
+				Click a row, or use <Kbd>↑</Kbd> <Kbd>↓</Kbd> to move, <Kbd>→</Kbd> <Kbd>←</Kbd> to open and
+				close, and <Kbd>Enter</Kbd> to open a row's detail. Every step opens to its Msg, the state
+				before and after, and its Cmds.
 			</p>
 		</section>
 	);

@@ -15,6 +15,7 @@
 		"@demlik/tea": "catalog:",
 		"@kampus/fabrika": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
+		"@manti-ui/react": "catalog:",
 		"@tea-fabrika/tracker": "workspace:*",
 		"effect": "catalog:"
 	},

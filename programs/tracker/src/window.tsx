@@ -1,5 +1,6 @@
 import type {WindowProps} from "@kampus/fabrika";
 import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
+import {Kbd} from "@manti-ui/react";
 import {
 	type FormEvent,
 	type KeyboardEvent,
@@ -321,7 +322,7 @@ function ListPage(props: {
 						spellCheck={false}
 						autoComplete="off"
 					/>
-					<kbd>/</kbd>
+					<Kbd>/</Kbd>
 				</label>
 			</div>
 			<form className="tracker-composer" onSubmit={file} aria-label="new ticket">
@@ -354,7 +355,7 @@ function ListPage(props: {
 						/>
 						<div className="tracker-row">
 							<small>
-								<kbd>Ctrl</kbd> <kbd>Enter</kbd> files it
+								<Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> files it
 							</small>
 							<button
 								type="submit"
@@ -455,22 +456,22 @@ function ListPage(props: {
 			</div>
 			<footer className="tracker-keys">
 				<span>
-					<kbd>j</kbd> <kbd>k</kbd> pick
+					<Kbd>j</Kbd> <Kbd>k</Kbd> pick
 				</span>
 				<span>
-					<kbd>Enter</kbd> open
+					<Kbd>Enter</Kbd> open
 				</span>
 				<span>
-					<kbd>o</kbd> <kbd>x</kbd> <kbd>a</kbd> open, closed, all
+					<Kbd>o</Kbd> <Kbd>x</Kbd> <Kbd>a</Kbd> open, closed, all
 				</span>
 				<span>
-					<kbd>/</kbd> search
+					<Kbd>/</Kbd> search
 				</span>
 				<span>
-					<kbd>c</kbd> new ticket
+					<Kbd>c</Kbd> new ticket
 				</span>
 				<span>
-					<kbd>q</kbd> quit
+					<Kbd>q</Kbd> quit
 				</span>
 			</footer>
 		</section>
@@ -617,7 +618,7 @@ function TicketPage(props: {
 				>
 					← Tickets
 				</button>
-				<kbd>Esc</kbd>
+				<Kbd>Esc</Kbd>
 			</div>
 			{opened === null || ticket === null ? (
 				<p className="tracker-empty">No ticket #{number} on the ledger.</p>
@@ -684,7 +685,7 @@ function TicketPage(props: {
 						/>
 						<div className="tracker-row">
 							<small>
-								<kbd>Ctrl</kbd> <kbd>Enter</kbd> comments
+								<Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> comments
 							</small>
 							<button
 								type="button"
