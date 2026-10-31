@@ -1,2 +1,4 @@
 # The formatter's first pass over the whole repo (biome). Skipped by `git blame`.
 9e02c8ad704c144fdc67c1c573412531ba18ecd3
+# The first pass by oxfmt, when it replaced biome.
+022ce5587a79a48a54fe81598c00136994b41041
