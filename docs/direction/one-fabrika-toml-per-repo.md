@@ -4,10 +4,57 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 [blog post 10](../../blog/10-knobs-in-a-file.md); the first code is
 `legacy/src/settings.ts`.
 
+## Where the files live (2026-10-30)
+
+Decided: the repo's file moves into a `.fabrika/` folder, and a person's own
+settings live in the same shape in their home. One name, two places, like
+`.claude/` and `~/.claude`.
+
+```text
+~/.fabrika/                            the person's home for fabrika
+  fabrika.toml                         their own settings: login, key file
+acme/.fabrika/                         the repo's
+  fabrika.toml                         which ledger, agents, checks, packs
+  programs/deploy/                     the repo's own programs (proposed)
+acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
+```
+
+- **Decided:**
+  - The repo's file is `.fabrika/fabrika.toml`, not `fabrika.toml` at the
+    root.
+  - `~/.fabrika` is the one home. It replaces the app's own folder
+    (Electron's `userData`), `~/.tsh` and `ledger.json`. `FABRIKA_HOME` stays,
+    so a test can point at a home of its own.
+  - `ledger.json` goes. Its ledger address and name are the project's, so
+    they go in the repo's file. Its login and key file are the person's, so
+    they go in `~/.fabrika/fabrika.toml`.
+  - `tsh.toml` folds into the two files the same way.
+  - State is not settings. The desk and the asks live on the ledger, not in
+    either folder.
+- **Proposed, for monorepos:**
+  - The nearest `.fabrika/` above where a run starts wins. It builds on the
+    ones above it, up to the repo root, the way Biome 2 (`"root": false`) and
+    Turborepo (`"extends": ["//"]`) nest their files.
+  - A key that only makes sense once per repo, like `[ledger]`, fails to load
+    in a nested file. The mistake cannot be made, rather than warned about.
+  - Repo programs are read from the default branch only, like the settings,
+    so a lane cannot change the code that judges it.
+  - Opening a repo whose programs you have not run before asks you to trust
+    it first, like `mise trust` or VS Code's workspace trust. A program runs
+    in workerd and can only ask for Cmds, so it never touches the computer
+    directly.
+- **Not built yet.** `packages/pipeline/src/settings-source.ts` still reads
+  `fabrika.toml` at the root, and `.fabrika.jsonc` still sits beside it. Both
+  move into the folder when the code does.
+- **Doubt:** a hidden folder is harder to find than a file at the root, which
+  is why Cargo keeps `Cargo.toml` in plain sight. We pick matching the home
+  folder over that.
+
 ## What was decided
 
 - **Each repo fabrika works on has one `fabrika.toml`.** TOML, not JSON:
-  real comments, sections, no braces to balance.
+  real comments, sections, no braces to balance. Since 2026-10-30 it lives
+  at `.fabrika/fabrika.toml` (above).
 - **A knob is a number, a name, or a pick between paths the code already has
   and tests.** Floors, limits, a model name.
 - **The order of the steps stays in code.** No `steps = [...]`, no `when = "..."`.
