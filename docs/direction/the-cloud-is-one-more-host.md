@@ -81,6 +81,8 @@ node on a laptop and a node in a data center run the same release.
 ```ts
 // A sketch, not built. One Durable Object class, on a laptop (workerd, through
 // Alchemy's local stage) and on Cloudflare (the same bundle).
+// Changed 2026-10-31: the class stays thin, and these jobs live in plain code behind it
+// (object-classes-stay-thin.md).
 class Host extends DurableObject {
 	// wake       a message or the alarm: rebuild every program from storage (148)
 	// step       run the program's update; write what it says to the ledger
@@ -446,6 +448,37 @@ const view = {
   a stale Msg means.
 - Screen state (scroll, hover, the picked row) lives in the window's own tea
   machine (`useMachine`).
+- **Three homes for state (decided 2026-10-31).** Who needs it picks the home.
+
+  ```text
+  others need it     the log             tickets, claims
+  only this process  object's storage    a filter, a search; survives a crash, gone at exit
+  only this window   window's machine    scroll, hover; gone on reload
+  ```
+
+  So a process wakes from two places, its inbox and its own storage, and
+  replaying the log alone no longer rebuilds a filter. A process that moves to
+  another brain leaves its filter behind. How a program says what to keep is
+  open. Lean, 70%: `keep: {data, select}`, the same shape as `view`, saved by
+  the runtime in the same turn as the step, so a crash leaves no gap. Elm's own
+  way is a Cmd plus flags at start. The doubt is whether a real program wants
+  more than that; the tracker in `next/` will settle it.
+- **A program never holds the log (decided 2026-10-31).** Each layer uses only
+  the one below it, so a fact goes program, app, coordination, data. A law checks
+  it: one layer down, and any exception is named with its reason. How a program
+  writes a fact others read is open. Lean, 70%: a `Topic` service in coordination,
+  named after `Phoenix.PubSub` topics, which owns who may write and who to wake.
+  The poke in D4 covers peers on a socket, not sleeping objects, so this fills
+  that gap too. The doubt is that it ends up a thin pass-through over the log.
+  The tracker in `next/` will settle it.
+
+  ```ts
+  // A sketch. The runtime gives this Layer, tied to this process.
+  const close = Effect.gen(function* () {
+  	const topic = yield* Topic;
+  	yield* topic.publish("tickets", {kind: "closed", ticket: 7});
+  });
+  ```
 - Not now: Relay. A study found it a second store, with no patches and its own
   schema bridge; Linear's own app uses a sync engine, not GraphQL. A later
   look: fate (react-fate), whose views are fragments without a GraphQL server.

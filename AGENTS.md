@@ -60,7 +60,19 @@ everything else    what we use today, and a map of which jobs exist
   and its tests to learn what jobs exist and what was learned, then rethink. Never
   import it and never copy it across
   ([rethink, do not port](./docs/direction/rethink-do-not-port.md)).
-- **In today's version:** only fixes that daily use or CI needs. No new features.
+- **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
+  appears only in a one-line edge the platform demands
+  ([no Promises](./docs/direction/no-promises.md)).
+- **In `next/`, an object class stays thin.** It holds what the platform gives it and
+  a one-line handoff. The logic is plain code that also runs on Node in tests
+  ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
+- **In `next/`, every change goes through the pipeline's steps, by hand:** plan, test
+  writer, build, mutation step, one review, each by its own agent, with laws. No
+  builder starts before an approved plan and tests that exist
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)).
+- **In today's version:** fixes that daily use or CI needs, the UX work the owner
+  picks, and ideas the owner wants to try out there first. What a tryout teaches
+  goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
 - **When `next/` takes a job over,** the pull request that switches to it deletes
   the old part. Its tests or laws are ported first.
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
