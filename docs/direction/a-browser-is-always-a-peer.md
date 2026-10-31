@@ -6,6 +6,13 @@ nobody builds the browser side yet. The protocol comes first; each
 implementation (the Mac's hands, the VM's hands, a browser tab, a test) is one
 peer that speaks it.
 
+*Changed 2026-10-31 (T3): the window no longer talks to its own hands over a
+Unix socket. Every window is a peer, the Electron window too, and dials its
+own gateway over a WebSocket with its own key (kept in the macOS Keychain in
+Electron). The brain checks the page's origin. The window row below and the
+"local shortcut" bullet are kept as the earlier answer. See
+[the five layers](./a-local-first-sync-engine.md#layer-1-transport-decided-2026-10-30-t3-changed-2026-10-31).*
+
 ```ts
 // A sketch. One protocol, many peers. Only the transport and the key store differ.
 //   peer           transport                      key kept in            has
