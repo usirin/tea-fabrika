@@ -29,7 +29,7 @@ export const claude = defineProgram({
 });
 
 // flags:   folder, session, model, effort, system, usd, tools, seconds, schema (a JSON Schema)
-// inputs:  prompt (text), allow / refuse (an ask id), cancel (a turn number, or "now")
+// inputs:  prompt (text), cancel (a turn number, or "now"); allow and refuse are gone (13)
 // outputs: started {provider, session, resumed, resent}
 //          said {turn, text}   tool {turn, id, title, status}   ask {turn, id, title, answer}
 //          ended {turn, stop, answer: Json | null, tokens, counted, usd, requests, ms, error}
@@ -117,12 +117,12 @@ sees the difference.
 
 | Part | claude | codex | Hidden or shown |
 |---|---|---|---|
-| Inputs | prompt, allow, refuse, cancel | the same | the same |
+| Inputs | prompt, cancel (allow and refuse until 13) | the same | the same |
 | `--usd` limit | held | refused at turn start: `failed`, `cannot_limit` | shown, on purpose |
 | Outputs | started, said, tool, ended | the same, plus the answer again as a `said` | shown |
 | Typed answer, how it comes | a `StructuredOutput` tool call, then the SDK's typed field | the last message, as JSON text | hidden in `ended.answer`; the tool call and the extra `said` are shown |
 | Session resume | the SDK's session id | the thread id | hidden by the service |
-| Permission asks | never sent (`dontAsk`) | never sent (approvals `never`) | the same: `allow` and `refuse` answer `not_waiting` on both |
+| Permission asks | never sent (`dontAsk`) | never sent (approvals `never`) | the same: refused at once on both, and no input answers one (13) |
 | Cancel | interrupt, then the service's stop | the same | hidden |
 | Usage | tokens, usd, requests | tokens; usd and requests are `null` | shown |
 | `counted` | `turn` | `turn` | the same |
@@ -330,9 +330,10 @@ provider as the name." The owner rejected it (11).
 Two gaps to fix in the service, not in the program, the same on both providers:
 
 - **No permission asks.** Neither adapter ever sends `asked`, and the service
-  has no path to answer one. `allow` and `refuse` are wired but dead.
-  They stay as they are until the proposed direction note in
-  [PR 194](https://github.com/usirin/tea-fabrika/pull/194) settles them as ledger facts.
+  has no path to answer one. `allow` and `refuse` were wired but dead.
+  The direction note from
+  [PR 194](https://github.com/usirin/tea-fabrika/pull/194), now merged and
+  still proposed, takes them out; 13 does it.
 - **No chat turn without a schema.** `Turn.answer` is required, and
   `Schema.Json` makes the JSON Schema `{}`. Proposal: `answer: null` in `Turn`
   for a plain chat turn.
@@ -398,7 +399,7 @@ yield* serve(handlers, {until: ["prompt"]});
   mailbox stays the one queue.
 - **`allow` and `refuse` are unchanged** (they wait on PR 194). They are
   ordinary inputs, so one told during a turn is said back as `not_waiting`
-  once the turn ends. Nothing waits on them today (10).
+  once the turn ends. Nothing waits on them today (10). **Since gone (13).**
 - **A turn a kill cut off** runs again first, in a fiber of its own, while
   the mailbox is served, so a cancel reaches it. Every prompt waits for it.
   If `prompt` closes first, `chat` keeps serving until that turn ends.
@@ -418,6 +419,44 @@ as 6. `cost 300` ran with the machine at load 18: the program's gap over
 `Agents.run` was about 1.2 to 1.8 ms a turn, against 0.8 ms before, but
 `Agents.run` alone was also 2 to 4 times slower than the saved run. The saved
 results file is left as it was.
+
+## 13. Since the rebase (2026-10-30)
+
+Rebased onto main after PRs 194, 196, 205, 206, 210, 211 and 212. Only the
+README rows and the package lists clashed; each kept both sides.
+
+```ts
+// packages/fabrika/src/agents/program/chat.ts, now
+export const inputs = {
+	prompt: input(Schema.String, "A prompt: one turn, after the turns before it."),
+	cancel: input(Cancel, "...", {control: true}),
+};
+// ask {turn, id, title, answer: "refused"}: what the run's containment refused, as a view
+```
+
+- **`allow` and `refuse` are gone.** The note
+  [one way to ask a person](../docs/direction/one-ask-and-one-meter.md)
+  (from PR 194, still proposed) says so for these two programs and for
+  `acp`: any program in a pipe can tell an input, so an input is never a
+  person's answer. A person answers with an `answered` fact from their own
+  session. The `ask` output stays, as a view of what was refused. Its `turn`
+  is never `null` now, and its answer is only `refused`.
+- **What 194 leaves for later.** Writing `asked {for: "permission"}` and
+  reading `answered` under `--permissions ask` waits until the one ask is
+  built (its facts, `hashOf` in fabrika). Until then every ask is refused
+  at once, as before, and no adapter sends one.
+- **No window in the app.** The app lists its programs by hand
+  (`appPrograms` in `apps/fabrika/src/tsh.ts`), and the app does not depend
+  on either package. Typed in a tile's tsh, `claude` answers `no program
+  named claude`, status 127, as any word tsh does not know; neither program
+  is in the palette or the program list. The chat window is its own later
+  change. The two stay usable as child runs and in tests.
+- **PR 205's rule** (one input per command, never `do` or `in`) already
+  held: the inputs are `prompt` and `cancel`.
+- **Run again, fake providers, keys unset, $0:** `order 50` gave the same
+  four answers as 6, 50 of 50 on both. `cost 300` ran at machine load 35, so
+  its numbers (program p50 1.0 to 1.3 ms, `Agents.run` p50 0.09 to 0.54 ms)
+  say little. The saved results file is left as it was.
 
 ## What this cannot tell us
 

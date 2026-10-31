@@ -27,9 +27,14 @@ export const codex = defineProgram({
   Schema cannot say still holds.
 - **What differs from `claude`** is data only: Codex says no dollars and no request count, says
   its answer again as a `said`, and fails a turn given a `--usd` cap at its start.
+- **Inputs are `prompt` and `cancel`.** A permission ask is refused at once and shown on `ask`;
+  no input answers one ([one way to ask a person](../../docs/direction/one-ask-and-one-meter.md),
+  proposed).
+- **Not in the app yet.** It has no window, so the app does not list it: a stage starts it as a
+  child run, and the tests run it. Its chat window is a later change.
 
 | File | What it is |
 |---|---|
 | `src/index.ts` | The program. |
-| `src/codex.test.ts` | The program on its fake provider: outputs, resume, cancel, a cap, asks, a restart, the answer. |
+| `src/codex.test.ts` | The program on its fake provider: outputs, resume, cancel, a cap, its inputs, a restart, the answer. |
 | `src/sort.test.ts` | The real sort stage with `codex` as its child run, the answer decoded, and a misfit. |

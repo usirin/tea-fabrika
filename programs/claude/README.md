@@ -27,9 +27,14 @@ export const claude = defineProgram({
   Schema cannot say still holds.
 - **What differs from `codex`** is data only: Claude says its dollars and its request count, and
   holds a `--usd` cap.
+- **Inputs are `prompt` and `cancel`.** A permission ask is refused at once and shown on `ask`;
+  no input answers one ([one way to ask a person](../../docs/direction/one-ask-and-one-meter.md),
+  proposed).
+- **Not in the app yet.** It has no window, so the app does not list it: a stage starts it as a
+  child run, and the tests run it. Its chat window is a later change.
 
 | File | What it is |
 |---|---|
 | `src/index.ts` | The program. |
-| `src/claude.test.ts` | The program on its fake provider: outputs, resume, cancel, a cap, asks, a restart, the answer. |
+| `src/claude.test.ts` | The program on its fake provider: outputs, resume, cancel, a cap, its inputs, a restart, the answer. |
 | `src/sort.test.ts` | The real sort stage with `claude` as its child run, the answer decoded, and a misfit. |
