@@ -1,9 +1,12 @@
 # Clean slate: the new code in `packages/`, the old deleted
 
-**Proposed 2026-10-30.** It starts only after every layer (link, data, nodes,
-app) has been talked through and decided, one by one
-([the cloud is one more host](./the-cloud-is-one-more-host.md),
-[a local-first sync engine](./a-local-first-sync-engine.md)). It changes
+**Proposed 2026-10-30.** It starts only after all five layers (transport,
+data, coordination, app, desktop) have been talked through and decided, one by
+one ([a local-first sync engine](./a-local-first-sync-engine.md) for the lower
+three, [the cloud is one more host](./the-cloud-is-one-more-host.md) for the
+app, [the desktop layer](./the-desktop-layer.md)). *Changed 2026-10-31: five
+layers, not four. The walk renamed link to transport and nodes to
+coordination, and added the desktop on top.* It changes
 [sweep the core](./sweep-the-core-rebuild-the-pipeline.md) (2026-10-22): the
 core is no longer swept in place. It is rebuilt too, on the new picture.
 
@@ -43,11 +46,17 @@ one file.
 | `legacy`, `wip` | 75 files, about 28k lines | deleted, nothing rebuilt from them |
 | `packages/ledger-server`, `packages/promises` | 14 files, about 1.1k lines | folded into the project object; deleted |
 | `programs/*`, `packs/*` | 83 files, about 15k lines | each one rethought onto the new host, old copy deleted in the same pull request |
-| `apps/fabrika` | 102 files, about 27k lines | the windows stay; its Node host is replaced by the hands |
+| `apps/fabrika` | 102 files, about 27k lines | its window becomes the desktop layer's Electron backend, which dials the brain itself (T3); its Node host is replaced by the hands |
 | `experiments/` | 132 scripts (about 121k lines), 174 write-ups, 24 MB of results | onto the ledger through the experiments program; the folder deleted |
 | `field/` | 4,691 run rows, 263 notes | onto the ledger as run records; the folder deleted |
 
 Line counts are `.ts` and `.tsx` only, counted 2026-10-30.
+
+One piece is carried over, not rethought, as the 2026-10-31 walk decided
+(C4): **the supervisor** (`packages/fabrika/src/host/supervisor.ts`,
+experiments 99 to 102). It moves into the new coordination code with its OTP
+strategies, restart intensity and backoff, and the six places where today's
+code differs from OTP are fixed on the way.
 
 ## The order
 
@@ -55,11 +64,11 @@ Line counts are `.ts` and `.tsx` only, counted 2026-10-30.
 // A sketch of the order. Each step is one or more pull requests, each one
 // adding the new and deleting the old together.
 const order = [
-	"finish the decisions",       // every layer, one by one: link, data, nodes, app
+	"finish the decisions",       // all five layers: transport, data, coordination, app, desktop
 	"tools to read them",          // an agent finds, reads and searches experiments on the ledger
 	"experiments onto the ledger", // built in experiment 170: run the importer for real, delete the folder
 	"field onto the ledger",       // runs.jsonl rows become run records, notes become facts
-	"the new core",                // the project object, program objects, the hands, each with its laws
+	"the new core",                // the project object, gateways, program objects, the hands, each with its laws
 	"programs, one at a time",     // counter first; the old copy goes in the same pull request
 	"the pipeline, rebuilt small", // then packages/pipeline, legacy and wip go
 ] as const;
