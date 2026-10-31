@@ -212,10 +212,10 @@ The wire has four steps. Any peer speaks it.
 
 ```ts
 // 4. Drops (T7). Retry once at once, then back off. Once back, catch up from the last rev seen.
-const backoff = Schedule.exponential("250 millis").pipe(
-	Schedule.jittered, // each wait 80 to 120%, at random
-	Schedule.either(Schedule.spaced("30 seconds")), // never more than 30 s
-);
+const backoff = Schedule.min([
+	Schedule.exponential("250 millis").pipe(Schedule.jittered), // each wait 80 to 120%, at random
+	Schedule.spaced("30 seconds"), // never more than 30 s
+]);
 const reconnect = Schedule.recurs(1).pipe(Schedule.andThen(backoff));
 connect.pipe(Effect.retry(reconnect));
 ```

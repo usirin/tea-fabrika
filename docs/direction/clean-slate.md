@@ -120,7 +120,8 @@ const order = [
 
 - **Experiments and field notes keep going where they go today,** as files, until
   a later step says otherwise.
-- **Today's version gets only fixes** that daily use or CI needs. No new features.
+- **Today's version gets only fixes** that daily use or CI needs, and the UX work
+  the owner picks. No new plumbing. *Changed 2026-10-31: it said "no new features".*
 - [AGENTS.md](../../AGENTS.md) tells agents which version is which.
 - `blog/`, `video/` and `singles/` are finished pieces and are not touched.
 

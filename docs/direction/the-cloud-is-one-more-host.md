@@ -81,6 +81,8 @@ node on a laptop and a node in a data center run the same release.
 ```ts
 // A sketch, not built. One Durable Object class, on a laptop (workerd, through
 // Alchemy's local stage) and on Cloudflare (the same bundle).
+// Changed 2026-10-31: the class stays thin, and these jobs live in plain code behind it
+// (object-classes-stay-thin.md).
 class Host extends DurableObject {
 	// wake       a message or the alarm: rebuild every program from storage (148)
 	// step       run the program's update; write what it says to the ledger
