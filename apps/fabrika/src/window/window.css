@@ -3676,6 +3676,8 @@ main.program:has(> .view) {
 	inset-block-start: 4px;
 	transform: translateX(-50%);
 	font-variant-numeric: tabular-nums;
+	/* Near the track's end the box has little room left: "40 ms" stays one line. */
+	white-space: nowrap;
 }
 
 .trace-view .wf-tick:first-child {

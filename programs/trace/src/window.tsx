@@ -375,6 +375,17 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 			</section>
 		);
 
+	// Read, and nobody wrote it: no job, no span, no step. Said in words, not drawn as a job of 0 ms.
+	if (view.job === null && view.spans === 0 && view.steps === 0)
+		return (
+			<section className="view trace-view" aria-label="trace">
+				<p className="empty">
+					This host keeps no record of trace <span className="mono">{view.id}</span>. A job run on
+					another host, or before this host kept records, has none here.
+				</p>
+			</section>
+		);
+
 	const focusable = chosen ?? view.rows[0]?.key ?? null;
 	return (
 		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
