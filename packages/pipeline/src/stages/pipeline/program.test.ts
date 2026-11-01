@@ -104,6 +104,24 @@ interface Script {
 	readonly mainFiles?: readonly {readonly path: string; readonly text: string}[];
 	/** After the kill, the repo's own checks turn red: a second `[[checks.run]]` starts to fail. */
 	readonly redAfterKill?: boolean;
+	/** What the fake agent says in place of its plain answers: `script.json`, fixtures/pipeline-lane/codex.mjs. */
+	readonly fake?: FakeScript;
+}
+
+/** By step, as the fake names them. Each list goes by the step's runs, first run first. */
+interface FakeScript {
+	/** A string is the whole last message. `with` lays keys over the plain answer. `null`: the plain answer. */
+	readonly answers?: Readonly<
+		Record<string, readonly (string | {readonly with: Readonly<Record<string, unknown>>} | null)[]>
+	>;
+	/** Codex `error` events, in mid-stream. */
+	readonly notes?: Readonly<Record<string, readonly string[]>>;
+	/** More files the step writes in its folder. */
+	readonly writes?: Readonly<
+		Record<string, readonly {readonly path: string; readonly text: string}[]>
+	>;
+	/** Every review row is `unseen`, for this reason. */
+	readonly unseen?: string;
 }
 
 const TIMED_OUT = "-- timed out --";
@@ -123,6 +141,7 @@ const lane = ({
 	within = 290,
 	mainFiles,
 	redAfterKill = false,
+	fake,
 }: Script): Promise<Ran> => {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
@@ -138,6 +157,7 @@ const lane = ({
 		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
 	});
 	if (noConfig) rmSync(join(home, "pipeline.json"));
+	if (fake !== undefined) writeFileSync(join(dir, "script.json"), JSON.stringify(fake));
 	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
 	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
@@ -201,6 +221,7 @@ const codexRuns = (dir: string) =>
 						JSON.parse(row) as {
 							readonly args: readonly string[];
 							readonly step: string;
+							readonly prompt: string;
 							readonly keys: readonly string[];
 							readonly rubrics: string | null;
 							readonly diff: string | null;
@@ -837,6 +858,323 @@ describe("a lane, whole, on GitHub", () => {
 			expect(ran.wrote).toEqual([]);
 			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 			expect(said.some((body) => body.includes("gh pr create"))).toBe(true);
+		},
+	);
+
+	// P8.
+	it(
+		"a builder's `left` reaches the pull request and the ticket, a failed `ran` shows on the ticket, and neither decides anything",
+		{timeout: 60_000},
+		async () => {
+			const LEFT = "A test that needs a local port could not run.";
+			const FAILED = "pnpm test:integration";
+			const ran = await onGitHub({
+				rubrics: null,
+				fake: {
+					answers: {
+						build: [
+							{
+								with: {
+									left: [LEFT],
+									ran: [
+										{command: "vitest run", passed: true},
+										{command: FAILED, passed: false},
+									],
+								},
+							},
+						],
+					},
+				},
+			});
+			const opened = ran.calls.find((call) => call.kind === "pr_create");
+			const args = opened?.args ?? [];
+			expect(args[args.indexOf("--body") + 1]).toContain(LEFT);
+			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+			expect(said.some((body) => body.includes(LEFT))).toBe(true);
+			expect(said.some((body) => body.includes(FAILED))).toBe(true);
+			// The code's own checks judged it.
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+});
+
+// An audit changed the fake's answers to what a real agent might say, and found ordinary answers that
+// end a lane for good. Each test here is one of those answers. Today's version.
+describe("a lane, on what a real agent might answer", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+	});
+
+	const runsOf = (ran: Ran, step: string) => codexRuns(ran.dir).filter((r) => r.step === step);
+	const THE_PLANS_NO = {approve: "no"};
+	const askedOf = (ran: Ran) => ran.facts.filter((f) => f.type === "asked");
+
+	// P1
+	it(
+		"a Reconnecting error in mid-stream is a note, and the plan still ends",
+		{timeout: 60_000},
+		async () => {
+			const ran = await lane({
+				within: 50,
+				picks: THE_PLANS_NO,
+				fake: {notes: {plan: ["Reconnecting... 1/5"]}},
+			});
+			expect(ran.names.plan).toContain('"done"');
+			expect(askedOf(ran).some((f) => String(f.ask).startsWith("a-approve"))).toBe(true);
+		},
+	);
+
+	// P2
+	it("every step's agent runs with --output-schema", {timeout: 100_000}, async () => {
+		const ran = await lane({title: "[rules] Read names in one form", within: 90});
+		expect(ran.lines.at(-1)).toContain("ended: done");
+		const runs = codexRuns(ran.dir);
+		expect(runs.map((r) => r.step)).toEqual(
+			expect.arrayContaining(["triage", "plan", "exam", "tests", "build", "mutants", "review"]),
+		);
+		expect(runs.filter((r) => !r.args.includes("--output-schema")).map((r) => r.step)).toEqual([]);
+	});
+
+	// P3
+	describe("a last message that does not fit", () => {
+		const ON_PLAN = "Done. The plan is above.";
+		const ON_BUILD = "I made the change and all tests pass.";
+
+		it(
+			"on plan: a second try names it, and the good answer carries on",
+			{timeout: 60_000},
+			async () => {
+				const ran = await lane({
+					within: 50,
+					picks: THE_PLANS_NO,
+					fake: {answers: {plan: [ON_PLAN]}},
+				});
+				const runs = runsOf(ran, "plan");
+				expect(runs).toHaveLength(2);
+				expect(runs[1]?.prompt).toContain(ON_PLAN);
+				expect(ran.names.plan).toContain('"done"');
+				expect(askedOf(ran).some((f) => String(f.ask).startsWith("a-approve"))).toBe(true);
+			},
+		);
+
+		it(
+			"on plan: a second misfit ends draft_failed, with no third try",
+			{timeout: 60_000},
+			async () => {
+				const ran = await lane({within: 50, fake: {answers: {plan: [ON_PLAN, ON_PLAN]}}});
+				expect(runsOf(ran, "plan")).toHaveLength(2);
+				expect(ran.names.plan).toContain("draft_failed");
+				expect(ran.stages).not.toContain("build");
+			},
+		);
+
+		it(
+			"on build: a second try names it, and the good answer carries on",
+			{timeout: 100_000},
+			async () => {
+				const ran = await lane({within: 90, fake: {answers: {build: [ON_BUILD]}}});
+				const runs = runsOf(ran, "build");
+				expect(runs).toHaveLength(2);
+				expect(runs[1]?.prompt).toContain(ON_BUILD);
+				expect(ran.stages).toEqual(WHOLE);
+				expect(ran.lines.at(-1)).toContain("ended: done");
+			},
+		);
+
+		it(
+			"on build: a second misfit ends draft_failed, with no third try",
+			{timeout: 60_000},
+			async () => {
+				const ran = await lane({within: 50, fake: {answers: {build: [ON_BUILD, ON_BUILD]}}});
+				expect(runsOf(ran, "build")).toHaveLength(2);
+				expect(ran.names.build).toContain("draft_failed");
+				expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+			},
+		);
+
+		it(
+			"on every step that runs an agent: one misfit each, and the lane still lands",
+			{timeout: 150_000},
+			async () => {
+				const MISFIT = "All done, see above.";
+				const STEPS = ["triage", "plan", "exam", "tests", "build", "mutants", "review"];
+				const ran = await lane({
+					title: "[rules] Read names in one form",
+					within: 140,
+					fake: {answers: Object.fromEntries(STEPS.map((step) => [step, [MISFIT]]))},
+				});
+				expect(ran.lines.at(-1)).toContain("ended: done");
+				for (const step of STEPS) {
+					const runs = runsOf(ran, step);
+					expect({step, runs: runs.length}).toEqual({step, runs: 2});
+					expect(runs[1]?.prompt).toContain(MISFIT);
+				}
+			},
+		);
+	});
+
+	// P5
+	it(
+		"no test importing the changed file means every mutant survived: the work goes to the test writer",
+		{timeout: 100_000},
+		async () => {
+			const READS_ONLY = [
+				'import {readFileSync} from "node:fs";',
+				'import {expect, it} from "vitest";',
+				"",
+				'it("reads the new file as text", () => {',
+				'\texpect(readFileSync("src/lower.ts", "utf8")).toContain("toLowerCase");',
+				"});",
+				"",
+			].join("\n");
+			const ran = await lane({
+				within: 90,
+				fake: {
+					answers: {
+						tests: [
+							{
+								with: {
+									files: [{path: "src/lower.test.ts", text: READS_ONLY}],
+									answers: [
+										{
+											property: "p1",
+											kind: "test",
+											file: "src/lower.test.ts",
+											name: "reads the new file as text",
+										},
+									],
+								},
+							},
+						],
+					},
+				},
+			});
+			expect(ran.names.mutation).not.toContain("run_failed");
+			expect(ran.names.mutation).toContain("test_writer");
+			expect(ran.stages).toContain("mutants");
+			expect(runsOf(ran, "mutants")[0]?.prompt).toContain("src/lower.ts:");
+		},
+	);
+
+	// P6
+	it(
+		"every review row unseen goes to the person with the reviewer's reason, and nothing lands on it",
+		{timeout: 60_000},
+		async () => {
+			const REASON = "The fixture run is elsewhere, so nothing here could show it.";
+			const ran = await lane({within: 50, picks: {step: "stop"}, fake: {unseen: REASON}});
+			expect(ran.names.review).not.toContain("stuck");
+			expect(ran.names.review).toContain('"ask"');
+			const asked = askedOf(ran).filter((f) => String(f.ask).startsWith("a-step"));
+			expect(asked).toHaveLength(1);
+			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+			expect([String(asked[0]?.what), ...said].some((text) => text.includes(REASON))).toBe(true);
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+		},
+	);
+
+	it(
+		"a reviewer's folder is told as it is: a box that refuses a write",
+		{timeout: 60_000},
+		async () => {
+			const ran = await lane({within: 50, picks: {merge: "no"}});
+			const review = runsOf(ran, "review")[0]?.prompt ?? "";
+			expect(review).toContain("You review one pull request");
+			expect(review).not.toMatch(/thrown away/);
+		},
+	);
+
+	// P7
+	it(
+		"a changed file with a space or a non-ASCII letter is mutated like any other, and the lane goes on",
+		{timeout: 150_000},
+		async () => {
+			const CODE = "export const flip = (on: boolean): boolean => !on;\n";
+			const ran = await lane({
+				within: 140,
+				fake: {
+					writes: {
+						build: [
+							{path: "src/my flip.ts", text: CODE},
+							{path: "src/flïp.ts", text: CODE},
+						],
+					},
+				},
+			});
+			expect(ran.names.mutation).not.toContain("run_failed");
+			const mutants = runsOf(ran, "mutants")[0]?.prompt ?? "";
+			expect(mutants).toContain("src/my flip.ts:");
+			expect(mutants).toContain("src/flïp.ts:");
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	// P9
+	it(
+		"a rule change's path with a line break goes back to the planner, and never reaches a question",
+		{timeout: 60_000},
+		async () => {
+			const change = {path: ".oxlintrc.json\nand more", change: "add a rule", why: "it needs one"};
+			const ran = await lane({
+				within: 50,
+				picks: THE_PLANS_NO,
+				fake: {answers: {plan: [{with: {exam: [change]}}]}},
+			});
+			expect(runsOf(ran, "plan")).toHaveLength(2);
+			expect(ran.names.plan).toContain('"done"');
+			expect(ran.stages).not.toContain("exam_merge");
+		},
+	);
+
+	it(
+		"a plan summary and a criterion over a comment's limit are cut, not fatal",
+		{timeout: 100_000},
+		async () => {
+			const LONG = "a very long sentence ".repeat(4_000);
+			const claim = {
+				when: "someone reads a name",
+				result: LONG,
+				check: {how: "test", what: "a test runs it"},
+				serves: ["reader"],
+			};
+			const ran = await lane({
+				within: 90,
+				fake: {
+					answers: {
+						plan: [
+							{
+								with: {
+									summary: LONG,
+									tasks: [
+										{
+											title: "Read a name in one form",
+											ends: "pr",
+											job: {
+												when: "someone reads three names",
+												result: "each comes back in one form",
+												check: {how: "test", what: "a test runs it"},
+												serves: ["reader"],
+												fixture: "three names, each read twice",
+											},
+											criteria: [claim],
+										},
+									],
+								},
+							},
+						],
+					},
+				},
+			});
+			expect(ran.names.plan).toContain('"done"');
+			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+			expect(said.some((body) => body.startsWith("# Plan:"))).toBe(true);
+			expect(ran.lines.at(-1)).toContain("ended: done");
 		},
 	);
 });
