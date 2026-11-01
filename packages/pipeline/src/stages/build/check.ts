@@ -33,6 +33,17 @@ const fixedPart = (pattern: string): string => {
 	return wild === -1 ? pattern : dirname(`${pattern.slice(0, wild)}x`);
 };
 
+/**
+ * Which of a build's changed files are the exam's: the exact files the test writer's own commits
+ * touched, plus the rule files. An exact list, not a name pattern, so a helper the plan gave the
+ * builder is not caught by its name, and a test the writer put somewhere odd still is.
+ */
+export const examTouched = (
+	changed: readonly string[],
+	exam: readonly string[],
+	isRule: (file: string) => boolean,
+): readonly string[] => changed.filter((file) => exam.includes(file) || isRule(file));
+
 const READS = new Set(["Read", "Grep", "Glob"]);
 
 /** Commands that talk to GitHub or the network, or that would let a command out of the sandbox. Refused by name. */

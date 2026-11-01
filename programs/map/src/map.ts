@@ -179,14 +179,14 @@ export type Where =
 	| {readonly kind: "missing"; readonly note: string};
 
 export const SPOTS: {readonly [S in StepName]: Where} = {
-	triage: {kind: "apart", as: "machine", in: "stages/sort"},
+	triage: {kind: "apart", as: "program", in: "stages/sort"},
 	plan: {kind: "apart", as: "program", in: "plan"},
 	approval: {kind: "apart", as: "program", in: "asks"},
-	test_writer: {kind: "apart", as: "machine", in: "stages/test-writer"},
+	test_writer: {kind: "apart", as: "program", in: "stages/test-writer"},
 	build: {kind: "stepped", by: "the build machine"},
-	mutation: {kind: "apart", as: "machine", in: "stages/mutation"},
+	mutation: {kind: "apart", as: "program", in: "stages/mutation"},
 	review: {kind: "stepped", by: "the review machine"},
-	push: {kind: "missing", note: "build pushes today"},
+	push: {kind: "apart", as: "program", in: "stages/push"},
 	merge: {kind: "stepped", by: "the ship machine"},
 };
 

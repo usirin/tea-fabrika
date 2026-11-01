@@ -10,7 +10,8 @@ import {parse, TomlError} from "smol-toml";
 //   [pack."@acme/owner-desk"]         # one pack's own settings; the pack checks them
 //   view = "markdown"
 //
-//   [agents.build]                    # one agent step: plan, build or review
+//   [agents.build]                    # one agent step: triage, plan, exam, test_writer, build or review
+//   harness = "codex"                 # the `pipeline` lane reads this one: codex or claude
 //   model = "haiku"
 //   effort = "low"
 //   usd = 0.5                         # the most one run may cost, in dollars
@@ -19,8 +20,17 @@ import {parse, TomlError} from "smol-toml";
 //   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
 //   checks = [["npm", "test"]]        # the commands the builder is told to run
 //
+//   [test_writer]
+//   includes = ["**/*.test.ts"]       # the patterns a new test file must match
+//   run = ["npx", "vitest", "run", "--reporter=json", "--outputFile={out}"]
+//   reads = []                        # folders outside the copy its box may read
+//
+//   [mutation]
+//   tests = ["npx", "vitest", "run"]  # the repository's own tests, at a head
+//   typecheck = ["npx", "tsc", "--noEmit"]
+//
 //   [review]
-//   rubrics = "docs/rubrics"          # code.md, doc.md, skill.md, in the repository at its main
+//   rubrics = "docs/rubrics"        # code.md, doc.md, skill.md, in the repository at its main
 //   governed = [".github/"]           # read only when the repository has no .fabrika.jsonc
 //   ui = []
 //
@@ -73,7 +83,7 @@ const Name = Schema.String.check(Schema.isNonEmpty({message: "a pack is named by
 const PackTable = Schema.Record(Schema.String, Schema.Unknown);
 
 /** The steps that run an agent, each with its own `[agents.<step>]` table. */
-export const AGENT_STEPS = ["plan", "build", "review"] as const;
+export const AGENT_STEPS = ["triage", "plan", "exam", "test_writer", "build", "review"] as const;
 export type AgentStep = (typeof AGENT_STEPS)[number];
 
 /** How hard an agent thinks. The same three words every agent step takes. */
@@ -83,6 +93,8 @@ const Word = Schema.String.check(Schema.isNonEmpty({message: "an empty word"}));
 
 /** One agent step's table. A key left out is picked at the edge (./setup.ts). */
 const Agent = Schema.Struct({
+	/** Which agent runs the step: `codex` or `claude`. The steps' logic never reads it. */
+	harness: Schema.optionalKey(Schema.Literals(["codex", "claude"])),
 	model: Schema.optionalKey(Word),
 	effort: Schema.optionalKey(Schema.Literals(EFFORTS)),
 	usd: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
@@ -95,6 +107,24 @@ const Build = Schema.Struct({
 	/** `[]`: install nothing. */
 	install: Schema.optionalKey(Schema.Array(Word)),
 	checks: Schema.optionalKey(Schema.Array(Command)),
+});
+
+const TestWriterTable = Schema.Struct({
+	/** The patterns a new test file must match. */
+	includes: Schema.optionalKey(Schema.Array(Word)),
+	/** Runs the tests on the base, in a box with no login. `{out}`: where it writes vitest's JSON report. */
+	run: Schema.optionalKey(Command),
+	/** Folders outside the copy the box may read, such as where a linked install stands. */
+	reads: Schema.optionalKey(Schema.Array(Word)),
+});
+
+const MutationTable = Schema.Struct({
+	/** The repository's own tests. */
+	tests: Schema.optionalKey(Command),
+	/** The repository's own typecheck: a mutant it rejects is not counted. */
+	typecheck: Schema.optionalKey(Command),
+	/** The vitest config, from the repository's root. */
+	vitest: Schema.optionalKey(Word),
 });
 
 /** A path inside the repository: never out of it, never from the root of the machine. */
@@ -131,12 +161,17 @@ const File = Schema.Struct({
 	),
 	agents: Schema.optionalKey(
 		Schema.Struct({
+			triage: Schema.optionalKey(Agent),
 			plan: Schema.optionalKey(Agent),
+			exam: Schema.optionalKey(Agent),
+			test_writer: Schema.optionalKey(Agent),
 			build: Schema.optionalKey(Agent),
 			review: Schema.optionalKey(Agent),
 		}),
 	),
 	build: Schema.optionalKey(Build),
+	test_writer: Schema.optionalKey(TestWriterTable),
+	mutation: Schema.optionalKey(MutationTable),
 	review: Schema.optionalKey(Review),
 	checks: Schema.optionalKey(Checks),
 	ship: Schema.optionalKey(Ship),

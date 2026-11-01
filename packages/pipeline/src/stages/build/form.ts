@@ -48,6 +48,9 @@ export const Built = Schema.Struct({
 	ran: Schema.Array(Schema.Struct({command: Schema.String, passed: Schema.Boolean})),
 	/** What it could not do, and why. Empty: nothing. */
 	left: Schema.Array(Schema.String),
+	/** Each open item it found does not hold, with what it ran to see that. */
+	disputed: Schema.optionalKey(Schema.Array(Schema.String)),
+	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Built = typeof Built.Type;
 

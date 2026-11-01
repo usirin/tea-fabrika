@@ -143,7 +143,7 @@ export function promptOf(
 		"",
 		"# How to work",
 		"",
-		`Read the ticket and the code around what it names first. Make the smallest change that meets every criterion. Add or change tests where the criteria ask for behaviour. ${checks} Dependencies are already installed; there is no network to install more.`,
+		`Read the ticket and the code around what it names first. Make the smallest change that meets every criterion. The tests that prove them are already written and are not yours to change: a change to one, or to a rule file, throws away all your work. ${checks} Dependencies are already installed; there is no network to install more.`,
 		"",
 		"Where the ticket asks for something you cannot do here, or where you chose to do something other than it says, say so in the form: that is a deviation, and a reviewer reads it.",
 		"",

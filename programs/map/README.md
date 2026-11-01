@@ -14,7 +14,7 @@ WIRES.map((w) => `${w.from.join(".")} -> ${w.into.join(".")}`);
 // ["plan.planned -> asks.planned", "build.opened -> review.pr", "review.passed -> ship.pr"]
 
 SPOTS.push;
-// {kind: "missing", note: "build pushes today"}
+// {kind: "apart", as: "program", in: "stages/push"}
 
 // tsh> map --ticket 7      the boxes light up with ticket 7's facts: "a-1 approve plan v1" in asks
 ```

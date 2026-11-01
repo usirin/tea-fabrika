@@ -109,6 +109,8 @@ export const Found = Schema.Struct({
 	proof: Schema.String,
 	/** What has to be true for it to be closed. Not how to write the fix. */
 	wants: Schema.String,
+	/** `ran`: the reviewer ran it and saw it. `read`: it worked it out from reading. */
+	seen: Schema.optionalKey(Schema.Literals(["ran", "read"])),
 });
 export type Found = typeof Found.Type;
 
@@ -132,6 +134,7 @@ export const Form = Schema.Struct({
 	rows: Schema.Array(Row),
 	findings: Schema.Array(Found),
 	skipped: Schema.Array(Skipped),
+	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Form = typeof Form.Type;
 
