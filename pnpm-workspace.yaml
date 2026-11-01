@@ -55,7 +55,7 @@ catalog:
   # The markdown window's code colors (programs/markdown): Pierre's highlighter, its lexers in one
   # WebAssembly module. Apache-2.0, its themes MIT or Apache-2.0. Held exact: a beta.
   '@pierre/highlights': 0.3.0
-  '@rslib/core': 1.0.3
+  '@rslib/core': 1.0.5
   # The mutation step (packages/pipeline/src/stages/mutation), held exact: experiment 124 ran 10.1.1.
   '@stryker-mutator/core': 10.1.1
   '@stryker-mutator/instrumenter': 10.1.1
@@ -67,8 +67,8 @@ catalog:
   '@types/react-dom': 19.3.0
   # Experiment 142's other terminals (experiments/142-web-terminals), held exact like ghostty-web.
   # wterm, Apache-2.0, a Vercel Labs experiment: rows in the DOM, libghostty's core opt-in.
-  '@wterm/dom': 0.5.5
-  '@wterm/ghostty': 0.5.5
+  '@wterm/dom': 0.5.7
+  '@wterm/ghostty': 0.5.7
   # xterm.js, MIT, VS Code's terminal, with its fit and WebGL addons.
   '@xterm/addon-fit': 0.11.0
   '@xterm/addon-webgl': 0.19.0
@@ -76,7 +76,7 @@ catalog:
   # React Flow, MIT: the map program's window (programs/map).
   '@xyflow/react': 12.12.0
   effect: 4.1.1
-  electron: 45.0.0
+  electron: 45.2.1
   esbuild: 0.28.2
   fast-check: 4.10.2
   # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
@@ -93,12 +93,12 @@ catalog:
   react-dom: 19.3.1
   # Experiment 142: libghostty-vt on WebGPU. MIT.
   restty: 0.3.0
-  smol-toml: 1.9.0
+  smol-toml: 1.9.1
   typescript: 7.0.2
-  vitest: 5.0.3
+  vitest: 5.0.5
   # The YAML parser oxlint-plugins/exact-versions.ts reads this file with. vite's optional peer, so already in the lockfile.
   yaml: 2.9.1
-  zod: 4.6.5
+  zod: 4.6.7
 
 # `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
 savePrefix: ''
