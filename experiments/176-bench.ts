@@ -21,7 +21,7 @@
 //
 // Headless numbers from one machine: read them against each other, not as absolutes.
 
-import {execFile, execFileSync, spawn} from "node:child_process";
+import {execFile, execFileSync} from "node:child_process";
 import {
 	appendFileSync,
 	cpSync,
@@ -2273,4 +2273,3 @@ if (command === "build" && label !== undefined) {
 	console.error("176-bench: build <label> | run <label> <moment> ... | open <label> | list");
 	process.exitCode = 2;
 }
-void spawn;
