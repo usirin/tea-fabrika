@@ -80,6 +80,8 @@ export interface Sample {
 		readonly tiles: number;
 		readonly workspaces: number;
 		readonly programs: readonly (string | null)[];
+		/** The window's content, in CSS pixels. */
+		readonly window: readonly [number, number];
 	};
 	/** The moment's own time, in ms, per event. */
 	readonly ms: {
@@ -440,12 +442,12 @@ const hostPidOf = (home: string) => {
 export const withApp = async <T>(
 	label: string,
 	use: (b: Bench) => Promise<T>,
-	options: {readonly width?: number; readonly height?: number} = {},
+	options: {readonly width?: number; readonly height?: number; readonly home?: string} = {},
 ): Promise<T> => {
 	const dist = join(DISTS, label);
 	if (!existsSync(join(dist, "main.mjs"))) throw new Error(`no copy ${label}: build it first`);
-	const home = mkdtempSync(join(tmpdir(), "fabrika-176-"));
-	mkdirSync(join(home, "gh"));
+	const home = options.home ?? mkdtempSync(join(tmpdir(), "fabrika-176-"));
+	mkdirSync(join(home, "gh"), {recursive: true});
 	const env: Record<string, string | undefined> = {
 		...process.env,
 		FABRIKA_HOME: home,
@@ -496,8 +498,58 @@ export const withApp = async <T>(
 			} catch {}
 		}
 		await sleep(300);
-		rmSync(home, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
+		if (options.home === undefined)
+			rmSync(home, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
 	}
+};
+
+/**
+ * Pick 4b: a real restart, three times on one home. What was kept comes back; a kept file that
+ * breaks the law is refused for a fresh desk; a file from before the store still reads.
+ */
+const restartCheck = async (label: string) => {
+	const home = mkdtempSync(join(tmpdir(), "fabrika-176-"));
+	const file = join(home, "desk.json");
+	const read = () => JSON.parse(readFileSync(file, "utf8"));
+	const again = () => withApp(label, (b) => tilesNow(b), {home});
+	const made = await withApp(
+		label,
+		async (b) => {
+			await split(b, "|");
+			await split(b, "-");
+			await sleep(500);
+			return tilesNow(b);
+		},
+		{home},
+	);
+	const kept = read();
+	const back = await again();
+	const out: Record<string, unknown> = {
+		made,
+		fileHasRecords: "tiles" in kept,
+		back,
+	};
+	if ("tiles" in kept) {
+		const twice = structuredClone(kept);
+		const children = twice.workspaces[0].layout.root.children;
+		children.push(children[0]);
+		writeFileSync(file, JSON.stringify(twice));
+		out.brokenFileGives = await again();
+		const toTree = (node: any): any =>
+			node.tag === "tile" ? kept.tiles[node.id] : {...node, children: node.children.map(toTree)};
+		const old = {
+			...kept,
+			tiles: undefined,
+			workspaces: kept.workspaces.map((ws: any) => ({
+				...ws,
+				layout: {...ws.layout, root: toTree(ws.layout.root)},
+			})),
+		};
+		writeFileSync(file, JSON.stringify(old));
+		out.oldTreeFileGives = await again();
+	}
+	rmSync(home, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
+	console.log(label, JSON.stringify(out));
 };
 
 const screen = (b: Bench, id: string): Promise<string> =>
@@ -1244,6 +1296,8 @@ if (command === "build" && label !== undefined) {
 	});
 } else if (command === "shots" && label !== undefined) {
 	await withApp(label, (b) => shots(b, rest[0] ?? label));
+} else if (command === "restart" && label !== undefined) {
+	await restartCheck(label);
 } else if (command === "list") {
 	console.log(["cold-start", ...Object.keys(MOMENTS)].join("\n"));
 } else if (command === "refs") {
@@ -1275,6 +1329,31 @@ if (command === "build" && label !== undefined) {
 		for (let i = 0; i < n; i++) f();
 		return (performance.now() - t) / n;
 	};
+	// Pick 4b: the store against the tree, on the host's side, on this same desk.
+	const {setShows} = await import(join(appDir, "src/desk/layout/index.ts"));
+	const {toStore, fromKept} = await import(join(appDir, "src/desk/store.ts")).catch(() => ({
+		toStore: null,
+		fromKept: null,
+	}));
+	if (toStore !== null) {
+		const saved = {workspaces: desk.workspaces, active: desk.active, next: desk.next};
+		const store = wire(toStore(saved));
+		const asTree = wire(saved);
+		const ws = desk.workspaces[0];
+		const run = {kind: "tsh", run: {id: "r", program: "map"}};
+		console.log({
+			savedBytesTree: JSON.stringify(saved).length,
+			savedBytesStore: JSON.stringify(store).length,
+			toStoreMs: timed(2000, () => toStore(saved)),
+			fromKeptMs: timed(2000, () => fromKept(store)),
+			treePassThroughMs: timed(2000, () => fromKept(asTree)),
+			setShowsTreeMs: timed(200000, () => setShows(ws.layout, "t9", run)),
+			setShowsStoreMs: timed(200000, () => ({
+				...store.tiles,
+				t9: {...store.tiles.t9, shows: run},
+			})),
+		});
+	}
 	const LONG = {
 		program: "markdown",
 		data: {text: LONG_MARKDOWN(200), blocks: new Array(200).fill({a: 1})},

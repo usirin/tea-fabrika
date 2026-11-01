@@ -6,6 +6,7 @@ import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
 import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
+import {fromKept, toStore} from "../desk/store.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
@@ -141,10 +142,10 @@ export const runHost = (options: {
 				onSome: (c) => ({kind: "server", address: `${c.url}/${c.ledger}`, login: c.login}) as const,
 			}),
 			desk: {
-				kept,
+				kept: fromKept(kept),
 				save: (saved) =>
 					fs
-						.writeFileString(at("desk.json"), JSON.stringify(saved))
+						.writeFileString(at("desk.json"), JSON.stringify(toStore(saved)))
 						.pipe(
 							Effect.catch((e) =>
 								Effect.logError(`fabrika host: could not keep the desk: ${e.message}`),

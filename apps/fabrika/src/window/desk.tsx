@@ -44,6 +44,7 @@ import {
 	type TileNode,
 	tiles,
 } from "../desk/layout/index.ts";
+import {recordsOf} from "../desk/store.ts";
 import {
 	type Attached,
 	type FromPage,
@@ -138,9 +139,12 @@ interface Model {
 	/** What the window shows of the link, as the app said last. */
 	readonly link: LinkNow;
 	readonly views: ReadonlyMap<string, ToWindow>;
+	/** Each tile's record, by id. Worked out of `desk` on arrival (experiment 176, pick 4b). */
+	readonly tiles: Readonly<Record<TileId, TileNode>>;
 }
 
 let model: Model = {
+	tiles: {},
 	desk: null,
 	attachedOnce: false,
 	prefix: "",
@@ -176,6 +180,16 @@ const readModel = () => model;
 
 /** The one way a render reads the page's state. The third argument is for a render with no DOM. */
 const useModel = () => useSyncExternalStore(subscribe, readModel, readModel);
+
+/** One tile's record, by id: a render reads this tile and no other. */
+const useRecord = (id: TileId) => {
+	const read = () => model.tiles[id];
+	return useSyncExternalStore(subscribe, read, read);
+};
+
+/** The records of a desk, by id; each keeps its reference as `share` kept it in the tree. */
+const recordsIn = (desk: Desk | null) =>
+	desk?.at === "open" ? recordsOf(desk.workspaces.map((ws) => ws.layout)) : {};
 
 const terminals = new Map<TileId, TileTerminal>();
 /** The runs whose view this page hears, on each run's port. */
@@ -344,7 +358,10 @@ const heard = (raw: unknown) => {
 			follows(m.desk);
 			// The wire made every object new. What did not change gets its old object back, so a
 			// tile the change did not touch keeps its props, and its `memo` skips it.
-			model = {...model, desk: share(model.desk, m.desk), attachedOnce: true};
+			{
+				const desk = share(model.desk, m.desk);
+				model = {...model, desk, tiles: recordsIn(desk), attachedOnce: true};
+			}
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(notify);
 			holdStep({type: "takes", takes: m.takes});
@@ -609,7 +626,7 @@ function Tiles(props: {
 		<div className="tiles" ref={ref}>
 			{laid.tiles.map(({tile, box}) => (
 				<div key={tile.id} className="cell" style={placed(box)}>
-					<DeskTile tile={tile} ws={ws} desk={desk} views={views} />
+					<DeskTile id={tile.id} ws={ws} desk={desk} views={views} />
 				</div>
 			))}
 			{laid.strips.map(({node, along, box}) => (
@@ -658,12 +675,14 @@ function Strip(props: {
 
 /** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
 function DeskTile(props: {
-	readonly tile: TileNode;
+	readonly id: TileId;
 	readonly ws: Workspace;
 	readonly desk: Open;
 	readonly views: Model["views"];
 }): ReactNode {
-	const {tile, ws, desk, views} = props;
+	const {id, ws, desk, views} = props;
+	const tile = useRecord(id);
+	if (tile === undefined) return null;
 	const run = runOf(tile);
 	return (
 		<Tile
