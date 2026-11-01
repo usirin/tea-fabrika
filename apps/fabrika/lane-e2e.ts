@@ -122,14 +122,19 @@ const shot = async (page: Page, name: string) => {
 	console.log(`shot ${name}`);
 };
 
-const sized = async (app: ElectronApplication, width: number, height: number) => {
+const sized = async (app: ElectronApplication, page: Page, width: number, height: number) => {
 	await app.evaluate(
 		({BrowserWindow}, size) => {
 			BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
 		},
 		{width, height},
 	);
-	await sleep(400);
+	await until(
+		`the window to be ${width}x${height}`,
+		() => page.evaluate(() => [window.innerWidth, window.innerHeight]),
+		(seen) => seen[0] === width && seen[1] === height,
+		10_000,
+	);
 };
 
 const onMain = (path: string): string | null => {
@@ -166,7 +171,6 @@ const app = await _electron.launch({executablePath: electronPath, args: [here], 
 let failed = false;
 try {
 	const page = await app.firstWindow();
-	await sized(app, 1600, 1000);
 
 	// ---- file it, in the tracker's own window
 	await until(
@@ -175,6 +179,8 @@ try {
 		(t) => lastRow(t) === "tsh$",
 		30_000,
 	);
+	// Sized only now: a tiling window manager resizes a new window soon after it opens.
+	await sized(app, page, 1600, 1000);
 	const first = await split(page, "|");
 	await prefixed(page, "h");
 	await typed(page, "t1", "tracker");
@@ -363,24 +369,27 @@ try {
 	);
 	check("the ticket window says the pull request merged", /merged/.test(closedView));
 	await shot(page, "merged-2x2");
-	await sized(app, 1024, 700);
+	await sized(app, page, 1024, 700);
 	await shot(page, "merged-2x2-small-window");
-	await sized(app, 1600, 1000);
+	await sized(app, page, 1600, 1000);
 	await prefixed(page, "z");
 	await shot(page, "merged-one-tile");
 	await prefixed(page, "z");
+	await until(
+		"the zoom to end",
+		() => tiles(page),
+		(t) => t.includes(runsTile) && t.includes(mapTile),
+		10_000,
+	);
 	// ---- the same lane, its windows closing one by one down to two stacked
 	for (const id of [runsTile, mapTile]) {
-		const open = (await tiles(page)).filter((t) => t === id || t.startsWith("t"));
-		await tile(page, id)
-			.click({position: {x: 3, y: 3}})
-			.catch(() => {});
+		await tile(page, id).click({position: {x: 3, y: 3}});
 		await prefixed(page, "x");
 		await page.keyboard.press("y");
 		await until(
 			`${id} to go`,
 			() => tiles(page),
-			(t) => t.length < open.length,
+			(t) => !t.includes(id),
 			15_000,
 		);
 	}
