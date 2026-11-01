@@ -1,17 +1,17 @@
 import {readFileSync} from "node:fs";
 import {run} from "@demlik/tea/effect";
 import {Effect, Layer, Stream} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, expectTypeOf, it} from "vitest";
+import type {readChange, reviewKindsOf} from "./code-host-github.ts";
 import {
 	type Accounts,
 	type Declared,
 	type Gh,
 	kindsNeeded,
-	parseJsonc,
 	prOf,
 	readPrFacts,
 	readPullRequests,
-	rulesOf,
+	rulesOfBoth,
 	textKindOf,
 	ticketIn,
 	ticketOf,
@@ -29,8 +29,9 @@ import {recordOf} from "./stages/ship/scripted.ts";
 // files under `fixtures/code-host/` were made from real public pull requests
 // and trimmed: account names and the owning team replaced, bodies cut to the
 // lines that are read, file lists cut to the files that decide something, and
-// the two config files cut to the keys that are read. No call leaves this
-// file.
+// the two config files cut to the keys that are read and written out by hand
+// as `.fabrika/fabrika.toml`, which those repos did not have then. No call
+// leaves this file.
 //
 // One of them is not as recorded. Neither repo had a pull request with an
 // unresolved review thread, so `open-person-comment.json` is the clean one
@@ -329,8 +330,11 @@ describe("the facts of a recorded pull request", () => {
 			"number=7",
 		]);
 		expect(whole).toContain("codeowners=trunk:.github/CODEOWNERS");
-		expect(whole).toContain("baseConfig=trunk:.fabrika.jsonc");
-		expect(whole).toContain("headConfig=b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf:.fabrika.jsonc");
+		expect(whole).toContain("baseConfig=trunk:.fabrika/fabrika.toml");
+		expect(whole).toContain(
+			"headConfig=b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf:.fabrika/fabrika.toml",
+		);
+		expect(whole).not.toContain(".fabrika.jsonc");
 		expect(calls.flat().join(" ")).not.toMatch(/mutation/i);
 	});
 
@@ -527,11 +531,11 @@ describe("the reviews a pull request needs", () => {
 		});
 	});
 
-	it("a change under a governed folder needs the governance review, by the base's rules or the head's", async () => {
+	it("a change under a governed folder needs the governance review, by the head's rules alone", async () => {
 		const answer = changed(
 			"open-clean",
 			(_pr, repo) =>
-				(repo.headConfig.text = '{ "governedRoots": [".fabrika.jsonc", "packages/tea/docs/"] }'),
+				(repo.headConfig.text = '[review]\ngoverned = [".fabrika/", "packages/tea/docs/"]\n'),
 		);
 
 		expect((await factsOn(answer)).reviews).toEqual(
@@ -539,13 +543,58 @@ describe("the reviews a pull request needs", () => {
 		);
 	});
 
+	describe("a change cannot take itself out of a review", () => {
+		const GOVERNS = '[review]\ngoverned = ["packages/tea/docs/"]\n';
+		const OWED = kinds({"review-code": "passed", "review-doc": "passed", governance: "missing"});
+
+		it.each<[string, {readonly text: string} | null]>([
+			["empties governed", {text: "[review]\ngoverned = []\n"}],
+			["removes [review]", {text: "[build]\ninstall = []\n"}],
+			["removes the file", null],
+		])("a head that %s still owes the governance review the base asks for", async (_name, head) => {
+			const answer = changed("open-clean", (_pr, repo) => {
+				repo.baseConfig.text = GOVERNS;
+				repo.headConfig = head;
+			});
+
+			expect((await factsOn(answer)).reviews).toEqual(OWED);
+		});
+	});
+
+	describe("a side with no file, or no rules, is known: it just names none", () => {
+		const TEXT_ONLY = kinds({"review-code": "passed", "review-doc": "passed"});
+
+		it.each<[string, Parameters<typeof changed>[1]]>([
+			["no file at the base", (_pr, repo) => (repo.baseConfig = null)],
+			["no file at the head", (_pr, repo) => (repo.headConfig = null)],
+			[
+				"no file on either side",
+				(_pr, repo) => {
+					repo.baseConfig = null;
+					repo.headConfig = null;
+				},
+			],
+			["an empty file", (_pr, repo) => (repo.headConfig.text = "")],
+			["no [review]", (_pr, repo) => (repo.baseConfig.text = "[ship]\napproval = 'none'\n")],
+			[
+				"an unknown table elsewhere",
+				(_pr, repo) => (repo.baseConfig.text = "[failure]\nfloor = 1\n"),
+			],
+		])("%s", async (_name, change) => {
+			expect((await factsOn(changed("open-clean", change))).reviews).toEqual(TEXT_ONLY);
+		});
+	});
+
 	it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void]>([
-		["the repo has no config at the base", (_pr, repo) => (repo.baseConfig = null)],
-		["the head has no config", (_pr, repo) => (repo.headConfig = null)],
-		["the config does not parse", (_pr, repo) => (repo.baseConfig.text = "{ not json")],
+		["the base's config is not TOML", (_pr, repo) => (repo.baseConfig.text = "[review\n")],
+		["the head's config is not TOML", (_pr, repo) => (repo.headConfig.text = "[review\n")],
 		[
 			"the config's governed folders are not a list of texts",
-			(_pr, repo) => (repo.baseConfig.text = '{ "governedRoots": "all" }'),
+			(_pr, repo) => (repo.baseConfig.text = '[review]\ngoverned = "all"\n'),
+		],
+		[
+			"the config's rendered folders are not a list of texts",
+			(_pr, repo) => (repo.headConfig.text = "[review]\nui = [3]\n"),
 		],
 		["more files changed than one call holds", (pr) => (pr.files.pageInfo.hasNextPage = true)],
 		["no file changed", (pr) => (pr.files.nodes = [])],
@@ -566,7 +615,7 @@ describe("the reviews a pull request needs", () => {
 	});
 
 	it("works out the kinds from the files, the way today's fabrika does", () => {
-		const rules = {governed: [".decisions/", ".github/", ".fabrika.jsonc"], ui: ["apps/web/src/"]};
+		const rules = {governed: [".decisions/", ".github/", ".fabrika/"], ui: ["apps/web/src/"]};
 
 		expect(kindsNeeded(["src/a.ts"], rules)).toEqual(["review-code"]);
 		expect(kindsNeeded(["docs/a.md"], rules)).toEqual(["review-doc"]);
@@ -580,26 +629,50 @@ describe("the reviews a pull request needs", () => {
 		// A test beside a rendered page is not rendered work.
 		expect(kindsNeeded(["apps/web/src/App.test.tsx"], rules)).toEqual(["review-code"]);
 		expect(kindsNeeded([".decisions/0001-x.md"], rules)).toEqual(["review-doc", "governance"]);
-		expect(kindsNeeded([".fabrika.jsonc"], rules)).toEqual(["review-code", "governance"]);
+		expect(kindsNeeded([".fabrika/fabrika.toml"], rules)).toEqual(["review-code", "governance"]);
+	});
+});
+
+describe("the rules of a change's two sides", () => {
+	const A = '[review]\ngoverned = ["a/"]\nui = ["web-a/"]\n';
+	const B = '[review]\ngoverned = ["b/"]\nui = ["web-b/"]\n';
+	const sorted = (rules: ReturnType<typeof rulesOfBoth>) =>
+		rules === null ? null : {governed: [...rules.governed].sort(), ui: [...rules.ui].sort()};
+
+	it("is what both say, together", () => {
+		expect(sorted(rulesOfBoth([A, B]))).toEqual({governed: ["a/", "b/"], ui: ["web-a/", "web-b/"]});
 	});
 
-	it("reads a config with comments and trailing commas, and falls back to fabrika's default governed folders", () => {
-		expect(
-			parseJsonc(
-				'{\n  // a note with "quotes"\n  "a": "x // not a comment", /* and\n another */ "b": [1, 2,],\n}',
-			),
-		).toEqual({a: "x // not a comment", b: [1, 2]});
-		expect(parseJsonc("{ nope")).toBeUndefined();
-		expect(rulesOf('{ "governedRoots": ["a/"], "uiSurfaces": [{ "prefix": "web/" }] }')).toEqual({
+	it("a head that empties a list takes nothing from the base's", () => {
+		expect(sorted(rulesOfBoth([A, "[review]\ngoverned = []\nui = []\n"]))).toEqual({
 			governed: ["a/"],
-			ui: ["web/"],
+			ui: ["web-a/"],
 		});
-		expect(rulesOf("{}")).toEqual({
-			governed: [".decisions/", ".claude/", ".github/", ".fabrika.jsonc"],
-			ui: [],
-		});
-		expect(rulesOf("[]")).toBeNull();
-		expect(rulesOf('{ "uiSurfaces": [{ "name": "web" }] }')).toBeNull();
+	});
+
+	it("a side with no file adds nothing, and takes nothing away", () => {
+		expect(sorted(rulesOfBoth([A, null]))).toEqual({governed: ["a/"], ui: ["web-a/"]});
+		expect(sorted(rulesOfBoth([null, B]))).toEqual({governed: ["b/"], ui: ["web-b/"]});
+	});
+
+	it("no file on either side: no rules, and known", () => {
+		expect(rulesOfBoth([null, null])).toEqual({governed: [], ui: []});
+	});
+
+	it.each<[string, readonly (string | null)[]]>([
+		["the base does not read", ["[review\n", B]],
+		["the head does not read", [A, "[review\n"]],
+		["a side with no file does not save the other", [null, "[review\n"]],
+		["a list of the wrong type", [A, '[review]\nui = "all"\n']],
+	])("%s: the whole answer is not known", (_name, configs) => {
+		expect(rulesOfBoth(configs)).toBeNull();
+	});
+
+	it("has no second source of rules to fall back on: what the sides say is all there is", () => {
+		expectTypeOf(rulesOfBoth).parameters.toEqualTypeOf<[readonly (string | null)[]]>();
+		expectTypeOf<Parameters<typeof reviewKindsOf>["length"]>().toEqualTypeOf<3>();
+		expectTypeOf<Parameters<typeof readChange>["length"]>().toEqualTypeOf<1 | 2>();
+		expectTypeOf<Declared>().toEqualTypeOf<{readonly approval?: "codeowners" | "none"}>();
 	});
 });
 
@@ -764,22 +837,6 @@ describe("the owner's approval", () => {
 		it("a CODEOWNERS file at the base binds, whatever was declared", async () => {
 			const owned = changed("open-awaiting-approval", () => {});
 			expect((await declaredOn(owned, {approval: "none"})).approval).toBe("missing");
-		});
-
-		it("no .fabrika.jsonc on either side: the declared kinds stand in, so the reviews are known", async () => {
-			const answer = changed("open-clean", (_pr, repo) => {
-				repo.baseConfig = null;
-				repo.headConfig = null;
-			});
-			expect((await declaredOn(answer, {kinds: {governed: [], ui: []}})).reviews).toEqual(
-				kinds({"review-code": "passed", "review-doc": "passed"}),
-			);
-			expect((await declaredOn(answer, {})).reviews).toBeNull();
-		});
-
-		it("a config that does not parse is not stood in for: unknown", async () => {
-			const answer = changed("open-clean", (_pr, repo) => (repo.baseConfig.text = "{ not json"));
-			expect((await declaredOn(answer, {kinds: {governed: [], ui: []}})).reviews).toBeNull();
 		});
 	});
 

@@ -359,7 +359,7 @@ describe("one pull request at one commit, read from recorded answers", () => {
 		const range = `repos/example/repo/compare/${BASE}...${HEADS.first}`;
 		expect(plain).toEqual([
 			"api graphql -f owner=example -f name=repo -F number=628 -f",
-			`api graphql -f owner=example -f name=repo -F number=628 -f head=${HEADS.first} -f baseConfig=main:.fabrika.jsonc -f headConfig=${HEADS.first}:.fabrika.jsonc -f claudeMd=main:CLAUDE.md -f agentsMd=main:AGENTS.md -f`,
+			`api graphql -f owner=example -f name=repo -F number=628 -f head=${HEADS.first} -f baseConfig=main:.fabrika/fabrika.toml -f headConfig=${HEADS.first}:.fabrika/fabrika.toml -f claudeMd=main:CLAUDE.md -f agentsMd=main:AGENTS.md -f`,
 			"api graphql -f owner=example -f name=repo -F number=625 -f",
 			`api ${range}`,
 			`api ${range} -H Accept: application/vnd.github.diff`,
@@ -461,14 +461,41 @@ describe("one pull request at one commit, read from recorded answers", () => {
 		expect(read.checks.state).toBe("green");
 	});
 
-	it("gives no kinds when the repo's rules cannot be read, and keeps the files", async () => {
+	it.each<[string, string]>([
+		["is not TOML", "[review\n"],
+		["holds governed of the wrong type", '[review]\ngoverned = "all"\n'],
+	])("gives no kinds when the head's file %s, and keeps the files", async (_name, text) => {
 		const read = await change("final", {
 			change: changed(recorded("change-final.json"), (repo) => {
-				repo.headConfig = null;
+				repo.headConfig = {text};
 			}),
 		});
 		expect(read.kinds).toBeNull();
 		expect(read.files).toHaveLength(7);
+	});
+
+	it("reads no file on either side as no rules, and the kinds are still known", async () => {
+		const read = await change("final", {
+			change: changed(recorded("change-final.json"), (repo) => {
+				repo.baseConfig = null;
+				repo.headConfig = null;
+			}),
+		});
+		expect(read.kinds).toEqual(["review-code", "review-doc"]);
+	});
+
+	it.each<[string, {readonly text: string} | null]>([
+		["empties governed", {text: "[review]\ngoverned = []\n"}],
+		["removes the file", null],
+	])("a head that %s still owes the governance review the base asks for", async (_name, head) => {
+		const files = JSON.stringify({files: [{filename: ".github/workflows/build.yaml"}]});
+		const read = await change("final", {
+			files,
+			change: changed(recorded("change-final.json"), (repo) => {
+				repo.headConfig = head;
+			}),
+		});
+		expect(read.kinds).toContain("governance");
 	});
 
 	it("owes the governance review too when a governed file changed", async () => {

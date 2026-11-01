@@ -92,7 +92,7 @@ const BASE_FILES: Readonly<Record<string, string>> = {
 		"",
 	].join("\n"),
 	"AGENTS.md": "# Rules\n\nEvery change comes with a test.\n",
-	".fabrika.jsonc": "{}\n",
+	".fabrika/fabrika.toml": '[review]\ngoverned = [".fabrika/"]\n',
 };
 const WORDS = [
 	"export const count = (text) => text.split(/\\s+/).filter(Boolean).length;",
@@ -417,5 +417,81 @@ describe("the local code host", () => {
 		const unplanned = await read(TASK);
 		expect(unplanned).toMatchObject({_tag: "Success", success: {criteria: null, ticket: "none"}});
 		expect(await read(PLAN)).toMatchObject({_tag: "Failure", failure: {_tag: "unknown"}});
+	});
+
+	describe("which reviews a task needs, by .fabrika/fabrika.toml at the base and at the head", () => {
+		const FILE = ".fabrika/fabrika.toml";
+		const GOVERNS = '[review]\ngoverned = ["policy/"]\n';
+		const CHANGE = {"policy/rule.txt": "a rule\n"};
+
+		/** What `change` says of a branch off `base` that adds `head` and removes `gone`, in a repository of its own. */
+		const kindsAcross = (
+			base: Readonly<Record<string, string>>,
+			head: Readonly<Record<string, string>>,
+			gone: readonly string[] = [],
+		) =>
+			onNode(
+				Effect.gen(function* () {
+					const fs = yield* FileSystem.FileSystem;
+					const dir = yield* fs.makeTempDirectoryScoped({prefix: "local-kinds-"});
+					yield* sh(dir, "git", ["init", "-q", "-b", "main"]);
+					yield* commit(dir, {"README.txt": "words\n", ...base}, "base");
+					yield* sh(dir, "git", ["checkout", "-q", "-b", "plan/9"]);
+					for (const name of gone) yield* sh(dir, "git", ["rm", "-q", name]);
+					const at = yield* commit(dir, {...CHANGE, ...head}, "head");
+					const settings: LocalSettings = {...SETTINGS(dir), base: "main"};
+					const read = yield* Effect.gen(function* () {
+						return yield* (yield* CodeHost).change(TASK, at);
+					}).pipe(
+						Effect.provide(localCodeHost(settings).layer),
+						Effect.provide(memoryLedger().layer),
+					);
+					return read.kinds;
+				}).pipe(Effect.scoped),
+			);
+
+		it.each<[string, Readonly<Record<string, string>>, Readonly<Record<string, string>>]>([
+			["no file on either side", {}, {}],
+			["no [review] on either side", {[FILE]: "[ship]\napproval = 'none'\n"}, {}],
+			["an unknown table elsewhere in the file", {[FILE]: "[failure]\nfloor = 1\n"}, {}],
+		])("%s: known, with only the text review", async (_name, base, head) => {
+			expect(await kindsAcross(base, head)).toEqual(["review-code"]);
+		});
+
+		it("the base's rules are enough", async () => {
+			expect(await kindsAcross({[FILE]: GOVERNS}, {})).toContain("governance");
+		});
+
+		it("the head's rules are enough", async () => {
+			expect(await kindsAcross({}, {[FILE]: GOVERNS})).toContain("governance");
+		});
+
+		it("a head that empties governed still owes the review the base asks for", async () => {
+			const head = {[FILE]: "[review]\ngoverned = []\n"};
+			expect(await kindsAcross({[FILE]: GOVERNS}, head)).toContain("governance");
+		});
+
+		it("a head that removes the file still owes the review the base asks for", async () => {
+			expect(await kindsAcross({[FILE]: GOVERNS}, {}, [FILE])).toContain("governance");
+		});
+
+		it.each<[string, string]>([
+			["not TOML", "[review\n"],
+			["governed of the wrong type", '[review]\ngoverned = "all"\n'],
+			["ui of the wrong type", "[review]\nui = [3]\n"],
+		])("a head with %s: the kinds are not known", async (_name, text) => {
+			expect(await kindsAcross({}, {[FILE]: text})).toBeNull();
+		});
+
+		it("a base with a file that does not read: the kinds are not known", async () => {
+			expect(await kindsAcross({[FILE]: "[review\n"}, {})).toBeNull();
+		});
+
+		it.each<[string, string, string]>([
+			["a .fabrika.jsonc", ".fabrika.jsonc", '{ "governedRoots": ["policy/"] }\n'],
+			["a fabrika.toml at the root", "fabrika.toml", GOVERNS],
+		])("%s on both sides is not read for the rules", async (_name, name, text) => {
+			expect(await kindsAcross({[name]: text}, {[name]: text})).toEqual(["review-code"]);
+		});
 	});
 });

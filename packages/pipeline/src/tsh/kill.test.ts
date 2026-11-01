@@ -101,6 +101,6 @@ describe("tsh killed mid build, attached again with its input closed", () => {
 		// Gone from the table once it ended: nothing printed but the line that says which fabrika.toml was read, and the run's picks under it.
 		const after = life(home, folder, "jobs");
 		expect(await after.exited).toBe(0);
-		expect(after.out()).toMatch(/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+$/);
+		expect(after.out()).toMatch(/^\.fabrika\/fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+$/);
 	});
 });

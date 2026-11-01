@@ -60,7 +60,6 @@ export function makeLaneHome({
 	};
 	const link = `ln -s ${nodeModules} node_modules`;
 	put(".gitignore", "node_modules\n.done\n");
-	put(".fabrika.jsonc", "{}\n");
 	put(
 		"tsconfig.json",
 		`${JSON.stringify(
@@ -93,7 +92,7 @@ export function makeLaneHome({
 	put("docs/rubrics/doc.md", "Words that say what is true.\n");
 	put("docs/rubrics/skill.md", "A skill that does one job.\n");
 	put(
-		"fabrika.toml",
+		".fabrika/fabrika.toml",
 		[
 			"[agents.triage]",
 			'harness = "codex"',
@@ -131,5 +130,5 @@ export function makeLaneHome({
 		join(home, "pipeline.json"),
 		JSON.stringify({repo: "example/lane", remote, host: "local", codex}),
 	);
-	return {home, remote};
+	return {home, remote, seed};
 }
