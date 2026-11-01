@@ -8,11 +8,12 @@ import {
 	codexHomeOf,
 	codexSystem,
 	type FolderAccess,
+	listFolder,
 	writeSystem,
 } from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
-import {type Env, runEnv} from "../claude/env.ts";
+import {type Env, runEnv, toolHome} from "../claude/env.ts";
 import {toolchain} from "../claude/sandbox.ts";
 
 // Codex through `codex exec --json`, as an adapter of the interface
@@ -30,13 +31,15 @@ import {toolchain} from "../claude/sandbox.ts";
 //   - `HOME` is that home too, so `~/.agents` skills stay out;
 //   - the environment is a keep-list: a program's, `USER`, the home. No key
 //     (`OPENAI_API_KEY`, `CODEX_API_KEY`) is ever handed on;
-//   - the permission profile of the ACP row (`codexConfig`): home unreadable
-//     but for the folder and the toolchain, core shell variables only, no
-//     login shell, no web search, Codex's far-reaching features off;
+//   - the permission profile of the ACP row (`codexConfig`): the folder and the
+//     toolchain open and what is beside them under home closed (`homeFence`),
+//     core shell variables only, no login shell, no web search, Codex's
+//     far-reaching features off;
 //   - `--ignore-user-config`, and approvals `never`: nothing asks a person.
 //
 // Node at the edge: `realpathSync` once, to find the folder Codex's own
-// binary runs from, which the profile must leave readable.
+// binary runs from, which the profile must leave readable, and `listFolder`,
+// to read home for the profile.
 
 /** Where Codex is, and where the login it links to is. */
 export interface CodexAdapterConfig {
@@ -222,7 +225,9 @@ export const codexAdapter = (
 						...(turn.effort === null ? [] : ["-c", `model_reasoning_effort=${toml(turn.effort)}`]),
 						"-c",
 						'approval_policy="never"',
-						...flagsOf(codexConfig(turn.folder, tools, owner, config.access)),
+						...flagsOf(
+							codexConfig(turn.folder, tools, owner, config.access, listFolder, toolHome(parent)),
+						),
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),

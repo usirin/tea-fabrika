@@ -1,9 +1,10 @@
 import {createHash} from "node:crypto";
+import {readdirSync} from "node:fs";
 import {fileURLToPath} from "node:url";
-import {Effect, FileSystem} from "effect";
+import {Effect, FileSystem, Option} from "effect";
 import type {SystemPrompt} from "../agent/turn.ts";
-import {agentEnv, type Env, runEnv} from "../claude/env.ts";
-import {fencedEnv, filesOf, TOOLS, toolchain} from "../claude/sandbox.ts";
+import {agentEnv, type Env, runEnv, toolHome} from "../claude/env.ts";
+import {fencedEnv, filesOf, LOGIN_FILES, TOOLS, toolchain} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
@@ -16,7 +17,8 @@ import type {Spawnable} from "./client.ts";
 // Each adapter is installed apart from the workspace, at an exact version,
 // with its own lockfile (adapters/package.json), and started from there by
 // path: never `npx` of a latest. Node is touched here only to find files:
-// the adapter's script by its path, and node's own binary to run it with.
+// the adapter's script by its path, node's own binary to run it with, and what
+// is in home for Codex's profile (`listFolder`).
 //
 // Containment, as the builder has it (src/stages/build/builder.ts):
 //
@@ -63,13 +65,15 @@ import type {Spawnable} from "./client.ts";
 //   - `CODEX_CONFIG`, merged into every session's config (`codexConfig`): the
 //     shell gets only the core variables and no login shell, no web search,
 //     Codex's features that reach past the folder off, and a permission
-//     profile that makes home unreadable but for the folder and the toolchain.
+//     profile that opens the folder and the toolchain and closes what is beside
+//     them under home (`homeFence`).
 //   - `NO_BROWSER`: no browser login is offered.
 //
 // What it does not hold, measured in experiment 153: writes in the temp
 // folders are open (the adapter sends its own sandbox with every turn, and
 // that one keeps them); reads outside home are open; there is no dollar cap
-// and no typed answer field.
+// and no typed answer field. Nor is home closed whole: its names can be listed,
+// and an ordinary entry made during a run is open (`homeFence` says why).
 
 export const AGENTS = ["claude", "codex", "fake"] as const;
 export type AgentName = (typeof AGENTS)[number];
@@ -107,12 +111,15 @@ const CLAUDE = `${ADAPTERS}@agentclientprotocol/claude-agent-acp/dist/index.js`;
 const CODEX = `${ADAPTERS}@agentclientprotocol/codex-acp/dist/index.js`;
 const FAKE = at("./fake-agent.ts");
 
+/** Under home, the folder that holds every Codex home. */
+const CODEX_HOMES = ".cache/tea-fabrika/codex";
+
 /**
  * The Codex home of a run in `folder`: one per folder, under home's cache,
  * where the agent's commands can neither read nor write (`codexConfig`).
  */
 export const codexHomeOf = (folder: string, parent: Env = process.env) =>
-	`${parent.HOME ?? ""}/.cache/tea-fabrika/codex/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
+	`${parent.HOME ?? ""}/${CODEX_HOMES}/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
 
 /** The modes a contained Codex may run in. `agent` lets a model answer the asks; full access has no sandbox. */
 export const CODEX_MODES = ["read-only", "workspace-write"] as const;
@@ -126,11 +133,93 @@ const MODE_OF = {
 	read: "read-only",
 } as const satisfies Record<FolderAccess, (typeof CODEX_MODES)[number]>;
 
+/** One thing in a folder, by name. A link is told apart, so it is never followed. */
+export interface Entry {
+	readonly name: string;
+	readonly link: boolean;
+}
+
+/** What a folder holds, or `null` when it cannot be read. */
+export type Listing = (folder: string) => readonly Entry[] | null;
+
+/** The real disk, as a `Listing`: the one place the fence touches it. A read that fails is `null`. */
+export const listFolder: Listing = (folder) =>
+	Option.getOrNull(
+		Option.liftThrowable(() =>
+			readdirSync(folder, {withFileTypes: true}).map((entry) => ({
+				name: entry.name,
+				link: entry.isSymbolicLink(),
+			})),
+		)(),
+	);
+
+/**
+ * Under home, closed whether it is there or not: where a login is kept, and
+ * where each Codex home is made, some of them after the fence is.
+ */
+const ALWAYS_CLOSED = [...LOGIN_FILES, ".codex", ".codex/auth.json", CODEX_HOMES];
+
+const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
+
+const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
+	Object.fromEntries(paths.map((path) => [path, rule]));
+
+/**
+ * The profile's filesystem table: what is beside the opened folders is closed,
+ * home itself is not. Pure: the disk comes in as `list`.
+ *
+ * Seatbelt's deny on a folder refuses even `lstat` on that folder. Node's
+ * `realpathSync` looks at every parent of a script, so closing home whole
+ * stops every Node script under it, `pnpm` under `~/.volta` too, with
+ * `EPERM: lstat '<home>'`. So walk down from home. An entry that is an opened
+ * folder is left alone, one that holds an opened folder is walked into, and
+ * every other entry is closed. A folder that cannot be read is closed. A link
+ * is closed like any entry, and never walked through. With nothing opened
+ * under home, nothing under it needs to run, and home is closed whole.
+ *
+ * This is weaker than a whole closed home, in two ways. A command can list the
+ * names in home and in each folder on the way down to an opened one. An
+ * ordinary entry made in those folders after this table is made is open. We
+ * accept both: the names are not secrets, and the entries that hold logins
+ * exist before a run starts. `ALWAYS_CLOSED` covers one that does not.
+ */
+export const homeFence = (
+	home: string,
+	reads: readonly string[],
+	folder: string,
+	access: FolderAccess,
+	list: Listing,
+): Record<string, FolderAccess | "deny"> => {
+	const root = plain(home);
+	const opened = [...reads, folder].map(plain);
+	const holdsOpened = (path: string) => opened.some((open) => open.startsWith(`${path}/`));
+	const beside = (dir: string): readonly string[] => {
+		const entries = list(dir);
+		if (entries === null) return [dir];
+		return entries.flatMap(({name, link}) => {
+			const path = `${dir}/${name}`;
+			if (opened.includes(path)) return [];
+			return holdsOpened(path) && !link ? beside(path) : [path];
+		});
+	};
+	return {
+		...lines(holdsOpened(root) ? beside(root) : [root], "deny"),
+		...lines(reads.map(plain), "read"),
+		[plain(folder)]: access,
+		// Last, so a login stays closed even if something asks to open it. One that holds an opened
+		// folder is not closed whole, for the same reason as home: the walk closed what is in it.
+		...lines(
+			ALWAYS_CLOSED.map((path) => `${root}/${path}`).filter((path) => !holdsOpened(path)),
+			"deny",
+		),
+	};
+};
+
 /**
  * Merged into every Codex session's config by the adapter (`CODEX_CONFIG`).
- * The permission profile is the builder's `filesOf` for reads: home denied
- * but for the folder and the toolchain, and the adapters' own folder, where
- * the Codex that runs inside the box is. The folder is writable
+ * The permission profile opens the folder, the toolchain, and the adapters'
+ * own folder, where the Codex that runs inside the box is, and closes what is
+ * beside them under home (`homeFence`). The folder is writable
  * (`access: "write"`), or only readable for a turn that reads code and
  * changes nothing (`access: "read"`). There is no default: every caller says.
  */
@@ -139,8 +228,12 @@ export const codexConfig = (
 	tools: readonly string[],
 	home: string,
 	access: FolderAccess,
+	/** How home is read, for what is beside the folders the profile opens (`homeFence`). */
+	list: Listing,
+	/** Core variables only, plus this: where a version manager holds the real tools (`toolHome`). */
+	set: Readonly<Record<string, string>> = {},
 ) => ({
-	shell_environment_policy: {inherit: "core"},
+	shell_environment_policy: {inherit: "core", ...(Object.keys(set).length > 0 ? {set} : {})},
 	allow_login_shell: false,
 	web_search: "disabled",
 	default_permissions: "fenced",
@@ -149,11 +242,7 @@ export const codexConfig = (
 			// `:workspace` makes the working folder writable whatever the folder's own line says
 			// (experiment 163, part 3), so a read turn starts from `:read-only`.
 			extends: access === "write" ? ":workspace" : ":read-only",
-			filesystem: {
-				[home]: "deny",
-				...Object.fromEntries([...tools, ADAPTERS.replace(/\/$/, "")].map((t) => [t, "read"])),
-				[folder]: access,
-			},
+			filesystem: homeFence(home, [...tools, ADAPTERS.replace(/\/$/, "")], folder, access, list),
 		},
 	},
 	// Codex's own features that reach past the folder, on by default in a fresh home (codex 0.159.3).
@@ -246,7 +335,7 @@ export const codexEnv = (
 		NO_BROWSER: "1",
 		INITIAL_AGENT_MODE: MODE_OF[access],
 		CODEX_CONFIG: JSON.stringify({
-			...codexConfig(folder, tools, parent.HOME ?? home, access),
+			...codexConfig(folder, tools, parent.HOME ?? home, access, listFolder, toolHome(parent)),
 			...more,
 		}),
 	};

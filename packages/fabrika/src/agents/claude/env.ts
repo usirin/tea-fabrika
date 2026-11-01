@@ -10,8 +10,14 @@
 /** The environment of a parent process, or of a test standing in for one. */
 export type Env = Readonly<Record<string, string | undefined>>;
 
+/**
+ * Where a version manager holds the real tools. Its shim on the PATH looks for them under the home
+ * folder unless this says where they are, so under another home it finds no `pnpm` without it.
+ */
+const TOOL_HOME = ["VOLTA_HOME"];
+
 /** What a program needs to run at all: where programs are, the home folder, the temp folder, the locale. */
-const RUN = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TZ"];
+const RUN = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TZ", ...TOOL_HOME];
 
 /**
  * How `claude` finds its own login. Where the login is kept in the system's
@@ -34,6 +40,9 @@ const kept = (names: readonly string[], parent: Env): Record<string, string> =>
 
 /** For a program that runs code a ticket or an agent wrote: a test file, an install, a typecheck. */
 export const runEnv = (parent: Env = process.env) => kept(RUN, parent);
+
+/** Only where a version manager holds the real tools: for a command that keeps the core variables alone. */
+export const toolHome = (parent: Env = process.env) => kept(TOOL_HOME, parent);
 
 /** For an agent's own process: what a program needs, and its login. */
 export const agentEnv = (parent: Env = process.env) => kept([...RUN, ...LOGIN], parent);

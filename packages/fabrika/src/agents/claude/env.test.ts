@@ -1,6 +1,6 @@
 import {execFileSync} from "node:child_process";
 import {describe, expect, it} from "vitest";
-import {agentEnv, hostEnv, runEnv, shellEnv} from "./env.ts";
+import {agentEnv, hostEnv, runEnv, shellEnv, toolHome} from "./env.ts";
 
 // The short environments, on a made-up parent: no test here reads a real key.
 // How each place that starts a process uses them is tested beside that place.
@@ -24,6 +24,13 @@ const RUN = {PATH: "/bin", HOME: "/home/someone", TMPDIR: "/tmp/someone", LANG: 
 describe("the environment a started process is handed", () => {
 	it("is what a program needs to run, for code a ticket or an agent wrote", () => {
 		expect(runEnv(PARENT)).toEqual(RUN);
+	});
+
+	it("keeps where a version manager holds the real tools, so its shim works under another home", () => {
+		const parent = {...PARENT, VOLTA_HOME: "/home/someone/.volta"};
+		expect(runEnv(parent)).toEqual({...RUN, VOLTA_HOME: "/home/someone/.volta"});
+		expect(toolHome(parent)).toEqual({VOLTA_HOME: "/home/someone/.volta"});
+		expect(toolHome(PARENT)).toEqual({});
 	});
 
 	it("adds the agent's own login for an agent, wherever that login is kept", () => {

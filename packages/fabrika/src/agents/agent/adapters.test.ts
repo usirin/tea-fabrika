@@ -388,8 +388,13 @@ describe("codex: the system prompt", () => {
 	};
 
 	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
+	const startedWith = async (
+		system: SystemPrompt,
+		access: FolderAccess,
+		folder: (home: string) => string = () => TURN.folder,
+	) => {
 		const home = madeUpHome();
+		mkdirSync(join(home, "beside"));
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
 		const spawner = ChildProcessSpawner.make((command) => {
@@ -405,7 +410,9 @@ describe("codex: the system prompt", () => {
 					parent,
 					access,
 				});
-				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
+				return yield* Effect.flip(
+					Effect.scoped(adapter.start({...TURN, system, folder: folder(home)})),
+				);
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provide(nodeServices),
@@ -415,7 +422,7 @@ describe("codex: the system prompt", () => {
 		const command = seen[0];
 		if (command === undefined) throw new Error("codex was never started");
 		const flags = command.args.flatMap((a, i) => (command.args[i - 1] === "-c" ? [a] : []));
-		return {flags, home: codexHomeOf("session:s", parent)};
+		return {flags, home: codexHomeOf("session:s", parent), owner: home};
 	};
 
 	const TURN: AdapterTurn = {
@@ -463,6 +470,15 @@ describe("codex: the system prompt", () => {
 			base: 'permissions.fenced.extends=":read-only"',
 			folder: '"read"',
 		});
+	});
+
+	it("reads home's own listing for a folder under home: home open, what is beside the folder closed", async () => {
+		const {flags, owner} = await startedWith({_tag: "append", text: ""}, "write", (home) =>
+			join(home, "copy"),
+		);
+		const table = flags.find((f) => f.startsWith("permissions.fenced.filesystem="));
+		expect(table).toContain(`"${owner}/beside"="deny"`);
+		expect(table).not.toContain(`"${owner}"="deny"`);
 	});
 
 	it("cannot be made without saying what the folder allows", () => {

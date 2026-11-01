@@ -43,7 +43,7 @@ export const temps = (): readonly string[] => {
 };
 
 /** The files a login lives in, under the home folder. No folder the builder may read holds one. */
-const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
+export const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
 const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
 
 /** Folders under home that many programs keep things in: opening one opens them all. */
