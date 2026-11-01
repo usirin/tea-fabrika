@@ -295,7 +295,12 @@ describe("a mailbox nobody reads (row 11)", () => {
 						"n",
 					);
 					if (source.kind !== "running") return null;
-					yield* Effect.sleep("20 millis");
+					// The source fills the mailbox at its own pace, and the next writer then waits on it.
+					const isFull = () => {
+						const {length, inputs} = target.run.mailbox();
+						return length === CAPACITY && inputs.n?.waiting === 1;
+					};
+					while (!isFull()) yield* Effect.sleep("1 millis");
 					const full = target.run.mailbox();
 					yield* Deferred.succeed(go, undefined);
 					return {full, from: yield* source.run.ended, to: yield* target.run.ended};
