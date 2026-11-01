@@ -243,12 +243,34 @@ const editable = (el: Element | null): el is HTMLElement =>
 	(el instanceof HTMLElement && el.isContentEditable && el.closest("[data-view]") !== null);
 
 /**
+ * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
+ * over with focus outside it, so the key is dropped, never reaches a tile, and focus has moved in.
+ * For a key pressed now and a key held for the host's answer alike: an over opens before that
+ * answer is in, so a key can be held while it is already open.
+ */
+const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
+	const open = store.desk?.at === "open" ? store.desk : null;
+	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
+	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
+	const desk = {
+		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		asking: open?.ask != null,
+	};
+	if (keyGoesTo(store.frame.over, name, store.prefix, desk) !== "over") return "desk";
+	const box = document.querySelector<HTMLElement>("[data-over]");
+	if (box === null || (target instanceof Element && box.contains(target))) return "in";
+	(box.querySelector<HTMLElement>("input") ?? box).focus();
+	return "moved in";
+};
+
+/**
  * Press a held key again, where focus is now: a character into a view's text box, as typing
  * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
  */
 const pressAgain = (key: Key) => {
 	const p = key.press;
 	const target = document.activeElement ?? document.body;
+	if (keyForOver(key.name, target) === "moved in") return;
 	replaying = true;
 	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta)
 		document.execCommand("insertText", false, p.key);
@@ -364,20 +386,9 @@ const onKey = (e: KeyboardEvent) => {
 	}
 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
 	if (name === null) return;
-	const open = store.desk?.at === "open" ? store.desk : null;
-	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
-	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
-	const desk = {
-		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
-		asking: open?.ask != null,
-	};
-	if (keyGoesTo(over, name, store.prefix, desk) === "over") {
-		const box = document.querySelector<HTMLElement>("[data-over]");
-		if (box === null || (e.target instanceof Element && box.contains(e.target))) return;
-		swallow(e);
-		(box.querySelector<HTMLElement>("input") ?? box).focus();
-		return;
-	}
+	const forOver = keyForOver(name, e.target);
+	if (forOver === "in") return;
+	if (forOver === "moved in") return swallow(e);
 	const press = {
 		key: e.key,
 		code: e.code,

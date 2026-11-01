@@ -20,7 +20,7 @@
 // Node at the edge: `process.execPath` to start the child, a free port from `node:net`, and `ps`
 // for the group's memory. The child itself is started and signalled through Effect's ChildProcess.
 import {createServer} from "node:net";
-import {NodeServices} from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
 	Context,
 	Deferred,
