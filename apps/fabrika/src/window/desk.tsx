@@ -106,30 +106,34 @@ import {WINDOWS} from "./windows.tsx";
 //   stopped       the same, and its lines offer Try again
 //   restarting    the desk dimmed: the top bar says host restarting
 
-/** The desk, the newest view of each run, the frame's own state, and who to tell of a change. */
-const store: {
+/**
+ * The page's whole state, as one value: the desk, the newest view of each run, the frame's own
+ * state. Never changed in place. A change makes a new one, so the value a render read is the value
+ * it drew, and what did not change keeps its reference.
+ */
+interface Model {
 	/** `null` until the host sends the desk. */
-	desk: Desk | null;
+	readonly desk: Desk | null;
 	/** A desk came once: a link down after it is the host down. */
-	attachedOnce: boolean;
+	readonly attachedOnce: boolean;
 	/** The desk's Ctrl-B key, as the host's table says. */
-	prefix: string;
+	readonly prefix: string;
 	/** The desk's Ctrl-B table, each key with its name. */
-	table: readonly Bound[];
+	readonly table: readonly Bound[];
 	/** What each program takes and sends. */
-	shapes: Shapes;
+	readonly shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
-	asks: AsksNow | null;
+	readonly asks: AsksNow | null;
 	/** The host's own state: its process, its ledger, the agents on it; `null` until it says. */
-	host: HostNow | null;
+	readonly host: HostNow | null;
 	/** What the frame shows over the desk, and its modes (frame.ts). */
-	frame: Frame;
+	readonly frame: Frame;
 	/** What the window shows of the link, as the app said last. */
-	link: LinkNow;
-	readonly views: Map<string, ToWindow>;
-	readonly listeners: Set<() => void>;
-	version: number;
-} = {
+	readonly link: LinkNow;
+	readonly views: ReadonlyMap<string, ToWindow>;
+}
+
+let model: Model = {
 	desk: null,
 	attachedOnce: false,
 	prefix: "",
@@ -140,21 +144,31 @@ const store: {
 	frame: FRAME,
 	link: {kind: "up"},
 	views: new Map(),
-	listeners: new Set(),
-	version: 0,
 };
 
-const changed = () => {
-	store.version += 1;
-	for (const listener of store.listeners) listener();
+const listeners = new Set<() => void>();
+
+const notify = () => {
+	for (const listener of listeners) listener();
+};
+
+/** A new model, and everyone told. */
+const set = (patch: Partial<Model>) => {
+	model = {...model, ...patch};
+	notify();
 };
 
 const subscribe = (listener: () => void) => {
-	store.listeners.add(listener);
+	listeners.add(listener);
 	return () => {
-		store.listeners.delete(listener);
+		listeners.delete(listener);
 	};
 };
+
+const readModel = () => model;
+
+/** The one way a render reads the page's state. The third argument is for a render with no DOM. */
+const useModel = () => useSyncExternalStore(subscribe, readModel, readModel);
 
 const terminals = new Map<TileId, TileTerminal>();
 /** The runs whose view this page hears, on each run's port. */
@@ -172,8 +186,7 @@ const follow = (run: string) =>
 	window.fabrika.onMessage(`run:${run}`, (raw) => {
 		const read = readToWindow(raw);
 		if (read.kind === "refused") return console.warn(`fabrika: refused a view: ${read.why}`);
-		store.views.set(run, read.msg);
-		changed();
+		set({views: new Map(model.views).set(run, read.msg)});
 	});
 
 /**
@@ -199,7 +212,9 @@ const follows = (desk: Desk) => {
 	for (const run of followed) {
 		if (runs.has(run)) continue;
 		followed.delete(run);
-		store.views.delete(run);
+		const views = new Map(model.views);
+		views.delete(run);
+		model = {...model, views};
 		window.fabrika.forget(`run:${run}`);
 	}
 };
@@ -288,14 +303,13 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Step the frame's own state (frame.ts), and draw it. A note goes after a while. */
 const frameStep = (m: FrameMsg) => {
-	const next = frameUpdate(store.frame, m);
-	if (next === store.frame) return;
-	if (next.note !== null && next.note !== store.frame.note) {
+	const next = frameUpdate(model.frame, m);
+	if (next === model.frame) return;
+	if (next.note !== null && next.note !== model.frame.note) {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
-	store.frame = next;
-	changed();
+	set({frame: next});
 };
 
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
@@ -305,38 +319,34 @@ const heard = (raw: unknown) => {
 	const m = read.msg;
 	switch (m.type) {
 		case "keys":
-			store.prefix = m.prefix;
-			store.table = m.table;
-			return changed();
+			return set({prefix: m.prefix, table: m.table});
 		case "programs":
-			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
-			return changed();
+			return set({
+				shapes: new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}])),
+			});
 		case "asks":
-			store.asks = m.now;
-			return changed();
+			return set({asks: m.now});
 		case "host":
-			store.host = m.now;
-			return changed();
+			return set({host: m.now});
 		case "show":
 			return frameStep({type: "show", what: m.what});
 		case "desk":
-			store.desk = m.desk;
-			store.attachedOnce = true;
 			follows(m.desk);
+			model = {...model, desk: m.desk, attachedOnce: true};
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
-			flushSync(changed);
+			flushSync(notify);
 			holdStep({type: "takes", takes: m.takes});
 			return;
 		case "answer":
 			holdStep({type: "answer", id: m.id, took: m.took});
 			return;
 		case "link":
-			store.link = m.now;
+			model = {...model, link: m.now};
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) holdStep({type: "down"});
 			// On one, it may be a host that never heard the workspace's size.
 			else tellArea(true);
-			return changed();
+			return notify();
 	}
 };
 
@@ -358,21 +368,21 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	const over = store.frame.over;
+	const over = model.frame.over;
 	if (over.kind !== "none" && e.key === "Escape") {
 		swallow(e);
 		return frameStep({type: "close"});
 	}
 	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
 	if (name === null) return;
-	const open = store.desk?.at === "open" ? store.desk : null;
+	const open = model.desk?.at === "open" ? model.desk : null;
 	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
 	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
 	const desk = {
 		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
 		asking: open?.ask != null,
 	};
-	if (keyGoesTo(over, name, store.prefix, desk) === "over") {
+	if (keyGoesTo(over, name, model.prefix, desk) === "over") {
 		const box = document.querySelector<HTMLElement>("[data-over]");
 		if (box === null || (e.target instanceof Element && box.contains(e.target))) return;
 		swallow(e);
@@ -393,7 +403,7 @@ const onKey = (e: KeyboardEvent) => {
 
 /** In info mode, what the pointer is over, said on the bottom line. */
 const onPointerOver = (e: PointerEvent) => {
-	if (!store.frame.info) return;
+	if (!model.frame.info) return;
 	const at = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-info]") : null;
 	frameStep({type: "explain", text: at?.dataset.info ?? null});
 };
@@ -419,8 +429,12 @@ const tintOf = (node: LayoutNode): number | undefined => {
 /** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
 const noFocus = (e: ReactPointerEvent) => e.preventDefault();
 
-function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
-	const view = store.views.get(run);
+function View(props: {
+	readonly tile: TileId;
+	readonly run: string;
+	readonly view: ToWindow | undefined;
+}): ReactNode {
+	const {tile, run, view} = props;
 	const send = (msg: unknown) => toRun(run, msg);
 	const known = view === undefined ? undefined : WINDOWS.get(view.program);
 	return (
@@ -458,8 +472,9 @@ function Tile(props: {
 	readonly closing: boolean;
 	/** Does the desk let this tile fold: no for the last open tile of the workspace. */
 	readonly folds: boolean;
+	readonly view: ToWindow | undefined;
 }): ReactNode {
-	const {tile, focused, asking, closing, folds} = props;
+	const {tile, focused, asking, closing, folds, view} = props;
 	const run = runOf(tile);
 	const line = lineOf(tile);
 	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
@@ -493,7 +508,7 @@ function Tile(props: {
 				<span className="tid">{tile.id}</span>
 			</button>
 			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
-			{run !== null && <View tile={tile.id} run={run.id} />}
+			{run !== null && <View tile={tile.id} run={run.id} view={view} />}
 			{closing && (
 				<p className="closing-note" role="status">
 					closing
@@ -527,8 +542,9 @@ function Container(props: {
 	readonly container: ContainerNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
+	readonly views: Model["views"];
 }): ReactNode {
-	const {container, ws, desk} = props;
+	const {container, ws, desk, views} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Readonly<Record<string, number>> | null>(null);
@@ -584,7 +600,7 @@ function Container(props: {
 						data-cell={child.id}
 						style={{flexGrow: shares[child.id] ?? 1}}
 					>
-						<Node node={child} ws={ws} desk={desk} />
+						<Node node={child} ws={ws} desk={desk} views={views} />
 					</div>,
 				];
 			})}
@@ -618,10 +634,11 @@ function Node(props: {
 	readonly node: LayoutNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
+	readonly views: Model["views"];
 }): ReactNode {
-	const {node, ws, desk} = props;
-	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} />;
-	return <Container container={node} ws={ws} desk={desk} />;
+	const {node, ws, desk, views} = props;
+	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} views={views} />;
+	return <Container container={node} ws={ws} desk={desk} views={views} />;
 }
 
 /** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
@@ -629,8 +646,10 @@ function DeskTile(props: {
 	readonly tile: TileNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
+	readonly views: Model["views"];
 }): ReactNode {
-	const {tile, ws, desk} = props;
+	const {tile, ws, desk, views} = props;
+	const run = runOf(tile);
 	return (
 		<Tile
 			tile={tile}
@@ -638,6 +657,7 @@ function DeskTile(props: {
 			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
 			closing={desk.closing.includes(tile.id)}
 			folds={fold(ws.layout, tile.id) !== ws.layout}
+			view={run === null ? undefined : views.get(run.id)}
 		/>
 	);
 }
@@ -702,15 +722,15 @@ const linkView = (now: LinkNow): Shown => {
 const MAC = /Mac/.test(navigator.userAgent);
 
 function App(): ReactNode {
-	useSyncExternalStore(subscribe, () => store.version);
-	const desk = store.desk;
-	const view = linkView(store.link);
+	const m = useModel();
+	const desk = m.desk;
+	const view = linkView(m.link);
 	/** The desk is out of reach: the link is down, or there is no desk to reach. */
 	const away = view.kind === "instead" || view.dim;
 	const open = desk?.at === "open" ? desk : null;
 	const ws = open === null ? null : activeOf(open);
 	const focused = open === null ? null : focusedOf(open);
-	const over = store.frame.over.kind;
+	const over = m.frame.over.kind;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
@@ -730,24 +750,24 @@ function App(): ReactNode {
 	}, [shown, away, over]);
 	const props: FrameProps = {
 		desk: open,
-		frame: store.frame,
-		asks: store.asks,
-		host: store.host,
-		link: store.link,
-		attachedOnce: store.attachedOnce,
-		prefix: store.prefix,
-		table: store.table,
-		shapes: store.shapes,
-		tickets: ticketsShown(store.views),
+		frame: m.frame,
+		asks: m.asks,
+		host: m.host,
+		link: m.link,
+		attachedOnce: m.attachedOnce,
+		prefix: m.prefix,
+		table: m.table,
+		shapes: m.shapes,
+		tickets: ticketsShown(m.views),
 		armed: open?.prefix.armed ?? false,
 		toHost,
 		toApp,
 		toRun,
 		step: frameStep,
 	};
-	const bare = store.frame.bare;
+	const bare = m.frame.bare;
 	/** With both bars hidden, the bottom line still shows while you are mid-key. */
-	const keying = props.armed || open?.ask != null || store.frame.note !== null;
+	const keying = props.armed || open?.ask != null || m.frame.note !== null;
 	const zoomed = ws?.layout.zoomed ?? null;
 	return (
 		<div
@@ -767,9 +787,9 @@ function App(): ReactNode {
 					inert={view.dim}
 				>
 					{zoomed !== null ? (
-						<ZoomedTile ws={ws} id={zoomed} desk={open} />
+						<ZoomedTile ws={ws} id={zoomed} desk={open} views={m.views} />
 					) : (
-						<Node node={ws.layout.root} ws={ws} desk={open} />
+						<Node node={ws.layout.root} ws={ws} desk={open} views={m.views} />
 					)}
 				</div>
 			)}
@@ -783,11 +803,12 @@ function ZoomedTile(props: {
 	readonly ws: Workspace;
 	readonly id: TileId;
 	readonly desk: Open;
+	readonly views: Model["views"];
 }): ReactNode {
-	const {ws, id, desk} = props;
+	const {ws, id, desk, views} = props;
 	const tile = findTile(ws.layout, id);
 	if (tile === null) return null;
-	return <DeskTile tile={tile} ws={ws} desk={desk} />;
+	return <DeskTile tile={tile} ws={ws} desk={desk} views={views} />;
 }
 
 const boot = Effect.gen(function* () {

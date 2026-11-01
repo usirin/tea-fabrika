@@ -367,8 +367,11 @@ const benchBuild = async (label: string, from: string, compile: boolean, dev = f
 	const deskMs = performance.now() - deskStarted;
 	// With --dev the app's own dist/ gets the same page, so its e2e runs on React's development build.
 	if (dev) cpSync(join(out, "desk.js"), join(app, "dist/desk.js"));
-	const commit = run("git", ["rev-parse", "HEAD"], from);
+	// BENCH_COMMIT: this copy was built with an older commit's files restored, and says which.
+	const named = process.env.BENCH_COMMIT;
+	const commit = named ?? run("git", ["rev-parse", "HEAD"], from);
 	const dirty =
+		named === undefined &&
 		run("git", ["status", "--porcelain", "--", "apps", "programs", "packages"], from) !== "";
 	writeFileSync(
 		join(out, "bench.json"),
