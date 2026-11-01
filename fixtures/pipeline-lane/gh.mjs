@@ -521,6 +521,23 @@ const rest = (state, method, path, {fields, jq, headers}) => {
 			},
 		};
 	}
+	m = /^git\/refs\/heads\/(.+)$/.exec(route);
+	if (m !== null && method === "DELETE") {
+		exact("ref_delete");
+		const branch = m[1];
+		if (branch === "main" || fields.length !== 0) throw new Unknown(`ref_delete: ${branch}`);
+		return {
+			kind: "ref_delete",
+			text: () => {
+				if (state.story.refusesBranchDelete === true)
+					throw new Refused("gh: Cannot delete this protected branch (HTTP 422)");
+				if (gitMaybe(state, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`) === null)
+					throw new Refused("gh: Reference does not exist (HTTP 422)");
+				git(state, "update-ref", "-d", `refs/heads/${branch}`);
+				return "";
+			},
+		};
+	}
 	if (route === "git/ref/heads/main" && method === "GET") {
 		exact("ref_read");
 		return {kind: "ref_read", answer: () => ({object: {sha: mainTip(state)}})};
@@ -743,5 +760,6 @@ function refusedKind(called) {
 	const query = called.find((arg) => arg.startsWith("query="));
 	if (query !== undefined) return queryKind(query.slice("query=".length));
 	const path = called.find((arg) => arg.startsWith("repos/"));
+	if (called.includes("DELETE")) return "ref_delete";
 	return path?.endsWith("/git/refs/heads/main") ? "ref_move" : null;
 }

@@ -26,6 +26,7 @@
 //   notes     {step: [text]}   Codex `error` events said in mid-stream, before the answer
 //   writes    {step: [{path, text}]}  more files this step writes in its folder
 //   unseen    text             every review row is `unseen`, for this reason
+//   cannot    text             every surviving mutant is answered `cannot`, for this reason
 //
 // A later try that resumes a thread names the step by its thread. One that does not, whose prompt is
 // only what the last try got wrong, is the step that ran last.
@@ -136,6 +137,7 @@ const reviewsSoFar = () =>
 		.filter((row) => row.includes('"step":"review"')).length;
 
 function stepOf(text) {
+	if (text.startsWith("A ticket on ")) return "triage";
 	if (text.startsWith("You write the plan")) return "plan";
 	if (text.startsWith("You build one ticket")) return "build";
 	if (text.startsWith("You review one pull request")) return "review";
@@ -240,6 +242,8 @@ const ANSWERS = {
 	},
 	mutants: () => {
 		const ids = [...new Set(brief.match(/src\/[^:"\n]+\.ts:\d+:\d+:[A-Za-z0-9_-]+/g) ?? [])];
+		if (script.cannot !== undefined)
+			return {files: [], answers: ids.map((mutant) => ({mutant, answer: "cannot", why: script.cannot}))};
 		const killed = ids.filter((id) => id.endsWith("MethodExpression") || id.includes("Method"));
 		return {
 			files: [
