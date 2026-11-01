@@ -1,0 +1,5 @@
+Long post titles lose their meaning when the slug is cut at 40 characters.
+
+`slugify` in `src/slug.ts` should cut at 80 characters, not 40. A cut slug must still not end on a `-`.
+
+The law in `src/slug.laws.test.ts` holds slugs to 40 today, so it has to say 80 as well.

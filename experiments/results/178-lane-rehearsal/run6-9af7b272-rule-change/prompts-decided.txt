@@ -1,0 +1,59 @@
+=== spawn 27
+=== spawn 28
+=== spawn 36
+=== spawn 181
+# What a person decided
+
+None.
+
+These bind your tests. A test never goes against a decision. If a Property does, answer `cannot` and say which decision it goes against.
+
+# Properties
+
+```json
+[
+ {
+  "when": "A title normalizes to a slug longer than 40 characters",
+  "result": "Its output equals the first 80 normalized characters with any final hyphen removed.",
+=== spawn 228
+Owner's calls, not yours:
+
+None.
+
+# The exam
+
+Someone else wrote these tests, and your code must pass them:
+
+- src/slug.limit.test.ts
+
+These paths are the exam:
+
+- src/slug.limit.test.ts
+=== spawn 302
+# What a person decided
+
+None.
+
+A test never goes against a decision. A mutant only such a test could kill is `noise`: say which decision it goes against.
+
+# Mutants
+
+Each id is `file:line:column:tag`.
+
+```json
+[
+ {
+=== spawn 362
+# What a person decided
+
+None.
+
+A decision above is not a finding. It is a person's call, and you may not overrule it. Work that follows it is right, even if you would have chosen otherwise.
+
+If you think a decision is wrong, you may say so: write a finding whose `from` is `source: "decision"` with the question's `id`. It fails nothing and no test comes of it. The person hears your side and theirs, and says which stands. Only a question shown with an id can be named this way. A thing no decision settled is an ordinary finding.
+
+# How to work
+
+Read and think freely first. Read the diff, open the files around it, follow what calls what, and read the tests. Do not fill the form as you go. Fill it once, at the very end, when you know what you think.
+
+The rows are not the whole job. A change can meet every criterion and still be wrong. So look for these in every change:

@@ -1,0 +1,11 @@
+--- a/packages/pipeline/src/stages/plan/check.ts
++++ b/packages/pipeline/src/stages/plan/check.ts
+@@ -213,6 +213,8 @@
+ 		ids.add(story.id);
+ 		for (const part of ["who", "want", "why"] as const)
+ 			if (story[part].trim() === "") problems.push(`${at}: its \`${part}\` is empty.`);
++		if (typeof story.from === "string" && !/^[\w.-]+\/[\w.-]+#[1-9][0-9]*$/.test(story.from))
++			problems.push(`${at}: its \`from\` must be a ticket id like owner/repo#12, or null.`);
+ 	});
+ 	return {problems, ids};
+ }

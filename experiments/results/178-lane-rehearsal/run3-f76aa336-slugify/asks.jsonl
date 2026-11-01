@@ -1,0 +1,2 @@
+{"at":"2026-11-01T16:25:32.342Z","ask":"a-approve-2","unexpected":true,"fact":{"type":"asked","ask":"a-approve-2","what":"Do you approve plan version 1?","picks":["approve","no"]}}
+{"at":"2026-11-01T16:25:49.416Z","ask":"a-approve-2","fact":{"type":"asked","ask":"a-approve-2","what":"Do you approve plan version 1?","picks":["approve","no"]},"pick":"approve","how":"the agent playing the person, by hand"}

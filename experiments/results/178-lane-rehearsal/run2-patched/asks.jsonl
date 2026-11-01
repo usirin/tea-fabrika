@@ -1,0 +1,6 @@
+{"at":"2026-11-01T15:19:28.877Z","ask":"a-approve-2","fact":{"type":"asked","ask":"a-approve-2","what":"approve plan v1","picks":["approve","no"]},"pick":"approve","how":"script"}
+{"at":"2026-11-01T15:23:14.757Z","ask":"a-step-4","unexpected":true,"fact":{"type":"asked","ask":"a-step-4","what":"test_writer asks: ask:owner:cannot_test","picks":["again","go_on","stop"]}}
+{"at":"2026-11-01T15:24:04.061Z","ask":"a-step-4","fact":{"type":"asked","ask":"a-step-4","what":"test_writer asks: ask:owner:cannot_test","picks":["again","go_on","stop"]},"pick":"go_on","how":"the agent playing the person, by hand"}
+{"at":"2026-11-01T15:24:53.476Z","ask":"a-step-7","unexpected":true,"fact":{"type":"asked","ask":"a-step-7","what":"mutants asks: ask:owner:disable","picks":["again","go_on","stop"]}}
+{"at":"2026-11-01T15:25:07.562Z","ask":"a-step-7","fact":{"type":"asked","ask":"a-step-7","what":"mutants asks: ask:owner:disable","picks":["again","go_on","stop"]},"pick":"go_on","how":"the agent playing the person, by hand"}
+{"at":"2026-11-01T15:25:46.847Z","ask":"a-merge-9","fact":{"type":"asked","ask":"a-merge-9","what":"merge local:toy/slug-lab/pull/1","picks":["merge","no"]},"pick":"merge","how":"script"}
