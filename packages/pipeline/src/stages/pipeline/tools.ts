@@ -235,6 +235,7 @@ export const laneExamWork = Layer.effect(
 	Effect.gen(function* () {
 		const work = yield* LaneWork;
 		const pulls = yield* LanePulls;
+		const wire = yield* PullWire;
 		const lane = yield* LaneNow;
 		const agents = yield* LaneAgents;
 		return {
@@ -243,15 +244,16 @@ export const laneExamWork = Layer.effect(
 					const side = yield* work.side(`exam-${number}`);
 					const head = yield* work.commit(side.tree, files, `rule changes for ticket ${number}`);
 					yield* work.pushTo(side.tree, head, side.branch);
-					const pr = yield* pulls.open({
-						kind: "exam",
-						ticket: number,
-						branch: side.branch,
-						head,
-						tree: side.tree,
-						title: `Rule changes for ticket ${number}`,
-						body: `The rule changes the plan for ticket ${number} lists.`,
-					});
+					const title = `Rule changes for ticket ${number}`;
+					const body = `The rule changes the plan for ticket ${number} lists.`;
+					// Resumed after a kill: the pull request opened before it is the one.
+					const id =
+						(yield* pulls.onBranch(side.branch)) ??
+						(yield* wire.open({branch: side.branch, title, body}));
+					const pr = yield* pulls.open(
+						{kind: "exam", ticket: number, branch: side.branch, head, tree: side.tree, title, body},
+						id ?? undefined,
+					);
 					return {pr, head};
 				}).pipe(Effect.mapError(() => failed)),
 			write: (sub) =>

@@ -8,7 +8,7 @@ import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {PrFact} from "../../tickets/ticket.ts";
 import {Tickets, Watcher} from "../../tickets/tickets.ts";
 import type {TextKind} from "../review/pack.ts";
-import type {PrFacts} from "../ship/facts.ts";
+import {type PrFacts, ReviewKind} from "../ship/facts.ts";
 import {LaneWork} from "./work.ts";
 
 // The lane's pull requests on a local code host: a file of them beside a bare remote. Today's
@@ -42,7 +42,7 @@ export const Pull = Schema.Struct({
 	title: Schema.String,
 	body: Schema.String,
 	verdicts: Schema.Array(
-		Schema.Struct({kind: Schema.String, verdict: Schema.Literals(["pass", "fail"])}),
+		Schema.Struct({kind: ReviewKind.fields.kind, verdict: Schema.Literals(["pass", "fail"])}),
 	),
 });
 export type Pull = typeof Pull.Type;
@@ -191,6 +191,36 @@ const prefixOf = (pull: Pull) => (pull.kind === "exam" ? "a-exam_merge-" : "a-me
 export const mergeAnswered = (ticket: Parameters<typeof said>[0], pull: Pull): boolean =>
 	said(ticket, prefixOf(pull));
 
+/** The reviews only the lane knows. No verdict posted yet is not known, and never passed. Pure. */
+const reviewsFrom = (pull: Pull): PrFacts["reviews"] => {
+	if (pull.kind === "exam") return [{kind: "governance", verdict: "passed"}];
+	const row = ({kind, verdict}: Pull["verdicts"][number]): ReviewKind => ({
+		kind,
+		verdict: verdict === "pass" ? "passed" : "failed",
+	});
+	const [first, ...rest] = pull.verdicts;
+	return first === undefined ? null : [row(first), ...rest.map(row)];
+};
+
+/**
+ * What only the lane knows about a pull request, the same on every host. `yes`: a person said `merge`
+ * to its newest ask. The exam's lands rules for the ticket, so only the lane's own finishes it, and a
+ * person's answer is its one criterion. Pure.
+ */
+export const pullFacts = (
+	pull: Pull,
+	repo: string,
+	yes: boolean,
+): Pick<PrFacts, "ours" | "ticket" | "approval" | "reviews"> => ({
+	ours: true,
+	ticket:
+		pull.kind === "exam"
+			? {id: examTicket(repo, pull.ticket), link: "part_of_it"}
+			: {id: `${repo}#${pull.ticket}`, link: "closes_it"},
+	approval: yes ? "given" : "missing",
+	reviews: reviewsFrom(pull),
+});
+
 /** Where a window links to a pull request: its own url, or one that says it is local. Pure. */
 export const pullUrl = (pr: string): string =>
 	pr.startsWith("https://") ? pr : `https://local.invalid/${pr.replace(/^local:/, "")}`;
@@ -309,8 +339,6 @@ export const laneLocalHost = (
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
 						const {repo} = yield* work.config;
 						const tip = yield* work.main;
-						const id =
-							pull.kind === "exam" ? examTicket(repo, pull.ticket) : `${repo}#${pull.ticket}`;
 						const target = bookTarget(planOf(readTicketId(`${repo}#${pull.ticket}`) as TicketId));
 						const checks = yield* onLocal(pull.tree, (local) =>
 							local.change(target, pull.head).pipe(Effect.map((c) => c.checks.state)),
@@ -318,19 +346,7 @@ export const laneLocalHost = (
 						return {
 							head: pull.head,
 							state: pull.state,
-							ours: true,
-							// The exam's pull request lands rules for the ticket: only the lane's own finishes it.
-							ticket: {id, link: pull.kind === "exam" ? "part_of_it" : "closes_it"} as const,
-							approval: said(ticket, prefixOf(pull)) ? ("given" as const) : ("missing" as const),
-							reviews:
-								pull.kind === "exam"
-									? ([{kind: "governance", verdict: "passed"}] as const)
-									: pull.verdicts.length === 0
-										? null
-										: (pull.verdicts.map((v) => ({
-												kind: v.kind,
-												verdict: v.verdict === "pass" ? "passed" : "failed",
-											})) as never),
+							...pullFacts(pull, repo, mergeAnswered(ticket, pull)),
 							checks: checks === "unknown" ? ("stuck" as const) : checks,
 							mergeable: yield* work.mergeable(pull.head),
 							comments: [],

@@ -32,6 +32,34 @@ triage -> plan -> the person approves -> exam, when rules change -> test writer
 change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-6-astra`, effort
 `high`. Triage defaults to `claude` on `opus`.
 
+`[review] rubrics` names a folder, read from a copy of main's tip, so a change cannot rewrite the
+rubrics that judge it. Left out, the lane uses the rubrics fabrika ships. This holds on both hosts.
+
+## On GitHub
+
+`host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
+(`fixtures/pipeline-lane/gh.mjs`), never against real GitHub.
+
+- **The review stays local.** It reads the head on this machine, and its checks are `[[checks.run]]`.
+  The push step then opens the pull request and posts the verdicts as comments.
+- **The lane's own verdicts count.** No GitHub approval and no reviewers list is read. A verdict counts
+  only at the head it was posted for. If a person pushes after that, the lane ends `stuck: sent_back`.
+- **The yes is yours, on the ticket.** A GitHub approval does not stand in for it.
+
+Which checks ship waits on, from `[checks] github` at main, read on each call:
+
+| `github` | What ship does |
+|---|---|
+| `every`, or left out | Waits on every check on the head. A failed one is run again once, then the work is sent back. |
+| `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. `required` changes only what `CodeHost.change` reads for a pull request, and no step of the lane reads that. |
+| `none` | Never waits on GitHub. It runs `[[checks.run]]` on this machine at the head it pushed, and those decide. A file with no `[[checks.run]]` is refused. |
+
+- **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and the lane
+  ends `stuck: checks_stuck`. Set `github = "none"` in `[checks]` to get past this.
+- **A branch rule that wants a GitHub review.** GitHub refuses the merge, and the lane ends
+  `stuck: merge_failed`. The ticket does not say which rule refused it: ship never reads the refusal's
+  words.
+
 ## What it holds to
 
 - **A ticket must be yours.** One filed by someone else is refused before any agent starts.

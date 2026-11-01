@@ -469,14 +469,13 @@ const bodies = {
 		Effect.gen(function* () {
 			const work = yield* LaneWork;
 			const tickets = yield* Tickets;
-			const settings = yield* work.settings;
 			const head = yield* need(at.cmd.carry.head, "no head to review");
 			const folder = yield* work.copy(head);
 			yield* at.tell(folder, "read", {
 				tools: "A shell, in a copy of the code at this head. What you change there is thrown away.",
 				checked: "The checks below ran at this head.",
 			});
-			const rubrics = `${folder}/${settings.review?.rubrics ?? "docs/rubrics"}`;
+			const rubrics = yield* work.rubrics;
 			const target = bookTarget(planOf(at.id));
 			const reviewed: Reviewed = yield* Effect.gen(function* () {
 				const runtime = yield* at.stages.review
