@@ -1401,6 +1401,111 @@ const turnLayout: Moment = async (b) => {
 };
 
 /** Every kind of thing the desk does, once, for what React and the page say about it: not timed. */
+declare const __feed: {told: number; shown: Set<string>; ended: number; lastAt: number};
+
+/**
+ * Pick 9: a heavy window fed fast, and a person typing in another tile. Every block of a long page
+ * changes with each text. `FEED_MS` sets the gap, `FEED_TEXTS` how many.
+ */
+const feed: Moment = async (b) => {
+	const every = Number(process.env.FEED_MS ?? 50);
+	const count = Number(process.env.FEED_TEXTS ?? 100);
+	const markdown = await tileShowing(b, "markdown");
+	const terminal: string | null = await b.page.evaluate(
+		() =>
+			[...document.querySelectorAll("[data-tile]")]
+				.find(
+					(t) =>
+						t.checkVisibility() &&
+						t.querySelector(".screen-text") !== null &&
+						t.querySelector("[data-view]") === null,
+				)
+				?.getAttribute("data-tile") ?? null,
+	);
+	if (terminal === null) throw new Error("no bare terminal");
+	await focusTile(b, terminal);
+	await prompted(b, terminal);
+	const texts = Array.from(
+		{length: count},
+		(_, n) =>
+			`# text${n}x\n\n${LONG_MARKDOWN(Number(process.env.FEED_BLOCKS ?? 200)).replaceAll("words", `words${n}`)}`,
+	);
+	await resetCounters(b);
+	await b.page.evaluate(
+		([tile, run, gap, all]: [string, string, number, string[]]) => {
+			const seen = {told: 0, shown: new Set<string>(), ended: 0, lastAt: 0};
+			Object.assign(window, {__feed: seen});
+			const page = document.querySelector(`[data-tile="${tile}"] .markdown-page`);
+			if (page === null) throw new Error("no page");
+			const read = () => {
+				const h = page.querySelector("h1")?.textContent ?? "";
+				if (!seen.shown.has(h)) {
+					seen.shown.add(h);
+					seen.lastAt = performance.now();
+				}
+			};
+			new MutationObserver(read).observe(page, {
+				childList: true,
+				subtree: true,
+				characterData: true,
+			});
+			const timer = setInterval(() => {
+				window.fabrika.send(`run:${run}`, {
+					type: "msg",
+					msg: {type: "text", value: all[seen.told]},
+				});
+				seen.told += 1;
+				if (seen.told === all.length) {
+					clearInterval(timer);
+					seen.ended = performance.now();
+				}
+			}, gap);
+		},
+		[markdown, await b.page.evaluate((t: string) => __probe.runIn(t), markdown), every, texts],
+	);
+	const times: number[] = [];
+	const screenOf = `document.querySelector('[data-tile="${terminal}"] .screen-text').textContent`;
+	const until = Date.now() + every * count;
+	let i = 0;
+	let late = 0;
+	while (Date.now() < until && i < 200) {
+		const typed = i % 2 === 0;
+		try {
+			const got = await keyToDom(b, `${screenOf}.endsWith('tsh$${typed ? " x" : ""}')`, () =>
+				b.page.keyboard.press(typed ? "x" : "Backspace"),
+			);
+			times.push(got.dom);
+		} catch {
+			late += 1;
+		}
+		i += 1;
+		await sleep(60);
+	}
+	const last = `text${count - 1}x`;
+	const caught = await waitFor(
+		"the last text",
+		() => b.page.evaluate((h: string) => __feed.shown.has(h), last),
+		(y) => y,
+		60000,
+	).catch(() => false);
+	const got = await b.page.evaluate(() => ({
+		told: __feed.told,
+		shown: __feed.shown.size,
+		behind: __feed.lastAt - __feed.ended,
+	}));
+	keep(
+		await readSample(b, "feed", times, 1, {
+			every,
+			count,
+			caught,
+			shown: got.shown,
+			lastShownAfterFeedEnd: got.behind,
+			keysLate: late,
+			bytes: texts[0]?.length ?? 0,
+		}),
+	);
+};
+
 declare const __vt: {
 	runs: number;
 	active: number;
@@ -2047,6 +2152,7 @@ export const MOMENTS: Record<string, Moment> = {
 	reveal,
 	overlays,
 	moves,
+	feed,
 };
 
 // ---------------------------------------------------------------- the command line

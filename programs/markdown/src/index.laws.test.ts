@@ -26,7 +26,11 @@ const text = fc.oneof(
 	fc.string({maxLength: 80}),
 );
 /** One entry per Msg type: leaving one out does not compile. */
-const table: MsgArbitraryTable<Msg> = {show: arbRecordMsg("show", {text})};
+const table: MsgArbitraryTable<Msg> = {
+	show: arbRecordMsg("show", {text}),
+	told: arbRecordMsg("told", {text}),
+	cooled: fc.constant({type: "cooled" as const}),
+};
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 20});
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -37,30 +41,36 @@ interface Law {
 	readonly check: (machine: Page) => void;
 }
 
+const same = (root: unknown, text: string) =>
+	JSON.stringify(root) === JSON.stringify(Root.fromMarkdown(text));
+
 const showsWhatItIsTold: Law = {
-	name: "each text told replaces the page with that text read, and asks for no work",
+	name: "a text shown replaces the page, a text told does or waits, and neither asks for work",
 	check: (machine) =>
 		propertyInvariant(
 			machine,
 			ctx,
 			lists,
 			({msg, next, cmds}) =>
-				JSON.stringify(next.root) === JSON.stringify(Root.fromMarkdown(msg.text)) &&
-				cmds.length === 0,
+				cmds.length === 0 &&
+				(msg.type === "cooled" ||
+					(msg.type === "told" && next.waiting === msg.text) ||
+					same(next.root, msg.text)),
 			OPTS,
 		),
 };
 
 const startsEmpty: Law = {
-	name: "from the start, the page is the last text told, or nothing",
+	name: "from the start, the newest text is on the page or waiting, and nothing while none came",
 	check: (machine) =>
 		propertyTrace(
 			machine,
 			ctx,
 			lists,
-			(steps, last) =>
-				JSON.stringify(last.root) ===
-				JSON.stringify(Root.fromMarkdown(steps.at(-1)?.msg.text ?? "")),
+			(steps, last) => {
+				const newest = steps.flatMap((s) => (s.msg.type === "cooled" ? [] : [s.msg.text])).at(-1);
+				return last.waiting !== null ? last.waiting === newest : same(last.root, newest ?? "");
+			},
 			OPTS,
 		),
 };
@@ -82,10 +92,19 @@ const broken = (machine: Page): readonly string[] =>
 const keepsTheFirst: Page = {
 	...page,
 	update: {
-		show: (s, m) => [s.root.children.length > 0 ? s : {root: Root.fromMarkdown(m.text)}, []],
+		...page.update,
+		show: (s, m) => [s.root.children.length > 0 ? s : {...s, root: Root.fromMarkdown(m.text)}, []],
 	},
 };
-const startsWithAHeading: Page = {...page, init: () => [{root: Root.fromMarkdown("# Page")}, []]};
+const startsWithAHeading: Page = {
+	...page,
+	init: () => [{root: Root.fromMarkdown("# Page"), waiting: null, cool: false, reads: 0}, []],
+};
+/** The newest text told while cooling is dropped: the page stays on an old one. */
+const dropsTheNewest: Page = {
+	...page,
+	update: {...page.update, told: (s, m) => (s.cool ? [s, []] : page.update.told(s, m))},
+};
 
 describe("the markdown page's laws", () => {
 	it.each(LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
@@ -95,5 +114,6 @@ describe("the markdown page's laws", () => {
 	it("each law is seen to fail on a planted mistake", () => {
 		expect(broken(keepsTheFirst)).toEqual([showsWhatItIsTold.name, startsEmpty.name]);
 		expect(broken(startsWithAHeading)).toEqual([startsEmpty.name]);
+		expect(broken(dropsTheNewest)).toEqual([showsWhatItIsTold.name, startsEmpty.name]);
 	});
 });

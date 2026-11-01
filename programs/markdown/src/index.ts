@@ -1,7 +1,7 @@
-import {defineMachine} from "@demlik/tea";
+import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {defineProgram, end, flag, input, kind} from "@kampus/fabrika-old";
-import {Effect, Schema} from "effect";
+import {Duration, Effect, Schema, Stream} from "effect";
 import {Root} from "./root.ts";
 
 // Any markdown, drawn, as `glow` or `less` draws it in a terminal: in a tile of its own
@@ -15,19 +15,61 @@ import {Root} from "./root.ts";
 // Its machine holds the text read into a tree (./root.ts); its view is that tree. Once a text
 // has come, a pipe's end does not end it: a person reads, then quits.
 
-export const Model = Schema.Struct({root: Root});
+export const Model = Schema.Struct({
+	root: Root,
+	/** The newest text told while the page cools: read when it has cooled. Older ones are dropped. */
+	waiting: Schema.NullOr(Schema.String),
+	/** A text was read less than `PACE` ago. */
+	cool: Schema.Boolean,
+	/** Texts read so far: keys the pace Sub, so each read starts its own wait. */
+	reads: Schema.Number,
+});
 export type Model = typeof Model.Type;
 
-type Msg = {readonly type: "show"; readonly text: string};
+type Msg =
+	| {readonly type: "show"; readonly text: string}
+	| {readonly type: "told"; readonly text: string}
+	| {readonly type: "cooled"};
+
+/** The fastest a page is read and sent on: slower than a long page takes the host and the window. */
+export const PACE = Duration.millis(250);
+
+type PaceSub = Sub<"pace", {readonly reads: number}>;
+
+/** `cooled`, once, a `PACE` after the read it is keyed by. */
+const paceRunner = (_sub: PaceSub) =>
+	Stream.fromEffect(Effect.sleep(PACE)).pipe(Stream.map(() => ({type: "cooled" as const})));
+
+const read = (s: Model, text: string, cool: boolean): readonly [Model, readonly []] => [
+	{root: Root.fromMarkdown(text), waiting: null, cool, reads: s.reads + 1},
+	[],
+];
 
 const page = defineMachine({
-	types: {model: {} as Model, msg: {} as Msg, ctx: undefined},
+	types: {model: {} as Model, msg: {} as Msg, ctx: undefined, sub: {} as PaceSub},
 	cmds: [],
-	init: (): readonly [Model, readonly []] => [{root: Root.fromMarkdown("")}, []],
-	update: {show: (_s, m): readonly [Model, readonly []] => [{root: Root.fromMarkdown(m.text)}, []]},
+	init: (): readonly [Model, readonly []] => [
+		{root: Root.fromMarkdown(""), waiting: null, cool: false, reads: 0},
+		[],
+	],
+	update: {
+		show: (s, m) => read(s, m.text, false),
+		// The first of a burst shows at once, the newest of it a pace later: nothing waits on a
+		// lone text, and what was told last always shows.
+		told: (s, m): readonly [Model, readonly []] =>
+			s.cool ? [{...s, waiting: m.text}, []] : read(s, m.text, true),
+		cooled: (s): readonly [Model, readonly []] =>
+			s.waiting === null ? [{...s, cool: false}, []] : read(s, s.waiting, true),
+	},
+	subs: [
+		{
+			type: "pace",
+			deps: (s) => (s.cool ? {reads: s.reads} : null),
+		} satisfies DepKeyedSub<Model, PaceSub>,
+	],
 });
 
-const options = {ctx: undefined};
+const options = {ctx: undefined, subscribe: {pace: paceRunner}};
 
 export const markdown = defineProgram({
 	name: "markdown",
@@ -50,7 +92,7 @@ export const markdown = defineProgram({
 			state: Model,
 			parent: "main",
 			options: () => options,
-			drawing: () => ({name: "page", steps: {}}),
+			drawing: () => ({name: "page", steps: {pace: "wait a pace between reads"}}),
 			status: (s) => `${s.root.children.length} blocks`,
 		}),
 	},
@@ -79,6 +121,7 @@ export const markdown = defineProgram({
 			if (first !== "text") return;
 			// Then each text told, in order with the window's quit: a pipe's end does not end the
 			// window, a person reads, then quits. A quit, or `quit` closed, does.
-			yield* serve({text: show, quit: () => end}, {until: ["quit"]});
+			const told = (text: string) => runtime.dispatch({type: "told", text}).pipe(Effect.orDie);
+			yield* serve({text: told, quit: () => end}, {until: ["quit"]});
 		}).pipe(Effect.scoped),
 });
