@@ -2,14 +2,15 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
-import {runChild} from "../../child.ts";
+import {type Exited, runChild} from "../../child.ts";
+import {listedAt, textAt} from "../../git-read.ts";
 import {
 	DEFAULT_SETTINGS,
-	OLD_SETTINGS_FILE,
 	readSettings,
 	SETTINGS_FILE,
-	SETTINGS_MOVED,
+	SETTINGS_PATHS,
 	type Settings,
+	settingsRefusal,
 } from "../../settings.ts";
 
 // Where a lane works, on the machine it runs on. Read when a step needs it, so a home with no
@@ -80,7 +81,7 @@ export class LaneWork extends Context.Service<
 		readonly config: Effect.Effect<LaneConfig, Failed>;
 		/** Fetch, and answer main's tip now. */
 		readonly main: Effect.Effect<string, Failed>;
-		/** The repository's `.fabrika/fabrika.toml`, at main. A `fabrika.toml` still at its root fails it. */
+		/** The repository's `.fabrika/fabrika.toml`, at main. An old file `settingsRefusal` refuses fails it, and so does a read that broke. */
 		readonly settings: Effect.Effect<Settings, Failed>;
 		/** Ticket `n`'s working copy: found, or made from main now. */
 		readonly tree: (n: number) => Effect.Effect<Tree, Failed>;
@@ -99,7 +100,7 @@ export class LaneWork extends Context.Service<
 		readonly filesOf: (folder: string, commit: string) => Effect.Effect<readonly string[], Failed>;
 		/** Every file at `commit`. */
 		readonly listAt: (folder: string, commit: string) => Effect.Effect<readonly string[], Failed>;
-		/** A file's text at a commit. `null`: it is not there. */
+		/** A file's text at a commit. `null`: it is not there. Git failing is not that: it fails, with the reason. */
 		readonly show: (commit: string, path: string) => Effect.Effect<string | null, Failed>;
 		/** The code at `commit`, as plain files with no history and no links, installed once. */
 		readonly copy: (commit: string) => Effect.Effect<string, Failed>;
@@ -140,14 +141,15 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const gitIn = (dir: string, args: readonly string[]) =>
 			on(runChild("git", [...GIT, "-C", dir, ...args], {env: {...runEnv(), ...IDENTITY}}));
+		const said = (step: string, ran: Exited) =>
+			failed(`git ${step}: ${ran.err.trim().slice(0, 300)}`);
 		const git = (dir: string, args: readonly string[]) =>
 			gitIn(dir, args).pipe(
 				Effect.flatMap((ran) =>
-					ran.code === 0
-						? Effect.succeed(ran.out.trim())
-						: Effect.fail(failed(`git ${args[0]}: ${ran.err.trim().slice(0, 300)}`)),
+					ran.code === 0 ? Effect.succeed(ran.out.trim()) : Effect.fail(said(args[0] ?? "", ran)),
 				),
 			);
+		const inClone = (args: readonly string[]) => gitIn(clone, args);
 		const lines = (out: string) => out.split("\n").filter((line) => line !== "");
 		const quiet = <A, E extends {readonly message: string}>(effect: Effect.Effect<A, E>) =>
 			effect.pipe(Effect.mapError((e) => failed(e.message)));
@@ -173,14 +175,16 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const main = Effect.andThen(fetched, git(clone, ["rev-parse", "origin/main"]));
 
 		const show = (commit: string, file: string) =>
-			gitIn(clone, ["show", `${commit}:${file}`]).pipe(
-				Effect.map((ran) => (ran.code === 0 ? ran.out : null)),
-			);
+			textAt(inClone, commit, file).pipe(Effect.mapError((ran) => said(`read of ${file}`, ran)));
 
 		const settings: Effect.Effect<Settings, Failed> = Effect.gen(function* () {
 			const tip = yield* main;
-			if ((yield* show(tip, OLD_SETTINGS_FILE)) !== null)
-				return yield* Effect.fail(failed(SETTINGS_MOVED));
+			const refused = settingsRefusal(
+				yield* listedAt(inClone, tip, SETTINGS_PATHS).pipe(
+					Effect.mapError((ran) => said("read of the settings", ran)),
+				),
+			);
+			if (refused !== null) return yield* Effect.fail(failed(refused));
 			const file = at("settings", tip, SETTINGS_FILE);
 			const text = yield* show(tip, SETTINGS_FILE);
 			if (text === null) return DEFAULT_SETTINGS;

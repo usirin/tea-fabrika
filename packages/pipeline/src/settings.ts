@@ -58,11 +58,18 @@ import {parse, TomlError} from "smol-toml";
 // One more, so a pick never says something the run will not do:
 // - `checks.github = "none"` with no `[[checks.run]]` fails: a change would pass on no check.
 //
-// A `fabrika.toml` left at a repository's root is refused with one line that
-// says to move it (`SETTINGS_MOVED`), by whatever reads the repository
-// (./settings-source.ts, ./stages/pipeline/work.ts), so it never reads as "no
-// file, every default". A `.fabrika.jsonc` is not refused and not read: it may
-// be today's fabrika plugin's (./setup.ts says so at the start of a run).
+// The old files never read as "no file, every default". Whatever reads a
+// repository (./settings-source.ts, ./stages/pipeline/work.ts) asks
+// `settingsRefusal` first:
+//
+//   .fabrika/fabrika.toml alone      read it
+//   beside a .fabrika.jsonc          read it; the jsonc may be today's fabrika
+//                                    plugin's (./setup.ts says it is not read)
+//   only a .fabrika.jsonc            refused: `JSONC_MOVED`. Its governed folders
+//                                    would read as none, with no review owed
+//   a fabrika.toml at the root       refused, with the new file there or not:
+//                                    `SETTINGS_MOVED`
+//   none of them                     every default
 //
 // The keys of the new tables are left out of `Settings` when the file leaves
 // them out: what a left-out key means is picked at the edge, beside what the
@@ -88,6 +95,24 @@ export const OLD_SETTINGS_FILE = "fabrika.toml";
 
 /** What a repository that still holds `OLD_SETTINGS_FILE` fails with, with the new file there or not. */
 export const SETTINGS_MOVED = `${OLD_SETTINGS_FILE} moved to ${SETTINGS_FILE}: move it there`;
+
+/** Where the review's two lists used to be, from the root of the repository. */
+const JSONC_FILE = ".fabrika.jsonc";
+
+/** What a repository that holds `JSONC_FILE` and no `SETTINGS_FILE` fails with. */
+export const JSONC_MOVED = `${JSONC_FILE} moved to [review] in ${SETTINGS_FILE}: move it there`;
+
+/** The paths `settingsRefusal` needs to know about, each at the one place read. */
+export const SETTINGS_PATHS = [SETTINGS_FILE, OLD_SETTINGS_FILE, JSONC_FILE] as const;
+
+/**
+ * Why a repository that holds `there`, of `SETTINGS_PATHS`, must not be read.
+ * `null`: it may. The one rule every reader goes by. Pure.
+ */
+export const settingsRefusal = (there: ReadonlySet<string>): string | null => {
+	if (there.has(OLD_SETTINGS_FILE)) return SETTINGS_MOVED;
+	return there.has(JSONC_FILE) && !there.has(SETTINGS_FILE) ? JSONC_MOVED : null;
+};
 
 const Name = Schema.String.check(Schema.isNonEmpty({message: "a pack is named by its package"}));
 
