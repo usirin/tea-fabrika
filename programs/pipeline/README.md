@@ -32,17 +32,22 @@ triage -> plan -> the person approves -> exam, when rules change -> test writer
 change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-6-astra`, effort
 `high`. Triage defaults to `claude` on `opus`.
 
-`[review] rubrics` names a folder, read from a copy of main's tip, so a change cannot rewrite the
-rubrics that judge it. Left out, the lane uses the rubrics fabrika ships. This holds on both hosts.
+`[review] rubrics` names a folder, read from a copy of main's tip, so a change's files cannot rewrite
+the rubrics that judge it. Left out, the lane uses the rubrics fabrika ships. This holds on both hosts.
 
 The same goes for what an agent loads by itself. In the copy of a head that the test writer, the
 mutants step and the review read, these are main's, or gone when main has none, at any depth and in any
-case: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`, `.codex/`,
-`.agents/`, `.claude/`. A change to one still shows in the review's diff. The tests run in the head's
-own copy, so they see the head's files.
+case or compatibility form of the name: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`,
+`CLAUDE.local.md`, `.mcp.json`, `.codex/`, `.agents/`, `.claude/`. A change to one still shows in the
+review's diff. The tests run in the head's own copy, so they see the head's files.
+
+**Run the lane only on work from agents you trust.** The judge's copy stops a head's files from telling
+its judge how to judge. It does not stop a head's running code. The install, the checks and the mutants
+run with no box, as you. They have no login in their environment, but they can reach what you can reach.
 
 The lane's git runs with your ssh agent's socket and your `gh` login in reach, as the build's does, so
-a `git@` remote works. Git's hooks are off, and the install runs without that socket or login.
+a `git@` remote works. Git's hooks are off. The clone's git config is not held: a head's install or
+checks can change it, and this git obeys it.
 
 ## On GitHub
 
@@ -70,8 +75,11 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 - **A branch rule that wants a GitHub review.** GitHub refuses the merge, and the lane ends
   `stuck: merge_failed`. The ticket does not say which rule refused it: ship never reads the refusal's
   words.
-- **Hold other merges during a run.** Any commit on main before the merge means `behind`, even one that
-  touches nothing of this change. The lane then ends `stuck: sent_back`, and that is final.
+- **Hold other merges during a run.** A commit on main that ship's last read before the merge sees means
+  `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
+  is final. After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned
+  to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
+  GitHub's own merge checks the head and not main, so that commit does not stop it.
 - **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
   the lane ends `stuck: merge_unknown`. It does not wait and look again.
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
@@ -81,6 +89,10 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 - **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
   `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
   is a new pull request.
+- **A merge ship finds already done shows as GitHub reads it.** The ticket's `pr` fact holds the head that
+  merged and its checks as they read. At the head the lane judged, the lane ends `done`: it cannot tell
+  its own merge with a lost answer from a person's merge of that head, so red checks there show as red.
+  At another head, the lane ends `stuck: merged_elsewhere`, and the ticket says both heads.
 
 ## What it holds to
 

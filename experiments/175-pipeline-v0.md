@@ -186,7 +186,8 @@ Kept because they cost time and will come back:
 - The app's map still draws `operate` as the holder of the steps. The lane is not `operate`. That
   map's change is #117's.
 - The map's "not built yet" legend now has nothing to point at.
-- `.done` markers are visible in the disposable copies an agent reads.
+- `.done` markers were visible in the disposable copies an agent reads. A later change moved them
+  beside the copy.
 
 ## What this cannot tell us
 

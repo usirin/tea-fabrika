@@ -331,7 +331,7 @@ const bodies = {
 			const base = round > 1 ? yield* need(carry.head, "no head to add tests on") : tree.base;
 			const properties = propertiesOf(carry, round);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
-			const taken = (yield* work.listAt(tree.tree, base)).filter(includedBy(includes));
+			const taken = (yield* work.judgedFiles(base)).filter(includedBy(includes));
 			const version = (carry.version ?? 1) + round - 1;
 			const summary = carry.plan?.summary ?? at.title;
 			const pointers = carry.plan?.pointers ?? [];
@@ -439,7 +439,7 @@ const bodies = {
 			const head = yield* need(carry.head, "no head the mutants lived on");
 			const tree = yield* work.tree(at.cmd.number);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
-			const taken = (yield* work.listAt(tree.tree, head)).filter(includedBy(includes));
+			const taken = (yield* work.judgedFiles(head)).filter(includedBy(includes));
 			yield* at.tell(yield* work.judgeCopy(head), "read", {
 				ticket: at.url,
 				head,
@@ -552,8 +552,21 @@ const bodies = {
 			const pr = yield* need(at.cmd.carry.pr, "no pull request to merge");
 			const head = yield* need(at.cmd.carry.head, "no head to merge");
 			const outcome = yield* shipped(at, pr);
-			if (outcome.kind === "done") yield* (yield* LaneWatch).merged(at.cmd.number, pr, head);
-			return ended(outcome);
+			if (outcome.kind !== "done") return ended(outcome);
+			const watch = yield* LaneWatch;
+			if (outcome.cleanup !== "not_run") {
+				yield* watch.merged(at.cmd.number, pr, head);
+				return ended(outcome);
+			}
+			// Ship found it merged, and its `commit` is the head the host read. That is this lane's own merge
+			// whose answer was lost, or a person's. So the ticket shows what the host reads, and another head
+			// than the one judged is no merge of this lane's.
+			yield* watch.look(at.cmd.number, pr);
+			return outcome.commit === head
+				? ended(outcome)
+				: ended({kind: "stuck", why: "merged_elsewhere"}, {}, [
+						`${pr} was merged at ${outcome.commit}, by someone other than this lane. This lane judged ${head}.`,
+					]);
 		}),
 };
 

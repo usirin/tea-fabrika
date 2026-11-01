@@ -35,7 +35,7 @@ import {parse, TomlError} from "smol-toml";
 //   ui = []                           # a change under one needs the rendered review; read the same way
 //
 //   [checks]
-//   github = "every"                  # every: each check on GitHub counts. required: only required ones. none: GitHub's do not count
+//   github = "every"                  # every, or required: ship waits on every check on GitHub, and a failed one sends the work back. none: GitHub's do not count
 //   [[checks.run]]                    # a command fabrika runs itself at each head, in a copy of it
 //   name = "test"
 //   run = ["npm", "test"]

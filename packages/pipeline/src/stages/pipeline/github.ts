@@ -2,7 +2,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, Layer, Schema, Stream} from "effect";
 import type {Ledger} from "../../asks/ledger.ts";
 import {codeHostWritesOn} from "../../code-host-github-writes.ts";
-import {answerOf, codeHostOn, prOf} from "../../code-host-github.ts";
+import {answerOf, codeHostOn} from "../../code-host-github.ts";
 import type {LocalCheck} from "../../code-host-local.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Tickets} from "../../tickets/tickets.ts";
@@ -65,19 +65,21 @@ export const openArgs = (repo: string, pull: {branch: string; title: string; bod
 	pull.body,
 ];
 
+/** A pull request's whole url, and nothing around it. ASCII only, as GitHub's names are. */
+const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/\d+$/;
+
 /**
- * The new pull request's url, from what `gh pr create` printed: its last line, whole, in this
- * repository. `null`: it printed anything else. Pure.
+ * The new pull request's url, from what `gh pr create` printed: its last line, exactly a pull
+ * request of this repository, with the owner and name compared without case, as GitHub does. `null`:
+ * it printed anything else. Pure.
  */
 export const createdUrl = (repo: string, out: string): string | null => {
 	const last = out
 		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line !== "")
+		.filter((line) => line.trim() !== "")
 		.at(-1);
-	if (last === undefined || !last.startsWith("https://") || /\s/.test(last)) return null;
-	const at = prOf(last);
-	return at !== null && `${at.owner}/${at.name}` === repo ? last : null;
+	const named = last === undefined ? null : PULL_URL.exec(last);
+	return named?.[1]?.toLowerCase() === repo.toLowerCase() ? (last ?? null) : null;
 };
 
 /** `--head` cannot name an owner, so a fork's pull request on a branch of this name is listed too. */
