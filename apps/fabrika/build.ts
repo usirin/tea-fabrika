@@ -11,6 +11,7 @@ import {bundlesOf, common} from "./bundles.ts";
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
 //   dist/host.mjs      the host process: ESM for the same Node, run by Electron's binary as Node
+//   dist/host-*.mjs    what the host loads later or shares: the lane's code, when a lane starts
 //   dist/ignorer.mjs   the mutation step's ignorer, which Stryker loads by path
 //   dist/briefs/       the pipeline's step briefs, plain files
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be

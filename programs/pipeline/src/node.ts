@@ -1,7 +1,6 @@
 import {existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Ledger, type Writer} from "@kampus/fabrika-old";
-import {laneLayer, runLane} from "@kampus/pipeline/stages/pipeline/layer";
 import {Effect, Layer} from "effect";
 import {LaneRunner} from "./index.ts";
 
@@ -20,6 +19,16 @@ const briefsFolder = () => (existsSync(here("./briefs")) ? here("./briefs") : he
 
 /** The ignorer as the app's bundle holds it. `undefined`: not bundled, so the step's own default. */
 const ignorerFile = () => (existsSync(here("./ignorer.mjs")) ? here("./ignorer.mjs") : undefined);
+
+/**
+ * The lane and all it brings: Stryker, Babel, the agents' SDKs. Loaded when a lane starts, as most
+ * hosts never run one, and every host started pays for what it loads (apps/fabrika's bundles.test.ts
+ * holds this). It can fail: a host that outlives a rebuild can find its files gone.
+ */
+const laneCode = Effect.tryPromise({
+	try: () => import("@kampus/pipeline/stages/pipeline/layer"),
+	catch: String,
+});
 
 /** Whoever a writer writes for: its person, or itself when it has none. */
 const personOf = (writer: Writer): string => ("for" in writer ? writer.for : writer.id);
@@ -42,16 +51,21 @@ export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledge
 							return;
 						}
 						const ignorer = ignorerFile();
-						yield* runLane(n, say).pipe(
-							Effect.provide(
-								laneLayer({
-									home,
-									briefs: briefsFolder(),
-									person: personOf(writer),
-									...(ignorer === undefined ? {} : {ignorer}),
-								}),
+						yield* laneCode.pipe(
+							Effect.flatMap(({laneLayer, runLane}) =>
+								runLane(n, say).pipe(
+									Effect.provide(
+										laneLayer({
+											home,
+											briefs: briefsFolder(),
+											person: personOf(writer),
+											...(ignorer === undefined ? {} : {ignorer}),
+										}),
+									),
+									Effect.provideService(Ledger, ledger),
+								),
 							),
-							Effect.provideService(Ledger, ledger),
+							Effect.catch((why) => say(`pipeline could not load: ${why}. Restart the host.`)),
 						);
 					}),
 			};

@@ -114,9 +114,14 @@ const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => b
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
-/** A tile's screen, as text: its rows, with no trailing spaces. */
-const screen = async (page: Page, id: string) =>
-	(await tile(page, id).locator(".screen-text").textContent({timeout: 2000})) ?? "";
+/**
+ * A tile's screen, as text: its rows, with no trailing spaces. Empty while it is not drawn, as the
+ * first tile is not until the host is up: `until` is what waits, and a look here never ends it.
+ */
+const screen = async (page: Page, id: string) => {
+	const text = tile(page, id).locator(".screen-text");
+	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
+};
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
@@ -246,7 +251,13 @@ const popovers = async (page: Page) => {
 	// Focus knocked out of the list, onto the page itself: the next key still never reaches t3.
 	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 	await page.keyboard.press("ArrowUp");
-	check("a key with focus outside it moves focus back in", (await overHolds(page)) === "pop-asks");
+	// `until`: this key is held, and acts only once the host's answer to `a` is in (desk/hold.ts).
+	await until(
+		"focus back in the list",
+		() => overHolds(page),
+		(held) => held === "pop-asks",
+	);
+	check("a key with focus outside it moves focus back in", true);
 	await page.waitForTimeout(200);
 	const under = await screen(page, "t3");
 	check("no arrow, Enter or letter reached t3 under the list", lastRow(under) === "tsh$", under);

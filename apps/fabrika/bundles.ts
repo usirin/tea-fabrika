@@ -35,8 +35,15 @@ export const bundlesOf = (at: (...parts: string[]) => string): readonly BuildOpt
 		banner: {js: REQUIRE},
 	},
 	{
-		entryPoints: [at("src/host/main.ts")],
-		outfile: at("dist/host.mjs"),
+		// Split, so a host's `import()` waits for real: the lane's code and FIND_THEMSELVES load when a
+		// lane starts. Without it esbuild lifts an external's import to the top of the one file, so
+		// every host would load Stryker as it starts. A chunk's name holds its hash, so a host that
+		// outlives a rebuild still finds its own.
+		entryPoints: {host: at("src/host/main.ts")},
+		outdir: at("dist"),
+		outExtension: {".js": ".mjs"},
+		chunkNames: "host-[hash]",
+		splitting: true,
 		platform: "node",
 		format: "esm",
 		target: "node24",

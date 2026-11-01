@@ -25,7 +25,7 @@
 // and its timer late. So a 401 to a call, or a refused doorbell, logs in again too, once for
 // every caller holding the same ended token. A door that refuses the login itself (401, 403: the
 // person was removed) is kept as the answer, and every call fails with it from then on.
-import {NodeHttpClient} from "@effect/platform-node";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import {
 	Clock,
 	Duration,
