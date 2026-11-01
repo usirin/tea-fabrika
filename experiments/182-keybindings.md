@@ -238,7 +238,7 @@ Cmd-K again      leave the mode; the bindings work
   accelerator page was **unread**.
 - **How our terminal gets its keys (today's version).** `apps/fabrika` uses ghostty-web 0.4.0.
   Its key handler lets only Cmd-C and Cmd-V (and Ctrl-V) pass. Every other key is encoded from
-  `event.code`, the place, then cancelled with `preventDefault`. That cancel is what kept
+  `event.code`, the place, then canceled with `preventDefault`. That cancel is what kept
   Cmd-Q from the menu in the bug PR 278 fixes. For the text it sends, it uses `event.key` only
   when it is one ASCII character. **Read from code, not run:** a non-ASCII key with a modifier
   may reach the program with no text.
@@ -261,7 +261,7 @@ sends the table to the window, which draws the keys panel from it. What is not d
 - A `Press` has no `code`, so a binding by place cannot be written.
 
 The Cmd-Q bug ([PR 278](https://github.com/usirin/tea-fabrika/pull/278)): with a tsh tile
-focused, Cmd-Q typed `q` instead of quitting. The terminal cancelled the key, and Electron only
+focused, Cmd-Q typed `q` instead of quitting. The terminal canceled the key, and Electron only
 offers the menu a key the page left alone. The fix asks `keyOwner` first: on a Mac, every
 Command key belongs to the system and the menu, except Cmd-K (the app's) and Cmd-W (nobody's).
 That is already a table of who owns which key.
