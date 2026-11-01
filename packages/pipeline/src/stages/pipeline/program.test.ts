@@ -12,14 +12,17 @@ import {tmpdir} from "node:os";
 import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Ledger, streams} from "@kampus/fabrika-old";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
 import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
+import {BREAK} from "../build/body.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
+import {Lane} from "./machine.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
 // adapter over a fake `codex`, real git on a bare remote, real vitest and Stryker, the real box, and
@@ -52,7 +55,14 @@ const read = readNumbered(NUMBER);
 /** Answers every ask as a person, with `picks[kind]` or its first pick, until the fiber is stopped. */
 const answering = (
 	picks: Readonly<Record<string, string>>,
-	{steps = [], notes = {}}: Pick<Script, "steps" | "notes"> = {},
+	{
+		steps = [],
+		notes = {},
+		onlyStep,
+	}: Pick<Script, "steps" | "notes"> & {
+		/** The one step's question this person answers. Any other waits for ever. */
+		readonly onlyStep?: string;
+	} = {},
 ) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
@@ -63,8 +73,9 @@ const answering = (
 			for (const entry of ticket.timeline) {
 				const fact = entry.fact;
 				if (fact.type !== "asked" || done.has(fact.ask)) continue;
-				done.add(fact.ask);
 				const kind = fact.ask.split("-")[1] ?? "";
+				if (kind === "step" && onlyStep !== undefined && fact.ask !== onlyStep) continue;
+				done.add(fact.ask);
 				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
 					kind: "answered",
 					writer: OWNER,
@@ -117,6 +128,11 @@ interface Script {
 	readonly redAfterKill?: boolean;
 	/** What the fake agent says in place of its plain answers: `script.json`, fixtures/pipeline-lane/codex.mjs. */
 	readonly fake?: FakeScript;
+	/**
+	 * Stop the lane at the step's question whose line this matches, unanswered, and start it again from
+	 * what it saved, holding `offers` as code from before this change would have.
+	 */
+	readonly savedAsking?: {readonly at: RegExp; readonly offers: readonly string[]};
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -131,6 +147,13 @@ interface FakeScript {
 	readonly writes?: Readonly<
 		Record<string, readonly {readonly path: string; readonly text: string}[]>
 	>;
+	/** More files one run of the step writes, by the run, the first being 0. */
+	readonly writesAt?: Readonly<
+		Record<
+			string,
+			Readonly<Record<number, readonly {readonly path: string; readonly text: string}[]>>
+		>
+	>;
 	/** Every review row is `unseen`, for this reason. */
 	readonly unseen?: string;
 	/** Every surviving mutant is answered `cannot`, for this reason. */
@@ -138,6 +161,34 @@ interface FakeScript {
 }
 
 const TIMED_OUT = "-- timed out --";
+
+const SAVED_ASK = "a-step-99";
+
+/**
+ * The saved lane, as code from before this change would have kept it: asking the same thing, with
+ * `offers` on offer. Under an id of its own, so the lane's own question on the ticket stays as it was
+ * and the restarted lane writes this one there, with these picks.
+ */
+const keptAsAsking = (home: string, offers: readonly string[]) =>
+	Effect.gen(function* () {
+		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+		const store = handle.store("lane", `lane/${NUMBER}`, Lane);
+		const saved = store.migrate(yield* Effect.promise(() => store.load()));
+		if (!Schema.is(Lane)(saved) || saved.phase !== "asking")
+			return yield* Effect.die(new Error("the lane was not saved asking"));
+		yield* Effect.promise(() =>
+			store.save({
+				...saved,
+				question: {...saved.question, ask: SAVED_ASK, picks: offers},
+				asked: {
+					...saved.asked,
+					ask: SAVED_ASK,
+					picks: offers,
+					intent: `lane/${NUMBER}/${SAVED_ASK}`,
+				},
+			}),
+		);
+	}).pipe(Effect.orDie);
 
 /** Every folder a run made, for those tests that clean up after themselves. */
 const made: string[] = [];
@@ -157,6 +208,7 @@ const lane = ({
 	mainFiles,
 	redAfterKill = false,
 	fake,
+	savedAsking,
 }: Script): Promise<Ran> => {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
@@ -192,8 +244,16 @@ const lane = ({
 				answering(picks, {
 					...(steps === undefined ? {} : {steps}),
 					...(notes === undefined ? {} : {notes}),
+					...(savedAsking === undefined ? {} : {onlyStep: SAVED_ASK}),
 				}),
 			);
+			if (savedAsking !== undefined) {
+				const first = yield* Effect.forkScoped(line());
+				while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
+				yield* Fiber.interrupt(first);
+				lines.push("-- killed --");
+				yield* keptAsAsking(home, savedAsking.offers);
+			}
 			if (killAt !== undefined) {
 				const first = yield* Effect.forkScoped(line());
 				while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
@@ -1086,9 +1146,9 @@ describe("a lane, on what a real agent might answer", () => {
 		},
 	);
 
-	// P6
+	// P6, and P27: its `stop` lands nothing with or without a guard, so what is on offer is the point.
 	it(
-		"every review row unseen goes to the person with the reviewer's reason, and nothing lands on it",
+		"every review row unseen goes to the person with the reviewer's reason, nothing lands on it, and nothing on offer lets it through",
 		{timeout: 60_000},
 		async () => {
 			const REASON = "The fixture run is elsewhere, so nothing here could show it.";
@@ -1097,8 +1157,28 @@ describe("a lane, on what a real agent might answer", () => {
 			expect(ran.names.review).toContain('"ask"');
 			const asked = askedOf(ran).filter((f) => String(f.ask).startsWith("a-step"));
 			expect(asked).toHaveLength(1);
+			expect(asked[0]?.picks).toEqual(["again", "stop"]);
 			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 			expect([String(asked[0]?.what), ...said].some((text) => text.includes(REASON))).toBe(true);
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+		},
+	);
+
+	// P27: a lane saved with `go_on` on offer, picked. What stops it is ship's guard, not the question.
+	it(
+		"a lane saved asking with go_on on offer, and picked, opens its pull request and ends stuck: nothing lands",
+		{timeout: 100_000},
+		async () => {
+			const ran = await lane({
+				within: 90,
+				picks: {step: "go_on"},
+				fake: {unseen: "The fixture run is elsewhere, so nothing here could show it."},
+				savedAsking: {at: /asks: (?!Do you approve)/, offers: ["again", "go_on", "stop"]},
+			});
+			expect(ran.facts.filter((f) => f.type === "answered" && f.pick === "go_on")).toHaveLength(1);
+			expect(ran.lines).not.toContain(TIMED_OUT);
+			expect(ran.names.merge).toContain("reviews_unknown");
+			expect(ran.lines.at(-1)).toContain("stuck");
 			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		},
 	);
@@ -1554,6 +1634,9 @@ describe("a lane, on what the real agents answered", () => {
 				},
 			};
 			const THE_LEAN = {plan: [{with: {questions: [RUN3_QUESTION]}}]};
+			const THE_LEAN_AND_NOTHING_SEEN = {
+				unseen: "The fixture run is elsewhere, so nothing here could show it.",
+			};
 			const found = (...findings: readonly unknown[]) => ({with: {findings}});
 			/** Run 3 as it went: the finding is not marked, and the builder changes nothing in round 2. */
 			const RUN_3: FakeScript = {
@@ -1710,14 +1793,29 @@ describe("a lane, on what the real agents answered", () => {
 					const {what, picks} = readBy(ran, "a-step");
 					// Its own reason: not the words any step falls back on.
 					expect(what).not.toMatch(/stopped and needs your call/);
-					expect(picks).toEqual(expect.arrayContaining(["go_on", "stop"]));
+					expect(picks).toEqual(["again", "stop"]);
 					expect(bye(ran)).toContain("skip:owner_no");
 				},
 			);
 
-			// P22
+			// P28: the words are true on run 3's own case, where the new test really stays red.
 			it(
-				"a go_on past that, with the tests still red, lands nothing: what code checks still holds",
+				"that question says the new test is still failing, and that a note beside `again` goes to the builder",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					const {text} = readBy(ran, "a-step");
+					expect(text).toMatch(/still failing/i);
+					const again = text.split("\n").filter((line) => /`?again`?/.test(line));
+					expect(again.filter((line) => /note/i.test(line) && /builder/i.test(line))).not.toEqual(
+						[],
+					);
+				},
+			);
+
+			// P28: `go_on` is gone from a new question, so this is a lane saved with it on offer.
+			it(
+				"a lane saved with go_on on offer there, and picked, lands nothing while the new test is red",
 				{timeout: 200_000},
 				async () => {
 					const ran = await lane({
@@ -1725,36 +1823,365 @@ describe("a lane, on what the real agents answered", () => {
 						steps: ["go_on"],
 						picks: {step: "stop"},
 						fake: RUN_3,
+						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
 					});
 					expect(answeredWith(ran, "go_on")).not.toEqual([]);
+					expect(ran.lines).not.toContain(TIMED_OUT);
 					expect(bye(ran)).not.toContain("ended: done");
 					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 				},
 			);
 
-			// P22
+			/** What makes round 2's test pass, written by a third build. */
+			const FOLDS = {
+				path: "src/lower.ts",
+				text: 'export function lower(name: string): string {\n\treturn name.trim().toLowerCase().replaceAll("ß", "ss");\n}\n',
+			};
+
+			// P28: this replaces a test whose new test passed from the start, which only a fake could write.
 			it(
-				"a go_on past that, with the tests green, lands the work as it is",
+				"`again` with a note runs the builder once more with it, and no new test writer: a real fix lands",
+				{timeout: 200_000},
+				async () => {
+					const NOTE = "Fold ß to ss in `lower`, as the new test says.";
+					const ran = await lane({
+						within: 90,
+						steps: ["again"],
+						picks: {step: "go_on"},
+						notes: {step: NOTE},
+						fake: {
+							...RUN_3,
+							// Each mutant is answered `cannot`, so a later mutation run writes no test twice.
+							cannot: REAL_MUTANT,
+							answers: {...RUN_3.answers, build: [null, NO_CHANGE, null]},
+							writesAt: {build: {2: [FOLDS]}},
+						},
+					});
+					const builds = runsOf(ran, "build");
+					expect(builds).toHaveLength(3);
+					expect(builds[2]?.prompt).toContain(NOTE);
+					expect(runsOf(ran, "tests")).toHaveLength(2);
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
+				},
+			);
+
+			// P28
+			it(
+				"`again` counts as a round: a builder that keeps changing nothing ends stuck at the limit, in words",
 				{timeout: 200_000},
 				async () => {
 					const ran = await lane({
-						within: 180,
-						picks: {step: "go_on"},
+						within: 90,
+						picks: {step: "again"},
 						fake: {
-							// Each mutant is answered `cannot`, so a second mutation run writes no test twice.
-							cannot: REAL_MUTANT,
+							...RUN_3,
 							answers: {
-								review: [found(RUN3_FINDING)],
-								build: [null, {with: {summary: "Nothing is left to change.", left: []}}],
+								...RUN_3.answers,
+								build: [null, NO_CHANGE, NO_CHANGE, NO_CHANGE, NO_CHANGE],
 							},
 						},
 					});
-					expect(ran.names.build).not.toContain('"stuck"');
-					expect(runsOf(ran, "build")).toHaveLength(2);
-					expect(bye(ran)).toContain("ended: done");
-					expect(onMain(ran.remote, "src/lower.ts")).not.toBeNull();
+					expect(ran.lines).not.toContain(TIMED_OUT);
+					expect(runsOf(ran, "build")).toHaveLength(3);
+					expect(bye(ran)).toContain("stuck");
+					const told = [bye(ran), ...commentsOf(ran)];
+					expect(told.filter((said) => /builder/i.test(said) && /round/i.test(said))).not.toEqual(
+						[],
+					);
+					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 				},
 			);
+
+			// P28: a first round has no work to go on with, so nobody is asked.
+			it(
+				"a builder that changes nothing in round 1 still ends stuck, with nothing asked of it",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						picks: {step: "go_on"},
+						// The plain builder writes just this, so round 1's diff is empty.
+						mainFiles: [
+							{
+								path: "src/lower.ts",
+								text: "export function lower(name: string): string {\n\treturn name.trim().toLowerCase();\n}\n",
+							},
+						],
+					});
+					expect(ran.names.build).toContain("no_change");
+					expect(runsOf(ran, "build")).toHaveLength(1);
+					expect(bye(ran)).toContain("stuck");
+					expect(ran.stages).not.toContain("mutation");
+				},
+			);
+
+			// P26: the one path where a go_on asks again from inside the same step's end.
+			it(
+				"a finding marked against a decision, beside a row the review could not see: two questions, each with its own id and its own answer",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						steps: ["go_on", "stop"],
+						fake: {
+							...THE_LEAN_AND_NOTHING_SEEN,
+							answers: {...THE_LEAN, review: [found(AGAINST_Q1)]},
+						},
+					});
+					const asked = ran.facts.filter(
+						(f) => f.type === "asked" && String(f.ask).startsWith("a-step"),
+					);
+					expect(new Set(asked.map((f) => f.ask)).size).toBe(2);
+					const heard = ran.facts
+						.filter((f) => f.type === "answered" && String(f.ask).startsWith("a-step"))
+						.map((f) => [f.ask, f.pick]);
+					expect(heard).toEqual([
+						[asked[0]?.ask, "go_on"],
+						[asked[1]?.ask, "stop"],
+					]);
+					// The second question waited: its answer came after it was asked, not with the first.
+					const at = (type: string, ask: unknown) =>
+						ran.facts.findIndex((f) => f.type === type && f.ask === ask);
+					expect(at("answered", asked[1]?.ask)).toBeGreaterThan(at("asked", asked[1]?.ask));
+					expect(at("asked", asked[1]?.ask)).toBeGreaterThan(at("answered", asked[0]?.ask));
+					expect(bye(ran)).toContain("skip:owner_no");
+					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+				},
+			);
+
+			describe("a finding a person lets through", () => {
+				const MARKED_ONCE = {...THE_LEAN, review: [found(AGAINST_Q1)]};
+				const prBody = (ran: {readonly calls: readonly {readonly args: readonly string[]}[]}) => {
+					const args =
+						ran.calls.find((call) => call.args.includes("--body") && call.args.includes("--head"))
+							?.args ?? [];
+					return args[args.indexOf("--body") + 1] ?? "";
+				};
+
+				// P29
+				it(
+					"its question says the finding and the decision side by side, and that go_on lets the finding through",
+					{timeout: 100_000},
+					async () => {
+						const ran = await lane({
+							within: 90,
+							picks: {step: "stop"},
+							fake: {answers: MARKED_ONCE},
+						});
+						const {text} = readBy(ran, "a-step");
+						const lines = text.split("\n");
+						const decided = lines.findIndex((line) => line.includes(RUN3_LEAN));
+						const faulted = lines.findIndex((line) => line.includes(RUN3_FINDING.fault));
+						expect(decided).toBeGreaterThan(-1);
+						expect(faulted).toBe(decided + 1);
+						const goOn = lines.filter((line) => /go[ _]on/.test(line));
+						expect(goOn.filter((line) => line.includes("lets that finding through"))).not.toEqual(
+							[],
+						);
+					},
+				);
+
+				// P29, with a title long enough to cut: a count that goes first survives it.
+				it(
+					"the merge question says the count, then how many were let through, and each in a line",
+					{timeout: 100_000},
+					async () => {
+						const OTHER_MARK = {...AGAINST_Q1, fault: "The accents are folded too far."};
+						const ran = await lane({
+							title: `Read names in one form ${"and keep reading them ".repeat(8)}`.trim(),
+							within: 90,
+							picks: {step: "go_on", merge: "no"},
+							fake: {answers: {...THE_LEAN, review: [found(AGAINST_Q1, OTHER_MARK)]}},
+						});
+						const {what, text} = readBy(ran, "a-merge");
+						const reviewed = ran.facts.findLast((f) => f.type === "reviewed");
+						const count = `met ${String(reviewed?.met)} of ${String(reviewed?.of)}`;
+						const said = what.indexOf(count);
+						expect(said).toBeGreaterThan(-1);
+						expect(what.slice(said)).toMatch(/\b2 findings\b.*let through/);
+						const lines = text.split("\n");
+						const each = [AGAINST_Q1.fault, OTHER_MARK.fault].filter(
+							(fault) => !lines.some((line) => line.includes(fault)),
+						);
+						expect(each).toEqual([]);
+					},
+				);
+
+				// P29
+				it("one finding let through is said as one", {timeout: 100_000}, async () => {
+					const ran = await lane({
+						within: 90,
+						picks: {step: "go_on", merge: "no"},
+						fake: {answers: MARKED_ONCE},
+					});
+					expect(readBy(ran, "a-merge").what).toMatch(/\b1 finding\b.*let through/);
+				});
+
+				// P29
+				it(
+					"the pull request lists each finding, mutant and untested property let through, and does not say no deviations",
+					{timeout: 120_000},
+					async () => {
+						const ran = await onGitHub({
+							within: 110,
+							rubrics: null,
+							picks: {step: "go_on", merge: "no"},
+							fake: {
+								cannot: REAL_MUTANT,
+								answers: {
+									...P1_CANNOT,
+									plan: [{with: {questions: [RUN3_QUESTION], properties: [REAL_P1, REAL_P2]}}],
+									review: [found(AGAINST_Q1)],
+								},
+							},
+						});
+						const body = prBody(ran);
+						expect(body).toContain(RUN3_FINDING.fault);
+						expect(body).toContain(REAL_MUTANT);
+						expect(body).toContain(REAL_P1.when);
+						expect(body).not.toMatch(/no deviations/i);
+					},
+				);
+
+				// P29
+				it(
+					"a pull request with nothing let through says nothing was",
+					{timeout: 100_000},
+					async () => {
+						const ran = await onGitHub({within: 90, rubrics: null, picks: {merge: "no"}});
+						expect(prBody(ran)).toContain("No deviations.");
+						expect(prBody(ran)).not.toMatch(/let through/i);
+					},
+				);
+
+				// P29: a mark can't take a failed row with it.
+				it(
+					"a marked finding beside a failed row: after go_on the failed row still goes back, and nothing lands",
+					{timeout: 200_000},
+					async () => {
+						const FAILED = {
+							...OTHER_FINDING,
+							from: {source: "criterion", id: "c1"},
+							wants: "The first criterion is met.",
+						};
+						const failing = {
+							with: {
+								rows: [{id: "c1", grade: "fail", where: [], says: "It does not hold yet."}],
+								findings: [AGAINST_Q1, FAILED],
+							},
+						};
+						const ran = await lane({
+							within: 180,
+							steps: ["go_on"],
+							picks: {step: "stop"},
+							fake: {answers: {...THE_LEAN, review: [failing, failing, failing]}},
+						});
+						expect(answeredWith(ran, "go_on")).not.toEqual([]);
+						const second = runsOf(ran, "tests")[1]?.prompt ?? "";
+						expect(second).toContain(FAILED.wants);
+						expect(second).not.toContain(AGAINST_Q1.wants);
+						expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+					},
+				);
+			});
+
+			// P30: what the lane really hands to the stand-in, the only place a ping could go off.
+			describe("an agent's words on GitHub", () => {
+				const LOUD = "Thanks @someone and @org/team, this fixes #2.";
+				const pings = (text: string) => text.match(/(?<!\w)@[a-z0-9][\w/-]*/gi) ?? [];
+				const closes = (text: string) => text.match(/fixes #2\b/gi) ?? [];
+				const holdsLoud = (text: string) => text.replaceAll(BREAK, "").includes(LOUD);
+				const bodyOf = (args: readonly string[]) => args[args.indexOf("--body") + 1] ?? "";
+
+				it(
+					"a pull request's body pings nobody and closes nothing, and reads the same",
+					{timeout: 100_000},
+					async () => {
+						const ran = await onGitHub({
+							within: 90,
+							rubrics: null,
+							picks: {merge: "no"},
+							fake: {
+								answers: {
+									plan: [{with: {summary: LOUD}}],
+									build: [{with: {deviations: [LOUD], left: [LOUD]}}],
+								},
+							},
+						});
+						const body = bodyOf(ran.calls.find((call) => call.kind === "pr_create")?.args ?? []);
+						expect(holdsLoud(body)).toBe(true);
+						expect(pings(body)).toEqual([]);
+						expect(closes(body)).toEqual([]);
+					},
+				);
+
+				it(
+					"a rule change's pull request body pings nobody and closes nothing, and reads the same",
+					{timeout: 100_000},
+					async () => {
+						const ran = await onGitHub({
+							title: "[rules] Read names in one form",
+							rubrics: null,
+							picks: {exam_merge: "no"},
+							fake: {
+								answers: {
+									plan: [
+										{
+											with: {
+												exam: [{path: ".oxlintrc.json", change: LOUD, why: LOUD}],
+											},
+										},
+									],
+								},
+							},
+						});
+						const body = bodyOf(ran.calls.find((call) => call.kind === "pr_create")?.args ?? []);
+						expect(holdsLoud(body)).toBe(true);
+						expect(pings(body)).toEqual([]);
+						expect(closes(body)).toEqual([]);
+					},
+				);
+
+				// Found while writing these: the review's comment goes through `flat`, not `inert`.
+				it(
+					"a review's comment pings nobody and closes nothing, for a row's words or a finding's",
+					{timeout: 120_000},
+					async () => {
+						const ran = await onGitHub({
+							within: 110,
+							rubrics: null,
+							picks: {step: "go_on", merge: "no"},
+							fake: {
+								answers: {
+									...THE_LEAN,
+									review: [
+										{
+											with: {
+												rows: [
+													{
+														id: "c1",
+														grade: "pass",
+														where: [{file: "src/lower.ts", first: 2, last: 2}],
+														says: LOUD,
+														limit: null,
+													},
+												],
+												findings: [{...AGAINST_Q1, fault: LOUD, proof: LOUD, wants: LOUD}],
+												skipped: [{what: LOUD, why: LOUD}],
+											},
+										},
+									],
+								},
+							},
+						});
+						const comments = (ran.pulls[0]?.comments ?? []).map((c) => c.body).join("\n");
+						expect(holdsLoud(comments)).toBe(true);
+						expect(pings(comments)).toEqual([]);
+						expect(closes(comments)).toEqual([]);
+					},
+				);
+			});
 
 			// P23
 			it(
@@ -1803,6 +2230,8 @@ describe("a lane, on what the real agents answered", () => {
 					const count = `${String(reviewed?.met)} of ${String(reviewed?.of)}`;
 					reads(ran, "a-merge", [TITLE, count, "lands on main"]);
 					expect(readBy(ran, "a-merge").text).toMatch(/\bchecks?\b/i);
+					// P29: with nothing let through, it does not say so.
+					expect(readBy(ran, "a-merge").text).not.toMatch(/let through/i);
 				},
 			);
 

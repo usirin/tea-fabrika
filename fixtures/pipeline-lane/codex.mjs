@@ -25,6 +25,7 @@
 //                              plain answer. `null`, or no entry left, is the plain answer
 //   notes     {step: [text]}   Codex `error` events said in mid-stream, before the answer
 //   writes    {step: [{path, text}]}  more files this step writes in its folder
+//   writesAt  {step: {run: [{path, text}]}}  more files one run of this step writes, the first run being 0
 //   unseen    text             every review row is `unseen`, for this reason
 //   cannot    text             every surviving mutant is answered `cannot`, for this reason
 //
@@ -352,6 +353,8 @@ const filled = (value, raw) => {
 for (const {path, text} of script.writes?.[step] ?? []) write(path, text);
 
 const plain = ANSWERS[step]();
+// After the plain answer's own files, so a later run can change what an earlier one wrote.
+for (const {path, text} of script.writesAt?.[step]?.[nth] ?? []) write(path, text);
 const entry = script.answers?.[step]?.[nth] ?? null;
 const said = typeof entry === "string" ? entry : null;
 const answer = entry?.with === undefined ? plain : {...plain, ...entry.with};

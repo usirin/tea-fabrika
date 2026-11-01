@@ -16,7 +16,16 @@ import {reviewsOf, type PrFacts} from "../ship/facts.ts";
 import {createdUrl, laneFactsOver, openArgs} from "./github.ts";
 import {fakeEnv, type GhStory, LANE_REPO, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer} from "./layer.ts";
-import {examTicket, LanePulls, type Pull, pullFacts, pullUrl, PullWire} from "./pulls.ts";
+import {leaveBehind} from "./leave.ts";
+import {
+	examTicket,
+	LanePulls,
+	ownBranch,
+	type Pull,
+	pullFacts,
+	pullUrl,
+	PullWire,
+} from "./pulls.ts";
 import {LaneWork, rubricsFolder} from "./work.ts";
 
 // Today's version. The parts of the GitHub host that can be read with no GitHub, then the host itself
@@ -570,6 +579,48 @@ describe("the GitHub host, over a stand-in gh", () => {
 			expect(got.again).not.toBe(got.pr);
 			expect(got.state).toBe("open");
 			expect(fake.pulls().map((p) => p.state)).toEqual(["MERGED", "OPEN"]);
+		});
+	});
+
+	describe("what a lane that ended done takes off GitHub", () => {
+		const DONE = {kind: "done", part: false} as const;
+		const pullOn = (branch: string, ticket: number, head: string) => ({
+			kind: "lane" as const,
+			ticket,
+			branch,
+			head,
+			tree: "t",
+			title: "A change",
+			body: "From a tracker ticket.",
+		});
+
+		it("only the branch the lane named for its ticket, and never another its row names", async () => {
+			const {home, fake} = scene({});
+			await run(
+				home,
+				Effect.gen(function* () {
+					const {pr, head} = yield* opened(A_FILE);
+					const pulls = yield* LanePulls;
+					const elsewhere = yield* pulls.open(pullOn("main", NUMBER, head), `${pr}0`);
+					const someone = yield* pulls.open(pullOn("someone/work", NUMBER, head), `${pr}1`);
+					yield* pulls.merged(pr);
+					yield* pulls.merged(elsewhere);
+					yield* pulls.merged(someone);
+					yield* leaveBehind(NUMBER, DONE);
+				}),
+			);
+			const deleted = fake.calls().filter((call) => call.kind === "ref_delete");
+			expect(deleted.map((call) => call.args.join(" "))).toEqual([
+				expect.stringContaining(`git/refs/heads/lane/${NUMBER}`),
+			]);
+		});
+
+		it("a merged pull request whose own branch is not its ticket's is left alone", () => {
+			expect(ownBranch(PULL)).toBe(true);
+			expect(ownBranch({...PULL, branch: "main"})).toBe(false);
+			expect(ownBranch({...PULL, branch: "lane/8"})).toBe(false);
+			expect(ownBranch({...PULL, branch: "exam/7"})).toBe(false);
+			expect(ownBranch({...PULL, kind: "exam", branch: "exam/7"})).toBe(true);
 		});
 	});
 
