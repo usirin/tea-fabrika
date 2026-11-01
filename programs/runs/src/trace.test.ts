@@ -1,13 +1,25 @@
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {atSeven, OWNER, SEVEN, SEVEN_NOW} from "@tea-fabrika/tracker/seven";
 import {describe, expect, it} from "vitest";
-import {axisOf, placeOf, stopsOf, ticksOf, traceOf} from "./trace.ts";
+import {axisOf, liveTime, placeOf, stopsOf, ticksOf, traceOf} from "./trace.ts";
 
 const track = (trace: ReturnType<typeof traceOf>, name: string) => {
 	const found = trace.tracks.find((t) => t.name === name);
 	if (found === undefined) throw new Error(`no track ${name}`);
 	return found;
 };
+
+describe("liveTime", () => {
+	it("shows a fact newer than the clock's last tick, and never goes back", () => {
+		const last = SEVEN.at(-1)?.at ?? 0;
+		const stale = atSeven(10, 3) - 1;
+		expect(traceOf(SEVEN, stale).spans).toBe(1);
+		expect(liveTime(SEVEN, stale)).toBe(last);
+		expect(traceOf(SEVEN, liveTime(SEVEN, stale)).spans).toBe(2);
+		expect(liveTime(SEVEN, last + 5)).toBe(last + 5);
+		expect(liveTime([], 0)).toBe(0);
+	});
+});
 
 describe("traceOf", () => {
 	it("lays ticket 7 out live: a ticket row, the nine steps, a clip per run, the open wait", () => {

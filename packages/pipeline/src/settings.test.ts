@@ -142,7 +142,7 @@ describe("fabrika.toml", () => {
 		});
 
 		it.each([
-			["[agents.triage]\nmodel = 'haiku'", "agents.triage: no such key or table"],
+			["[agents.mutation]\nmodel = 'haiku'", "agents.mutation: no such key or table"],
 			["[agents.build]\neffort = 'max'", "agents.build.effort: "],
 			["[agents.build]\nusd = 0", "agents.build.usd: "],
 			["[build]\ninstall = ['']", "build.install[0]: an empty word"],

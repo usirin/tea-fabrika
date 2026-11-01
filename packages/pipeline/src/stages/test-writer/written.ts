@@ -29,7 +29,13 @@ export const Answer = Schema.Union([
 export type Answer = typeof Answer.Type;
 export type TestAnswer = Extract<Answer, {readonly kind: "test"}>;
 
-export const Written = Schema.Struct({files: Schema.Array(File), answers: Schema.Array(Answer)});
+export const Written = Schema.Struct({
+	files: Schema.Array(File),
+	answers: Schema.Array(Answer),
+	/** For each new test, the planted fault it was seen to catch, in the writer's words. */
+	plants: Schema.optionalKey(Schema.Array(Schema.String)),
+	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+});
 export type Written = typeof Written.Type;
 
 /** `[test_writer] includes` when a repo's `fabrika.toml` leaves it out. */

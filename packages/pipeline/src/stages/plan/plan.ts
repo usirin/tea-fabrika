@@ -139,6 +139,10 @@ const questionFields = {
 	options: Schema.Array(Schema.String),
 	lean: Schema.String,
 	why: Schema.String,
+	cost: Schema.optionalKey(Schema.String),
+	/** How sure of the lean, as a percent. Under 80, `doubt` says what would settle it. */
+	sure: Schema.optionalKey(Schema.Finite),
+	doubt: Schema.optionalKey(Schema.String),
 };
 
 /** An open question as the planner writes it: no id. */
@@ -211,7 +215,29 @@ const numberedQuestion = entity(QuestionId, questionFields);
 const numberedGoal = goalOf(numberedJob, numberedCriterion);
 
 /** What the planner writes: a plan with no ids. */
-export const PlanDraft = Schema.Struct(planOf(draftTask, DraftStory, Question, draftGoal));
+/** A claim a tool checks and that lasts as a test. The lane gives it its id, in the plan's order. */
+export const DraftProperty = Schema.Struct({
+	when: Schema.String,
+	result: Schema.String,
+	why: Schema.String,
+	behavior: Schema.Literals(["new", "existing"]),
+	tool: Schema.Literal("test"),
+	code: Schema.Array(Schema.Struct({file: Schema.String, name: Schema.String})),
+});
+export type DraftProperty = typeof DraftProperty.Type;
+
+/** A rule change the plan needs, landed first by a non-builder. */
+const ExamChange = Schema.Struct({path: Schema.String, change: Schema.String, why: Schema.String});
+
+export const PlanDraft = Schema.Struct({
+	...planOf(draftTask, DraftStory, Question, draftGoal),
+	properties: Schema.optionalKey(Schema.Array(DraftProperty)),
+	/** A TypeScript block: the public names a `new` test compiles against. */
+	interface: Schema.optionalKey(Schema.String),
+	exam: Schema.optionalKey(Schema.Array(ExamChange)),
+	/** What the brief or the repo's notes left unclear, what it blocked, and what the planner did. */
+	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+});
 export type PlanDraft = typeof PlanDraft.Type;
 export const DraftTask = draftTask;
 export type DraftTask = typeof DraftTask.Type;

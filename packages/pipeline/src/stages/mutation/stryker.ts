@@ -42,6 +42,8 @@ export interface StrykerSetup {
 	readonly concurrency?: number;
 	/** The vitest config, from the folder. Default: vitest's own search. */
 	readonly vitest?: string;
+	/** Where the ignorer plugin is, when a bundle moved it. Default: beside this file. */
+	readonly ignorer?: string;
 }
 
 /** One mutant, as the instrumenter makes it: lines and columns counted from 0. */
@@ -202,7 +204,7 @@ const services = (setup: StrykerSetup) =>
 			"stryker.js",
 		);
 		const runner = pathOf("@stryker-mutator/vitest-runner");
-		const ignorer = fileURLToPath(new URL("./ignorer.ts", import.meta.url));
+		const ignorer = setup.ignorer ?? fileURLToPath(new URL("./ignorer.ts", import.meta.url));
 
 		/** Every mutant Stryker makes on `spans`, the ignorer's marked `Ignored`. */
 		const list = (folder: string, spans: readonly Span[]) =>

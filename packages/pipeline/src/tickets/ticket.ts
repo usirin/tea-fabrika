@@ -132,8 +132,18 @@ export const CodeFact = Schema.Union([
 		task: Schema.NullOr(Id),
 		log: Schema.NullOr(Schema.String),
 		trace: Schema.optionalKey(TraceId),
+		/** The brief this run was given: its file's name and the hash of the file. Only known now. */
+		brief: Schema.optionalKey(Schema.String),
+		hash: Schema.optionalKey(Schema.String),
+		harness: Schema.optionalKey(Schema.String),
+		model: Schema.optionalKey(Schema.String),
+		effort: Schema.optionalKey(Schema.String),
 	}),
-	/** The run ended, with its stage's answer, what it cost and how long it went. */
+	/**
+	 * The run ended, with its stage's answer, what it cost and how long it went. `usd`: dollars at
+	 * API list price where a rate is known, else 0. `listUsd`: the same, with `null` for a rate
+	 * nobody knows, so an unknown price never reads as free.
+	 */
 	Schema.Struct({
 		type: Schema.Literal("ended"),
 		run: Id,
@@ -143,6 +153,15 @@ export const CodeFact = Schema.Union([
 		input: Count,
 		output: Count,
 		turns: Count,
+		harness: Schema.optionalKey(Schema.String),
+		model: Schema.optionalKey(Schema.String),
+		effort: Schema.optionalKey(Schema.String),
+		/** Part of `input`: the tokens read back from the maker's cache. */
+		cached: Schema.optionalKey(Count),
+		/** What the maker's own answer said was billed. `null`: it did not say, as on a flat plan. */
+		billed: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+		listUsd: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+		minutes: Schema.optionalKey(Schema.Finite),
 	}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({

@@ -55,7 +55,11 @@ export const readTicket = gather("build_ticket", {input: TicketIn, ok: Ticket, e
 
 export const copyTree = act("build_copy", {input: TicketIn, ok: Copied, err: Unknown});
 
-export const pushBranch = act("build_push", {input: PushIn, ok: Pushed, err: Unknown});
+export const pushBranch = act("build_push", {
+	input: PushIn,
+	ok: Pushed,
+	err: ["unknown", "exam_touched"],
+});
 
 export const openPr = act("build_open", {input: OpenIn, ok: Schema.String, err: Unknown});
 
@@ -406,9 +410,13 @@ export const build = defineMachine({
 			});
 			return [{...done, phase: "opening", pushed, asked}, [asked]];
 		},
-		build_push_err: (s): Step =>
+		build_push_err: (s, m): Step =>
 			s.phase === "pushing"
-				? end(s, {kind: "stuck", why: "push_failed"}, {built: s.built, ran: s.ran, runs: s.runs})
+				? end(
+						s,
+						{kind: "stuck", why: m.error._tag === "exam_touched" ? "exam_touched" : "push_failed"},
+						{built: s.built, ran: s.ran, runs: s.runs},
+					)
 				: stay(s),
 
 		build_open_ok: (s, m): Step =>

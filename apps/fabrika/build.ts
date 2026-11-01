@@ -7,10 +7,12 @@ import {Effect, FileSystem, Layer, Path} from "effect";
 import {type BuildOptions, build} from "esbuild";
 import {bundlesOf, common} from "./bundles.ts";
 
-// Build the app into dist/, with esbuild: four bundles (bundles.ts) and the page's plain files.
+// Build the app into dist/, with esbuild: the bundles (bundles.ts) and the page's plain files.
 //
 //   dist/main.mjs      the main process: ESM for Electron's Node 24, with electron left out
 //   dist/host.mjs      the host process: ESM for the same Node, run by Electron's binary as Node
+//   dist/ignorer.mjs   the mutation step's ignorer, which Stryker loads by path
+//   dist/briefs/       the pipeline's step briefs, plain files
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
@@ -73,6 +75,8 @@ const program = Effect.gen(function* () {
 				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
 			),
 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
+			// The step briefs stay plain files in the bundle's folder: changing one changes no code.
+			fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), {overwrite: true}),
 			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
 			// Flow's own rules for the map program's canvas, then fabrika's theme, which sets Manti's
 			// tokens from the app's values, and the app's rules, which restyle the rest.

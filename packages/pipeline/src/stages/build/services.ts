@@ -43,7 +43,7 @@ export class BuildWrites extends Context.Service<
 			ticket: string,
 			copied: Copied,
 			message: string,
-		) => Effect.Effect<Pushed, Failed>;
+		) => Effect.Effect<Pushed, Failed | {readonly _tag: "exam_touched"}>;
 		/**
 		 * The pull request from the ticket's branch: the open one, with its
 		 * text made this round's, or a new one. Read before written, so a

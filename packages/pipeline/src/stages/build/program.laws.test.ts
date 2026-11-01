@@ -154,7 +154,9 @@ const table: MsgArbitraryTable<Msg> = {
 	build_push_ok: fc
 		.tuple(round, fc.boolean())
 		.map(([r, changed]) => pushBranch.ok(pushOf(r), {head: "h1", changed}, 0)),
-	build_push_err: round.map((r) => pushBranch.err(pushOf(r), UNKNOWN, 0)),
+	build_push_err: fc
+		.tuple(round, fc.constantFrom(UNKNOWN, {_tag: "exam_touched"} as const))
+		.map(([r, why]) => pushBranch.err(pushOf(r), why, 0)),
 	build_open_ok: round.map((r) => openPr.ok(openOf(r), "P", 0)),
 	build_open_err: round.map((r) => openPr.err(openOf(r), UNKNOWN, 0)),
 };
@@ -210,5 +212,46 @@ describe("the build machine is kept", () => {
 			},
 		};
 		await expect(keepsEvery(keepsTheMsg, 40)).rejects.toThrow(/Counterexample/);
+	});
+});
+
+/**
+ * A build the guard refused never goes on: whatever came before, it ends `stuck:exam_touched`, with
+ * no pull request and no Cmd after it.
+ */
+const refusedStaysRefused = (machine: Machine) =>
+	fc.assert(
+		fc.property(lists, (list) => {
+			const {states} = foldEvents(machine, ctx, null, list);
+			list.forEach((msg, i) => {
+				const before = states[i];
+				const after = states[i + 1];
+				if (
+					msg.type !== "build_push_err" ||
+					msg.error._tag !== "exam_touched" ||
+					before?.phase !== "pushing" ||
+					msg.cmd.ticket !== before.asked.ticket
+				)
+					return;
+				expect(after).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "exam_touched"}});
+			});
+		}),
+		{numRuns: 300, seed: 2},
+	);
+
+describe("the builder cannot touch the exam", () => {
+	it("a change to the test writer's files ends the build in a named stuck", () => {
+		refusedStaysRefused(build);
+	});
+
+	it("the law is seen to fail on a planted mistake: a refused change read as a push that failed", () => {
+		const planted: Machine = {
+			...build,
+			update: {
+				...build.update,
+				build_push_err: (s, m) => build.update.build_push_err(s, {...m, error: UNKNOWN}),
+			},
+		};
+		expect(() => refusedStaysRefused(planted)).toThrow();
 	});
 });

@@ -7,6 +7,7 @@ import {type KeyboardEvent, type PointerEvent, useRef, useState} from "react";
 import type {runs} from "./index.ts";
 import {
 	type Clip,
+	liveTime,
 	placeOf,
 	stopsOf,
 	type Trace,
@@ -226,7 +227,7 @@ function Tracks({view, send}: WindowProps<typeof runs>) {
 	const [chosen, setChosen] = useState<string | null>(null);
 	const lane = useRef<HTMLDivElement>(null);
 	const timeline = view.ticket?.timeline ?? [];
-	const now = view.now === 0 ? (timeline.at(-1)?.at ?? 0) : view.now;
+	const now = liveTime(timeline, view.now);
 	const shown: Trace = traceOf(timeline, now, at ?? now);
 	const live = at === null || at >= shown.to;
 	const most = Math.max(0.01, ...shown.tracks.filter((t) => t.name !== "ticket").map((t) => t.usd));

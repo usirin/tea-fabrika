@@ -9,6 +9,7 @@ import {
 	PrFact,
 	readRow,
 	type Ticket,
+	TicketFact,
 } from "./ticket.ts";
 
 /** A ticket's number, as the tracker counts them from 1. */
@@ -82,8 +83,16 @@ export class Tickets extends Context.Service<
 			id: WriteId,
 			fact: CodeFact,
 		) => Effect.Effect<void, TicketsFailed>;
+		/**
+		 * A comment on the ticket, or its close: what the triage step says when it answers no. Kept
+		 * apart from `write`, so a writer that has no reason to talk is never handed the words.
+		 */
+		readonly talk: (n: TicketNumber, id: WriteId, fact: Talk) => Effect.Effect<void, TicketsFailed>;
 	}
 >()("Tickets") {}
+
+/** What a lane may say on a ticket: a comment, or the close. Never a person's kinds. */
+export type Talk = Extract<Fact, {readonly type: "commented" | "closed"}>;
 
 /** The PR watcher's one write: what it read from GitHub, on a change only. */
 export class Watcher extends Context.Service<
@@ -130,6 +139,13 @@ const laneChecked = checking(
 	"a lane",
 	CodeFact.members.map((m) => m.fields.type.literal),
 	Schema.encodeUnknownEffect(CodeFact),
+);
+
+/** A lane's two words on a ticket, by the tracker's own schema. */
+const talkChecked = checking(
+	"a lane",
+	["commented", "closed"],
+	Schema.encodeUnknownEffect(TicketFact),
 );
 
 /** The watcher's one kind. */
@@ -185,6 +201,7 @@ export const ticketsOnLedger = (writer: Writer): Layer.Layer<Tickets, never, Led
 						),
 					),
 				write: (n, id, fact) => send(n, id, laneChecked(n, fact)),
+				talk: (n, id, fact) => send(n, id, talkChecked(n, fact)),
 			};
 		}),
 	);
@@ -271,6 +288,8 @@ export const ticketsInMemory = (writer: Writer): Layer.Layer<Tickets, never, Mem
 				read: memory.read,
 				write: (n, id, fact) =>
 					laneChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
+				talk: (n, id, fact) =>
+					talkChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
 			};
 		}),
 	);

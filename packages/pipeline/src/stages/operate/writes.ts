@@ -66,7 +66,7 @@ export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
 });
 
 /** `gh` on Effect's `ChildProcess`, with the host's short environment. */
-const ghOn = Effect.gen(function* () {
+export const ghOn = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const gh: Gh = (args) =>
 		runChild("gh", args, {env: hostEnv()}).pipe(

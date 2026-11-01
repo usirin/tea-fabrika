@@ -24,6 +24,8 @@ import {experiment} from "@tea-fabrika/experiment";
 import {experiments} from "@tea-fabrika/experiments";
 import {map} from "@tea-fabrika/map";
 import {markdown} from "@tea-fabrika/markdown";
+import {pipeline} from "@tea-fabrika/pipeline";
+import {laneRunner} from "@tea-fabrika/pipeline/node";
 import {runs} from "@tea-fabrika/runs";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
@@ -184,7 +186,8 @@ export const RESET = "\x1bc";
  * here: the host's own records of its jobs (host/run.ts), so `seq --to 3 | tally | trace` shows
  * that line's job as it goes. The three that read experiments (the list, one experiment, two runs
  * compared), on the same ledger, read-only, and `markdown`, which draws what it is told
- * (experiment 170).
+ * (experiment 170). `pipeline`, which runs one ticket's lane for `author`, on the host's home
+ * (experiment 175).
  */
 export const appPrograms = (
 	ledger: Ledger["Service"],
@@ -204,6 +207,7 @@ export const appPrograms = (
 		listed(ticket, tickets),
 		listed(map, tickets),
 		listed(runs, tickets),
+		listed(pipeline, Layer.provide(laneRunner(author), Layer.succeed(Ledger, ledger))),
 		listed(trace, Layer.succeed(Traces, traces)),
 		listed(experiments, read),
 		listed(experiment, read),
