@@ -88,11 +88,14 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
   with their reason; the first is tsh lines.
-- **Protocols first, and a browser is always a peer.** Name the protocol a
+- **Protocols first, and a browser is always a client.** Name the protocol a
   boundary speaks before its implementation. A protocol may not need what a
   browser lacks: no Node, no Unix socket, no files, no WebSocket-level frames.
-  Ask of every design: could a browser tab be this peer? See
-  [`docs/direction/a-browser-is-always-a-peer.md`](./docs/direction/a-browser-is-always-a-peer.md).
+  Ask of every design: could a browser tab be this client? See
+  [`docs/direction/a-browser-is-always-a-client.md`](./docs/direction/a-browser-is-always-a-client.md).
+  In the new version, hands, a window and an agent dial the brain, and `client`
+  means any of them at the door. See
+  [`docs/direction/brain-hands-window-agent.md`](./docs/direction/brain-hands-window-agent.md).
 - **The data shape comes first.** Weigh it before anything else, and ask of
   every design: what fact is lost forever if we don't record it now? A fact
   that exists only when something is written (who, when on their own clock,
@@ -101,7 +104,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   things (durations, views, summaries) can wait, since they rebuild from the
   log. Before you say "add it later", say whether later loses data. If a fact
   is recorded but must not be trusted, keep it out of the deciding code's
-  types. Example: a ledger entry keeps the peer's own clock as `said` from day
+  types. Example: a ledger entry keeps the writer's own clock as `said` from day
   one, but leases and limits use only the referee's `at`.
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check

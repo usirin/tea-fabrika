@@ -21,17 +21,17 @@ share a growing, signed log between people and agents. The ledger is the
 first log built on it.
 
 - **Bottom, the sync engine.** Append-only logs, every line signed by whoever
-  wrote it, peers that sync by gossip, and a lease for anything that needs
+  wrote it, hosts that sync by gossip, and a lease for anything that needs
   one writer. It runs on a laptop, in a Cloudflare Durable Object, anywhere.
 - **Middle, many logs.** fabrika's ledger is one. A team's shared knowledge,
   agent traces, and others are just different kinds of lines.
-- **Top, views.** The owner's desk, Tuval, search, analysis. Every peer has
+- **Top, views.** The owner's desk, Tuval, search, analysis. Every host has
   all the state, so each person runs their own.
 
 ```ts
 // The same Ledger service; only the Layer under it changes.
 const solo = layerSqlite({ path: "~/.tsh/ledgers/github/acme/app.sqlite" }); // built 2026-10-21
-const team = syncedLedger({ log: "acme/app", peers, referee });  // the vision
+const team = syncedLedger({ log: "acme/app", hosts, referee });  // the vision
 ```
 
 **Solo is a team of one.** Designing for a team covers the solo case for free;
@@ -39,7 +39,7 @@ the reverse is not true.
 
 ## The hard part: a claim
 
-Sharing facts is easy: if two peers add the same harmless line, nothing
+Sharing facts is easy: if two hosts add the same harmless line, nothing
 breaks. A claim is different. Two agents on one ticket is real money spent
 twice. A claim needs "add this only if nothing new came in first", and gossip
 has no single place that can say who was first.
@@ -47,11 +47,11 @@ has no single place that can say who was first.
 - **Leases, not claims for ever.** A claim lasts some minutes and is renewed
   while the agent works. A dead lane's claim runs out by itself; nobody has to
   adopt it by hand, as today's fabrika needs.
-- **A referee grants leases.** Any always-on peer can be it; the team picks
+- **A referee grants leases.** Any always-on host can be it; the team picks
   which one, and another takes over when it is gone (leader election, kept
   small). Inside a Durable Object, one request at a time makes the referee
   free.
-- **During a split, no new leases.** A peer cut off from the referee can read
+- **During a split, no new leases.** A host cut off from the referee can read
   and plan, and cannot start an agent. That is the honest answer.
 
 ## Decided 2026-10-19
@@ -91,6 +91,8 @@ has no single place that can say who was first.
   machine can run several, and a Durable Object is one. A role (referee,
   tracker, CI runner, builder) is a program on a host, and the shape a role
   needs is an **interface**: the plain type of a program.
+  *Changed 2026-10-31: in the new version, `host` means a computer and the brain
+  runs programs. See [brain, hands, window, agent](./brain-hands-window-agent.md).*
 - **Libraries checked first.** Effect's own event log and cluster modules do
   not fit (the first merges copies with no compare-and-set; the second needs
   one shared database every node reaches). No outside library has
@@ -109,7 +111,7 @@ The owner walked the architecture one layer at a time on 2026-10-30 and
 //   app           programs, Cmds, windows     build:7 asks the Mac for a git commit
 //   coordination  online, inboxes, claims     build:7 holds the claim on #7
 //   data          the ledger                  the line "build:7 claimed #7" is saved
-//   transport     one pipe per peer           the Mac's hands keep one WebSocket open
+//   transport     one pipe per client         the Mac's hands keep one WebSocket open
 //
 //   Mac hands --WebSocket--> gateway:mac --object call--> project, build:7, ...
 //   VM hands  --WebSocket--> gateway:vm  --object call--> project, ...
@@ -137,16 +139,18 @@ them. The desktop has a note of its own. Config for every layer is one
 - **The names.** The bottom layer is **transport**, not link: "link layer"
   means Ethernet and Wi-Fi, and MCP, libp2p and gRPC say transport. The middle
   layer is **coordination**, not nodes: in Erlang a node is a running machine,
-  and Kafka and ZooKeeper say coordinator for the same jobs.
-- **A browser is always a peer.** No protocol may need Node, a Unix socket,
+  and Kafka and ZooKeeper say coordinator for the same jobs. Three things dial
+  the brain: hands, a window and an agent. `client` means any of them at the
+  door ([brain, hands, window, agent](./brain-hands-window-agent.md)).
+- **A browser is always a client.** No protocol may need Node, a Unix socket,
   files or WebSocket-level frames
-  ([protocols first](./a-browser-is-always-a-peer.md)).
-- **Central first.** Every peer reads from the one ledger. Central makes
+  ([protocols first](./a-browser-is-always-a-client.md)).
+- **Central first.** Every client reads from the one ledger. Central makes
   what is on screen easy to trust, and a screen that gets sloppy is the sign
   to change it. The data layer's calls (`append`, `read`, `wait`) leave room
   for a local copy later.
 - **One object per thing:** a program, a job record, a desk, a gateway per
-  peer. One shared project object holds the ledger, plus claims, inboxes and
+  client. One shared project object holds the ledger, plus claims, inboxes and
   the process tree (80%).
 - **Two places for records.** The ledger keeps facts that someone decides
   with, for good. Monitoring (OpenTelemetry, through tea's otel) keeps health
@@ -173,36 +177,36 @@ them. The desktop has a note of its own. Config for every layer is one
   {kind: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
   // ephemeral: at-most-once, may be lost, nothing breaks
   {kind: "poke", stream: "counter:1/inbox", rev: 41}
-  {kind: "presence", peer, at: "tile:t1"}
+  {kind: "presence", client, at: "tile:t1"}
   {kind: "bytes", port: "tile:t1", data: "l"}
   ```
 
 ### Layer 1: transport (decided 2026-10-30; T3 changed 2026-10-31)
 
-One two-way pipe between a peer (a computer's hands, a window, a browser tab)
-and the brain. Everything above rides on it: ledger writes, pokes, presence,
+One two-way pipe between a client (a computer's hands, a window, an agent) and
+the brain. Everything above rides on it: ledger writes, pokes, presence,
 terminal bytes. Locally the brain is workerd on the Mac (Miniflare), with the
 same objects and code as on Cloudflare. Only the URL changes: the Mac's hands
 dial localhost, the VM's hands dial the Mac.
 
-The wire has four steps. Any peer speaks it.
+The wire has four steps. Any client speaks it.
 
 ```jsonc
-// 1. Hello (T1, T2, T4, T5). The peer dials its own gateway, like LSP's initialize.
-// peer -> brain
+// 1. Hello (T1, T2, T4, T5). The client dials its own gateway, like LSP's initialize.
+// client -> brain
 {"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {
   "versions": [1, 2],          // every version it speaks
   "key": "ed25519:...",
   "signed": "...",             // the hello, signed with that key
   "has": ["git", "files", "agents"],
   "ping": "30s"}}
-// brain -> peer
+// brain -> client
 {"jsonrpc": "2.0", "id": 1, "result": {
   "version": 2,                // the highest shared version
   "ping": "30s"}}              // clamped to the brain's min and max
 
 // 2. Liveness (T6). Plain text, answered by the gateway without running its code.
-//    peer -> brain "ping", brain -> peer "pong"; every 30 s; no pong in 10 s = dead, reconnect
+//    client -> brain "ping", brain -> client "pong"; every 30 s; no pong in 10 s = dead, reconnect
 
 // 3. Everything else (T8). A Cmd is a request; news is a notification, with no id.
 {"jsonrpc": "2.0", "id": 7, "method": "git.push", "params": {"branch": "feat/x"}}
@@ -220,10 +224,10 @@ const reconnect = Schedule.recurs(1).pipe(Schedule.andThen(backoff));
 connect.pipe(Effect.retry(reconnect));
 ```
 
-- **T1, who dials:** the peer always dials the brain, locally and on
+- **T1, who dials:** the client always dials the brain, locally and on
   Cloudflare. A Worker cannot dial a laptop. Tunnels, polling and a private
   network were looked at; each still dials out underneath.
-- **T2, how many pipes:** one WebSocket per peer, to its own gateway object,
+- **T2, how many pipes:** one WebSocket per client, to its own gateway object,
   which passes each message on to the right object with an object-to-object
   call. Pokes come back the same way. Every message names its tile, as
   `link.ts` does today: `{port: "tile:t3", m: {type: "keys", data: "l"}}`.
@@ -234,7 +238,7 @@ connect.pipe(Effect.retry(reconnect));
   - Only tiles on screen stream. Five workspaces with 20 tiles cost about
     what 4 visible tiles cost. Hidden tiles keep running and send nothing; a
     newly shown tile asks for one redraw, then a live stream, as tmux does.
-- **T3, the window (changed 2026-10-31, 80%):** every window is a peer and
+- **T3, the window (changed 2026-10-31, 80%):** every window is a client and
   dials the brain over its own WebSocket, the Electron window too, the same as
   a browser tab. It signs its hello with its own key (T5; in Electron the key
   lives in the macOS Keychain). The brain checks the page's origin, so a
@@ -249,14 +253,14 @@ connect.pipe(Effect.retry(reconnect));
     leaned that way at 85%: a hands crash costs 0.4 to 0.8 s until the window
     is back and caught up. The number still holds; the window now reconnects
     to the brain instead.
-- **T4, versions:** the hello lists the versions a peer speaks; the brain
+- **T4, versions:** the hello lists the versions a client speaks; the brain
   speaks the current and the previous one and picks the highest shared, as
   Kafka does. Changes inside a version are additive only, and unknown fields
   and kinds are ignored. A schema diff in CI fails a breaking change without a
   version bump (like `buf breaking`). The brain deploys first; the window
   forces updates.
-- **T5, identity:** one key pair per peer signs the hello. The person's key
-  grants each new peer, as `fabrika post` grants agent keys today; revoking is
+- **T5, identity:** one key pair per client signs the hello. The person's key
+  grants each new client, as `fabrika post` grants agent keys today; revoking is
   one ledger entry. Nothing joins without its person saying so (Signal's
   linked devices, Tailscale's node approval).
 - **T6, liveness:** a text ping every 30 s, answered by the gateway's
@@ -278,7 +282,7 @@ What local Miniflare gives us, from our own experiments:
   `ctx.abort()` ([experiment 148](../../experiments/148-remote-programs.md)).
 - Restarts: about 12 to 17 a day at 500 MB of memory, and every connection
   drops ([experiment 93](../../experiments/93-ledger-miniflare.md)). That
-  reconnects one socket per peer, far below the limit of 200 opened at once
+  reconnects one socket per client, far below the limit of 200 opened at once
   that get reset. Reconnecting is the normal path, after a small random wait.
 - Speed: an object call answers in about 10 ms (experiment 148).
 
@@ -302,7 +306,7 @@ interface Data {
 	wait(stream: string, after: Rev): Effect.Effect<Rev>; // the doorbell
 }
 
-// D3: one entry, EventStoreDB's fields in our short words, plus the peer's own time.
+// D3: one entry, EventStoreDB's fields in our short words, plus the writer's own time.
 {
 	id: "e-91",        // the writer's id: a resend is saved once
 	stream: "build:7",
@@ -310,7 +314,7 @@ interface Data {
 	rev: 412,          // place in the whole log
 	at: "23:12:04",    // the referee's clock: leases, limits and order use only this
 	by: "mac@owner",   // stamped by the door from the signed-in key
-	said: "23:10:01",  // the peer's own clock: shown, never used to decide
+	said: "23:10:01",  // the writer's own clock: shown, never used to decide
 	kind: "claimed",
 	body: {lease: "30s"},
 }
@@ -331,13 +335,13 @@ interface Data {
   with it.
 - **D4, hearing news:** poke, then pull (Replicache's shape). The brain sends
   `ledger.appended` with `{rev, streams}` on the ephemeral lane, at most once;
-  the peer pulls with `ledger.read` after the last rev it has. A lost poke
+  the client pulls with `ledger.read` after the last rev it has. A lost poke
   costs nothing: the next poke or the reconnect catch-up pulls the same
-  entries. Every peer hears every poke in its project; per-stream
+  entries. Every client hears every poke in its project; per-stream
   subscriptions wait, since nothing is lost by adding them later. `wait` stays
   for code that wants to block.
 - **D5, a local read copy:** later. Central first; the three calls leave
-  room for a copy on each peer, a browser too.
+  room for a copy on each client, a browser too.
 - **D6, the services:** today's `Ledger` (about 25 methods, all three layers
   mixed) splits into small services, one Effect Layer per level. A service
   name is never plural; one that holds many of a thing is `<Thing>Manager`.
@@ -439,7 +443,7 @@ one. The guesses that did not hold stay here, marked.
 - ~~JSON lines on a Unix socket for the local app~~ **Replaced 2026-10-31:**
   every window dials the brain over a WebSocket (T3).
 - ~~The subprotocol `fabrika.v1`~~ **Replaced:** the hello lists versions (T4).
-- ~~SSH keys as identity~~ **Replaced:** a key pair per peer signs the hello
+- ~~SSH keys as identity~~ **Replaced:** a key pair per client signs the hello
   (T5). On a Mac it may still be an SSH key file; in a browser it is WebCrypto.
 - ~~WebSocket ping and pong frames~~ **Wrong:** browser JavaScript cannot
   send a ping frame. A text ping instead (T6).
@@ -447,8 +451,8 @@ one. The guesses that did not hold stay here, marked.
   hub~~ **Replaced:** JSON-RPC 2.0 (T8).
 - **W3C `traceparent` in each message** (proposed, 85%): not walked. Still
   proposed.
-- **No peer-to-peer calls** (proposed, 80%): holds. Peers meet through the
-  brain (T2).
+- **No direct calls between clients** (proposed, 80%): holds. Clients meet
+  through the brain (T2).
 
 **Cost and how sure.** The layers are a map for the rebuild, not code yet. The
 decision log puts the transport at 75 to 85% per decision, the object layout at
@@ -474,7 +478,7 @@ Cloudflare, which a keystroke-echo test would settle.
 - **The `Ledger` has no GitHub in it**, and safety never rests on a code host's
   permissions ([North Star first](./north-star-first-harden-later.md)).
 - **Data first** ([markdown is a view](./data-first-markdown-is-a-view.md)):
-  state is folded from facts on every read, so a peer that receives new lines
+  state is folded from facts on every read, so a client that receives new lines
   just folds again.
 
 ## What it asks of the work being done now
@@ -497,6 +501,6 @@ Cloudflare, which a keystroke-echo test would settle.
   our own, test the closest one on the hard case, a lease on a claim. The sync
   engine sits behind a protocol either way.
 - How keys are given out and taken back, for people and for agents.
-- Who sees what: one team's lessons should not sync to another team's peers.
+- Who sees what: one team's lessons should not sync to another team's hosts.
 - Search over a log, and how stale knowledge gets marked as replaced.
 - What "always online" means for the referee when the team is small.

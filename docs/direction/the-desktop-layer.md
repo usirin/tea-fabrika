@@ -19,7 +19,7 @@ type Workspace = {
 type Split = {dir: "row" | "column"; parts: {percent: number; then: Split | Tile}[]};
 type Tile = {id: "t3"; shows: Pid; keep: "never" | "failed" | "always"};
 
-// A window is a peer. It picks a workspace, folds the layout to its own size, and runs the prefix.
+// A window is a client. It picks a workspace, folds the layout to its own size, and runs the prefix.
 type Window = {backend: "electron" | "browser" | "headless"; workspace: 1; cannot: Key[]};
 ```
 
@@ -28,7 +28,7 @@ The floor is the app layer's window protocol (A3 in
 a view plus a revision, `saw`, JSON patches and streams. A process sends its
 view and never knows where its tile is. Apps and a Wayland compositor split the
 same way. Like every layer, it must run in a browser tab
-([a browser is always a peer](./a-browser-is-always-a-peer.md)).
+([a browser is always a client](./a-browser-is-always-a-client.md)).
 
 ## One example
 
