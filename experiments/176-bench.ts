@@ -320,7 +320,12 @@ const compilerPlugin = (
 const probed = (path: string, source: string) => {
 	if (!path.endsWith("window/desk.tsx")) return source;
 	if (!source.includes(HEARD_FROM)) throw new Error("desk.tsx has no `heard` to mark");
-	return source.replace(HEARD_FROM, HEARD_TO);
+	return source
+		.replace(HEARD_FROM, HEARD_TO)
+		.replace(
+			"const read = readToWindow(raw);",
+			'performance.mark("fabrika:heard"); const read = readToWindow(raw);',
+		);
 };
 
 const benchBuild = async (label: string, from: string, compile: boolean, dev = false) => {
@@ -1065,6 +1070,51 @@ if (command === "build" && label !== undefined) {
 	});
 } else if (command === "list") {
 	console.log(["cold-start", ...Object.keys(MOMENTS)].join("\n"));
+} else if (command === "refs") {
+	// Pick 3's question, off the app: does the host's update keep what did not change, what is left
+	// of that after the wire, and what does taking it back cost on the page?
+	const {applyCell} = await import(join(appDir, "node_modules/@demlik/tea/dist/index.js"));
+	const {deskMachine} = await import(join(appDir, "src/desk/desk.ts"));
+	const {tiles} = await import(join(appDir, "src/desk/layout/index.ts"));
+	const {share} = await import(join(appDir, "src/window/share.ts"));
+	let at = 0;
+	const key = (d: any, k: string) => {
+		at += 10;
+		return applyCell(deskMachine, d, {type: "key", key: k, at})[0];
+	};
+	let desk = deskMachine.init(null)[0];
+	const both = (d: any, ks: readonly string[]) => ks.reduce((acc, k) => key(acc, k), d);
+	for (let i = 0; i < 15; i++) desk = both(desk, ["<c-b>", i % 2 === 0 ? "|" : "-"]);
+	const tilesIn = (d: any) => d.workspaces.flatMap((ws: any) => [...tiles(ws.layout.root)]);
+	const kept = (a: any, b: any) => {
+		const old = new Set(tilesIn(a));
+		return `${tilesIn(b).filter((t: any) => old.has(t)).length}/${tilesIn(b).length}`;
+	};
+	const focused = both(desk, ["<c-b>", "h"]);
+	const splitted = both(desk, ["<c-b>", "|"]);
+	const wire = (v: any) => JSON.parse(JSON.stringify(v));
+	const data = wire(focused);
+	const timed = (n: number, f: () => void) => {
+		const t = performance.now();
+		for (let i = 0; i < n; i++) f();
+		return (performance.now() - t) / n;
+	};
+	const LONG = {
+		program: "markdown",
+		data: {text: LONG_MARKDOWN(200), blocks: new Array(200).fill({a: 1})},
+	};
+	console.log({
+		tiles: tilesIn(desk).length,
+		bytes: JSON.stringify(desk).length,
+		keptAfterFocus: kept(desk, focused),
+		keptAfterSplit: kept(desk, splitted),
+		keptAfterWire: kept(focused, wire(focused)),
+		keptAfterShare: kept(focused, share(focused, wire(focused))),
+		sameDeskAfterShare: share(data, wire(data)) === data,
+		shareMs: timed(2000, () => share(desk, wire(focused))),
+		wireOnlyMs: timed(2000, () => wire(focused)),
+		shareLongViewMs: timed(2000, () => share(LONG, wire(LONG))),
+	});
 } else {
 	console.error("176-bench: build <label> | run <label> <moment> ... | open <label> | list");
 	process.exitCode = 2;

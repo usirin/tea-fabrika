@@ -2,11 +2,13 @@ import {applyCell} from "@demlik/tea";
 import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
 import {
+	memo,
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	StrictMode,
 	useEffectEvent,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	useSyncExternalStore,
@@ -60,6 +62,7 @@ import {
 	ticketsShown,
 } from "./frame.ts";
 import {Band, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {share} from "./share.ts";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -186,7 +189,10 @@ const follow = (run: string) =>
 	window.fabrika.onMessage(`run:${run}`, (raw) => {
 		const read = readToWindow(raw);
 		if (read.kind === "refused") return console.warn(`fabrika: refused a view: ${read.why}`);
-		set({views: new Map(model.views).set(run, read.msg)});
+		// A view that says what the last one said is no change: nothing draws.
+		const old = model.views.get(run);
+		const view = share(old, read.msg);
+		if (view !== old) set({views: new Map(model.views).set(run, view)});
 	});
 
 /**
@@ -332,7 +338,9 @@ const heard = (raw: unknown) => {
 			return frameStep({type: "show", what: m.what});
 		case "desk":
 			follows(m.desk);
-			model = {...model, desk: m.desk, attachedOnce: true};
+			// The wire made every object new. What did not change gets its old object back, so a
+			// tile the change did not touch keeps its props, and its `memo` skips it.
+			model = {...model, desk: share(model.desk, m.desk), attachedOnce: true};
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(notify);
 			holdStep({type: "takes", takes: m.takes});
@@ -429,32 +437,34 @@ const tintOf = (node: LayoutNode): number | undefined => {
 /** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
 const noFocus = (e: ReactPointerEvent) => e.preventDefault();
 
-function View(props: {
-	readonly tile: TileId;
-	readonly run: string;
-	readonly view: ToWindow | undefined;
-}): ReactNode {
-	const {tile, run, view} = props;
-	const send = (msg: unknown) => toRun(run, msg);
-	const known = view === undefined ? undefined : WINDOWS.get(view.program);
-	return (
-		// Focus sits here when the tile is focused: the keys a view takes go to it alone.
-		<main
-			className="program"
-			aria-label={`${view?.program ?? "program"} view`}
-			data-view={tile}
-			tabIndex={-1}
-		>
-			{view === undefined ? (
-				<p className="starting">starting</p>
-			) : known === undefined ? (
-				<p role="alert">no view for {view.program} in this app</p>
-			) : (
-				known.draw(view.data, send)
-			)}
-		</main>
-	);
-}
+const View = memo(
+	(props: {
+		readonly tile: TileId;
+		readonly run: string;
+		readonly view: ToWindow | undefined;
+	}): ReactNode => {
+		const {tile, run, view} = props;
+		const send = (msg: unknown) => toRun(run, msg);
+		const known = view === undefined ? undefined : WINDOWS.get(view.program);
+		return (
+			// Focus sits here when the tile is focused: the keys a view takes go to it alone.
+			<main
+				className="program"
+				aria-label={`${view?.program ?? "program"} view`}
+				data-view={tile}
+				tabIndex={-1}
+			>
+				{view === undefined ? (
+					<p className="starting">starting</p>
+				) : known === undefined ? (
+					<p role="alert">no view for {view.program} in this app</p>
+				) : (
+					known.draw(view.data, send)
+				)}
+			</main>
+		);
+	},
+);
 
 function Slot({tile}: {readonly tile: TileId}): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
@@ -464,59 +474,61 @@ function Slot({tile}: {readonly tile: TileId}): ReactNode {
 	return <div className="slot" ref={ref} />;
 }
 
-function Tile(props: {
-	readonly tile: TileNode;
-	readonly focused: boolean;
-	/** The tile's question, as tmux's confirm-before asks it, or none. */
-	readonly asking: string | null;
-	readonly closing: boolean;
-	/** Does the desk let this tile fold: no for the last open tile of the workspace. */
-	readonly folds: boolean;
-	readonly view: ToWindow | undefined;
-}): ReactNode {
-	const {tile, focused, asking, closing, folds, view} = props;
-	const run = runOf(tile);
-	const line = lineOf(tile);
-	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
-	return (
-		<section
-			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
-			data-tile={tile.id}
-			data-tint={tintOf(tile)}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
-			aria-current={focused}
-			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
-		>
-			{/* A press on the title bar focuses the tile, as anywhere on it; a double-click folds it,
+const Tile = memo(
+	(props: {
+		readonly tile: TileNode;
+		readonly focused: boolean;
+		/** The tile's question, as tmux's confirm-before asks it, or none. */
+		readonly asking: string | null;
+		readonly closing: boolean;
+		/** Does the desk let this tile fold: no for the last open tile of the workspace. */
+		readonly folds: boolean;
+		readonly view: ToWindow | undefined;
+	}): ReactNode => {
+		const {tile, focused, asking, closing, folds, view} = props;
+		const run = runOf(tile);
+		const line = lineOf(tile);
+		const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
+		return (
+			<section
+				className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
+				data-tile={tile.id}
+				data-tint={tintOf(tile)}
+				aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
+				aria-current={focused}
+				onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
+			>
+				{/* A press on the title bar focuses the tile, as anywhere on it; a double-click folds it,
 			    as on a device's title bar in Ableton Live. Not `disabled` when it cannot fold: a
 			    disabled button would swallow the press that focuses. */}
-			<button
-				type="button"
-				className="titlebar"
-				aria-label={`tile ${tile.id}: double-click to fold`}
-				aria-disabled={!folds}
-				data-info={INFO.titlebar}
-				onPointerDown={noFocus}
-				onDoubleClick={() => {
-					if (folds) toHost({type: "fold", tile: tile.id});
-				}}
-			>
-				<span>{nameOf(tile)}</span>
-				{/* The question itself is on the bottom line, where tmux asks it; the tile it is for
+				<button
+					type="button"
+					className="titlebar"
+					aria-label={`tile ${tile.id}: double-click to fold`}
+					aria-disabled={!folds}
+					data-info={INFO.titlebar}
+					onPointerDown={noFocus}
+					onDoubleClick={() => {
+						if (folds) toHost({type: "fold", tile: tile.id});
+					}}
+				>
+					<span>{nameOf(tile)}</span>
+					{/* The question itself is on the bottom line, where tmux asks it; the tile it is for
 				    says so too, so an eye on the tile does not miss it. */}
-				{asking !== null && <span className="asking">{asking}</span>}
-				<span className="tid">{tile.id}</span>
-			</button>
-			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
-			{run !== null && <View tile={tile.id} run={run.id} view={view} />}
-			{closing && (
-				<p className="closing-note" role="status">
-					closing
-				</p>
-			)}
-		</section>
-	);
-}
+					{asking !== null && <span className="asking">{asking}</span>}
+					<span className="tid">{tile.id}</span>
+				</button>
+				{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
+				{run !== null && <View tile={tile.id} run={run.id} view={view} />}
+				{closing && (
+					<p className="closing-note" role="status">
+						closing
+					</p>
+				)}
+			</section>
+		);
+	},
+);
 
 /**
  * The sizes after a drag of the border between two open children, `a` and `b`: they split their
@@ -748,6 +760,7 @@ function App(): ReactNode {
 	useLayoutEffect(() => {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
+	const tickets = useMemo(() => ticketsShown(m.views), [m.views]);
 	const props: FrameProps = {
 		desk: open,
 		frame: m.frame,
@@ -758,7 +771,7 @@ function App(): ReactNode {
 		prefix: m.prefix,
 		table: m.table,
 		shapes: m.shapes,
-		tickets: ticketsShown(m.views),
+		tickets,
 		armed: open?.prefix.armed ?? false,
 		toHost,
 		toApp,
