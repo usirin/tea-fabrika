@@ -2,12 +2,13 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema, Struct} from "effect";
 import {LaneId} from "../../ids.ts";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
-import {Outcome} from "../../tickets/ticket.ts";
+import {Outcome, titleOf} from "../../tickets/ticket.ts";
 import {Item} from "../build/ticket.ts";
 import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
-import {PlanDraft} from "../plan/plan.ts";
+import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
+import {throughWords} from "./found.ts";
 import {LaneOutcome} from "./outcome.ts";
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
@@ -55,10 +56,39 @@ const AskFor = Schema.Literals(ASKS);
 /** The most builds a ticket gets: the first, and each one review sent it back for. */
 export const MAX_ROUNDS = 3;
 
+/** A Property of the plan with no test, in its own words, and why the test writer wrote none. */
+export const Untested = Schema.Struct({when: Schema.String, why: Schema.String});
+export type Untested = typeof Untested.Type;
+
+/**
+ * What no test or review will hold a change to, on a person's word alone: a finding against their
+ * decision, and a mutant no test can see. A row keeps the agent's words, so the pull request can say them.
+ */
+const ThroughRows = Schema.Struct({
+	findings: Schema.Array(Schema.Struct({id: Schema.String, fault: Schema.String})),
+	mutants: Schema.Array(Schema.Struct({mutant: Schema.String, why: Schema.String})),
+});
+export type Through = typeof ThroughRows.Type;
+
+/** What a person decided: every step after the plan that judges or writes is told it. */
+const Decided = Schema.Struct({
+	/** The plan's open questions, under their ids. A person's yes takes the lean on each. */
+	questions: Schema.Array(PlanQuestion),
+	/** What the person wrote beside their answers, in their words. */
+	said: Schema.Array(Schema.String),
+});
+
+/** What the review judged last, for the question of whether it lands. */
+const Reviewed = Schema.Struct({title: Schema.String, met: Schema.Finite, of: Schema.Finite});
+
 /** What one step leaves for the steps after it. */
 const carried = {
 	/** The plan as data, once it is written. Every later step reads it. */
-	plan: Schema.NullOr(PlanDraft),
+	plan: Schema.NullOr(HeldDraft),
+	/** What a person decided. Optional: a lane saved before this key still reads, by its plan's leans. */
+	decided: Schema.optionalKey(Decided),
+	/** Optional, as `decided` is: the question falls back on the pull request's name. */
+	reviewed: Schema.optionalKey(Reviewed),
 	/** The plan's version, once it is written. */
 	version: Schema.NullOr(Schema.Finite),
 	/** The rule files the exam step changes. */
@@ -75,6 +105,16 @@ const carried = {
 	open: Schema.Array(Item),
 	/** What the builder declared it did other than asked. */
 	deviations: Schema.Array(Schema.String),
+	/** What the builder says it could not do. Optional: a lane saved before this key still reads. */
+	left: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** What the test writer's last run says no test can check. Optional, as `left` is. */
+	cannot: Schema.optionalKey(Schema.Array(Untested)),
+	/** What a person let through with no test: the ticket and the pull request say so. Optional, as `left` is. */
+	untested: Schema.optionalKey(Schema.Array(Untested)),
+	/** What the question on the ticket would let through on a `go_on`. Optional, as `left` is. */
+	waiting: Schema.optionalKey(ThroughRows),
+	/** What a person let through: the merge's question and the pull request say so. Optional, as `left` is. */
+	through: Schema.optionalKey(ThroughRows),
 	/** The mutants the mutation step saw live: the test writer's second job. */
 	survived: Schema.Array(Survived),
 	/** The review's verdicts: the push step posts them on the pull request. */
@@ -100,10 +140,15 @@ export const EMPTY: Carry = {
 	pr: null,
 };
 
-/** One step's end: its outcome, and what it leaves. */
+/**
+ * One step's end: its outcome, and what it leaves. `after`, on an `ask`: how the step ends if the
+ * person lets it through. Having one makes the question a call on what is there, with nothing to run
+ * again. (Not `then`: an object with `then` reads as a Promise.)
+ */
 export const StepEnd = Schema.Struct({
 	outcome: Outcome,
 	carry: Schema.Struct(Struct.map(carried, Schema.optionalKey)),
+	after: Schema.optionalKey(Outcome),
 });
 export type StepEnd = typeof StepEnd.Type;
 
@@ -121,7 +166,13 @@ const AskIn = Schema.Struct({
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
+	/** What each pick does, a line for each. Left out: a lane saved before this key still reads. */
+	does: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** What a person reads before they answer, a line for each. Left out: nothing more to read. */
+	also: Schema.optionalKey(Schema.Array(Schema.String)),
 });
+/** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
+const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -136,7 +187,7 @@ const ReadIn = Schema.Struct({number: Schema.Finite});
 export const readFiled = gather("lane_read", {input: ReadIn, ok: Filed, err: Unknown});
 export const claimLane = act("lane_claim", {input: LaneIn, ok: LaneId, err: Unknown});
 export const releaseLane = act("lane_release", {
-	input: LaneIn,
+	input: ReleaseIn,
 	ok: Schema.Literal("released"),
 	err: Unknown,
 });
@@ -150,13 +201,18 @@ export type LaneCmd =
 	| ReturnType<typeof runStep>
 	| ReturnType<typeof askPerson>;
 
-/** A question on the ticket. `then`: the step it comes back to. */
+/** A person's call on a step's end: what the step asked about, and how it ends if they let it through. */
+const Call = Schema.Struct({about: Schema.String, after: Outcome});
+type Call = typeof Call.Type;
+
+/** A question on the ticket. `step`: the step it comes back to. Left out, `call`: any other question. */
 const Question = Schema.Struct({
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
 	for: AskFor,
 	step: LaneStep,
+	call: Schema.optionalKey(Call),
 });
 type Question = typeof Question.Type;
 
@@ -205,7 +261,7 @@ export const Lane = Schema.Union([
 		...Held.fields,
 		...Ended.fields,
 		phase: Schema.Literal("releasing"),
-		asked: keptAct(releaseLane, LaneIn),
+		asked: keptAct(releaseLane, ReleaseIn),
 	}),
 	Schema.Struct({
 		...Ended.fields,
@@ -221,7 +277,13 @@ export type LaneMsg =
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
 	| {readonly type: "resume"}
 	/** A person answered `ask` on the ticket: the Listen below heard it. */
-	| {readonly type: "lane_answered"; readonly ask: string; readonly pick: string};
+	| {
+			readonly type: "lane_answered";
+			readonly ask: string;
+			readonly pick: string;
+			/** What they wrote beside it. */
+			readonly note?: string;
+	  };
 
 type Step_ = readonly [Lane, readonly LaneCmd[]];
 
@@ -292,26 +354,139 @@ export const PICKS = {
 	step: ["again", "stop"],
 } as const;
 
-/** What a person may answer: a step that ended on `ask` may also be let through, unless it merges or pushes. */
-const picksFor = (kind: (typeof ASKS)[number], step: LaneStep): readonly string[] =>
-	kind === "step" && !LANDS.has(step) ? ["again", "go_on", "stop"] : PICKS[kind];
+/** A person's call: what is there stands or stops. Nothing would change by running the step again. */
+const CALL_PICKS = ["go_on", "stop"] as const;
 
-/** The steps a person's "go on" could only skip over: nothing lands without them having run. */
-const LANDS: ReadonlySet<LaneStep> = new Set(["push", "merge", "exam_merge"]);
+/** What a person may answer: a step that ended on `ask` may also be let through, unless it can't be. */
+const picksFor = (kind: (typeof ASKS)[number], step: LaneStep): readonly string[] =>
+	kind === "step" && !NO_GO_ON.has(step) ? ["again", "go_on", "stop"] : PICKS[kind];
+
+/**
+ * The steps whose plain question offers no `go_on`, since it could only lead to nothing landing:
+ * one that merges or pushes has to have run, a review no one could judge is what ship's guard refuses,
+ * and a build asks plainly only of a head whose tests fail, where the mutation step ends `tests_red`.
+ * A person's call on what is there (`Call`) is its own question, with its own picks.
+ */
+const NO_GO_ON: ReadonlySet<LaneStep> = new Set(["push", "merge", "exam_merge", "review", "build"]);
+
+/** A step, as a person says it. */
+const STEP_WORDS: Readonly<Record<LaneStep, string>> = {
+	triage: "triage",
+	plan: "plan",
+	exam: "rule change",
+	exam_merge: "rule change's merge",
+	test_writer: "test writer",
+	build: "build",
+	mutation: "mutation test",
+	mutants: "test writer",
+	review: "review",
+	push: "push",
+	merge: "merge",
+};
+
+/** Why a step asks, by the word its outcome holds. Each is a sentence for a person. */
+const ASK_WORDS: Readonly<Record<string, string>> = {
+	cannot_test: "The test writer says no test can check a property of the plan.",
+	already_passes: "A new test already passes before the build, so it shows nothing yet.",
+	fails_on_base: "A test of what works today fails on the code as it is.",
+	disable: "A mutant lived, and the test writer says no test can see the change.",
+	unseen: "The review could not see all it needed.",
+	check_change: "This step's change touches the checks, and those are a person's call.",
+	ruling: "Triage needs a ruling on this ticket.",
+	approval: "This pull request needs a person's yes.",
+	comment: "This pull request has a comment that needs an answer.",
+	decision: "The review says a decision you made on the plan is wrong. Does your decision stand?",
+	no_change:
+		"The builder changed nothing this round, and the checks pass at this head. Should the lane go on with the work as it is?",
+	still_red:
+		"The builder changed nothing this round, and the new test is still failing at this head. Should the builder try once more?",
+};
+
+/** What a `go_on` means, by what the step asked about. Each is a sentence for a person. */
+const CALL_WORDS: Readonly<Record<string, string>> = {
+	decision: "Your decision stands, which lets that finding through, and no test comes of it.",
+	no_change: "The work stays as it is, and code's own checks still have to pass before it lands.",
+};
+
+/** The question of a step that ended on `ask`, in words: the outcome's own name is code. Pure. */
+const askWords = (step: LaneStep, outcome: Outcome): string =>
+	(outcome.kind === "ask" ? ASK_WORDS[outcome.for] : undefined) ??
+	`The ${STEP_WORDS[step]} step stopped and needs your call.`;
+
+/** How many findings a person let through, for the merge's question. None: nothing is said. Pure. */
+const throughCount = ({through}: Carry): string => {
+	const count = through?.findings.length ?? 0;
+	if (count === 0) return "";
+	return `, ${count} ${count === 1 ? "finding" : "findings"} let through`;
+};
+
+/** The merge's question: the review's count and the checks first, so a long title cuts only itself. A review reaches a reviewer only with the checks green. Pure. */
+const mergeWords = (carry: Carry): string => {
+	const {reviewed, pr} = carry;
+	return reviewed === undefined
+		? `Do you want to merge ${pr ?? "the change"}?`
+		: `The review met ${reviewed.met} of ${reviewed.of}${throughCount(carry)}, and the repository's checks passed at its head. Do you want to merge "${reviewed.title}"?`;
+};
 
 const questionFor = (
 	s: Held,
 	kind: (typeof ASKS)[number],
 	step: LaneStep,
-	said: string,
+	asks: string,
+	call?: Call,
 ): Question => {
 	const what = {
-		approve: `approve plan v${s.carry.version ?? 1}`,
-		exam_merge: `merge the rule changes: ${s.carry.rules.join(", ")}`.slice(0, 200),
-		merge: `merge ${s.carry.pr ?? "the change"}`,
-		step: `${step} asks: ${said}`.slice(0, 200),
+		approve: `Do you approve plan version ${s.carry.version ?? 1}?`,
+		exam_merge: titleOf(`Do you want to merge these rule changes: ${s.carry.rules.join(", ")}?`),
+		merge: titleOf(mergeWords(s.carry)),
+		step: titleOf(asks),
 	}[kind];
-	return {ask: `a-${kind}-${s.count}`, what, picks: picksFor(kind, step), for: kind, step};
+	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
+	// the old count is safe too: that count was never more than the trail, and its answer added a row.
+	const ask = `a-${kind}-${s.trail.length}`;
+	return call === undefined
+		? {ask, what, picks: picksFor(kind, step), for: kind, step}
+		: {ask, what, picks: CALL_PICKS, for: kind, step, call};
+};
+
+/** Where the lane goes on a `go_on`, in words. Pure. */
+const goOnWords = (next: Move): string => {
+	if ("to" in next) return `The lane moves on to the ${STEP_WORDS[next.to]} step.`;
+	return "ask" in next ? "The lane moves on, and asks you what comes next." : "The lane ends here.";
+};
+
+/** The line for one pick of a question: what picking it does, in words. Pure. */
+const pickLine = (s: Held, question: Question, pick: string): string => {
+	const words = STEP_WORDS[question.step];
+	const lean =
+		(s.carry.plan?.questions ?? []).length === 0
+			? ""
+			: ", and a yes takes the lean on each open question";
+	const next = NEXT[question.step];
+	const {call} = question;
+	const says: Readonly<Record<string, string>> = {
+		approve: `The plan stands as written${lean}. The lane goes on with it.`,
+		merge: "The change lands on main.",
+		again:
+			question.step === "build"
+				? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${MAX_ROUNDS}.`
+				: `The ${words} step runs once more, from the start.`,
+		go_on:
+			call === undefined
+				? [
+						`The lane moves on${"to" in next ? ` to the ${STEP_WORDS[next.to]} step` : ""} as things stand.`,
+						...((s.carry.cannot ?? []).length === 0
+							? []
+							: ["The ticket and the pull request say which property has no test."]),
+					].join(" ")
+				: [
+						...(CALL_WORDS[call.about] === undefined ? [] : [CALL_WORDS[call.about]]),
+						goOnWords(after(question.step, call.after, s.round)),
+					].join(" "),
+		stop: "The lane ends here, and this change does not land.",
+		no: "The lane ends here, and this change does not land.",
+	};
+	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
 };
 
 const asking = (s: Held, question: Question): Step_ => {
@@ -320,6 +495,8 @@ const asking = (s: Held, question: Question): Step_ => {
 		ask: question.ask,
 		what: question.what,
 		picks: question.picks,
+		does: question.picks.map((pick) => pickLine(s, question, pick)),
+		...(question.for === "merge" ? {also: throughWords(s.carry.through)} : {}),
 		intent: intentOf("lane", s.number, question.ask),
 	});
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
@@ -342,15 +519,64 @@ const releasing = (s: Held, ended: Ended): Step_ => {
 	const cmd = releaseLane({
 		number: s.number,
 		lane: s.lane,
+		outcome: ended.outcome,
 		intent: intentOf("lane", s.number, "release"),
 	});
 	return [{...s, ...ended, phase: "releasing", asked: cmd}, [cmd]];
 };
 
-const move = (s: Held, step: LaneStep, m: Move, said: string): Step_ => {
+/** `said`: what the trail and the end say. `asks`: the question, if this move asks one. `call`: if that question is a call. */
+const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call): Step_ => {
 	if ("to" in m) return running(s, m.to, m.round);
-	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, said));
+	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, asks, call));
 	return releasing(s, {outcome: m.end, said});
+};
+
+/** A person wrote something beside their answer: every step after this one is told it. Pure. */
+const withNote = (carry: Carry, note: string): Carry =>
+	note.trim() === ""
+		? carry
+		: {
+				...carry,
+				decided: {
+					questions: carry.decided?.questions ?? [],
+					said: [...(carry.decided?.said ?? []), note],
+				},
+			};
+
+/** `had`, and each row of `more` it does not hold yet: a person may be asked again in a later round. Pure. */
+const joined = <A>(had: readonly A[], more: readonly A[], same: (a: A, b: A) => boolean) => [
+	...had,
+	...more.filter((row, at) => ![...had, ...more.slice(0, at)].some((seen) => same(seen, row))),
+];
+
+/**
+ * A person let a step through: what its writer could not test is now what nobody tested, and what
+ * the question would let through now is. Pure.
+ */
+const letThrough = (carry: Carry): Carry => {
+	const {waiting, ...rest} = carry;
+	const cannot = carry.cannot ?? [];
+	return {
+		...rest,
+		...(cannot.length === 0 ? {} : {cannot: [], untested: [...(carry.untested ?? []), ...cannot]}),
+		...(waiting === undefined
+			? {}
+			: {
+					through: {
+						findings: joined(
+							carry.through?.findings ?? [],
+							waiting.findings,
+							(a, b) => a.fault === b.fault,
+						),
+						mutants: joined(
+							carry.through?.mutants ?? [],
+							waiting.mutants,
+							(a, b) => a.mutant === b.mutant,
+						),
+					},
+				}),
+	};
 };
 
 /** A state's held part, and only that: a kept state holds its own phase's keys and no other's. */
@@ -363,10 +589,27 @@ const heldOf = (s: Held): Held => ({
 	trail: s.trail,
 });
 
-const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string): Step_ => {
+const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: string): Step_ => {
 	const {question} = s;
-	const held: Held = {...heldOf(s), trail: [...s.trail, {step: question.ask, said: pick}]};
-	if (pick === "go_on") return move(held, question.step, NEXT[question.step], pick);
+	const held: Held = {
+		...heldOf(s),
+		carry: withNote(s.carry, note),
+		trail: [...s.trail, {step: question.ask, said: pick}],
+	};
+	if (pick === "go_on") {
+		const on: Held = {...held, carry: letThrough(held.carry)};
+		const {call} = question;
+		// A call says how the step ends. Any other let-through just moves on.
+		return call === undefined
+			? move(on, question.step, NEXT[question.step], pick)
+			: move(
+					on,
+					question.step,
+					after(question.step, call.after, s.round),
+					nameOf(call.after),
+					askWords(question.step, call.after),
+				);
+	}
 	// The first pick goes on. Any other is the person's no.
 	if (pick !== question.picks[0])
 		return releasing(held, {
@@ -381,7 +624,8 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string): Step_ => {
 		case "merge":
 			return running(held, "merge");
 		case "step":
-			return running(held, question.step);
+			// A build run again is a round: the builder gets another try, and the tries are counted.
+			return running(held, question.step, question.step === "build" ? s.round + 1 : s.round);
 	}
 };
 
@@ -504,7 +748,17 @@ export const lane = defineMachine({
 				carry: {...s.carry, ...m.value.carry},
 				trail: [...s.trail, {step: s.step, said}],
 			};
-			return move(held, s.step, after(s.step, m.value.outcome, s.round), said);
+			const {outcome, after: past} = m.value;
+			return move(
+				held,
+				s.step,
+				after(s.step, outcome, s.round),
+				said,
+				askWords(s.step, outcome),
+				outcome.kind === "ask" && past !== undefined
+					? {about: outcome.for, after: past}
+					: undefined,
+			);
 		},
 		lane_step_err: (s): Step_ => {
 			if (s.phase !== "running") return [s, []];
@@ -525,7 +779,7 @@ export const lane = defineMachine({
 				: [s, []],
 		lane_answered: (s, m): Step_ =>
 			s.phase === "asking" && m.ask === s.question.ask && s.question.picks.includes(m.pick)
-				? answered(s, m.pick)
+				? answered(s, m.pick, m.note ?? "")
 				: [s, []],
 		lane_release_ok: (s): Step_ =>
 			s.phase === "releasing"

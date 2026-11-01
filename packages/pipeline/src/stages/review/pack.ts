@@ -293,6 +293,8 @@ export const Ask = Schema.Struct({
 	head: Schema.NullOr(Schema.String),
 	/** The folder the rubrics are read from. */
 	rubrics: Schema.String,
+	/** The ids of the questions a person decided on the plan. Whoever asks for the review knows them; the pack does not. */
+	decisions: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Ask = typeof Ask.Type;
 

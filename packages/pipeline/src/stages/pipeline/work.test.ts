@@ -13,9 +13,10 @@ import {
 } from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
-import {Effect, Layer, type Result} from "effect";
+import {Effect, Layer, type Result, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_MOVED} from "../../settings.ts";
+import {Title} from "../../tickets/ticket.ts";
 import {makeLaneHome} from "./lane-fixture.ts";
 import {LaneHome, LaneWork, laneWork} from "./work.ts";
 
@@ -444,6 +445,25 @@ describe("the settings a lane works by", () => {
 			},
 		);
 
+		it.each(COPIES)(
+			"%s: a half-made copy holding a read-only folder can be started over",
+			async (place, make) => {
+				const home = repository(() => {});
+				const sha = await headWith(home, []);
+				const shut = join(home, "work", place, sha, "cache");
+				put(shut, "left-over", "from the try that broke\n");
+				chmodSync(shut, 0o555);
+				try {
+					const got = await asked(home, make, sha);
+					if (got._tag === "Failure") throw new Error(`no copy: ${got.failure.says}`);
+					expect(existsSync(join(got.success, "cache"))).toBe(false);
+					expect(existsSync(join(got.success, "src/slug.ts"))).toBe(true);
+				} finally {
+					if (existsSync(shut)) chmodSync(shut, 0o755);
+				}
+			},
+		);
+
 		it("two lanes that ask for one copy at once get it made once", async () => {
 			const runs = join(dir, "runs");
 			const home = installing(`sleep 0.3; printf x >> ${runs}`);
@@ -451,6 +471,64 @@ describe("the settings a lane works by", () => {
 			const both = await Promise.all([asked(home, "copy", sha), asked(home, "copy", sha)]);
 			expect(both.map((got) => got._tag)).toEqual(["Success", "Success"]);
 			expect(timesIn(runs)).toBe(1);
+		});
+	});
+
+	describe("a file's name, as the disk has it", () => {
+		// `git` quotes the second by default: `"src/caf\303\251.ts"`, in `--name-only` and in a diff.
+		const NAMES = ["src/my file.ts", "src/café.ts"];
+		const FILES = NAMES.map((path) => ({path, text: "export const one = 1;\n"}));
+
+		const worked = <A, E>(home: string, use: (work: LaneWork["Service"]) => Effect.Effect<A, E>) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return yield* use(yield* LaneWork);
+				}).pipe(provideLane(home)),
+			);
+
+		it("what a commit changed, and what stands at it, name the file itself", async () => {
+			const home = repository(() => {});
+			const sha = await headWith(home, FILES);
+			const {listed, changed} = await worked(home, (work) =>
+				Effect.gen(function* () {
+					const {tree} = yield* work.tree(1);
+					return {listed: yield* work.listAt(tree, sha), changed: yield* work.filesOf(tree, sha)};
+				}),
+			);
+			expect(changed.toSorted()).toEqual(NAMES.toSorted());
+			expect(listed).toEqual(expect.arrayContaining(NAMES));
+		});
+
+		it("what the guard reads a change by names the file itself", async () => {
+			const home = repository(() => {});
+			const base = await headWith(home, []);
+			const changed = await worked(home, (work) =>
+				Effect.gen(function* () {
+					const {tree} = yield* work.tree(1);
+					for (const {path, text} of FILES) put(tree, path, text);
+					return yield* work.staged(tree, base);
+				}),
+			);
+			expect(changed.toSorted()).toEqual(NAMES.toSorted());
+		});
+	});
+
+	describe("a title git hands back", () => {
+		it("a long subject, cut where a space falls, still fits a commit's title on the ticket", async () => {
+			const home = repository(() => {});
+			const base = await headWith(home, []);
+			// A 199-letter word and more: a plain cut at 200 ends on the space.
+			const subject = `${"a".repeat(199)} and more`;
+			const rows = await Effect.runPromise(
+				Effect.gen(function* () {
+					const work = yield* LaneWork;
+					const {tree} = yield* work.tree(1);
+					const head = yield* work.commit(tree, [{path: "src/a.ts", text: "a\n"}], subject);
+					return yield* work.commits(base, head);
+				}).pipe(provideLane(home)),
+			);
+			expect(rows).toHaveLength(1);
+			expect(Schema.is(Title)(rows[0]?.title)).toBe(true);
 		});
 	});
 

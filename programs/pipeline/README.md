@@ -49,6 +49,9 @@ The lane's git runs with your ssh agent's socket and your `gh` login in reach, a
 a `git@` remote works. Git's hooks are off. The clone's git config is not held: a head's install or
 checks can change it, and this git obeys it.
 
+A run on `claude` leaves its transcript in `~/.claude/projects`. The SDK writes it there, not the lane,
+so a lane's home does not hold it and removing a run's home does not remove it.
+
 ## On GitHub
 
 `host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
@@ -83,7 +86,8 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
   is final. After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned
   to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
-  GitHub's own merge checks the head and not main, so that commit does not stop it.
+  ship's merge names only the head, so ship itself does not stop on that commit. A rule that requires
+  up-to-date branches may refuse the merge. A real run is what will settle that.
 - **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
   ship ends `stuck: merge_unknown`, so the lane ends `stuck: step_stuck`. It does not wait and look again.
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
@@ -112,6 +116,11 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   ticket says so.
 - **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
+- **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
+  the review. A review that thinks one is wrong can say so, and it fails nothing and makes no test. The
+  person reads both sides, and picks whether the decision stands or the lane stops.
+- **A later round with no change is a question.** The person picks whether the work goes on as it is,
+  with code's checks still ahead of it, or the lane stops. A first round with no change stays stuck.
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
 - **A stuck lane is final.** Typing the line again says how it ended, and runs nothing.
 

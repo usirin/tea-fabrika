@@ -161,8 +161,10 @@ export const rawOfLine = (line: string): Raw[] | {readonly broke: string} => {
 		}
 		case "turn.failed":
 			return {broke: `turn failed: ${JSON.stringify(e.error ?? null).slice(0, 300)}`};
+		// A note: Codex says this while it reconnects, and goes on to finish the turn.
+		// Only `turn.failed`, or the process ending with no finished turn, ends one.
 		case "error":
-			return {broke: `error: ${(e.message ?? "").slice(0, 300)}`};
+			return [];
 	}
 };
 
@@ -256,19 +258,30 @@ export const codexAdapter = (
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),
-						strict ? turn.prompt : `${turn.prompt}\n${formOf(turn.schema)}`,
+						// The prompt comes on stdin: an argument has a limit a prompt can pass.
+						"-",
 					];
+					const sent = strict ? turn.prompt : `${turn.prompt}\n${formOf(turn.schema)}`;
 					const handle = yield* spawner
 						.spawn(
 							ChildProcess.make(config.codex, args, {
 								cwd: turn.folder,
 								env: codexEnvOf(parent, home),
 								extendEnv: false,
-								stdin: "ignore",
+								// Written in a fiber of its own while `updates` reads, so a Codex that prints before it
+								// reads blocks neither side. One that exits without reading fails that fiber alone, and
+								// `exited` below says so.
+								stdin: {stream: Stream.make(new TextEncoder().encode(sent))},
 								forceKillAfter: "3 seconds",
 							}),
 						)
-						.pipe(Effect.mapError((e) => failed("start", String(e))));
+						.pipe(
+							Effect.mapError((e) => failed("start", String(e))),
+							// Node throws some refusals where it reports others, and a throw here is a defect:
+							// E2BIG, an appended system prompt over what the system lets one command carry, would
+							// kill the run that asked. It is a turn that could not start, like any other.
+							Effect.catchDefect((defect) => Effect.fail(failed("start", String(defect)))),
+						);
 					const updates = handle.stdout.pipe(
 						Stream.decodeText(),
 						Stream.splitLines,

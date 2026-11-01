@@ -1,0 +1,10 @@
+Blog posts need a URL slug made from their title.
+
+Add `slugify(text)` in `src/slug.ts`. It takes a title and gives a slug:
+
+- lowercase, ASCII only
+- words joined by one `-`
+- no leading or trailing `-`
+- letters that are not ASCII fold to their plain form when they can, so `Çay Şeker` gives `cay-seker`
+
+Anything left that is not a letter or a digit separates words. A title with nothing usable gives an empty string.

@@ -284,6 +284,102 @@ describe("each law fails on its planted break", () => {
 		});
 });
 
+// A law over a whole run, not over one Msg: what a person is asked, across every question of a lane.
+describe("the questions a lane asks, over any run", () => {
+	const DONE: Outcome = {kind: "done", part: false};
+	const SEND: Outcome = {kind: "send", to: "plan", why: "yes"};
+	const UNSEEN: Outcome = {kind: "ask", who: "owner", for: "unseen"};
+	const MARKED: Outcome = {kind: "ask", who: "owner", for: "decision"};
+	const NOTHING_CHANGED: Outcome = {kind: "ask", who: "owner", for: "no_change"};
+	const ANSWERS: readonly Outcome[] = [
+		DONE,
+		UNSEEN,
+		{kind: "ask", who: "owner", for: "check_change"},
+		{kind: "send", to: "builder", why: "review_failed"},
+		{kind: "send", to: "test_writer", why: "mutant_survived"},
+		{kind: "skip", why: "no_properties"},
+	];
+	const anyEnd: fc.Arbitrary<StepEnd> = fc.oneof(
+		fc.constantFrom(...ANSWERS).map((outcome) => ({outcome, carry: {}})),
+		// A question a person's `go_on` answers with how the step ends, which may be another question.
+		fc
+			.tuple(fc.constantFrom(MARKED, NOTHING_CHANGED), fc.constantFrom(...ANSWERS))
+			.map(([outcome, past]) => ({outcome, after: past, carry: {}})),
+	);
+	const runs = fc.record({
+		ends: fc.array(anyEnd, {maxLength: 40}),
+		picks: fc.array(fc.nat(2), {maxLength: 40}),
+	});
+
+	/** Every question `machine` asks on one run, walked from its start, each pick one it offers. */
+	const asksIn = (
+		machine: Machine,
+		{ends, picks}: {readonly ends: readonly StepEnd[]; readonly picks: readonly number[]},
+	) => {
+		const asks: string[] = [];
+		const leftEnds = [...ends];
+		const leftPicks = [...picks];
+		const next = (s: Lane): readonly [Lane, readonly LaneCmd[]] => {
+			switch (s.phase) {
+				case "idle":
+					return machine.update.start(s, {type: "start", number: 7, lane: ID});
+				case "reading":
+					return machine.update.lane_read_ok(s, readFiled.ok(READ, {state: "open", mine: true}, 0));
+				case "claiming":
+					return machine.update.lane_claim_ok(s, claimLane.ok(CLAIM, ID, 0));
+				case "running": {
+					const end: StepEnd =
+						s.step === "triage"
+							? {outcome: SEND, carry: {}}
+							: (leftEnds.shift() ?? {outcome: DONE, carry: {}});
+					return machine.update.lane_step_ok(s, runStep.ok(STEP, end, 0));
+				}
+				case "asking": {
+					const {ask, picks: offered} = s.question;
+					const pick = offered[(leftPicks.shift() ?? 0) % offered.length] ?? "";
+					return machine.update.lane_answered(s, {type: "lane_answered", ask, pick});
+				}
+				case "releasing":
+					return machine.update.lane_release_ok(s, releaseLane.ok(RELEASE, "released", 0));
+				case "over":
+					return [s, []];
+			}
+		};
+		let s: Lane = {phase: "idle"};
+		for (let i = 0; i < 200; i++) {
+			const [moved, cmds] = next(s);
+			s = moved;
+			for (const cmd of cmds) if (cmd.type === "lane_ask") asks.push(cmd.ask);
+		}
+		return asks;
+	};
+
+	const eachOwnId = (machine: Machine) =>
+		fc.assert(
+			fc.property(runs, (run) => {
+				const asks = asksIn(machine, run);
+				expect(asks.filter((ask, at) => asks.indexOf(ask) !== at)).toEqual([]);
+			}),
+			{numRuns: 500, seed: 7},
+		);
+
+	it("no two questions share an id, on any path", () => {
+		eachOwnId(lane);
+	});
+
+	it("that law catches its plant: a machine that names every question alike", () => {
+		const alike = (cmds: readonly LaneCmd[]) =>
+			cmds.map((cmd) => (cmd.type === "lane_ask" ? {...cmd, ask: "a-step-1"} : cmd));
+		const planted = plant({
+			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) => {
+				const [next, cmds] = lane.update.lane_step_ok(s, m);
+				return [next, alike(cmds)];
+			},
+		});
+		expect(() => eachOwnId(planted)).toThrow();
+	});
+});
+
 describe("the whole lane, step by step", () => {
 	const DONE: Outcome = {kind: "done", part: false};
 	const IDLE: Lane = {phase: "idle"};

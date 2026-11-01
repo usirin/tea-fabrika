@@ -1,11 +1,12 @@
-import {Cmd, type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
+import {Cmd, type DepKeyedSub, defineMachine, RuntimeDiscardedError, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
+import {failureReport, runKept} from "./kept.ts";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
-import {memoryStorage, StateRefused, type Storage} from "./storage.ts";
+import {type Handle, memoryStorage, StateRefused, type Storage} from "./storage.ts";
 
 // A ref's `start` (./refs.ts, ./kept.ts) against the restart race of
 // experiment 69, on a toy with the build machine's shape: a Listen that
@@ -556,6 +557,185 @@ describe("a failure tea reports ends the run, never the process", () => {
 		expect(endOf(called).kind).toBe("failed");
 		expect(endOf(called).why).toContain(`job run j failed (tea's "stop-save")`);
 	});
+});
+
+const thrown = new Error("the reducer broke");
+
+/** `breaks`' state, as a kept run keeps it. */
+const Broke = Schema.Struct({run: Schema.Finite});
+
+const BROKE: typeof Broke.Type = {run: 1};
+
+/** A machine whose reducer throws on the answer its Listen gives at once. */
+const breaks = defineMachine({
+	types: {
+		model: BROKE,
+		msg: {} as {readonly type: "job_done"; readonly run: number},
+		sub: {} as WorkSub,
+		ctx: undefined,
+	},
+	cmds: [],
+	init: () => [{run: 1}, []],
+	update: {
+		job_done: () => {
+			throw thrown;
+		},
+	},
+	subs: [{type: "job_work", deps: (s) => ({run: s.run})}],
+});
+
+/**
+ * What a kept run does with what tea reports, with its choices written down and no clock. `closing`
+ * is the test's to set. `failureReport` is the one choice `runKept` makes, out where a test can reach.
+ */
+const reporting = () => {
+	const fails: Error[] = [];
+	const brokens: Error[] = [];
+	const seen = {closing: false, fails, brokens};
+	const report = failureReport("job run j", {
+		closing: () => seen.closing,
+		fail: (ended) => seen.fails.push(ended),
+		broken: (ended) => seen.brokens.push(ended),
+	});
+	return {seen, report};
+};
+
+describe("what a kept run does with what tea reports", () => {
+	it("a report before closing fails the run, in words that name it and tea's phase", () => {
+		const {seen, report} = reporting();
+		report(new Error("the feed broke"), {phase: "sub"});
+		expect(seen.fails.map((ended) => ended.message)).toEqual([
+			`job run j failed (tea's "sub"): the feed broke`,
+		]);
+		expect(seen.brokens).toEqual([]);
+	});
+
+	it("keeps the error it was told as the cause of what it says", () => {
+		const {seen, report} = reporting();
+		report(thrown, {phase: "reduce"});
+		expect(seen.fails[0]?.cause).toBe(thrown);
+	});
+
+	it("the same error again as the run closes is dropped: broken is not called", () => {
+		const {seen, report} = reporting();
+		report(thrown, {phase: "reduce"});
+		seen.closing = true;
+		report(thrown, {phase: "follow-up"});
+		expect(seen.fails).toHaveLength(1);
+		expect(seen.brokens).toEqual([]);
+	});
+
+	it("another error as the run closes calls broken, once", () => {
+		const {seen, report} = reporting();
+		report(thrown, {phase: "reduce"});
+		seen.closing = true;
+		report(new Error("the disk is full"), {phase: "stop-save"});
+		expect(seen.fails).toHaveLength(1);
+		expect(seen.brokens.map((ended) => ended.message)).toEqual([
+			`job run j failed (tea's "stop-save"): the disk is full`,
+		]);
+	});
+
+	it("a first report that comes as the run closes calls broken, and fails nothing", () => {
+		const {seen, report} = reporting();
+		seen.closing = true;
+		report(new Error("the disk is full"), {phase: "stop-save"});
+		expect(seen.fails).toEqual([]);
+		expect(seen.brokens).toHaveLength(1);
+	});
+
+	it("a discard the host asked for does nothing, live or closing", () => {
+		const {seen, report} = reporting();
+		report(new RuntimeDiscardedError(1), {phase: "discard"});
+		seen.closing = true;
+		report(new RuntimeDiscardedError(2), {phase: "discard"});
+		expect(seen.fails).toEqual([]);
+		expect(seen.brokens).toEqual([]);
+	});
+
+	it("tells apart two errors, and an error that is `undefined`", () => {
+		const {seen, report} = reporting();
+		const where = {phase: "sub"} as const;
+		for (const error of [undefined, undefined, "the disk", "the disk", "the feed"])
+			report(error, where);
+		expect(seen.fails.map((ended) => ended.message)).toEqual([
+			`job run j failed (tea's "sub"): undefined`,
+			`job run j failed (tea's "sub"): the disk`,
+			`job run j failed (tea's "sub"): the feed`,
+		]);
+	});
+});
+
+describe("one failure tea reports twice", () => {
+	it.live("a reducer's throw on a Listen's answer: two reports of one error, told once", () =>
+		Effect.gen(function* () {
+			const reports: string[] = [];
+			const {seen, report} = reporting();
+			yield* run(breaks, {
+				ctx: undefined,
+				subscribe: {
+					job_work: (sub: WorkSub) => Stream.make({type: "job_done", run: sub.deps.run} as const),
+				},
+				onError: (error, where) => {
+					reports.push(`${where.phase}: ${error === thrown ? "the throw" : "another"}`);
+					report(error, where);
+				},
+			});
+			while (reports.length < 2) yield* Effect.sleep("1 millis");
+			// If tea ever stops repeating itself, this says the rule can go.
+			expect(reports).toEqual(["reduce: the throw", "follow-up: the throw"]);
+			expect(seen.fails.map((ended) => ended.cause)).toEqual([thrown]);
+		}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+	);
+
+	// `runKept` itself, with no clock. tea's own repeat never lands late in a toy, so the same error
+	// comes back here as the last save's failure: the one report tea makes once the run is closing.
+	it.live(
+		"through runKept: an error the parent already heard, told again as the run closes, does not break the program",
+		() =>
+			Effect.gen(function* () {
+				const broken: Error[] = [];
+				let closing = false;
+				const real = yield* memoryStorage().open("job:r1", {});
+				const handle: Handle = {
+					...real,
+					store: (name, id, state) => {
+						const store = real.store(name, id, state);
+						return {
+							...store,
+							save: (s) => (closing ? Promise.reject(thrown) : store.save(s)),
+						};
+					},
+				};
+				const heard = yield* Effect.scoped(
+					Effect.gen(function* () {
+						const runtime = yield* runKept(
+							handle,
+							"job",
+							breaks,
+							Broke,
+							ID,
+							{
+								ctx: undefined,
+								subscribe: {
+									job_work: (sub: WorkSub) =>
+										Stream.make({type: "job_done", run: sub.deps.run} as const),
+								},
+							},
+							() => null,
+							() => Effect.void,
+							() => ({name: "job", steps: {job_work: "work"}}),
+							(ended) => broken.push(ended),
+						);
+						const end = yield* runtime.done().pipe(Effect.exit);
+						closing = true;
+						return Exit.isFailure(end) ? (Cause.pretty(end.cause).split("\n")[0] ?? "") : "done";
+					}),
+				);
+				expect(heard).toBe(`Error: job run j failed (tea's "reduce"): the reducer broke`);
+				expect(broken).toEqual([]);
+			}).pipe(Effect.timeout("5 seconds")),
+	);
 });
 
 /**

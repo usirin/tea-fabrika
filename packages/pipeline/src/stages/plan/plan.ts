@@ -2,6 +2,7 @@ import {Schema} from "effect";
 import {Version} from "../../criteria/book.ts";
 import {entity, value} from "../../entity.ts";
 import {CriterionId, QuestionId, StoryId, TaskId, TicketId} from "../../ids.ts";
+import {maybe} from "../../schema.ts";
 
 // A plan: what one ticket asks for, as data, kept outside any builder. Every
 // ticket gets one, sized to the work: a small bug is one task that reads as a
@@ -72,7 +73,7 @@ const storyFields = {who: Schema.String, want: Schema.String, why: Schema.String
 export const DraftStory = Schema.Struct({
 	id: Schema.String,
 	...storyFields,
-	from: Schema.optionalKey(Schema.String),
+	from: maybe(Schema.String),
 });
 export type DraftStory = typeof DraftStory.Type;
 
@@ -134,11 +135,14 @@ export const Pointer = value({at: Schema.String, why: Schema.String});
 export type Pointer = typeof Pointer.Type;
 
 /** A product call the ticket leaves open. The plan is written with the lean. */
-const questionFields = {
+const askedFields = {
 	ask: Schema.String,
 	options: Schema.Array(Schema.String),
 	lean: Schema.String,
 	why: Schema.String,
+};
+const questionFields = {
+	...askedFields,
 	cost: Schema.optionalKey(Schema.String),
 	/** How sure of the lean, as a percent. Under 80, `doubt` says what would settle it. */
 	sure: Schema.optionalKey(Schema.Finite),
@@ -146,7 +150,12 @@ const questionFields = {
 };
 
 /** An open question as the planner writes it: no id. */
-export const Question = value(questionFields);
+export const Question = value({
+	...askedFields,
+	cost: maybe(Schema.String),
+	sure: maybe(Schema.Finite),
+	doubt: maybe(Schema.String),
+});
 export type Question = typeof Question.Type;
 
 /** A task's fields but its criteria. */
@@ -231,14 +240,18 @@ const ExamChange = Schema.Struct({path: Schema.String, change: Schema.String, wh
 
 export const PlanDraft = Schema.Struct({
 	...planOf(draftTask, DraftStory, Question, draftGoal),
-	properties: Schema.optionalKey(Schema.Array(DraftProperty)),
+	goal: maybe(draftGoal),
+	properties: maybe(Schema.Array(DraftProperty)),
 	/** A TypeScript block: the public names a `new` test compiles against. */
-	interface: Schema.optionalKey(Schema.String),
-	exam: Schema.optionalKey(Schema.Array(ExamChange)),
+	interface: maybe(Schema.String),
+	exam: maybe(Schema.Array(ExamChange)),
 	/** What the brief or the repo's notes left unclear, what it blocked, and what the planner did. */
-	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+	gaps: maybe(Schema.Array(Schema.String)),
 });
 export type PlanDraft = typeof PlanDraft.Type;
+
+/** A planner's draft as a run holds and saves it, past the read. */
+export const HeldDraft = Schema.toType(PlanDraft);
 export const DraftTask = draftTask;
 export type DraftTask = typeof DraftTask.Type;
 

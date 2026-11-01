@@ -4,7 +4,7 @@ import {CriterionId} from "../../ids.ts";
 import type {Brief} from "./gate.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {TextKind} from "./pack.ts";
-import {Finding, Place, type Sheet} from "./sheet.ts";
+import {Finding, isAgainstDecision, Place, type Sheet} from "./sheet.ts";
 
 // The Check after the reviewer: the verdict, worked out from the sheet. The
 // agent never says pass or fail for a review. It grades rows and writes
@@ -20,12 +20,15 @@ export type Verdict = typeof Verdict.Type;
  *
  * A row belongs to no kind: a criterion is the ticket's, not a review's. So
  * a failed row fails every kind the change owes, and an unseen row holds
- * every kind back. A finding counts for its own kind only.
+ * every kind back. A finding counts for its own kind only. One against a
+ * person's decision counts for none: that call is the person's.
  */
 export function verdictOf(sheet: Sheet, kind: TextKind): Verdict {
 	const failed =
 		sheet.rows.some((row) => row.grade === "fail") ||
-		sheet.findings.some((finding) => finding.kind === kind && finding.state === "open");
+		sheet.findings.some(
+			(finding) => finding.kind === kind && finding.state === "open" && !isAgainstDecision(finding),
+		);
 	if (failed) return "fail";
 	return sheet.rows.some((row) => row.grade === "unseen") ? "unseen" : "pass";
 }
@@ -107,10 +110,13 @@ export type Judged = typeof Judged.Type;
 /**
  * The criteria of a sheet, each open or met: the ticket's, in its order, then
  * one per finding no criterion of the ticket covers. Every criterion is met
- * exactly when `outcomeOf` says `done`.
+ * exactly when `outcomeOf` says `done`. A finding against a person's decision
+ * is no criterion: nothing a builder or a test writer could close.
  */
 export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
-	const open = sheet.findings.filter((finding) => finding.state === "open");
+	const open = sheet.findings.filter(
+		(finding) => finding.state === "open" && !isAgainstDecision(finding),
+	);
 	const ticket = brief.criteria.map((criterion): Judged => {
 		const row = sheet.rows.find((r) => r.id === criterion.id);
 		const findings = open.filter(

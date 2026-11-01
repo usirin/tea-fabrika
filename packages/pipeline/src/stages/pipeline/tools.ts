@@ -6,6 +6,7 @@ import {layerOs} from "@kampus/fabrika-old/sandbox/os";
 import {Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId} from "../../ids.ts";
+import {saidOf} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {examTouched} from "../build/check.ts";
 import {BuildWrites} from "../build/services.ts";
@@ -13,6 +14,7 @@ import {numberOf} from "../build/ticket.ts";
 import {ExamWritten, ruleFiles} from "../exam/machine.ts";
 import {ExamWork} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
+import {placeIn} from "../mutation/mutant.ts";
 import {type Added, hashOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope} from "../mutation/services.ts";
 import {strykerRunner} from "../mutation/stryker.ts";
@@ -22,6 +24,7 @@ import {TestsAgents, TestsWork} from "../test-writer/program.ts";
 import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
+import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
@@ -37,15 +40,17 @@ type Failed = {readonly _tag: "unknown"};
 const failed: Failed = {_tag: "unknown"};
 const couldNotRun = {_tag: "could_not_run"} as const;
 
-/** `git diff --unified=0`, read for the lines it adds. Pure. */
-export const addedIn = (diff: string): readonly Added[] => {
+/**
+ * One file's `git diff --unified=0`, read for the lines it adds. The file's name comes from the
+ * caller and only a hunk holds lines, so neither a name git quotes nor an added line that reads like
+ * a header can mislead it. Pure.
+ */
+export const addedIn = (file: string, diff: string): readonly Added[] => {
 	const out: Added[] = [];
-	let file = "";
 	let line = 0;
 	for (const text of diff.split("\n")) {
-		if (text.startsWith("+++ ")) file = text.slice(6);
-		else if (text.startsWith("@@")) line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0);
-		else if (text.startsWith("+")) out.push({file, line: line++, text: text.slice(1)});
+		if (text.startsWith("@@")) line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0);
+		else if (line > 0 && text.startsWith("+")) out.push({file, line: line++, text: text.slice(1)});
 	}
 	return out;
 };
@@ -194,11 +199,11 @@ export const laneTestsWork = Layer.effect(
 						const [one] = resultsOf(report, [{property: "p", file: on.file, name: on.test}]);
 						return one === undefined ? yield* Effect.fail(couldNotRun) : one.result;
 					}
-					const [file = "", line = "1"] = on.mutant.split(":");
+					const {file, line} = placeIn(on.mutant);
 					yield* work.copy(on.commit);
 					const ran = yield* runner.run({
 						head: on.commit,
-						spans: [{file, from: Number(line), to: Number(line)}],
+						spans: [{file, from: line, to: line}],
 						seed: 1,
 						most: MAX_MUTANTS,
 					});
@@ -274,13 +279,19 @@ export const laneExamWork = Layer.effect(
 		const lane = yield* LaneNow;
 		const agents = yield* LaneAgents;
 		return {
-			land: (_ticket, number, _base, files) =>
+			land: (_ticket, number, _base, files, changes) =>
 				Effect.gen(function* () {
 					const side = yield* work.side(`exam-${number}`);
 					const head = yield* work.commit(side.tree, files, `rule changes for ticket ${number}`);
 					yield* work.pushTo(side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
-					const body = `The rule changes the plan for ticket ${number} lists.`;
+					const body = saidOf(
+						[
+							`The rule changes the plan for ticket ${number} lists. They land before the rest of its work.`,
+							"",
+							...ruleChangeLines(changes),
+						].join("\n"),
+					);
 					const id = yield* pullOnBranch({pulls, wire, tickets}, number, {
 						branch: side.branch,
 						title,
@@ -348,14 +359,14 @@ export const laneMutationScope = Layer.effect(
 		return {
 			read: (base, head, kept, exam) =>
 				Effect.gen(function* () {
-					const diff = yield* work.diff(base, head);
-					const added = addedIn(diff);
+					const files = yield* work.changedFiles(base, head);
+					const added = (yield* Effect.forEach(
+						files,
+						(file) => Effect.map(work.diff(base, head, file), (diff) => addedIn(file, diff)),
+						{concurrency: 1},
+					)).flat();
 					// `show` answers `null` only for a file that is not there. A read that broke fails this
 					// read, so it never looks like a kept function or an exam file that went away.
-					const files = diff
-						.split("\n")
-						.filter((l) => l.startsWith("diff --git "))
-						.map((l) => l.replace(/^diff --git a\/.* b\//, ""));
 					const spans = yield* Effect.forEach(
 						kept,
 						(ref) =>

@@ -1,0 +1,1 @@
+{"at":"2026-11-01T17:59:46.306Z","schema":{"type":"object","properties":{"files":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"text":{"type":"string"}},"required":["path","text"],"additionalProperties":false}}},"required":["files"],"additionalProperties":false}}

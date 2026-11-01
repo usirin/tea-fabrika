@@ -15,12 +15,14 @@ import {Schema} from "effect";
 export const BREAK = String.fromCharCode(0x200b);
 
 /**
- * A text of the builder's, with every reference GitHub would read broken:
- * `#2`, `owner/repo#2`, `GH-2`, and a ticket's or pull request's url. It reads
- * the same; it links to nothing and closes nothing.
+ * A text of an agent's, with every reference GitHub would read broken: `#2`,
+ * `owner/repo#2`, `GH-2`, a ticket's or pull request's url, and a mention,
+ * `@name` or `@org/team`. It reads the same; it links to nothing, closes nothing
+ * and pings nobody. An `@` right after a word is an email address, and stays.
  */
 export const inert = (text: string): string =>
 	text
+		.replace(/(?<!\w)@(?=[a-z0-9])/gi, `@${BREAK}`)
 		.replace(/#(?=\d)/g, `#${BREAK}`)
 		.replace(/\b(gh)-(?=\d)/gi, `$1${BREAK}-`)
 		.replace(/\/(issues|pull)\/(?=\d)/gi, `/$1${BREAK}/`);

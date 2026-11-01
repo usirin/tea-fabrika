@@ -1,0 +1,4 @@
+0779fbc build: Let slugs run to 80 characters (round 1)
+252c30f tests for https://github.com/toy/slug-lab/issues/1
+2ef2d9a rule changes for ticket 1
+31a8879 first

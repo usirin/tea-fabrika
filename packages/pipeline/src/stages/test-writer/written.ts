@@ -2,6 +2,7 @@ import {createDraft} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {matcherFor} from "../../codeowners.ts";
 import type {Check} from "../../primitives.ts";
+import {maybe} from "../../schema.ts";
 import {PropertyId, type WriterBrief} from "./brief.ts";
 
 // What the test writer hands back, and the pure Check on it. The answer
@@ -33,10 +34,13 @@ export const Written = Schema.Struct({
 	files: Schema.Array(File),
 	answers: Schema.Array(Answer),
 	/** For each new test, the planted fault it was seen to catch, in the writer's words. */
-	plants: Schema.optionalKey(Schema.Array(Schema.String)),
-	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+	plants: maybe(Schema.Array(Schema.String)),
+	gaps: maybe(Schema.Array(Schema.String)),
 });
 export type Written = typeof Written.Type;
+
+/** A writer's answer as a run holds and saves it, past the read. */
+export const HeldWritten = Schema.toType(Written);
 
 /** `[test_writer] includes` when a repo's `fabrika.toml` leaves it out. */
 export const DEFAULT_INCLUDES = ["**/*.test.ts", "fixtures/**"] as const;

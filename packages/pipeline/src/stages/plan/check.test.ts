@@ -1,5 +1,6 @@
 import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {Option, Schema} from "effect";
+import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {claimProblems, identifiersIn, jobProblems, planProblems} from "./check.ts";
 import {numbered as numberedRevision} from "./ids.ts";
@@ -13,7 +14,7 @@ import {
 	type DraftTask as Task,
 	textOf,
 } from "./plan.ts";
-import {namesBrief} from "./planner.ts";
+import {namesBrief, promptFor} from "./planner.ts";
 import {planMarkdown} from "./render.ts";
 
 /** A draft the Check passes, numbered as the plan's first version. */
@@ -313,6 +314,38 @@ describe("planProblems: the whole plan", () => {
 		);
 	});
 
+	// P24. A real planner took this line over its brief and wrote "in one pull request" into the plan a
+	// person approved, and two landed.
+	it("a plan with a rule change is told two pull requests, not one", () => {
+		const two = {...good, tasks: [task, {...task, title: "second"}]};
+		const exam = [{path: "src/slug.laws.test.ts", change: "Hold slugs to 80.", why: "The ticket."}];
+		const said = planProblems({...two, exam}, null).join("\n");
+		expect(said).toMatch(/two pull requests/i);
+		expect(said).not.toMatch(/All the tasks land in one pull request/i);
+	});
+
+	// P24
+	it("the planner's own prompt names the rule changes where it says one pull request", () => {
+		const prompt = promptFor(
+			{
+				ticket: {
+					url: "https://github.com/example/lane/issues/1",
+					number: 1,
+					state: "open",
+					title: "t",
+					body: "b",
+					at: null,
+				},
+				facts: null,
+				names: [],
+			},
+			null,
+		);
+		const lines = prompt.split("\n").filter((line) => /one pull request/i.test(line));
+		expect(lines).not.toEqual([]);
+		expect(lines.filter((line) => !/rule change/i.test(line))).toEqual([]);
+	});
+
 	it("sends back a plan with no task", () => {
 		expect(planProblems({...good, tasks: []}, null)).toEqual([
 			"The plan has no task. Every ticket has at least one.",
@@ -451,7 +484,12 @@ describe("the schema", () => {
 			additionalProperties: boolean;
 		};
 		expect([...schema.required].sort()).toEqual([
+			"exam",
+			"gaps",
+			"goal",
+			"interface",
 			"pointers",
+			"properties",
 			"questions",
 			"stories",
 			"summary",
@@ -469,7 +507,60 @@ describe("the schema", () => {
 	});
 });
 
+// A rehearsal on real models: its planner wrote `"from": "The ticket"`, which the form takes and the
+// kept plan does not.
+describe("a story's `from`, as the planner writes it", () => {
+	const [story] = good.stories;
+	const withFrom = (from: string): Plan => ({...good, stories: [{...story, from}]});
+
+	it("a plan with a bad one has a problem that names it", () => {
+		const bad = ["The ticket", "#1", "o/r#0", "https://github.com/o/r/issues/3", "", " "];
+		const silent = bad.filter(
+			(from) => !planProblems(withFrom(from), null).some((p) => p.includes("`from`")),
+		);
+		expect(silent).toEqual([]);
+	});
+
+	it("the Check passes a draft only when it can be kept", () => {
+		fc.assert(
+			fc.property(
+				fc.oneof(fc.string(), fc.constantFrom("o/r#1", "The ticket", "o/r#0", "a.b/c-d#12")),
+				(from) => {
+					const draft = withFrom(from);
+					expect(planProblems(draft, null).length === 0).toBe(revisionOfDraft(draft) !== null);
+				},
+			),
+			{seed: 178, numRuns: 200},
+		);
+	});
+});
+
 describe("the view", () => {
+	// P19. From the rehearsal: the lean's cost and doubt are the part a person could act on.
+	it("shows a question's lean whole: what it costs, how sure, and what would settle it", () => {
+		const view = planMarkdown(
+			numbered({
+				...good,
+				questions: [
+					{
+						ask: "How broadly should non-ASCII letters fold into ASCII?",
+						options: ["Decompose and drop marks.", "Also a table for ß, æ and ø."],
+						lean: "Decompose and drop marks, so Straße gives stra-e.",
+						why: "The ticket does not define a folding policy.",
+						cost: "A broader table needs an agreed character set.",
+						sure: 75,
+						doubt: "Confirm whether ß, æ and ø must keep their usual forms.",
+					},
+				],
+			}),
+			"slugify",
+		);
+		expect(view).toContain("Decompose and drop marks, so Straße gives stra-e.");
+		expect(view).toContain("A broader table needs an agreed character set.");
+		expect(view).toContain("75");
+		expect(view).toContain("Confirm whether ß, æ and ø must keep their usual forms.");
+	});
+
 	it("counts a plan's size, stories and the job included: the story's own words are 21", () => {
 		expect(sizeOf(good)).toMatchObject({stories: 1, tasks: 1, criteria: 2});
 		const bare = sizeOf({...good, stories: [{id: "s1", who: "", want: "", why: ""}]}).words;

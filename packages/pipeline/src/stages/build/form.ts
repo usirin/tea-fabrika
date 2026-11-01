@@ -1,4 +1,5 @@
 import {Context, type Effect, Schema} from "effect";
+import {maybe} from "../../schema.ts";
 import {Criterion} from "../review/pack.ts";
 import {Ran, Settings} from "../review/reviewer.ts";
 import {RepoRule} from "../rules.ts";
@@ -49,10 +50,13 @@ export const Built = Schema.Struct({
 	/** What it could not do, and why. Empty: nothing. */
 	left: Schema.Array(Schema.String),
 	/** Each open item it found does not hold, with what it ran to see that. */
-	disputed: Schema.optionalKey(Schema.Array(Schema.String)),
-	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+	disputed: maybe(Schema.Array(Schema.String)),
+	gaps: maybe(Schema.Array(Schema.String)),
 });
 export type Built = typeof Built.Type;
+
+/** A builder's form as a run holds and saves it, past the read. */
+export const HeldBuilt = Schema.toType(Built);
 
 /** How one builder run ended. Never a throw. */
 export type BuildDrafted =

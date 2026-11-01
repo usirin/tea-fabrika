@@ -23,7 +23,8 @@ import {
 	testsOf,
 } from "./checked.ts";
 import type {TestWriterOutcome} from "./outcome.ts";
-import {File, problemsOf, testsWrite, Written} from "./written.ts";
+import type {Written} from "./written.ts";
+import {File, HeldWritten, problemsOf, testsWrite} from "./written.ts";
 
 // The test writer's first job (docs/direction/the-test-writer.md): after the
 // owner approves the plan and before build, one test per Property, run on the
@@ -104,7 +105,7 @@ export type TestWriterCmd = TakenCmd | CommitCmd | RunCmd | RecordCmd | ReadCmd;
 /** What a run leaves besides its outcome. */
 export const TestWriterReport = Schema.Struct({
 	/** The writer's answer: the one that passed, or the last one when the tries ran out. */
-	written: Schema.NullOr(Written),
+	written: Schema.NullOr(HeldWritten),
 	/** The tests' local commit on the base. `null`: none was made. */
 	commit: Schema.NullOr(Schema.String),
 	checked: Schema.Array(Checked),

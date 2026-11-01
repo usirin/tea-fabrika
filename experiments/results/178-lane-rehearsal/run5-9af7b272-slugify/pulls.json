@@ -1,0 +1,19 @@
+[
+ {
+  "id": "local:toy/slug-lab/pull/1",
+  "kind": "lane",
+  "ticket": 1,
+  "branch": "lane/1",
+  "head": "0d6311e391464299357c7942062903891859b682",
+  "tree": "<tmp>/run5/home/work/trees/1",
+  "state": "merged",
+  "title": "Add slugify: turn a title into a URL slug",
+  "body": "From tracker ticket 1.\n\nAdd slugify so blog titles become lowercase ASCII URL slugs.\n\nNo deviations.",
+  "verdicts": [
+   {
+    "kind": "review-code",
+    "verdict": "pass"
+   }
+  ]
+ }
+]
