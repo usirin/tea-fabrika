@@ -41,7 +41,7 @@ The same review led to these:
 
 **Building those found one more bug.** When a mutant had an answer but no test, its commit became the head. The builder's files then joined the exam, and later rounds ended `exam_touched`. A test now pins it.
 
-**CI failed with `E2BIG`.** The prompt went to Codex as one argument. A build's brief holds its long text twice, about 170 KB, and Linux allows 128 KB per argument. A Mac allowed it, so no local run saw this.
+**CI failed because a prompt was too long to start Codex.** CI's log said only `lane ended with build run lane/1/5/build unfinished`, and it never printed `E2BIG`. A builder got the same message on a Mac with a longer text and traced it there to `E2BIG`. The prompt went to Codex as one argument. A build's brief holds its long text twice, about 170 KB, and Linux allows 128 KB per argument. A Mac allows more, so no local run hit it at that size. The link to CI is a strong inference, and it stands or falls with this pull request's next CI run.
 
 ```ts
 // packages/fabrika/src/agents/codex/adapter.ts, as it is now
