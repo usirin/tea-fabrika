@@ -27,7 +27,7 @@ import {SHOWS} from "./desk/keys.ts";
 //   from a window        {type: "msg", msg: {type: "press", value: "plus"}}
 //
 // A window's `msg` is one of its run's inputs, and only the run's program reads it: the host
-// reads it with `readInput` (from @kampus/fabrika), after this file's reader took the envelope.
+// reads it with `readInput` (from @kampus/fabrika-old), after this file's reader took the envelope.
 // A view's `data` is read the same way, in the window, by its program's view schema.
 //
 // Each side reads what it is handed strictly, with no key the schema does not name. The host

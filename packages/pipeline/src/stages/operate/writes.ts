@@ -1,5 +1,5 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Layer, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {runChild} from "../../child.ts";

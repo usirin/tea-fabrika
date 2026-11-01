@@ -9,9 +9,9 @@ import {
 	type Storage,
 	streams,
 	Traces,
-} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {memoryTraces} from "@tea-fabrika/trace/memory";

@@ -1,7 +1,7 @@
 // Whether a comment on an issue or a pull request is a machine's, and so
 // nobody's reply. The GitHub code host reads review threads with it; the old
 // operator's issue thread (`wip/src/operator-live.ts`) reads replies with it.
-// Lifted out of that file when the pipeline moved into `@kampus/fabrika`
+// Lifted out of that file when the pipeline moved into `@kampus/fabrika-old`
 // (experiment 103).
 
 /**

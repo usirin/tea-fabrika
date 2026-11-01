@@ -20,7 +20,7 @@ import {ChildProcess, type ChildProcessSpawner} from "effect/process";
 //   none   a plain child: its own home and temp folder, and an environment
 //          built here from a short keep-list. No fence on files or network.
 //   os     the same, inside Anthropic's sandbox-runtime: it reads only its own
-//          folders, and reaches only the model. On `@kampus/fabrika/sandbox/os`.
+//          folders, and reaches only the model. On `@kampus/fabrika-old/sandbox/os`.
 //
 // Both build the environment the same way, and both refuse a job that would
 // carry a GitHub key in: by its name, or by its value anywhere in what the
@@ -81,7 +81,7 @@ export class Sandbox extends Context.Service<
 			job: Job,
 		) => Effect.Effect<ChildProcessSpawner.ChildProcessHandle, SandboxError, Scope.Scope>;
 	}
->()("@kampus/fabrika/Sandbox") {}
+>()("@kampus/fabrika-old/Sandbox") {}
 
 /** The environment a sandbox is built from, or a test standing in for it. */
 export type Env = Readonly<Record<string, string | undefined>>;

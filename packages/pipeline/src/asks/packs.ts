@@ -13,7 +13,7 @@ import {
 	type Running,
 	type Storage,
 	start,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, type FileSystem, type Layer, type Path, Queue, Schema, type Scope} from "effect";
 import {AskId} from "../ids.ts";
 import {type Ask, Refused} from "./ask.ts";

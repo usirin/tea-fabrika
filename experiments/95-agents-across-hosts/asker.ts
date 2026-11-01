@@ -8,7 +8,7 @@
 // machine sends it again under the same message id.
 import type {OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, offer, output, start} from "@kampus/fabrika";
+import {defineProgram, input, offer, output, start} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {
 	type Asker,

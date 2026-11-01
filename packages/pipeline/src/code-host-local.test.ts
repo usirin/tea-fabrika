@@ -1,6 +1,6 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {noSpend} from "@kampus/fabrika/agents/claude";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {beforeAll, describe, expect, it} from "vitest";

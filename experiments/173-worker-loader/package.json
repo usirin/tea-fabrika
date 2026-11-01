@@ -6,7 +6,7 @@
 	"description": "Experiment 173's harness: a tea program bundled on the hands side and loaded into a core Durable Object with Worker Loader, in Miniflare. Only the experiment uses it.",
 	"dependencies": {
 		"@demlik/tea": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",
 		"@tea-fabrika/tracker": "workspace:*",
 		"effect": "catalog:",

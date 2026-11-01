@@ -101,7 +101,7 @@ export const noProjectSettings: CreateRule = {
 					if (name === "settingSources" || name === "projectConfigRoot") {
 						context.report({
 							node,
-							message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika/agents/sandbox), or \`settingSources: []\`, written out. ${ON_PURPOSE}`,
+							message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), or \`settingSources: []\`, written out. ${ON_PURPOSE}`,
 						});
 					}
 					return;
@@ -112,13 +112,13 @@ export const noProjectSettings: CreateRule = {
 				if (bare === "settingSources" && !isEmptyList(node.value)) {
 					context.report({
 						node: node.key,
-						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Load a folder's rule files with \`...ownRules(...)\` from @kampus/fabrika/agents/sandbox, or no settings with \`settingSources: []\`. ${ON_PURPOSE}`,
+						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Load a folder's rule files with \`...ownRules(...)\` from @kampus/fabrika-old/agents/sandbox, or no settings with \`settingSources: []\`. ${ON_PURPOSE}`,
 					});
 				}
 				if (bare === "projectConfigRoot") {
 					context.report({
 						node: node.key,
-						message: `\`projectConfigRoot\` is set only by \`ownRules\` (@kampus/fabrika/agents/sandbox), on the system's empty folder: pointed anywhere else, a run reads that folder's settings and hooks (experiment 155). ${ON_PURPOSE}`,
+						message: `\`projectConfigRoot\` is set only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), on the system's empty folder: pointed anywhere else, a run reads that folder's settings and hooks (experiment 155). ${ON_PURPOSE}`,
 					});
 				}
 				const isFlagKey =
@@ -126,7 +126,7 @@ export const noProjectSettings: CreateRule = {
 				if (isFlagKey && !isEmptyString(source, node.value)) {
 					context.report({
 						node: node.key,
-						message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika/agents/sandbox), not by \`extraArgs\` (experiment 155). ${ON_PURPOSE}`,
+						message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), not by \`extraArgs\` (experiment 155). ${ON_PURPOSE}`,
 					});
 				}
 			},
@@ -137,13 +137,13 @@ export const noProjectSettings: CreateRule = {
 				if (name === "settingSources" && !isEmptyList(node.right)) {
 					context.report({
 						node,
-						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Use \`...ownRules(...)\` from @kampus/fabrika/agents/sandbox, or \`settingSources: []\`. ${ON_PURPOSE}`,
+						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Use \`...ownRules(...)\` from @kampus/fabrika-old/agents/sandbox, or \`settingSources: []\`. ${ON_PURPOSE}`,
 					});
 				}
 				if (name === "projectConfigRoot") {
 					context.report({
 						node,
-						message: `\`projectConfigRoot\` is set only by \`ownRules\` (@kampus/fabrika/agents/sandbox), on the system's empty folder (experiment 155). ${ON_PURPOSE}`,
+						message: `\`projectConfigRoot\` is set only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), on the system's empty folder (experiment 155). ${ON_PURPOSE}`,
 					});
 				}
 			},
@@ -168,7 +168,7 @@ export const noProjectSettings: CreateRule = {
 				if (raw === null || !FLAG.test(raw) || !isValue(node)) return;
 				context.report({
 					node,
-					message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika/agents/sandbox), not by a CLI flag (experiment 155). ${ON_PURPOSE}`,
+					message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), not by a CLI flag (experiment 155). ${ON_PURPOSE}`,
 				});
 			},
 		};

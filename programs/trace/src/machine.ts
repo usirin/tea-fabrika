@@ -1,5 +1,5 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {JobTrace, TraceId} from "@kampus/fabrika";
+import {JobTrace, TraceId} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 

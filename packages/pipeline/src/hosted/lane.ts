@@ -12,7 +12,7 @@
 //           under an id made of the child's name
 //   open    the pull request and the last review's verdict on it, each through the gate, once
 
-import {Ledger, Self, streams} from "@kampus/fabrika";
+import {Ledger, Self, streams} from "@kampus/fabrika-old";
 import {
 	Duration,
 	Effect,

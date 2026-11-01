@@ -23,7 +23,7 @@ import {
 	Monitor,
 	NOT_BEGUN,
 	START,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import * as agent from "@kampus/pipeline/laws/agent";
 import * as build from "@kampus/pipeline/laws/build";
 import * as catchup from "@kampus/pipeline/laws/catchup";

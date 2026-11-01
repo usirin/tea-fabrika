@@ -1,4 +1,4 @@
-import {Ledger, type Row, streams, type Writer, writerText} from "@kampus/fabrika";
+import {Ledger, type Row, streams, type Writer, writerText} from "@kampus/fabrika-old";
 import {Context, Effect, Layer, Schema} from "effect";
 import {sha256} from "../tickets/approval.ts";
 import {

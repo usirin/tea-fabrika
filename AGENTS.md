@@ -21,7 +21,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
-| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#packages) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika`, a subpath such as `@kampus/fabrika/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
+| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#packages) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial: its README and its finished files | A folder there with a `package.json` whose `typecheck` covers the files, so a change to the package that breaks the tutorial fails `pnpm typecheck`. Run every step on a fresh clone before it lands. |
 | Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
@@ -50,6 +50,10 @@ new design work is `next/`, and if you still cannot tell, ask.
 next/              what we are building, on the decisions in docs/direction
 everything else    what we use today, and a map of which jobs exist
 ```
+
+Today's library is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`. They are
+deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
+`@kampus/libfabrika` is the library.
 
 - **A search finds both.** Check the path of every file you read before you
   trust it. A name that exists in both can mean different things: a `rev` or a
@@ -159,7 +163,7 @@ All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
 patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The two advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
-`pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
+`pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does

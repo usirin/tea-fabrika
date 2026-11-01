@@ -7,8 +7,8 @@
 // It asks for every service the lane's children use through Effect's context. `liveDelivery` gives
 // them over GitHub and the Agent SDK, writing to the named repositories only; a test gives fakes.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {defineProgram, flag, input, output} from "@kampus/fabrika";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {defineProgram, flag, input, output} from "@kampus/fabrika-old";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Duration, Effect, Layer, Random, Schema} from "effect";
 import {gitHubCodeHost} from "../code-host-github.ts";
 import type {LocalCheck} from "../code-host-local.ts";

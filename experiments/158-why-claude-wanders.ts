@@ -52,11 +52,11 @@ import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {type Options, query, type SDKUserMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Agent} from "@kampus/fabrika";
-import {ADAPTERS, acpAdapter} from "@kampus/fabrika/agents/acp";
-import {claudeAdapter, type Open} from "@kampus/fabrika/agents/claude";
-import {psReaper} from "@kampus/fabrika/agents/codex";
-import {agentEnv, fencedEnv, runEnv} from "@kampus/fabrika/agents/sandbox";
+import {Agent} from "@kampus/fabrika-old";
+import {ADAPTERS, acpAdapter} from "@kampus/fabrika-old/agents/acp";
+import {claudeAdapter, type Open} from "@kampus/fabrika-old/agents/claude";
+import {psReaper} from "@kampus/fabrika-old/agents/codex";
+import {agentEnv, fencedEnv, runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Exit, Schema, Stream} from "effect";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

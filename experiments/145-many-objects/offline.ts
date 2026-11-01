@@ -8,7 +8,7 @@
 //
 // Restores are timed from the server and from the copy.
 import {NodeFileSystem, NodePath} from "@effect/platform-node";
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Duration, Effect, FileSystem, Layer} from "effect";
 import {openCopy} from "./cache.ts";
 import {layerObject} from "./client.ts";

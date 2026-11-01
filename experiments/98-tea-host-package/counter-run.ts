@@ -3,7 +3,7 @@
 // pass checks but one (`aloneRefusedByFence`, below). What changed:
 //
 //   - The ledger is the package's local ledger (`layerLocal`): the runner starts, reads and stops
-//     it through `@kampus/fabrika` alone, and its memory cap is the package's, not the
+//     it through `@kampus/fabrika-old` alone, and its memory cap is the package's, not the
 //     runner's.
 //   - `counter:1` is registered first: under deny by default, nothing lands under it before that.
 //   - The hosts are `serve` (./counter-host.ts), the senders `cast`, the attach the observer.
@@ -17,8 +17,8 @@
 import {mkdirSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {applyCell} from "@demlik/tea";
-import type {Meter} from "@kampus/fabrika";
-import {type Lease, Ledger, type Row} from "@kampus/fabrika";
+import type {Meter} from "@kampus/fabrika-old";
+import {type Lease, Ledger, type Row} from "@kampus/fabrika-old";
 import {Effect} from "effect";
 import {type Count, type CounterMsg, counter, ZERO} from "../94-tea-host/counter.ts";
 import {

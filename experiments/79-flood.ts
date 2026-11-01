@@ -4,7 +4,7 @@
 // mailbox, so 1000 go in across both, not 1000 each. Run with
 // `node --expose-gc experiments/79-flood.ts`.
 
-import {defineProgram, input, start, tell} from "@kampus/fabrika";
+import {defineProgram, input, start, tell} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 const COUNT = Number(process.env.COUNT ?? 1_000_000);

@@ -1,4 +1,4 @@
-import {LedgerUnreachable} from "@kampus/fabrika";
+import {LedgerUnreachable} from "@kampus/fabrika-old";
 import {Duration, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {type LaneId, laneId, planOf, taskId, ticketId} from "../ids.ts";

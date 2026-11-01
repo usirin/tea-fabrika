@@ -5,7 +5,7 @@ to a merged pull request, where code runs the steps and agents only do the writi
 on [`@demlik/tea`](https://github.com/kamp-us/demlik), the Elm architecture in TypeScript.
 
 - **It is an experiment.** Some parts are proven on real tickets. Others are still drafts.
-- **You get it by cloning this repository.** The package, `@kampus/fabrika`, is not on npm yet.
+- **You get it by cloning this repository.** The package, `@kampus/fabrika-old`, is not on npm yet.
   It is marked `"private": true` and has no license yet.
 - **It is for TypeScript developers** who want to run, study or build an agent pipeline, and for
   the people working on this one.
@@ -213,7 +213,7 @@ These still run, but they are not the way forward:
 
 | You want to | Go to |
 |---|---|
-| Write code with `@kampus/fabrika` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
+| Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
@@ -227,7 +227,7 @@ These still run, but they are not the way forward:
 A pnpm workspace. A package may import the ones listed before it, never the ones after.
 `layer-rules.json` holds the order, and `pnpm lint` checks it.
 
-- [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika`: the tools, in one
+- [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika-old`: the tools, in one
   package. It names no pipeline. Its parts, bottom first:
   - [`program`](./packages/fabrika/src/program/README.md): programs.
   - [`host`](./packages/fabrika/src/host/README.md): the host and the ledger.
@@ -264,7 +264,7 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   - [`packs/ui-verification`](./packs/ui-verification/README.md): holds a build that changes
     what a user sees, and asks the owner yes or no.
 - `apps/`: what a person opens, on top of everything else. Nothing imports an app.
-  - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app`: the fabrika app, a
+  - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app-old`: the fabrika app, a
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
@@ -293,7 +293,7 @@ Other commands:
 
 | What | Command |
 |---|---|
-| Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
+| Build the `dist/` of `@kampus/fabrika-old` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |

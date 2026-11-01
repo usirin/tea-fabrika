@@ -7,7 +7,7 @@ import {
 	propertyTrace,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import type {MsgOf} from "@kampus/fabrika";
+import type {MsgOf} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {counter} from "./index.ts";
 

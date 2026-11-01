@@ -6,7 +6,7 @@ a view drawn from the data, and it ends. It reads through the `Experiments` serv
 and writes nothing. The fabrika app lists it.
 
 ```ts
-import {call} from "@kampus/fabrika";
+import {call} from "@kampus/fabrika-old";
 import {experiment} from "@tea-fabrika/experiment";
 
 yield* call(experiment, {n: "170"});

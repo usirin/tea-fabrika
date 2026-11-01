@@ -1,4 +1,4 @@
-import {fresh, type LawResult, say} from "@kampus/fabrika/laws";
+import {fresh, type LawResult, say} from "@kampus/fabrika-old/laws";
 import {Duration, Effect, Exit, Layer, Scope} from "effect";
 import {type LaneId, laneId, planOf, type TicketId, taskId, ticketId} from "../ids.ts";
 import {claim, Lanes, layerLanes, release} from "./claims.ts";

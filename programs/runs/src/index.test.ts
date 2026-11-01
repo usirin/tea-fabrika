@@ -1,5 +1,5 @@
-import {Ledger, memoryStorage, offer, start, streams} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, memoryStorage, offer, start, streams} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Author, type One, oneOf, pullRequestsOf} from "@tea-fabrika/tracker";
 import {OWNER} from "@tea-fabrika/tracker/seven";

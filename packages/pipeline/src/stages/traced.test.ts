@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
-import {ATTR} from "@kampus/fabrika";
-import {noSpend} from "@kampus/fabrika/agents/claude";
+import {ATTR} from "@kampus/fabrika-old";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import {gatherPack, type Review, type ReviewCmd, review} from "./review/machine.ts";
 import type {Ran} from "./review/reviewer.ts";

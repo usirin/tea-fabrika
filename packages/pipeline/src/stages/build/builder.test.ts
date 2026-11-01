@@ -1,4 +1,4 @@
-import type {Open} from "@kampus/fabrika/agents/claude";
+import type {Open} from "@kampus/fabrika-old/agents/claude";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";

@@ -1,4 +1,4 @@
-import {type Row, sha256Hex, TraceId, Writer, writerOf} from "@kampus/fabrika";
+import {type Row, sha256Hex, TraceId, Writer, writerOf} from "@kampus/fabrika-old";
 import {Equal, Option, Schema} from "effect";
 import {Title} from "../tickets/ticket.ts";
 
@@ -34,7 +34,7 @@ const HEX = 12;
 // The two names are two types, told apart by their separator: an id is `${string}.${string}`, a
 // label `${string}-${number}`, and neither is the other's type, nor is a plain string. A brand
 // would say the same, but a program's flags and outputs take only a schema whose two sides are
-// one type (`ShapeSchema` in @kampus/fabrika), and a template literal is one.
+// one type (`ShapeSchema` in @kampus/fabrika-old), and a template literal is one.
 //
 //   experiments.log("170.49af0a19b683", logs)   // types
 //   experiments.log("170-1", logs)              // does not: a label is no run id

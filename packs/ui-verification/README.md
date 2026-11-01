@@ -25,7 +25,7 @@ The owner's yes or no goes to the core, not to this pack. Whoever shows the ques
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@kampus/fabrika` and the pipeline, `@kampus/pipeline/*` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
+- It imports `@kampus/fabrika-old` and the pipeline, `@kampus/pipeline/*` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
 - The pipeline is its own package, in `packages/pipeline/`. `@kampus/pipeline` is a working name, from experiment 114.
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.

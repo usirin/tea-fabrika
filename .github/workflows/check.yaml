@@ -53,7 +53,7 @@ jobs:
           else
             pnpm promises gate
           fi
-      # The builds of @kampus/fabrika and @kampus/pipeline (dist/): the published
+      # The builds of @kampus/fabrika-old and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build
 
@@ -90,7 +90,7 @@ jobs:
       - name: e2e
         env:
           SHOTS: ${{ runner.temp }}/e2e-shots
-        run: pnpm --filter @kampus/fabrika-app e2e
+        run: pnpm --filter @kampus/fabrika-app-old e2e
       # What the window showed at each step, to see a red run without running it again.
       - if: failure()
         uses: actions/upload-artifact@v4

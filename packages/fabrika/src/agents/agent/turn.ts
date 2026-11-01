@@ -286,4 +286,4 @@ export class Agents extends Context.Service<
 		/** Whether a session of ours is known, and on which provider: so a stage picks "carry on" or "start". */
 		readonly knows: (session: string) => Effect.Effect<string | null>;
 	}
->()("@kampus/fabrika/Agents") {}
+>()("@kampus/fabrika-old/Agents") {}

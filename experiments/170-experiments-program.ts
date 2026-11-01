@@ -13,8 +13,8 @@
 // The counts, and only the counts, go to results/170-experiments-program.json: no title, answer
 // or text from an old write-up is written anywhere.
 import {readdirSync, readFileSync, writeFileSync} from "node:fs";
-import {call, Ledger, memoryStorage} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {call, Ledger, memoryStorage} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Experiments, experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {load, transform} from "@kampus/pipeline/experiments/import";
 import {compare} from "@tea-fabrika/compare";

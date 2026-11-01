@@ -20,7 +20,7 @@ import {
 	Ledger,
 	type Program,
 	serve,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Duration, Effect, Schedule} from "effect";
 import {ensureName} from "../asks/ledger.ts";
 import type {PlanId} from "../ids.ts";

@@ -8,8 +8,8 @@
 // counted.
 
 import {NodeRuntime} from "@effect/platform-node";
-import {Ledger} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Config, Console, Duration, Effect} from "effect";
 
 const main = Effect.gen(function* () {

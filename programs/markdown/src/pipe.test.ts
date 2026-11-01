@@ -1,5 +1,5 @@
-import {Ledger, listed, Shell} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, listed, Shell} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {compare} from "@tea-fabrika/compare";
 import {experiment} from "@tea-fabrika/experiment";

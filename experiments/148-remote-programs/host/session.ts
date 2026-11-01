@@ -26,7 +26,7 @@ import {
 	Shell,
 	start,
 	storageOf,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {Context, Effect, Exit, Layer, Schema, Scope, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";

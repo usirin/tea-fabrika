@@ -67,7 +67,7 @@ import {
 	type SpawnedProcess,
 	type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import {agentEnv, MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika/agents/sandbox";
+import {agentEnv, MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika-old/agents/sandbox";
 import {promptOf} from "@kampus/pipeline/stages/sort/brief";
 import {sortDraft} from "@kampus/pipeline/stages/sort/machine";
 import {sorterOptions} from "@kampus/pipeline/stages/sort/sorter";

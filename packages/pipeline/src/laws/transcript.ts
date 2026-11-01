@@ -4,7 +4,7 @@ import {
 	type ToolStatus,
 	type Transcript,
 	transcript,
-} from "@kampus/fabrika/agents/acp";
+} from "@kampus/fabrika-old/agents/acp";
 import {
 	broke,
 	type Law,

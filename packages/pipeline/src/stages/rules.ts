@@ -7,7 +7,7 @@ import {Schema} from "effect";
 // Every Claude run on the Agent SDK also reads the rule files of the folder
 // it works in itself, the way Claude Code ships it: subfolder files, the
 // nearest one winning, and `@file` imports (`ownRules` in
-// @kampus/fabrika/agents/sandbox, experiment 155,
+// @kampus/fabrika-old/agents/sandbox, experiment 155,
 // docs/direction/agents-read-rules-the-normal-way.md). It reads none of that
 // folder's settings: `.claude/settings.json` ran its hooks, handed its env to
 // the agent and ran its `apiKeyHelper` in experiment 155, so settings come

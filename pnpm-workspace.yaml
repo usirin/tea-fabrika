@@ -35,7 +35,7 @@ catalog:
   '@effect/platform-node': 4.0.6
   '@effect/tsgo': 0.56.0
   '@effect/vitest': 4.0.6
-  # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika/mcp).
+  # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
   # The app's UI (apps/fabrika, programs/*/window): Manti UI, Zag.js state machines and a token

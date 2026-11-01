@@ -19,8 +19,8 @@ import {
 	Signer,
 	start,
 	viewOf,
-} from "@kampus/fabrika";
-import {DoorRefused, doorOf, layerHttp} from "@kampus/fabrika/http";
+} from "@kampus/fabrika-old";
+import {DoorRefused, doorOf, layerHttp} from "@kampus/fabrika-old/http";
 import {Author, pullRequestsOf, type Shown, tracker} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream} from "effect";
 import {ConnectFailed, connectionOf, loginWith} from "./connection.ts";

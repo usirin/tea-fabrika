@@ -25,8 +25,8 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 // window, takes no focus and needs no network: the page's files are served from dist/ by the
 // browser's own request hook. Not part of `pnpm test`.
 //
-//   pnpm --filter @kampus/fabrika-app shots                writes docs/round-6/*.png
-//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app shots  writes them there
+//   pnpm --filter @kampus/fabrika-app-old shots                writes docs/round-6/*.png
+//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old shots  writes them there
 //
 //   ticket.png         the ticket, with the map and the runs folded into strips beside it
 //   folded-column.png  the ticket beside a column of the map over the runs, the column folded

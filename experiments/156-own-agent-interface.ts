@@ -1,10 +1,10 @@
 // Experiment 156: our own agent interface, its shapes taken from ACP, and the same job through
 // both paths. Four rows of one provider table, all behind the same `Agent.Agents` service:
 //
-//   claude      Claude through our adapter on the Agent SDK      (@kampus/fabrika/agents/claude)
-//   acp-claude  Claude through ACP, our ACP client and Zed's adapter (@kampus/fabrika/agents/acp)
-//   codex       Codex through our adapter on `codex exec --json`  (@kampus/fabrika/agents/codex)
-//   acp-codex   Codex through ACP, the pinned codex-acp adapter    (@kampus/fabrika/agents/acp)
+//   claude      Claude through our adapter on the Agent SDK      (@kampus/fabrika-old/agents/claude)
+//   acp-claude  Claude through ACP, our ACP client and Zed's adapter (@kampus/fabrika-old/agents/acp)
+//   codex       Codex through our adapter on `codex exec --json`  (@kampus/fabrika-old/agents/codex)
+//   acp-codex   Codex through ACP, the pinned codex-acp adapter    (@kampus/fabrika-old/agents/acp)
 //
 //   P='env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 15'
 //   $P CLAUDE_CODE_OAUTH_TOKEN=... node experiments/156-own-agent-interface.ts job <row> [n]   # the format-bytes job
@@ -46,11 +46,11 @@ import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Agent} from "@kampus/fabrika";
-import {acpAdapter, codexHomeOf} from "@kampus/fabrika/agents/acp";
-import {claudeAdapter, type Open} from "@kampus/fabrika/agents/claude";
-import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {Agent} from "@kampus/fabrika-old";
+import {acpAdapter, codexHomeOf} from "@kampus/fabrika-old/agents/acp";
+import {claudeAdapter, type Open} from "@kampus/fabrika-old/agents/claude";
+import {codexAdapter, psReaper} from "@kampus/fabrika-old/agents/codex";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Exit, Schema, Stream} from "effect";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

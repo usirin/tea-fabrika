@@ -9,8 +9,8 @@
 // reads the plan as it stands and every ticket sort folded in since (`foldedPlanHost`), and writes
 // the whole plan again. The outcome row holds the new draft, for whoever plans the next version.
 
-import {Ledger, type Self} from "@kampus/fabrika";
-import type {DraftRun} from "@kampus/fabrika/agents/claude";
+import {Ledger, type Self} from "@kampus/fabrika-old";
+import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Effect, Exit, Schema, Stream} from "effect";
 import {readFacts} from "../asks/ledger.ts";
 import {foldLedger, foldsOf, latestOf} from "../asks/rules.ts";

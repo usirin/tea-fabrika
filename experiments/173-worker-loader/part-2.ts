@@ -288,10 +288,10 @@ export const main = async () => {
 		pureTrackerRealEffect: await bundle({path: "pure-tracker.ts"}),
 		pureCounter: await pureProgram("pure-counter.ts"),
 		pureTracker: await pureProgram("pure-tracker.ts"),
-		pureCounterNoFabrika: await pureProgram("pure-counter.ts", ["@kampus/fabrika"]),
+		pureCounterNoFabrika: await pureProgram("pure-counter.ts", ["@kampus/fabrika-old"]),
 		pureCounterMachine: await pureProgram("pure-counter-machine.ts"),
 		pureCounterMachineRealEffect: await bundle({path: "pure-counter-machine.ts"}),
-		pureTrackerNoFabrika: await pureProgram("pure-tracker.ts", ["@kampus/fabrika"]),
+		pureTrackerNoFabrika: await pureProgram("pure-tracker.ts", ["@kampus/fabrika-old"]),
 	};
 	const core = await bundle({path: "core-2.ts"});
 	const show = (b: Built) => ({bytes: b.bytes, gzip: b.gzip, buildMs: b.ms, parts: b.parts});

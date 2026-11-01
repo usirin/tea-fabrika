@@ -5,7 +5,7 @@ import {
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {createDraft, type DraftRun, noSpend, type Open} from "@kampus/fabrika/agents/claude";
+import {createDraft, type DraftRun, noSpend, type Open} from "@kampus/fabrika-old/agents/claude";
 import {
 	agentEnv,
 	fencedEnv,
@@ -14,8 +14,8 @@ import {
 	ownRules,
 	TOOLS,
 	temps,
-} from "@kampus/fabrika/agents/sandbox";
-import {sdkTrace} from "@kampus/fabrika/agents/trace";
+} from "@kampus/fabrika-old/agents/sandbox";
+import {sdkTrace} from "@kampus/fabrika-old/agents/trace";
 import {Clock, Effect, Layer, Stream} from "effect";
 import type {Refused} from "../review/reviewer.ts";
 import {builderRefusal} from "./check.ts";

@@ -1,4 +1,4 @@
-import {Shell} from "@kampus/fabrika";
+import {Shell} from "@kampus/fabrika-old";
 import {cells, spot} from "./cells.ts";
 
 // The bytes the line editor writes to the terminal: text, and a few VT100 cursor moves. Pure, so

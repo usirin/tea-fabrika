@@ -1,4 +1,4 @@
-import {ATTR, type JobTrace, runTraceId} from "@kampus/fabrika";
+import {ATTR, type JobTrace, runTraceId} from "@kampus/fabrika-old";
 
 // The record `seq --to 3 | tally` leaves, in the record's own read shape
 // (packages/fabrika/src/host/traces.ts): the example of

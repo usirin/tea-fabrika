@@ -38,7 +38,7 @@ const packageOf = (path: string) => {
 	if (m?.[1]) return m[1];
 	if (path.includes("effect-stub")) return "the stub";
 	if (path.startsWith("stub:")) return "stubbed names";
-	if (path.includes("packages/fabrika")) return "@kampus/fabrika";
+	if (path.includes("packages/fabrika")) return "@kampus/fabrika-old";
 	if (path.includes("packages/pipeline")) return "@kampus/pipeline";
 	if (path.includes("programs/")) return "the program";
 	return "own code";
@@ -127,7 +127,7 @@ const effectPartsOf = async (): Promise<string[]> => {
 	};
 	for (const entry of [
 		{contents: `export * from "@demlik/tea"; export * from "@demlik/tea/effect";`},
-		{contents: `export * from "@kampus/fabrika";`},
+		{contents: `export * from "@kampus/fabrika-old";`},
 		{path: "program.ts"},
 		{path: "counter-entry.ts"},
 	])
@@ -196,10 +196,10 @@ export const splitLibs = async (): Promise<Split> => {
 		await facade(to["@demlik/tea"] ?? "", "engine", "@demlik/tea/effect"),
 	);
 	add(
-		"@kampus/fabrika",
+		"@kampus/fabrika-old",
 		"fabrika",
 		"0.0.0",
-		await bundle({contents: `export * from "@kampus/fabrika";`}, [shared(to)]),
+		await bundle({contents: `export * from "@kampus/fabrika-old";`}, [shared(to)]),
 	);
 	add("./shared-probe.ts", "probe", "0", await bundle({path: "shared-probe.ts"}));
 	return {libs, to};
@@ -214,7 +214,7 @@ const literal = (s: string) => s.replaceAll(/[/\\^$*+?.()|[\]{}]/g, "\\$&");
 
 /**
  * `effect`, and any `effect/<part>`, as the inert names of ./effect-stub.ts; and so for any other
- * package named in `also` (for example `@kampus/fabrika`), to see if the update calls it.
+ * package named in `also` (for example `@kampus/fabrika-old`), to see if the update calls it.
  */
 const stub = (also: readonly string[]): Plugin => ({
 	name: "stub",

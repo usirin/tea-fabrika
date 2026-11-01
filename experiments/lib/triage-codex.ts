@@ -13,9 +13,9 @@ import {existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Agent} from "@kampus/fabrika";
-import {codexHomeOf} from "@kampus/fabrika/agents/acp";
-import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
+import {Agent} from "@kampus/fabrika-old";
+import {codexHomeOf} from "@kampus/fabrika-old/agents/acp";
+import {codexAdapter, psReaper} from "@kampus/fabrika-old/agents/codex";
 import {nextTry} from "@kampus/pipeline/combos";
 import {saidOf as dSaidOf, SortReply} from "@kampus/pipeline/stages/sort/answer";
 import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/brief";

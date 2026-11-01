@@ -1,4 +1,4 @@
-import type {JobTrace, Span} from "@kampus/fabrika";
+import type {JobTrace, Span} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {TALLY_TRACE} from "./tally.ts";
 import {groupsOf, type Node, treeOf} from "./tree.ts";

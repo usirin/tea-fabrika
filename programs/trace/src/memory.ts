@@ -1,4 +1,4 @@
-import {type JobTrace, Traces, TraceUnread} from "@kampus/fabrika";
+import {type JobTrace, Traces, TraceUnread} from "@kampus/fabrika-old";
 import {Effect, Layer, Stream} from "effect";
 
 // `Traces` over records held in memory: what the tests and the shots read. A trace nobody wrote

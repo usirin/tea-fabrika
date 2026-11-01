@@ -1,4 +1,4 @@
-import {HOST_GRACE_MS, hostOf, Ledger} from "@kampus/fabrika";
+import {HOST_GRACE_MS, hostOf, Ledger} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, FiberMap, Layer} from "effect";
 import {type LaneId, laneId, readLaneId, type TicketId} from "../ids.ts";
 import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from "./ledger.ts";
@@ -74,7 +74,7 @@ export class Lanes extends Context.Service<
 		/** The lease this process holds on `ticket`, to write facts under. `null`: it holds none. */
 		readonly hold: (ticket: TicketId) => Effect.Effect<Hold | null>;
 	}
->()("@kampus/fabrika/pipeline/Lanes") {}
+>()("@kampus/fabrika-old/pipeline/Lanes") {}
 
 /** `Lanes` over the `Ledger`. Its renewals end with the layer's scope, as a killed process's would. */
 export const layerLanes = (o: LanesOptions = {}) =>

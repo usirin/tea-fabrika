@@ -7,8 +7,8 @@ import {
 	streams,
 	type Word,
 	type Writer,
-} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Jev} from "@kampus/pipeline/services";
 import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";

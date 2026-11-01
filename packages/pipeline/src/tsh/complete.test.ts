@@ -1,4 +1,4 @@
-import {readFlags, Shell} from "@kampus/fabrika";
+import {readFlags, Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {DEFAULT_SETTINGS} from "../settings.ts";
 import {HOLDS_NOTHING, setupOf} from "../setup.ts";
@@ -8,7 +8,7 @@ import {programsOf} from "./fabrika-list.ts";
 // What the launcher does from the line as typed, with no terminal: Tab
 // completion, and which programs the command line lists. The Ctrl-R search
 // and how the command line is read name no program of this package's: they
-// are the shell's own tests (`@kampus/fabrika`'s shell/launch.test.ts).
+// are the shell's own tests (`@kampus/fabrika-old`'s shell/launch.test.ts).
 
 const {complete, EMPTY} = Shell;
 const list = programsOf(defaultConfig("/tsh"));

@@ -1,7 +1,7 @@
 // Read the book and the poet's tally. Writes nothing.
 import {NodeRuntime} from "@effect/platform-node";
-import {getState} from "@kampus/fabrika";
-import {layerAttach} from "@kampus/fabrika/local";
+import {getState} from "@kampus/fabrika-old";
+import {layerAttach} from "@kampus/fabrika-old/local";
 import {Console, Effect} from "effect";
 import {Book, Poet} from "./programs.ts";
 

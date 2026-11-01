@@ -26,7 +26,7 @@ import {
 	type Unread,
 	type Watch,
 	type Word,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {
 	type Cause,
 	Deferred,
@@ -47,7 +47,7 @@ import {
 //
 // A record since 2026-10-30: shape B was built into the runtime itself in
 // https://github.com/usirin/tea-fabrika/pull/195. This file rode on the
-// runtime before that, and was moved here out of `@kampus/fabrika` unchanged
+// runtime before that, and was moved here out of `@kampus/fabrika-old` unchanged
 // but for its imports. It no longer runs on main: it reads its hidden input
 // as a stream from the kit, and since #195 the kit hands `serve` instead.
 //
@@ -75,7 +75,7 @@ import {
 /** What a handler of one input is handed: its value, or a `manual` input's delivery. */
 export type ValueOf<D> = D extends Input<infer T, "manual"> ? Delivery<T> : PayloadOf<D>;
 
-const EndId: unique symbol = Symbol.for("@kampus/fabrika/spike/serve/End");
+const EndId: unique symbol = Symbol.for("@kampus/fabrika-old/spike/serve/End");
 /** What a handler answers to stop serving. */
 export interface End {
 	readonly [EndId]: typeof EndId;
@@ -89,7 +89,7 @@ const isEnd = (value: unknown): value is End =>
 /** One input's handler: run once per value, one value at a time, in arrival order. */
 export type Handler<A, E, R> = (value: A) => Effect.Effect<unknown, E, R>;
 
-const ForkedId: unique symbol = Symbol.for("@kampus/fabrika/spike/serve/Forked");
+const ForkedId: unique symbol = Symbol.for("@kampus/fabrika-old/spike/serve/Forked");
 /** A handler that runs beside the order: Effect's `Rpc.fork`. */
 export interface Forked<A, E, R> {
 	readonly [ForkedId]: typeof ForkedId;

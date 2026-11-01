@@ -10,7 +10,7 @@ import {
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import {type MsgOf, memoryStorage} from "@kampus/fabrika-old";
 import {FLOOR} from "@kampus/pipeline/tickets/duplicates";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import {Effect} from "effect";

@@ -6,7 +6,7 @@ then the list as markdown, and it ends. It reads through the `Experiments` servi
 and writes nothing. The fabrika app lists it.
 
 ```ts
-import {call} from "@kampus/fabrika";
+import {call} from "@kampus/fabrika-old";
 import {experiments} from "@tea-fabrika/experiments";
 
 yield* call(experiments, {});

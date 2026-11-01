@@ -1,4 +1,4 @@
-// `@kampus/fabrika/mcp`: a host's programs, served to an agent as MCP tools (spec 2026-07-28), so
+// `@kampus/fabrika-old/mcp`: a host's programs, served to an agent as MCP tools (spec 2026-07-28), so
 // an agent drives the programs a person watches. Each input of each program is a tool, made from
 // its schema (`toolsOf`); a call goes to the agent's own run of that program (`driveFor`), which
 // writes as the agent. On a subpath: it names the MCP SDK, whose stdio part reads Node's process.

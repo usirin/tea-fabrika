@@ -21,7 +21,7 @@
 // The twin (`twin.ts`) runs the same `LEDGER_ENTRY` with the same `ledgerBindings` in Miniflare.
 // This file loads Alchemy, which reads the working folder once as it loads, so no test imports it.
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika/local";
+import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika-old/local";
 import * as Alchemy from "alchemy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import {Config, Effect, Option} from "effect";

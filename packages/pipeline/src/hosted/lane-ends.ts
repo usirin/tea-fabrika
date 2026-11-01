@@ -28,7 +28,7 @@ import {
 	type Row,
 	Self,
 	serve,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Arbitrary, Clock, Duration, Effect, Exit, Layer, Schedule, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
 import {plans86b} from "../asks/cases.ts";

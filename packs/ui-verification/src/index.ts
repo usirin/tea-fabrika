@@ -1,4 +1,4 @@
-import {defineProgram, input, output} from "@kampus/fabrika";
+import {defineProgram, input, output} from "@kampus/fabrika-old";
 import type {Attachment} from "@kampus/pipeline/asks/ask";
 import type {Pack} from "@kampus/pipeline/asks/packs";
 import {Built, Cleared, Raise} from "@kampus/pipeline/asks/program";

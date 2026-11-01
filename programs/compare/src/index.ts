@@ -1,4 +1,4 @@
-import {defineProgram, flag, output} from "@kampus/fabrika";
+import {defineProgram, flag, output} from "@kampus/fabrika-old";
 import {Comparison, ExperimentId, RunId, RunLabel} from "@kampus/pipeline/experiments/experiment";
 import {Experiments, ExperimentsFailed} from "@kampus/pipeline/experiments/experiments";
 import {Effect, Schema} from "effect";

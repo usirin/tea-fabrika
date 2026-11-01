@@ -7,7 +7,7 @@ import {
 	start,
 	Traces,
 	type Word,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Deferred, Duration, Effect, Layer, Option, Queue, Stream} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";

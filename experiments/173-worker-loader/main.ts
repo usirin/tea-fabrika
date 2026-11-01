@@ -54,7 +54,8 @@ const bundle = async (entry: string, minify: boolean) => {
 	for (const o of Object.values(out.metafile.outputs))
 		for (const [path, {bytesInOutput}] of Object.entries(o.inputs)) {
 			const m = path.match(/node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+)/);
-			const name = m?.[1] ?? (path.includes("packages/fabrika") ? "@kampus/fabrika" : "own code");
+			const name =
+				m?.[1] ?? (path.includes("packages/fabrika") ? "@kampus/fabrika-old" : "own code");
 			by[name] = (by[name] ?? 0) + bytesInOutput;
 		}
 	const parts = Object.fromEntries(

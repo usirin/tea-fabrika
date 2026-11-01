@@ -1,4 +1,4 @@
-# @kampus/fabrika
+# @kampus/fabrika-old
 
 The tools for building your own software factory on [`@demlik/tea`](https://github.com/kamp-us/demlik),
 in one package. Use it to write programs, run them on a host with one shared ledger, drive them
@@ -39,8 +39,8 @@ The top level runs anywhere, a browser too. Anything tied to a platform comes fr
 - A program picks its Layers where it starts. The rest of its code never names a platform.
 
 ```ts
-import {defineProgram, input, Ledger, serve} from "@kampus/fabrika"; // runs anywhere
-import {layerHttp} from "@kampus/fabrika/http"; // a Ledger over HTTP
+import {defineProgram, input, Ledger, serve} from "@kampus/fabrika-old"; // runs anywhere
+import {layerHttp} from "@kampus/fabrika-old/http"; // a Ledger over HTTP
 ```
 
 - An `import` loads every file it points to. A top level that pulled in Miniflare or the Agent
@@ -55,7 +55,7 @@ A program that doubles each number it is told. `call` runs it once, tells it its
 collects what it says.
 
 ```ts
-import {call, defineProgram, input, output} from "@kampus/fabrika";
+import {call, defineProgram, input, output} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 const double = defineProgram({
@@ -96,22 +96,22 @@ runs TypeScript as it is.
 
 | Import | What it gives |
 |---|---|
-| `@kampus/fabrika` | Programs (`defineProgram`, `start`, `tell`, `call`, shapes, `Storage` with `memoryStorage`, traces), the host (`Ledger`, `serve`, `Self`, `cast`, `supervisor`, `tail`, `whereis`, dead letters), the Elm modules `Call` and `Monitor`, and `Shell`: tsh's program list (`programList`, `Programs`, `SMALL`) and its parts |
-| `@kampus/fabrika/memory` | `layerMemory`: a `Ledger` in plain memory, for tests |
-| `@kampus/fabrika/sqlite` | `layerSqlite`: a `Ledger` on a node:sqlite file |
-| `@kampus/fabrika/records` | `sqliteRecords`: a host's job records, one node:sqlite file per job, what `trace` reads |
-| `@kampus/fabrika/http` | `layerHttp`: a `Ledger` over HTTP to any running ledger, through its door with a token; `doorOf`: the door's login, invite and remove steps |
-| `@kampus/fabrika/local` | `layerLocal`: the ledger as a Durable Object in a Miniflare child, `layerAttach` to join one another process started, `layerInside` past the door for tests, and `ledgerOptions` |
-| `@kampus/fabrika/storage/node` | `fileStorage(dir)`: a program's `Storage` in a folder |
-| `@kampus/fabrika/otel` | Spans out over OTLP/HTTP, and what a trace viewer is shown |
-| `@kampus/fabrika/shell` | `runTsh`, the launcher an app's bin runs with its `Programs`, and `homeOf` |
-| `@kampus/fabrika/agents/claude` | A Draft over the Claude Agent SDK, the schema its answer is read by, and the shell guard its tool calls pass |
-| `@kampus/fabrika/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the rule files it reads and the settings it does not (`ownRules`, experiment 155), the guard. No Agent SDK loads |
-| `@kampus/fabrika/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
-| `@kampus/fabrika/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
-| `@kampus/fabrika/mcp` | Programs as MCP tools, one per input, made from each input's schema (`toolsOf`, `callOf`); an agent's runs of them (`driveFor`); one agent served on a socket with the official MCP SDK, writing as `agent:<name>` (`serveAgent`); and the stdio bridge an MCP client starts (`bridge`) |
-| `@kampus/fabrika/sandbox/os` | `layerOs`: the `Sandbox` on Anthropic's sandbox-runtime. It reads only its own folders and reaches only its model. The `none` sandbox, `Sandbox.layerNone`, is on the top level |
-| `@kampus/fabrika/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
+| `@kampus/fabrika-old` | Programs (`defineProgram`, `start`, `tell`, `call`, shapes, `Storage` with `memoryStorage`, traces), the host (`Ledger`, `serve`, `Self`, `cast`, `supervisor`, `tail`, `whereis`, dead letters), the Elm modules `Call` and `Monitor`, and `Shell`: tsh's program list (`programList`, `Programs`, `SMALL`) and its parts |
+| `@kampus/fabrika-old/memory` | `layerMemory`: a `Ledger` in plain memory, for tests |
+| `@kampus/fabrika-old/sqlite` | `layerSqlite`: a `Ledger` on a node:sqlite file |
+| `@kampus/fabrika-old/records` | `sqliteRecords`: a host's job records, one node:sqlite file per job, what `trace` reads |
+| `@kampus/fabrika-old/http` | `layerHttp`: a `Ledger` over HTTP to any running ledger, through its door with a token; `doorOf`: the door's login, invite and remove steps |
+| `@kampus/fabrika-old/local` | `layerLocal`: the ledger as a Durable Object in a Miniflare child, `layerAttach` to join one another process started, `layerInside` past the door for tests, and `ledgerOptions` |
+| `@kampus/fabrika-old/storage/node` | `fileStorage(dir)`: a program's `Storage` in a folder |
+| `@kampus/fabrika-old/otel` | Spans out over OTLP/HTTP, and what a trace viewer is shown |
+| `@kampus/fabrika-old/shell` | `runTsh`, the launcher an app's bin runs with its `Programs`, and `homeOf` |
+| `@kampus/fabrika-old/agents/claude` | A Draft over the Claude Agent SDK, the schema its answer is read by, and the shell guard its tool calls pass |
+| `@kampus/fabrika-old/agents/sandbox` | What an agent's process may see and do: its environment, its sandbox's folders and tools, the rule files it reads and the settings it does not (`ownRules`, experiment 155), the guard. No Agent SDK loads |
+| `@kampus/fabrika-old/agents/trace` | An agent's turns and tool calls as spans, its words kept out of export |
+| `@kampus/fabrika-old/agents/acp` | Any harness that speaks the Agent Client Protocol: the `acp` program, its client, the harnesses |
+| `@kampus/fabrika-old/mcp` | Programs as MCP tools, one per input, made from each input's schema (`toolsOf`, `callOf`); an agent's runs of them (`driveFor`); one agent served on a socket with the official MCP SDK, writing as `agent:<name>` (`serveAgent`); and the stdio bridge an MCP client starts (`bridge`) |
+| `@kampus/fabrika-old/sandbox/os` | `layerOs`: the `Sandbox` on Anthropic's sandbox-runtime. It reads only its own folders and reaches only its model. The `none` sandbox, `Sandbox.layerNone`, is on the top level |
+| `@kampus/fabrika-old/laws` | The ledger's law suite and its planted mistakes, for a new `Ledger` to run |
 
 ### The parts
 
@@ -180,7 +180,7 @@ root; `pnpm lint` checks it).
 | What | Command |
 |---|---|
 | Build (`dist/`) | `pnpm build` at the root |
-| Typecheck | `pnpm --filter @kampus/fabrika typecheck` |
+| Typecheck | `pnpm --filter @kampus/fabrika-old typecheck` |
 | Test | `pnpm vitest run packages/fabrika` |
 | The browser check | `pnpm lint:browser` |
 | tsh with the small programs only (a dev script; the package installs no command) | `packages/fabrika/bin/tsh-small` |

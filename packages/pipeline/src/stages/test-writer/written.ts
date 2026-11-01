@@ -1,4 +1,4 @@
-import {createDraft} from "@kampus/fabrika/agents/claude";
+import {createDraft} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {matcherFor} from "../../codeowners.ts";
 import type {Check} from "../../primitives.ts";

@@ -1,5 +1,5 @@
-import {Ledger, streams} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, streams} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Deferred, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {

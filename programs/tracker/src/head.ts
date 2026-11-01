@@ -1,4 +1,4 @@
-import {Writer} from "@kampus/fabrika";
+import {Writer} from "@kampus/fabrika-old";
 import {type Entry, factsOf, Id, Stage, Title} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 

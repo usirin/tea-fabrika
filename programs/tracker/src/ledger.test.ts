@@ -1,5 +1,5 @@
-import {DOOR, Ledger, MEMBERS, streams} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {DOOR, Ledger, MEMBERS, streams} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {loadCell} from "./ledger.ts";

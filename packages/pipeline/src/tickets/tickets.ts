@@ -1,4 +1,4 @@
-import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika";
+import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika-old";
 import {Clock, Context, Effect, Layer, Ref, Schema} from "effect";
 import {
 	CodeFact,

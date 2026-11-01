@@ -10,7 +10,7 @@
 // GitHub with a fake, and only Miniflare's `outboundService` does that; and Alchemy reads the
 // working folder once as it loads, so a test process cannot hold it. What the twin cannot show is
 // in the README.
-import {ledgerOptions} from "@kampus/fabrika/local";
+import {ledgerOptions} from "@kampus/fabrika-old/local";
 import {Effect, Schema} from "effect";
 import {Miniflare} from "miniflare";
 import {type ServerConfig, serverDoor} from "./config.ts";

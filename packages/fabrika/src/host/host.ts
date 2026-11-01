@@ -305,7 +305,7 @@ export class Self extends Context.Service<
 			why: string,
 		) => Effect.Effect<"signalled" | "exited" | "noproc" | "denied" | Fenced>;
 	}
->()("@kampus/fabrika/Self") {}
+>()("@kampus/fabrika-old/Self") {}
 
 // ---------------------------------------------------------------- what the host says
 

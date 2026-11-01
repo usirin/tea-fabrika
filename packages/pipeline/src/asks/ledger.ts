@@ -1,5 +1,12 @@
-import {type Appended, type Fenced, Ledger, type Row, streams, type Writes} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {
+	type Appended,
+	type Fenced,
+	Ledger,
+	type Row,
+	streams,
+	type Writes,
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Duration, Effect, Layer, Schema} from "effect";
 import {Row as BookRow} from "../criteria/book.ts";
 import {LaneId, Owner, PlanId, TaskId, TicketId} from "../ids.ts";
@@ -188,7 +195,7 @@ export interface Hold {
 }
 
 /** The one ledger, the tea-host's: the pipeline keeps no second one. */
-export {Ledger} from "@kampus/fabrika";
+export {Ledger} from "@kampus/fabrika-old";
 
 const encode = Schema.encodeSync(Fact);
 const decode = Schema.decodeUnknownExit(Fact);

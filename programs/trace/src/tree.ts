@@ -1,4 +1,4 @@
-import {ATTR, type JobTrace, type Span, type Step} from "@kampus/fabrika";
+import {ATTR, type JobTrace, type Span, type Step} from "@kampus/fabrika-old";
 
 // A job's record as one tree, the way the tile opens it: the job, its spans nested by parent,
 // each run's machine runs under the run's span, each machine run's steps under it, and an

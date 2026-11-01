@@ -11,7 +11,7 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {holderOf, layerLanes} from "../../asks/claims.ts";

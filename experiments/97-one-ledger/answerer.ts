@@ -14,7 +14,7 @@
 //   - Questions come by a live tail of `answerer:1/inbox` from the saved cursor.
 import type {OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, offer, output, start} from "@kampus/fabrika";
+import {defineProgram, input, offer, output, start} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {Agent} from "../95-agents-across-hosts/agent.ts";
 import {

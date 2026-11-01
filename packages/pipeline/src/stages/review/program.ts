@@ -1,4 +1,12 @@
-import {defineProgram, flag, input, kind, output, type RefsOf, type Send} from "@kampus/fabrika";
+import {
+	defineProgram,
+	flag,
+	input,
+	kind,
+	output,
+	type RefsOf,
+	type Send,
+} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {CriteriaRecord, type Judgement} from "../../criteria/record.ts";
 import {readTicketId} from "../../ids.ts";

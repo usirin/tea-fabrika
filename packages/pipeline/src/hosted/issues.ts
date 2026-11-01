@@ -13,7 +13,7 @@
 // Two implementations: GitHub (below, gh on this machine, for the sandbox runs) and experiment 111's
 // fake (experiments/111-sort-on-tea-host/world.ts).
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Layer, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {runChild} from "../child.ts";
@@ -58,7 +58,7 @@ export class Issues extends Context.Service<
 			reason: CloseReason,
 		) => Effect.Effect<void, Failed | KeyRefused>;
 	}
->()("@kampus/fabrika/pipeline/Issues") {}
+>()("@kampus/fabrika-old/pipeline/Issues") {}
 
 const ok = (exited: {readonly code: number; readonly out: string}): Effect.Effect<string, Failed> =>
 	exited.code === 0 ? Effect.succeed(exited.out) : failed;

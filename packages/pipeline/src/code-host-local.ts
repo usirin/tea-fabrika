@@ -1,5 +1,5 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Layer, Path, Ref, Semaphore, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {Ledger, readFacts} from "./asks/ledger.ts";

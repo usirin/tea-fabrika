@@ -13,7 +13,7 @@
 //   const s = twinStack({name: "tf-exp-171", person: "owner", secret, port: 18787, main: {kind: "source"}});
 //   yield* deploy({stack: s, stage: "local", dev: true, scope});   // {url: "http://127.0.0.1:18787"}
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika/local";
+import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika-old/local";
 import * as Alchemy from "alchemy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import {Effect, type Redacted} from "effect";

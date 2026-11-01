@@ -298,7 +298,7 @@ export class Traces extends Context.Service<
 		 */
 		readonly watch: (trace: string) => Stream.Stream<JobTrace, TraceUnread>;
 	}
->()("@kampus/fabrika/Traces") {}
+>()("@kampus/fabrika-old/Traces") {}
 
 /** How often a record that says nothing of its writes is read again while it is followed. */
 export const POLL = Duration.seconds(1);

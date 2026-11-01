@@ -1,7 +1,7 @@
 import {AsyncSchemaError, Cmd as CoreCmd, defineMachine, type Settled} from "@demlik/tea";
 import {Cmd, run} from "@demlik/tea/effect";
 import {drive} from "@demlik/tea/testing/effect";
-import {createDraft, jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {createDraft, jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {Context, Effect, Exit, Layer, Option, Schema, SchemaGetter} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";

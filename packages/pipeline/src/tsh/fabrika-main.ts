@@ -1,7 +1,7 @@
 import {homedir} from "node:os";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Ledger, Shell} from "@kampus/fabrika";
-import {homeOf, runTsh} from "@kampus/fabrika/shell";
+import {Ledger, Shell} from "@kampus/fabrika-old";
+import {homeOf, runTsh} from "@kampus/fabrika-old/shell";
 import {Context, Effect, Exit, FileSystem, Layer, Path, Scope} from "effect";
 import {loadSettings, sourceLine} from "../settings-source.ts";
 import {repoOf} from "../settings.ts";

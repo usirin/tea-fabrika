@@ -9,7 +9,7 @@ lists it, so `tracker` typed in the app's tsh opens its window. The design is
 [Tickets start in our tracker](../../docs/direction/tickets-start-in-our-tracker.md).
 
 ```ts
-import {start, tell} from "@kampus/fabrika";
+import {start, tell} from "@kampus/fabrika-old";
 import {Author, tracker} from "@tea-fabrika/tracker";
 
 // What its window sends: one input per command, named by its verb, read in the order told across
@@ -89,7 +89,7 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   ledger. A run reads what it is told in the order told, across all its inputs, so a write told
   before quit is always read before it, and a close told right after a file is read after it.
 - **An agent gets one tool per input, and none for `answer` or `rate_duplicate`.**
-  `@kampus/fabrika/mcp` makes `tracker_file`, `tracker_query`, and so on. The `answer` and
+  `@kampus/fabrika-old/mcp` makes `tracker_file`, `tracker_query`, and so on. The `answer` and
   `rate_duplicate` inputs are `{personOnly: true}`, so there is no `tracker_answer` and no
   `tracker_rate_duplicate`. The query is `{writes: false}`: its tool carries `readOnlyHint`.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,

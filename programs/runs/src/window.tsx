@@ -1,4 +1,4 @@
-import type {WindowProps} from "@kampus/fabrika";
+import type {WindowProps} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import {endedAs} from "@kampus/pipeline/stages/status";
 import {Kbd} from "@manti-ui/react";

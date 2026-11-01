@@ -1,4 +1,4 @@
-import {type Delivery, flag, output, type RefsOf, type Send} from "@kampus/fabrika";
+import {type Delivery, flag, output, type RefsOf, type Send} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import {drop, queueKind, workQueue} from "@kampus/pipeline/stages/queue";
 import {Look, look} from "@kampus/pipeline/stages/ship/look";

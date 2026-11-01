@@ -1,4 +1,4 @@
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Duration, Effect} from "effect";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {door, httpLayer, layerObject} from "./client.ts";

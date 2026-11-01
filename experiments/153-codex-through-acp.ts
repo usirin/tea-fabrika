@@ -47,7 +47,7 @@ import {fileURLToPath} from "node:url";
 import type * as acp from "@agentclientprotocol/sdk";
 import {layer as nodeHttpServer} from "@effect/platform-node/NodeHttpServer";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {ear, memoryStorage, start, tell} from "@kampus/fabrika";
+import {ear, memoryStorage, start, tell} from "@kampus/fabrika-old";
 import {
 	acpProgram,
 	codexHomeOf,
@@ -56,9 +56,9 @@ import {
 	harnessOf,
 	type Spawnable,
 	type Transcript,
-} from "@kampus/fabrika/agents/acp";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+} from "@kampus/fabrika-old/agents/acp";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {McpProtocol, McpServer, Tool, Toolkit} from "effect/ai";
 import {HttpRouter, HttpServer} from "effect/http";

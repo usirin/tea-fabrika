@@ -1,4 +1,4 @@
-import {defineProgram, flag, input, type Kit, kind, output, type RefsOf} from "@kampus/fabrika";
+import {defineProgram, flag, input, type Kit, kind, output, type RefsOf} from "@kampus/fabrika-old";
 import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
 import {nameOf} from "../outcome.ts";

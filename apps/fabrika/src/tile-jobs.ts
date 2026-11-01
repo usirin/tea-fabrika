@@ -1,4 +1,4 @@
-import type {Ended, Shell} from "@kampus/fabrika";
+import type {Ended, Shell} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 
 // A tile's jobs, as its tsh tells the desk: each job of the host's table that this tile's tsh

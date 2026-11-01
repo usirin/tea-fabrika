@@ -1,4 +1,4 @@
-import {readFlags, Shell} from "@kampus/fabrika";
+import {readFlags, Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {defaultConfig} from "./config.ts";
 import {programsOf} from "./fabrika-list.ts";
@@ -7,7 +7,7 @@ import {programsOf} from "./fabrika-list.ts";
 // every name, every value and every pipe. The list is the one the launcher
 // makes, ship and review included; checking never calls GitHub. How one word
 // is read as a value, which names no program of this package's, is the
-// shell's own test (`@kampus/fabrika`'s shell/decode.test.ts).
+// shell's own test (`@kampus/fabrika-old`'s shell/decode.test.ts).
 
 const {check, helpOf, parse, partsHelp, shapeLines, typeOf} = Shell;
 const list = programsOf(defaultConfig("/tsh"));

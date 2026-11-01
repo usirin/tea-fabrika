@@ -1,7 +1,7 @@
 import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
-import {fencedEnv, filesOf, toolchain} from "@kampus/fabrika/agents/sandbox";
+import {fencedEnv, filesOf, toolchain} from "@kampus/fabrika-old/agents/sandbox";
 import {afterAll, describe, expect, it} from "vitest";
 import {builderRefusal} from "./check.ts";
 

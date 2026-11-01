@@ -1,4 +1,12 @@
-import {defineProgram, flag, input, kind, output, type RefsOf, type Send} from "@kampus/fabrika";
+import {
+	defineProgram,
+	flag,
+	input,
+	kind,
+	output,
+	type RefsOf,
+	type Send,
+} from "@kampus/fabrika-old";
 import {Effect, Exit, Schema} from "effect";
 import {nameOf} from "../outcome.ts";
 import {drop, queueKind, workQueue} from "../queue.ts";

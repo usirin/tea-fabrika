@@ -12,7 +12,7 @@
 // answer since 151.
 import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {defineProgram, envelope, input, Self} from "@kampus/fabrika";
+import {defineProgram, envelope, input, Self} from "@kampus/fabrika-old";
 import {sendFact} from "@kampus/pipeline/asks/ledger";
 import {gate, noFaults, useKey} from "@kampus/pipeline/hosted/idempotency";
 import {planOf, taskId, ticketId} from "@kampus/pipeline/ids";

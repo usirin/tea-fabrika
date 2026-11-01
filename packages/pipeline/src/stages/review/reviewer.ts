@@ -15,9 +15,9 @@ import {
 	jsonSchema,
 	noSpend,
 	type Open,
-} from "@kampus/fabrika/agents/claude";
-import {agentEnv, guardHook, ownRules} from "@kampus/fabrika/agents/sandbox";
-import {sdkTrace} from "@kampus/fabrika/agents/trace";
+} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv, guardHook, ownRules} from "@kampus/fabrika-old/agents/sandbox";
+import {sdkTrace} from "@kampus/fabrika-old/agents/trace";
 import {Clock, Context, Effect, Layer, Option, Queue, Schema, Stream} from "effect";
 import {z} from "zod";
 import {sessionOf} from "../../combos.ts";

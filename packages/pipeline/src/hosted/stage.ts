@@ -13,7 +13,7 @@
 //                `<name>/outcome`, fenced, under the id `outcome`. The child is shut down, and the
 //                name exits `normal`. A stage taken over after its outcome row exits at once.
 import type {EffectBootingRuntime} from "@demlik/tea/effect";
-import {defineProgram, envelope, input, Ledger, type Limits, Self} from "@kampus/fabrika";
+import {defineProgram, envelope, input, Ledger, type Limits, Self} from "@kampus/fabrika-old";
 import {Duration, Effect, Exit, Schema, type Scope} from "effect";
 import {steady, steadyCall} from "../asks/ledger.ts";
 import {agentOf} from "./agent.ts";

@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {kind} from "@kampus/fabrika";
+import {kind} from "@kampus/fabrika-old";
 import {type AnswerBody, Ask} from "@kampus/pipeline/asks/ask";
 import {Effect, Schema} from "effect";
 import {askPage, inboxPage, type Page, saidOf} from "./pages.ts";

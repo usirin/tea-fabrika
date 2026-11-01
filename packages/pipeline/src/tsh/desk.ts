@@ -7,7 +7,7 @@ import {
 	listed,
 	memoryStorage,
 	output,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {
 	Context,
 	Deferred,

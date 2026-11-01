@@ -1,8 +1,8 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika";
-import {recordTracing} from "@kampus/fabrika/otel";
-import {sqliteRecords} from "@kampus/fabrika/records";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
+import {recordTracing} from "@kampus/fabrika-old/otel";
+import {sqliteRecords} from "@kampus/fabrika-old/records";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
 import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
@@ -15,7 +15,7 @@ import {pathsOf, reach} from "./socket.ts";
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
 // its own (host.test.ts). Node is named only through Effect's platform: `NodeSocketServer`, and
-// the ledger's node:sqlite and the storage's files from @kampus/fabrika.
+// the ledger's node:sqlite and the storage's files from @kampus/fabrika-old.
 //
 //   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash

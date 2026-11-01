@@ -1,5 +1,5 @@
 import {replay} from "@demlik/tea";
-import type {Writer} from "@kampus/fabrika";
+import type {Writer} from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {load, type Tracker, tracker} from "./machine.ts";
 

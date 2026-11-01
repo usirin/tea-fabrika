@@ -2,7 +2,7 @@
 // place with hard evidence that the model matters for triage (the step the code still calls
 // `sort`): opus closed 32 of 58 answers on phoenix's missed "no"s, sonnet 6. This runs 135's cases,
 // briefs and scoring (`lib/triage-135.ts`, moved out of 135 unchanged) on GPT sol through this
-// repo's Codex adapter (`@kampus/fabrika/agents/codex`, experiment 156's `codex exec --json`, with
+// repo's Codex adapter (`@kampus/fabrika-old/agents/codex`, experiment 156's `codex exec --json`, with
 // experiment 153's containment). Only the model and the harness change. The calls, sorts and
 // tables are in `lib/triage-codex.ts`, shared with experiment 161.
 //

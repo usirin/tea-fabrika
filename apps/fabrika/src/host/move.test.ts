@@ -17,8 +17,8 @@ import {
 	append as rulesAppend,
 	sealMove,
 	writeUnguarded,
-} from "@kampus/fabrika";
-import {openDb} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old";
+import {openDb} from "@kampus/fabrika-old/sqlite";
 import {Effect, type FileSystem, Layer, Option, type Path, type Scope} from "effect";
 import {afterAll, describe, expect, it} from "vitest";
 import {CONNECTION_FILE} from "./connection.ts";

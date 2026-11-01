@@ -1,7 +1,7 @@
 // Experiment 172: when the hands die, how long until the window is back, caught up and usable?
 // See 172-hands-restart-time.md.
 //
-//   pnpm --filter @kampus/fabrika-app build      # dist/host.mjs, the host the app runs
+//   pnpm --filter @kampus/fabrika-app-old build      # dist/host.mjs, the host the app runs
 //   env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
 //     nice -n 15 node experiments/172-hands-restart-time.ts
 //
@@ -37,8 +37,8 @@ import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {asRng, backoffDelay} from "@demlik/tea/retry-backoff";
-import {Ledger, streams, writerText} from "@kampus/fabrika";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+import {Ledger, streams, writerText} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Effect} from "effect";
 import {type Line, type Link, openLink, reach} from "./lib/host-link.ts";
@@ -55,7 +55,7 @@ const FORBIDDEN = ["TYPESAFE_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"];
 const present = FORBIDDEN.filter((k) => process.env[k] !== undefined);
 if (present.length > 0) throw new Error(`unset these first: ${present.join(", ")}`);
 if (!existsSync(HOST))
-	throw new Error("build the app first: pnpm --filter @kampus/fabrika-app build");
+	throw new Error("build the app first: pnpm --filter @kampus/fabrika-app-old build");
 
 const RUNS = Number(process.env.RUNS ?? "20");
 const PARTS = (process.env.PARTS ?? "cold,crash,brain,hop").split(",");

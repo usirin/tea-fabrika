@@ -180,7 +180,7 @@ const PLANTED: readonly (readonly [string, boolean])[] = [
 ];
 
 const PRELUDE = [
-	'import {ownRules} from "@kampus/fabrika/agents/sandbox";',
+	'import {ownRules} from "@kampus/fabrika-old/agents/sandbox";',
 	"declare const options: {settingSources?: string[]; projectConfigRoot?: string};",
 	"declare const sources: string[];",
 	"declare const settingSources: string[];",

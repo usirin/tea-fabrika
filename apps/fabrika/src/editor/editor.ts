@@ -1,6 +1,6 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Shell} from "@kampus/fabrika";
+import {Shell} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import {type Command, KILLS, keyOf, keysIn, printable} from "./keys.ts";
 import {

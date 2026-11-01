@@ -24,7 +24,15 @@
 // The child traps nothing: when a limit ends it, the stage (which traps exits) hears an EXIT, and
 // reads the `limit` record in `<child>/dead`.
 import {defineMachine} from "@demlik/tea";
-import {type Cost, defineProgram, envelope, input, Ledger, Self, streams} from "@kampus/fabrika";
+import {
+	type Cost,
+	defineProgram,
+	envelope,
+	input,
+	Ledger,
+	Self,
+	streams,
+} from "@kampus/fabrika-old";
 import {Duration, Effect, Exit, Schedule, Schema} from "effect";
 import {steady} from "../asks/ledger.ts";
 import {Faults} from "./idempotency.ts";

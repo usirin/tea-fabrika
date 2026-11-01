@@ -7,7 +7,7 @@ import {
 	output,
 	type RefsOf,
 	type Send,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {claim, holding as holds, newLane, release} from "../../asks/claims.ts";
 import {markOf} from "../../criteria/mark.ts";

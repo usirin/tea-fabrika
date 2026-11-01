@@ -8,7 +8,7 @@ import {
 	propertyTrace,
 	type Step,
 } from "@demlik/tea/pbt";
-import type {MsgOf} from "@kampus/fabrika";
+import type {MsgOf} from "@kampus/fabrika-old";
 import type {Entry, Fact} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";

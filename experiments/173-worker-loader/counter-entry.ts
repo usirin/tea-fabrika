@@ -1,4 +1,4 @@
-// The repo's own programs/counter, loaded whole: @kampus/fabrika's defineProgram, its schemas
+// The repo's own programs/counter, loaded whole: @kampus/fabrika-old's defineProgram, its schemas
 // and its machine. Does the real thing load and step, not only a copy?
 
 import {applyCell} from "@demlik/tea";

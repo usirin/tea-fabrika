@@ -6,7 +6,7 @@
 	"scripts": {
 		"prepare": "effect-tsgo patch --typescript",
 		"typecheck": "effect-tsgo patch --typescript && pnpm -r typecheck",
-		"build": "pnpm --filter @kampus/fabrika --filter @kampus/pipeline build",
+		"build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
 		"test": "vitest run",
 		"lint": "node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead",
 		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
@@ -20,7 +20,7 @@
 		"demo:hard": "TOY=duration AGENT=claude node legacy/src/demo.ts",
 		"real": "node legacy/src/real.ts",
 		"tsh": "node packages/pipeline/src/tsh/fabrika-main.ts",
-		"fabrika": "pnpm --filter @kampus/fabrika-app start",
+		"fabrika": "pnpm --filter @kampus/fabrika-app-old start",
 		"trace:up": "docker run -d --rm --name tsh-jaeger --user 0 -p 16686:16686 -p 4318:4318 -v tsh-jaeger-data:/badger -v \"$PWD/jaeger:/etc/jaeger:ro\" -e OTEL_TRACES_SAMPLER=always_off jaegertracing/jaeger:2.21.0 --config /etc/jaeger/config.yaml && echo 'Jaeger: http://localhost:16686'",
 		"trace:down": "docker stop tsh-jaeger",
 		"trace:wipe": "docker volume rm tsh-jaeger-data"
@@ -32,7 +32,7 @@
 		"@demlik/tea": "catalog:",
 		"@effect/opentelemetry": "catalog:",
 		"@effect/platform-node": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"@kampus/promises": "workspace:*",
 		"@opentelemetry/api": "catalog:",

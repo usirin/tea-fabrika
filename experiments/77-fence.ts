@@ -31,9 +31,9 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import type {Heard} from "@kampus/fabrika/agents/acp";
-import {claudeOptions} from "@kampus/fabrika/agents/acp";
-import {temps} from "@kampus/fabrika/agents/sandbox";
+import type {Heard} from "@kampus/fabrika-old/agents/acp";
+import {claudeOptions} from "@kampus/fabrika-old/agents/acp";
+import {temps} from "@kampus/fabrika-old/agents/sandbox";
 import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 import {
 	builderHarness,

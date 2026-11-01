@@ -15,8 +15,8 @@
 //           still at the base first, and is never forced.
 //   open    keyed too: a pull request already open from the branch is the one, and none is opened.
 
-import type {Ledger, Self} from "@kampus/fabrika";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import type {Ledger, Self} from "@kampus/fabrika-old";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Exit, FileSystem, Option, Path, Schema} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {runLow} from "../child.ts";
@@ -53,7 +53,7 @@ export class BuildWork extends Context.Service<
 		/** Install the copy's packages before the builder runs in it (a real builder runs checks). */
 		readonly install: boolean;
 	}
->()("@kampus/fabrika/pipeline/BuildWork") {}
+>()("@kampus/fabrika-old/pipeline/BuildWork") {}
 
 export const BuildJob = Schema.Struct({
 	ticket: Schema.String,

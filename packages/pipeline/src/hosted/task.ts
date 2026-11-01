@@ -10,7 +10,7 @@
 //           the patch applied, and one commit with a fixed author and date, so every host makes
 //           the same commit. Keyed (./idempotency.ts), from the base only, never forced
 
-import type {Ledger, Self} from "@kampus/fabrika";
+import type {Ledger, Self} from "@kampus/fabrika-old";
 import {Effect, Exit, FileSystem, Option, type Path, Schema, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {readFacts} from "../asks/ledger.ts";

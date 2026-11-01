@@ -38,7 +38,7 @@
 // fence. Leaving owning turns it off, which stops the program. (Elm: something that stays open is
 // a Sub.)
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import type {ExitReason} from "@kampus/fabrika";
+import type {ExitReason} from "@kampus/fabrika-old";
 
 export interface HostSettings {
 	/** How often an owner renews. Well under the lease's ttl. */

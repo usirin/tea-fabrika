@@ -22,7 +22,7 @@ import {
 	type SupervisorSpec,
 	streams,
 	supervisor,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 
 // ---------------------------------------------------------------- the flags

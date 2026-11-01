@@ -1,4 +1,4 @@
-import {call, memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika";
+import {call, memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika-old";
 import {Effect, Fiber, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {counter} from "./index.ts";

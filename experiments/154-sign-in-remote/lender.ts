@@ -15,7 +15,7 @@
 //
 // Node at the edge, said here: node:http for the catcher, as in ./app.ts.
 import {createServer} from "node:http";
-import {Ledger, streams} from "@kampus/fabrika";
+import {Ledger, streams} from "@kampus/fabrika-old";
 import {Duration, Effect, Schema} from "effect";
 import {bindLoopback, readCallback} from "./app.ts";
 import {aboutOf} from "./lent-cells.ts";

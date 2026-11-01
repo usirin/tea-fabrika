@@ -1,5 +1,5 @@
 import type {Machine} from "@demlik/tea";
-import {ATTR, type Drawing, type Tags} from "@kampus/fabrika";
+import {ATTR, type Drawing, type Tags} from "@kampus/fabrika-old";
 import type {build} from "./build/machine.ts";
 import type {loop} from "./operate/machine.ts";
 import {nameOf} from "./outcome.ts";

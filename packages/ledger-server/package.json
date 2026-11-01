@@ -18,7 +18,7 @@
 	"dependencies": {
 		"@alchemy.run/cloudflare": "catalog:",
 		"@effect/platform-node": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"alchemy": "catalog:",
 		"effect": "catalog:",
 		"esbuild": "catalog:",

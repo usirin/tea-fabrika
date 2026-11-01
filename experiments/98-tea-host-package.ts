@@ -21,12 +21,12 @@
 //
 // Node at the edge, as 93 to 97: processes in their own groups, signals, `ps` and `docker`
 // (./98-tea-host-package/harness.ts). The ledger, the hosts and everything they write go through
-// `@kampus/fabrika`.
+// `@kampus/fabrika-old`.
 import {existsSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {type Appended, Ledger, meter, type Row, streams, tail} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {type Appended, Ledger, meter, type Row, streams, tail} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {
 	fresh,
 	type LawResult,
@@ -35,9 +35,9 @@ import {
 	type Planted,
 	runLaws,
 	say,
-} from "@kampus/fabrika/laws";
-import {ledgerOptions} from "@kampus/fabrika/local";
-import {layerSqlite} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old/laws";
+import {ledgerOptions} from "@kampus/fabrika-old/local";
+import {layerSqlite} from "@kampus/fabrika-old/sqlite";
 import {checkCalls, checkHost} from "@kampus/pipeline/laws/tea-host";
 import {Effect, Fiber, Stream} from "effect";
 import {Miniflare} from "miniflare";

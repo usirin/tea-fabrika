@@ -13,7 +13,7 @@
 // the commit). A forced push, were one ever needed, would be `--force-with-lease` on the commit the
 // ledger recorded: none is made in this experiment.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Layer, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "../child.ts";
@@ -96,7 +96,7 @@ export class Outside extends Context.Service<
 			head: string,
 		) => Effect.Effect<readonly Rerun[], Failed | KeyRefused>;
 	}
->()("@kampus/fabrika/pipeline/Outside") {}
+>()("@kampus/fabrika-old/pipeline/Outside") {}
 
 /** A text with its key's marker on its last line. */
 export const marked = (text: string, key: string) => `${text}\n\n${markerOf(key)}`;

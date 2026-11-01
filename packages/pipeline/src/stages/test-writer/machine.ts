@@ -1,5 +1,5 @@
 import {defineMachine, type Sub} from "@demlik/tea";
-import type {DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import type {DraftMsg, DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {
 	createRefineLoop,

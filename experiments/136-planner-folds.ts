@@ -53,7 +53,7 @@ import {execFile} from "node:child_process";
 import {existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {plannerOptions} from "@kampus/pipeline/stages/plan/planner";
 import type {Settings} from "@kampus/pipeline/stages/plan/services";
 import {removeLinks} from "@kampus/pipeline/stages/review/reviewer";
