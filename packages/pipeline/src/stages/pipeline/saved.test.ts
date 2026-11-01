@@ -27,6 +27,13 @@ describe("what a lane saved before answers had required nulls", () => {
 		const {left: _, ...before} = {...EMPTY, left: []};
 		expect(Schema.decodeUnknownSync(Carry)(before).left).toBeUndefined();
 	});
+
+	// P20
+	it("a carry from before `decided` was kept still reads", () => {
+		expect(Object.keys(Carry.fields)).toContain("decided");
+		const read = Schema.decodeUnknownSync(Carry)({...EMPTY, plan: PLAN});
+		expect(Object.keys(read)).not.toContain("decided");
+	});
 });
 
 describe("an agent's answer, as it writes one", () => {

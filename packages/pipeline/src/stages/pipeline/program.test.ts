@@ -50,10 +50,14 @@ const readNumbered = (number: number) =>
 const read = readNumbered(NUMBER);
 
 /** Answers every ask as a person, with `picks[kind]` or its first pick, until the fiber is stopped. */
-const answering = (picks: Readonly<Record<string, string>>) =>
+const answering = (
+	picks: Readonly<Record<string, string>>,
+	{steps = [], notes = {}}: Pick<Script, "steps" | "notes"> = {},
+) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const done = new Set<string>();
+		const queue = [...steps];
 		for (;;) {
 			const ticket = yield* read;
 			for (const entry of ticket.timeline) {
@@ -67,8 +71,8 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 					data: {
 						type: "answered",
 						ask: fact.ask,
-						pick: picks[kind] ?? fact.picks[0],
-						note: "",
+						pick: (kind === "step" ? queue.shift() : undefined) ?? picks[kind] ?? fact.picks[0],
+						note: notes[kind] ?? "",
 						text: yield* hashOf(textOf(ticket)),
 					},
 				});
@@ -92,6 +96,10 @@ interface Script {
 	readonly title?: string;
 	readonly writer?: string;
 	readonly picks?: Readonly<Record<string, string>>;
+	/** A step's questions, answered in turn. Past the last, `picks` answers. */
+	readonly steps?: readonly string[];
+	/** What a person writes beside their pick, by the kind of question. */
+	readonly notes?: Readonly<Record<string, string>>;
 	/** Stop the lane when a line holding this is said, then type the line again. */
 	readonly killAt?: string;
 	readonly noConfig?: boolean;
@@ -138,6 +146,8 @@ const lane = ({
 	title = "Read names in one form",
 	writer = OWNER,
 	picks = {},
+	steps,
+	notes,
 	killAt,
 	noConfig = false,
 	story,
@@ -178,7 +188,12 @@ const lane = ({
 	return Effect.runPromise(
 		Effect.gen(function* () {
 			yield* file(title, "Lower case, no spaces around.", writer);
-			yield* Effect.forkScoped(answering(picks));
+			yield* Effect.forkScoped(
+				answering(picks, {
+					...(steps === undefined ? {} : {steps}),
+					...(notes === undefined ? {} : {notes}),
+				}),
+			);
 			if (killAt !== undefined) {
 				const first = yield* Effect.forkScoped(line());
 				while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
@@ -1469,6 +1484,362 @@ describe("a lane, on what the real agents answered", () => {
 				expect(yes.filter((line) => /lean/i.test(line))).not.toEqual([]);
 			},
 		);
+
+		// The second rehearsal's run 3, in its real words: a lean the person approved, a review that calls
+		// that same behavior wrong, a second test writer that writes a test against it, and a builder that
+		// cannot pass both. The names are the fake's own, so the fake's plain builder has code to change.
+		describe("what a person decided at the plan", () => {
+			const RUN3_LEAN =
+				"Fold decomposable accents; treat remaining non-ASCII characters as word separators.";
+			const RUN3_QUESTION = {
+				ask: "How broadly should letters fold when Unicode accent decomposition does not produce ASCII, such as ß, ø, and ł?",
+				options: [
+					RUN3_LEAN,
+					"Also support an agreed transliteration table, such as ß → ss, ø → o, and ł → l.",
+				],
+				lean: RUN3_LEAN,
+				why: "The ticket specifies Ç and Ş but does not define broader transliteration. The remaining-non-ASCII property depends on this choice; the accent-folding property defines the minimum supported folding.",
+				cost: "The lean gives 'Straße' → 'stra-e'. Broader transliteration needs an explicit supported mapping and additional examples.",
+				sure: 75,
+				doubt: "Expected slugs for 'Straße', 'smør', and 'Łódź' would settle the intended scope.",
+			};
+			const RUN3_FINDING = {
+				kind: "review-code",
+				from: {source: "check", name: "tests-prove-it"},
+				fault:
+					"Folding handles only canonical accents, losing other non-ASCII letters that have plain ASCII forms. Tests omit compatibility letters and explicitly require losing common letters such as ł and ø, so green checks preserve this ticket violation.",
+				at: {file: "src/lower.ts", first: 2, last: 2},
+				proof:
+					"Direct execution returned 'o-ce' for 'oﬃce', 'width' for 'Ｆｕｌｌ Width', and 'odz' for 'Łódź', rather than 'office', 'full-width', and 'lodz'.",
+				wants:
+					"Letters with plain ASCII forms survive folding, including these examples, and regression tests require their preservation instead of their loss.",
+				seen: "ran",
+			};
+			/** The same finding, as a reviewer told of q1 marks it. */
+			const AGAINST_Q1 = {...RUN3_FINDING, from: {source: "decision", id: "q1"}};
+			const OTHER_FINDING = {
+				...RUN3_FINDING,
+				from: {source: "check", name: "bugs-a-person-would-hit"},
+				fault: "An empty name comes back as a space.",
+				proof: "Read from the code.",
+				wants: "An empty name comes back empty.",
+				seen: "read",
+			};
+			const RUN3_NAME = "p1: preserves letters with plain ASCII forms, including ł and ø";
+			const RUN3_ROUND_2 = {
+				with: {
+					files: [
+						{
+							path: "src/slug.folding.test.ts",
+							text: `import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit(${JSON.stringify(RUN3_NAME)}, () => {\n\texpect(lower("Straße")).toBe("strasse");\n});\n`,
+						},
+					],
+					answers: [
+						{property: "p1", kind: "test", file: "src/slug.folding.test.ts", name: RUN3_NAME},
+					],
+					plants: [],
+					gaps: [
+						"Existing p5 and p6 tests in src/slug.test.ts require losing foldable letters, contradicting p1. They remain untouched. Passing both sets requires resolving that conflict.",
+					],
+				},
+			};
+			const RUN3_LEFT =
+				"Blocked by contradictory protected tests: src/slug.test.ts requires Straße → stra-e and discards ł, ø, æ, and œ; src/slug.folding.test.ts requires Straße → strasse and preserves those letters. The exam owner must reconcile these expectations before implementation can satisfy every check.";
+			const NO_CHANGE = {
+				with: {
+					summary:
+						"Reproduced the folding defect: Łódź produces odz instead of lodz. No files changed because the protected tests require contradictory behavior.",
+					ran: [{command: "node_modules/.bin/vitest run", passed: false}],
+					left: [RUN3_LEFT],
+				},
+			};
+			const THE_LEAN = {plan: [{with: {questions: [RUN3_QUESTION]}}]};
+			const found = (...findings: readonly unknown[]) => ({with: {findings}});
+			/** Run 3 as it went: the finding is not marked, and the builder changes nothing in round 2. */
+			const RUN_3: FakeScript = {
+				answers: {
+					...THE_LEAN,
+					review: [found(RUN3_FINDING)],
+					tests: [null, RUN3_ROUND_2],
+					build: [null, NO_CHANGE],
+				},
+			};
+			const bye = (ran: Ran) => ran.lines.at(-1) ?? "";
+			const answeredWith = (ran: Ran, pick: string) =>
+				ran.facts.filter((f) => f.type === "answered" && f.pick === pick);
+
+			// P20
+			it(
+				"its lean reaches each step that judges or writes after it, in both rounds",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					const steps: readonly (readonly [string, number])[] = [
+						["tests", 0],
+						["build", 0],
+						["mutants", 0],
+						["review", 0],
+						["tests", 1],
+						["build", 1],
+					];
+					const untold = steps.filter(
+						([step, at]) => !(runsOf(ran, step)[at]?.prompt ?? "").includes(RUN3_LEAN),
+					);
+					expect(untold).toEqual([]);
+				},
+			);
+
+			// P20
+			it(
+				"the words a person wrote beside their yes reach those steps too",
+				{timeout: 100_000},
+				async () => {
+					const NOTE = "Yes, but ß gives ss. The rest as you lean.";
+					const ran = await lane({
+						within: 90,
+						notes: {approve: NOTE},
+						fake: {answers: THE_LEAN},
+					});
+					const untold = ["tests", "build", "mutants", "review"].filter(
+						(step) => !(runsOf(ran, step)[0]?.prompt ?? "").includes(NOTE),
+					);
+					expect(untold).toEqual([]);
+				},
+			);
+
+			// P20, and the review's half of P21: it names the question, so a finding can name it back.
+			it(
+				"the review's brief names each decision, and says it is not a finding",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						picks: {merge: "no"},
+						fake: {answers: THE_LEAN},
+					});
+					const prompt = runsOf(ran, "review")[0]?.prompt ?? "";
+					expect(prompt).toContain("`q1`");
+					expect(prompt).toMatch(/not a finding/i);
+				},
+			);
+
+			// P21: run 3's main line. It goes to the person, and no test is written against what they decided.
+			it(
+				"a finding marked against it goes to the person with both sides, and no test comes of it",
+				{timeout: 100_000},
+				async () => {
+					const marked = found(AGAINST_Q1);
+					const ran = await lane({
+						within: 90,
+						picks: {step: "stop"},
+						fake: {answers: {...THE_LEAN, review: [marked, marked, marked]}},
+					});
+					expect(ran.names.review).toContain('"ask"');
+					reads(ran, "a-step", [RUN3_LEAN, RUN3_FINDING.fault]);
+					expect(runsOf(ran, "tests")).toHaveLength(1);
+					expect(bye(ran)).toContain("skip:owner_no");
+				},
+			);
+
+			// P21
+			it(
+				"the person's go_on keeps the decision: the work lands as it is, and no test comes of the finding",
+				{timeout: 100_000},
+				async () => {
+					const marked = found(AGAINST_Q1);
+					const ran = await lane({
+						within: 90,
+						picks: {step: "go_on"},
+						fake: {answers: {...THE_LEAN, review: [marked, marked, marked]}},
+					});
+					expect(answeredWith(ran, "go_on")).not.toEqual([]);
+					expect(runsOf(ran, "tests")).toHaveLength(1);
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).not.toBeNull();
+				},
+			);
+
+			// P21
+			it(
+				"a finding beside it that goes against nothing still reaches the test writer, and the marked one does not",
+				{timeout: 100_000},
+				async () => {
+					const both = found(AGAINST_Q1, OTHER_FINDING);
+					const ran = await lane({
+						within: 90,
+						steps: ["go_on"],
+						picks: {step: "stop"},
+						fake: {answers: {...THE_LEAN, review: [both, both, both]}},
+					});
+					expect(answeredWith(ran, "go_on")).not.toEqual([]);
+					const second = runsOf(ran, "tests")[1]?.prompt ?? "";
+					expect(second).toContain(OTHER_FINDING.wants);
+					expect(second).not.toContain(AGAINST_Q1.wants);
+				},
+			);
+
+			// P21: the form stays strict.
+			it(
+				"a finding that names a question the plan does not have goes back to the reviewer, in words",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						picks: {merge: "no"},
+						fake: {
+							answers: {
+								...THE_LEAN,
+								review: [found({...RUN3_FINDING, from: {source: "decision", id: "q9"}})],
+							},
+						},
+					});
+					const runs = runsOf(ran, "review");
+					expect(runs).toHaveLength(2);
+					expect(runs[1]?.prompt).toMatch(/q9\b.*\bno such question\b/i);
+				},
+			);
+
+			// P22: run 3's other line, where the reviewer marked nothing.
+			it(
+				"a builder that changes nothing in round 2 asks the person, with its own reason, and does not end stuck",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					expect(ran.names.build).toContain('"ask"');
+					reads(ran, "a-step", [RUN3_LEFT]);
+					const {what, picks} = readBy(ran, "a-step");
+					// Its own reason: not the words any step falls back on.
+					expect(what).not.toMatch(/stopped and needs your call/);
+					expect(picks).toEqual(expect.arrayContaining(["go_on", "stop"]));
+					expect(bye(ran)).toContain("skip:owner_no");
+				},
+			);
+
+			// P22
+			it(
+				"a go_on past that, with the tests still red, lands nothing: what code checks still holds",
+				{timeout: 200_000},
+				async () => {
+					const ran = await lane({
+						within: 180,
+						steps: ["go_on"],
+						picks: {step: "stop"},
+						fake: RUN_3,
+					});
+					expect(answeredWith(ran, "go_on")).not.toEqual([]);
+					expect(bye(ran)).not.toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+				},
+			);
+
+			// P22
+			it(
+				"a go_on past that, with the tests green, lands the work as it is",
+				{timeout: 200_000},
+				async () => {
+					const ran = await lane({
+						within: 180,
+						picks: {step: "go_on"},
+						fake: {
+							// Each mutant is answered `cannot`, so a second mutation run writes no test twice.
+							cannot: REAL_MUTANT,
+							answers: {
+								review: [found(RUN3_FINDING)],
+								build: [null, {with: {summary: "Nothing is left to change.", left: []}}],
+							},
+						},
+					});
+					expect(ran.names.build).not.toContain('"stuck"');
+					expect(runsOf(ran, "build")).toHaveLength(2);
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).not.toBeNull();
+				},
+			);
+
+			// P23
+			it(
+				"the rule change's merge says what changes and why, in words",
+				{timeout: 60_000},
+				async () => {
+					const ran = await lane({
+						title: "[rules] Read names in one form",
+						within: 50,
+						picks: {exam_merge: "no"},
+					});
+					reads(ran, "a-exam_merge", [
+						".oxlintrc.json",
+						"add an empty rules list",
+						"the plan needs it",
+					]);
+				},
+			);
+
+			// P23
+			it(
+				"the rule change's pull request says what changes and why, in words",
+				{timeout: 60_000},
+				async () => {
+					const ran = await onGitHub({
+						title: "[rules] Read names in one form",
+						rubrics: null,
+						picks: {exam_merge: "no"},
+					});
+					const args = ran.calls.find((call) => call.kind === "pr_create")?.args ?? [];
+					const body = args[args.indexOf("--body") + 1] ?? "";
+					expect(body).toContain(".oxlintrc.json");
+					expect(body).toContain("add an empty rules list");
+					expect(body).toContain("the plan needs it");
+				},
+			);
+
+			// P23
+			it(
+				"the merge says the title, what the review found, the checks, and what a yes does",
+				{timeout: 100_000},
+				async () => {
+					const TITLE = "Read names in one form";
+					const ran = await lane({title: TITLE, within: 90, picks: {merge: "no"}});
+					const reviewed = ran.facts.findLast((f) => f.type === "reviewed");
+					const count = `${String(reviewed?.met)} of ${String(reviewed?.of)}`;
+					reads(ran, "a-merge", [TITLE, count, "lands on main"]);
+					expect(readBy(ran, "a-merge").text).toMatch(/\bchecks?\b/i);
+				},
+			);
+
+			// P24
+			it(
+				"the plan a person reads shows each rule change, and says two pull requests",
+				{timeout: 60_000},
+				async () => {
+					const ran = await lane({
+						title: "[rules] Read names in one form",
+						within: 50,
+						picks: THE_PLANS_NO,
+					});
+					const view = commentsOf(ran).find((body) => body.startsWith("# Plan:")) ?? "";
+					expect(view).toContain("## Rule changes");
+					expect(view).toContain(".oxlintrc.json");
+					expect(view).toContain("add an empty rules list");
+					expect(view).toContain("the plan needs it");
+					expect(view).toMatch(/two pull requests/i);
+				},
+			);
+
+			// P25. Vitest makes its API token at startup, under the home or under `node_modules/.vitest`, and
+			// the box refuses both. With a token in place, a repo's `vitest.config.ts` still stops it: Vite
+			// writes the bundled config under `node_modules/.vite-temp`. So the brief has to say it.
+			it(
+				"the review's brief says the test runner may not start in its copy, and how to run a piece by hand",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({within: 90, picks: {merge: "no"}});
+					const prompt = runsOf(ran, "review")[0]?.prompt ?? "";
+					expect(prompt).toMatch(/checks below ran/i);
+					expect(prompt).toMatch(/test runner/i);
+					expect(prompt).toMatch(/by hand/i);
+				},
+			);
+		});
 	});
 
 	// P18
