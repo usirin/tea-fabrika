@@ -192,6 +192,8 @@ export interface GhStory {
 	readonly forkOn?: string;
 	/** What `gh pr create` prints, in place of the new pull request's url. */
 	readonly createSays?: string;
+	/** A rule of the repository's keeps its branches: GitHub refuses to delete one. */
+	readonly refusesBranchDelete?: boolean;
 }
 
 const GhCall = Schema.Struct({

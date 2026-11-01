@@ -41,8 +41,41 @@ describe("the step briefs on disk", () => {
 				slot === "note" || brief.body.includes(`{${slot}}`) ? [] : [`${file}: ${slot}`],
 			);
 		});
-		// As compiled: this brief declares the ticket and never shows it to the agent.
-		expect(unused).toEqual(["test-writer-mutants.md: ticket"]);
+		expect(unused).toEqual([]);
+	});
+});
+
+// Today's version. What a brief tells its agent, and what code does with the answer, say one thing.
+describe("a brief says what is so", () => {
+	const brief = (file: string) => readFileSync(`${FOLDER}${file}`, "utf8");
+
+	// P12
+	it("plan.md says what a story's `from` is: a ticket id, or null", () => {
+		const lines = brief("plan.md")
+			.split("\n")
+			.filter((line) => line.includes("`from`"));
+		expect(lines.filter((line) => /#\d/.test(line) && /null/.test(line))).not.toEqual([]);
+	});
+
+	// P14
+	it.each([
+		"plan.md",
+		"build.md",
+		"review.md",
+		"test-writer.md",
+		"test-writer-mutants.md",
+		"exam.md",
+	])("%s says its box has no network", (file) => {
+		expect(brief(file)).toMatch(/box has no network/i);
+	});
+
+	// P17
+	it("test-writer.md counts a test that cannot import a new file yet as a red, as `resultsOf` does", () => {
+		const text = brief("test-writer.md");
+		expect(text).not.toMatch(/a missing import or a setup error is not that/i);
+		expect(text).toMatch(/plain import/i);
+		// A typo stays no red.
+		expect(text).toMatch(/typo/i);
 	});
 });
 
