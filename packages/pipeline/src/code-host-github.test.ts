@@ -6,6 +6,7 @@ import type {readChange, reviewKindsOf} from "./code-host-github.ts";
 import {
 	type Accounts,
 	type Declared,
+	codeHostOn,
 	type Gh,
 	kindsNeeded,
 	prOf,
@@ -837,6 +838,13 @@ describe("the owner's approval", () => {
 		it("a CODEOWNERS file at the base binds, whatever was declared", async () => {
 			const owned = changed("open-awaiting-approval", () => {});
 			expect((await declaredOn(owned, {approval: "none"})).approval).toBe("missing");
+		});
+
+		it("the code host hands on what was declared to its read of a pull request", async () => {
+			const read = (config: Accounts & {readonly declared?: Declared}) =>
+				Effect.runPromise(codeHostOn(fakeGh({pr: noOwners}).gh, config).prFacts(PR));
+			expect((await read({...WHO, declared: {approval: "none"}})).approval).toBe("not_needed");
+			expect((await read(WHO)).approval).toBe("unknown");
 		});
 	});
 

@@ -67,36 +67,38 @@ describe("a repository that writes nothing", () => {
 describe("the line a run prints about review kinds", () => {
 	const JSONC: Holds = {files: new Set([".fabrika.jsonc"]), rubrics: {}};
 	const NOT_READ =
-		".fabrika.jsonc at main is not read: review rules are [review] in .fabrika/fabrika.toml";
+		"review kinds: .fabrika.jsonc at main is not read: review rules are [review] in .fabrika/fabrika.toml";
+	const NOTHING_NAMED =
+		"review kinds: governed [] and ui [] (default), read at each change's base and head: text reviews only";
 	const review = (rules: NonNullable<Settings["review"]>): Settings => ({
 		...DEFAULT_SETTINGS,
 		review: rules,
 	});
-	const kindsLine = (settings: Settings) => lineOf(linesOf(settings, NPM), "review kinds");
+	/** Every line a run prints about review kinds, whole and in order. */
+	const kindsLines = (settings: Settings, holds: Holds = NPM) =>
+		linesOf(settings, holds).filter((line) => line.startsWith("review kinds"));
 
 	it("nothing named: empty lists, by default, and it says only text reviews run", () => {
-		const line = kindsLine(DEFAULT_SETTINGS);
-		expect(line).toContain("governed [] and ui [] (default)");
-		expect(line).toContain("read at each change's base and head");
-		expect(line).toContain(": text reviews only");
+		expect(kindsLines(DEFAULT_SETTINGS)).toEqual([NOTHING_NAMED]);
 	});
 
-	it("rules named: they are listed as the file's, and text reviews are not all it runs", () => {
-		const line = kindsLine(review({governed: [".github/", "AGENTS.md"], ui: ["apps/web/src/"]}));
-		expect(line).toContain(
-			"governed [.github/, AGENTS.md] and ui [apps/web/src/] (from fabrika.toml)",
-		);
-		expect(line).toContain("read at each change's base and head");
-		expect(line).not.toContain("text reviews only");
+	it("rules named: each list says all its entries, as the file's, and text reviews are not all it runs", () => {
+		const rules = {
+			governed: [".github/", "AGENTS.md"],
+			ui: ["apps/web/src/", "apps/desk/src/"],
+		};
+		expect(kindsLines(review(rules))).toEqual([
+			"review kinds: governed [.github/, AGENTS.md] and ui [apps/web/src/, apps/desk/src/] (from fabrika.toml), read at each change's base and head",
+		]);
 	});
 
 	it.each<[string, NonNullable<Settings["review"]>, string]>([
 		["governed alone", {governed: [".github/"]}, "governed [.github/] and ui []"],
 		["ui alone", {ui: ["apps/web/src/"]}, "governed [] and ui [apps/web/src/]"],
 	])("%s: the other is an empty list, and more than text reviews run", (_name, rules, says) => {
-		const line = kindsLine(review(rules));
-		expect(line).toContain(says);
-		expect(line).not.toContain("text reviews only");
+		expect(kindsLines(review(rules))).toEqual([
+			`review kinds: ${says} (from fabrika.toml), read at each change's base and head`,
+		]);
 	});
 
 	it("no .fabrika.jsonc at main: nothing is said about one", () => {
@@ -106,15 +108,17 @@ describe("the line a run prints about review kinds", () => {
 	});
 
 	it(".fabrika.jsonc at main: the run says it is not read, and where the rules are", () => {
-		const lines = linesOf(DEFAULT_SETTINGS, JSONC);
-		const about = lines.filter((line) => line.includes(".fabrika.jsonc"));
-		expect(about).toHaveLength(1);
-		expect(about[0]).toContain(NOT_READ);
+		expect(kindsLines(DEFAULT_SETTINGS, JSONC)).toEqual([NOTHING_NAMED, NOT_READ]);
+		expect(
+			linesOf(DEFAULT_SETTINGS, JSONC).filter((line) => line.includes(".fabrika.jsonc")),
+		).toEqual([NOT_READ]);
 	});
 
 	it(".fabrika.jsonc at main beside rules in the file: still said, since a person may think it counts", () => {
-		const settings = review({governed: [".github/"]});
-		expect(linesOf(settings, JSONC).join("\n")).toContain(NOT_READ);
+		expect(kindsLines(review({governed: [".github/"]}), JSONC)).toEqual([
+			"review kinds: governed [.github/] and ui [] (from fabrika.toml), read at each change's base and head",
+			NOT_READ,
+		]);
 	});
 });
 

@@ -13,7 +13,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
-import {SETTINGS_MOVED} from "../settings.ts";
+import {JSONC_MOVED, SETTINGS_MOVED} from "../settings.ts";
 
 // The owner's desk in tsh, as the owner meets it: the real launcher (bin/tsh)
 // started in a project folder whose .fabrika/fabrika.toml names the packs, its lines
@@ -236,6 +236,16 @@ describe("the owner's desk in tsh", () => {
 			".fabrika.jsonc at main is not read: review rules are [review] in .fabrika/fabrika.toml",
 		);
 		expect(run.status).toBe(0);
+	});
+
+	it("a .fabrika.jsonc with no .fabrika/fabrika.toml stops tsh and says to move it", async () => {
+		const at = project("");
+		rmSync(join(at.folder, ".fabrika"), {recursive: true});
+		writeFileSync(join(at.folder, ".fabrika.jsonc"), "{}\n");
+		const run = await tsh(at, ["programs"]);
+		expect(run.status, run.err).toBe(2);
+		expect(run.err).toContain(JSONC_MOVED);
+		expect(run.out).toBe("");
 	});
 
 	it("no .fabrika.jsonc: the run lists the review kinds and says where they are read", async () => {

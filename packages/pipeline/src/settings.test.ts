@@ -2,10 +2,10 @@ import {existsSync, readFileSync} from "node:fs";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
-import {kindsNeeded} from "./code-host-github.ts";
 import {
 	BUILD_GO_GONE,
 	DEFAULT_SETTINGS,
+	JSONC_MOVED,
 	type Rules,
 	readSettings,
 	repoOf,
@@ -46,6 +46,12 @@ describe("fabrika.toml", () => {
 
 		it("a file left at the root is refused with one line that says to move it", () => {
 			expect(SETTINGS_MOVED).toBe("fabrika.toml moved to .fabrika/fabrika.toml: move it there");
+		});
+
+		it("a .fabrika.jsonc with no new file is refused with one line that says to move it", () => {
+			expect(JSONC_MOVED).toBe(
+				".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
+			);
 		});
 	});
 
@@ -254,33 +260,30 @@ describe("fabrika.toml", () => {
 
 	describe("this repository's own file", () => {
 		const ROOT = new URL("../../../", import.meta.url);
-		const text = () => readFileSync(new URL(SETTINGS_FILE, ROOT), "utf8");
-
-		it("passes the load rules, and its [review] governed reaches the kinds a change needs", async () => {
-			const settings = await read(text());
+		/** The file as the load rules take it: one they refuse fails the test that asks, saying why. */
+		const loaded = async () => {
+			const settings = await read(readFileSync(new URL(SETTINGS_FILE, ROOT), "utf8"));
 			if (typeof settings === "string") throw new Error(settings);
-			const rules: Rules = {
-				governed: settings.review?.governed ?? [],
-				ui: settings.review?.ui ?? [],
-			};
-			expect(kindsNeeded([".fabrika/fabrika.toml"], rules)).toContain("governance");
-			expect(kindsNeeded([".github/workflows/ci.yml"], rules)).toContain("governance");
-			expect(kindsNeeded(["packages/pipeline/src/settings.ts"], rules)).not.toContain("governance");
-		});
+			return settings;
+		};
 
-		it("gives the same rules through the reader the code hosts use", async () => {
-			const settings = await read(text());
-			if (typeof settings === "string") throw new Error(settings);
-			expect(reviewRules(text())?.governed).toEqual(settings.review?.governed);
-		});
-
-		it("governs only what is there: a typo in a path is not a rule that never fires", async () => {
-			const settings = await read(text());
-			if (typeof settings === "string") throw new Error(settings);
-			const missing = (settings.review?.governed ?? []).filter(
-				(root) => !existsSync(new URL(root, ROOT)),
+		it("passes the load rules, and [review] rubrics names a folder that holds every rubric", async () => {
+			const folder = (await loaded()).review?.rubrics;
+			if (folder === undefined) throw new Error("[review] rubrics is not named");
+			const missing = ["code.md", "doc.md", "skill.md"].filter(
+				(file) => !existsSync(new URL(`${folder}/${file}`, ROOT)),
 			);
 			expect(missing).toEqual([]);
+		});
+
+		it("each [[checks.run]] installs before it runs: a fresh copy of a head has no node_modules", async () => {
+			const checks = (await loaded()).checks?.run ?? [];
+			expect(checks).not.toEqual([]);
+			for (const {run} of checks) {
+				expect(run).toHaveLength(3);
+				expect(run.slice(0, 2)).toEqual(["sh", "-c"]);
+				expect(run[2]).toMatch(/^pnpm install --frozen-lockfile && \S/);
+			}
 		});
 	});
 
