@@ -29,6 +29,10 @@ with plain functions, do that. Anything bigger needs a reason written down.
   callback can send to it later. An agent run inside a machine is a Sub, since
   it keeps talking, and each tool call that changes something arrives as a Msg
   when it happens.
+- **In `next/`, a program may say no** (2026-11-01, with [Tier 1](../plan/tier-1.md#notes)).
+  Elm has no refusal, since its Msgs come from its own view. Ours come from a window
+  that may be out of date. So `Program` has a required `refuse`, a pure check of a fresh
+  Msg against the model. It runs on fresh letters only, never on a fold.
 
 ## Why
 

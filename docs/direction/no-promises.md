@@ -20,7 +20,7 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`
-  outside tests and a named list of edge files. They arrive in ticket 115's exam
+  outside tests and a named list of edge files. They arrive in Tier 1's exam
   pull request, along with planted lines that must fire. Until then, this note and
   [AGENTS.md](../../AGENTS.md) are the only guard.
 

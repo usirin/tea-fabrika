@@ -99,24 +99,24 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 ## The order of work
 
-1. The owner approved this plan on 2026-11-01, and every question is settled: see [Settled by the owner](#settled-by-the-owner). Today's pipeline builds ticket 117 first, and builders start after it. Each pull request below runs under [its own ticket](#one-ticket-per-pull-request).
+1. The owner approved this plan on 2026-11-01, and the rest is [settled](#settled-by-the-owner) but for one question that comes back to the owner: [how `next/` reaches the lane](#still-open-how-next-reaches-the-lane). Today's pipeline builds ticket 117 first, and builders start after it. Each pull request below runs under [its own ticket](#one-ticket-per-pull-request).
 2. Start from main at `05a43d0` or later. PR 226 (oxlint and oxfmt replace Biome) and PR 229 (the `-old` rename) are merged.
-3. The docs PR lands, as the list below says. The notes it names were first brought in line on 2026-11-01, in the same change that added this file. Re-check them against this plan before PR A.
-4. The exam PR lands, by an agent that is not the builder. See [The exam PR](#the-exam-pr-not-in-this-plan).
-5. **PR A, door and plumbing:** PR 223 rebased on the exam and moved into packages (T0), then T1 to T6. Demo: two tabs of one browser show one code, and one terminal command lets both in, on the local stage.
-6. **PR B, the app:** T7, T8, T15, T9, in that order. Demo: the owner opens the app, types their own name (the person a grant's `for` points at), and gets a window. "Open in browser" brings a tab online, and a tab typed by hand comes in with Approve. Remove takes a let-in window out.
-7. **PR C, cloud:** T10 and T11. Demo: the same on Cloudflare, with the same approval flow, after the owner reads `alchemy plan` and says yes. It still proves the counter.
-8. **PR D, notes:** a small exam PR for p22's new wording and the copies' laws, then T16, T17, T18, T20, T21 and T19, in that order. Demo: on Cloudflare, an agent runs `notes_save` through MCP, let in once by Approve. The doc shows drawn in another window and in a phone tab. The owner presses `e`, adjusts it, and saves. The agent's next save, on the old `base`, is refused, and it reads and saves again. From here the Cloudflare ledger holds real notes.
-9. **PR D2, backup:** T22. A small PR right after notes, since the owner moved it up from Tier 3, so Tier 1 grew by it. Its size is a guess. Demo: a new Mac comes back to the same notes from the sheet.
-10. **PR E, chaos:** T12 to T14. Demo: a run with a seed, a verdict on the screen, on a throwaway ledger on each stage, pressing the counter and saving notes while faults fire.
+3. The exam PR lands, by an agent that is not the builder. See [The exam PR](#the-exam-pr-not-in-this-plan).
+4. **PR A, door and plumbing:** PR 223 rebased on the exam and moved into packages (T0), then T1 to T6. How PR 223 reaches the lane is [still open](#still-open-how-next-reaches-the-lane). Before its lane starts, a small change to today's version adds the rest of [the exam files](#the-exam-pr-not-in-this-plan) to the lane's `RULES`. Demo: two tabs of one browser show one code, and one terminal command lets both in, on the local stage.
+5. **PR B, the app:** T7, T8, T15, T9, in that order. Demo: the owner opens the app, types their own name (the person a grant's `for` points at), and gets a window. "Open in browser" brings a tab online, and a tab typed by hand comes in with Approve. Remove takes a let-in window out.
+6. **PR C, cloud:** T10 and T11. Demo: the same on Cloudflare, with the same approval flow, after the owner reads `alchemy plan` and says yes. It still proves the counter.
+7. **PR D, notes:** a small exam PR for p22's new wording and the copies' laws, then T16, T17, T18, T20, T21 and T19, in that order. Demo: on Cloudflare, an agent runs `notes_save` through MCP, let in once by Approve. The doc shows drawn in another window and in a phone tab. The owner presses `e`, adjusts it, and saves. The agent's next save, on the old `base`, is refused, and it reads and saves again. From here the Cloudflare ledger holds real notes.
+8. **PR D2, backup:** T22. A small PR right after notes, since the owner moved it up from Tier 3, so Tier 1 grew by it. Its size is a guess. Demo: a new Mac comes back to the same notes from the sheet.
+9. **PR E, chaos:** T12 to T14. Demo: a run with a seed, a verdict on the screen, on a throwaway ledger on each stage, pressing the counter and saving notes while faults fire.
 
 Each PR: test writer first (a separate agent, adds its tests, runs them on the base), builder with local commits (cannot touch the tests), mutation sample, one review by another agent, screenshots, the owner's yes. Runs and notes go to `field/` the same day.
 
-**The docs PR,** before the exam, since those notes differ from this plan (gap 9). It holds:
+**No docs ticket is left.** This plan once kept a docs PR before the exam, since the notes differed from it (gap 9). [PR 269](https://github.com/usirin/tea-fabrika/pull/269), the pull request that added this folder, finished that list, so it is off the ticket list:
 
-- Real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
+- Real notes on the cloud, and chaos on a throwaway ledger: `the-ledger-goes-to-cloudflare.md` and `every-update-builds-every-layer.md`.
+- `refuse`: `elm-first.md`.
 
-The pull request that added this folder already made the rest of this list: the sketches of ledger entries in `a-local-first-sync-engine.md` and `the-cloud-is-one-more-host.md`, now on `_tag` as [Tags](#tags) says, `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
+Re-check the notes against this plan before PR A's plan step. PR 269 also made the rest: the sketches of ledger entries in `a-local-first-sync-engine.md` and `the-cloud-is-one-more-host.md`, now on `_tag` as [Tags](#tags) says, `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
 
 **Why six PRs, not one:** 9,700 and more lines in one review is not a review. Each cut is a whole visible thing, and every layer still moves when it needs to. Cost: a rebase per landing, and six reviews instead of one. Sure: 75%.
 
@@ -1423,7 +1423,7 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 
 ### PR A
 
-- **T0.** `ends`: local commit. Scenario p65. The first commit only moves, and the slice's own tests stay green. The second removes the desk and its mirrored-focus check, and nothing else. First step: `code-graph . --unreachable`, `--interface-width` and `build.ts` on the new shape. If either doubt in [Packages](#packages) is off, stop and tell the owner.
+- **T0.** `ends`: local commit. Scenario p65. The test writer moves the tests, as [the exam files](#the-exam-pr-not-in-this-plan) say. The first commit only moves, and the slice's own tests stay green. The second removes the desk and its mirrored-focus check, and nothing else. First step: `code-graph . --unreachable`, `--interface-width` and `build.ts` on the new shape. If either doubt in [Packages](#packages) is off, stop and tell the owner.
 - **T1.** `ends`: local commit. Scenario c1. Properties p1 to p9, p16.
 - **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28. Criterion c2.
 - **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35. Criteria c2, c3.
@@ -1671,7 +1671,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 ## The exam PR, not in this plan
 
-An agent that is not the builder writes it. The owner reads it. It lands after the docs PR, on main at `05a43d0` or later, and holds:
+An agent that is not the builder writes it. The owner reads it. It lands first, on main at `05a43d0` or later, and holds:
 
 1. An oxlint JS plugin rule, `no-promises`, blocking in `next/**` leaving out tests. It refuses `async`, `await`, `new Promise`, `Promise.<anything>(...)`, `.then(...)`, `Effect.promise(...)`, and `.catch(...)` unless the object is an imported Effect module. JS plugins are alpha and not type-aware, so that check goes by import name: report any miss.
 2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `data/ledger.ts`, `app/process.ts`, `transport/gateway.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `brain.ts`, `build.ts`, `window/use-model.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none.
@@ -1696,7 +1696,7 @@ An agent that is not the builder writes it. The owner reads it. It lands after t
 5. `next/apps/fabrika/src/exam/bytes.test.ts`: the brain's bytes hold no `@modelcontextprotocol`; the box's bundle of `@kampus/notes` holds no `micromark`, `mdast` or `@pierre`.
 6. New edge lines, by name: for `no-effect-run-outside-edge`, `mcp/serve.ts`'s `Effect.runPromiseWith`; for `no-promises`, the SDK's async transport in `mcp/serve.ts`, and `import()` in `programs/notes/highlight.ts`. `no-promises`, `no-of`, `no-tea-react` and `no-hand-tag` fire on the copies like any other file: a copy gets no line of its own.
 
-**Exam files for the builder.** Any diff here stops the build and asks the owner: `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, the oxlint and oxfmt config and plugin folder as PR 226 names them, `vitest.config.ts`, `.github/**`, `layer-rules.json`, `boundary-rules.json`, `pnpm-workspace.yaml`. A package's own `package.json` is the builder's, since its `exports` map says what is public, and p65 reads it. The test versions in `next/packages/tuval/src/headless/` are product code, not exam files; the tests read them only through the names in the interface block.
+**Exam files for the builder.** On today's lane, a builder's diff here ends the lane `stuck` with `exam_touched`, and that is final. Nothing the build did is kept, and the owner hears why. Today's `RULES` list (`packages/pipeline/src/stages/exam/machine.ts`) does not yet name `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, `boundary-rules.json`, `vitest.config.ts` or `pnpm-workspace.yaml`. A small change to today's version adds them before PR A's lane starts, and until then those guards do not hold. So T0's move of tests belongs to the test writer, since a builder moving a `*.laws.test.ts` ends the lane. The files: `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, the oxlint and oxfmt config and plugin folder as PR 226 names them, `vitest.config.ts`, `.github/**`, `layer-rules.json`, `boundary-rules.json`, `pnpm-workspace.yaml`. A package's own `package.json` is the builder's, since its `exports` map says what is public, and p65 reads it. The test versions in `next/packages/tuval/src/headless/` are product code, not exam files; the tests read them only through the names in the interface block.
 
 **Order problems,** plan-115's stand: plan before exam, the exam sees nothing on main, PR 223 goes red when rebased on it, and that is intended. T0 turns p65 green. PR 223's `window/main.tsx` uses `useRuntime`, so `no-tea-react` is red until the hook lands. That is why the hook comes with T5, in PR A, which already changes that file. Later PRs extend the exam only through a small exam PR of their own. `tuval-*` rows are in the table and rules from the start, so B needs none.
 
@@ -1824,7 +1824,7 @@ Plan-115's list stands, with these added:
 6. **Where a chaos finding goes.** It may be a real bug in another layer, in the middle of PR E. Resolved: a finding goes to the owner and `field/`; the builder does not fix it in place unless it is in the task's files.
 7. **A law that needs the laptop's own service manager.** p48 runs real launchd, and CI has none. Resolved: laptop only, the PR says so, and CI runs the steps on the test `BrainService`.
 8. **A later check with an end date.** `layers.test.ts` lives until demlik issue 763 lands. No note says who removes it. Resolved: the small exam PR that adopts the new code-graph.
-9. **A plan ahead of the notes.** The plan now differs from notes in `docs/direction/`, and the steps do not say which lands first. Resolved here: those notes get their change in a docs PR of their own, before PR A. That now includes real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
+9. **A plan ahead of the notes.** The plan now differs from notes in `docs/direction/`, and the steps do not say which lands first. Resolved here: PR 269 changed those notes, before PR A, including real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
 10. **When lab data turns real.** `next/` may be rough until a person opens it for real work, and no note says what happens when one job opens first. Notes make one ledger real while the rest stays a lab. Resolved: from PR D the cloud ledger is kept for good, and the laptop stage stays a lab.
 11. **A later PR changes an earlier law's meaning.** Notes change p22 and narrow p25, both written for PR A. Resolved: a small exam PR before PR D, not a builder's edit. No note says a law's old wording must stay readable.
 12. **"Only this process" when many windows share the process.** The three homes do not say whether state that looks per-process is really per-window. Which note is open looked like the first and is the second. Resolved: the window's machine. The note should ask "does each window want its own?".
@@ -1833,7 +1833,7 @@ Plan-115's list stands, with these added:
 15. **A rule with an owner-allowed exception grows.** Styling, drawing, and now tools. "Never copy across" has three exceptions, each a comment read at c7. No check counts them. Resolved: c7's read, and the owner names each one. A fourth should make us read the note again.
 16. **A decision can change after the plan was written, mid-plan-stage.** The agent path changed from a command to MCP in one sitting, and the plan stage has no word for a rework on its own draft. Resolved: edit the plan before any test writer starts; nothing was built.
 17. **Today's rule, tomorrow's reason.** "An agent gets its own run" came from a reason that does not hold in `next/`. Porting the rule would have hidden the agent's doc. Resolved: biggest call 16. Rethink-do-not-port covers it, and the plan names the difference.
-18. **A written rule with no home.** "No `xOf` names" lived only in private memory. No check held it, and no note or `AGENTS.md` said it, so a copy would have passed every step. Resolved: `no-of` in the exam PR, and a line in the docs PR. The steps have no moment that asks "where does this rule live?".
+18. **A written rule with no home.** "No `xOf` names" lived only in private memory. No check held it, and no note or `AGENTS.md` said it, so a copy would have passed every step. Resolved: `no-of` in the exam PR, and a line in `AGENTS.md`. The steps have no moment that asks "where does this rule live?".
 19. **A plan can't assume what strict `node_modules` stops.** A root `package.json` that depends on a package makes it resolve from every folder below. So a law on `package.json` alone would have looked strong and stopped nothing. Resolved: p65 reads the imports too. Exam laws should plant the thing they claim to stop.
 20. **An exam needs a home before the code has one.** The exam PR writes to `next/apps/fabrika/src/exam/` before T0 makes that package. Resolved: it runs from the root's vitest, with the root's tools, until T0.
 
@@ -1867,9 +1867,26 @@ Plan-115's list stands, with these added:
 - **Whether a hello's `has` stays true.** A tab can lose the screen when it's hidden, and Touch ID goes on a docked Mac, while a hello is said once. Nothing reads it yet, so nothing breaks. Whoever reads it first settles this.
 - **The size.** 50% sure, as above.
 
+## Still open: how `next/` reaches the lane
+
+**This comes back to the owner before PR A's plan step.** On today's version, a lane branches only from `origin/main` (`packages/pipeline/src/stages/pipeline/work.ts`), and `next/` is not on main. So PR 223 has no way in yet.
+
+```text
+main -> PR A's lane, like any other
+          plan         names PR 223's commit
+          test writer  brings in 223's moved tests
+          builder      brings in 223's product code
+```
+
+- **Lean, 65%:** PR A's lane starts from main like any other, as above. The lane's clone already fetches every branch, so 223's commit is there to read.
+- **Why:** no new lane code, and [the deal](./README.md#where-we-want-to-go) holds.
+- **Cost:** it is unproved, a builder's box must be able to read those git objects, and the builder would commit 3,000 and more lines it did not write.
+- **The other route:** T0 by hand and logged. It would land red, since `no-tea-react` and p65 fire until T5.
+- **What settles it:** one rehearsal, an agent's own check before this comes back to the owner.
+
 ## Settled by the owner
 
-The owner approved this plan on 2026-11-01, and no question is left open.
+The owner approved this plan on 2026-11-01. The question above is the only one left.
 
 ### One ticket per pull request
 
@@ -1877,13 +1894,15 @@ The owner approved this plan on 2026-11-01, and no question is left open.
 
 ```text
 Tier 1, the parent     for now, a line in each ticket: pipeline v0 has no parent plans
-  docs, exam, A, B, C, D, D2, E     one tracker ticket each
+  exam, A, B, C, the small exam before D, D, D2's design pass, D2, E     one tracker ticket each
 
 each ticket:  triage -> plan step -> the owner approves -> the steps as usual
                         turns its part of tier-1.md into the pipeline's plan format
 ```
 
 - **Each ticket** goes through triage and the plan step and points at its part of this file. A step that cannot run yet goes by hand and is logged, as [the deal](./README.md#where-we-want-to-go) says.
+- **Exam pull requests go by hand and are logged.** An exam-only ticket has no build step in the lane. That covers the first exam, the small one before D, and D2's design pass and exam.
+- **Who files them:** the agent running this project session, for the owner's GitHub id, after ticket 117 lands. The owner reads each plan at the approve step.
 - **Why:** it needs no new code.
 - **Cost:** one short look per pull request. The plan step could drift from this file, and that look catches it.
 - **How sure:** 75%. The doubt is whether PR D fits one plan step. Running PR D's plan step settles it.

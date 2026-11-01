@@ -146,6 +146,8 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   mean two things, pick a clearer short word before you reach for a long one.
 
   ```ts
+  // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
+  // Today's code says `kind` here.
   // Yes: read it out loud and it is a sentence.
   { _tag: "ask", who: "owner", for: "approval" }
   { _tag: "send", to: "builder", why: "checks_red" }
@@ -235,7 +237,8 @@ live run, each learned from a run:
 - The target repository's own merge rules apply. Never merge by hand, never arm
   auto-merge, never push to its main branch. A change lands only through the
   ship stage.
-- A pull request that went by hand is not a live run. It lands by
+- A pull request that went by hand is not a live run, and neither is what is left
+  once a lane is finished and stuck. Each lands by
   [the plan's rule](./docs/plan/README.md#how-a-change-lands).
 - No agent approves a pull request, and no agent answers a question the machine
   put to a person.

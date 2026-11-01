@@ -38,13 +38,22 @@ An agent goes through this list and tells the owner what is missing.
    - `gh auth status`
    - `claude auth status`. Triage defaults to `claude` on `opus`, and this repository does not change
      that.
-5. **The ticket was filed by the owner, or by an agent of theirs.** Read the first row of
-   `ticket --ticket 117`: it says who filed it, such as `user:owner` or `agent:claude`. The lane makes
-   the same check when it starts. If the ticket is not theirs, it ends `stuck:not_yours` before any agent
-   starts.
+5. **The ticket was filed by the owner, or by an agent of theirs.** The owner looks at the first row of
+   `ticket --ticket 117`: it says who filed it, such as `user:owner` or `agent:claude`. An agent has no
+   proved way to read that row without typing in the owner's app. The app's MCP tools might give one, and
+   nobody has checked. The lane makes the same check when it starts. If the ticket is not theirs, it ends
+   `stuck:not_yours` before any agent starts.
 6. **No other merges to main during the run.** A commit on main before a pinned merge (a merge that names
    the main it read) sends the lane back, and that is final. The agent preparing the run tells the owner
    and any other agent session that pushes to main.
+7. **Main has no branch rule, ruleset or CODEOWNERS that blocks the merge.** A rule that wants a review
+   ends ship `stuck: merge_failed`. This one has none as of 2026-11-01. To check:
+
+   ```sh
+   gh api repos/<owner>/<repo>/rules/branches/main --jq length   # 0: no rule applies to main
+   gh api repos/<owner>/<repo>/branches/main --jq .protected     # false: no branch protection
+   ls .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS              # all three missing
+   ```
 
 ## Who starts it
 
@@ -60,7 +69,7 @@ An agent goes through this list and tells the owner what is missing.
    that folder after `productName` in `apps/fabrika/package.json`, and on a Mac it is under
    `~/Library/Application Support/`. The right folder holds `ledger.sqlite` and `host/sock`.
 
-2. **Get the host onto main's code.** The lane runs in the host, not in the app, and Cmd-Q leaves the host
+2. **The owner gets the host onto main's code,** doing each of these: Cmd-Q, pull, install, open. The lane runs in the host, not in the app, and Cmd-Q leaves the host
    running. So quitting and opening again may keep old code. The steps:
 
    ```sh
@@ -124,15 +133,17 @@ Stuck words come at two levels. The ticket shows both.
 
 1. Read both words on the ticket. The program's README says what each GitHub one means.
 2. Say exactly what is left: a claim, a branch, a pull request.
-3. **An agent does not merge the open pull request.** The owner decides. On a yes, it lands as a by-hand
-   change, under [the plan's rule](../plan/README.md#how-a-change-lands). The other choice is a new ticket.
+3. **Inside a live run nothing but ship merges.** Once a lane is finished and stuck, what is left is a
+   by-hand change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green
+   CI, and an agent merges after a leak grep. The other choice is a new ticket.
 4. Log it in `field/`. A stuck lane teaches as much as a merged one.
 
 ## The leak check
 
-The leak check is not built into the lane, and this repository is public. Before the merge yes, a
-person or an agent reads the pull request's added lines by hand and greps them for keys, machine paths,
-personal names and account names. Do not give the merge yes until that is clean.
+Today the leak check is a by-hand grep, before the merge yes, when the branch is already public. A gate
+before the push ([nothing is pushed before review](../direction/push-after-review.md)) is not built. A
+person or an agent reads the pull request's added lines and greps them for keys, machine paths, personal
+names and account names. Do not give the merge yes until that is clean.
 
 ## What to log
 

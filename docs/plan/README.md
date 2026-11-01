@@ -27,8 +27,9 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
    After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
    get built through the pipeline, with one tracker ticket per pull request.
 
-After ticket 117, on today's version: rename `runs` to `timeline` (ticket 86), then the
-performance program (ticket 114). Past that, [seven tiers](./tiers.md), proposed.
+Also right after ticket 117, on today's version and beside Tier 1: rename `runs` to
+`timeline` (ticket 86), then the performance program (ticket 114). They and Tier 1 do not
+wait for each other. Past Tier 1, [seven tiers](./tiers.md) in all, the rest proposed.
 
 Ticket numbers are this project's own tracker, not GitHub issues.
 
@@ -45,9 +46,9 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo. No real ticket yet. → nothing, until ticket 117
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. A review found a blocker, and CI is red. → an agent fixes it, then a mutation run and a new review, then the owner's yes
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
-- **Skipping work already done, and restarting a stuck lane.** Today's pipeline does neither. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
+- **Skipping work already done, and restarting a stuck lane.** Today, a saved lane does not rerun a finished step, but it cannot skip work done outside the lane, and a stuck lane cannot restart. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
 - **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
-- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the docs and exam pull requests, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says
+- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the exam pull request, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
 - **This plan folder and the notes it brought up to date, with [every update builds every layer](../direction/every-update-builds-every-layer.md) (`next/`).** Docs. → the owner's yes
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
 - **[PR 257](https://github.com/usirin/tea-fabrika/pull/257), test windows you can't see.** Green. → the owner's yes, then an agent merges
@@ -76,8 +77,9 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Approves a plan, in `next/` or today's, before any builder starts.
 - Approves a pull request, and answers a question the machine put to a person. No agent does either. Rows that only record what happened need no yes: see [how a change lands](#how-a-change-lands).
+- Answers [how `next/` reaches the lane](./tier-1.md#still-open-how-next-reaches-the-lane), before PR A's plan step (lean 65%).
 - Settles a **proposed** note.
-- Reads each exam pull request. Any diff to the exam files stops the build and asks the owner.
+- Reads each exam pull request. On today's lane, a builder's diff to the exam files ends the lane stuck: nothing the build did is kept, and the owner hears why.
 - Adds an entry to `unreachable-ledger.json`, in a change of its own.
 - Says yes after reading `alchemy plan`, before a deploy to the cloud.
 - Names each exception to "never copy across".
@@ -87,15 +89,16 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Decides which version a job is in when the brief says, or the rule in [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) answers it. If it still cannot tell, it asks.
 - Writes a note marked **proposed**, an experiment, or a field log.
+- Files Tier 1's tracker tickets, for the owner's GitHub id, after ticket 117 lands: the agent running this project session does it.
 - Fixes a dead-code finding it checked by hand. If the finding is wrong, it stops and tells the owner.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
 
-In a live run on a target repository, never, by anyone's agent: merge by hand, arm auto-merge, or push to its main.
+In a live run on a target repository, never, by anyone's agent: merge by hand, arm auto-merge, or push to its main. Once a lane is finished and stuck, [what is left is a by-hand change](#how-a-change-lands).
 
 ## How a change lands
 
-- **A live run on a target repository:** only through the ship stage.
+- **A live run on a target repository:** inside the run, nothing but ship merges. Once a lane is finished and stuck, what is left is a by-hand change, under the next rule.
 - **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs the merge, after a leak grep.
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
 - **Direction notes and plans:** they still get the owner's yes.

@@ -89,7 +89,9 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
   Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
   `stuck: sent_back`. Then typing the line again only says how it ended. The pull request and its branch
-  stay open and nothing more runs, so a person lands it by hand or files a new ticket.
+  stay open and nothing more runs. Inside a live run nothing but ship merges. Once a lane is finished and
+  stuck, what is left is a by-hand change, under the by-hand rule: the owner's yes, green CI, and an agent
+  merges after a leak grep. The other choice is a new ticket.
 - **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
   `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
   is a new pull request.
