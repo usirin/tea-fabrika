@@ -12,7 +12,8 @@
 //   [touch-rules]  the builder also rewrites every file an agent loads by itself, for the same reason
 //   [review-once]  the first review has a finding, so a second round starts from a head
 //
-// `FAKE_CODEX_LOG`: a file each run adds one JSON line to, with its arguments, its folder, the names
+// `FAKE_CODEX_LOG`: a file each run adds one JSON line to, with its arguments (all but the last, which is
+// the prompt or the `-` that says the prompt is on stdin), the prompt, its folder, the names
 // in its environment that look like a key, the rubrics its brief holds, the diff its brief holds,
 // what its folder holds of the files `[touch-rules]` writes, and the files its brief says are taken.
 // The adapter's keep-list drops this name too, so ./make.ts names it in a small wrapper.
@@ -44,7 +45,8 @@ const flagOf = (name) => {
 	return at < 0 ? null : args[at + 1];
 };
 const folder = flagOf("-C") ?? process.cwd();
-const prompt = args.at(-1) ?? "";
+// A last argument of `-` means the prompt comes on stdin, as with a real `codex exec`.
+const prompt = args.at(-1) === "-" ? readFileSync(0, "utf8") : (args.at(-1) ?? "");
 
 /** What a real agent would load by itself, or what the docs say it scans, from the folder it runs in. */
 const SELF_LOADED = [
