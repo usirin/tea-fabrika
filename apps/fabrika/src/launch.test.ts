@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest";
+import app from "../package.json" with {type: "json"};
 import {launchOf} from "./launch.ts";
 
 // Which launch each environment asks for: a home of its own is quiet, unless asked otherwise.
@@ -26,5 +27,13 @@ describe("launchOf", () => {
 
 	it("needs a home to be in the foreground: the owner's start stays the owner's", () => {
 		expect(launchOf({FABRIKA_FOREGROUND: "1"})).toEqual({kind: "owner"});
+	});
+});
+
+// Electron names the owner's home after `productName`. A new value starts the owner on an empty
+// home, and their tickets look gone.
+describe("the owner's home", () => {
+	it("keeps its folder name when the package is renamed", () => {
+		expect(app.productName).toBe("@kampus/fabrika-app");
 	});
 });

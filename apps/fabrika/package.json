@@ -1,5 +1,6 @@
 {
 	"name": "@kampus/fabrika-app-old",
+	"productName": "@kampus/fabrika-app",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
