@@ -10,6 +10,10 @@ The findings below are unchanged. These things changed after them.
   This replaces the study's lean that the pick lives on the person's ledger object (section 3).
   The built-in themes are named `fabrika` (dark, the default) and `fabrika-light`. They are the
   slate and indigo pick measured here; the shot file names below keep the old words.
+- **Repair now happens once, at import, and the terminal per cell.** The study repairs in the app
+  (section 5). Now a theme that repair changes is saved as `<name>-fabrika`, and the terminal's
+  palette is never changed: its text is lifted per cell as it is drawn, as Ghostty and iTerm2 do.
+  `177-themes/rules.py` runs those rules on the files kept here (see "How to run it").
 - **Themes are TOML.** The theme examples here are TypeScript values, and the results are JSON.
   Theme files are now TOML. A shared file is still read in its own format and mapped in.
 - **Pipe colors are now six fixed names.** [Pipe colors](../docs/direction/pipe-colors.md) set sky,
@@ -453,7 +457,12 @@ port the spike: its first-paint trick and replay are lessons, not code.
 pnpm --filter @kampus/fabrika-app-old build
 env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 15 node experiments/177-themes.ts        # all of it
 env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 15 node experiments/177-themes.ts radix  # no window at all
+python3 -I experiments/177-themes/rules.py   # the themes note's rules on the kept files
 ```
+
+- `rules.py` was added on 2026-11-01 for [themes](../docs/direction/themes.md). Every contrast number in
+  that note comes from it. It reads only `177-themes/schemes/`, needs no build, no network and no
+  key, costs $0 and takes about 40 seconds.
 
 - It needs the spike commit on this branch. The same change is in `177-themes/spike.patch`.
 - No model, no key, $0. About 2 minutes for each.

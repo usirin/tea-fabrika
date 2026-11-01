@@ -7,14 +7,14 @@ not Radix steps. `next/` builds this. Nothing is built yet.
 
 ```toml
 # ~/.fabrika/fabrika.toml, the person's own settings
-theme = "nord"   # a file in ~/.fabrika/themes/; leave the line out for "fabrika", the default
+theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for "fabrika"
 ```
 
 ```text
 ~/.fabrika/
-  fabrika.toml          the pick: theme = "<name>"
-  themes/nord.toml      one theme, a full set of named colors
-  keybindings.toml      the person's keys, from the keybindings note
+  fabrika.toml               the pick: theme = "<name>"
+  themes/nord-fabrika.toml   one theme, a full set of named colors: Nord, imported and repaired
+  keybindings.toml           the person's keys, from the keybindings note
 ```
 
 ## Decided
@@ -40,6 +40,18 @@ theme = "nord"   # a file in ~/.fabrika/themes/; leave the line out for "fabrika
   each theme, the choice goes into `workbench.colorTheme` in user settings), and Zed's
   [theme selector](https://zed.dev/docs/themes) too (moving through the list "will change the theme
   in real time", Enter saves it to the settings file).
+- **A theme that repair changes gets a name of its own: `<name>-fabrika`.** If import has to change a
+  color so it reads, Nord is saved as `~/.fabrika/themes/nord-fabrika.toml` and shown as
+  `nord-fabrika` in the picker, never under `nord`. A theme that needs no repair keeps its name. So
+  repair happens once, at import, and lands in a real file a person can open. Its `[repaired]` table
+  says what came in and what changed. This is the Linux distro habit for a patched package: Debian
+  adds `+deb13u1` to a stable update
+  ([Developer's Reference 5.5.1](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html)),
+  and Ubuntu adds `ubuntu1` the first time it changes a Debian package
+  ([version string format](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/version-strings/)),
+  so nobody takes their version for the upstream one.
+- **The terminal's per-cell check never renames anything.** It happens as the terminal draws and
+  never changes a file ([below](#4-a-brought-theme-that-fails-contrast-proposed)).
 - **Where it lands in the plan.** Tier 1 reads its config files and keeps today's styling as its
   named exception. Reading theme files and the `themes` program are both in Tier 2, beside the other
   first programs. The approved Tier 1 does not grow.
@@ -63,8 +75,9 @@ Themes and keys follow one rule: **user config, with the defaults as the first r
 
 ## The answer each way in gives
 
-These are sketches of the shape proposed below. Every number was computed by a script that runs
-this note's rules on the files experiment 177 kept (`experiments/177-themes/schemes/`). They are
+These are sketches of the shape proposed below. Every number was computed by
+`experiments/177-themes/rules.py`, which runs this note's rules on the files experiment 177 kept
+(`experiments/177-themes/schemes/`); the experiment says how to run it. They are
 WCAG contrast ratios, each over the worst of the backgrounds the color sits on (desk, ground and
 raised for text; the ground for focus and the turn fill; the fill for `on-turn`). No number here was
 read off a screen.
@@ -104,30 +117,31 @@ foreground = "#edeef0"
 background = "#111113"
 cursor = "#edeef0"
 selection = "#d9edfe25" # slate a5
-palette = [ ... ]     # 16 Radix steps: slate 11, red 9, grass 9, amber 9, blue 9, purple 11,
-                      # cyan 9, slate 11, slate 11, then red, grass, amber, blue, purple, cyan 11,
-                      # slate 12
+palette = [ ... ]     # 16 Radix steps: slate 3 (black, a fill), red 9, grass 9, amber 9, blue 9,
+                      # purple 11, cyan 9, slate 12, slate 11, then red, grass, amber, blue,
+                      # purple, cyan 11, slate 12
 ```
 
 ```text
 text 15.15   faint 8.71   turn-text 8.53   done 9.26   running 11.49   stuck 8.35   closed 8.71
 focus 3.01   turn 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
-terminal: every color 4.82 or more
+terminal: every color but black (0, a fill) 4.82 or more on the background
 moved by repair: 0
 ```
 
 **The built-in `fabrika-light`:** the same pick, `look = "light"`. Two colors are a step up from
 the dark one, because repair would move them there: `running` is amber 12, since amber 11 reads 4.38,
 and `focus` is slate a9, since a8 reads 1.90. With those written in, repair moves nothing: text
-15.58, faint 5.81, done 4.82, running 10.81, stuck 4.96, focus 3.27, and every terminal color 4.65 or
-more. The cost: running reads brown, not amber.
+15.58, faint 5.81, done 4.82, running 10.81, stuck 4.96, focus 3.27. In the terminal, white and bright
+white (7 and 15, slate 8 and 7) are fills, and every other color reads 4.65 or more on the
+background. The cost: running reads brown, not amber.
 
 **A Base16 file, mapped in:**
 
 ```toml
-# ~/.fabrika/themes/nord.toml (a sketch), from base16-nord.yaml
+# ~/.fabrika/themes/nord-fabrika.toml (a sketch), imported from base16-nord.yaml
 format = 1
-name = "Nord"
+name = "nord-fabrika" # repair changed it, so not "nord"
 look = "dark"
 
 [from.base16]
@@ -141,15 +155,15 @@ ground = "#2e3440"    # base00
 raised = "#353b47"
 hover = "#3d434f"
 edge = "#444a55"
-focus = "#727882"
+focus = "#787e88"     # repaired
 text = "#e5e9f0"      # base05
 faint = "#b6bbc4"
 turn = "#81a1c1"      # base0D
 on-turn = "#000000"   # black or white, whichever reads more on turn
-turn-text = "#81a1c1" # base0D
+turn-text = "#89a9c9" # base0D, repaired
 done = "#a3be8c"      # base0B
 running = "#ebcb8b"   # base0A
-stuck = "#bf616a"     # base08
+stuck = "#eb8991"     # base08, repaired
 closed = "#b6bbc4"    # the faint gray
 
 [terminal]
@@ -157,21 +171,31 @@ foreground = "#e5e9f0"
 background = "#2e3440"
 cursor = "#e5e9f0"
 selection = "#434c5e" # base02
-palette = [ ... ]     # the Tinted Theming roles, base00 to base0F
+palette = [ ... ]     # the Tinted Theming roles, base00 to base0F; never repaired
+
+[repaired]            # what import changed, by our color name; `now` is the value in [colors]
+turn-text = { was = "#81a1c1", now = "#89a9c9", why = "under 4.5:1 on raised" }
+stuck = { was = "#bf616a", now = "#eb8991", why = "under 4.5:1 on raised" }
+focus = { was = "#727882", now = "#787e88", why = "under 3:1 on ground" }
 ```
 
 ```text
 text 9.23   faint 5.83   done 5.51   running 7.20   (all over raised, the worst of the three)
-moved by repair, in the app only, never in the file:
+changed by repair at import, written into nord-fabrika.toml:
   stuck      #bf616a -> #eb8991   2.75 -> 4.56, over raised
   turn-text  #81a1c1 -> #89a9c9   4.18 -> 4.59, over raised
   focus      #727882 -> #787e88   2.81 -> 3.06, over the ground
-terminal: 6 of 16 under 4.5 (2 under 3:1), all 6 moved; cursor 10.26
-bottom line, once: theme nord: 3 colors and 6 terminal colors moved so they read
+terminal: never changed; 6 of 16 under 4.5 on the background (2 under 3:1), so text in
+  those colors is lifted per cell when drawn; cursor 10.26
+bottom line, at import: Imported Nord as nord-fabrika: 3 colors changed to stay readable
 ```
 
 The study measured Nord's `stuck` at 2.83 over raised with its own ladder. This note's ladder puts
 raised a little lighter, so it reads 2.75 here.
+
+`[repaired]` is keyed by our names, not by `base08`, since `focus` is mixed and has no Base16 key of
+its own. `was` is the value the mapping gave, and `now` must match `[colors]`, so the decoder refuses
+a file where they differ.
 
 The Base16 roles are the [Tinted Theming styling guide](https://github.com/tinted-theming/home/blob/main/styling.md)'s:
 base00 the ground, base05 the text, base08 red, base0A yellow, base0B green, base0D blue.
@@ -198,6 +222,7 @@ const Theme = Schema.Struct({
 	from: From,
 	colors: Colors, // every name the window uses, each a Hex; none optional
 	terminal: Terminal, // foreground, background, cursor, selection, palette of 16
+	repaired: Schema.optional(Repaired), // what import changed: was, now, why, by color name
 });
 ```
 
@@ -217,7 +242,7 @@ const Theme = Schema.Struct({
   - `desk`, `raised`, `hover`, `edge`, `focus` and `faint` are mixed in OKLCH from the background
     toward the foreground, each at the place it sits in `fabrika`'s own ladder. In a dark theme that
     is desk -0.026, raised 0.045, hover 0.096, edge 0.136, focus 0.403, faint 0.766; in a light one
-    0.012, 0, 0.059, 0.091, 0.271, 0.656. The study's spike mixed the same way, from today's ladder.
+    0.012, 0, 0.059, 0.091, 0.467, 0.656. The study's spike mixed the same way, from today's ladder.
   - `turn` and `turn-text` are the blue (base0D, Ghostty's palette 4), `done` the green (base0B, 2),
     `running` the yellow (base0A, 3) and `stuck` the red (base08, 1). `on-turn` is black or white,
     whichever reads more on `turn`. `closed` is `faint`.
@@ -233,7 +258,8 @@ const Theme = Schema.Struct({
   from. Sure: 85%, the study's number.
 - **The source table names its kind**, `[from.radix]` or `[from.base16]`, so no `kind` key is typed
   and a file cannot be two kinds at once.
-- **A shared file is mapped once, at import.** The `themes` program writes `themes/<name>.toml` and
+- **A shared file is mapped once, at import.** Repair runs then too. The `themes` program writes
+  `themes/<name>.toml`, or `themes/<name>-fabrika.toml` when repair changed a color, and
   keeps the original's format, author and sha256 in `[from]`, not the original itself. One theme is
   one file. The cost: a new version of a scheme needs the original again, and the hash only says
   whether it changed. Sure: 70%.
@@ -291,16 +317,17 @@ Sure: 75%. Doubt: no third-party program exists yet, so this is reasoning from t
 
 ### 4. A brought theme that fails contrast (proposed)
 
-A brought theme must never make the app unreadable. The app repairs it and does not refuse it.
+A brought theme must never make the app unreadable. The `themes` program repairs it at import, into
+`<name>-fabrika`, and does not refuse it.
 
-What is checked, on every load:
+What is checked, at import and again on every load:
 
 | Names | Against | Bar |
 |---|---|---|
 | `text`, `faint`, `turn-text`, `done`, `running`, `stuck`, `closed` | the worst of desk, ground and raised | 4.5:1, [WCAG 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) |
 | `on-turn` | `turn` | 4.5:1 |
 | `focus`, `turn` | the ground (focus is drawn inside the tile) | 3:1, [1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) |
-| the 16 terminal colors | the terminal's background | 4.5:1 |
+| terminal text, per cell, when drawn | that cell's own background | 4.5:1 |
 | the terminal cursor | the terminal's background | 3:1 |
 
 What repair does:
@@ -315,47 +342,77 @@ What repair does:
   25 accents, dark and light), this always ended on a Radix step, with no value off the scale. 275
   of the 300 needed a move: every light pick moves `running` (amber 11 to 12) and `focus` (a8 to
   a9). So the built-ins are written with those steps already, and repair moves nothing in them.
+  - A guess: a pick has no upstream file anyone could mistake it for, so it is written with its
+    steps already chosen and keeps its name. If the owner wants `-fabrika` there too, it costs
+    nothing.
 - **A shared file moves lightness only,** along each color's own hue, away from the background
   first, as iTerm2's minimum contrast moves text and never the background. Black or white text
   reaches 4.5:1 on any ground, so it always ends readable.
-- **The terminal's 16 colors are repaired too,** each as text on the terminal's background, at 4.5:1.
-  In the study's unreadable test (every color near one gray), 16 of 16 were under 3:1; after
-  repair all 16 read, and the cursor goes from 1.07 to 3.05.
-  - The cost, said plainly: a color that a program uses as a fill moves too. Color 0, black in a
-    dark theme, sits near the background on purpose. In `fabrika`, slate has no step between 4.45
-    (slate 10) and 9.06 (slate 11), so black, white and bright black all end on slate 11, and a
-    program that paints a black bar gets a gray one.
-  - The real fix is contrast per cell, so only text moves: Ghostty's `minimum-contrast`, iTerm2's
-    minimum contrast and xterm.js's `minimumContrastRatio` all work that way. ghostty-web has none,
-    so we ask upstream. When it lands, the palette is no longer moved.
-- **The file stays the person's.** Repair happens in the app, in memory. It never rewrites the file.
+- **The terminal's palette is never changed. Its text is kept readable per cell, when it is drawn.**
+  Each cell's text moves, lightness only, against that cell's own background, and the background
+  never moves. So ANSI black stays black where a program paints a bar with it, and only black text
+  on that same black is lifted.
+  - This is how terminals do it. [Ghostty's `minimum-contrast`](https://ghostty.org/docs/config/reference#minimum-contrast)
+    sets "the minimum contrast ratio between the foreground and background colors", from 1 to 21,
+    and leaves emoji and images alone. Its docs do not say per cell, but its
+    [cell shader](https://github.com/ghostty-org/ghostty/blob/main/src/renderer/shaders/glsl/cell_text.v.glsl)
+    applies it to each glyph against that cell's background. [iTerm2's minimum contrast](https://iterm2.com/documentation-preferences-profiles-colors.html)
+    shifts "text colors that are similar to their background colors closer to black or white", and
+    "never modifies background colors".
+  - The bar is 4.5:1, the same as the app's text. Ghostty suggests 1.1 to stop invisible text and
+    calls 3 or more good, so ours is stricter on purpose: one bar for every word on the desk.
+  - The two built-ins need it only where a fill color is used as text: black (0) in `fabrika`, the
+    two whites (7, 15) in `fabrika-light`. Every other color reads 4.5 on the background as written.
+  - The check, run over every pair a program can draw (the default text and the 16, on the default
+    background and the 16, 273 pairs): in the study's unreadable test (every color near one gray),
+    16 of 16 colors read under 3:1 and all 273 pairs under 4.5:1. Per cell, all 273 reach 4.5.
+  - The cursor stays a theme check, at 3:1 on the terminal's background, and moves like `focus`.
+    Ghostty leaves the cursor glyph out of minimum contrast too. In the unreadable test it goes from
+    1.07 to 3.05.
+  - ghostty-web 0.4 has no minimum contrast. We try it first as a `pnpm patch` to ghostty-web and
+    offer it upstream. Until one lands, the terminal draws the file's colors as they are, and the
+    `themes` program counts the colors under 4.5 before a person picks.
+  - Sure: 75%. Doubt: the cost of one more contrast step per cell in ghostty-web's renderer, and
+    upstream's answer. A patch measured with four full terminals, as the study's swap was, settles
+    the first.
+- **The file brought in is never changed.** Repair writes a new file, `<name>-fabrika.toml`, with
+  `[repaired]` saying what changed. Import keeps only the original's hash, as above.
+- **A file in `themes/` that fails at load is not applied.** That is a file written or edited by
+  hand, since import never writes one that fails. The app keeps `fabrika` and says once:
+  `theme mine: stuck under 4.5:1; using fabrika`. The `themes` program offers to import it as
+  `mine-fabrika`. Sure: 70%. Doubt: a person tuning their own file may want it shown anyway, as they
+  edit it.
 - **A file that does not decode is not applied.** A value that is not a color, a missing name or
   broken TOML: the app keeps `fabrika` and says why.
 
-What the study's files need, from the same script:
+What the study's files need, from the same script. No palette is changed in any of them.
 
-| Theme | App colors moved | Terminal colors moved |
+| Theme | App colors moved | Terminal colors under 4.5 on the background, lifted per cell |
 |---|---|---|
+| `fabrika`, `fabrika-light` | 0 | 1 and 2, the fills |
 | Nord (Base16) | 3 | 6 |
 | Solarized Light (Base16) | 7 | 14 |
 | Catppuccin Mocha (Base24) | 1 | 2 |
 | Dracula (Ghostty) | 1 | 2 |
-| Catppuccin Latte (Ghostty) | 6 | 14, and the cursor |
-| Unreadable on purpose | 9 | 16, and the cursor |
+| Catppuccin Latte (Ghostty) | 6, and the cursor | 14 |
+| Unreadable on purpose | 9, and the cursor | 16 |
 
 When a person meets it:
 
-- **In the `themes` program, before they pick.** The preview lists what repair moved, for example
-  `stuck #bf616a -> #eb8991`, and the terminal colors it moved.
-- **At load, when repair moved anything.** The bottom line says so once, in one line:
-  `theme nord: 3 colors and 6 terminal colors moved so they read`. The `themes` program lists them.
+- **In the `themes` program, before they import.** The preview lists what repair will change, for
+  example `stuck #bf616a -> #eb8991`, the name it will be saved under, and how many terminal colors
+  are lifted per cell.
+- **At import, when repair changed anything.** The bottom line says so once, in one line:
+  `Imported Nord as nord-fabrika: 3 colors changed to stay readable`. The file's `[repaired]` lists
+  them.
 - **At load, when a file is refused.** The bottom line says once: `theme nord: ground is not a
   color; using fabrika`. The `themes` program shows the same reason.
 - There is no prompt on opening the app.
 
-Sure: 75%, and 60% on the terminal. Doubts: which measure gates, WCAG or APCA, is open (Radix
-promises APCA). Repair changes colors the person chose: Solarized Light and Latte lose most of their
-terminal colors as designed, so a "keep my colors" switch may be wanted. A real person using a
+Sure: 75%, and 75% on the terminal (its doubt is above). Doubts: which measure gates, WCAG or APCA,
+is open (Radix promises APCA). Repair changes colors the person chose: Solarized Light and Latte lift
+most of their terminal text when drawn, so a "keep my colors" switch may be wanted. A `-fabrika`
+file is a copy: when the scheme's author ships a new version, it must be imported again. A real person using a
 brought theme for a week settles both.
 
 ## The color principles a brought theme gives up
@@ -385,5 +442,6 @@ up.
 - How a brought theme looks with Radix pipe washes on it. Nobody has looked.
 - Whether repair feels like the app overruling the person. Nobody has used it for long.
 - The live-switching and Nord-at-2.83 numbers are from today's version, on one Mac, in experiment 177.
-  The contrast numbers come from a script on the study's files, not from a screen: alpha colors were
-  composited by hand, and nothing was drawn. `next/` has no window that shows a theme yet.
+  The contrast numbers come from `experiments/177-themes/rules.py` on the study's files, not from a
+  screen: alpha colors were composited by hand, and nothing was drawn. Per-cell contrast was
+  worked out over every pair, never drawn, so its cost is not known. `next/` has no window that shows a theme yet.
