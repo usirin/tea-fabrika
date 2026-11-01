@@ -1,8 +1,10 @@
+import {createHash} from "node:crypto";
 import {mkdtempSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {layerDigest} from "@effect/platform-node/NodeCrypto";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Effect} from "effect";
+import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {
 	CONFIG_FILE,
@@ -152,7 +154,9 @@ describe("where fabrika.toml is read from", () => {
 
 describe("where the ledger is kept", () => {
 	const fileOf = (where: Parameters<typeof ledgerFile>[1]) =>
-		Effect.runPromise(ledgerFile("/h/.tsh", where).pipe(Effect.provide(nodeServices)));
+		Effect.runPromise(
+			ledgerFile("/h/.tsh", where).pipe(Effect.provide(Layer.merge(nodeServices, layerDigest))),
+		);
 	const repo = (name: string) => ({
 		from: "repo" as const,
 		target: {name, clone: `/h/w/${name}/clone`, url: `https://github.com/${name}`},
@@ -169,6 +173,13 @@ describe("where the ledger is kept", () => {
 		expect(a).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/app-[0-9a-f]{12}\.sqlite$/);
 		expect(b).not.toBe(a);
 		expect(await fileOf({from: "folder", folder: "/one/app/"})).toBe(a);
+	});
+
+	it("a folder's hash is the first 12 hex of its path's SHA-256, so a ledger written before stays found", async () => {
+		const hash = createHash("sha256").update("/one/app").digest("hex").slice(0, 12);
+		expect(await fileOf({from: "folder", folder: "/one/app"})).toBe(
+			`/h/.tsh/ledgers/folders/app-${hash}.sqlite`,
+		);
 	});
 
 	it("a clone named alone is kept by its path, like a folder", async () => {

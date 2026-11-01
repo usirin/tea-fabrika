@@ -44,6 +44,7 @@ export function mortalDisk(): {readonly life: (before?: BeforeWrite) => Life} {
 				remove: (key) => write(key, () => disk.delete(key)),
 				clear: write(null, () => disk.clear()),
 				size: Effect.sync(() => disk.size),
+				keys: Effect.sync(() => [...disk.keys()]),
 			});
 			return {
 				storage: storageOf(Layer.succeed(KeyValueStore.KeyValueStore, store)),

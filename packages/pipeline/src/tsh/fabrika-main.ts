@@ -1,4 +1,5 @@
 import {homedir} from "node:os";
+import {layerDigest} from "@effect/platform-node/NodeCrypto";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Ledger, Shell} from "@kampus/fabrika-old";
 import {homeOf, runTsh} from "@kampus/fabrika-old/shell";
@@ -62,7 +63,7 @@ const read = await Effect.runPromise(
 		// One object per repository: named after its file's folder (github, folders) and name.
 		const ledger = ledgerNameOf(`${path.basename(path.dirname(file))}-${path.basename(file)}`);
 		return {config, start, settings, source, persist, ledger, file, setup, lines};
-	}).pipe(Effect.result, Effect.provide(nodeServices)),
+	}).pipe(Effect.result, Effect.provide(Layer.merge(nodeServices, layerDigest))),
 );
 
 if (read._tag === "Failure") {
