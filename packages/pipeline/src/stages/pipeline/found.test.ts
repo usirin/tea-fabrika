@@ -12,6 +12,7 @@ import {
 	brokeWords,
 	decidedWords,
 	foundWords,
+	jobsList,
 	mutantWords,
 	ruleChangeLines,
 	untestedWords,
@@ -42,6 +43,41 @@ describe("a lane's program that broke", () => {
 		expect(brokeWords(7, failed).join("\n")).toMatch(/^#7 broke: .*the disk broke/);
 		expect(brokeWords(7, {kind: "ended", unread})).toEqual([]);
 		expect(brokeWords(7, {kind: "stopped", unread})).toEqual([]);
+	});
+});
+
+describe("the jobs the test writer and the mutants' writer are told", () => {
+	const job = (when: string, fixture: string) => ({
+		when,
+		result: "it reads each name in one form",
+		check: {how: "test", what: "a test reads them"},
+		serves: ["reader"],
+		fixture,
+	});
+
+	it("say each task's job, and the whole plan's with its fixture", () => {
+		const plan = Schema.decodeUnknownSync(HeldDraft)({
+			summary: "One form.",
+			stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
+			tasks: [
+				{
+					title: "Read a name",
+					ends: "pr",
+					job: job("a name comes in", "three names"),
+					criteria: [],
+				},
+			],
+			goal: {job: job("a whole list comes in", "a list of a thousand names"), criteria: []},
+			pointers: [],
+			questions: [],
+		});
+		const jobs = jobsList(plan);
+		expect(jobs).toContain(
+			"Read a name: When a name comes in, it reads each name in one form (Fixture: three names)",
+		);
+		expect(jobs).toContain(
+			"The whole plan: When a whole list comes in, it reads each name in one form (Fixture: a list of a thousand names)",
+		);
 	});
 });
 

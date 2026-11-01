@@ -159,7 +159,7 @@ interface FakeScript {
 	>;
 	/** Every review row is `unseen`, for this reason. */
 	readonly unseen?: string;
-	/** Every surviving mutant is answered `cannot`, for this reason. */
+	/** Every surviving mutant is answered `cannot`, for this reason. `{mutant}` in it is that mutant's id. */
 	readonly cannot?: string;
 }
 
@@ -2185,6 +2185,39 @@ describe("a lane, on what the real agents answered", () => {
 						expect(body).toContain(REAL_MUTANT);
 						expect(body).toContain(REAL_P1.when);
 						expect(body).not.toMatch(/no deviations/i);
+					},
+				);
+
+				// Each with its own reason: under one shared reason, a row that dropped out would not show.
+				it(
+					"every mutant answered `cannot` reaches the merge question and the pull request, each with its own reason",
+					{timeout: 120_000},
+					async () => {
+						const ran = await onGitHub({
+							within: 110,
+							rubrics: null,
+							picks: {step: "go_on", merge: "no"},
+							fake: {
+								cannot: "No test can see the change at {mutant}.",
+								// A file no test reads: every mutant in it survives, so there are several to let live.
+								writes: {
+									build: [
+										{
+											path: "src/big.ts",
+											text: "export const isBig = (size: number): boolean => size > 10;\n",
+										},
+									],
+								},
+							},
+						});
+						const asked = runsOf(ran, "mutants")[0]?.prompt ?? "";
+						const ids = [...new Set(asked.match(/src\/[^:"\n]+\.ts:\d+:\d+:[0-9a-f]{6}/g) ?? [])];
+						expect(ids.length).toBeGreaterThan(1);
+						const rows = ids.map((id) => `\`${id}\`: No test can see the change at ${id}.`);
+						const body = prBody(ran);
+						const merge = readBy(ran, "a-merge").text;
+						expect(rows.filter((row) => !body.includes(row))).toEqual([]);
+						expect(rows.filter((row) => !merge.includes(row))).toEqual([]);
 					},
 				);
 

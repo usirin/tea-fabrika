@@ -28,7 +28,8 @@
 //   writes    {step: [{path, text}]}  more files this step writes in its folder
 //   writesAt  {step: {run: [{path, text}]}}  more files one run of this step writes, the first run being 0
 //   unseen    text             every review row is `unseen`, for this reason
-//   cannot    text             every surviving mutant is answered `cannot`, for this reason
+//   cannot    text             every surviving mutant is answered `cannot`, for this reason. `{mutant}`
+//                              in it is that mutant's id, so each can have a reason of its own
 //
 // A later try that resumes a thread names the step by its thread. One that does not, whose prompt is
 // only what the last try got wrong, is the step that ran last.
@@ -246,7 +247,14 @@ const ANSWERS = {
 	mutants: () => {
 		const ids = [...new Set(brief.match(/src\/[^:"\n]+\.ts:\d+:\d+:[A-Za-z0-9_-]+/g) ?? [])];
 		if (script.cannot !== undefined)
-			return {files: [], answers: ids.map((mutant) => ({mutant, answer: "cannot", why: script.cannot}))};
+			return {
+				files: [],
+				answers: ids.map((mutant) => ({
+					mutant,
+					answer: "cannot",
+					why: script.cannot.replaceAll("{mutant}", mutant),
+				})),
+			};
 		const killed = ids.filter((id) => id.endsWith("MethodExpression") || id.includes("Method"));
 		return {
 			files: [

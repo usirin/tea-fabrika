@@ -41,7 +41,7 @@ The same review led to these:
 
 **Building those found one more bug.** When a mutant had an answer but no test, its commit became the head. The builder's files then joined the exam, and later rounds ended `exam_touched`. A test now pins it.
 
-**CI failed because a prompt was too long to start Codex.** CI's log said only `lane ended with build run lane/1/5/build unfinished`, and it never printed `E2BIG`. A builder got the same message on a Mac with a longer text and traced it there to `E2BIG`. The prompt went to Codex as one argument. A build's brief holds its long text twice, about 170 KB, and Linux allows 128 KB per argument. A Mac allows more, so no local run hit it at that size. The link to CI is a strong inference, and it stands or falls with this pull request's next CI run.
+**CI failed because a prompt was too long to start Codex.** CI's log said only `lane ended with build run lane/1/5/build unfinished`, and it never printed `E2BIG`. A builder got the same message on a Mac with a longer text and traced it there to `E2BIG`. The prompt went to Codex as one argument. A build's brief holds its long text twice, about 170 KB, and Linux allows 128 KB per argument. A Mac allows more, so no local run hit it at that size. The link to CI is a strong inference. The next CI run, on 4e985856, sent the prompt on stdin and passed on Linux, which fits it. CI ran the stand-in Codex, and its old log never said `E2BIG`, so this is not proof.
 
 ```ts
 // packages/fabrika/src/agents/codex/adapter.ts, as it is now
@@ -51,7 +51,31 @@ stdin: {stream: Stream.make(new TextEncoder().encode(sent))}
 
 I ran real Codex 0.165.0 this way on a Mac: a fresh turn, a resume, and a resume with a 200 KB prompt. All three worked. The appended system prompt still goes by argument, and past 128 KB it fails in words.
 
-**What this cannot tell us:** none of these paths has run on real models from ticket to merge. A real person has still not read these questions. Whether stdin works on Linux rests on this pull request's CI run.
+**What this cannot tell us:** none of these paths has run on real models from ticket to merge. A real person has still not read these questions. Real Codex has not taken a prompt on stdin on Linux: CI's run there used the stand-in.
+
+## A second fresh review, and a mutation run cut short
+
+**The second fresh review found no blockers, and a partial mutation run killed 68 of 129 mutants, 53%. That is a low estimate. Three of its survivors became tests.** All of this is today's version. The owner's rule is now that long checks don't hold a pull request, so I stopped the run early on purpose.
+
+**The review.** Zero blockers, about 80% sure. The doubt is that it was mostly reading: the only tests it ran were `adapter.test.ts`, 13 of 13. Its findings are in tracker ticket 125.
+
+**The mutation run.** It ran on 32940be8, with seed 267.
+
+| Stage | What ran | What came back |
+|---|---|---|
+| 1. Stryker, without the whole-lane tests | 150 picked of 1,368. They came out as 154 rows, since a pick names where a mutant starts and four named two | 62 killed, 91 uncaught (36 survived, 55 no coverage), 1 runtime error |
+| 2. Stryker, on four whole-lane tests | 53 of 143, stopped at 28 minutes | 22 survived, 12 timed out at a load of about 21. Not counted: I don't trust those timeouts, and the stopped run saved only its counts |
+| 3. By hand, on lane tests | 39 of the 92 still open | 6 killed, 9 alive, 24 compile errors |
+
+The kill rate is 62 and 6 killed, out of 154 rows less the runtime error and the 24 compile errors: 68 of 129. It is low because 52 of the uncaught have no counted result from a lane test. Stage 2 may have reached some of them, but its rows are gone.
+
+**The three new tests.** This is the first recorded case of survivors on a real pull request leading to tests. Each test passes on the code and goes red with its mutation put in by hand. No code changed: all three were missing tests, not bugs.
+
+- **`machine.ts`, `===` to `!==` in the list of mutants let through.** It stayed alive on two lane tests in stage 3. With several mutants let through, all but the first drop out of the merge question and the pull request, so a person says yes to a short list. The old fixture gave each mutant the same reason, which hid it. Now each has its own reason, and the test wants every row in both places.
+- **`tools.ts`, `spans` to `[]` in the run that checks a new test kills its mutant.** With no lines asked for, no survivors come back, so any test counts as a killer. The test's stand-in runner records what it is asked. It wants the mutant's line, and green for a mutant that still survives.
+- **`found.ts`, the whole plan's row to `[]` in `jobsList`.** The test writer and the mutants' writer would stop being told the plan's own job. The test wants "The whole plan" and its fixture.
+
+**What this cannot tell us:** the true kill rate, since most of the uncaught never got a counted lane test. Stage 1 gave the `tools.ts` and `found.ts` mutants no coverage, and no later stage reached them, so no run saw them live on a lane test. Only the new tests' red shows they matter. The other 8 mutants alive in stage 3 got no test here. Nothing ran on the head these tests landed on except those tests and CI.
 
 ## Runs 5 and 6, on 9af7b272
 
