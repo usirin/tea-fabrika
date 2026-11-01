@@ -518,7 +518,7 @@ describe("codex: the system prompt", () => {
 				Effect.provide(nodeServices),
 			),
 		);
-		const args = seen[0]?.args ?? [];
+		const args = (seen[0]?.args ?? []).filter((arg) => typeof arg === "string");
 		return args.find((arg) => arg.startsWith("permissions.fenced.filesystem=")) ?? "";
 	};
 
