@@ -162,7 +162,8 @@ One example, a desk of `t1 | t2` in a row, the line typed in `t2`:
 - **The tint is on tiles and strips, not in the tree.** The tree holds which
   line a tile is in; the page mixes `--line-N` into the border at 30% and into
   the ground at a sixth of that. Six tints, in oklch at close lightness, so no line
-  stands out over another.
+  stands out over another. This look is what runs today. [Pipe colors](./pipe-colors.md)
+  decides what replaces it.
 - **When the run ends, its window goes.** The typed-in tile goes back to its
   tsh. A desk kept and read back holds no windows (`quiet`): their runs did not
   live through the restart.
