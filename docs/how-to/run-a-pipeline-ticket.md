@@ -74,6 +74,7 @@ An agent goes through this list and tells the owner what is missing.
 
    ```sh
    # In the app: Cmd-Q. A second start would only bring the open window forward.
+   volta install pnpm@12.16.1          # once per machine: pnpm 10 cannot switch itself to 12
    git pull --ff-only origin main      # in the checkout the app is built from
    pnpm install --frozen-lockfile
    pnpm fabrika                        # builds, then opens the app
