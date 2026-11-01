@@ -12,8 +12,8 @@ const track = (trace: ReturnType<typeof traceOf>, name: string) => {
 describe("liveTime", () => {
 	it("shows a fact newer than the clock's last tick, and never goes back", () => {
 		const last = SEVEN.at(-1)?.at ?? 0;
-		const stale = last - 60_000;
-		expect(traceOf(SEVEN, stale).spans).toBeLessThan(traceOf(SEVEN, last).spans);
+		const stale = atSeven(10, 3) - 1;
+		expect(traceOf(SEVEN, stale).spans).toBe(1);
 		expect(liveTime(SEVEN, stale)).toBe(last);
 		expect(traceOf(SEVEN, liveTime(SEVEN, stale)).spans).toBe(2);
 		expect(liveTime(SEVEN, last + 5)).toBe(last + 5);
