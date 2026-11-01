@@ -217,8 +217,7 @@ const ANSWERS = {
 						fault: "It misses a case.",
 						at: null,
 						proof: "Read from the code.",
-						// One word: the ticket's `reviewed` fact keeps this text as an id, and an id has no spaces.
-						wants: "the-case-holds",
+						wants: "The case holds.\nSo does the one beside it.",
 					},
 				],
 				skipped: [],

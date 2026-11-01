@@ -175,13 +175,13 @@ export const CodeFact = Schema.Union([
 		head: Sha,
 		commits: Schema.Array(Schema.Struct({sha: Sha, title: Title})),
 	}),
-	/** The review stage judged the criteria at `head`: `met` of `of`, and what it found. */
+	/** The review stage judged the criteria at `head`: `met` of `of`, and what it found, in its own words. */
 	Schema.Struct({
 		type: Schema.Literal("reviewed"),
 		head: Sha,
 		met: Count,
 		of: Count,
-		findings: Schema.Array(Id),
+		findings: Schema.Array(Body),
 	}),
 	/** A stage asks the owner something. `picks`: the buttons, at least one. */
 	Schema.Struct({
