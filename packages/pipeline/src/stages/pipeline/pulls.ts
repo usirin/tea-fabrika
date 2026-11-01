@@ -71,14 +71,26 @@ export class PullWire extends Context.Service<
 				readonly text: string;
 			}[],
 		) => Effect.Effect<void, Failed>;
+		/** A merged pull request's branch off the host, where the host may lose it. */
+		readonly gone: (pull: Pull) => Effect.Effect<void, Failed>;
 	}
 >()("PullWire") {}
 
-/** A local host is told nothing: the row is all there is. */
-export const localWire = Layer.succeed(PullWire, {
-	open: () => Effect.succeed(null),
-	post: () => Effect.void,
-});
+/** A local host is told nothing but a merged branch's end: the row is all there is. */
+export const localWire: Layer.Layer<PullWire, never, LaneWork> = Layer.effect(
+	PullWire,
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		return {
+			open: () => Effect.succeed(null),
+			post: () => Effect.void,
+			gone: (pull) => work.dropBranch(pull.branch).pipe(Effect.mapError(() => failed)),
+		};
+	}),
+);
+
+/** Is this the branch the lane itself named for this ticket? Only that one may ever be removed. Pure. */
+export const ownBranch = (pull: Pull): boolean => pull.branch === `${pull.kind}/${pull.ticket}`;
 
 /** The pulls file, and the local host over a tree. */
 export class LanePulls extends Context.Service<
@@ -98,6 +110,8 @@ export class LanePulls extends Context.Service<
 			verdicts: Pull["verdicts"],
 		) => Effect.Effect<void, Failed>;
 		readonly merged: (id: string) => Effect.Effect<void, Failed>;
+		/** The pull requests of ticket `n` that merged. */
+		readonly landed: (n: number) => Effect.Effect<readonly Pull[]>;
 	}
 >()("LanePulls") {}
 
@@ -150,6 +164,8 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 				}),
 			post: (id, head, verdicts) => change(id, (p) => ({...p, head, verdicts})),
 			merged: (id) => change(id, (p) => ({...p, state: "merged"})),
+			landed: (n) =>
+				Effect.map(all, (pulls) => pulls.filter((p) => p.ticket === n && p.state === "merged")),
 		};
 	}),
 ).pipe(Layer.provide(nodeServices));
