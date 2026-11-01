@@ -1,0 +1,31 @@
+[
+ {
+  "id": "local:toy/slug-lab/pull/1",
+  "kind": "exam",
+  "ticket": 1,
+  "branch": "exam/1",
+  "head": "2ef2d9a845ddb2f2373238d0dec053227f7fea26",
+  "tree": "<tmp>/run4/home/work/trees/exam-1",
+  "state": "merged",
+  "title": "Rule changes for ticket 1",
+  "body": "The rule changes the plan for ticket 1 lists.",
+  "verdicts": []
+ },
+ {
+  "id": "local:toy/slug-lab/pull/2",
+  "kind": "lane",
+  "ticket": 1,
+  "branch": "lane/1",
+  "head": "0779fbc376920604821a2f5b71c028ef6061ca80",
+  "tree": "<tmp>/run4/home/work/trees/1",
+  "state": "merged",
+  "title": "Let slugs run to 80 characters",
+  "body": "From tracker ticket 1.\n\nAllow blog slugs up to 80 characters while keeping trailing hyphens out. Prepare the law update first, then the implementation, in one pull request.\n\nNo deviations.",
+  "verdicts": [
+   {
+    "kind": "review-code",
+    "verdict": "pass"
+   }
+  ]
+ }
+]

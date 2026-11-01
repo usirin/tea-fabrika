@@ -1,0 +1,57 @@
+=== spawn 27
+=== spawn 76
+# What a person decided
+
+A person approved the plan, and that yes took the lean on each question here:
+1. `q1` Should folding also cover letters such as ß, æ and ł, beyond ordinary accented letters?
+   - Options: Fold ordinary accents; remaining letters such as ß, æ and ł separate words. / Also fold ß → ss, æ → ae and ł → l.
+   - Lean: Fold ordinary accents; remaining letters such as ß, æ and ł separate words.
+   - Why: The ticket demonstrates accent folding but leaves 'when they can' undefined. The remaining-character Property depends on this choice.
+   - Cost: Broader folding needs an agreed mapping scope and additional examples.
+   - Sure: 75%
+   - Would settle it: Confirmation of the expected slug for 'Straße' would settle whether ordinary accent folding is enough.
+
+These bind your tests. A test never goes against a decision. If a Property does, answer `cannot` and say which decision it goes against.
+
+=== spawn 123
+Owner's calls, not yours:
+
+A person approved the plan, and that yes took the lean on each question here:
+1. `q1` Should folding also cover letters such as ß, æ and ł, beyond ordinary accented letters?
+   - Options: Fold ordinary accents; remaining letters such as ß, æ and ł separate words. / Also fold ß → ss, æ → ae and ł → l.
+   - Lean: Fold ordinary accents; remaining letters such as ß, æ and ł separate words.
+   - Why: The ticket demonstrates accent folding but leaves 'when they can' undefined. The remaining-character Property depends on this choice.
+   - Cost: Broader folding needs an agreed mapping scope and additional examples.
+   - Sure: 75%
+   - Would settle it: Confirmation of the expected slug for 'Straße' would settle whether ordinary accent folding is enough.
+
+# The exam
+
+=== spawn 190
+# What a person decided
+
+A person approved the plan, and that yes took the lean on each question here:
+1. `q1` Should folding also cover letters such as ß, æ and ł, beyond ordinary accented letters?
+   - Options: Fold ordinary accents; remaining letters such as ß, æ and ł separate words. / Also fold ß → ss, æ → ae and ł → l.
+   - Lean: Fold ordinary accents; remaining letters such as ß, æ and ł separate words.
+   - Why: The ticket demonstrates accent folding but leaves 'when they can' undefined. The remaining-character Property depends on this choice.
+   - Cost: Broader folding needs an agreed mapping scope and additional examples.
+   - Sure: 75%
+   - Would settle it: Confirmation of the expected slug for 'Straße' would settle whether ordinary accent folding is enough.
+
+A test never goes against a decision. A mutant only such a test could kill is `noise`: say which decision it goes against.
+
+=== spawn 250
+# What a person decided
+
+A person approved the plan, and that yes took the lean on each question here:
+1. `q1` Should folding also cover letters such as ß, æ and ł, beyond ordinary accented letters?
+   - Options: Fold ordinary accents; remaining letters such as ß, æ and ł separate words. / Also fold ß → ss, æ → ae and ł → l.
+   - Lean: Fold ordinary accents; remaining letters such as ß, æ and ł separate words.
+   - Why: The ticket demonstrates accent folding but leaves 'when they can' undefined. The remaining-character Property depends on this choice.
+   - Cost: Broader folding needs an agreed mapping scope and additional examples.
+   - Sure: 75%
+   - Would settle it: Confirmation of the expected slug for 'Straße' would settle whether ordinary accent folding is enough.
+
+A decision above is not a finding. It is a person's call, and you may not overrule it. Work that follows it is right, even if you would have chosen otherwise.
+

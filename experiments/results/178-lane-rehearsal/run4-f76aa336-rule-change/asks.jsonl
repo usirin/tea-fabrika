@@ -1,0 +1,8 @@
+{"at":"2026-11-01T16:32:03.805Z","ask":"a-approve-2","unexpected":true,"fact":{"type":"asked","ask":"a-approve-2","what":"Do you approve plan version 1?","picks":["approve","no"]}}
+{"at":"2026-11-01T16:32:13.357Z","ask":"a-approve-2","fact":{"type":"asked","ask":"a-approve-2","what":"Do you approve plan version 1?","picks":["approve","no"]},"pick":"approve","how":"the agent playing the person, by hand"}
+{"at":"2026-11-01T16:32:27.947Z","ask":"a-exam_merge-3","unexpected":true,"fact":{"type":"asked","ask":"a-exam_merge-3","what":"Merge the rule changes: src/slug.laws.test.ts","picks":["merge","no"]}}
+{"at":"2026-11-01T16:32:56.607Z","ask":"a-exam_merge-3","fact":{"type":"asked","ask":"a-exam_merge-3","what":"Merge the rule changes: src/slug.laws.test.ts","picks":["merge","no"]},"pick":"merge","how":"the agent playing the person, by hand"}
+{"at":"2026-11-01T16:35:36.075Z","ask":"a-step-8","unexpected":true,"fact":{"type":"asked","ask":"a-step-8","what":"A mutant lived, and the test writer says no test can see the change.","picks":["again","go_on","stop"]}}
+{"at":"2026-11-01T16:35:47.158Z","ask":"a-step-8","fact":{"type":"asked","ask":"a-step-8","what":"A mutant lived, and the test writer says no test can see the change.","picks":["again","go_on","stop"]},"pick":"go_on","how":"the agent playing the person, by hand"}
+{"at":"2026-11-01T16:36:55.649Z","ask":"a-merge-10","unexpected":true,"fact":{"type":"asked","ask":"a-merge-10","what":"Do you want to merge local:toy/slug-lab/pull/2?","picks":["merge","no"]}}
+{"at":"2026-11-01T16:37:09.243Z","ask":"a-merge-10","fact":{"type":"asked","ask":"a-merge-10","what":"Do you want to merge local:toy/slug-lab/pull/2?","picks":["merge","no"]},"pick":"merge","how":"the agent playing the person, by hand"}
