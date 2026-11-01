@@ -57,7 +57,7 @@ describe("a turn's system prompt", () => {
 		const fake = fakeAdapter(() => saying('{"note":"ok"}'));
 		const agents = makeAgents({adapters: {fake}, sessions: memorySessions(), reaper: noReaper});
 		for (const [n, text] of BLANK.entries()) {
-			// biome-ignore lint/plugin: a planted mistake, as JavaScript or a cast could send it; the type refuses it
+			// oxlint-disable-next-line fabrika/no-type-assertions -- a planted mistake, as JavaScript or a cast could send it; the type refuses it
 			const system = {_tag: "replace", text} as unknown as SystemPrompt;
 			const error = await Effect.runPromise(
 				Effect.flip(Stream.runDrain(agents.run(turn(`b-${n}`, system)))),

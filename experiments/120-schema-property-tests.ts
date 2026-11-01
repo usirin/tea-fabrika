@@ -311,7 +311,7 @@ function fold<S extends Ship>(
 		bump(reach.sent, msg.type);
 		let next: S;
 		let cmds: readonly ShipCmd[];
-		// biome-ignore lint/plugin: a throw from the reducer under test is what this law measures, in a sync loop run millions of times, as walk.ts does
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- a throw from the reducer under test is what this law measures, in a sync loop run millions of times, as walk.ts does
 		try {
 			[next, cmds] = update(s, msg);
 		} catch (error) {
@@ -325,7 +325,7 @@ function fold<S extends Ship>(
 		if (next.phase === "over" && s.phase !== "over") bump(reach.ends, nameOf(next.outcome));
 		const step: Step<S, AnyShipMsg, ShipCmd> = {prev: s, msg, next, cmds};
 		let broke: Folded["broke"] = null;
-		// biome-ignore lint/plugin: a law that throws on a mutant's state is a finding to report, not an error to model
+		// oxlint-disable-next-line fabrika/no-raw-try-catch -- a law that throws on a mutant's state is a finding to report, not an error to model
 		try {
 			watches = watches.map((w, i) => {
 				const after = w.step(step);
@@ -440,7 +440,7 @@ const armC = <S extends Ship>(update: Update<S, AnyShipMsg, ShipCmd>) =>
 
 const real: Update<Ship, AnyShipMsg, ShipCmd> = stepOf<Ship, AnyShipMsg, ShipCmd>(ship);
 /** A handler that returns nothing, as a Stryker mutant of a `switch` case or an arrow body makes it. */
-// biome-ignore lint/plugin: the plant must return what the mutant returns, nothing, which the type rightly forbids
+// oxlint-disable-next-line fabrika/no-type-assertions -- the plant must return what the mutant returns, nothing, which the type rightly forbids
 const nothing = undefined as unknown as readonly [Ship, readonly ShipCmd[]];
 const merging = (s: Ship, m: AnyShipMsg) =>
 	s.phase === "merging" &&
@@ -479,7 +479,7 @@ const PLANTS: Record<string, Update<Keeping, AnyShipMsg, ShipCmd>> = {
 	// 540, machine.ts:404: `"ejected"` made `""`: an ejected pull request is taken as landed.
 	"540 ejected is taken as landed": (s, m) =>
 		m.type === "ship_queue" && m.reading === "ejected"
-			? // biome-ignore lint/plugin: the mutant reads the commit of an ejected message, which has none
+			? // oxlint-disable-next-line fabrika/no-type-assertions -- the mutant reads the commit of an ejected message, which has none
 				real(s, {...m, reading: "landed", commit: undefined as unknown as string})
 			: real(s, m),
 	"plant: forgetsMissingReview": forgetsMissingReview,

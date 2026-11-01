@@ -86,9 +86,8 @@ const followRunner = (sub: FollowSub) =>
 	).pipe(
 		Stream.switchMap(gotThenSettled),
 		Stream.takeWhile((msg): msg is TraceMsg => msg !== null),
-		Stream.catchTag(
-			"TraceUnread",
-			(e): Stream.Stream<TraceMsg> => Stream.make({type: "lost", id: sub.deps.id, why: e.message}),
+		Stream.catchTag("TraceUnread", (e): Stream.Stream<TraceMsg> =>
+			Stream.make({type: "lost", id: sub.deps.id, why: e.message}),
 		),
 	);
 

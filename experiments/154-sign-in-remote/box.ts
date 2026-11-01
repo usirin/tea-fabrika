@@ -33,8 +33,8 @@ import {
 	tradeCell,
 	wantCell,
 } from "./cells.ts";
-import {lent, lentOver} from "./lent.ts";
 import {askCell, dropCell, Keys, lentInboxRunner, openCell} from "./lent-cells.ts";
+import {lent, lentOver} from "./lent.ts";
 import {over, signIn} from "./machine.ts";
 import {ask} from "./responses.ts";
 import {makeKeys} from "./seal.ts";

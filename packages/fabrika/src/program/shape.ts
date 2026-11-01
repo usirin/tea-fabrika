@@ -71,8 +71,10 @@ export const mustBeGiven = (declared: Flag<unknown>): boolean =>
  */
 export type Ack = "auto" | "manual";
 /** A value a running program can be told at any time, like a line on stdin. */
-export interface Input<T, A extends Ack = Ack, C extends boolean = boolean>
-	extends Declared<"input", T> {
+export interface Input<T, A extends Ack = Ack, C extends boolean = boolean> extends Declared<
+	"input",
+	T
+> {
 	readonly ack: A;
 	/**
 	 * A control input, like Akka's `ControlMessage`: a Ctrl-C, a cancel. Its

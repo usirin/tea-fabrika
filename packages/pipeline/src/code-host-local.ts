@@ -133,15 +133,13 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 				if (track === undefined) return {criteria: null, ticket: "none" as const};
 				const current =
 					task.task === PLAN ? currentOf(track.book) : criteriaOf(state, task.plan, task.task);
-				const criteria = current.map(
-					(c): Criterion => ({
-						id: c.id,
-						version: c.version,
-						text: c.text,
-						checked: false,
-						evidence: null,
-					}),
-				);
+				const criteria = current.map((c): Criterion => ({
+					id: c.id,
+					version: c.version,
+					text: c.text,
+					checked: false,
+					evidence: null,
+				}));
 				const [ticket] = track.tickets;
 				return {
 					criteria,

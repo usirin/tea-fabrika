@@ -152,7 +152,7 @@ describe("Tickets", () => {
 			Effect.gen(function* () {
 				const tickets = yield* Tickets;
 				const refused = yield* Effect.flip(
-					// biome-ignore lint/plugin: the test plays a lane that lies to the compiler, to show the run-time check holds
+					// oxlint-disable-next-line fabrika/no-type-assertions -- the test plays a lane that lies to the compiler, to show the run-time check holds
 					tickets.write(1, "watch/1", merged as unknown as CodeFact),
 				);
 				const kinds = (yield* tickets.read(1)).timeline.map((e) => e.fact.type);
@@ -170,7 +170,7 @@ describe("Tickets", () => {
 				const watching = yield* Watcher;
 				yield* watching.write(1, "watch/1", success);
 				const refused = yield* Effect.flip(
-					// biome-ignore lint/plugin: the test plays a caller that lies to the compiler, to show the run-time check holds
+					// oxlint-disable-next-line fabrika/no-type-assertions -- the test plays a caller that lies to the compiler, to show the run-time check holds
 					watching.write(1, "r-1/started", started as unknown as PrFact),
 				);
 				const timeline = (yield* tickets.read(1)).timeline.map((e) => [e.by, e.fact.type]);
@@ -193,7 +193,7 @@ describe("Tickets", () => {
 			Effect.gen(function* () {
 				const tickets = yield* Tickets;
 				const refused = yield* Effect.flip(
-					// biome-ignore lint/plugin: the test plays a caller that lies to the compiler, to show the run-time check holds
+					// oxlint-disable-next-line fabrika/no-type-assertions -- the test plays a caller that lies to the compiler, to show the run-time check holds
 					tickets.write(1, "r-1/answer", answer as unknown as CodeFact),
 				);
 				const kinds = (yield* tickets.read(1)).timeline.map((e) => e.fact.type);

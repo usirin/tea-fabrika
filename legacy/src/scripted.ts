@@ -83,7 +83,7 @@ export function scriptedFileBuilder(
 		build: () =>
 			Effect.gen(function* () {
 				const files = yield* next(queue, "file builder");
-				// biome-ignore lint/plugin: a stand-in that cannot write its scripted files is a broken script, so it stops the run; failing as an agent would send the lane back to it
+				// oxlint-disable-next-line fabrika/no-effect-promise -- a stand-in that cannot write its scripted files is a broken script, so it stops the run; failing as an agent would send the lane back to it
 				yield* Effect.promise(async () => {
 					for (const [path, text] of Object.entries(files)) {
 						await mkdir(dirname(join(dir, path)), {recursive: true});

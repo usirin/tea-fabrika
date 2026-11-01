@@ -134,16 +134,14 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 	});
 	const added = open
 		.filter((finding) => finding.from.source !== "criterion")
-		.map(
-			(finding): Judged => ({
-				text: finding.wants,
-				from: "review",
-				state: "open",
-				says: finding.fault,
-				where: finding.at === null ? [] : [finding.at],
-				findings: [finding],
-			}),
-		);
+		.map((finding): Judged => ({
+			text: finding.wants,
+			from: "review",
+			state: "open",
+			says: finding.fault,
+			where: finding.at === null ? [] : [finding.at],
+			findings: [finding],
+		}));
 	return [...ticket, ...added];
 }
 

@@ -71,16 +71,14 @@ export function sortWorld(): World<SortState, Msg, SortCmd> {
 				{type: "resume"},
 				...ids.flatMap((id): Msg[] => [
 					{type: "sort_tool", key: KEY, id, tool: "t"},
-					...Object.values(REPLIES).map(
-						(output): Msg => ({
-							type: "sort_finished",
-							key: KEY,
-							id,
-							output,
-							session: "s",
-							spend: SPENT,
-						}),
-					),
+					...Object.values(REPLIES).map((output): Msg => ({
+						type: "sort_finished",
+						key: KEY,
+						id,
+						output,
+						session: "s",
+						spend: SPENT,
+					})),
 					{type: "sort_failed", key: KEY, id, error: "boom", spend: SPENT},
 					{type: "sort_failed", key: KEY, id, error: "error_max_budget_usd", spend: SPENT},
 				]),

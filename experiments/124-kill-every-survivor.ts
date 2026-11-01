@@ -167,7 +167,7 @@ const tidy = (s: string): string =>
 		.replaceAll(WORK, "<work>")
 		.replaceAll(FROM === "" ? "\u0000" : FROM, "<work123>")
 		.replaceAll(homedir(), "~")
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: strips the colour codes of a terminal
+		// oxlint-disable-next-line eslint/no-control-regex -- strips the colour codes of a terminal
 		.replace(/\u001b\[[0-9;]*m/g, "");
 
 const ticketOf = (n: string): Ticket => {

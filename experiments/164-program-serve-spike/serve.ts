@@ -145,8 +145,12 @@ export type Serve<I extends Inputs> = <H extends Handlers<I>>(
 ) => Effect.Effect<void, ErrorOf<H>, ServicesOf<H>>;
 
 /** What `main` is handed: today's kit, `watch`, and `serve` in place of `inputs`. */
-export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ks extends Kinds>
-	extends Kit<F, O, Ks> {
+export interface Io<
+	F extends Flags,
+	I extends Inputs,
+	O extends Outputs,
+	Ks extends Kinds,
+> extends Kit<F, O, Ks> {
 	readonly watch: Watch<Ks>;
 	readonly serve: Serve<I>;
 }
@@ -359,8 +363,13 @@ export interface Mailbox {
 }
 
 /** A running program made by {@link make}. */
-export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ks extends Kinds, E>
-	extends Pick<DefinedRun<F, Hidden, O, Ks, E>, "id" | "listen" | "machines"> {
+export interface Run<
+	F extends Flags,
+	I extends Inputs,
+	O extends Outputs,
+	Ks extends Kinds,
+	E,
+> extends Pick<DefinedRun<F, Hidden, O, Ks, E>, "id" | "listen" | "machines"> {
 	readonly program: Serving<F, I, O, Ks, E, any>;
 	/** Never waits: on a full mailbox it fails {@link MailboxFull}. */
 	tell(name: string, value: unknown): Effect.Effect<Word, MailboxFull>;

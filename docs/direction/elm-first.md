@@ -39,7 +39,7 @@ functions already covered. Naming the Elm answer first stops that early.
 
 Elm's guidelines are the default, everywhere. A place that does not follow
 them is allowed only when it is named here with its reason, the way a
-`// biome-ignore` carries its reason on the line.
+`// oxlint-disable-next-line` carries its reason on the line.
 
 ```ts
 // The shape of an exception: what, and why Elm's answer does not fit there.

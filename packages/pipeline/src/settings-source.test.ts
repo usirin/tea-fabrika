@@ -4,7 +4,6 @@ import {Effect, FileSystem, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {runChild} from "./child.ts";
-import {DEFAULT_SETTINGS, SETTINGS_FILE} from "./settings.ts";
 import {
 	type Loaded,
 	loadSettings,
@@ -12,6 +11,7 @@ import {
 	sourceLine,
 	type Target,
 } from "./settings-source.ts";
+import {DEFAULT_SETTINGS, SETTINGS_FILE} from "./settings.ts";
 import {HOLDS_NOTHING} from "./setup.ts";
 
 // Where fabrika.toml is read from (docs/direction/one-fabrika-toml-per-repo.md):

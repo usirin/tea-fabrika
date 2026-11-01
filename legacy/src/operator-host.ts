@@ -303,7 +303,7 @@ export const shellOptions =
 			model: config.model,
 			effort: config.effort,
 			plugins: [{type: "local", path: config.plugin}],
-			// biome-ignore lint/plugin/no-project-settings: the old operator runs today's fabrika shells, which use the target repository's own settings; legacy only shrinks, and its runner opens the SDK's query by name (shellRunner)
+			// oxlint-disable-next-line fabrika/no-project-settings -- the old operator runs today's fabrika shells, which use the target repository's own settings; legacy only shrinks, and its runner opens the SDK's query by name (shellRunner)
 			settingSources: ["project"],
 			settings: {disableClaudeAiConnectors: true},
 			permissionMode: "dontAsk",

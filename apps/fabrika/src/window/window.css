@@ -1295,7 +1295,7 @@ button:focus-visible {
 	-webkit-font-smoothing: antialiased;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: `main.program > *` above is the view itself, and this is only what is inside one, so the two never style the same box. */
+/* `main.program > *` above is the view itself, and this is only what is inside one, so the two never style the same box. */
 .view *,
 .view *::before,
 .view *::after {

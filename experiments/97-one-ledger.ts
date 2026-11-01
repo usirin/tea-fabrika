@@ -336,7 +336,7 @@ async function kill() {
 		const writers = Array.from({length: 8}, async (_, w) => {
 			for (let i = 1; !stop; i++) {
 				const id = `${k}.${w}.${i}`;
-				// biome-ignore lint/plugin: law 7 as in 93, on the Promise client; a kill ends a writer.
+				// oxlint-disable-next-line fabrika/no-raw-try-catch -- law 7 as in 93, on the Promise client; a kill ends a writer.
 				try {
 					const r = await c.append(STREAM, "any", {kind: "inc", writer: `w${w}`, id});
 					if (!r.ok) throw new Error(`append-any said ${r.why}`);

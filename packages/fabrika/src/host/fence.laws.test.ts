@@ -586,7 +586,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"rules",
-				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${name}` is that file's own template, written out as it is
+				// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a source file; `${name}` is that file's own template, written out as it is
 				"const own = stream === name || stream.startsWith(`${name}/`);",
 				"const own = stream === name || stream.startsWith(name);",
 			]),
@@ -596,7 +596,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${name}` is that file's own template, written out as it is
+				// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a source file; `${name}` is that file's own template, written out as it is
 				"return stream === name || stream.startsWith(`${name}/`) || openInbox(stream);",
 				"return stream === name || stream.startsWith(name) || openInbox(stream);",
 			]),

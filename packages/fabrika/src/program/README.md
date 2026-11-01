@@ -68,7 +68,7 @@ The rules of a run are in the comment at the top of `program.ts`:
 - A control input, `input(schema, description, {control: true})`, takes a `fork(handler)`: each value is handled at once, beside the order, on a small bound of its own (16), so a full mailbox never refuses a Ctrl-C.
 - The mailbox holds at most the program's `capacity` values `serve` has not taken: `defineProgram({capacity: 16, ...})`, or `CAPACITY` (1000) when left out. A capacity that is not a whole number, 1 or more, is refused when the program is defined. `run.mailbox()` shows its length and, per input, how many wait in it and how many offers wait for room.
 - `tell` is an Effect that never waits. It answers `queued`, `closed`, `stopped`, `bad_shape` or `no_cell`. On a full mailbox it fails with `MailboxFull` (`{input, capacity}`), so a caller that does not handle it fails too; one that expects a full mailbox says so with `Effect.catchTag("MailboxFull", ...)`. `offer` waits for room instead of failing.
-- A bare `tell(...)` or `offer(...)` statement makes the Effect and drops it, so nothing is told. `pnpm lint` refuses one (`biome-plugins/no-bare-tell.grit`).
+- A bare `tell(...)` or `offer(...)` statement makes the Effect and drops it, so nothing is told. `pnpm lint` refuses one (`oxlint-plugins/no-bare-tell.ts`).
 
 ```ts
 const word = yield* tell(run, "n", 7);   // "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; fails MailboxFull

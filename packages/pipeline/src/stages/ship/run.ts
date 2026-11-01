@@ -25,8 +25,8 @@
 // request this machine lands. `--reviewers` names the accounts whose review
 // verdicts count; left out, they are the same accounts.
 import {Effect} from "effect";
-import {gitHubCodeHost} from "../../code-host-github.ts";
 import {gitHubCodeHostWrites} from "../../code-host-github-writes.ts";
+import {gitHubCodeHost} from "../../code-host-github.ts";
 import {memoryRecord} from "../../criteria/record.ts";
 import {checked, launch, modeLine, planOf, shown} from "./launch.ts";
 

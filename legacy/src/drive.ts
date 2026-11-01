@@ -555,7 +555,7 @@ export const drive = (options: {
 		});
 		yield* Effect.raceFirst(
 			work,
-			// biome-ignore lint/plugin: `held` is only ever resolved, never rejected, so there is no failure to give a type
+			// oxlint-disable-next-line fabrika/no-effect-promise -- `held` is only ever resolved, never rejected, so there is no failure to give a type
 			Effect.promise(() => held),
 		);
 		const final = runtime.getState();

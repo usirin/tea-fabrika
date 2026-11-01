@@ -146,16 +146,14 @@ export function reviewWorld(options: ReviewWorldOptions = {}): World<Review, Msg
 					{type: "review_checks", pr: PR, head},
 					...waits.map((wait): Msg => ({type: "review_checks_overdue", pr: PR, head, wait})),
 					...runs.flatMap((run): Msg[] => [
-						...forms.map(
-							(form): Msg => ({
-								type: "review_reviewed",
-								pr: PR,
-								head,
-								run,
-								form,
-								ran: noRun,
-							}),
-						),
+						...forms.map((form): Msg => ({
+							type: "review_reviewed",
+							pr: PR,
+							head,
+							run,
+							form,
+							ran: noRun,
+						})),
 						{type: "review_failed", pr: PR, head, run, why: "broke", error: null, ran: noRun},
 						{type: "review_note", pr: PR, head, run, note: {title: "t", body: "b", at: null}},
 					]),

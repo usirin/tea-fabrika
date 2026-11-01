@@ -326,10 +326,8 @@ const bent =
 
 const PLANTED: Readonly<Record<string, Make>> = {
 	"a turn ends exactly once, last; a stream with no end fails as broken": bent((s) =>
-		Stream.flatMap(
-			s,
-			(h): Stream.Stream<Heard<unknown>> =>
-				h._tag === "ended" ? Stream.make(h, h) : Stream.make(h),
+		Stream.flatMap(s, (h): Stream.Stream<Heard<unknown>> =>
+			h._tag === "ended" ? Stream.make(h, h) : Stream.make(h),
 		),
 	),
 	"the answer is the last message read by the schema, null on a misfit": (config) => {

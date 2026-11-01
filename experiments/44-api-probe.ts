@@ -1,7 +1,7 @@
 import {readFile} from "node:fs/promises";
 import {Effect} from "effect";
-import {type Factory, parseFactory} from "../legacy/src/factory.ts";
 import {PublishedApi} from "../legacy/src/factory-services.ts";
+import {type Factory, parseFactory} from "../legacy/src/factory.ts";
 import {localPublishedApi} from "../legacy/src/local.ts";
 import {apiLine, namedIn, ruleOnApi, ticketNames} from "../legacy/src/surface.ts";
 import {rewriteOf} from "../legacy/src/triage.ts";

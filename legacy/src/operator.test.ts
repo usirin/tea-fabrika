@@ -4,8 +4,15 @@ import {memoryStore} from "@demlik/tea/mem";
 import type {Reply} from "@kampus/pipeline/combos";
 import {Effect, Layer} from "effect";
 import {describe, expect, it, vi} from "vitest";
-import type {Unparked} from "./fabrika.ts";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
+import type {Unparked} from "./fabrika.ts";
+import {
+	fieldRows,
+	knobsOf,
+	operatorInterpret,
+	operatorSubscribe,
+	shellOptions,
+} from "./operator-host.ts";
 import {
 	createOperator,
 	defaultKnobs,
@@ -14,13 +21,6 @@ import {
 	type OperatorMsg,
 	update,
 } from "./operator.ts";
-import {
-	fieldRows,
-	knobsOf,
-	operatorInterpret,
-	operatorSubscribe,
-	shellOptions,
-} from "./operator-host.ts";
 import {scriptedJev} from "./scripted.ts";
 import {makeTree, type OperatorCmd, recordFact} from "./turn.ts";
 

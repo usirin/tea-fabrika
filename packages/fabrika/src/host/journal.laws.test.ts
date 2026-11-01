@@ -214,7 +214,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	idPerTry: () =>
 		plant(
 			"ledger.append(o.stream, expected, event, o.fence)",
-			// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a planted line; its `${...}` is that line's own template
+			// oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a planted line; its `${...}` is that line's own template
 			"ledger.append(o.stream, expected, {...event, id: `${event.id}:${tries}`}, o.fence)",
 		),
 	// No answer is taken for a refusal: the first drop ends the save. Lane 18 took out the give-up

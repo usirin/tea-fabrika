@@ -480,50 +480,44 @@ const BOXED: readonly ProgramName[] = [
 ];
 
 const nodesOf = (lit: Lit): Node[] => [
-	...BOXED.map(
-		(name): Node<ProgramData> => ({
-			id: name,
-			type: "program",
-			...placed(name),
-			data: {
-				program: PROGRAMS[name],
-				body: bodyOf(name, lit),
-				lit: name === "asks" && lit.asks.length > 0,
-				calls: LEDGER_CALLS.some((c) => c.from === name),
-			},
-		}),
-	),
+	...BOXED.map((name): Node<ProgramData> => ({
+		id: name,
+		type: "program",
+		...placed(name),
+		data: {
+			program: PROGRAMS[name],
+			body: bodyOf(name, lit),
+			lit: name === "asks" && lit.asks.length > 0,
+			calls: LEDGER_CALLS.some((c) => c.from === name),
+		},
+	})),
 	{id: "ledger", type: "ledger", ...placed("ledger"), data: {lit}},
 	{id: "operate", type: "operate", ...placed("operate"), data: {lit}},
 	{id: "deliver", type: "deliver", ...placed("deliver"), data: {}},
 ];
 
 const EDGES: readonly Edge[] = [
-	...WIRES.map(
-		(w): Edge<WireData> => ({
-			id: `${w.from.join(".")}>${w.into.join(".")}`,
-			type: "wire",
-			source: w.from[0],
-			sourceHandle: `out-${w.from[1]}`,
-			target: w.into[0],
-			targetHandle: `in-${w.into[1]}`,
-			data: {
-				type: PROGRAMS[w.from[0]].outs.find((p) => p.name === w.from[1])?.type ?? "",
-			},
-		}),
-	),
-	...LEDGER_CALLS.map(
-		(c): Edge<CallData> => ({
-			id: `${c.from}~ledger`,
-			type: "call",
-			source: c.from,
-			sourceHandle: "call",
-			target: "ledger",
-			targetHandle: LANDS[c.from] ?? "top",
-			data: {what: c.what},
-			selectable: false,
-		}),
-	),
+	...WIRES.map((w): Edge<WireData> => ({
+		id: `${w.from.join(".")}>${w.into.join(".")}`,
+		type: "wire",
+		source: w.from[0],
+		sourceHandle: `out-${w.from[1]}`,
+		target: w.into[0],
+		targetHandle: `in-${w.into[1]}`,
+		data: {
+			type: PROGRAMS[w.from[0]].outs.find((p) => p.name === w.from[1])?.type ?? "",
+		},
+	})),
+	...LEDGER_CALLS.map((c): Edge<CallData> => ({
+		id: `${c.from}~ledger`,
+		type: "call",
+		source: c.from,
+		sourceHandle: "call",
+		target: "ledger",
+		targetHandle: LANDS[c.from] ?? "top",
+		data: {what: c.what},
+		selectable: false,
+	})),
 ];
 
 /** Fit the canvas to its tile, at start and whenever the tile changes size. */

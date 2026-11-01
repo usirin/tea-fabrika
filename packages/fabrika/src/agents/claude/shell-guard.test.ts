@@ -48,7 +48,7 @@ describe("the check before each step of a shell", () => {
 	it("does not take a device, or a path with a subshell's bracket stuck to it, for a write outside", () => {
 		// Both were refused on the second live run, and a builder had to word its command another way.
 		expect(bash("D=$(readlink -f node_modules/x 2>/dev/null) && ls $D")).toBeNull();
-		expect(bash("pnpm exec biome check --write src >/dev/stdout 2>&1 | tail -8")).toBeNull();
+		expect(bash("pnpm exec oxfmt --write src >/dev/stdout 2>&1 | tail -8")).toBeNull();
 		expect(bash("x=$(cat a.txt > /repo/leak.txt)")).toContain("/repo/leak.txt is outside");
 	});
 

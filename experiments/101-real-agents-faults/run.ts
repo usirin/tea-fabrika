@@ -314,7 +314,7 @@ export async function runFaulted(o: {
 	// ------------------------------------------------ drain
 	let finished = "gave up waiting";
 	let doneAt = 0;
-	for (const t0 = Date.now(); Date.now() - t0 < 600_000; ) {
+	for (const t0 = Date.now(); Date.now() - t0 < 600_000;) {
 		const s = await answeredNow();
 		if (s.answered === o.n && s.pending === 0) {
 			finished = "all answered";

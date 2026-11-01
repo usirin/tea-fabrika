@@ -148,7 +148,7 @@ describe("the table printer", () => {
 		expect(out).toContain("\x1b[34mrunning 2\x1b[0m");
 		expect(out).toContain("\x1b[34mexperiments --all\x1b[0m");
 		// The same lines, plain, are the colored ones with their colors taken out.
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: the colors are what it takes out.
+		// oxlint-disable-next-line eslint/no-control-regex -- the colors are what it takes out.
 		expect(out.replace(/\x1b\[[\d;]*m/g, "")).toBe(plain(lines));
 	});
 });

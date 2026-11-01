@@ -312,7 +312,7 @@ export const importChunk = (
 ): Answer<{readonly progress: Progress; readonly written: readonly Written[]}> => {
 	const chunk = decodeChunk(body);
 	if (Option.isNone(chunk)) return refuse(400, "not a chunk of moved events");
-	// biome-ignore lint/plugin: a throw inside `db.tx` is how SQLite and the Durable Object roll the whole chunk back; it is caught right here and never leaves this function.
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- a throw inside `db.tx` is how SQLite and the Durable Object roll the whole chunk back; it is caught right here and never leaves this function.
 	try {
 		return db.tx(() => {
 			const no = mayImport(db, founder, who);

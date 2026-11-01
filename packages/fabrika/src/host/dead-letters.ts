@@ -76,14 +76,11 @@ export const deadLetters = (name: string) =>
 		return yield* Effect.forEach(
 			dead,
 			(d) =>
-				Effect.map(
-					ledger.readStream(inbox, d.rev - 1, 1),
-					(rows): DeadLetterEntry => ({
-						...d,
-						message: rows[0]?.rev === d.rev ? rows[0] : null,
-						redriven: ids.has(redriveId(d.rev)),
-					}),
-				),
+				Effect.map(ledger.readStream(inbox, d.rev - 1, 1), (rows): DeadLetterEntry => ({
+					...d,
+					message: rows[0]?.rev === d.rev ? rows[0] : null,
+					redriven: ids.has(redriveId(d.rev)),
+				})),
 			// One small read per dead letter, none depending on another; the order is kept anyway.
 			{concurrency: "unbounded"},
 		);

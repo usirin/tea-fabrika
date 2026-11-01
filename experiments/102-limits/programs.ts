@@ -130,14 +130,12 @@ export const specOf = (size: Size, name: string): SupervisorSpec => {
 	if (name === "top")
 		return {
 			...LOOSE,
-			children: namesOf(size).all.map(
-				(x): ChildSpec => ({
-					name: x.ticket,
-					restart: "permanent",
-					type: "supervisor",
-					limits: L.ticket(x.c),
-				}),
-			),
+			children: namesOf(size).all.map((x): ChildSpec => ({
+				name: x.ticket,
+				restart: "permanent",
+				type: "supervisor",
+				limits: L.ticket(x.c),
+			})),
 		};
 	const c = caseOf(name);
 	const i = Number(name.split(":")[2]);

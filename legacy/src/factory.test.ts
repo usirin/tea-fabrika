@@ -2,6 +2,7 @@ import {Refusal, replay} from "@demlik/tea";
 import {drive} from "@demlik/tea/testing/effect";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import type {CheckResult} from "./factory-services.ts";
 import {
 	BEFORE_SETTINGS,
 	type Factory,
@@ -14,7 +15,6 @@ import {
 	unsureForAPerson,
 	VET_TRIES_BEFORE,
 } from "./factory.ts";
-import type {CheckResult} from "./factory-services.ts";
 import type {FactsPack} from "./facts.ts";
 import {factoryInterpret} from "./handlers.ts";
 import {type Issue, type RawIssue, testNames} from "./issue.ts";

@@ -232,7 +232,7 @@ export const livePlanner = (config: PlannerConfig) =>
 					catch: () => ({_tag: "no_temp_folder" as const}),
 				}),
 				(made) =>
-					// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
+					// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
 					Effect.promise(() => rm(made, {recursive: true, force: true})),
 			);
 			const trees = new Map<string, string>();

@@ -250,16 +250,14 @@ export function answerWorld(): World<Answerer, AnswerMsg, AnswerCmd> {
 				(["answered", "repeat"] as const).flatMap((type) =>
 					[s.cursor - 1, s.cursor, s.cursor + 1]
 						.filter((rev) => rev >= 1)
-						.map(
-							(rev): AnswerMsg => ({
-								type,
-								id,
-								corr: `c-${id}`,
-								replyTo: INBOX,
-								rev,
-								answer: `a-${id}`,
-							}),
-						),
+						.map((rev): AnswerMsg => ({
+							type,
+							id,
+							corr: `c-${id}`,
+							replyTo: INBOX,
+							rev,
+							answer: `a-${id}`,
+						})),
 				),
 			),
 		answers: () => [],

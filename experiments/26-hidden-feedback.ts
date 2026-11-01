@@ -257,6 +257,7 @@ async function once(way: Way, n: number): Promise<Run> {
 		feedback: feedbacks,
 	};
 	console.log(
+		// oxlint-disable-next-line eslint/prefer-template -- an experiment is a record; this line stays as it ran.
 		`${way.padEnd(6)} #${n}  builds ${builds}  hidden ${passed ? "pass" : "FAIL"}  held-out ${held.passed}/${HELD_OUT.length}` +
 			(written.length === 0
 				? ""

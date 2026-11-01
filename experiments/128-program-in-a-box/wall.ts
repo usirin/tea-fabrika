@@ -120,6 +120,7 @@ export const standIn = <Id, S, Rpcs extends Rpc.Any>(
 	routes: Routes,
 ): Layer.Layer<Id> => {
 	const protocol = RpcClient.Protocol.make(
+		// oxlint-disable-next-line eslint/require-yield -- `Effect.fnUntraced` asks for a generator, and this one has nothing to wait on.
 		Effect.fnUntraced(function* (answer, clients) {
 			routes.set(wall.name, (msg) =>
 				Effect.forEach(clients, (id) => answer(id, msg as never), {discard: true, concurrency: 1}),

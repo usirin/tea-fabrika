@@ -32,22 +32,6 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {Schema} from "effect";
 import {
-	allIssues,
-	Cache,
-	firstVersion,
-	promptOf,
-	REPO_NOTE,
-	Run,
-	SAID,
-	SONNET_IN,
-	SONNET_OUT,
-	saidOf,
-	sortOnce,
-	type Ticket,
-	Truth,
-	type TruthEntry,
-} from "./lib/sort.ts";
-import {
 	type Answer,
 	type Bar,
 	barLines,
@@ -64,6 +48,22 @@ import {
 	showJevAgainstClaude,
 	withClauses,
 } from "./lib/sort-bar.ts";
+import {
+	allIssues,
+	Cache,
+	firstVersion,
+	promptOf,
+	REPO_NOTE,
+	Run,
+	SAID,
+	SONNET_IN,
+	SONNET_OUT,
+	saidOf,
+	sortOnce,
+	type Ticket,
+	Truth,
+	type TruthEntry,
+} from "./lib/sort.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-92-cache");

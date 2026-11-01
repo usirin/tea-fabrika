@@ -92,7 +92,7 @@ export class LedgerDoor extends WorkerEntrypoint<Env, BoxProps> {
 /** One sign-in's box: started once, gone when the box process ends. */
 export class SignInBox extends DurableObject<Env> {
 	private get box() {
-		// biome-ignore lint/style/noNonNullAssertion: a Durable Object with a container always has one.
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- a Durable Object with a container always has one.
 		return this.ctx.container!;
 	}
 

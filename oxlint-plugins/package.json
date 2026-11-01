@@ -1,0 +1,19 @@
+{
+	"name": "@tea-fabrika/oxlint-plugins",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "This repo's own lint rules, as an oxlint JS plugin, and the step of `pnpm lint` that runs them.",
+	"engines": {
+		"node": ">=26"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"devDependencies": {
+		"@oxlint/plugins": "catalog:",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

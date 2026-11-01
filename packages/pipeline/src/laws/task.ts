@@ -81,9 +81,13 @@ export function taskWorld(): World<Task, Msg, TaskCmd> {
 				},
 				{type: "resume"},
 				...runs.flatMap((run): Msg[] => [
-					...Object.values(TASK_BUILTS).map(
-						(built): Msg => ({type: "task_built", ...at, run, built, ran: noRun}),
-					),
+					...Object.values(TASK_BUILTS).map((built): Msg => ({
+						type: "task_built",
+						...at,
+						run,
+						built,
+						ran: noRun,
+					})),
 					{type: "task_failed", ...at, run, why: "broke", error: null, ran: noRun},
 					{type: "task_failed", ...at, run, why: "over_budget", error: null, ran: noRun},
 				]),

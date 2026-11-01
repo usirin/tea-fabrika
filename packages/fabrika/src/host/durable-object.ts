@@ -29,8 +29,8 @@ import {
 	stampText,
 	trustedArgs,
 } from "./door.ts";
-import {type Keys, layerNobody} from "./keys.ts";
 import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
+import {type Keys, layerNobody} from "./keys.ts";
 import {importChunk, migrateMove, moveProgress, sealMove} from "./move.ts";
 import {spansOf} from "./otlp.ts";
 import * as L from "./rules.ts";

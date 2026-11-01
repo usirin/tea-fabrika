@@ -52,34 +52,28 @@ export async function loadCases(): Promise<Case[]> {
 		...enriched.flatMap((run) =>
 			run.criteria
 				.filter((c) => c.tests > 0)
-				.map(
-					(c): Case => ({
-						from: "writer",
-						good: !c.wrong && !c.empty,
-						about: run.goal,
-						criterion: c.text,
-						test: c.source,
-					}),
-				),
+				.map((c): Case => ({
+					from: "writer",
+					good: !c.wrong && !c.empty,
+					about: run.goal,
+					criterion: c.text,
+					test: c.source,
+				})),
 		),
-		...fooling.map(
-			(r): Case => ({
-				from: "fooler",
-				good: r.truth === "checks",
-				about: titles[r.toy] ?? "",
-				criterion: r.criterion,
-				test: r.source,
-			}),
-		),
-		...handBuilt.map(
-			(r): Case => ({
-				from: "hand",
-				good: r.truth === "checks",
-				about: titles[r.toy] ?? "",
-				criterion: r.criterion,
-				test: r.test,
-			}),
-		),
+		...fooling.map((r): Case => ({
+			from: "fooler",
+			good: r.truth === "checks",
+			about: titles[r.toy] ?? "",
+			criterion: r.criterion,
+			test: r.source,
+		})),
+		...handBuilt.map((r): Case => ({
+			from: "hand",
+			good: r.truth === "checks",
+			about: titles[r.toy] ?? "",
+			criterion: r.criterion,
+			test: r.test,
+		})),
 	];
 	return [...new Map(cases.map((c) => [`${c.criterion}\n${c.test}`, c])).values()];
 }

@@ -12,7 +12,7 @@ const key = yield* Config.Redacted("TYPESAFE_API_KEY");     // Redacted<string>
 yield* Effect.log("calling Jev with", key);                  // "calling Jev with <redacted>"
 JSON.stringify({key});                                       // '{"key":"<redacted>"}'
 
-// Leave: only at the edge, in a file biome.jsonc lists.
+// Leave: only at the edge, in a file .oxlintrc.json lists.
 headers.authorization = `Bearer ${Redacted.value(key)}`;     // the one line
 ```
 
@@ -95,12 +95,12 @@ const bearer = said === null ? null : Redacted.make(said);
 const session = (r) => Response.json({...r.value, token: Redacted.value(r.value.token)});
 ```
 
-Two lint rules, both blocking (`biome-plugins/README.md` has their counts):
+Two lint rules, both blocking (`oxlint-plugins/README.md` has their counts):
 
 | Rule | Refuses | Left out |
 |---|---|---|
-| `no-secret-env.grit` | `process.env.NAME`, `process.env["NAME"]` and `const {NAME} = process.env`, where NAME has TOKEN, SECRET, PASSWORD, AUTH, CREDENTIAL or an API, PRIVATE, SECRET, ACCESS or SIGNING KEY in it | a check that it is set, a `delete`, a name ending in `_HASH` or `_SOCK`; `experiments/` |
-| `no-redacted-value.grit` | `Redacted.value`, called or handed on | seven edge files, each with its reason in `biome.jsonc`; tests; `experiments/` |
+| `no-secret-env.ts` | `process.env.NAME`, `process.env["NAME"]` and `const {NAME} = process.env`, where NAME has TOKEN, SECRET, PASSWORD, AUTH, CREDENTIAL or an API, PRIVATE, SECRET, ACCESS or SIGNING KEY in it | a check that it is set, a `delete`, a name ending in `_HASH` or `_SOCK`; `experiments/` |
+| `no-redacted-value.ts` | `Redacted.value`, called or handed on | seven edge files, each with its reason in `.oxlintrc.json`; tests; `experiments/` |
 
 And a test, `packages/fabrika/src/redacted.test.ts`, that a secret shows
 `<redacted>` through `String`, a template, `JSON.stringify`, Node's inspect,
@@ -117,9 +117,9 @@ on its way to the exporter, and that the session schema refuses to encode it.
   read, which is a plain string from the start, and it cannot stop a
   `Redacted.value` in the middle of the code. The two rules close those two
   doors.
-- **Why the edge files are named by path and not by a `biome-ignore`:** the
+- **Why the edge files are named by path and not by an `oxlint-disable`:** the
   list is short and each entry has a reason in one place. A new edge is a
-  change to `biome.jsonc` that a reviewer sees.
+  change to `.oxlintrc.json` that a reviewer sees.
 
 ## What it costs
 
@@ -154,7 +154,7 @@ on a pull request's diff, counted for false alarms first, would lift it.
 - **Text a secret is already inside**, such as a URL with a token in it, or a
   tool's own output that prints it.
 - **`experiments/`.** Old scripts read keys as plain strings; the rules leave
-  the folder out, and `biome-plugins/README.md` counts what they would find.
+  the folder out, and `oxlint-plugins/README.md` counts what they would find.
 
 ## What would change this
 

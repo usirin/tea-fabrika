@@ -46,6 +46,7 @@ const empty = function* () {};
 
 /** One inert value: callable, constructible, and every property another inert value. */
 export const inert = (path: string): any =>
+	// oxlint-disable-next-line eslint/prefer-arrow-callback -- a Proxy can only be constructed if its target can, and an arrow function cannot.
 	new Proxy(function inert() {}, {
 		get(_target, key) {
 			if (key === "prototype") return {};

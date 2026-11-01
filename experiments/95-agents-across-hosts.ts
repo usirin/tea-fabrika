@@ -564,7 +564,7 @@ async function runOnce(preset: Preset, index: number) {
 	// ------------------------------------------------ drain
 	let done: Done | null = null;
 	const limit = real ? 300_000 : faulted ? 240_000 : 120_000;
-	for (const t0 = Date.now(); Date.now() - t0 < limit; ) {
+	for (const t0 = Date.now(); Date.now() - t0 < limit;) {
 		const s = await lastAsker();
 		if (s !== null && s.answered === n && s.pending.length === 0) {
 			done = {at: Date.now(), how: "all answered"};

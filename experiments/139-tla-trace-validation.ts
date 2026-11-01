@@ -137,16 +137,14 @@ const traceOne = (variant: Variant, input: Gen) =>
 			settle: true,
 		}),
 	).pipe(
-		Effect.map(
-			({a, ms}): Traced => ({
-				variant,
-				input,
-				ended: a.ended,
-				steps: stepsOf(a.log, N_RUNS),
-				v1: stepsOf(a.log, 3),
-				ms,
-			}),
-		),
+		Effect.map(({a, ms}): Traced => ({
+			variant,
+			input,
+			ended: a.ended,
+			steps: stepsOf(a.log, N_RUNS),
+			v1: stepsOf(a.log, 3),
+			ms,
+		})),
 	);
 
 /** The same runs, as read for 116's bound of 3 children. */
