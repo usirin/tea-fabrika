@@ -279,8 +279,11 @@ const compilerPlugin = (
 	appRoot: string,
 	seen: {compiled: number; failed: number; files: number},
 ) => {
-	const babel = require("@babel/core");
-	const compiler = require.resolve("babel-plugin-react-compiler");
+	// Off the branch's lockfile: `npm i --prefix runs/exp-176/compiler --save-exact
+	// babel-plugin-react-compiler@1.0.0 @babel/core@7.29.7`. A pick that lands adds them for real.
+	const fromCompiler = createRequire(join(WORK, "compiler/package.json"));
+	const babel = fromCompiler("@babel/core");
+	const compiler = fromCompiler.resolve("babel-plugin-react-compiler");
 	return {
 		name: "react-compiler",
 		setup(build: any) {
@@ -322,12 +325,18 @@ const compilerPlugin = (
 const probed = (path: string, source: string) => {
 	if (!path.endsWith("window/desk.tsx")) return source;
 	if (!source.includes(HEARD_FROM)) throw new Error("desk.tsx has no `heard` to mark");
-	return source
+	const marked = source
 		.replace(HEARD_FROM, HEARD_TO)
 		.replace(
 			"const read = readToWindow(raw);",
 			'performance.mark("fabrika:heard"); const read = readToWindow(raw);',
 		);
+	// Pick 6: is the tile `memo` still needed under the Compiler? BENCH_NO_MEMO makes `memo` do nothing.
+	return process.env.BENCH_NO_MEMO === undefined
+		? marked
+		: marked
+				.replace(/\tmemo,\n/, "\n")
+				.replace("const terminals = new Map", "const memo = <T,>(f: T): T => f;\nconst terminals = new Map");
 };
 
 const benchBuild = async (label: string, from: string, compile: boolean, dev = false) => {
@@ -442,7 +451,13 @@ const hostPidOf = (home: string) => {
 export const withApp = async <T>(
 	label: string,
 	use: (b: Bench) => Promise<T>,
-	options: {readonly width?: number; readonly height?: number; readonly home?: string} = {},
+	options: {
+		readonly width?: number;
+		readonly height?: number;
+		readonly home?: string;
+		/** How long to wait for the first prompt, in ms. */
+		readonly wait?: number;
+	} = {},
 ): Promise<T> => {
 	const dist = join(DISTS, label);
 	if (!existsSync(join(dist, "main.mjs"))) throw new Error(`no copy ${label}: build it first`);
@@ -477,7 +492,7 @@ export const withApp = async <T>(
 				return t?.textContent?.split("\n").at(-1) === "tsh$";
 			},
 			null,
-			{timeout: 60000},
+			{timeout: options.wait ?? 60000},
 		);
 		const coldMs = performance.now() - started;
 		await app.evaluate(({BrowserWindow}: any, size: any) => {
@@ -1524,6 +1539,12 @@ if (command === "build" && label !== undefined) {
 	});
 } else if (command === "shots" && label !== undefined) {
 	await withApp(label, (b) => shots(b, rest[0] ?? label));
+} else if (command === "start" && label !== undefined) {
+	// Pick 6: does this copy start at all? The trap freezes the desk on its first value.
+	const started = await withApp(label, async (b) => b.coldMs, {wait: 15000}).catch(
+		(e: Error) => `no prompt: ${e.message.split("\n")[0]}`,
+	);
+	console.log(label, "first prompt:", started);
 } else if (command === "soak" && label !== undefined) {
 	await withApp(label, (b) => soak(b, Number(rest[0] ?? 60)));
 } else if (command === "restart" && label !== undefined) {
