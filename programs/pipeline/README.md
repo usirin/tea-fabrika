@@ -49,6 +49,9 @@ The lane's git runs with your ssh agent's socket and your `gh` login in reach, a
 a `git@` remote works. Git's hooks are off. The clone's git config is not held: a head's install or
 checks can change it, and this git obeys it.
 
+A run on `claude` leaves its transcript in `~/.claude/projects`. The SDK writes it there, not the lane,
+so a lane's home does not hold it and removing a run's home does not remove it.
+
 ## On GitHub
 
 `host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
@@ -113,6 +116,11 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   ticket says so.
 - **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
+- **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
+  the review. A review that thinks one is wrong can say so, and it fails nothing and makes no test. The
+  person reads both sides, and picks whether the decision stands or the lane stops.
+- **A later round with no change is a question.** The person picks whether the work goes on as it is,
+  with code's checks still ahead of it, or the lane stops. A first round with no change stays stuck.
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
 - **A stuck lane is final.** Typing the line again says how it ended, and runs nothing.
 

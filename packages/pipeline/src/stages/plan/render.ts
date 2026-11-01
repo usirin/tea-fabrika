@@ -1,5 +1,5 @@
 import {markOf} from "../../criteria/mark.ts";
-import {type Plan, type PlanCriterion, sizeOf, storyText, textOf} from "./plan.ts";
+import {type Plan, type PlanCriterion, type PlanDraft, sizeOf, storyText, textOf} from "./plan.ts";
 
 // The markdown view of a plan, for people. Made from the data and never read
 // back (docs/direction/data-first-markdown-is-a-view.md). A person marks what
@@ -28,7 +28,7 @@ const box = (c: PlanCriterion, lead = "") =>
 	`- [ ] ${markOf(c)} ${flat(textOf(c))}\n  - ${lead}_Serves ${c.serves.join(", ")}. Check (${c.check.how}): ${flat(c.check.what)}_`;
 
 /** A plan's open questions, each with its lean whole: why, what it costs, how sure, what would settle it. Pure. */
-export const questionLines = (plan: Plan): readonly string[] =>
+export const questionLines = (plan: Pick<Plan, "questions">): readonly string[] =>
 	plan.questions.length === 0
 		? ["None."]
 		: plan.questions.flatMap((q, i) => [
@@ -41,9 +41,27 @@ export const questionLines = (plan: Plan): readonly string[] =>
 				...(q.doubt === undefined ? [] : [`   - Would settle it: ${flat(q.doubt)}`]),
 			]);
 
-/** The plan as markdown. `title`: what the heading calls the ticket. Pure. */
-export function planMarkdown(plan: Plan, title: string): string {
+/**
+ * The plan as markdown. `title`: what the heading calls the ticket. `exam`: the rule changes the
+ * planner listed, which a numbered plan does not hold. Pure.
+ */
+export function planMarkdown(
+	plan: Plan,
+	title: string,
+	exam: NonNullable<PlanDraft["exam"]> = [],
+): string {
 	const size = sizeOf(plan);
+	const rules =
+		exam.length === 0
+			? []
+			: [
+					"## Rule changes",
+					"",
+					"These land first, in a pull request of their own, on your yes. With the one for the tasks, this plan makes two pull requests.",
+					"",
+					...exam.map((c) => `- ${code(flat(c.path))}: ${flat(c.change)} Why: ${flat(c.why)}`),
+					"",
+				];
 	const stories = plan.stories.map(
 		(s) => `- **${s.id}**: ${flat(storyText(s))}.${s.from === undefined ? "" : ` _(${s.from})_`}`,
 	);
@@ -62,7 +80,7 @@ export function planMarkdown(plan: Plan, title: string): string {
 			: [
 					"## The whole plan",
 					"",
-					"Judged once every task is in, at the one pull request's head.",
+					"Judged once every task is in, at the head of the pull request that holds them.",
 					"",
 					`${box(plan.goal.job, "**The whole job.** ")}  \n    _Fixture: ${flat(plan.goal.job.fixture)}_`,
 					...plan.goal.criteria.map((c) => box(c)),
@@ -83,6 +101,7 @@ export function planMarkdown(plan: Plan, title: string): string {
 		"",
 		...stories,
 		"",
+		...rules,
 		...tasks,
 		...goal,
 		"## Open questions",

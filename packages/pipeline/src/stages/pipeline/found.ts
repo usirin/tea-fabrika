@@ -1,5 +1,10 @@
+import type {Ended} from "@kampus/fabrika-old";
+import {Cause} from "effect";
 import {inert} from "../build/body.ts";
+import type {ExamChange} from "../exam/machine.ts";
 import {textOf} from "../plan/plan.ts";
+import {questionLines} from "../plan/render.ts";
+import type {Finding} from "../review/sheet.ts";
 import type {Found} from "../test-writer/checked.ts";
 import type {MutantAnswer} from "../test-writer/mutants.ts";
 import {Surprise} from "../test-writer/outcome.ts";
@@ -74,6 +79,67 @@ export const untestedWords = (rows: readonly Untested[]): readonly string[] =>
 				"No test checks these properties. A person said to go on without one:",
 				listed(rows.map((row) => inert(`${row.when}: ${row.why}`))),
 			];
+
+/** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
+export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>
+	end.kind === "failed"
+		? [`#${n} broke: ${Cause.pretty(end.cause).split("\n")[0] ?? "no reason given"}`]
+		: [];
+
+/** Each rule change, as the plan says it: which file, what changes, and why. */
+export const ruleChangeLines = (changes: readonly ExamChange[]): readonly string[] =>
+	changes.map((c) => `- \`${c.path}\`: ${inert(c.change)} Why: ${inert(c.why)}`);
+
+/**
+ * What a person decided at the plan, for a brief: each question with its lean, under its id, and
+ * what they wrote beside their answers. A lane saved before this was kept has only its plan's leans,
+ * with no ids, so no finding can name one. Pure.
+ */
+export const decidedWords = (carry: Pick<Carry, "plan" | "decided">): string => {
+	const questions = carry.decided?.questions ?? [];
+	const leans =
+		questions.length > 0
+			? questionLines({questions})
+			: (carry.plan?.questions ?? []).map((q) => `- ${q.ask} Lean: ${q.lean}`);
+	const said = carry.decided?.said ?? [];
+	if (leans.length === 0 && said.length === 0) return "None.";
+	return [
+		...(leans.length === 0
+			? []
+			: [
+					"A person approved the plan, and that yes took the lean on each question here:",
+					...leans,
+				]),
+		...(said.length === 0 ? [] : ["What the person wrote beside their answers:", listed(said)]),
+	].join("\n");
+};
+
+/** Both sides of each finding against a decision, for the person who made it. Pure. */
+export const againstWords = (
+	carry: Pick<Carry, "decided">,
+	against: readonly Finding[],
+): readonly string[] => [
+	"The review says a decision you made on the plan is wrong.",
+	...against.flatMap((finding) => {
+		const {from} = finding;
+		const question =
+			from.source === "decision"
+				? carry.decided?.questions.find((q) => q.id === from.id)
+				: undefined;
+		return [
+			"",
+			...(question === undefined
+				? []
+				: [`You decided: ${inert(question.ask)} ${inert(question.lean)}`]),
+			`The review says: ${inert(finding.fault)}`,
+			`What it shows: ${inert(finding.proof)}`,
+			`What it wants: ${inert(finding.wants)}`,
+		];
+	}),
+	...((carry.decided?.said ?? []).length === 0
+		? []
+		: ["", "You also wrote:", listed((carry.decided?.said ?? []).map(inert))]),
+];
 
 /** Each task's job, and the plan's own: the whole thing a user does, with its real values. */
 export const jobsList = (plan: Carry["plan"]): string =>

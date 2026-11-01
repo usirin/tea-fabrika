@@ -9,7 +9,7 @@ import {ReviewOutcome} from "./outcome.ts";
 import {Ask, Kind, Pack} from "./pack.ts";
 import {Comment, render} from "./render.ts";
 import {fenced, Ran, Settings} from "./reviewer.ts";
-import {type Form, Place, readForm} from "./sheet.ts";
+import {Finding, type Form, isAgainstDecision, Place, readForm} from "./sheet.ts";
 import {Note, noteIdOf} from "./tools.ts";
 import {criteriaOf, Judged, KindVerdict, outcomeOf, rowsOf, verdictsOf} from "./verdict.ts";
 
@@ -155,6 +155,8 @@ export const Report = Schema.Struct({
 	/** The ticket reviewed against, as the pull request names it. `null`: no reviewer ran. */
 	ticket: Schema.NullOr(Schema.String),
 	criteria: Schema.Array(Judged),
+	/** What the reviewer says against a person's decisions. It fails nothing, so no criterion holds it, and the person hears it. Left out: nothing, and a review saved before this key still reads. */
+	against: Schema.optionalKey(Schema.Array(Finding)),
 	/** The rows for the criteria record, by id and version, at `head` (`rowsOf`, ./verdict.ts). The record files each as a verdict. */
 	rows: Schema.Array(Row),
 	verdicts: Schema.Array(KindVerdict),
@@ -389,11 +391,13 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 	}
 	const base = afterRuns(s, ran);
 	const verdicts = verdictsOf(s.brief.kinds, made.sheet);
+	const against = made.sheet.findings.filter(isAgainstDecision);
 	return end(
 		s,
 		outcomeOf(s.brief, verdicts),
 		{
 			...base,
+			...(against.length === 0 ? {} : {against}),
 			criteria: criteriaOf(s.brief, made.sheet),
 			rows: rowsOf(s.brief, made.sheet),
 			verdicts,
@@ -498,7 +502,10 @@ export function createReview(config: ReviewConfig = {}) {
 							{
 								...held(s),
 								phase: "reviewing",
-								brief: gate.brief,
+								brief:
+									s.ask.decisions === undefined
+										? gate.brief
+										: {...gate.brief, decisions: s.ask.decisions},
 								replay: pack.replay,
 								run: 1,
 								tries: 1,

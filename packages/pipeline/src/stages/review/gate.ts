@@ -42,6 +42,8 @@ export const Brief = Schema.Struct({
 	rubrics: Schema.Array(Schema.Struct({kind: TextKind, text: Schema.String})),
 	/** The repository's own rules for agents, from the base branch. The reviewer holds the change to them too. */
 	rules: Schema.Array(RepoRule),
+	/** The ids of the questions a person decided on the plan: what a finding may name as against one. Left out: none, and a review saved before this key still reads. */
+	decisions: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Brief = typeof Brief.Type;
 

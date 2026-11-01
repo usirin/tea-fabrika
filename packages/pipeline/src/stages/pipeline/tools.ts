@@ -6,6 +6,7 @@ import {layerOs} from "@kampus/fabrika-old/sandbox/os";
 import {Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId} from "../../ids.ts";
+import {saidOf} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {examTouched} from "../build/check.ts";
 import {BuildWrites} from "../build/services.ts";
@@ -23,6 +24,7 @@ import {TestsAgents, TestsWork} from "../test-writer/program.ts";
 import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
+import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
@@ -277,13 +279,19 @@ export const laneExamWork = Layer.effect(
 		const lane = yield* LaneNow;
 		const agents = yield* LaneAgents;
 		return {
-			land: (_ticket, number, _base, files) =>
+			land: (_ticket, number, _base, files, changes) =>
 				Effect.gen(function* () {
 					const side = yield* work.side(`exam-${number}`);
 					const head = yield* work.commit(side.tree, files, `rule changes for ticket ${number}`);
 					yield* work.pushTo(side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
-					const body = `The rule changes the plan for ticket ${number} lists.`;
+					const body = saidOf(
+						[
+							`The rule changes the plan for ticket ${number} lists. They land before the rest of its work.`,
+							"",
+							...ruleChangeLines(changes),
+						].join("\n"),
+					);
 					const id = yield* pullOnBranch({pulls, wire, tickets}, number, {
 						branch: side.branch,
 						title,

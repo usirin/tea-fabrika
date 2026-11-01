@@ -6,6 +6,7 @@ import {nameOf} from "../outcome.ts";
 import {
 	Exam,
 	ExamAsk,
+	type ExamChange,
 	type ExamMsg,
 	ExamOutcome,
 	ExamReport,
@@ -28,6 +29,7 @@ export class ExamWork extends Context.Service<
 			number: number,
 			base: string,
 			files: readonly {readonly path: string; readonly text: string}[],
+			changes: readonly ExamChange[],
 		) => Effect.Effect<Landed, {readonly _tag: "unknown"}>;
 		/** The writer: one try's run, as a stream of the Draft's Msgs. */
 		readonly write: (sub: Sub<"exam_write", DraftRun>) => Stream.Stream<ExamMsg>;
@@ -42,7 +44,13 @@ const base = {
 		interpret: {
 			exam_land: (cmd: ReturnType<typeof landExam>) =>
 				Effect.gen(function* () {
-					return yield* (yield* ExamWork).land(cmd.ticket, cmd.number, cmd.base, cmd.files);
+					return yield* (yield* ExamWork).land(
+						cmd.ticket,
+						cmd.number,
+						cmd.base,
+						cmd.files,
+						cmd.changes ?? [],
+					);
 				}),
 		},
 		subscribe: {
