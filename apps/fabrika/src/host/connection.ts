@@ -23,9 +23,9 @@
 // One project, one server: the file picks either the home's own file or a server, never both
 // (docs/direction/the-ledger-goes-to-cloudflare.md).
 
-import {type Ledger, layerSignerFile} from "@kampus/fabrika";
-import {DoorRefused, doorOf, layerHttp, renewing} from "@kampus/fabrika/http";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+import {type Ledger, layerSignerFile} from "@kampus/fabrika-old";
+import {DoorRefused, doorOf, layerHttp, renewing} from "@kampus/fabrika-old/http";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {Author} from "@tea-fabrika/tracker";
 import {Effect, FileSystem, Layer, Option, Path, Schema} from "effect";
 import {stopHost} from "./stop.ts";

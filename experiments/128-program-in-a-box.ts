@@ -40,8 +40,8 @@ import {
 import {homedir, tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {start} from "@kampus/fabrika";
-import {toolchain} from "@kampus/fabrika/agents/sandbox";
+import {start} from "@kampus/fabrika-old";
+import {toolchain} from "@kampus/fabrika-old/agents/sandbox";
 import {Deferred, Effect, Exit, Layer, Scope} from "effect";
 import {
 	type Box,

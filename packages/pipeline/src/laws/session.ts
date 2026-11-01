@@ -1,4 +1,4 @@
-import {NONE, type Session, session} from "@kampus/fabrika/agents/acp";
+import {NONE, type Session, session} from "@kampus/fabrika-old/agents/acp";
 import {type Law, law, type MsgOf, stepOf, type Update, type World} from "./explore.ts";
 
 // What one `acp` run keeps across a restart, under every order of messages:

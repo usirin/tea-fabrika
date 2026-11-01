@@ -8,8 +8,8 @@ import {
 	streams,
 	type Word,
 	type Writer,
-} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {hashOf} from "@kampus/pipeline/tickets/approval";
 import type {CodeFact, PrFact} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeline/tickets/tickets";

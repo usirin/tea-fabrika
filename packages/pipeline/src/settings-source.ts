@@ -1,4 +1,4 @@
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "./child.ts";

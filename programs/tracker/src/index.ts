@@ -1,5 +1,5 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, end, input, kind, output} from "@kampus/fabrika";
+import {defineProgram, end, input, kind, output} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema} from "effect";
 import {duplicatesCell} from "./duplicates.ts";

@@ -1,5 +1,5 @@
-import {Ledger, memoryStorage, openJobs} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, memoryStorage, openJobs} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect} from "effect";

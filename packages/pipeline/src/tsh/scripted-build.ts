@@ -1,5 +1,5 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {defineProgram, type Entry, listed} from "@kampus/fabrika";
+import {defineProgram, type Entry, listed} from "@kampus/fabrika-old";
 import {Effect, FileSystem, Layer} from "effect";
 import {criterionId} from "../ids.ts";
 import {buildProgram} from "../stages/build/program.ts";

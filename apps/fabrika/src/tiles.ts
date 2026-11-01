@@ -1,4 +1,4 @@
-import {type JobsOnHost, Ledger, Traces} from "@kampus/fabrika";
+import {type JobsOnHost, Ledger, Traces} from "@kampus/fabrika-old";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Exit, Scope} from "effect";
 import type {DeskMsg} from "./desk/desk.ts";

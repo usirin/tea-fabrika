@@ -1,5 +1,5 @@
 import {run} from "@demlik/tea/effect";
-import {defineProgram, end, flag, input} from "@kampus/fabrika";
+import {defineProgram, end, flag, input} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {One, oneOf, tickets, ticketsKind, ticketsOptions} from "@tea-fabrika/tracker";
 import {Effect, Schema} from "effect";

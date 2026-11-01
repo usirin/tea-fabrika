@@ -1,5 +1,5 @@
 import {replay} from "@demlik/tea";
-import type {MsgOf} from "@kampus/fabrika";
+import type {MsgOf} from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
 import {load, over, pullRequests, save, shownOf, statusOf, tracker} from "./machine.ts";

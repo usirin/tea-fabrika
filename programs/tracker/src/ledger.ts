@@ -1,4 +1,4 @@
-import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
+import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika-old";
 import {type Entry, mayWrite, nameOf, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
 import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";

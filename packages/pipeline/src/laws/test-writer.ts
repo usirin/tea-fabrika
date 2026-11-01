@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import type {Checked} from "../stages/test-writer/checked.ts";
 import {
 	commitTests,

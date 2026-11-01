@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import type {Spend} from "@kampus/fabrika/agents/claude";
+import type {Spend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import type {SortAnswer, SortReply} from "./answer.ts";
 import {NO_RULE_IDS, NO_RULES, STILL_YES} from "./bar.ts";

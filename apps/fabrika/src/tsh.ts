@@ -16,7 +16,7 @@ import {
 	Traces,
 	tell,
 	viewOf,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {compare} from "@tea-fabrika/compare";
 import {counter} from "@tea-fabrika/counter";

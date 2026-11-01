@@ -1,6 +1,6 @@
 import {fileURLToPath} from "node:url";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Instrumenter} from "@stryker-mutator/instrumenter";
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";

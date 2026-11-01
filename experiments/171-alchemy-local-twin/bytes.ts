@@ -19,7 +19,7 @@ import {getCompatibility} from "@alchemy.run/cloudflare/Workers/Compatibility";
 import {readPrebuiltWorkerBundle} from "@alchemy.run/cloudflare/Workers/Sources/Prebuilt";
 import {WorkerBundle} from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import {layer as NodeServices} from "@effect/platform-node/NodeServices";
-import {COMPATIBILITY_DATE, LEDGER_ENTRY} from "@kampus/fabrika/local";
+import {COMPATIBILITY_DATE, LEDGER_ENTRY} from "@kampus/fabrika-old/local";
 import {Effect, Option, Stream} from "effect";
 import type * as Esbuild from "esbuild";
 

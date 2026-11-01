@@ -4,7 +4,7 @@ import {Effect} from "effect";
 
 // One command, its stdout: how the GitHub code host, the planner and the
 // reviewer run `gh` and `git`. Lifted out of `wip/src/operator-live.ts` when
-// the pipeline moved into `@kampus/fabrika` (experiment 103); the old
+// the pipeline moved into `@kampus/fabrika-old` (experiment 103); the old
 // operator's live Layers stay behind in `wip` and import it from here.
 //
 // Node at the edge: `child_process`, because this one call predates the move

@@ -1,5 +1,5 @@
-import {Ledger} from "@kampus/fabrika";
-import {layerMemory} from "@kampus/fabrika/memory";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerMemory} from "@kampus/fabrika-old/memory";
 import {Duration, Effect, Layer, Option, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {

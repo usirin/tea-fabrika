@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import type {SortReply} from "../stages/sort/answer.ts";
 import {type Brief, sortProblems} from "../stages/sort/brief.ts";
 import {

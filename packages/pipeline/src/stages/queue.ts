@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {type Delivery, kind, type RefsOf} from "@kampus/fabrika";
+import {type Delivery, kind, type RefsOf} from "@kampus/fabrika-old";
 import {Effect, Exit, Queue, Schema, Scope} from "effect";
 import {queueLine} from "./status.ts";
 

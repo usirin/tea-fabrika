@@ -10,7 +10,7 @@ import {
 	kind,
 	TraceId,
 	Traces,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Clock, Duration, Effect, Schema, Stream} from "effect";
 import {
 	type FollowSub,

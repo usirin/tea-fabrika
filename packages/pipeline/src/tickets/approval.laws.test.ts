@@ -1,4 +1,4 @@
-import type {Writer} from "@kampus/fabrika";
+import type {Writer} from "@kampus/fabrika-old";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";

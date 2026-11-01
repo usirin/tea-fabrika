@@ -1,4 +1,4 @@
-import {defineProgram, flag, input, output} from "@kampus/fabrika";
+import {defineProgram, flag, input, output} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {PlanId, planOf, readTicketId, TaskId, TicketId, ticketOf} from "../ids.ts";
 import {Revision, revisionOfDraft} from "../stages/plan/plan.ts";

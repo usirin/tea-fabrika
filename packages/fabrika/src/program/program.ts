@@ -150,7 +150,7 @@ export interface Delivery<T> {
 // Every input needs a handler, a name that is no input does not compile, and
 // each handler's value type comes from its input's shape.
 
-const EndId: unique symbol = Symbol.for("@kampus/fabrika/End");
+const EndId: unique symbol = Symbol.for("@kampus/fabrika-old/End");
 /** What a handler answers to stop serving: {@link end}. */
 export interface End {
 	readonly [EndId]: typeof EndId;
@@ -163,7 +163,7 @@ const ending: End = {[EndId]: EndId};
  */
 export const end: Effect.Effect<End> = Effect.succeed(ending);
 
-const ForkedId: unique symbol = Symbol.for("@kampus/fabrika/Forked");
+const ForkedId: unique symbol = Symbol.for("@kampus/fabrika-old/Forked");
 /** A control input's handler, run at once beside the order: {@link fork}. */
 export interface Forked<A, E, R> {
 	readonly [ForkedId]: typeof ForkedId;

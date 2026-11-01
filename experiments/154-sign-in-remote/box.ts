@@ -20,8 +20,8 @@
 
 import {run} from "@demlik/tea/effect";
 import {NodeServices} from "@effect/platform-node";
-import {Ledger} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Duration, Effect, Layer, Redacted, Schema} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
 import {

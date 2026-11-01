@@ -8,8 +8,8 @@
 // program stops with it.
 
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, meter, serve} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {type HostEvent, meter, serve} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Config, Console, Duration, Effect} from "effect";
 import {counterProgram} from "./counter.ts";
 

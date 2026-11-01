@@ -11,7 +11,7 @@
 //   - Replies come by a live tail of `asker:1/inbox` from the saved cursor, not 95's whole-log polls.
 import type {OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, offer, output, start} from "@kampus/fabrika";
+import {defineProgram, input, offer, output, start} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {
 	type Asker,

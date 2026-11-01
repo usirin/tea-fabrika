@@ -14,7 +14,7 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {CriteriaRecord} from "../../criteria/record.ts";

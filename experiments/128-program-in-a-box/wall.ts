@@ -17,7 +17,7 @@
 //   host -> box   {kind: "ok", id, value} | {kind: "err", id, tag} | {kind: "no", id, why}
 
 import {fileURLToPath} from "node:url";
-import type {AnyProgram} from "@kampus/fabrika";
+import type {AnyProgram} from "@kampus/fabrika-old";
 import {type Context, Effect, Layer, Queue, Schema} from "effect";
 import {type Rpc, RpcClient, type RpcGroup, RpcSerialization, RpcServer} from "effect/rpc";
 import type {Keyed} from "./cmd-wall.ts";

@@ -103,7 +103,7 @@ export class LocalLedger extends Context.Service<
 		/** Stop the group gracefully (SIGTERM, then SIGKILL after 3 s) and start it again. */
 		readonly restart: Effect.Effect<{readonly restartMs: number}, LocalError>;
 	}
->()("@kampus/fabrika/LocalLedger") {}
+>()("@kampus/fabrika-old/LocalLedger") {}
 
 const DAEMON = beside(import.meta.url, "daemon");
 
@@ -120,7 +120,7 @@ const miniflareInstalled = Effect.forEach(
 			try: () => import.meta.resolve(peer),
 			catch: () =>
 				new LocalError({
-					message: `@kampus/fabrika/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
+					message: `@kampus/fabrika-old/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
 				}),
 		}),
 	// One after the other: the first one missing is the one named.

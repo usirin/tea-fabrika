@@ -1,4 +1,4 @@
-import {noSpend} from "@kampus/fabrika/agents/claude";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import type {Result} from "../../controls.ts";
 import {nameOf} from "../outcome.ts";

@@ -15,11 +15,11 @@
 //
 // Node at the edge, as 93 to 99: processes in their own groups and their signals
 // (./98-tea-host-package/harness.ts). The ledger, the hosts and everything they write go through
-// `@kampus/fabrika`.
+// `@kampus/fabrika-old`.
 import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {layerPlanted, PLANTED, type Planted, runLaws} from "@kampus/fabrika/laws";
+import {layerPlanted, PLANTED, type Planted, runLaws} from "@kampus/fabrika-old/laws";
 import {
 	checkCalls,
 	checkHost,

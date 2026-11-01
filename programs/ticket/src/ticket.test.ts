@@ -6,8 +6,8 @@ import {
 	start,
 	streams,
 	type Word,
-} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {Author, pullRequestsOf} from "@tea-fabrika/tracker";

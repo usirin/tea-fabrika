@@ -14,8 +14,8 @@
 //             send is answered and not written again
 //   fold      a `folded` fact on the plan, sent the same way
 
-import {Ledger, type Self} from "@kampus/fabrika";
-import type {DraftRun} from "@kampus/fabrika/agents/claude";
+import {Ledger, type Self} from "@kampus/fabrika-old";
+import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Effect, Exit, Option, Schema, Stream} from "effect";
 import {type Fact, type Hold, sendFact} from "../asks/ledger.ts";
 import {planOf, readTicketId} from "../ids.ts";

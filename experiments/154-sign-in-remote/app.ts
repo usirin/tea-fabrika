@@ -12,7 +12,7 @@
 // Node at the edge, said here: node:http for the catcher, which must bind one exact loopback port
 // and tell "taken" apart; Effect's HTTP server picks neither.
 import {createServer, type Server} from "node:http";
-import {Ledger, streams} from "@kampus/fabrika";
+import {Ledger, streams} from "@kampus/fabrika-old";
 import {Duration, Effect, Schema} from "effect";
 import {boxName, personName, redirectOf, SIWC, type ToBox, ToPerson} from "./wire.ts";
 

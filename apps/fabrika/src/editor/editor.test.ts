@@ -1,5 +1,5 @@
 import {replay} from "@demlik/tea";
-import {listed, Shell} from "@kampus/fabrika";
+import {listed, Shell} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {Layer} from "effect";
 import {describe, expect, it} from "vitest";

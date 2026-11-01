@@ -1,4 +1,4 @@
-import type {WindowProps} from "@kampus/fabrika";
+import type {WindowProps} from "@kampus/fabrika-old";
 import {Kbd} from "@manti-ui/react";
 import {
 	Fragment,

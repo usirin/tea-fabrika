@@ -29,7 +29,7 @@ SPOTS.push;
 
 - `src/map.test.ts` holds the map to the code. It imports each real program and checks every
   name, every port name, and that each port's type fits the real schema (`fit` from
-  `@kampus/fabrika`). It checks that each wire's two ends fit each other too. A renamed input
+  `@kampus/fabrika-old`). It checks that each wire's two ends fit each other too. A renamed input
   fails the test, so the map cannot drift from the code.
 - The page cannot import the programs (they use Node), so `map.ts` holds the names as data and
   the test is what keeps them true.

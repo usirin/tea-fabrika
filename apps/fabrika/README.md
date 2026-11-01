@@ -1,4 +1,4 @@
-# fabrika app: `@kampus/fabrika-app`
+# fabrika app: `@kampus/fabrika-app-old`
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
 tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
@@ -61,7 +61,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 ## Where it sits
 
-- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika` and the
+- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika-old` and the
   programs in `programs/`, and nothing imports it.
 - Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
   `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
@@ -478,7 +478,7 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
 
 - `fabrika mcp` is a stdio bridge: it passes MCP's lines to the running host on
   `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
-  official SDK (`@kampus/fabrika/mcp`, spec 2026-07-28). With no host running, the bridge says so
+  official SDK (`@kampus/fabrika-old/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
   the input's own description and its schema as JSON Schema (`tracker_file`, `tracker_query`,
@@ -504,9 +504,9 @@ would stamp what the host writes as you). The agent's runs end when its client g
 
 ```sh
 pnpm fabrika                                  # build, then open the app
-pnpm --filter @kampus/fabrika-app build       # dist/ only
-pnpm --filter @kampus/fabrika-app e2e         # the flow end to end, screenshots in a temp folder
-SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
+pnpm --filter @kampus/fabrika-app-old build       # dist/ only
+pnpm --filter @kampus/fabrika-app-old e2e         # the flow end to end, screenshots in a temp folder
+SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 ```
 
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
@@ -520,7 +520,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
   without taking focus and keeps drawing when covered, so an agent's test never takes the
   person's keys. `FABRIKA_FOREGROUND=1` shows it as a normal window.
 - The ledger is `ledger.sqlite`, on one node:sqlite connection in the host
-  (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
+  (`layerSqliteSync` from `@kampus/fabrika-old/sqlite`): the bundle has no worker file beside it, and
   a Miniflare child is more than one person's tickets need. Each call blocks the host while
   SQLite runs it. One host per home means one tsh writes each tile's job table. The end-to-end
   run uses a fresh home.

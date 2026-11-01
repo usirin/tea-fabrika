@@ -1,4 +1,4 @@
-import type {WindowProps} from "@kampus/fabrika";
+import type {WindowProps} from "@kampus/fabrika-old";
 import type {Ticket} from "@kampus/pipeline/tickets/ticket";
 import {
 	headOf,

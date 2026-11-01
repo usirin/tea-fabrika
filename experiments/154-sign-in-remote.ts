@@ -34,8 +34,8 @@ import {
 import {createServer} from "node:net";
 import {join, relative} from "node:path";
 import {replay} from "@demlik/tea";
-import {Ledger, streams} from "@kampus/fabrika";
-import {LocalLedger, layerLocal} from "@kampus/fabrika/local";
+import {Ledger, streams} from "@kampus/fabrika-old";
+import {LocalLedger, layerLocal} from "@kampus/fabrika-old/local";
 import {Effect, Redacted} from "effect";
 import {fakeBrowser, phoneBrowser, runApp} from "./154-sign-in-remote/app.ts";
 import {type Fake, startFake} from "./154-sign-in-remote/fake-auth.ts";

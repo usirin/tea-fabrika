@@ -1,5 +1,5 @@
-import {call, Ledger} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {call, Ledger} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {runIdOf} from "@kampus/pipeline/experiments/experiment";
 import {Experiments, experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {Cause, Effect, Layer, Option} from "effect";

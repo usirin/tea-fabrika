@@ -12,7 +12,7 @@ import {
 	type PayloadOf,
 	type Program,
 	withDefaults,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, Layer} from "effect";
 import {layerLanes} from "../asks/claims.ts";
 import {type Ledger, memoryLedger} from "../asks/ledger.ts";

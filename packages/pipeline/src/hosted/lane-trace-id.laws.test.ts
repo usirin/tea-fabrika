@@ -1,5 +1,5 @@
 import {runTraceId} from "@demlik/tea/otel";
-import {memoryTracing} from "@kampus/fabrika/otel";
+import {memoryTracing} from "@kampus/fabrika-old/otel";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Arbitrary, Effect} from "effect";
 import {describe, expect, it} from "vitest";

@@ -1,6 +1,6 @@
 import {realpathSync} from "node:fs";
 import {basename, dirname, isAbsolute, join, relative, resolve} from "node:path";
-import {refusal} from "@kampus/fabrika/agents/sandbox";
+import {refusal} from "@kampus/fabrika-old/agents/sandbox";
 
 // The builder's own check on one tool call, as a plain function. Kept apart
 // from ./builder.ts, which starts the Agent SDK, so a process that only checks
@@ -82,7 +82,7 @@ export function builderRefusal(
 
 /**
  * The builder's whole check on one tool call: the shared Check (fabrika's
- * `refusal`, `@kampus/fabrika/agents/sandbox`), then the builder's own rule
+ * `refusal`, `@kampus/fabrika-old/agents/sandbox`), then the builder's own rule
  * above. The reason to refuse, or `null`. The SDK path runs the two as its
  * PreToolUse hooks (`builderOptions`, ./builder.ts); the ACP path runs this
  * as a command hook (./check-hook.ts) and on each permission ask

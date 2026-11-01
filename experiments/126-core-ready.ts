@@ -134,7 +134,7 @@ interface Imported {
 	readonly type: boolean;
 }
 
-/** Every named import and re-export from `@kampus/fabrika` or a subpath, in one file's text. */
+/** Every named import and re-export from `@kampus/fabrika-old` or a subpath, in one file's text. */
 function importsOf(file: string, text: string): Imported[] {
 	const out: Imported[] = [];
 	const named =
@@ -188,7 +188,7 @@ function publicNames(): Record<string, string[]> {
 	const out: Record<string, string[]> = {};
 	for (const [sub, target] of Object.entries(pkg.exports)) {
 		if (!target.endsWith(".ts")) continue;
-		const from = sub === "." ? "@kampus/fabrika" : `@kampus/fabrika/${sub.slice(2)}`;
+		const from = sub === "." ? "@kampus/fabrika-old" : `@kampus/fabrika-old/${sub.slice(2)}`;
 		out[from] = [...new Set(namesOf(join(ROOT, "packages/fabrika", target), new Set()))].sort();
 	}
 	return out;

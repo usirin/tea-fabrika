@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import {sentBack} from "../../refine.ts";
 import {

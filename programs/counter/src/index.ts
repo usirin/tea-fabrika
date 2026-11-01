@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {defineProgram, end, input, kind, output} from "@kampus/fabrika";
+import {defineProgram, end, input, kind, output} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 // A program with a window, the smallest: it counts presses of +1 until done, and says the

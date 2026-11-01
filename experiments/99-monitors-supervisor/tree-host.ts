@@ -6,8 +6,8 @@
 // host event on stdout, tagged with the name, for the harness. Node only at this edge: the
 // runtime, and stdout.
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, serve} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {type HostEvent, serve} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Config, Console, Duration, Effect} from "effect";
 import {childNames, childProgram, specOf, supervisorProgram, watcherProgram} from "./programs.ts";
 

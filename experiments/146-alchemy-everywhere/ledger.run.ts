@@ -1,14 +1,14 @@
 // Spike 4's stack: a resource whose provider asks for the repo's own typed service, `Ledger` from
-// @kampus/fabrika, and gets it from the repo's own Layer, `layerSqliteSync`, over a file in the
+// @kampus/fabrika-old, and gets it from the repo's own Layer, `layerSqliteSync`, over a file in the
 // driver's temp folder. The stack itself runs on the Effect copy in this folder's node_modules;
-// @kampus/fabrika resolves through the workspace to packages/fabrika, which brings the root's
+// @kampus/fabrika-old resolves through the workspace to packages/fabrika, which brings the root's
 // copy. Both are effect 4.0.6, two copies on disk. Does a service, a Layer and an error cross?
 //
 //   const name = yield* Name("triage", {stream: "triage", writer: "exp146"});
 //
 // A ledger forgets nothing, so `delete` cannot undo a registration: it only drops Alchemy's row.
-import {Ledger} from "@kampus/fabrika";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import * as Alchemy from "alchemy";
 import * as Provider from "alchemy/Provider";
 import {Resource} from "alchemy/Resource";

@@ -1,4 +1,4 @@
-import {flag, output} from "@kampus/fabrika";
+import {flag, output} from "@kampus/fabrika-old";
 import {
 	Answer,
 	type Ask,

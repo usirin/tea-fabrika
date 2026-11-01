@@ -12,7 +12,7 @@
 // a host that lost the name cannot reply, even into another program's inbox.
 import type {OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, input, offer, output, start} from "@kampus/fabrika";
+import {defineProgram, input, offer, output, start} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {Agent} from "./agent.ts";
 import {type AnswerCmd, type Answerer, answerer, START} from "./answer-machine.ts";

@@ -1,10 +1,10 @@
 import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {type LawResult, layerPlanted} from "@kampus/fabrika/laws";
-import {layerInside, ledgerOptions} from "@kampus/fabrika/local";
-import {layerMemory, memoryService} from "@kampus/fabrika/memory";
-import {layerSqlite} from "@kampus/fabrika/sqlite";
+import {type LawResult, layerPlanted} from "@kampus/fabrika-old/laws";
+import {layerInside, ledgerOptions} from "@kampus/fabrika-old/local";
+import {layerMemory, memoryService} from "@kampus/fabrika-old/memory";
+import {layerSqlite} from "@kampus/fabrika-old/sqlite";
 import {Effect, Layer} from "effect";
 import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";

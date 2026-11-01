@@ -14,8 +14,8 @@
 //   node proc.ts read <file>
 //       Prints the facts as this fresh process folds them, as one JSON line.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Ledger} from "@kampus/fabrika";
-import {layerSqlite} from "@kampus/fabrika/sqlite";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerSqlite} from "@kampus/fabrika-old/sqlite";
 import {claim, holderOf, layerLanes} from "@kampus/pipeline/asks/claims";
 import {readFacts} from "@kampus/pipeline/asks/ledger";
 import {foldLedger, openAsks} from "@kampus/pipeline/asks/rules";

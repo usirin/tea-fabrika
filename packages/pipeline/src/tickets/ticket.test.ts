@@ -1,4 +1,4 @@
-import type {Row} from "@kampus/fabrika";
+import type {Row} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {type Entry, type Fact, fold, mayWrite, readRow, Said, Title, WRITTEN_BY} from "./ticket.ts";

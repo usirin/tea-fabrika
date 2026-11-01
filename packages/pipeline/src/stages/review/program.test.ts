@@ -13,8 +13,8 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
-import type {Spend} from "@kampus/fabrika/agents/claude";
+} from "@kampus/fabrika-old";
+import type {Spend} from "@kampus/fabrika-old/agents/claude";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";

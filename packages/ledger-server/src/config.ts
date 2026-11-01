@@ -11,7 +11,7 @@
 // The server is fabrika's own Worker and Durable Object (`LEDGER_ENTRY`), unchanged. What differs
 // between Cloudflare and the laptop is only where it runs and, in a test, where its calls to GitHub
 // go. Everything else comes from here.
-import type {DoorOptions} from "@kampus/fabrika/local";
+import type {DoorOptions} from "@kampus/fabrika-old/local";
 import {Schema} from "effect";
 
 /** A Worker's name on Cloudflare: lower case, digits and dashes, up to 63. */

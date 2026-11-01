@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Entry, type JobsOnHost, Ledger, Shell, Traces} from "@kampus/fabrika";
+import {type Entry, type JobsOnHost, Ledger, Shell, Traces} from "@kampus/fabrika-old";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";

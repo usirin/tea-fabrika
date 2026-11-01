@@ -3,8 +3,8 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Ledger, streams, writerText} from "@kampus/fabrika";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+import {Ledger, streams, writerText} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {type Fact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, FileSystem, Layer, Logger, Schedule, Scope} from "effect";

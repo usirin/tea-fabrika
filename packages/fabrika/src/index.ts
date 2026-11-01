@@ -1,4 +1,4 @@
-// `@kampus/fabrika`, the top level: the services and the code that runs
+// `@kampus/fabrika-old`, the top level: the services and the code that runs
 // anywhere, in a browser too. No platform is named here. Each platform's
 // implementation is a Layer on a subpath (`/memory`, `/sqlite`, `/http`,
 // `/local`, `/storage/node`, `/otel`, `/shell`, `/agents/claude`,

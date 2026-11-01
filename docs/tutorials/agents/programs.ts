@@ -1,7 +1,7 @@
 // Two programs. The poet asks an agent for one line per guest and sends it to the book.
 // The book keeps every line, once each.
 import {defineMachine} from "@demlik/tea";
-import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika";
+import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika-old";
 import {Console, Effect, Schedule, Schema} from "effect";
 import {write} from "./agent.ts";
 

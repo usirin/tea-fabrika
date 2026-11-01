@@ -1,13 +1,13 @@
 // tsh's parts that run anywhere, as one module: `Shell` on the top level of
-// `@kampus/fabrika`, read as `Shell.programList`, `Shell.tsh`. A module, like
+// `@kampus/fabrika-old`, read as `Shell.programList`, `Shell.tsh`. A module, like
 // `Call` and `Monitor`: its names (`check`, `parse`, `EMPTY`, `helpOf`) are
 // the shell's, and would say too little on the flat list beside the host's.
 //
 // It is what an app hands tsh and what it tests its lines with. The launcher
 // that holds the terminal, `runTsh`, reads Node's process and is on
-// `@kampus/fabrika/shell`.
+// `@kampus/fabrika-old/shell`.
 //
-//   import {listed, Shell} from "@kampus/fabrika";
+//   import {listed, Shell} from "@kampus/fabrika-old";
 //   const programs = Shell.programList([...Shell.SMALL, listed(hello, Layer.empty)]);
 
 // The host's job table, as tsh shows it. The host's jobs themselves (`HostJobs`, `openJobs`) are

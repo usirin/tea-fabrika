@@ -1,4 +1,4 @@
-// The laws of the machines in the host (`@kampus/fabrika`'s host/): the host's own loop
+// The laws of the machines in the host (`@kampus/fabrika-old`'s host/): the host's own loop
 // (host-machine.ts), the call module (call.ts), the supervisor (supervisor.ts) and the monitor
 // module (monitor.ts), walked by this repo's checker (./explore.ts): every Msg order up to a
 // bound, through the real reducers, each law after every step, and each law seen to fail once on a
@@ -38,7 +38,7 @@ import {
 	startsOf,
 	stopOf,
 	superviseWith,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {
 	broke,
 	explore,

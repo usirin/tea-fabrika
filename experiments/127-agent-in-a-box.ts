@@ -47,7 +47,7 @@ import {
 	type SpawnedProcess,
 	type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import {MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika/agents/sandbox";
+import {MAKE_EMPTY_FOLDER, toolchain} from "@kampus/fabrika-old/agents/sandbox";
 import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

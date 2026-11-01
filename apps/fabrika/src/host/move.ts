@@ -25,9 +25,9 @@ import {
 	planOf,
 	type Seal,
 	type SqlRow,
-} from "@kampus/fabrika";
-import {type DoorRefused, doorOf} from "@kampus/fabrika/http";
-import {readOnlyRows} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old";
+import {type DoorRefused, doorOf} from "@kampus/fabrika-old/http";
+import {readOnlyRows} from "@kampus/fabrika-old/sqlite";
 import {ROOT} from "@tea-fabrika/tracker";
 import {Context, Duration, Effect, FileSystem, Layer, Option, Schedule, Schema} from "effect";
 import {addressOf, type Connection, connectionOf, keepConnection, loginWith} from "./connection.ts";
@@ -136,7 +136,7 @@ export class MoveTarget extends Context.Service<
 		readonly send: (events: readonly Moved[]) => Effect.Effect<Progress, MoveStopped | LinkDropped>;
 		readonly seal: (seal: Seal) => Effect.Effect<Progress, MoveStopped | LinkDropped>;
 	}
->()("@kampus/fabrika-app/MoveTarget") {}
+>()("@kampus/fabrika-app-old/MoveTarget") {}
 
 /** The door's answer as the move reads it: no answer at all is a dropped link, else a stop. */
 const stopOf = (d: DoorRefused) =>

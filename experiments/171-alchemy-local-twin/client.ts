@@ -7,8 +7,8 @@
 //
 // Prints one JSON line.
 import {createHash} from "node:crypto";
-import {Ledger} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {Ledger} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Effect, Redacted} from "effect";
 
 const url = process.env.CLIENT_URL ?? "";

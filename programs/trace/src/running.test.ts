@@ -1,5 +1,5 @@
 import {replay} from "@demlik/tea";
-import {ATTR, type JobTrace, memoryStorage, type Span, start, Traces} from "@kampus/fabrika";
+import {ATTR, type JobTrace, memoryStorage, type Span, start, Traces} from "@kampus/fabrika-old";
 import {Duration, Effect, Layer, Option, Queue, Stream} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";

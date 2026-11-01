@@ -27,7 +27,7 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {type AnyOutcome, nameOf} from "@kampus/pipeline/stages/outcome";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {

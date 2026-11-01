@@ -12,7 +12,7 @@
 // mailbox, and the spike no longer runs on it, so the script floods the
 // runtime alone. The spike's own numbers are in the write-up.
 
-import {defineProgram, input, start, tell} from "@kampus/fabrika";
+import {defineProgram, input, start, tell} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 const COUNT = Number(process.env.COUNT ?? 1_000_000);

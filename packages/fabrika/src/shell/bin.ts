@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tsh with the small programs alone (./small.ts): a shell with its own
-// coreutils and nothing else. `@kampus/fabrika` installs no command: in this
+// coreutils and nothing else. `@kampus/fabrika-old` installs no command: in this
 // repo the dev script `packages/fabrika/bin/tsh-small` runs this file from the
 // source. An app with programs of its own ships its own bin that hands tsh its
 // list instead, as `@kampus/pipeline` does with `tsh`.

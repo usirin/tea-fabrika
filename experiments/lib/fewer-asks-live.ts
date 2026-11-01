@@ -2,8 +2,8 @@
 // decides a ticket. Through the Agent SDK with no tools, no settings and no skills, as part 2's opus.
 // Its dollars are the SDK's own `total_cost_usd`, which is list price.
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {agentEnv} from "@kampus/fabrika/agents/sandbox";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Option, type Schema} from "effect";
 
 export interface Heard<A> {

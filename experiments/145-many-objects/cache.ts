@@ -11,7 +11,7 @@
 // Like git's `origin/main`: what the remote said last, kept to read, never pushed to.
 //
 // The copy is one JSON file, written whole to a new file and renamed over the old one.
-import {Ledger, Rows} from "@kampus/fabrika";
+import {Ledger, Rows} from "@kampus/fabrika-old";
 import {Effect, FileSystem, Path, Schema} from "effect";
 import {openDesk, SAVED, Saved, savedOf} from "./desk.ts";
 

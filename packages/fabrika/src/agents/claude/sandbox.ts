@@ -9,7 +9,7 @@ import {basename, delimiter, dirname, isAbsolute, join, relative, resolve} from 
 // (../acp/harness.ts). It imports nothing but Node, so a process that only
 // checks a call (the build stage's check hook, run once per tool call) loads
 // nothing else: about 50 ms a start instead of about 300. On
-// `@kampus/fabrika/agents/sandbox`, with ./env.ts and ./shell-guard.ts.
+// `@kampus/fabrika-old/agents/sandbox`, with ./env.ts and ./shell-guard.ts.
 //
 // Until experiment 114 this was the build stage's `check.ts`. The builder's
 // own rule on one tool call stayed there: only the build stage uses it.

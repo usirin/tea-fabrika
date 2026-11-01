@@ -1,5 +1,5 @@
 // Experiment 95's asker as a program the package serves, its calls on the package's call module
-// (`Call` in `@kampus/fabrika`, gen_server:call). 95's call machine was the whole asker: window,
+// (`Call` in `@kampus/fabrika-old`, gen_server:call). 95's call machine was the whole asker: window,
 // questions and calls in one. Here the calls are the package's Elm module, and this parent keeps
 // only what is the asker's own: which question is next, how many are pending at once (the
 // window), and what the answers were. Elm's way: the parent holds the child's state and hands it
@@ -9,7 +9,7 @@
 //   reply q-17      the call module answers q-17; the parent counts it and asks the next question
 //   timed_out q-17  the call module sends q-17 again, same call id, next try
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {Call, defineProgram, envelope, type Inbox, input, Self, streams} from "@kampus/fabrika";
+import {Call, defineProgram, envelope, type Inbox, input, Self, streams} from "@kampus/fabrika-old";
 import {Effect, Schema, Stream} from "effect";
 import {isRight, questionOf} from "../95-agents-across-hosts/question.ts";
 

@@ -1,4 +1,4 @@
-import {defineProgram, type Entry, flag, listed} from "@kampus/fabrika";
+import {defineProgram, type Entry, flag, listed} from "@kampus/fabrika-old";
 import {Context, Effect, Layer, Schema} from "effect";
 import {TileIdSchema} from "./desk.ts";
 import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
@@ -24,7 +24,7 @@ import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
 export class DeskWords extends Context.Service<
 	DeskWords,
 	{readonly said: (does: Does) => string | null}
->()("@kampus/fabrika-app/DeskWords") {}
+>()("@kampus/fabrika-app-old/DeskWords") {}
 
 /** A word that named a tile or a workspace that is not there. */
 interface Refused {

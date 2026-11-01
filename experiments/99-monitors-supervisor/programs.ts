@@ -17,7 +17,7 @@ import {
 	Self,
 	type SupervisorSpec,
 	supervisor,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, Exit, Schema, Stream} from "effect";
 
 // ---------------------------------------------------------------- the child

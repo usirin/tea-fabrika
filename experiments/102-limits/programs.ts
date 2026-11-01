@@ -21,7 +21,7 @@
 //   wall   the ticket and its builder have wall time; the builder crashes once on the way
 //   burst  the builder asks for ten scouts at once against `children: 3`, twice
 import {defineMachine} from "@demlik/tea";
-import type {Limits} from "@kampus/fabrika";
+import type {Limits} from "@kampus/fabrika-old";
 import {
 	type ChildSpec,
 	defineProgram,
@@ -32,7 +32,7 @@ import {
 	type SupervisorSpec,
 	streams,
 	supervisor,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 
 const EVERY_100_MS = Schedule.spaced(Duration.millis(100));

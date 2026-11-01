@@ -9,8 +9,8 @@ import {
 	noSpend,
 	type Open,
 	sdkRunner,
-} from "@kampus/fabrika/agents/claude";
-import {agentEnv, guardHook, ownRules} from "@kampus/fabrika/agents/sandbox";
+} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv, guardHook, ownRules} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Layer, Schema, Stream} from "effect";
 import {sh} from "../../sh.ts";
 import {removeLinks} from "../review/reviewer.ts";

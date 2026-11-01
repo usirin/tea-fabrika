@@ -2,18 +2,18 @@
 // command line. The steps are host/connection.ts's, move.ts's and post.ts's; this file only reads
 // the words.
 //
-//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli connect https://ledger.example.com/acme \
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli connect https://ledger.example.com/acme \
 //     --login alice --key ~/.ssh/id_ed25519
 //   // connected as user:github:7; the host restarts on it (host/connection.ts, `connectAndRestart`)
-//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli invite bob
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli invite bob
 //   // invited bob (github:8): they get in at their first login
-//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli move --from <home>/ledger.sqlite \
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli move --from <home>/ledger.sqlite \
 //     --to https://ledger.example.com/acme --dry-run --founder github:7
 //   // streams, events, writers, anything it cannot map, and the hash; nothing written
-//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli move --from <home>/ledger.sqlite \
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli move --from <home>/ledger.sqlite \
 //     --to https://ledger.example.com/acme --login alice --key ~/.ssh/id_ed25519
 //   // the tickets moved and sealed (host/move.ts); the home now uses the server
-//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app cli post comment 9 --as triage \
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli post comment 9 --as triage \
 //     --body-file note.md
 //   // as agent:triage, for the home's person (host/post.ts); then the tickets, one line each
 //   FABRIKA_HOME=<home> node apps/fabrika/src/cli.ts mcp --as claude
@@ -23,8 +23,8 @@
 // FABRIKA_HOME is always given, as for the host (host/main.ts): this never guesses a home, so a
 // test's home is never the owner's. The owner names theirs.
 import {NodeRuntime, NodeServices, NodeSocket} from "@effect/platform-node";
-import {writerText} from "@kampus/fabrika";
-import {BridgeStopped, bridge} from "@kampus/fabrika/mcp";
+import {writerText} from "@kampus/fabrika-old";
+import {BridgeStopped, bridge} from "@kampus/fabrika-old/mcp";
 import {Config, Console, Effect, Logger, Option} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";

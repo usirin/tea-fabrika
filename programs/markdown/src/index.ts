@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {defineProgram, end, flag, input, kind} from "@kampus/fabrika";
+import {defineProgram, end, flag, input, kind} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {Root} from "./root.ts";
 

@@ -26,7 +26,7 @@ import {
 	start,
 	streams,
 	tail,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {
 	type Cause,
 	Deferred,

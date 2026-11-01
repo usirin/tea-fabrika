@@ -1,6 +1,6 @@
 // Question 1's program: experiment 98's counter, unchanged, served on whichever object its parent
 // hands it. It is given one `Ledger` and never learns which object holds its rows.
-import {cast, Ledger, serve} from "@kampus/fabrika";
+import {cast, Ledger, serve} from "@kampus/fabrika-old";
 import {Duration, Effect} from "effect";
 import {counterProgram} from "../98-tea-host-package/counter.ts";
 

@@ -16,7 +16,7 @@
 //
 // Node at the edge: stdin, stdout and one append, read and written whole.
 import {appendFileSync} from "node:fs";
-import {temps} from "@kampus/fabrika/agents/sandbox";
+import {temps} from "@kampus/fabrika-old/agents/sandbox";
 import {builderCheck, type Checked} from "./check.ts";
 
 // Exit 2 is the CLI's "block this call"; any other failure of a hook lets the

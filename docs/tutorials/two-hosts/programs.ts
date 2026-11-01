@@ -1,6 +1,6 @@
 // Two programs. The kettle brews each order and pours it into the glass. The glass counts pours.
 import {defineMachine} from "@demlik/tea";
-import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika";
+import {defineProgram, envelope, input, Self, streams} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 // ------------------------------------------------------------------ the kettle

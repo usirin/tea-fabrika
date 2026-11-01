@@ -2,9 +2,9 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Shell, Traces} from "@kampus/fabrika";
-import {callOf, toolsOf} from "@kampus/fabrika/mcp";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Shell, Traces} from "@kampus/fabrika-old";
+import {callOf, toolsOf} from "@kampus/fabrika-old/mcp";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {memoryTraces} from "@tea-fabrika/trace/memory";

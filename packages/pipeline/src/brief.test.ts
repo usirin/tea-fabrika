@@ -1,4 +1,4 @@
-import {createDraft} from "@kampus/fabrika/agents/claude";
+import {createDraft} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";

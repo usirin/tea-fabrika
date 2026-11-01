@@ -1,12 +1,12 @@
-import {Ledger, Shell, Traces} from "@kampus/fabrika";
-import {type InTile, serveAgent} from "@kampus/fabrika/mcp";
+import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
+import {type InTile, serveAgent} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, type Scope} from "effect";
 import type {SocketServer} from "effect/socket";
 import {appPrograms} from "../tsh.ts";
 
 // The host's agents' socket, `<home>/host/mcp`: each agent's MCP bridge attaches here (the app's
-// `fabrika mcp --as <name>`), and is served the app's programs as tools (`@kampus/fabrika/mcp`).
+// `fabrika mcp --as <name>`), and is served the app's programs as tools (`@kampus/fabrika-old/mcp`).
 // It names no platform: host/run.ts makes the server on the socket file, a test on its own.
 //
 //   person's tile    tsh$ tracker                     the tracker, as user:owner

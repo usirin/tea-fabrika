@@ -36,7 +36,7 @@ import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "n
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {nextTry} from "@kampus/pipeline/combos";
 import {type Said, SortReply, saidOf} from "@kampus/pipeline/stages/sort/answer";
 import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/brief";

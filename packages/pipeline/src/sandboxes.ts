@@ -1,4 +1,4 @@
-import type {Sandbox} from "@kampus/fabrika";
+import type {Sandbox} from "@kampus/fabrika-old";
 
 // What is mounted in each stage's sandbox (a-ticket-runs-from-the-app.md,
 // section 5). Every stage runs in a sandbox. Triage's mounts nothing and holds

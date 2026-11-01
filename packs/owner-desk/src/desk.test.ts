@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {describe, expect, it} from "@effect/vitest";
-import type {AnyRun} from "@kampus/fabrika";
-import {memoryStorage, type Storage} from "@kampus/fabrika";
+import type {AnyRun} from "@kampus/fabrika-old";
+import {memoryStorage, type Storage} from "@kampus/fabrika-old";
 import type {AnswerBody} from "@kampus/pipeline/asks/ask";
 import {changed, numberOf, plans86b, RULINGS} from "@kampus/pipeline/asks/cases";
 import {type Fact, memoryLedger} from "@kampus/pipeline/asks/ledger";

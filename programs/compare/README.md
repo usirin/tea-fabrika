@@ -8,7 +8,7 @@ through the `Experiments` service
 and writes nothing. The fabrika app lists it.
 
 ```ts
-import {call} from "@kampus/fabrika";
+import {call} from "@kampus/fabrika-old";
 import {compare} from "@tea-fabrika/compare";
 
 yield* call(compare, {n: "170", a: undefined, b: undefined});

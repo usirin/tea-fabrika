@@ -1,4 +1,4 @@
-import {Writer} from "@kampus/fabrika";
+import {Writer} from "@kampus/fabrika-old";
 import {textOf} from "@kampus/pipeline/tickets/approval";
 import {
 	Body,

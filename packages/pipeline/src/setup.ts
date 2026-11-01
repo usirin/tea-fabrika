@@ -257,7 +257,7 @@ export function setupLines(setup: Setup, holds: Holds, settings: Settings): read
 /**
  * The rubrics fabrika ships: `rubrics/` at the root of the package, beside
  * `src/` and `dist/`. Found from this file, which sits one folder below the
- * root in both (two, in `@kampus/fabrika`, before experiment 114).
+ * root in both (two, in `@kampus/fabrika-old`, before experiment 114).
  */
 export const shippedRubrics = (): Effect.Effect<string, never, Path.Path> =>
 	Effect.gen(function* () {

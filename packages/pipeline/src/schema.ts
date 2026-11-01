@@ -16,7 +16,7 @@ import type {z} from "zod";
 //
 // The other half that was here, how a Draft's answer is read (`reader`,
 // `jsonSchema`), is fabrika's since experiment 114, on
-// `@kampus/fabrika/agents/claude`, with the Draft that uses it.
+// `@kampus/fabrika-old/agents/claude`, with the Draft that uses it.
 
 /**
  * A schema a Cmd may carry: an Effect schema whose two sides are the same

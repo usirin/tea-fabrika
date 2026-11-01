@@ -4,7 +4,7 @@
 //   node experiments/154-sign-in-remote/build.ts          bundle, then `docker build`
 //
 // Once first: `pnpm install --ignore-workspace` in this folder, for esbuild and wrangler. Effect,
-// tea and @kampus/fabrika resolve from the repo's root, one copy each (experiment 148's trick).
+// tea and @kampus/fabrika-old resolve from the repo's root, one copy each (experiment 148's trick).
 // Node at the edge: child_process for `docker build`.
 import {execFileSync} from "node:child_process";
 import {join, resolve} from "node:path";

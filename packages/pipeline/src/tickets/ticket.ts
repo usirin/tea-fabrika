@@ -1,4 +1,4 @@
-import {type Row, TraceId, Writer, type Writes, writerOf} from "@kampus/fabrika";
+import {type Row, TraceId, Writer, type Writes, writerOf} from "@kampus/fabrika-old";
 import {Option, Schema} from "effect";
 
 // A ticket: one stream of facts on the ledger, and nothing else

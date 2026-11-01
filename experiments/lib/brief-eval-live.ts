@@ -17,8 +17,8 @@ import {existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync}
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {type Options, query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {agentEnv, guardHook} from "@kampus/fabrika/agents/sandbox";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv, guardHook} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Layer, Option, type Schema, type Scope} from "effect";
 import {type Asked, answerOf, type Brief, type Said, Sorter} from "./brief-eval.ts";
 import {type Earlier, fenced, type Ticket} from "./sort.ts";

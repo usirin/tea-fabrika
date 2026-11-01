@@ -7,7 +7,7 @@ import {
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import type {JobTrace, MsgOf} from "@kampus/fabrika";
+import type {JobTrace, MsgOf} from "@kampus/fabrika-old";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {type Model, trace} from "./machine.ts";

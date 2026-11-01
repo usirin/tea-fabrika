@@ -12,10 +12,10 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
-import {agentTrace} from "@kampus/fabrika/agents/trace";
-import {endpointOf, memoryTracing} from "@kampus/fabrika/otel";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+} from "@kampus/fabrika-old";
+import {agentTrace} from "@kampus/fabrika-old/agents/trace";
+import {endpointOf, memoryTracing} from "@kampus/fabrika-old/otel";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {SpanStatusCode} from "@opentelemetry/api";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer, Option, Stream} from "effect";

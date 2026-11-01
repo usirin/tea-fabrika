@@ -13,7 +13,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {defineMachine} from "@demlik/tea";
 import {Cmd, run} from "@demlik/tea/effect";
-import {defineProgram, flag, input, output} from "@kampus/fabrika";
+import {defineProgram, flag, input, output} from "@kampus/fabrika-old";
 import {Context, Effect, Schema, Stream} from "effect";
 import {Rpc, RpcGroup} from "effect/rpc";
 import {Outside, outside} from "./cmd-wall.ts";

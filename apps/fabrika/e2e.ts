@@ -4,7 +4,7 @@ import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
-import type {Shell} from "@kampus/fabrika";
+import type {Shell} from "@kampus/fabrika-old";
 import {_electron, type ElectronApplication, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -12,8 +12,8 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // window rules it checks are macOS's, so it runs on a Mac: CI runs it on a macOS runner, the
 // check workflow's `e2e` job, on every pull request and every push to main.
 //
-//   pnpm --filter @kampus/fabrika-app e2e
-//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e     screenshots there, not in a temp folder
+//   pnpm --filter @kampus/fabrika-app-old e2e
+//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e     screenshots there, not in a temp folder
 //
 //   1 desk           the window opens on one tile, t1, at tsh's prompt
 //   2 split          Ctrl-B |, then Ctrl-B -: three tiles, each with its own tsh
@@ -689,7 +689,7 @@ const hostPid = async (on: string) => {
 /**
  * The jobs in the host's one table, as kept in `<home>/storage/jobs` (host/run.ts), read from the
  * files and never opened: an open takes the table over from the host that runs on it
- * (@kampus/fabrika's host-jobs.ts), so its next write would fail. The table is the run `tsh`'s
+ * (@kampus/fabrika-old's host-jobs.ts), so its next write would fail. The table is the run `tsh`'s
  * machine `jobs`, under `table`, in two slots, the newer one whole (program/storage.ts). A file
  * that does not read fails the run, so a change to that layout is seen here.
  */

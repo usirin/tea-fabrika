@@ -1,4 +1,4 @@
-import {call, defineProgram, input, memoryStorage} from "@kampus/fabrika";
+import {call, defineProgram, input, memoryStorage} from "@kampus/fabrika-old";
 import {Cause, Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {queueKind, workQueue} from "./queue.ts";

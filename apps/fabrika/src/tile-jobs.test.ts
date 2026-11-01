@@ -1,4 +1,4 @@
-import type {Shell} from "@kampus/fabrika";
+import type {Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {endOf, type TileJobs, watchJobs} from "./tile-jobs.ts";
 

@@ -11,7 +11,7 @@
 //            writes it again writes nothing new. What it found that no criterion covers goes in
 //            the book under the task, or under the plan for the last review
 
-import {type Ledger, Self} from "@kampus/fabrika";
+import {type Ledger, Self} from "@kampus/fabrika-old";
 import {Context, Effect, Exit, type FileSystem, type Path, Schema} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {readFacts, sendFact} from "../asks/ledger.ts";
@@ -89,7 +89,7 @@ type LocalTurnNeeds =
 export class LocalChecks extends Context.Service<
 	LocalChecks,
 	readonly [LocalCheck, ...LocalCheck[]]
->()("@kampus/fabrika/pipeline/LocalChecks") {}
+>()("@kampus/fabrika-old/pipeline/LocalChecks") {}
 
 export const LocalReviewJob = Schema.Struct({
 	plan: PlanId,

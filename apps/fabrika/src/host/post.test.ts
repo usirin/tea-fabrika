@@ -3,7 +3,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import {keyFileText, keyLineOf, memoryStorage, offer, start, viewOf} from "@kampus/fabrika";
+import {keyFileText, keyLineOf, memoryStorage, offer, start, viewOf} from "@kampus/fabrika-old";
 import {startTwin} from "@kampus/ledger-server/twin";
 import {pullRequestsOf, type Shown, tracker} from "@tea-fabrika/tracker";
 import {Effect, Exit, type FileSystem, Layer, Option, type Path, Scope, Stream} from "effect";

@@ -10,7 +10,7 @@ import {
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import {asRng, backoffDelay} from "@demlik/tea/retry-backoff";
-import type {MsgOf} from "@kampus/fabrika";
+import type {MsgOf} from "@kampus/fabrika-old";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {

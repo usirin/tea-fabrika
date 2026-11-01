@@ -20,9 +20,9 @@ import {
 	start,
 	viewOf,
 	writerFor,
-} from "@kampus/fabrika";
-import {doorOf, layerHttp} from "@kampus/fabrika/http";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old";
+import {doorOf, layerHttp} from "@kampus/fabrika-old/http";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {startTwin} from "@kampus/ledger-server/twin";
 import {
 	Author,

@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import type {Cmd, DepKeyedSub, Sub} from "@demlik/tea";
-import {type Draft, type DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import {type Draft, type DraftMsg, DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Context, type Effect, Schema, type Stream} from "effect";
 import {z} from "zod";
 import {act, type Check, type createJudge, listen, type Ruled} from "./primitives.ts";

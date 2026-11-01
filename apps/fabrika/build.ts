@@ -29,7 +29,7 @@ import {bundlesOf, common} from "./bundles.ts";
 // as a data: url, which the page cannot fetch, and the bytes the page compiles are a second copy
 // (src/window/terminal.ts). It is read from disk, so the cost is size, not time on a network.
 //
-// `pnpm --filter @kampus/fabrika-app build`, or `start`, which builds and opens the app.
+// `pnpm --filter @kampus/fabrika-app-old build`, or `start`, which builds and opens the app.
 
 const here = import.meta.dirname;
 

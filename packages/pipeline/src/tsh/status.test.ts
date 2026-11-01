@@ -1,4 +1,4 @@
-import {ear, HostJobs, memoryStorage, openJobs, Shell, start, tell} from "@kampus/fabrika";
+import {ear, HostJobs, memoryStorage, openJobs, Shell, start, tell} from "@kampus/fabrika-old";
 import {Deferred, Duration, Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";

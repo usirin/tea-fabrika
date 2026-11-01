@@ -1,5 +1,10 @@
 import {applyCell} from "@demlik/tea";
-import {createDraft, type DraftMsg, type DraftRun, type Spend} from "@kampus/fabrika/agents/claude";
+import {
+	createDraft,
+	type DraftMsg,
+	type DraftRun,
+	type Spend,
+} from "@kampus/fabrika-old/agents/claude";
 import {
 	type Asking,
 	createAsk,

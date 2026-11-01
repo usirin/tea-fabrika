@@ -1,4 +1,4 @@
-import type {AnyProgram, View, WindowProps} from "@kampus/fabrika";
+import type {AnyProgram, View, WindowProps} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {CounterWindow} from "@tea-fabrika/counter/window";
 import {map} from "@tea-fabrika/map";

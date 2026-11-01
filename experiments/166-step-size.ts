@@ -30,9 +30,9 @@ import {
 	Shell,
 	start,
 	Traces,
-} from "@kampus/fabrika";
-import {layerTracesHttp, recordsHttp} from "@kampus/fabrika/http";
-import {ledgerOptions, recordInside} from "@kampus/fabrika/local";
+} from "@kampus/fabrika-old";
+import {layerTracesHttp, recordsHttp} from "@kampus/fabrika-old/http";
+import {ledgerOptions, recordInside} from "@kampus/fabrika-old/local";
 import {Effect, Layer, Redacted} from "effect";
 import {Miniflare} from "miniflare";
 // The patch maker is not a public name: it is the record's own part, read here to run the old

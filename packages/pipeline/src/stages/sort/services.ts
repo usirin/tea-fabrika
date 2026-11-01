@@ -1,5 +1,5 @@
-import {Ledger} from "@kampus/fabrika";
-import type {DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import {Ledger} from "@kampus/fabrika-old";
+import type {DraftMsg, DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Context, Effect, Layer, Schema, type Stream} from "effect";
 import {readFacts} from "../../asks/ledger.ts";
 import {foldLedger} from "../../asks/rules.ts";
@@ -105,12 +105,12 @@ export class SortHost extends Context.Service<
 		/** Every other ticket of the ticket's repo, open or closed, newest first. */
 		readonly earlier: (ticket: SortTicket) => Effect.Effect<readonly Earlier[], Failed>;
 	}
->()("@kampus/fabrika/pipeline/SortHost") {}
+>()("@kampus/fabrika-old/pipeline/SortHost") {}
 
 export class SortPlans extends Context.Service<
 	SortPlans,
 	{readonly open: (ticket: SortTicket) => Effect.Effect<readonly OpenPlan[], Failed>}
->()("@kampus/fabrika/pipeline/SortPlans") {}
+>()("@kampus/fabrika-old/pipeline/SortPlans") {}
 
 /**
  * The sorter, as a service: one run in, its stream of Msgs out, ending with one `sort_finished` or
@@ -119,13 +119,13 @@ export class SortPlans extends Context.Service<
 export class Sorter extends Context.Service<
 	Sorter,
 	{readonly run: (run: DraftRun, settings: Settings) => Stream.Stream<SortMsg>}
->()("@kampus/fabrika/pipeline/Sorter") {}
+>()("@kampus/fabrika-old/pipeline/Sorter") {}
 
 /** Where sort's writes go. `intent` names the write: the same write sent again has the same one. */
 export class SortWrites extends Context.Service<
 	SortWrites,
 	{readonly write: (write: SortWrite, intent: string) => Effect.Effect<null, Failed>}
->()("@kampus/fabrika/pipeline/SortWrites") {}
+>()("@kampus/fabrika-old/pipeline/SortWrites") {}
 
 // ---------------------------------------------------------------- the plans, from the ledger
 

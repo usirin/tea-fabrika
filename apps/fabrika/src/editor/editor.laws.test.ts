@@ -10,7 +10,7 @@ import {
 	propertyTrace,
 	type Step,
 } from "@demlik/tea/pbt";
-import {listed, type MsgOf, Shell} from "@kampus/fabrika";
+import {listed, type MsgOf, Shell} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {Layer} from "effect";
 import fc from "fast-check";

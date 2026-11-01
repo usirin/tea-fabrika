@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The work pipeline, an app on @kampus/fabrika: its stages, the programs it lists in tsh, and the bin that runs them. The name is a placeholder.",
+	"description": "The work pipeline, an app on @kampus/fabrika-old: its stages, the programs it lists in tsh, and the bin that runs them. The name is a placeholder.",
 	"engines": {
 		"node": ">=26"
 	},
@@ -39,7 +39,7 @@
 	},
 	"dependencies": {
 		"@effect/platform-node": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"smol-toml": "catalog:",
 		"zod": "catalog:"
 	},

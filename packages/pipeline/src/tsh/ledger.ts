@@ -12,11 +12,11 @@
 // the repository's pick, `[ledger] at` in its fabrika.toml (`local`, this one, when left out),
 // printed at start (../setup.ts); never tsh.toml's, so two machines on one repository pick alike.
 
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 // A ledger answers on a port: its door answers even a request with no credential.
-import {answers} from "@kampus/fabrika/http";
-import {layerLocal} from "@kampus/fabrika/local";
-import {layerSqlite} from "@kampus/fabrika/sqlite";
+import {answers} from "@kampus/fabrika-old/http";
+import {layerLocal} from "@kampus/fabrika-old/local";
+import {layerSqlite} from "@kampus/fabrika-old/sqlite";
 import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 
 /**

@@ -1,9 +1,9 @@
 import {join} from "node:path";
 import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {type MailboxFull, type RunOf, tell, type Word} from "@kampus/fabrika";
-import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika/agents/claude";
-import {shellEnv} from "@kampus/fabrika/agents/sandbox";
+import {type MailboxFull, type RunOf, tell, type Word} from "@kampus/fabrika-old";
+import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika-old/agents/claude";
+import {shellEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {type RepliesDeps, Thread} from "@kampus/pipeline/combos";
 import {
 	shipReadInterpret,

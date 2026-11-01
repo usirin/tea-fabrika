@@ -1,5 +1,5 @@
 {
-	"name": "@kampus/fabrika-app",
+	"name": "@kampus/fabrika-app-old",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
@@ -17,7 +17,7 @@
 	"dependencies": {
 		"@demlik/tea": "catalog:",
 		"@effect/platform-node": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"@manti-ui/react": "catalog:",
 		"@manti-ui/styles": "catalog:",

@@ -1,4 +1,4 @@
-import {Job, type Json, jsonPatchOf, type Span, type Step} from "@kampus/fabrika";
+import {Job, type Json, jsonPatchOf, type Span, type Step} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import {isRunning, type Model} from "./machine.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";

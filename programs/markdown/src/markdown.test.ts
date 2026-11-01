@@ -1,4 +1,4 @@
-import {memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika";
+import {memoryStorage, readInput, start, tell, viewOf} from "@kampus/fabrika-old";
 import * as highlights from "@pierre/highlights";
 import dimmed from "@pierre/highlights/themes/github-dark-dimmed";
 import {Effect, Fiber, Schema, Stream} from "effect";

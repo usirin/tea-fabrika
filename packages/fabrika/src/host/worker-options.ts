@@ -8,7 +8,7 @@
 // request, and only code holding the binding reaches it (`inside.ts`, for tests).
 //
 // Node at the edge: esbuild's Node API, loaded with Node's `require` when the options are made (an
-// optional peer: `@kampus/fabrika/local` still loads without it), and node:crypto's SHA-256 (the
+// optional peer: `@kampus/fabrika-old/local` still loads without it), and node:crypto's SHA-256 (the
 // door keeps a hash of the local secret, never the secret).
 import {createHash} from "node:crypto";
 import {createRequire} from "node:module";

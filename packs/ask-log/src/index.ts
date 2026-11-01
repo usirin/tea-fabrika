@@ -1,4 +1,4 @@
-import {defineProgram, input} from "@kampus/fabrika";
+import {defineProgram, input} from "@kampus/fabrika-old";
 import {Ask, Settled} from "@kampus/pipeline/asks/ask";
 import type {Pack} from "@kampus/pipeline/asks/packs";
 import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";

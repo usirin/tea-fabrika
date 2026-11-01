@@ -1,5 +1,5 @@
-import {KEPT_OUT} from "@kampus/fabrika/agents/trace";
-import type {Viewing} from "@kampus/fabrika/otel";
+import {KEPT_OUT} from "@kampus/fabrika-old/agents/trace";
+import type {Viewing} from "@kampus/fabrika-old/otel";
 import {wentWrong} from "../stages/outcome.ts";
 
 /**

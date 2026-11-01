@@ -27,9 +27,9 @@
 // never a word the agent said, never a path.
 import {existsSync, writeFileSync} from "node:fs";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {ear, type Given, memoryStorage, type Storage, start, tell} from "@kampus/fabrika";
-import {acpProgram} from "@kampus/fabrika/agents/acp";
-import {endpointOf, tracing} from "@kampus/fabrika/otel";
+import {ear, type Given, memoryStorage, type Storage, start, tell} from "@kampus/fabrika-old";
+import {acpProgram} from "@kampus/fabrika-old/agents/acp";
+import {endpointOf, tracing} from "@kampus/fabrika-old/otel";
 import {Effect, Layer} from "effect";
 import {
 	statusLine,

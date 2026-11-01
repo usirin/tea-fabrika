@@ -16,9 +16,9 @@ import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Agent, type AnyProgram, type Entry, listed, Shell} from "@kampus/fabrika";
-import {codexHomeOf} from "@kampus/fabrika/agents/acp";
-import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
+import {Agent, type AnyProgram, type Entry, listed, Shell} from "@kampus/fabrika-old";
+import {codexHomeOf} from "@kampus/fabrika-old/agents/acp";
+import {codexAdapter, psReaper} from "@kampus/fabrika-old/agents/codex";
 import type {AnyOutcome} from "@kampus/pipeline/stages/outcome";
 import {counter} from "@tea-fabrika/counter";
 import {map} from "@tea-fabrika/map";

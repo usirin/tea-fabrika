@@ -4,9 +4,9 @@
 // smallest app on fabrika's public names: a list, handed to `runTsh` as its `Programs`.
 //
 //   node fixtures/acp-tsh/tsh.ts --json -c 'acp --agent fake --folder <dir> ...'
-import {Shell} from "@kampus/fabrika";
-import {acpEntry} from "@kampus/fabrika/agents/acp";
-import {runTsh} from "@kampus/fabrika/shell";
+import {Shell} from "@kampus/fabrika-old";
+import {acpEntry} from "@kampus/fabrika-old/agents/acp";
+import {runTsh} from "@kampus/fabrika-old/shell";
 import {Effect} from "effect";
 
 const programs = Shell.programList([...Shell.SMALL, acpEntry]);

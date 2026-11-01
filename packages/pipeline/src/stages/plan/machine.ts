@@ -1,5 +1,5 @@
 import {defineMachine, type Sub} from "@demlik/tea";
-import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
+import type {DraftRun, Spend} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {createRefineLoop, refiningOf} from "../../combos.ts";
 import {gather, keptCmd, listen} from "../../primitives.ts";

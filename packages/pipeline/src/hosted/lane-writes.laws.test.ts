@@ -1,8 +1,8 @@
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {pathToFileURL} from "node:url";
-import {Ledger, LedgerUnreachable} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, LedgerUnreachable} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Effect, Layer, Option, Schema} from "effect";
 import * as fc from "fast-check";
 import {afterAll, describe, expect, it, vi} from "vitest";

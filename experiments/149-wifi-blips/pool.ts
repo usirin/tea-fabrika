@@ -12,8 +12,8 @@
 //
 //   node pool.ts '{"role":"A","variant":"today","ttlMs":30000,"renewEveryMs":10000,"graceMs":0,"periodMs":2000}'
 import {createInterface} from "node:readline";
-import {type HostEvent, Ledger, serve} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
+import {type HostEvent, Ledger, serve} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {Effect, Exit, Fiber, Layer} from "effect";
 import {type LaneNote, laneProgram, type Variant} from "./lane.ts";
 import {LINK_START, type LinkModel, linkUpdate} from "./link.ts";

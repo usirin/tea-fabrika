@@ -1,4 +1,4 @@
-import {type Writer, writerOf} from "@kampus/fabrika";
+import {type Writer, writerOf} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import {type Gate, park, pass} from "./combos.ts";
 

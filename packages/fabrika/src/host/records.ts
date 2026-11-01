@@ -12,7 +12,7 @@ import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} fro
 //
 //   the job      `keepJobs`: the host's table, as tsh tells it, writes when a job began and how it ended
 //   the steps    `stepsInto`: the runs' storage writes one step per Msg each kept machine folds
-//   the spans    `recordTracing` (@kampus/fabrika/otel): each span, once it ends
+//   the spans    `recordTracing` (@kampus/fabrika-old/otel): each span, once it ends
 //
 //   const records = yield* sqliteRecords({dir: "<home>/records", by: "user:owner"});   // the laptop's
 //   const jobs = keepJobs(yield* openJobs(fileStorage(dir, stepsInto(records))), records, "laptop");
@@ -25,7 +25,7 @@ import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} fro
 // step anywhere.
 //
 // The records live where the host says: on the laptop, one SQLite file per job in its home
-// (`sqliteRecords`, @kampus/fabrika/records), the same tables and SQL as the Durable Object
+// (`sqliteRecords`, @kampus/fabrika-old/records), the same tables and SQL as the Durable Object
 // (./job-rules.ts). Every write sends a change for the job, so a reader that follows the job
 // (`Traces.watch`) reads it again at once.
 

@@ -2,7 +2,7 @@ import {execFile} from "node:child_process";
 import {access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Jev} from "@kampus/pipeline/services";
 import {Config, Effect, Layer, Option, Redacted} from "effect";
 import {z} from "zod";

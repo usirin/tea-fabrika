@@ -15,8 +15,8 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+} from "@kampus/fabrika-old";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Fiber, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";

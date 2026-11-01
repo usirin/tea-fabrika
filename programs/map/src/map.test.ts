@@ -1,4 +1,4 @@
-import {type AnyProgram, envelope, fit, type ShapeSchema, shapeOf} from "@kampus/fabrika";
+import {type AnyProgram, envelope, fit, type ShapeSchema, shapeOf} from "@kampus/fabrika-old";
 import {
 	Answer as AsksAnswer,
 	Ask as AsksAsk,

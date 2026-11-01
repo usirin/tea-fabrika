@@ -23,7 +23,7 @@
 // `driveCase` runs the same world, but each child waits to be told when to write its row and when
 // to exit, so a test can push a run down one path of the spec (experiment 139's second question).
 
-import {Ledger, type Row} from "@kampus/fabrika";
+import {Ledger, type Row} from "@kampus/fabrika-old";
 import {Deferred, Effect, Exit, Schema} from "effect";
 import {
 	type ChildPlan,

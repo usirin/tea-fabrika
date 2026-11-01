@@ -12,7 +12,7 @@ import {Effect, Layer, Schedule, Stream} from "effect";
 // made again, and a question whose mark is already on the issue is not posted
 // again. That is how an Act stays safe to repeat where the world has no key.
 //
-// What the pipeline needs from here moved into `@kampus/fabrika` with it
+// What the pipeline needs from here moved into `@kampus/fabrika-old` with it
 // (experiment 103): `sh` (`pipeline/sh.ts`) and `isMachines`
 // (`pipeline/comments.ts`).
 

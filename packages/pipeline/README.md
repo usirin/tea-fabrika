@@ -1,12 +1,12 @@
 # @kampus/pipeline
 
 The work pipeline: the stage machines and their programs, the services they talk to, and the tsh
-that lists them. It is an app on [`@kampus/fabrika`](../fabrika/README.md), and uses only that
+that lists them. It is an app on [`@kampus/fabrika-old`](../fabrika/README.md), and uses only that
 package's public names.
 
 - **The name is a placeholder.** `@kampus/pipeline` is a working name, from experiment 114. The
   pipeline's own name is still open.
-- It was a part of `@kampus/fabrika` (`packages/fabrika/src/pipeline/`) from experiment 103 to
+- It was a part of `@kampus/fabrika-old` (`packages/fabrika/src/pipeline/`) from experiment 103 to
   114, and most of the package `@tea-fabrika/wip` before that.
 - It is `"private": true`, ESM only, for Node 26 and up, like fabrika.
 
@@ -37,8 +37,8 @@ fabrika ships tsh as a library and installs no command. This package installs th
 which hands tsh the whole list. The heart of `src/tsh/fabrika-main.ts`:
 
 ```ts
-import {Shell} from "@kampus/fabrika";
-import {runTsh} from "@kampus/fabrika/shell";
+import {Shell} from "@kampus/fabrika-old";
+import {runTsh} from "@kampus/fabrika-old/shell";
 
 const programs = programsOf(config, process.env.TSH_SCRIPTED, desk, ledger, setup); // a Shell.ProgramList
 process.exitCode = await Effect.runPromise(
@@ -53,12 +53,12 @@ typed line by the pull request or ticket it is about.
 
 ## Where it sits
 
-- Below `programs/`, `wip`, `legacy` and `packs`; above every part of `@kampus/fabrika`
+- Below `programs/`, `wip`, `legacy` and `packs`; above every part of `@kampus/fabrika-old`
   (`layer-rules.json`).
 - It imports fabrika by its public names only: the top level and its subpaths. Two checks hold
   that:
   - `exports` in fabrika's `package.json` lists every subpath there is, so a deep import such as
-    `@kampus/fabrika/program/shape` does not resolve, and `pnpm typecheck` fails.
+    `@kampus/fabrika-old/program/shape` does not resolve, and `pnpm typecheck` fails.
   - `pnpm lint:boundaries` (`boundary-rules.json`) fails on a relative import into another
     package, and on fabrika importing this package.
 - Imported by `wip`, `legacy` and every pack under `packs/`, by name.
@@ -89,7 +89,7 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `settings.ts` | The repository's `fabrika.toml`: its schema, its three load rules, and `repoOf`, which finds the repository's root |
 | `settings-source.ts` | Where `fabrika.toml` is read from: a target's committed default branch, or the start folder; and the line tsh prints about it |
 | `setup.ts` | What tsh needs before a live stage runs: rubrics, a clone, the agent's login |
-| `trace/viewing.ts` | The pipeline's trace view rules. An agent's spans are fabrika's, on `@kampus/fabrika/agents/trace` |
+| `trace/viewing.ts` | The pipeline's trace view rules. An agent's spans are fabrika's, on `@kampus/fabrika-old/agents/trace` |
 | `primitives.ts`, `combos.ts` | The six moves (Gather, Act, Listen, Draft, Check, Judge) and the combos built from them |
 | `schema.ts`, `refine.ts` | `zodCmd`, the zod slot of a Cmd; the draft-and-vet child |
 | `draft-scripted.ts` | A scripted stand-in for the Agent SDK's stream, for tests |
@@ -103,11 +103,11 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `sh.ts`, `comments.ts` | One command run through `execFile`, and `isMachines`: which issue comments a machine wrote. Both were in `wip/src/operator-live.ts`, which stays in `wip` with the old operator's live Layers |
 | `../rubrics/` | The rubric texts the review stage ships with |
 
-Moved to `@kampus/fabrika` in experiment 114, because nothing in them is the pipeline's:
+Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the pipeline's:
 
-- `draft.ts` (a Draft over the Agent SDK) and the reader half of `schema.ts`: `@kampus/fabrika/agents/claude`.
-- `env.ts`, `shell-guard.ts` and the sandbox half of `stages/build/check.ts`: `@kampus/fabrika/agents/sandbox`. The builder's own rules (`builderRefusal`, `builderCheck`) stay here.
-- `trace/agent.ts` and `trace/sdk-events.ts`: `@kampus/fabrika/agents/trace`.
+- `draft.ts` (a Draft over the Agent SDK) and the reader half of `schema.ts`: `@kampus/fabrika-old/agents/claude`.
+- `env.ts`, `shell-guard.ts` and the sandbox half of `stages/build/check.ts`: `@kampus/fabrika-old/agents/sandbox`. The builder's own rules (`builderRefusal`, `builderCheck`) stay here.
+- `trace/agent.ts` and `trace/sdk-events.ts`: `@kampus/fabrika-old/agents/trace`.
 
 ### More on some of these
 
@@ -158,7 +158,7 @@ Moved to `@kampus/fabrika` in experiment 114, because nothing in them is the pip
   - Draft: an agent's run as a Sub over the Agent SDK's stream (fabrika's `createDraft`), its conversation named up front and its answer typed by a schema.
   - Check: a pure function, or a Cmd when it runs code.
   - Judge: one Jev question with fixed choices. The floor is applied in update. `createYesNoJudge` is the one-answer kind: a `noul`, 0 to 1, read as `{yes}`.
-- `schema.ts`: a move's Cmd is tea's own `Cmd.define` from `@demlik/tea/effect`; the one Cmd part kept here is `zodCmd`, for a spec with a zod slot, which tea's Effect `Cmd.define` does not take. It goes when the repo is off zod. What a Draft needs from its output schema (the JSON Schema the Agent SDK takes, and a reader for the answer) is fabrika's, on `@kampus/fabrika/agents/claude`.
+- `schema.ts`: a move's Cmd is tea's own `Cmd.define` from `@demlik/tea/effect`; the one Cmd part kept here is `zodCmd`, for a spec with a zod slot, which tea's Effect `Cmd.define` does not take. It goes when the repo is off zod. What a Draft needs from its output schema (the JSON Schema the Agent SDK takes, and a reader for the answer) is fabrika's, on `@kampus/fabrika-old/agents/claude`.
 - `combos.ts`: the moves joined, as data and pure functions a parent calls: refine (Draft and Check in a loop), gate (pass, or park with why), ask (post a question, listen for replies, read each by code or a Judge into one of a fixed set of answers), remember (write, then read back) and spawn (a child per item).
 - `refine.ts`: draft and vet, a small child machine made per use. `createRefine({ name })` names its Cmds `<name>_write` and `<name>_check`. A writer agent turn, a checker in code, the checker's problems back to the writer in the same conversation, up to a limit, then it stops for its parent. Triage's enrichment in `legacy` is its first use.
 - `laws/standard.test.ts`: every machine in this package and in fabrika's `src/agents/` held to its laws. fabrika's agents are read from fabrika's folder on disk, found through its `package.json`; `laws/tea-host.ts` walks fabrika's host machines through its public names.
@@ -190,5 +190,5 @@ Tests run on scripted services and recorded answers under `fixtures/`. None need
 - [`docs/direction/where-each-piece-lives.md`](../../docs/direction/where-each-piece-lives.md): why the pipeline is its own package.
 - [`docs/ship-machine.md`](../../docs/ship-machine.md) and [`docs/review-machine.md`](../../docs/review-machine.md): the ship and review stages.
 - Experiment 82 in the [experiments index](../../experiments/README.md): what moved into the pipeline and why.
-- [Experiment 103](../../experiments/103-move-without-loss.md): moved into `@kampus/fabrika`.
+- [Experiment 103](../../experiments/103-move-without-loss.md): moved into `@kampus/fabrika-old`.
 - [Experiment 114](../../experiments/114-the-pipeline-moves-out.md): moved out again, into this package.

@@ -13,7 +13,7 @@ import {
 	type Workspace,
 } from "./sandbox.ts";
 
-// `@kampus/fabrika/sandbox/os`: the `os` sandbox. The program runs inside
+// `@kampus/fabrika-old/sandbox/os`: the `os` sandbox. The program runs inside
 // Anthropic's sandbox-runtime (`srt`, Seatbelt on a Mac, bubblewrap on
 // Linux), as experiments 127, 128 and 137 ran it. One settings file a sandbox:
 //

@@ -22,7 +22,7 @@ yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a 
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@kampus/fabrika`, `@demlik/tea` and the pipeline, `@kampus/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
+- It imports `@kampus/fabrika-old`, `@demlik/tea` and the pipeline, `@kampus/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
 - The pipeline is its own package, in `packages/pipeline/`. `@kampus/pipeline` is a working name, from experiment 114.
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.

@@ -11,7 +11,7 @@
 //
 // HTTP is `fetch`, the web standard, which a box and a Worker have too. It is wrapped in Effect
 // here and nowhere else.
-import {Ledger, streams} from "@kampus/fabrika";
+import {Ledger, streams} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Redacted, Schedule, Schema, Stream} from "effect";
 import type {forget, InboxSub, offer, refresh, SignInMsg, trade, want} from "./machine.ts";
 import {hostId, pkce, randomValue} from "./pkce.ts";

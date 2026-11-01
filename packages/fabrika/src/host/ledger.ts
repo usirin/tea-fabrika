@@ -423,7 +423,7 @@ export class Ledger extends Context.Service<
 		 */
 		readonly watch: (stream: string) => Stream.Stream<void>;
 	}
->()("@kampus/fabrika/Ledger") {}
+>()("@kampus/fabrika-old/Ledger") {}
 
 // ---------------------------------------------------------------- one mapping for every driver
 

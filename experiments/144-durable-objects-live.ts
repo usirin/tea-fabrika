@@ -27,7 +27,7 @@
 //
 // Node at the edge, as 93 to 98: child processes (Alchemy's CLI, the writers), fetch, Node's
 // global WebSocket, the clock and the files. The writers and part 1's second half go through
-// `@kampus/fabrika` and Effect.
+// `@kampus/fabrika-old` and Effect.
 import {spawn} from "node:child_process";
 import {createHash, randomBytes} from "node:crypto";
 import {
@@ -41,9 +41,9 @@ import {
 } from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {type Inbox, inboxOf, Ledger, type NewEvent} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
-import {law3Fencing, law12PrefixFence, law18Reply, runLaws} from "@kampus/fabrika/laws";
+import {type Inbox, inboxOf, Ledger, type NewEvent} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
+import {law3Fencing, law12PrefixFence, law18Reply, runLaws} from "@kampus/fabrika-old/laws";
 import {Duration, Effect, Result} from "effect";
 
 const DIR = fileURLToPath(new URL("./144-durable-objects-live/", import.meta.url));
@@ -420,7 +420,7 @@ const partLatency = async (d: Door, p: Plan) => {
 	};
 };
 
-/** The same two calls through the repo's own client, `layerHttp` from `@kampus/fabrika/http`. */
+/** The same two calls through the repo's own client, `layerHttp` from `@kampus/fabrika-old/http`. */
 const viaClient = (d: Door, ledger: string, p: Plan) =>
 	Effect.gen(function* () {
 		const l = yield* Ledger;

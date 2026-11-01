@@ -1,5 +1,5 @@
-import {Ledger, streams, type Writer} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
+import {Ledger, streams, type Writer} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Check, CodeFact, PrFact} from "./ticket.ts";

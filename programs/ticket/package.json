@@ -13,7 +13,7 @@
 	},
 	"dependencies": {
 		"@demlik/tea": "catalog:",
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"@manti-ui/react": "catalog:",
 		"@tea-fabrika/tracker": "workspace:*",
