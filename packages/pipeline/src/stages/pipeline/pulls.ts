@@ -147,7 +147,7 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 						}));
 						return open.id;
 					}
-					const {repo} = yield* work.config;
+					const {repo} = yield* work.origin;
 					const id = known ?? `local:${repo}/pull/${pulls.length + 1}`;
 					yield* save([...pulls, {...pull, id, state: "open", verdicts: []}]);
 					return id;
@@ -365,7 +365,7 @@ export const laneLocalHost = (
 					Effect.gen(function* () {
 						const pull = yield* pulls.find(pr);
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
-						const {repo} = yield* work.config;
+						const {repo} = yield* work.origin;
 						const tip = yield* work.main;
 						const target = bookTarget(planOf(readTicketId(`${repo}#${pull.ticket}`) as TicketId));
 						const checks = yield* onLocal(pull.tree, (local) =>
