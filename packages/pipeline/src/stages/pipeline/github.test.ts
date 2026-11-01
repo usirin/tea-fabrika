@@ -14,7 +14,14 @@ import {nameOf} from "../../tickets/ticket.ts";
 import {ghOn, markerOf} from "../operate/writes.ts";
 import {reviewsOf, type PrFacts} from "../ship/facts.ts";
 import {createdUrl, laneFactsOver, openArgs} from "./github.ts";
-import {fakeEnv, type GhStory, LANE_REPO, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
+import {
+	checkoutFor,
+	fakeEnv,
+	type GhStory,
+	LANE_REPO,
+	makeFakeGh,
+	makeLaneHome,
+} from "./lane-fixture.ts";
 import {laneLayer} from "./layer.ts";
 import {leaveBehind} from "./leave.ts";
 import {
@@ -84,7 +91,7 @@ describe("what GitHub says, under the lane's own facts", () => {
 		expect(read).toMatchObject({checks: "red", mergeable: "conflicts", head: "h"});
 	});
 
-	it("opens on the lane's branch, into main, in the repo the home names", () => {
+	it("opens on the lane's branch, into main, in the repo origin names", () => {
 		const args = openArgs("o/r", {branch: "lane/7", title: "T", body: "B"});
 		expect(args.slice(0, 2)).toEqual(["pr", "create"]);
 		expect(args).toContain("--head");
@@ -342,7 +349,7 @@ describe("the GitHub host, over a stand-in gh", () => {
 	) =>
 		Effect.runPromise(
 			effect.pipe(
-				Effect.provide(laneLayer({home, briefs: "", person: "owner"})),
+				Effect.provide(laneLayer({home, checkout: checkoutFor(home), briefs: "", person: "owner"})),
 				Effect.provide(Layer.fresh(memoryLedger().layer)),
 			),
 		);

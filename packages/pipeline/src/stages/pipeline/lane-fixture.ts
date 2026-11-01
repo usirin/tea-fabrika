@@ -1,10 +1,17 @@
-// A toy repository a lane can run on, and a home that points at it, for tests and the end-to-end
-// run. Everything lands under `dir`: a bare remote, a home with its `pipeline.json`, and a Codex home
+// A toy repository a lane can run on, for tests and the end-to-end run. Everything lands under `dir`:
+// a bare remote, a checkout whose `origin` names it, an empty home, a fake `codex`, and a Codex home
 // with a fake login that holds no secret. `nodeModules`: an install holding vitest and tsc.
+//
+//   <dir>/example/lane.git   the bare remote: the local host reads it as `example/lane`
+//   <dir>/seed               the checkout the lane starts from. Its origin is the bare remote, or
+//                            https://github.com/example/lane.git for the GitHub host, which the
+//                            fake's own ~/.gitconfig sends to the bare remote
+//   <dir>/home               the app's home: the lane writes its work here, and reads nothing
+//   <dir>/bin/codex          the fake Codex, first on the path that `fakeEnv` gives
 
 import {execFileSync} from "node:child_process";
 import {chmodSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
-import {join} from "node:path";
+import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Schema} from "effect";
 
@@ -25,11 +32,21 @@ const FAKE_GH = fileURLToPath(
 /** The repository a toy lane names. Nothing reads this name on a real code host. */
 export const LANE_REPO = "example/lane";
 
-/** The env a run needs so nothing reaches a real login: the fake's own home and Codex home. */
+/** The toy repository's address on GitHub. Nothing reaches it: the fake's `~/.gitconfig` sends git to the bare remote. */
+const GITHUB_ORIGIN = `https://github.com/${LANE_REPO}.git`;
+
+/**
+ * The env a run needs so nothing reaches a real login: the fake's own home and Codex home. Its folder
+ * of programs goes first on the path, so the `codex` a lane runs is the fake.
+ */
 export const fakeEnv = (dir: string) => ({
 	HOME: join(dir, "user"),
 	CODEX_HOME: join(dir, "user", ".codex"),
+	PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`,
 });
+
+/** The checkout a lane on a home `makeLaneHome` made starts from: the seed beside it. */
+export const checkoutFor = (home: string) => join(dirname(home), "seed");
 
 export function makeLaneHome({
 	dir,
@@ -44,7 +61,7 @@ export function makeLaneHome({
 	readonly dir: string;
 	readonly nodeModules: string;
 	readonly reads?: readonly string[];
-	/** What `pipeline.json` says. `github`: put a stand-in `gh` on the path first (`makeFakeGh`). */
+	/** Which host the checkout's origin names. `github`: put a stand-in `gh` on the path first (`makeFakeGh`). */
 	readonly host?: "local" | "github";
 	/** `[review] rubrics`. `null`: the file leaves the table out. */
 	readonly rubrics?: string | null;
@@ -57,7 +74,7 @@ export function makeLaneHome({
 }) {
 	const git = (cwd: string, ...args: readonly string[]) =>
 		execFileSync("git", args, {cwd, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
-	const remote = join(dir, "remote.git");
+	const remote = join(dir, `${LANE_REPO}.git`);
 	const seed = join(dir, "seed");
 	const home = join(dir, "home");
 	mkdirSync(remote, {recursive: true});
@@ -66,7 +83,8 @@ export function makeLaneHome({
 	mkdirSync(join(dir, "user", ".codex"), {recursive: true});
 	writeFileSync(join(dir, "user", ".codex", "auth.json"), '{"auth_mode": "chatgpt"}\n');
 	chmodSync(FAKE_CODEX, 0o755);
-	const codex = join(dir, "codex");
+	mkdirSync(join(dir, "bin"), {recursive: true});
+	const codex = join(dir, "bin", "codex");
 	writeFileSync(
 		codex,
 		`#!/bin/sh\nFAKE_CODEX_LOG=${JSON.stringify(join(dir, "codex.log"))} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_CODEX)} "$@"\n`,
@@ -157,11 +175,13 @@ export function makeLaneHome({
 	git(seed, "commit", "--quiet", "-m", "first");
 	git(seed, "remote", "add", "origin", remote);
 	git(seed, "push", "--quiet", "origin", "main");
-
-	writeFileSync(
-		join(home, "pipeline.json"),
-		JSON.stringify({repo: LANE_REPO, remote, host, codex}),
-	);
+	if (host === "github") {
+		git(seed, "remote", "set-url", "origin", GITHUB_ORIGIN);
+		writeFileSync(
+			join(dir, "user", ".gitconfig"),
+			`[url ${JSON.stringify(remote)}]\n\tinsteadOf = ${GITHUB_ORIGIN}\n`,
+		);
+	}
 	return {home, remote, seed};
 }
 

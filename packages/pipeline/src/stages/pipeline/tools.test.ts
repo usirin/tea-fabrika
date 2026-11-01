@@ -21,9 +21,9 @@ describe("the lines the mutation step reads from a change", () => {
 	afterEach(() => rmSync(dir, {recursive: true, force: true}));
 
 	it("a changed file with a space or a non-ASCII letter in its name gets its span", async () => {
-		const {home} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 		const work = laneWork.pipe(
-			Layer.provide(Layer.succeed(LaneHome, {home, briefs: "", person: "owner"})),
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
 		);
 		const NAMES = ["src/my file.ts", "src/café.ts"];
 		const read = await Effect.runPromise(
@@ -60,9 +60,9 @@ describe("whether a new test kills its mutant", () => {
 
 	/** With `surviving` as what a run finds on the lines it is asked for: as a real one, none on no line. */
 	const killed = async (surviving: readonly string[]) => {
-		const {home} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 		const work = laneWork.pipe(
-			Layer.provide(Layer.succeed(LaneHome, {home, briefs: "", person: "owner"})),
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
 		);
 		const asks: RunAsk[] = [];
 		const onLines = (ask: RunAsk) =>
