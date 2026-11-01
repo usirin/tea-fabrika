@@ -81,7 +81,7 @@ export function makeLaneHome({
 		writeFileSync(to, text);
 	};
 	const link = `ln -s ${nodeModules} node_modules`;
-	put(".gitignore", "node_modules\n.done\n");
+	put(".gitignore", "node_modules\n");
 	put(
 		"tsconfig.json",
 		`${JSON.stringify(
@@ -179,6 +179,11 @@ export interface GhStory {
 	readonly rule?: "none" | "refuses" | "allows";
 	/** A person pushes one more commit: at the first facts read, or just as the merge is about to be written. */
 	readonly moveHeadAt?: "facts" | "merge_read";
+	/**
+	 * A person merges by hand, on a new head of theirs when `newHead`. `next_read`: after the lane first
+	 * read the facts, before its next read. `merge_read`: just as the merge is about to be written.
+	 */
+	readonly mergedByAPerson?: {readonly newHead: boolean; readonly at: "next_read" | "merge_read"};
 	/** The merge's ref moves, and GitHub has not marked the pull request merged by the end of the run. */
 	readonly marksLate?: boolean;
 	/** A fork has a pull request open from a branch of this name, into this repository. */
@@ -241,8 +246,10 @@ export function makeFakeGh({
 			story,
 			pulls: [],
 			checkReads: 0,
+			factsReads: 0,
 			attempt: 1,
 			moved: false,
+			handMerged: false,
 		}),
 	);
 	writeFileSync(calls, "");

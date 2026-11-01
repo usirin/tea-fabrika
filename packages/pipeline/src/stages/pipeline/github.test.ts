@@ -91,10 +91,15 @@ describe("what `gh pr create` answers", () => {
 		expect(createdUrl("o/r", `${URL_IN_REPO}\n`)).toBe(URL_IN_REPO);
 	});
 
-	it("may say something first: the url is its last line", () => {
-		expect(createdUrl("o/r", `Warning: 1 uncommitted change\n${URL_IN_REPO}\n\n`)).toBe(
-			URL_IN_REPO,
-		);
+	// Nothing shows `gh` prints anything above the url on stdout. This only holds what is read: the last line.
+	it("reads its last line, whatever comes above it", () => {
+		expect(createdUrl("o/r", `words above\n${URL_IN_REPO}\n\n`)).toBe(URL_IN_REPO);
+	});
+
+	it("compares the owner and the name without case, as GitHub does", () => {
+		const url = "https://github.com/O/R/pull/9";
+		expect(createdUrl("o/r", `${url}\n`)).toBe(url);
+		expect(createdUrl("O/R", `${URL_IN_REPO}\n`)).toBe(URL_IN_REPO);
 	});
 
 	it.each([
@@ -102,7 +107,16 @@ describe("what `gh pr create` answers", () => {
 		["words", "not a url\n"],
 		["a url with no pull request in it", "https://github.com/o/r\n"],
 		["a pull request with no number", "https://github.com/o/r/pull/x\n"],
+		["a number with more after it", "https://github.com/o/r/pull/9x\n"],
+		["a pull request's page", "https://github.com/o/r/pull/9/files\n"],
+		["a pull request with a query", "https://github.com/o/r/pull/9?x=1\n"],
 		["a pull request in another repository", "https://github.com/o/other/pull/9\n"],
+		["another site with the path in its own", "https://evil.example/github.com/o/r/pull/9\n"],
+		["another site's name around github's", "https://github.com.evil.example/o/r/pull/9\n"],
+		["no tls", "http://github.com/o/r/pull/9\n"],
+		["spaces before the url", `  ${URL_IN_REPO}\n`],
+		["words on the line of the url", `see ${URL_IN_REPO}\n`],
+		["a name that only folds to this one", "https://github.com/o/K/pull/9\n"],
 		["words after the url", `${URL_IN_REPO}\nand then something broke\n`],
 	])("is refused when it is %s", (_name, out) => {
 		expect(createdUrl("o/r", out)).toBeNull();

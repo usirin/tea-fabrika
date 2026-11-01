@@ -204,6 +204,7 @@ const codexRuns = (dir: string) =>
 							readonly keys: readonly string[];
 							readonly rubrics: string | null;
 							readonly diff: string | null;
+							readonly taken: readonly string[] | null;
 							readonly loaded: Readonly<Record<string, string | null>>;
 						},
 				)
@@ -445,6 +446,48 @@ describe("which rubrics judge a change, on the local host", () => {
 		},
 	);
 
+	it(
+		"from the second round the writer reads a head through the judge's copy, and is told only of files there",
+		{timeout: 120_000},
+		async () => {
+			const MAIN_RULES = "Hold every change to its ticket.\n";
+			const ran = await lane({
+				title: "[touch-rules] [review-once] Read names in one form",
+				mainFiles: [
+					{path: "AGENTS.md", text: MAIN_RULES},
+					{
+						path: ".claude/main.test.ts",
+						text: 'import {it} from "vitest";\n\nit("is main\'s own", () => {});\n',
+					},
+				],
+				rubrics: null,
+				within: 100,
+				// The second round's writer is all this needs: the fake's second test passes at once, and it asks.
+				picks: {step: "stop"},
+			});
+			const writers = codexRuns(ran.dir).filter((r) => r.step === "tests");
+			// Two rounds really ran, and the head holds what the second must not read or be told of.
+			expect(writers).toHaveLength(2);
+			const atHead = (path: string) =>
+				execFileSync("git", ["show", `HEAD:${path}`], {
+					cwd: join(ran.dir, "home", "work", "trees", "1"),
+					encoding: "utf8",
+				});
+			expect(atHead(".claude/head.test.ts")).toContain("a head's own");
+			expect(atHead("AGENTS.md")).toBe(`${HEADS_RUBRIC}\n`);
+			const second = writers[1];
+			expect(second?.loaded["AGENTS.md"]).toBe(MAIN_RULES);
+			expect(second?.loaded["src/CLAUDE.md"]).toBeNull();
+			// What the copy holds: the head's own tests and main's, and not the head's file main has not.
+			const told = [second, codexRuns(ran.dir).find((r) => r.step === "mutants")];
+			for (const run of told) {
+				expect(run?.taken).toContain("src/lower.test.ts");
+				expect(run?.taken).toContain(".claude/main.test.ts");
+				expect(run?.taken).not.toContain(".claude/head.test.ts");
+			}
+		},
+	);
+
 	it("uses the rubrics fabrika ships when the file names none", {timeout: 60_000}, async () => {
 		const ran = await lane({rubrics: null, within: 50});
 		expect(ran.stages).toContain("review");
@@ -499,7 +542,7 @@ describe("a lane, whole, on GitHub", () => {
 	});
 
 	it(
-		"goes from triage to merged on a person's yes, once a check that is not required has ended",
+		"goes from triage to merged on a person's yes, once the running check has ended",
 		// One real poll of the checks: 30 seconds on top of the lane.
 		{timeout: 120_000},
 		async () => {
@@ -705,6 +748,84 @@ describe("a lane, whole, on GitHub", () => {
 			expect(rows.map((row) => row.state)).toEqual(["merged"]);
 		},
 	);
+
+	describe("a pull request ship finds merged already", () => {
+		const RED: GhStory = {checks: [{name: "ci", ends: "FAILURE"}]};
+		const pullFactsIn = (ran: Ran) => ran.facts.filter((f) => f.type === "pr");
+
+		it.each<[string, "next_read" | "merge_read", GhStory]>([
+			["before ship's first read, checks red", "next_read", RED],
+			["just as the merge is about to be written", "merge_read", PASSED_CI],
+		])(
+			"on a head of a person's, %s: not this lane's merge, and the ticket says what merged",
+			{timeout: 60_000},
+			async (_name, at, story) => {
+				const ran = await onGitHub({
+					story: {...story, mergedByAPerson: {newHead: true, at}},
+					rubrics: null,
+				});
+				const judged = String(
+					ran.facts.find((f) => f.type === "pushed")?.head ?? "no head was pushed",
+				);
+				const real = ran.pulls[0]?.mergedHead;
+				// A person really merged another head, and the lane wrote nothing to land it.
+				expect(real).not.toBe(judged);
+				expect(ran.wrote).toEqual([]);
+
+				expect(ran.stages).toContain("merge");
+				expect(ran.names.merge).toContain("merged_elsewhere");
+				expect(ran.lines.at(-1)).toContain("merged_elsewhere");
+				expect(ran.lines.at(-1)).not.toContain("ended: done");
+
+				// The ticket says the head that really merged, and never that the lane's own did.
+				expect(pullFactsIn(ran).at(-1)).toMatchObject({state: "merged", head: real});
+				expect(pullFactsIn(ran).filter((f) => f.state === "merged" && f.head === judged)).toEqual(
+					[],
+				);
+				const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+				expect(said.some((body) => body.includes(`${real}`) && body.includes(judged))).toBe(true);
+			},
+		);
+
+		it(
+			"at the head the lane judged, it ends done, with the checks as they read, not green by default",
+			{timeout: 60_000},
+			async () => {
+				const ran = await onGitHub({
+					story: {...RED, mergedByAPerson: {newHead: false, at: "next_read"}},
+					rubrics: null,
+				});
+				const judged = ran.facts.find((f) => f.type === "pushed")?.head;
+				expect(ran.pulls[0]?.mergedHead).toBe(judged);
+				expect(ran.wrote).toEqual([]);
+				expect(ran.lines.at(-1)).toContain("ended: done");
+				expect(pullFactsIn(ran).at(-1)).toMatchObject({
+					state: "merged",
+					head: judged,
+					checks: [{conclusion: "failure"}],
+				});
+			},
+		);
+
+		it(
+			"a merge of the lane's own whose answer was lost still ends done, and green",
+			{timeout: 60_000},
+			async () => {
+				// Ship's next read finds it merged at the lane's head: what a kill right after its merge leaves.
+				const ran = await onGitHub({
+					story: {...PASSED_CI, mergedByAPerson: {newHead: false, at: "next_read"}},
+					rubrics: null,
+				});
+				const judged = ran.facts.find((f) => f.type === "pushed")?.head;
+				expect(ran.lines.at(-1)).toContain("ended: done");
+				expect(pullFactsIn(ran).at(-1)).toMatchObject({
+					state: "merged",
+					head: judged,
+					checks: [{conclusion: "success"}],
+				});
+			},
+		);
+	});
 
 	it(
 		"ends on what went wrong when `gh pr create` answers something that is no pull request",

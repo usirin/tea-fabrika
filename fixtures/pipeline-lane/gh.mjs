@@ -206,6 +206,21 @@ const movedByAPerson = (state, pr) => {
 	state.moved = true;
 };
 
+/** A person merges the pull request by hand, once, on a new head of theirs if the story says so. */
+const mergedByAPerson = (state, pr) => {
+	if (state.handMerged || pr.state !== "OPEN") return;
+	state.handMerged = true;
+	if (state.story.mergedByAPerson.newHead) movedByAPerson(state, pr);
+	const head = headNow(state, pr);
+	const tip = mainTip(state, pr.base);
+	const tree = git(state, "merge-tree", "--write-tree", tip, head).split("\n")[0];
+	const commit = git(state, "commit-tree", tree, "-p", tip, "-p", head, "-m", "Merged by a person.");
+	git(state, "update-ref", `refs/heads/${pr.base}`, commit);
+	pr.state = "MERGED";
+	pr.mergedHead = head;
+	pr.mergeCommit = commit;
+};
+
 /** A head that has reached main is merged, as GitHub marks it. */
 const markLanded = (state, base, commit) => {
 	for (const pr of state.pulls) {
@@ -238,6 +253,8 @@ const graphql = (state, fields) => {
 const GRAPHQL = {
 	where: (state, at) => {
 		const pr = findPull(state, at.number);
+		if (state.story.mergedByAPerson?.at === "next_read" && state.factsReads > 0)
+			mergedByAPerson(state, pr);
 		return {
 			data: {
 				repository: {pullRequest: {headRefOid: headNow(state, pr), baseRefName: pr.base}},
@@ -247,6 +264,7 @@ const GRAPHQL = {
 	facts: (state, at) => {
 		const pr = findPull(state, at.number);
 		if (state.story.moveHeadAt === "facts") movedByAPerson(state, pr);
+		state.factsReads += 1;
 		const head = headNow(state, pr);
 		return {
 			data: {
@@ -315,6 +333,7 @@ const GRAPHQL = {
 	merge_read: (state, at) => {
 		const pr = findPull(state, at.number);
 		if (state.story.moveHeadAt === "merge_read") movedByAPerson(state, pr);
+		if (state.story.mergedByAPerson?.at === "merge_read") mergedByAPerson(state, pr);
 		return {
 			data: {
 				repository: {

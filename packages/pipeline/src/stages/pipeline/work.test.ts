@@ -357,10 +357,100 @@ describe("the settings a lane works by", () => {
 			await lose(home, "AGENTS.md");
 			expect(refusal(await judgeCopy(home, sha))).toMatch(/\S/);
 			const again = join(home, "work", "judges", sha);
-			expect(existsSync(join(again, ".done"))).toBe(false);
+			expect(existsSync(`${again}.done`)).toBe(false);
 			expect(readdirSync(join(home, "work", "judges")).filter((n) => n.endsWith(".tar"))).toEqual(
 				[],
 			);
+		});
+
+		it("takes a name this disk opens as one of them, by the name it really has", async () => {
+			const LONG_S = "ſ";
+			const home = repository(() => {});
+			const sha = await headWith(home, [
+				{path: `agent${LONG_S}.override.md`, text: PASS},
+				{path: `.mcp.j${LONG_S}on`, text: "{}\n"},
+				{path: `.agent${LONG_S}/skills/pass/SKILL.md`, text: PASS},
+				{path: `src/AGENT${LONG_S}.md`, text: PASS},
+				{path: "src/real.ts", text: "export const real = 1;\n"},
+			]);
+			const folder = await copied(home, sha);
+			// By the name on disk: on a Mac the plain names below would find these files as well.
+			expect(readdirSync(folder).filter((name) => name.includes(LONG_S))).toEqual([]);
+			const inSrc = readdirSync(join(folder, "src"));
+			expect(inSrc.filter((name) => name.includes(LONG_S))).toEqual([]);
+			expect(inSrc).toContain("real.ts");
+			for (const gone of ["AGENTS.override.md", ".mcp.json", ".agents", "src/AGENTS.md"])
+				expect(existsSync(join(folder, gone)), gone).toBe(false);
+		});
+	});
+
+	describe("a copy, made once", () => {
+		const COPIES: ReadonlyArray<readonly [string, "copy" | "judgeCopy"]> = [
+			["copies", "copy"],
+			["judges", "judgeCopy"],
+		];
+
+		/** The toy repository, with `install` as its `sh -c` at `[build] install`, in copies only. */
+		const installing = (install: string) =>
+			repository((seed) => {
+				const file = join(seed, ".fabrika/fabrika.toml");
+				const inCopies = `case "$PWD" in */trees/*) exit 0;; esac; ${install}`;
+				writeFileSync(
+					file,
+					readFileSync(file, "utf8").replace(
+						/^install = .*$/m,
+						`install = ["sh", "-c", ${JSON.stringify(inCopies)}]`,
+					),
+				);
+			});
+
+		const asked = (home: string, make: (typeof COPIES)[number][1], sha: string) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return yield* (yield* LaneWork)[make](sha);
+				}).pipe(provideLane(home), Effect.result),
+			);
+
+		const timesIn = (file: string) => (existsSync(file) ? readFileSync(file, "utf8").length : 0);
+
+		it.each(COPIES)(
+			"%s: a head's own .done is a plain file, and the steps still run",
+			async (place, make) => {
+				const runs = join(dir, "runs");
+				const flag = join(dir, "flag");
+				const home = installing(`test -e ${flag} && printf x >> ${runs}`);
+				const sha = await headWith(home, [
+					{path: ".done", text: "a head's own\n"},
+					{path: "AGENTS.md", text: "the head's\n"},
+				]);
+				// The first try stops halfway, inside its install, and leaves a part of the copy behind.
+				expect((await asked(home, make, sha))._tag).toBe("Failure");
+				const half = join(home, "work", place, sha);
+				expect(existsSync(join(half, ".done"))).toBe(true);
+				writeFileSync(join(half, "left-over"), "from the try that broke\n");
+
+				writeFileSync(flag, "");
+				const got = await asked(home, make, sha);
+				if (got._tag === "Failure") throw new Error(`no copy: ${got.failure.says}`);
+				expect(timesIn(runs)).toBe(1);
+				expect(existsSync(join(got.success, "left-over"))).toBe(false);
+				expect(readFileSync(join(got.success, ".done"), "utf8")).toBe("a head's own\n");
+				if (make === "judgeCopy") expect(existsSync(join(got.success, "AGENTS.md"))).toBe(false);
+
+				// Made now: the mark is beside it, and nothing runs twice.
+				expect(existsSync(`${half}.done`)).toBe(true);
+				expect(await asked(home, make, sha)).toMatchObject({_tag: "Success", success: got.success});
+				expect(timesIn(runs)).toBe(1);
+			},
+		);
+
+		it("two lanes that ask for one copy at once get it made once", async () => {
+			const runs = join(dir, "runs");
+			const home = installing(`sleep 0.3; printf x >> ${runs}`);
+			const sha = await headWith(home, []);
+			const both = await Promise.all([asked(home, "copy", sha), asked(home, "copy", sha)]);
+			expect(both.map((got) => got._tag)).toEqual(["Success", "Success"]);
+			expect(timesIn(runs)).toBe(1);
 		});
 	});
 
