@@ -160,6 +160,12 @@ ours opens with Cmd-K, as Linear's does.
   Keys after it are held, in order, until the host answers (`hold.ts`), with no timer. An answer
   of `took: false` lets the key go on as it was. Any other key after the prefix does nothing, as
   in tmux.
+- **On a Mac, Command is the system's and the menu's.** Before any of that, a Command key goes by
+  the desk and the terminal, so Cmd-Q quits whatever has focus, the prefix armed or a popover open
+  (`keyOwner` in `keys.ts`). With a popover open, focus goes back into it first, so Cmd-V pastes
+  there and never into a tile under it. Cmd-K stays the app's palette. Cmd-W and Cmd-Shift-W do
+  nothing for now, the owner's choice: they type nothing and close nothing, and one line in
+  `keys.ts` changes that. On Windows and Linux the Ctrl keys stay with tsh, Ctrl-C and Ctrl-W too.
 - **Typing in a tile goes to the host,** on the tile's port, to its tsh. A text box in a program's
   view stays in the page; the program gets only the inputs it declares.
 - **A click focuses a tile. Dragging a border resizes** the two open tiles beside it. A

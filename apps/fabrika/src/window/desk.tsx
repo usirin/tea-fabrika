@@ -23,7 +23,7 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
-import {keyName} from "../desk/keys.ts";
+import {keyName, keyOwner} from "../desk/keys.ts";
 import {
 	type ContainerNode,
 	findTile,
@@ -242,6 +242,14 @@ const editable = (el: Element | null): el is HTMLElement =>
 	el instanceof HTMLTextAreaElement ||
 	(el instanceof HTMLElement && el.isContentEditable && el.closest("[data-view]") !== null);
 
+/** With something over the desk, keep focus in it: answers whether focus was already there. */
+const focusOver = (target: EventTarget | null): "in" | "moved in" => {
+	const box = document.querySelector<HTMLElement>("[data-over]");
+	if (box === null || (target instanceof Element && box.contains(target))) return "in";
+	(box.querySelector<HTMLElement>("input") ?? box).focus();
+	return "moved in";
+};
+
 /**
  * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
  * over with focus outside it, so the key is dropped, never reaches a tile, and focus has moved in.
@@ -257,10 +265,7 @@ const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "
 		asking: open?.ask != null,
 	};
 	if (keyGoesTo(store.frame.over, name, store.prefix, desk) !== "over") return "desk";
-	const box = document.querySelector<HTMLElement>("[data-over]");
-	if (box === null || (target instanceof Element && box.contains(target))) return "in";
-	(box.querySelector<HTMLElement>("input") ?? box).focus();
-	return "moved in";
+	return focusOver(target);
 };
 
 /**
@@ -361,6 +366,12 @@ const heard = (raw: unknown) => {
 	}
 };
 
+/**
+ * On macOS, the window has no title bar of its own, so the top bar keeps room for its three
+ * buttons, and Command keys are the system's and the menu's.
+ */
+const MAC = /Mac/.test(navigator.userAgent);
+
 /** Take a key from the page: nothing else hears it. */
 const swallow = (e: KeyboardEvent) => {
 	e.preventDefault();
@@ -372,9 +383,30 @@ const swallow = (e: KeyboardEvent) => {
  * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; Escape closes what lies over
  * the desk. While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
  * never to a tile: if focus is not in it, the key is dropped and focus moves in.
+ *
+ * A key the system or the menu owns goes by all of that. Electron offers a key to the menu only if
+ * the page did not call `preventDefault` on it, and ghostty-web calls it on every Command key but
+ * Cmd-C and Cmd-V, and types the letter. Its custom key handler cannot help: answering true calls
+ * `preventDefault` too. So the key stops here, on its way down, before the terminal hears it. A
+ * program's view still hears it: a text box there may read Cmd-Enter.
+ *
+ * The menu's Paste and Cut act on whatever has focus. With something over the desk, focus goes back
+ * into it first, armed prefix or not, so such a key never reaches a tile nobody can see. Focus
+ * moving does not cancel the key, so Cmd-Q still quits.
+ *
+ * A key nobody owns is swallowed: nothing on the page hears it, and cancelling it is what keeps it
+ * from the menu, so Cmd-W does not reach Close Window.
  */
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
+	const pressed = {key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey};
+	const owner = keyOwner(pressed, MAC);
+	if (owner === "nobody") return swallow(e);
+	if (owner === "system") {
+		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
+		if (store.frame.over.kind !== "none") focusOver(e.target);
+		return;
+	}
 	if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "k") {
 		swallow(e);
 		return frameStep({type: "palette"});
@@ -384,7 +416,7 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "close"});
 	}
-	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
+	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
 	if (forOver === "in") return;
@@ -707,9 +739,6 @@ const linkView = (now: LinkNow): Shown => {
 			return absurd(now);
 	}
 };
-
-/** The macOS window has no title bar of its own: the top bar keeps room for its three buttons. */
-const MAC = /Mac/.test(navigator.userAgent);
 
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
