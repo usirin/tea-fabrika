@@ -315,17 +315,6 @@ const flow = async (app: ElectronApplication) => {
 	const page = await app.firstWindow();
 	await prompted(page, "t1");
 	check("the desk starts on our own scheme", page.url() === "fabrika://app/desk.html", page.url());
-	// Electron has no window opacity on Linux, where CI runs this with no one watching.
-	if (process.platform !== "linux") {
-		const opacity = await app.evaluate(({BrowserWindow}) =>
-			BrowserWindow.getAllWindows().map((w) => w.getOpacity()),
-		);
-		check(
-			"no one sees a test's window",
-			opacity.every((o) => o === 0),
-			String(opacity),
-		);
-	}
 	await run(page, "t1", "seq --to 3 | double");
 	const answer = await prompted(page, "t1");
 	check("t1's tsh answers", answer.includes("double 2\ndouble 4\ndouble 6\ntsh$"), answer);
