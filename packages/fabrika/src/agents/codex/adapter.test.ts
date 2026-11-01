@@ -10,7 +10,18 @@ import {
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
-import {codexFolders} from "./adapter.ts";
+import {codexFolders, rawOfLine} from "./adapter.ts";
+
+// A real `codex exec --json` says `error` while it reconnects, and goes on to finish the turn.
+describe("what ends a Codex turn", () => {
+	it("a mid-stream error event is a note, and only turn.failed ends the turn", () => {
+		const line = (value: unknown) => rawOfLine(JSON.stringify(value));
+		expect(line({type: "error", message: "Reconnecting... 1/5"})).toEqual([]);
+		expect(line({type: "turn.failed", error: {message: "over the limit"}})).toMatchObject({
+			broke: expect.stringContaining("over the limit"),
+		});
+	});
+});
 
 // The lane starts Codex by the bare name `codex`. Its folders must come from the PATH, as the
 // system finds it, or the box closes the binary its own tools run from.
