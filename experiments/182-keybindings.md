@@ -17,7 +17,9 @@ the rest:
   bound to that. The probe below shows it.
 - **A browser tab is not one list.** In Chromium's source, an installed app window reserves no
   keys at all, and fullscreen reserves only the way out of fullscreen. Only a normal tab keeps
-  Cmd-W and the rest.
+  Cmd-W and the rest. Apps that ship a desktop app and a web app keep one keymap, and none of
+  them refuses a binding because a browser keeps its key: see
+  [apps with a desktop and a web version](#apps-with-a-desktop-and-a-web-version).
 
 ```text
 how every tool read does it, in one line each
@@ -34,8 +36,8 @@ decision for `next/` in [the desktop layer](../docs/direction/the-desktop-layer.
 
 ## What was read
 
-About 45 public pages and two source files, each in the links at the end. Quotes are short,
-checked against the page as fetched. Anything not found on a page is marked **guess**, or
+About 60 public pages and 13 source files, each in the links at the end. Quotes are short,
+checked against the page or file as fetched. Anything not found on a page is marked **guess**, or
 **unread** when the page could not be fetched.
 
 ## Tiling and terminals
@@ -225,8 +227,7 @@ Cmd-K again      leave the mode; the bindings work
 - **A browser keeps some keys.** Chromium's `IsReservedCommandOrKey` says: "In Apps mode, no
   keys are reserved." In fullscreen, all commands except leaving fullscreen "should be
   delivered to the web page". In a normal tab it asks a separate list, `IsReservedCommand`,
-  which lives in another file and was **unread**. That Ctrl-W and Ctrl-N are kept there is
-  from VS Code's browser page [r14], not from Chromium's source. [r44] The Keyboard Lock API gets more keys, but "only when
+  read below in [what a tab can never get](#what-a-tab-can-never-get). [r44] The Keyboard Lock API gets more keys, but "only when
   JavaScript-initiated full screen is active", since Chrome 130 with a permission, and only
   keys "granted access by the underlying operating system". [r45] [r46] It is experimental in
   MDN. [r47]
@@ -235,7 +236,7 @@ Cmd-K again      leave the mode; the bindings work
   and keyup events and the menu shortcuts". [r48] So W5's `electron = {cannot: ["Cmd-Q",
   "Cmd-H"]}` is a choice we make, not a limit Electron sets. Electron's own docs warn that
   `globalShortcut` on macOS has "a long-standing bug" with non-QWERTY layouts. [r49] The
-  accelerator page was **unread**.
+  accelerator page is read below, in [Electron's accelerators](#electrons-accelerators).
 - **How our terminal gets its keys (today's version).** `apps/fabrika` uses ghostty-web 0.4.0.
   Its key handler lets only Cmd-C and Cmd-V (and Ctrl-V) pass. Every other key is encoded from
   `event.code`, the place, then canceled with `preventDefault`. That cancel is what kept
@@ -246,6 +247,158 @@ Cmd-K again      leave the mode; the bindings work
   tab") and reports a "base layout key", the key's place on a US PC-101 board. Alacritty,
   foot, Ghostty, iTerm2, WezTerm and xterm.js are among those that speak it. [r50] Whether
   ghostty-web 0.4.0 speaks it is **unverified**: its README and bundle do not mention it.
+
+## Apps with a desktop and a web version
+
+fabrika is this kind of app, since a browser tab is always a client. **The answer.** No app
+read refuses a keymap because a browser keeps a key. The plain way is VS Code's: one keymap
+for both. A default on a key the browser keeps gets a second key in the web build. A person's
+own row is kept as written, and in a normal tab it is simply dead. Only the docs say so. An
+installed app window, or fullscreen, gets the keys back. Microsoft's Teams and Outlook go the
+other way: two keymaps, side by side in the docs.
+
+```ts
+// VS Code's source, one default row (fileCommands.ts, New File). One table; the build picks the key.
+primary: isWeb ? (isWindows ? KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyCode.KeyN) : KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyN) : KeyMod.CtrlCmd | KeyCode.KeyN,
+secondary: isWeb ? [KeyMod.CtrlCmd | KeyCode.KeyN] : undefined,
+```
+
+| App | Keymaps | What moves in a tab | How the person is told |
+|---|---|---|---|
+| VS Code and vscode.dev | one, with web keys in code | New File Cmd-N to Cmd-Alt-N; Cmd-1 to 9 and Cmd-Alt-arrows dropped | a table on one docs page |
+| Linear | one (**guess**: no doc says otherwise) | no key named | the download page: less risk of a clash in the app |
+| Figma | one | nothing moves | nothing; people find out in the forum |
+| Slack | one, with a few moved | F6 to Cmd-F6 or Ctrl-F6; some keys are desktop only | `**` on desktop-only keys, a browser column |
+| Notion | one | Cmd-N, Cmd-T, Cmd-Shift-N exist only in the app | a "Desktop keyboard shortcuts" group |
+| Obsidian | desktop only | Publish sites have no keys in the docs | nothing to compare |
+| Teams | two | Ctrl-E to Ctrl-Alt-E, Ctrl-N to Alt-N, Ctrl-1 to Ctrl-Shift-1 | a Desktop and a Web column; Ctrl-. in the app |
+| Outlook | two, and the web lets a person pick a set | new mail Ctrl-N to N, calendar Ctrl-2 to Ctrl-Shift-2 | per-version docs, a set picker in settings |
+
+- **VS Code.** Its web page says "certain keyboard shortcuts may also work differently in the
+  web": Cmd-N "opens a new window instead", Cmd-W "closes the current tab in browsers", and
+  Firefox keeps Cmd-Shift-P, so use F1. [r14] The source has one registry. A default row picks
+  its key by build, and in the web it keeps the desktop key as a second key, which works
+  wherever the browser lets it through (the block above). [r56] New Window does the same with
+  Shift. [r57] The docs give Ctrl-Shift-Alt-N as the way to close an editor, but in the source
+  that is New Window's web key. **Guess:** a slip in the docs; no web key for Close Editor was in
+  the files read.
+- **VS Code drops some defaults in a tab, and never a person's row.** `canIUse.ts` sorts each
+  build into three: `Always` when `platform.isNative || browser.isStandalone()` (the desktop app
+  and an installed web app), `FullScreen` when `navigator.keyboard` exists or the browser is
+  Safari, and `None` otherwise. [r55] Below `Always`, defaults and extension keys on Cmd or Ctrl
+  with a digit, or Cmd-Alt or Ctrl-Alt with Left or Right, are left out of the table, with the
+  comment "should not be used by default in web". The person's own rows go through
+  `_resolveUserKeybindingItems`, which skips that check. [r54] So a person's row on a key the
+  browser keeps is neither refused nor dropped. In a tab it does nothing. **Guess:** the
+  Keyboard Shortcuts editor shows no mark on it; nothing in the files read adds one.
+- **VS Code asks for more keys.** In fullscreen it calls `keyboard?.lock(['Escape'])` and
+  rebuilds the table, which "will bring back all unbound keyboard shortcuts". [r54] Since Cmd-W
+  closes the whole browser tab, `window.confirmBeforeClose` is `keyboardOnly` in a tab and
+  `never` on desktop: "on by default in web, unless PWA". Its own text warns that "browsers may
+  still decide to close a tab or window without confirmation". [r58]
+- **Linear.** Its download page says that in the desktop app "keyboard shortcuts have less risk
+  of conflicting with browser-based presets or custom shortcuts", and lists "tab support within
+  the app". "Nearly all functionality in the desktop app including offline mode is available on
+  the web." It names no key. [r59] A person cannot rebind, so the last question does not come up.
+- **Figma.** Its keyboard page splits keys by Mac and Windows only, and never names the browser.
+  [r16] Its desktop guide lists tabs and split view, and no keys. [r60] Its layout post says the
+  browser's layout API "is not available on all browsers", while the desktop app can "detect the
+  OS keyboard setting". [r18] In a forum thread, Cmd-B and Cmd-U work in the desktop app and fail
+  in the browser; the staff reply asks about layouts and extensions. [r61] One keymap, and the
+  person is told nothing.
+- **Slack.** "Shortcuts marked with a double asterisk (\*\*) only work on the Slack desktop app",
+  among them preferences, upload, Cmd-J and Quit. [r62] Its keyboard navigation page has a
+  desktop and a browser column: the next section is F6 in the app and Cmd-F6 or Ctrl-F6 in a
+  browser. [r63] Chromium does not keep F6 in a desktop tab (below), so this is Slack's choice,
+  not a limit. Why is not said. **Guess:** to leave the browser's own F6 alone.
+- **Notion.** Five keys sit under "Desktop keyboard shortcuts": Cmd-N for a new page, Cmd-Shift-N
+  for a new window, Cmd-T for a new tab, Cmd-click and Option-Shift-click. [r64] Each is a key a
+  Chromium tab keeps, or a link click a browser owns. In a tab they are just missing, with no
+  other key in their place.
+- **Obsidian.** Hotkeys are set by pressing, "you can assign multiple hotkey combinations to a
+  single command", and system keys such as Ctrl-C "cannot be customized in Obsidian". The page
+  says nothing about the web. [r65] Obsidian Publish is a site for readers; no keys for it were
+  found in the docs. There is nothing to compare.
+- **Teams.** One table with a Desktop and a Web column, and no reason given: search Ctrl-E and
+  Ctrl-Alt-E, new chat Ctrl-N and Left Alt-N, settings Ctrl-, and Ctrl-Shift-,, help F1 and
+  Ctrl-F1. Ctrl-. opens the list in both. [r66] Chromium keeps Ctrl-N but not Ctrl-E or Ctrl-1,
+  so Teams moves every browser key, kept or not.
+- **Outlook.** "Go to Calendar" is Ctrl-2 in Outlook for Windows and Ctrl-Shift-2 on the web, and
+  a new message is Ctrl-N against N. On the web a person can "choose which keyboard shortcuts you
+  want to use: Outlook.com, Yahoo Mail, Gmail, or Outlook", or turn them off. [r67] The web picks
+  a whole set, never one key.
+- **Who asks the browser for more keys:** only VS Code, in the files and pages read: an installed
+  app gets every key, and fullscreen locks Escape. Linear, Figma, Slack and Notion point people
+  at the desktop app instead. None mentions the Keyboard Lock API. Teams and Outlook as installed
+  web apps: **unread.**
+
+### What a tab can never get
+
+Read in Chromium's source at commit `10919877`. [r44] [r51] [r52] [r53]
+
+- **The list.** `IsReservedCommand` is `kReservedCommandIds` in `accelerator_table.cc`: close tab,
+  close window, new incognito window, new isolated window, new tab, new window, restore tab,
+  select next and previous tab, cycle to next and previous tab, and exit. F6 and Shift-F6 are on
+  it only on Android, with a TODO: "Check if pane navigation should be reserved on Desktop as
+  well." [r51]
+- **Windows and Linux keys** for those commands: Ctrl-W, Ctrl-F4, Ctrl-Shift-W, Alt-F4, Ctrl-T,
+  Ctrl-Shift-T, Ctrl-N, Ctrl-Shift-N, Ctrl-Tab, Ctrl-Shift-Tab, Ctrl-PageDown and Ctrl-PageUp.
+  Linux adds the Close and New media keys. Ctrl-Q for exit is in the Android table only. [r51]
+- **Mac keys** come from the main menu, which maps a pressed key back to these commands, with
+  Close Window by `performClose:` and Quit by `terminate:`. [r52] [r53] Outside the menu it adds
+  Cmd-Shift-] and [, Ctrl-PageDown and PageUp, and Cmd-Option-Right and Left. [r52] That the
+  menu's keys are Cmd-W, Cmd-Shift-W, Cmd-T, Cmd-Shift-T, Cmd-N, Cmd-Shift-N, Cmd-Q and Ctrl-Tab
+  is from Chrome's menu as shown; the string files were **unread**.
+- **ChromeOS** keeps the Back, Forward and Refresh keys. **Linux** frees a key the person set as a
+  text-editing key. [r44]
+- **Not kept, so a page can take them** with `preventDefault`: Cmd or Ctrl with 1 to 9, Cmd-L,
+  Cmd-R, F5, F6, Ctrl-E. VS Code and Teams still move some of them.
+- **An installed app window** keeps none, and Chrome's Mac menu drops New Tab, Close Tab, Restore
+  Tab and Incognito there (`remove_if(is_pwa)`). [r44] [r53]
+- **Firefox** has its own list. Read in the gecko-dev mirror, which was archived after its last
+  push in July 2025, so it may be dated: `reserved="true"` on new window, new tab, close, close
+  window, private window (Cmd-Shift-P, as VS Code's page says), quit (with Shift on Windows,
+  without on Linux, handled apart on a Mac) and leaving fullscreen. The letters live in string
+  files, **unread**. [r68] [r14] So Firefox keeps Cmd-Shift-P and Chromium does
+  not. The list is per browser. **Safari: unread.**
+- **For us:** today's default prefix, Ctrl-B, is on neither list, and neither is F6 on a desktop.
+  So the no-trap rule (the prefix or F6) holds in a tab today. The Android TODO says F6 may join
+  the list.
+
+### Electron's accelerators
+
+- The old accelerator page (`/docs/latest/api/accelerator`) now returns 404. What it held is the
+  Accelerators section of the keyboard shortcuts tutorial. [r49]
+- An accelerator is one chord: modifiers `Command`, `Control`, `CommandOrControl`, `Alt`,
+  `Option`, `AltGr`, `Shift`, `Super` (alias `Meta`), then one key, with punctuation such as `|`
+  among the keys. "Use `Alt` instead of `Option`", and "on Linux and Windows, the `Command`
+  modifier does not have any effect." [r49]
+- It names no key sequence, says nothing about layouts, and does not say what a bad accelerator
+  does. **Guess from the list:** a prefix sequence like `C-b f` cannot be a menu accelerator, so a
+  menu can show only the keys without a prefix.
+- Local shortcuts "are triggered only when the application is focused", map to menu items, and
+  "can work even when menu items are hidden". [r49]
+
+### What it means for the open pick
+
+The owner's pick: a binding on a key a browser tab cannot get either fails the whole file at
+load (W5's old rule), or is turned off in that tab only, with a note.
+
+- **Nobody read refuses the file.** VS Code, the closest twin, runs one table in both builds and
+  keeps a person's row on a browser key. That is "off in the tab only", without the note.
+- **The note is ours.** No app read marks a dead row. VS Code, Slack and Teams tell it in their
+  docs, Notion in a group heading, Figma not at all.
+- **A tab cannot see the key it lost.** Cmd-W never reaches the page, so the tab cannot learn by
+  listening. The off list has to be data, per browser and platform, from the lists above. It is
+  empty in an installed app window and nearly empty in fullscreen. VS Code keeps its own short
+  list in code the same way.
+- **The plain industry way:** one keymap; a default on a browser key gets a web key, as VS Code's
+  `isWeb ?` rows do; a person's rows are kept; a dead key is told at most in the docs; installing
+  the app, or fullscreen, gets the keys back.
+- **Lean: off in the tab only, with a note. 65% to 80%.** Why: no app refuses a file, and VS Code's
+  source turns keys off per window. The doubt: the per-row note is new and untried, and a
+  per-browser list can go stale (Firefox's differs, Safari's is unread). A run of the keys program
+  in a Chrome, a Firefox and a Safari tab would settle it.
 
 ## Our own evidence
 
@@ -301,7 +454,11 @@ repo: it is twenty lines over a copied file.
 - **The plain known way is tmux's shape, with Ghostty's two verbs and VS Code's overlay.** A
   prefix, named tables, rows of key to command word, defaults first and the person's rows
   over them. That is the shape `keys.ts` already has. Confidence 80%: every terminal read
-  converged on it, and it matches W5.
+  converged on it, and it matches W5. **Since then** the owner picked, as a tryout, a prefix
+  that is a setting (`prefix = "ctrl+a"`, as tmux's `prefix` option) and bindings written
+  command to key (`zoom = ["z", "enter"]`, `close = []` to unbind), which no tool read does. The
+  cost and what would flip it back are in
+  [the note](../docs/direction/keybindings-are-configurable.md#k6-command-to-key-a-tryout).
 - **Bind by pressing, like Ableton.** A mode that shows what can take a key, then one press.
   VS Code's "listens for key presses" box is the same idea in a list. Confidence 70%: nobody
   in the tiling world does it, so there is no prior art for a tile desk.
@@ -321,8 +478,17 @@ repo: it is twenty lines over a copied file.
   `event.key`, so the probe shows what our code does with those characters, not what a browser
   hands it.
 - No screen reader was run. Every NVDA and VoiceOver clash above is from their docs.
-- Raycast, JAWS, Chromium's `IsReservedCommand` list, the ARIA 1.2 section on `aria-keyshortcuts`, Electron's accelerator page and
-  GNOME Terminal's copy key were not read.
+- Raycast, JAWS, the ARIA 1.2 section on `aria-keyshortcuts` and GNOME Terminal's copy key were
+  not read. Nor was Safari's list of keys a tab cannot get, or the string files that give Chrome's
+  Mac menu and Firefox their letters.
+- No browser was run. Chromium's list is read from source at one commit and Firefox's from an
+  archived mirror, so either may have moved. Which keys a tab loses is read, not pressed.
+- What VS Code's Keyboard Shortcuts editor shows for a row that is dead in a tab is a guess from
+  its source. Linear, Figma, Slack, Notion, Teams and Outlook were read in their docs only; their
+  apps were not opened, and their code is closed.
+- Why Slack and Teams move keys Chromium lets a page take (F6, Ctrl-E, Ctrl-1) is not said
+  anywhere read.
+- Whether Teams, Outlook or Slack get more keys as an installed web app is unread.
 - Whether Linear lets a person change keys is from the absence of docs, not a statement.
 - How Ableton handles a key pressed twice in Key Map mode is a guess.
 - Whether people want to rebind at all. Linear and Figma ship without it and do fine. The
@@ -380,3 +546,21 @@ repo: it is twenty lines over a copied file.
 - [r48]: https://www.electronjs.org/docs/latest/api/web-contents
 - [r49]: https://www.electronjs.org/docs/latest/tutorial/keyboard-shortcuts
 - [r50]: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+- [r51]: https://github.com/chromium/chromium/blob/109198775d829c97707fbfb9f51eff98a52d801c/chrome/browser/ui/accelerator_table.cc
+- [r52]: https://github.com/chromium/chromium/blob/109198775d829c97707fbfb9f51eff98a52d801c/chrome/browser/global_keyboard_shortcuts_mac.mm
+- [r53]: https://github.com/chromium/chromium/blob/109198775d829c97707fbfb9f51eff98a52d801c/chrome/browser/ui/cocoa/main_menu_builder.mm
+- [r54]: https://github.com/microsoft/vscode/blob/8fb60541db0e1a371ea40157e0f58951ae4a485d/src/vs/workbench/services/keybinding/browser/keybindingService.ts
+- [r55]: https://github.com/microsoft/vscode/blob/8fb60541db0e1a371ea40157e0f58951ae4a485d/src/vs/base/browser/canIUse.ts
+- [r56]: https://github.com/microsoft/vscode/blob/8fb60541db0e1a371ea40157e0f58951ae4a485d/src/vs/workbench/contrib/files/browser/fileCommands.ts
+- [r57]: https://github.com/microsoft/vscode/blob/8fb60541db0e1a371ea40157e0f58951ae4a485d/src/vs/workbench/browser/actions/windowActions.ts
+- [r58]: https://github.com/microsoft/vscode/blob/8fb60541db0e1a371ea40157e0f58951ae4a485d/src/vs/workbench/browser/workbench.contribution.ts
+- [r59]: https://linear.app/docs/get-the-app
+- [r60]: https://help.figma.com/hc/en-us/articles/5601429983767-Guide-to-the-Figma-desktop-app
+- [r61]: https://forum.figma.com/ask-the-community-7/same-commands-work-on-desktop-but-fail-in-browser-20194
+- [r62]: https://slack.com/help/articles/201374536-Slack-keyboard-shortcuts
+- [r63]: https://slack.com/help/articles/115003340723-Navigate-Slack-with-your-keyboard
+- [r64]: https://www.notion.com/help/keyboard-shortcuts
+- [r65]: https://obsidian.md/help/hotkeys
+- [r66]: https://support.microsoft.com/en-us/office/keyboard-shortcuts-for-microsoft-teams-2e8e2a70-e8d8-4a19-949b-4c36dd5292d2
+- [r67]: https://support.microsoft.com/en-us/office/keyboard-shortcuts-for-outlook-3cdeb221-7ae5-4c1d-8c1d-9e63216c1efd
+- [r68]: https://github.com/mozilla/gecko-dev/blob/5836a062726f715fda621338a17b51aff30d0a8c/browser/base/content/browser-sets.inc
