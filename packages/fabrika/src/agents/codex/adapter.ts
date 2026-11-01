@@ -270,7 +270,13 @@ export const codexAdapter = (
 								forceKillAfter: "3 seconds",
 							}),
 						)
-						.pipe(Effect.mapError((e) => failed("start", String(e))));
+						.pipe(
+							Effect.mapError((e) => failed("start", String(e))),
+							// Node throws some refusals where it reports others, and a throw here is a defect:
+							// E2BIG, a prompt over what the system lets one command carry, would kill the run
+							// that asked. It is a turn that could not start, like any other.
+							Effect.catchDefect((defect) => Effect.fail(failed("start", String(defect)))),
+						);
 					const updates = handle.stdout.pipe(
 						Stream.decodeText(),
 						Stream.splitLines,
