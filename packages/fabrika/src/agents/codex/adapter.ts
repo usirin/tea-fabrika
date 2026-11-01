@@ -1,5 +1,5 @@
 import {realpathSync} from "node:fs";
-import {dirname} from "node:path";
+import {dirname, resolve, sep} from "node:path";
 import {Effect, FileSystem, Option, Schema, Stream} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
 import {
@@ -16,7 +16,7 @@ import {
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
 import {type Env, runEnv, toolHome} from "../claude/env.ts";
-import {gitOf, toolchain, toolRoot} from "../claude/sandbox.ts";
+import {gitOf, onPath, toolchain, toolRoot} from "../claude/sandbox.ts";
 
 // Codex through `codex exec --json`, as an adapter of the interface
 // (../agent/turn.ts). One process per turn: it prints one JSON event per
@@ -180,13 +180,16 @@ export const codexEnvOf = (parent: Env, home: string): Record<string, string> =>
  * A standalone install keeps its releases under `~/.codex/packages` behind a
  * `current` link, so the box opens that folder (as experiment 152 did), never
  * the rest of `~/.codex`. A Codex at `~/codex` answers home here: the fence
- * opens nothing for it (`homeFence`).
+ * opens nothing for it (`homeFence`). A bare name is found on the PATH, as the
+ * system finds it. Not found: no folder, and the start fails on its own.
  */
-const codexFolders = (codex: string, owner: string): string[] => {
-	const real = Option.liftThrowable((p: string) => realpathSync(p))(codex);
+export const codexFolders = (codex: string, owner: string, env: Env): string[] => {
+	const found = codex.includes(sep) ? resolve(codex) : onPath(codex, env);
+	if (found === undefined) return [];
+	const real = Option.liftThrowable((p: string) => realpathSync(p))(found);
 	const packages = `${owner}/.codex/packages`;
-	const target = Option.isSome(real) ? real.value : codex;
-	return [dirname(codex), target.startsWith(`${packages}/`) ? packages : toolRoot(target, owner)];
+	const target = Option.isSome(real) ? real.value : found;
+	return [dirname(found), target.startsWith(`${packages}/`) ? packages : toolRoot(target, owner)];
 };
 
 export const codexAdapter = (
@@ -206,7 +209,7 @@ export const codexAdapter = (
 				Effect.gen(function* () {
 					const tools = [
 						...toolchain(parent),
-						...codexFolders(config.codex, owner),
+						...codexFolders(config.codex, owner, parent),
 						...gitOf(turn.folder),
 					];
 					const profile = codexConfig(

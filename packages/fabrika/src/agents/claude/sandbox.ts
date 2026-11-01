@@ -93,6 +93,17 @@ export const toolRoot = (program: string, home: string): string => {
 	return tooMuch ? holder : above;
 };
 
+/** Where the system would find `name` on this PATH. A relative entry means no fixed place, so it never counts. */
+export const onPath = (
+	name: string,
+	env: Readonly<Record<string, string | undefined>>,
+): string | undefined =>
+	(env.PATH ?? "")
+		.split(delimiter)
+		.filter((dir) => isAbsolute(dir))
+		.map((dir) => join(dir, name))
+		.find((path) => existsSync(path));
+
 /**
  * The folders under home the builder's commands run from: where `node` and
  * `pnpm` on the PATH are, with their links followed, where the node running
@@ -104,13 +115,7 @@ export const toolchain = (
 	exec: string = process.execPath,
 ): readonly string[] => {
 	const home = homedir();
-	const onPath = (name: string) =>
-		(env.PATH ?? "")
-			.split(delimiter)
-			.filter((dir) => isAbsolute(dir))
-			.map((dir) => join(dir, name))
-			.find((path) => existsSync(path));
-	const programs = [onPath("node"), onPath("pnpm"), exec].flatMap((p) =>
+	const programs = [onPath("node", env), onPath("pnpm", env), exec].flatMap((p) =>
 		p === undefined ? [] : [p, realOf(p)],
 	);
 	const roots = programs.flatMap((program) => {
