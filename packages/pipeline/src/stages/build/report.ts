@@ -1,5 +1,5 @@
 import {createServer} from "node:http";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {layer as nodeHttpServer} from "@effect/platform-node/NodeHttpServer";
 import {Context, Effect, Layer, Option, Schema, type Scope} from "effect";
 import {McpProtocol, McpServer, Tool, Toolkit} from "effect/ai";

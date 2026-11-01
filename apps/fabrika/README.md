@@ -516,7 +516,7 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 ```
 
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
-  it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
+  it downloads on first use, so pnpm needs no `allowBuilds` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
   `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, the one-copy lock, and the
   host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another

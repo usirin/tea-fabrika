@@ -14,7 +14,7 @@ person's secret in its data folder (`.teahouse/door-secret`, readable by you onl
 read it from there (`layerAttach`). So every write is stamped as that person, `user:owner`, and
 a holder reads like `host-a@1761000000000@user:owner`: the host's own tag, then who it is.
 
-You need Node `26.12.0`, `pnpm` 10, four terminals and a spare shell. Run everything from the
+You need Node `26.13.0`, `pnpm` 12, four terminals and a spare shell. Run everything from the
 repo root, after `pnpm install --frozen-lockfile`.
 
 ## 1. Start the ledger

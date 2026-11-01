@@ -3,7 +3,7 @@ import {existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {harnessOf, type PendingAsk} from "@kampus/fabrika-old/agents/acp";
 import {TOOLS} from "@kampus/fabrika-old/agents/sandbox";

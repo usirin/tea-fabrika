@@ -1,0 +1,111 @@
+diff --git a/lib/Auth/OAuthFlow.d.ts b/lib/Auth/OAuthFlow.d.ts
+index 37fd00f962920ec62a390b4be9467e6760791625..eb2df7f6bf73b7ae00a93c1b4b3bd328dad7a466 100644
+--- a/lib/Auth/OAuthFlow.d.ts
++++ b/lib/Auth/OAuthFlow.d.ts
+@@ -1,4 +1,8 @@
+-import * as Crypto from "effect/Crypto";
++import type { Digest } from "effect/crypto/Digest";
++import type { SecureRandom } from "effect/crypto/SecureRandom";
++declare namespace Crypto {
++    type Crypto = Digest | SecureRandom;
++}
+ import * as Effect from "effect/Effect";
+ import * as Redacted from "effect/Redacted";
+ import * as Schema from "effect/Schema";
+diff --git a/lib/Auth/OAuthFlow.js b/lib/Auth/OAuthFlow.js
+index c59878051a06d209772ce23ebfbf2572c5cdd202..1c6dcbff4e90429b6628bff98c7c6ce4abca7965 100644
+--- a/lib/Auth/OAuthFlow.js
++++ b/lib/Auth/OAuthFlow.js
+@@ -1,6 +1,7 @@
+ import http from "node:http";
+ import * as Clock from "effect/Clock";
+-import * as Crypto from "effect/Crypto";
++import * as Digest from "effect/crypto/Digest";
++import * as SecureRandom from "effect/crypto/SecureRandom";
+ import * as Data from "effect/Data";
+ import * as Duration from "effect/Duration";
+ import * as Effect from "effect/Effect";
+@@ -121,18 +122,13 @@ export const OAuthCredentials = Schema.Struct({
+     scopes: Schema.String.pipe(Schema.Array, Schema.mutable),
+ });
+ const randomText = Effect.fn(function* (length) {
+-    const crypto = yield* Crypto.Crypto;
+-    const bytes = yield* crypto
+-        .randomBytes(length)
+-        .pipe(Effect.mapError((cause) => new OAuthCryptoError({ operation: "Secure random generation", cause })));
+-    return Base64Url.encode(bytes);
++    const random = yield* SecureRandom.SecureRandom;
++    return Base64Url.encode(yield* random.randomBytes(length));
+ });
+ const generatePKCE = Effect.fn(function* (length = 96) {
+-    const crypto = yield* Crypto.Crypto;
++    const digest = yield* Digest.Digest;
+     const verifier = yield* randomText(length);
+-    const challenge = yield* crypto
+-        .digest("SHA-256", new TextEncoder().encode(verifier))
+-        .pipe(Effect.mapError((cause) => new OAuthCryptoError({ operation: "PKCE digest", cause })));
++    const challenge = yield* digest.digest(Digest.sha256, new TextEncoder().encode(verifier));
+     return { verifier, challenge: Base64Url.encode(challenge) };
+ });
+ const TokenResponse = Schema.Struct({
+diff --git a/lib/Stack.d.ts b/lib/Stack.d.ts
+index 1182271a665821b8d17bc3aa424f41a68ac9d748..5c3b17ae89a968fac4323cef96e47ef19ebc4b7d 100644
+--- a/lib/Stack.d.ts
++++ b/lib/Stack.d.ts
+@@ -1,6 +1,8 @@
+ import type { ConfigError } from "effect/Config";
+ import * as Context from "effect/Context";
+-import type { Crypto } from "effect/Crypto";
++import type { Digest } from "effect/crypto/Digest";
++import type { SecureRandom } from "effect/crypto/SecureRandom";
++type Crypto = Digest | SecureRandom;
+ import * as Effect from "effect/Effect";
+ import { FileSystem } from "effect/FileSystem";
+ import type { HttpClient } from "effect/http/HttpClient";
+diff --git a/lib/Util/PlatformServices.d.ts b/lib/Util/PlatformServices.d.ts
+index 533d43cc7a9b4926d2c23dc8f3d7713cf20c2124..939b3cb664afe4a989a64454b07cd385614827e0 100644
+--- a/lib/Util/PlatformServices.d.ts
++++ b/lib/Util/PlatformServices.d.ts
+@@ -1,4 +1,6 @@
+-import type { Crypto } from "effect/Crypto";
++import type { Digest } from "effect/crypto/Digest";
++import type { SecureRandom } from "effect/crypto/SecureRandom";
++type Crypto = Digest | SecureRandom;
+ import type { Input as DurationInput } from "effect/Duration";
+ import * as Effect from "effect/Effect";
+ import type { FileSystem } from "effect/FileSystem";
+diff --git a/lib/Util/PlatformServices.js b/lib/Util/PlatformServices.js
+index 7a31f1e6d78159e4f619f14ca5ecffc2d41ee911..9b4a4dd59356adf71e935f0aaa1b7ada77b22a11 100644
+--- a/lib/Util/PlatformServices.js
++++ b/lib/Util/PlatformServices.js
+@@ -1,3 +1,5 @@
++import * as Digest from "effect/crypto/Digest";
++import * as SecureRandom from "effect/crypto/SecureRandom";
+ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
+ import { defaultTeardown } from "effect/Runtime";
+@@ -22,20 +24,22 @@ export const platformLayer = (constructors) => Layer.unwrap(Effect.promise(async
+         return await constructors.node();
+     }
+ }));
++// effect 4.1 dropped crypto from the platform `*Services` bundles.
++const WebCryptoServices = Layer.mergeAll(SecureRandom.layerWebCrypto, Digest.layerWebCrypto);
+ export const PlatformServices = platformLayer({
+     bun: async () => {
+         const [BunServices, BunSocket] = await Promise.all([
+             importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunServices")),
+             importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunSocket")),
+         ]);
+-        return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
++        return Layer.mergeAll(BunServices.layer, BunSocket.layerWebSocketConstructor, WebCryptoServices);
+     },
+     node: async () => {
+         const [NodeServices, NodeSocket] = await Promise.all([
+             importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeServices")),
+             importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeSocket")),
+         ]);
+-        return Layer.merge(NodeServices.layer, NodeSocket.layerWebSocketConstructor);
++        return Layer.mergeAll(NodeServices.layer, NodeSocket.layerWebSocketConstructor, WebCryptoServices);
+     },
+ });
+ /**

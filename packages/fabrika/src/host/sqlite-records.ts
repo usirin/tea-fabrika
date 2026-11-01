@@ -34,7 +34,11 @@ const TRACE = /^[0-9a-f]{32}$/;
 
 /** Calls that only read a record: one of a trace no job began reads as empty. */
 const reads = (call: JobCall): boolean =>
-	call.op === "get" || call.op === "size" || call.op === "read" || call.op === "spanOf";
+	call.op === "get" ||
+	call.op === "size" ||
+	call.op === "keys" ||
+	call.op === "read" ||
+	call.op === "spanOf";
 
 type Opened = {readonly db: L.Db; readonly close: () => void; readonly heads: Heads};
 

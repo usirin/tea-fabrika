@@ -85,13 +85,12 @@ export const layerSqlite = (o: SqliteOptions) =>
 			// A thread that dies answers nothing again: every call waiting, and every call after, fails.
 			let dead: string | null = null;
 			for (const w of workers) {
+				// A thread can throw anything, not only an Error.
 				w.on("error", (e) => {
-					dead = e.message;
+					const message = e instanceof Error ? e.message : String(e);
+					dead = message;
 					for (const d of waiting.values())
-						Deferred.doneUnsafe(
-							d,
-							Effect.fail(new LedgerUnreachable({method: "sqlite", message: e.message})),
-						);
+						Deferred.doneUnsafe(d, Effect.fail(new LedgerUnreachable({method: "sqlite", message})));
 					waiting.clear();
 				});
 				w.on("message", (m: unknown) => {

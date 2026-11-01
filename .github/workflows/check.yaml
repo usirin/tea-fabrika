@@ -19,16 +19,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 26.12.0
+          node-version: 26.13.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -67,19 +67,19 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 26.12.0
+          node-version: 26.13.0
           cache: pnpm
 
       # Electron fetches its binary the first time it is asked for its path, into this folder.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/Library/Caches/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -93,7 +93,7 @@ jobs:
         run: pnpm --filter @kampus/fabrika-app-old e2e
       # What the window showed at each step, to see a red run without running it again.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-shots
           path: ${{ runner.temp }}/e2e-shots
@@ -108,19 +108,19 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # `--changed` compares with the pull request's base commit, so the
           # history must hold it. The whole repository is a few MB.
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 26.12.0
+          node-version: 26.13.0
           cache: pnpm
 
       # tsh's terminal tests drive it through `expect` (a pty) and from zsh.

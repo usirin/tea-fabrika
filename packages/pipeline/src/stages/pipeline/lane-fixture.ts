@@ -128,7 +128,9 @@ export function makeLaneHome({
 			"",
 			"[test_writer]",
 			'includes = ["**/*.test.ts"]',
-			'run = ["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]',
+			// The box may only read the shared node_modules, and vitest 5.0.5 writes its module cache
+			// there by default. On Linux the write fails and a test file does not load.
+			'run = ["node_modules/.bin/vitest", "run", "--no-fsModuleCache", "--reporter=json", "--outputFile={out}"]',
 			`reads = ${JSON.stringify([nodeModules, ...reads])}`,
 			"",
 			"[mutation]",

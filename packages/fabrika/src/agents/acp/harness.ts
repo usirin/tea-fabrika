@@ -47,9 +47,9 @@ import type {Spawnable} from "./client.ts";
 // It loads no settings and so no rule files either: a builder on this row is
 // handed the repository's rules as text in its prompt. The SDK runners read
 // them themselves with `ownRules` (../claude/rules.ts, experiment 155), but
-// the adapter pins an older Agent SDK (0.3.286) that experiment did not test,
-// and an option it does not know would be dropped, loading the project's
-// settings with the rules.
+// the adapter pins its own Agent SDK (0.3.312, 0.3.286 then) that experiment did
+// not test, and an option it does not know would be dropped, loading the
+// project's settings with the rules.
 //
 // What cannot cross: a PreToolUse hook and a custom spawn are functions, and
 // `_meta` is JSON. The adapter itself still reads the owner's settings files
@@ -512,7 +512,8 @@ export const codexConfig = (
 			),
 		},
 	},
-	// Codex's own features that reach past the folder, on by default in a fresh home (codex 0.159.3).
+	// Codex's own features that reach past the folder, on by default in a fresh home (listed at codex
+	// 0.159.3; at 0.165.0 all of them are still there and on).
 	features: {
 		apps: false,
 		plugins: false,
@@ -639,7 +640,7 @@ export const codexEnv = (
  * `snapshot: false`, so a resumed turn gets its own prompt. By default the SDK
  * records a session's first prompt and sends that record on every later
  * request and resume, ignoring the text a later turn passes (the `systemPrompt`
- * docs of SDK 0.3.296; 0.3.286, which ACP's row pins, has the same field).
+ * docs of SDK 0.3.296; 0.3.312, which ACP's row pins, has the same field).
  * Codex exec takes the turn's on every turn already.
  */
 export const claudeSystem = (system: SystemPrompt) =>

@@ -1,4 +1,4 @@
-import type {SessionUpdate} from "@agentclientprotocol/sdk";
+import type {SessionUpdate} from "@agentclientprotocol/sdk/unstable";
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
 

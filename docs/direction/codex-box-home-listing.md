@@ -249,8 +249,10 @@ should be dropped.
 - It has not run on Linux. Linux lists every entry, by `depth` 0, and nothing is tested there. That
   list goes to the model too. The limit of 600 was measured on a Mac, so a Linux home with more entries
   beside an opened folder is refused without proof it had to be.
-- It has not run on the Codex this repo pins for ACP's row, 0.159.3. That version's box does not
-  start on the Mac tested (`unbound variable: TIOCSTI`), so the same table is unproved there.
+- The Codex this repo used to pin for ACP's row, 0.159.3, could not start its box on the Mac tested
+  (`unbound variable: TIOCSTI`). The pin is 0.165.0 now, the same build as the one tested here, and
+  the table holds through ACP too. That run had a local stand-in for the model
+  ([PR 258](https://github.com/usirin/tea-fabrika/pull/258)), so no real model has been through it.
 - A writable folder reached through a link is proved in `codex sandbox`, not in `codex exec`. So are git
   in a lane's tree, and Codex's own refusal of changes to its `.git`: no model was called.
 - Whether a real run hits an odd name it has not met yet. The tests cover the names we thought of.

@@ -432,7 +432,8 @@ describe("codex: the system prompt", () => {
 		expect(why.why).toBe("start");
 		const command = seen[0];
 		if (command === undefined) throw new Error("codex was never started");
-		const flags = command.args.flatMap((a, i) => (command.args[i - 1] === "-c" ? [a] : []));
+		const args = command.args.filter((a) => typeof a === "string");
+		const flags = args.flatMap((a, i) => (args[i - 1] === "-c" ? [a] : []));
 		return {flags, home: codexHomeOf("session:s", parent), owner: home};
 	};
 
@@ -517,7 +518,7 @@ describe("codex: the system prompt", () => {
 				Effect.provide(nodeServices),
 			),
 		);
-		const args = seen[0]?.args ?? [];
+		const args = (seen[0]?.args ?? []).filter((arg) => typeof arg === "string");
 		return args.find((arg) => arg.startsWith("permissions.fenced.filesystem=")) ?? "";
 	};
 
