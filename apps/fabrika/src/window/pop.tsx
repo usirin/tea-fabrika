@@ -1,4 +1,4 @@
-import {Kbd} from "@manti-ui/react";
+import {Dialog, Kbd, Menu as MantiMenu, Popover} from "@manti-ui/react";
 import {
 	type KeyboardEvent,
 	type ReactNode,
@@ -151,6 +151,21 @@ const useOverlay = (
 		document.addEventListener("pointerdown", down, true);
 		return () => document.removeEventListener("pointerdown", down, true);
 	}, [box, id, onClose]);
+};
+
+/** Focus moves in when it opens, and goes back where it was when it closes: `useOverlay`'s first half. */
+const useFocusIn = (box: RefObject<HTMLElement | null>, into: () => void) => {
+	const moveIn = useEffectEvent(into);
+	useLayoutEffect(() => {
+		const before = document.activeElement;
+		const el = box.current;
+		moveIn();
+		return () => {
+			const now = document.activeElement;
+			const lost = now === null || now === document.body || el?.contains(now) === true;
+			if (lost && before instanceof HTMLElement && before.isConnected) before.focus();
+		};
+	}, [box]);
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
@@ -512,11 +527,8 @@ const PALETTE_FOOT: readonly Hint[] = [
  * Tab stays in the box; a press outside closes it.
  */
 export function Palette(props: PaletteProps): ReactNode {
-	const box = useRef<HTMLDivElement>(null);
-	const input = useRef<HTMLInputElement>(null);
 	const list = `${props.id}-list`;
 	const optionId = (i: number) => `${props.id}-o${i}`;
-	useOverlay(box, props.id, () => input.current?.focus(), props.onClose);
 	const picked = optionId(props.at);
 	useLayoutEffect(() => {
 		document.getElementById(picked)?.scrollIntoView({block: "nearest"});
@@ -524,22 +536,22 @@ export function Palette(props: PaletteProps): ReactNode {
 	const total = props.sections.reduce((n, s) => n + s.options.length, 0);
 	let i = -1;
 	return (
-		<>
-			<div className="scrim" aria-hidden="true" />
-			<div
-				ref={box}
-				id={props.id}
-				className="pop palette"
-				role="dialog"
-				aria-modal="true"
-				aria-label={props.label}
-				data-over=""
-			>
+		<Dialog
+			native
+			open
+			title={props.label}
+			showCloseButton={false}
+			className="on-manti"
+			persistentElements={[() => document.querySelector(`[aria-controls="${props.id}"]`)]}
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
+		>
+			<div id={props.id} className="pop palette" data-over="">
 				<div className="chip-row">
 					<span className="chip">{props.chip}</span>
 				</div>
 				<input
-					ref={input}
 					className="find"
 					role="combobox"
 					aria-label={`Find ${props.label.toLowerCase()}`}
@@ -608,9 +620,12 @@ export function Palette(props: PaletteProps): ReactNode {
 					<span className="count">{props.count}</span>
 				</Foot>
 			</div>
-		</>
+		</Dialog>
 	);
 }
+
+/** Pick 7: which kind of native popover Manti draws (experiment 176). */
+const POPOVER_KIND = "manual";
 
 /**
  * A panel (a non-modal WAI-ARIA `dialog`): a few lines on one item of the top bar, and the one
@@ -623,19 +638,41 @@ export function Panel(props: {
 	readonly children: ReactNode;
 }): ReactNode {
 	const box = useRef<HTMLDivElement>(null);
-	useOverlay(box, props.id, () => box.current?.focus(), props.onClose);
+	useFocusIn(box, () => box.current?.focus());
 	return (
-		<div
-			ref={box}
-			id={props.id}
-			className="pop panel"
-			role="dialog"
-			aria-label={props.label}
-			tabIndex={-1}
-			data-over=""
+		<Popover
+			native={POPOVER_KIND}
+			open
+			className="on-manti"
+			persistentElements={[() => document.querySelector(`[aria-controls="${props.id}"]`)]}
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
 		>
-			{props.children}
-		</div>
+			<div
+				ref={box}
+				id={props.id}
+				className="pop panel"
+				role="dialog"
+				aria-label={props.label}
+				tabIndex={-1}
+				data-over=""
+			>
+				{props.children}
+				<MantiMenu
+					trigger={<button type="button">Zag menu</button>}
+					aria-label="Zag menu"
+					items={[
+						{value: "one", label: "Alpha"},
+						{value: "two", label: "Beta"},
+						{value: "three", label: "Gamma"},
+					]}
+					onSelect={(value) => {
+						document.body.dataset.zagPicked = String(value);
+					}}
+				/>
+			</div>
+		</Popover>
 	);
 }
 

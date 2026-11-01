@@ -336,7 +336,10 @@ const probed = (path: string, source: string) => {
 		? marked
 		: marked
 				.replace(/\tmemo,\n/, "\n")
-				.replace("const terminals = new Map", "const memo = <T,>(f: T): T => f;\nconst terminals = new Map");
+				.replace(
+					"const terminals = new Map",
+					"const memo = <T,>(f: T): T => f;\nconst terminals = new Map",
+				);
 };
 
 const benchBuild = async (label: string, from: string, compile: boolean, dev = false) => {
@@ -363,6 +366,15 @@ const benchBuild = async (label: string, from: string, compile: boolean, dev = f
 							contents: probed(args.path, readFileSync(args.path, "utf8")),
 							loader: "tsx",
 						}));
+						// Pick 7: what a Manti menu does inside a top layer when it still portals to the body.
+						if (process.env.BENCH_NO_TOPLAYER !== undefined)
+							build.onLoad({filter: /@manti-ui\/react\/dist\/index\.js$/}, (args: any) => ({
+								contents: readFileSync(args.path, "utf8").replace(
+									"container: t ?? void 0, ...e",
+									"...e",
+								),
+								loader: "js",
+							}));
 					},
 				},
 			];
@@ -1077,6 +1089,182 @@ const reveal: Moment = async (b) => {
 	keep(await readSample(b, "reveal", times, 1, out));
 };
 
+/**
+ * Pick 7: the palette and a panel, however they are drawn. Is it in the top layer, does focus move in
+ * and come back, does the page's key capture still decide, what does a press outside do, and on a
+ * patched Manti, do Zag's menu keys work inside.
+ */
+declare const __clicks: {clicks: string[]};
+
+const overlays: Moment = async (b) => {
+	await focusTile(b, await tileShowing(b, "tracker"));
+	const facts = (): Promise<any> =>
+		b.page.evaluate(() => {
+			const over = document.querySelector<HTMLElement>("[data-over]");
+			const at = document.activeElement;
+			const rect = over?.getBoundingClientRect();
+			const onTop =
+				rect === undefined
+					? null
+					: document
+							.elementFromPoint(rect.left + rect.width / 2, rect.top + 12)
+							?.closest("[data-over]") === over;
+			return {
+				open: over?.id ?? null,
+				modal: document.querySelector("dialog:modal") !== null,
+				popoverOpen: document.querySelector(":popover-open") !== null,
+				onTop,
+				focusIn:
+					at?.closest<HTMLElement>("[data-over]")?.id ??
+					at?.closest<HTMLElement>("[data-tile]")?.dataset.tile ??
+					at?.tagName ??
+					null,
+				tileDim: document.querySelector("[data-tile]")?.closest("[inert]") !== null,
+			};
+		});
+	const out: Record<string, unknown> = {};
+	await b.page.evaluate(() => {
+		const seen = {clicks: [] as string[]};
+		Object.assign(window, {__clicks: seen});
+		document.addEventListener(
+			"click",
+			(e) => {
+				const t = e.target as HTMLElement;
+				seen.clicks.push(t.closest("[data-tile]")?.getAttribute("data-tile") ?? t.tagName);
+			},
+			true,
+		);
+	});
+	const lastClick = () => b.page.evaluate(() => __clicks.clicks.at(-1) ?? null);
+	const gone = (id: string) =>
+		waitFor(
+			`${id} closed`,
+			() => b.page.locator(`#${id}`).count(),
+			(n) => n === 0,
+			3000,
+		);
+	const opens = async (id: string, open: () => Promise<void>, label: string, close: "Escape") => {
+		await resetCounters(b);
+		const times: number[] = [];
+		for (let i = 0; i < 8; i += 1) {
+			const got = await keyToDom(b, `document.getElementById('${id}') !== null`, open);
+			times.push(got.dom);
+			await sleep(60);
+			await b.page.keyboard.press(close);
+			await gone(id);
+			await sleep(60);
+		}
+		keep(await readSample(b, label, times, 8));
+	};
+
+	// The palette.
+	const palette = () => b.page.keyboard.press("Meta+k");
+	await opens("pop-palette", palette, "open-palette", "Escape");
+	await palette();
+	await sleep(150);
+	const shot = (name: string) =>
+		b.page.screenshot({
+			path: join(root, `experiments/176-react-on-the-real-app/${b.label}-${name}.png`),
+		});
+	if (b.label.startsWith("p7")) await shot("palette");
+	out.paletteOpen = await facts();
+	for (let i = 0; i < 6; i += 1) await b.page.keyboard.press("Tab");
+	out.paletteAfterTabs = await facts();
+	await b.page.keyboard.type("fold");
+	out.paletteTyped = await b.page.locator("#pop-palette input").inputValue();
+	await b.page.keyboard.press("Escape");
+	await gone("pop-palette");
+	await sleep(100);
+	out.paletteAfterEsc = await facts();
+	await palette();
+	await sleep(150);
+	await b.page.mouse.click(4, 400);
+	await sleep(200);
+	out.paletteAfterPressOutside = {...(await facts()), click: await lastClick()};
+	await b.page.keyboard.press("Escape");
+
+	// A panel, on the top bar's item for the host.
+	const openerOf = '[aria-controls="pop-lines"]';
+	const panel = () => prefixed(b, "H");
+	await sleep(100);
+	await panel();
+	await b.page.locator("#pop-lines").waitFor({timeout: 3000});
+	await sleep(150);
+	if (b.label.startsWith("p7")) await shot("panel");
+	out.panelOpen = await facts();
+	await b.page.keyboard.press("Escape");
+	await gone("pop-lines");
+	await sleep(100);
+	out.panelAfterEsc = await facts();
+	await panel();
+	await b.page.locator("#pop-lines").waitFor({timeout: 3000});
+	await sleep(150);
+	await b.page.mouse.click(300, 400);
+	await sleep(200);
+	out.panelAfterPressOutside = {...(await facts()), click: await lastClick()};
+	await b.page.keyboard.press("Escape");
+	await sleep(100);
+	await panel();
+	await b.page.locator("#pop-lines").waitFor({timeout: 3000});
+	await sleep(150);
+	if ((await b.page.locator(openerOf).count()) > 0) {
+		await b.page.locator(openerOf).first().click();
+		await sleep(200);
+		out.panelAfterOpener = await facts();
+		if ((await b.page.locator("#pop-lines").count()) === 0) {
+			await panel();
+			await b.page.locator("#pop-lines").waitFor({timeout: 3000});
+			await sleep(150);
+		}
+	}
+	await resetCounters(b);
+
+	// Zag's menu inside, on the patched copies only.
+	const trigger = b.page.locator("#pop-lines").getByRole("button", {name: "Zag menu"});
+	if ((await trigger.count()) > 0) {
+		await trigger.click();
+		await sleep(200);
+		const menu = (): Promise<any> =>
+			b.page.evaluate(() => {
+				const content = document.querySelector<HTMLElement>(
+					'[data-scope="menu"][data-part="content"]:not([hidden])',
+				);
+				if (content === null) return {shown: false};
+				const r = content.getBoundingClientRect();
+				const atPoint = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+				return {
+					shown: true,
+					onTop: content.contains(atPoint),
+					inTopLayerParent: content.closest("[popover],dialog") !== null,
+					highlighted: content.querySelector("[data-highlighted]")?.textContent ?? null,
+					focusInMenu: content.contains(document.activeElement),
+					focus:
+						document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName,
+				};
+			});
+		if (b.label.startsWith("p7")) await shot("menu");
+		out.menuOpen = await menu();
+		await b.page.keyboard.press("ArrowDown");
+		await sleep(80);
+		out.menuAfterDown = await menu();
+		await b.page.keyboard.press("g");
+		await sleep(150);
+		out.menuAfterTypeahead = await menu();
+		await b.page.keyboard.press("Enter");
+		await sleep(150);
+		out.menuPicked = await b.page.evaluate(() => document.body.dataset.zagPicked ?? null);
+		out.afterMenuPick = await facts();
+		if ((await trigger.count()) > 0) {
+			await trigger.click();
+			await sleep(200);
+			await b.page.keyboard.press("Escape");
+			await sleep(150);
+			out.afterMenuEsc = {menu: await menu(), ...(await facts())};
+		}
+	}
+	keep(await readSample(b, "overlays", [], 1, out));
+};
+
 /** A click on a ticket's row in the tracker's list, to that ticket's page drawn: its comment box. */
 const openTicket: Moment = async (b) => {
 	const tile = await tileShowing(b, "tracker");
@@ -1505,6 +1693,7 @@ export const MOMENTS: Record<string, Moment> = {
 	"workspace-switch": workspaceSwitch,
 	"open-ticket": openTicket,
 	reveal,
+	overlays,
 };
 
 // ---------------------------------------------------------------- the command line

@@ -3831,3 +3831,39 @@ main.program:has(> .view) {
 		display: none;
 	}
 }
+
+/*
+ * Experiment 176, pick 7: what opens over the desk on Manti's Dialog and Popover, in the browser's top
+ * layer. Manti's own frame stands aside: `pop` draws the box as it did.
+ */
+.on-manti,
+.on-manti > [data-part="body"],
+.on-manti > [data-part="description"] {
+	display: contents;
+}
+
+.on-manti > [data-part="title"] {
+	display: none;
+}
+
+[data-scope="dialog"][data-part="positioner"]:has(> .on-manti) {
+	padding: 0;
+}
+
+[data-scope="dialog"][data-part="positioner"]:has(> .on-manti) > [data-part="backdrop"] {
+	background: var(--scrim);
+	backdrop-filter: none;
+}
+
+[data-scope="popover"][data-part="positioner"]:has(> .on-manti) {
+	position: fixed !important;
+	inset: 0 !important;
+	width: 100% !important;
+	height: 100% !important;
+	transform: none !important;
+	pointer-events: none;
+}
+
+.on-manti .pop {
+	pointer-events: auto;
+}
