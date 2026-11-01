@@ -107,9 +107,23 @@ export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>
 		? [`#${n} broke: ${Cause.pretty(end.cause).split("\n")[0] ?? "no reason given"}`]
 		: [];
 
+/**
+ * A path as one code span. A plan's Check refuses a backtick in a path, but a lane saved before that
+ * can still hold one, so the path takes a backtick run longer than any inside it, as CommonMark
+ * says, and a backtick at an edge gets the space that keeps it off the fence. On one line, as a
+ * blank line would end the span.
+ */
+const pathSpan = (path: string): string => {
+	const flat = path.replace(/\s+/g, " ");
+	const longest = Math.max(0, ...(flat.match(/`+/g) ?? []).map((run) => run.length));
+	const fence = "`".repeat(longest + 1);
+	const pad = longest > 0 ? " " : "";
+	return `${fence}${pad}${flat}${pad}${fence}`;
+};
+
 /** Each rule change, as the plan says it: which file, what changes, and why. */
 export const ruleChangeLines = (changes: readonly ExamChange[]): readonly string[] =>
-	changes.map((c) => `- \`${c.path}\`: ${inert(c.change)} Why: ${inert(c.why)}`);
+	changes.map((c) => `- ${pathSpan(c.path)}: ${inert(c.change)} Why: ${inert(c.why)}`);
 
 /**
  * What a person decided at the plan, for a brief: each question with its lean, under its id, and
