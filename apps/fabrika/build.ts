@@ -20,6 +20,7 @@ import {bundlesOf, common} from "./bundles.ts";
 //                      program view it knows, for Chromium
 //   dist/desk.html, dist/window.css   the page's stylesheet: Manti UI's, React Flow's base rules,
 //                      then fabrika's theme on Manti's tokens and the app's own rules
+//   dist/icon.png      the app's icon, for the Dock and for a window on Windows and Linux
 //
 // Every bundle gets the same build id, as the define `FABRIKA_BUILD` (src/build-id.ts): the first
 // 12 hex of a SHA-256 over every source file the four bundles are made from, by name and bytes. So
@@ -77,6 +78,7 @@ const program = Effect.gen(function* () {
 				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
 			),
 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
+			fs.copyFile(at("icon/icon.png"), at("dist/icon.png")),
 			// The step briefs stay plain files in the bundle's folder: changing one changes no code.
 			fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), {overwrite: true}),
 			fs.copy(at("../../packages/pipeline/rubrics"), at("dist/rubrics"), {overwrite: true}),

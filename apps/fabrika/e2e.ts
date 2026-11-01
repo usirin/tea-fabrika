@@ -511,6 +511,12 @@ const flow = async (app: ElectronApplication) => {
 	check("a line typed in one tile is in another's Up", true);
 	await page.keyboard.press("Control+u");
 
+	const iconWidth = await app.evaluate(
+		({nativeImage}, file) => nativeImage.createFromPath(file).getSize().width,
+		join(here, "dist", "icon.png"),
+	);
+	check("the app's icon loads as a real image, 1024 wide", iconWidth === 1024, iconWidth);
+
 	const reach = await reachOf(page);
 	check(
 		"the page has send, onMessage and forget only, and no Node",
