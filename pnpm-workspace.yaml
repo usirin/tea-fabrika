@@ -48,10 +48,12 @@ catalog:
   oxfmt: 0.75.0
   oxlint: 1.90.0
   '@oxlint/plugins': 1.90.0
+  # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.1 asks for
+  # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
-  '@opentelemetry/exporter-trace-otlp-http': 0.222.0
-  '@opentelemetry/resources': 2.11.0
-  '@opentelemetry/sdk-trace-base': 2.11.0
+  '@opentelemetry/exporter-trace-otlp-http': 0.223.0
+  '@opentelemetry/resources': 2.12.0
+  '@opentelemetry/sdk-trace-base': 2.12.0
   # The markdown window's code colors (programs/markdown): Pierre's highlighter, its lexers in one
   # WebAssembly module. Apache-2.0, its themes MIT or Apache-2.0. Held exact: a beta.
   '@pierre/highlights': 0.3.0
