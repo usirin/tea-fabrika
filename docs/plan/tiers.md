@@ -4,8 +4,10 @@
 the work on `next/` is one plan of seven tiers. Each tier is one pass across all five
 layers, and each ends with something a person can use. No layer gets finished alone. Only
 Tier 1 is committed. It has not started: today's pipeline finishes first and builds
-ticket 117, and then it builds Tier 1
-([where we are](./README.md#where-we-are-now)).
+ticket 117. Then Tier 1's free-form plan goes through the planner, the owner approves that
+output, and the pipeline builds it
+([where we are](./README.md#where-we-are-now), [the flow](../direction/free-form-plan-to-planner.md)).
+A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds, not its breakdown.
 
 ```text
                 transport   data   coordination   app   desktop
