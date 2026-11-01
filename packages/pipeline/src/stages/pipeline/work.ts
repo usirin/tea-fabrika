@@ -27,6 +27,8 @@ import {titleOf} from "../../tickets/ticket.ts";
 //   <home>/work/<place>/<c>.done   beside a copy, once it is whole: a head's files cannot write it
 //   <home>/work/main-<name>  main's tip, with nothing installed, while rubrics are read from it
 //   <home>/work/pulls.json   the pull requests of the lane
+//   <home>/work/holds/<n>    what lane n uses that other lanes may share, a path a line: a lane that
+//                            ends takes only what no other lane's file names
 //
 // The tree's commits stay on this machine until the push step. So what the builder does, what the
 // mutation step tests and what the review reads are one local head.
@@ -190,6 +192,21 @@ export class LaneWork extends Context.Service<
 		) => Effect.Effect<readonly {readonly sha: string; readonly title: string}[], Failed>;
 		/** Whether `head` can merge onto main. */
 		readonly mergeable: (head: string) => Effect.Effect<"clean" | "conflicts", Failed>;
+		/** A branch off the remote. Only a lane's own, and only once it has merged. */
+		readonly dropBranch: (branch: string) => Effect.Effect<void, Failed>;
+		/** The lane whose copies and homes these are, from now on. One `LaneWork` serves one lane. */
+		readonly servingLane: (n: number) => Effect.Effect<void>;
+		/** A folder this lane made that another lane may share: `leave` removes it once no lane holds it. */
+		readonly hold: (folder: string) => Effect.Effect<void, Failed>;
+		/**
+		 * What lane `n` holds, off this machine, unless another lane holds it too. `trees`: its working
+		 * copies and their branches as well. Answers what could not go. Never fails, and never touches the
+		 * clone, the pulls file or another lane's anything.
+		 */
+		readonly leave: (
+			n: number,
+			parts: {readonly trees: boolean},
+		) => Effect.Effect<readonly string[]>;
 		readonly at: (...parts: readonly string[]) => string;
 	}
 >()("LaneWork") {}
@@ -340,6 +357,86 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			}).pipe(Effect.ensuring(Effect.ignore(fs.remove(packed, {force: true}))));
 		};
 
+		/** Which lane this `LaneWork` serves. `null`: none is on yet, so nothing is held for one. */
+		let serving: number | null = null;
+		const holds = at("holds");
+		const holdBy = (n: number | null, folder: string) =>
+			n === null
+				? Effect.void
+				: Effect.gen(function* () {
+						yield* quiet(fs.makeDirectory(holds, {recursive: true}));
+						yield* quiet(
+							fs.writeFileString(path.join(holds, String(n)), `${folder}\n`, {flag: "a"}),
+						);
+					});
+		const heldIn = (name: string) =>
+			fs.readFileString(path.join(holds, name)).pipe(
+				Effect.map(lines),
+				Effect.orElseSucceed((): readonly string[] => []),
+			);
+		/** Every folder under this one open: a try may have left one shut, and nothing leaves a shut one. */
+		const opened = (folder: string) =>
+			on(
+				runChild("find", [folder, "-type", "d", "-exec", "chmod", "u+rwx", "{}", ";"], {
+					env: runEnv(),
+				}),
+			).pipe(Effect.ignore);
+		const cleared = (folder: string) =>
+			Effect.andThen(opened(folder), quiet(fs.remove(folder, {recursive: true, force: true})));
+		/** What could not be done, in words, or nothing. */
+		const orSaid = <E>(words: string, effect: Effect.Effect<unknown, E>) =>
+			effect.pipe(
+				Effect.as<readonly string[]>([]),
+				Effect.orElseSucceed((): readonly string[] => [words]),
+			);
+		/** The mark goes first, so a removal cut short is a try that broke, never a whole copy. */
+		const leaveHeld = (n: number, folder: string) =>
+			Effect.gen(function* () {
+				const names = yield* fs
+					.readDirectory(holds)
+					.pipe(Effect.orElseSucceed((): readonly string[] => []));
+				const others = yield* Effect.forEach(
+					names.filter((name) => name !== String(n)),
+					heldIn,
+					{concurrency: 1},
+				);
+				if (others.flat().includes(folder)) return [];
+				return yield* orSaid(
+					folder,
+					Effect.andThen(quiet(fs.remove(`${folder}.done`, {force: true})), cleared(folder)),
+				);
+			}).pipe(makerOf(folder).withPermits(1));
+		/** One working copy off the clone, with its branch and what the clone keeps of the remote's. */
+		const leaveTree = (name: string, branch: string) =>
+			Effect.gen(function* () {
+				const tree = at("trees", name);
+				yield* opened(tree);
+				yield* gitIn(clone, ["worktree", "remove", "--force", tree]).pipe(Effect.ignore);
+				const left = yield* orSaid(tree, cleared(tree));
+				yield* gitIn(clone, ["worktree", "prune"]).pipe(Effect.ignore);
+				yield* gitIn(clone, ["branch", "-D", branch]).pipe(Effect.ignore);
+				yield* gitIn(clone, ["update-ref", "-d", `refs/remotes/origin/${branch}`]).pipe(
+					Effect.ignore,
+				);
+				yield* fs.remove(`${tree}.installed`, {force: true}).pipe(Effect.ignore);
+				return left;
+			});
+		const leave = (n: number, parts: {readonly trees: boolean}) =>
+			Effect.gen(function* () {
+				const trees = parts.trees
+					? [
+							...(yield* leaveTree(String(n), `lane/${n}`)),
+							...(yield* leaveTree(`exam-${n}`, `exam/${n}`)),
+						]
+					: [];
+				const held = [...new Set(yield* heldIn(String(n)))];
+				const folders = yield* Effect.forEach(held, (folder) => leaveHeld(n, folder), {
+					concurrency: 1,
+				});
+				yield* fs.remove(path.join(holds, String(n)), {force: true}).pipe(Effect.ignore);
+				return [...trees, ...folders.flat()];
+			});
+
 		/**
 		 * The code at `sha`, as plain files with no links, in `<place>/<sha>`, and `ready` run in it, once.
 		 * The mark that says it is whole lies beside it, where no file of the head lands. No mark: anything
@@ -354,15 +451,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			const tree = at(place, sha);
 			const mark = `${tree}.done`;
 			return Effect.gen(function* () {
+				// Under the permit: a lane that is leaving reads the holds under it too, so it sees this one.
+				yield* holdBy(serving, tree);
 				if (yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))
 					return yield* quiet(fs.realPath(tree));
-				// A try that broke may have left a folder shut, and nothing can be removed from one.
-				yield* on(
-					runChild("find", [tree, "-type", "d", "-exec", "chmod", "u+rwx", "{}", ";"], {
-						env: runEnv(),
-					}),
-				).pipe(Effect.ignore);
-				yield* quiet(fs.remove(tree, {recursive: true, force: true}));
+				yield* cleared(tree);
 				yield* quiet(fs.makeDirectory(tree, {recursive: true}));
 				yield* unpacked(tree, sha);
 				const unlinked = yield* on(
@@ -528,6 +621,14 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				gitIn(clone, ["merge-tree", "--write-tree", "origin/main", sha]).pipe(
 					Effect.map((ran) => (ran.code === 0 ? ("clean" as const) : ("conflicts" as const))),
 				),
+			dropBranch: (branch) =>
+				git(clone, ["push", "--quiet", "origin", "--delete", branch]).pipe(Effect.asVoid),
+			servingLane: (n) =>
+				Effect.sync(() => {
+					serving = n;
+				}),
+			hold: (folder) => Effect.suspend(() => holdBy(serving, folder)),
+			leave,
 			at,
 		};
 	}),

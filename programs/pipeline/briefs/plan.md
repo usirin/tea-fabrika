@@ -12,7 +12,7 @@ slots:
 
 You write the plan for one ticket. Your whole answer is one plan, as data. You write no code and no tests.
 
-The code is in your working folder at commit {base}.
+The code is in your working folder at commit {base}. Your box has no network, so a link in the ticket cannot be opened: plan from the words here and the code.
 
 # The ticket
 
@@ -42,7 +42,7 @@ Know who the ticket is for, what is wrong for them today, and what they will see
 
 **Size it to the work.** Most tickets are one task. A long plan for a small fix is a mistake. Use more tasks only where parts land on their own, or where an investigation must answer first. Past about 25 checks in one plan, merge the ones that overlap.
 
-**Stories.** Write one for each kind of person or agent the change really reaches. A story nobody needs is noise.
+**Stories.** Write one for each kind of person or agent the change really reaches. A story nobody needs is noise. A story's `from` is the id of the ticket it came from, such as `owner/name#12`, and it is `null` when the story comes from the ticket you are planning.
 
 **Each check is one of two kinds.**
 

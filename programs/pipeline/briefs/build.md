@@ -21,7 +21,7 @@ slots:
 
 You build one ticket: {ticket}, round {round}. Make its tests pass and meet its criteria.
 
-Your working folder is a copy of the repository on branch {branch}. Code commits, pushes and opens the pull request after you, from your form.
+Your working folder is a copy of the repository on branch {branch}. Code commits, pushes and opens the pull request after you, from your form. Your box has no network, so a link cannot be opened and nothing can be fetched.
 
 # The plan
 

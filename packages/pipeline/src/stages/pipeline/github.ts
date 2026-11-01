@@ -24,6 +24,7 @@ import {LaneWork} from "./work.ts";
 //                     on this machine, at the head the lane pushed, and GitHub's are never waited on
 //   the row           merged once the lane's own merge says so, or a read of the facts does
 //   opening           asks GitHub first: a kill can come after it opened one and before the row
+//   a lane's end      a lane that ended done deletes its own merged `lane/<n>` branch, and only that
 //
 // So a branch rule that wants a GitHub review still refuses the merge. Ship ends `stuck: merge_failed`
 // and never reads the refusal's words, so the ticket does not say which rule refused it.
@@ -186,6 +187,14 @@ export const laneGitHubHost = (
 						concurrency: 1,
 						discard: true,
 					}),
+				// The lane's own branch only. An exam's stays, as it does today: nobody asked for that here.
+				gone: (pull) =>
+					pull.kind === "lane"
+						? gh(["api", "--method", "DELETE", `repos/${repo}/git/refs/heads/${pull.branch}`]).pipe(
+								Effect.asVoid,
+								Effect.mapError(() => failed),
+							)
+						: Effect.void,
 			};
 			return Context.make(CodeHost, host).pipe(
 				Context.add(CodeHostWrites, {

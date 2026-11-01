@@ -1,3 +1,5 @@
+import {Schema} from "effect";
+import {TicketId} from "../../ids.ts";
 import type {Check} from "../../primitives.ts";
 import {type Criterion, criteriaOf, type Job, type PlanDraft, textOf} from "./plan.ts";
 
@@ -6,7 +8,8 @@ import {type Criterion, criteriaOf, type Job, type PlanDraft, textOf} from "./pl
 // conversation (the refine combo). An empty list passes.
 //
 // What it holds a plan to:
-//   - every story says who, what and why, under an id of its own
+//   - every story says who, what and why, under an id of its own, and any
+//     ticket it names in `from` is a ticket id, as the kept plan needs
 //   - every story is served by a criterion, and every criterion serves a
 //     story the plan has (that it serves at least one, the schema holds)
 //   - at least one task, and each opens with the user's whole job on a
@@ -201,6 +204,9 @@ const dodge = /^(?:none|n\/a|unsure|unknown|tbd|no lean|undecided|either)\.?$/i;
 /** What the Check is handed besides the plan: the names a user meets. `null`: none were gathered. */
 export type Known = {readonly names: readonly string[]} | null;
 
+/** The kept plan's own test of a story's `from`, so the Check and the type cannot drift. */
+const isTicketId = Schema.is(TicketId);
+
 /** Each story's own problems, and the ids the plan has. */
 function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly ids: Set<string>} {
 	const problems: string[] = [];
@@ -213,6 +219,10 @@ function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly 
 		ids.add(story.id);
 		for (const part of ["who", "want", "why"] as const)
 			if (story[part].trim() === "") problems.push(`${at}: its \`${part}\` is empty.`);
+		if (story.from !== undefined && !isTicketId(story.from))
+			problems.push(
+				`${at}: its \`from\` says ${JSON.stringify(story.from)}. It must be a ticket id like owner/repo#12, or null for the ticket this plan is named by.`,
+			);
 	});
 	return {problems, ids};
 }

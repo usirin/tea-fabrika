@@ -2,7 +2,7 @@ import type {Sub} from "@demlik/tea";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Agent} from "@kampus/fabrika-old";
 import {claudeAdapter, type DraftRun, psReaper} from "@kampus/fabrika-old/agents/claude";
-import {codexAdapter} from "@kampus/fabrika-old/agents/codex";
+import {codexAdapter, codexHomeOf} from "@kampus/fabrika-old/agents/codex";
 import {Context, Effect, FileSystem, Layer, Option, Result, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import type {AgentStep, Settings} from "../../settings.ts";
@@ -200,11 +200,22 @@ export const laneAgents: Layer.Layer<LaneAgents, never, LaneHome | LaneWork> = L
 					claude: claudeAdapter({}),
 					claude_read: claudeAdapter({more: () => READ_ONLY_CLAUDE}),
 				};
-				return Agent.makeAgents({
+				const made = Agent.makeAgents({
 					adapters,
 					sessions: yield* Agent.fileSessions(work.at("sessions")),
 					reaper: psReaper,
 				});
+				// Each Codex session makes a home of its own: the lane says so before it can exist, so the
+				// lane's end can take it, however the run went. A hold that cannot be written costs a folder.
+				const run: typeof made.run = (turn) =>
+					turn.provider.startsWith("codex")
+						? Stream.unwrap(
+								work
+									.hold(codexHomeOf(`session:${turn.session}`, parent))
+									.pipe(Effect.ignore, Effect.as(made.run(turn))),
+							)
+						: made.run(turn);
+				return {...made, run};
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provideService(FileSystem.FileSystem, fs),

@@ -17,9 +17,9 @@
 // what its folder holds of the files `[touch-rules]` writes, and the files its brief says are taken.
 // The adapter's keep-list drops this name too, so ./make.ts names it in a small wrapper.
 //
-// `script.json` beside that log: what a test wants said in place of the plain answers, since a review's
-// and a test writer's briefs do not hold the ticket's words. Each key is optional, and each list goes by
-// the step's runs, first run first.
+// `script.json` beside that log: what a test wants said in place of the plain answers, more than a word
+// in a ticket's title can say. Each key is optional, and each list goes by the step's runs, first run
+// first.
 //
 //   answers   {step: [entry]}  a string is the whole last message. `{with: {...}}` is laid over the
 //                              plain answer. `null`, or no entry left, is the plain answer
@@ -267,7 +267,7 @@ const ANSWERS = {
 				findings: [],
 				skipped: [],
 			};
-		// A review's brief does not hold the ticket's title, so the builder leaves this word in the head.
+		// The builder leaves this word in the head, so only the first review of that head has a finding.
 		if (existsSync(join(folder, REVIEW_ONCE)) && reviewsSoFar() === 1) {
 			const where = [{file: "src/lower.ts", first: 2, last: 2}];
 			return {

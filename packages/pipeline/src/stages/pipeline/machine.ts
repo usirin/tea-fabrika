@@ -55,6 +55,10 @@ const AskFor = Schema.Literals(ASKS);
 /** The most builds a ticket gets: the first, and each one review sent it back for. */
 export const MAX_ROUNDS = 3;
 
+/** A Property of the plan with no test, in its own words, and why the test writer wrote none. */
+export const Untested = Schema.Struct({when: Schema.String, why: Schema.String});
+export type Untested = typeof Untested.Type;
+
 /** What one step leaves for the steps after it. */
 const carried = {
 	/** The plan as data, once it is written. Every later step reads it. */
@@ -77,6 +81,10 @@ const carried = {
 	deviations: Schema.Array(Schema.String),
 	/** What the builder says it could not do. Optional: a lane saved before this key still reads. */
 	left: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** What the test writer's last run says no test can check. Optional, as `left` is. */
+	cannot: Schema.optionalKey(Schema.Array(Untested)),
+	/** What a person let through with no test: the ticket and the pull request say so. Optional, as `left` is. */
+	untested: Schema.optionalKey(Schema.Array(Untested)),
 	/** The mutants the mutation step saw live: the test writer's second job. */
 	survived: Schema.Array(Survived),
 	/** The review's verdicts: the push step posts them on the pull request. */
@@ -123,7 +131,11 @@ const AskIn = Schema.Struct({
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
+	/** What each pick does, a line for each. Left out: a lane saved before this key still reads. */
+	does: Schema.optionalKey(Schema.Array(Schema.String)),
 });
+/** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
+const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -138,7 +150,7 @@ const ReadIn = Schema.Struct({number: Schema.Finite});
 export const readFiled = gather("lane_read", {input: ReadIn, ok: Filed, err: Unknown});
 export const claimLane = act("lane_claim", {input: LaneIn, ok: LaneId, err: Unknown});
 export const releaseLane = act("lane_release", {
-	input: LaneIn,
+	input: ReleaseIn,
 	ok: Schema.Literal("released"),
 	err: Unknown,
 });
@@ -207,7 +219,7 @@ export const Lane = Schema.Union([
 		...Held.fields,
 		...Ended.fields,
 		phase: Schema.Literal("releasing"),
-		asked: keptAct(releaseLane, LaneIn),
+		asked: keptAct(releaseLane, ReleaseIn),
 	}),
 	Schema.Struct({
 		...Ended.fields,
@@ -301,19 +313,76 @@ const picksFor = (kind: (typeof ASKS)[number], step: LaneStep): readonly string[
 /** The steps a person's "go on" could only skip over: nothing lands without them having run. */
 const LANDS: ReadonlySet<LaneStep> = new Set(["push", "merge", "exam_merge"]);
 
+/** A step, as a person says it. */
+const STEP_WORDS: Readonly<Record<LaneStep, string>> = {
+	triage: "triage",
+	plan: "plan",
+	exam: "rule change",
+	exam_merge: "rule change's merge",
+	test_writer: "test writer",
+	build: "build",
+	mutation: "mutation test",
+	mutants: "test writer",
+	review: "review",
+	push: "push",
+	merge: "merge",
+};
+
+/** Why a step asks, by the word its outcome holds. Each is a sentence for a person. */
+const ASK_WORDS: Readonly<Record<string, string>> = {
+	cannot_test: "The test writer says no test can check a property of the plan.",
+	already_passes: "A new test already passes before the build, so it shows nothing yet.",
+	fails_on_base: "A test of what works today fails on the code as it is.",
+	disable: "A mutant lived, and the test writer says no test can see the change.",
+	unseen: "The review could not see all it needed.",
+	check_change: "This step's change touches the checks, and those are a person's call.",
+	ruling: "Triage needs a ruling on this ticket.",
+	approval: "This pull request needs a person's yes.",
+	comment: "This pull request has a comment that needs an answer.",
+};
+
+/** The question of a step that ended on `ask`, in words: the outcome's own name is code. Pure. */
+const askWords = (step: LaneStep, outcome: Outcome): string =>
+	(outcome.kind === "ask" ? ASK_WORDS[outcome.for] : undefined) ??
+	`The ${STEP_WORDS[step]} step stopped and needs your call.`;
+
 const questionFor = (
 	s: Held,
 	kind: (typeof ASKS)[number],
 	step: LaneStep,
-	said: string,
+	asks: string,
 ): Question => {
 	const what = {
-		approve: `approve plan v${s.carry.version ?? 1}`,
-		exam_merge: titleOf(`merge the rule changes: ${s.carry.rules.join(", ")}`),
-		merge: `merge ${s.carry.pr ?? "the change"}`,
-		step: titleOf(`${step} asks: ${said}`),
+		approve: `Do you approve plan version ${s.carry.version ?? 1}?`,
+		exam_merge: titleOf(`Merge the rule changes: ${s.carry.rules.join(", ")}`),
+		merge: titleOf(`Do you want to merge ${s.carry.pr ?? "the change"}?`),
+		step: titleOf(asks),
 	}[kind];
 	return {ask: `a-${kind}-${s.count}`, what, picks: picksFor(kind, step), for: kind, step};
+};
+
+/** The line for one pick of a question: what picking it does, in words. Pure. */
+const pickLine = (s: Held, question: Question, pick: string): string => {
+	const words = STEP_WORDS[question.step];
+	const lean =
+		(s.carry.plan?.questions ?? []).length === 0
+			? ""
+			: ", and a yes takes the lean on each open question";
+	const next = NEXT[question.step];
+	const says: Readonly<Record<string, string>> = {
+		approve: `The plan stands as written${lean}. The lane goes on with it.`,
+		merge: "The change lands on main.",
+		again: `The ${words} step runs once more, from the start.`,
+		go_on: [
+			`The lane moves on${"to" in next ? ` to the ${STEP_WORDS[next.to]} step` : ""} as things stand.`,
+			...((s.carry.cannot ?? []).length === 0
+				? []
+				: ["The ticket and the pull request say which property has no test."]),
+		].join(" "),
+		stop: "The lane ends here, and this change does not land.",
+		no: "The lane ends here, and this change does not land.",
+	};
+	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
 };
 
 const asking = (s: Held, question: Question): Step_ => {
@@ -322,6 +391,7 @@ const asking = (s: Held, question: Question): Step_ => {
 		ask: question.ask,
 		what: question.what,
 		picks: question.picks,
+		does: question.picks.map((pick) => pickLine(s, question, pick)),
 		intent: intentOf("lane", s.number, question.ask),
 	});
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
@@ -344,15 +414,25 @@ const releasing = (s: Held, ended: Ended): Step_ => {
 	const cmd = releaseLane({
 		number: s.number,
 		lane: s.lane,
+		outcome: ended.outcome,
 		intent: intentOf("lane", s.number, "release"),
 	});
 	return [{...s, ...ended, phase: "releasing", asked: cmd}, [cmd]];
 };
 
-const move = (s: Held, step: LaneStep, m: Move, said: string): Step_ => {
+/** `said`: what the trail and the end say. `asks`: the question, if this move asks one. */
+const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said): Step_ => {
 	if ("to" in m) return running(s, m.to, m.round);
-	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, said));
+	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, asks));
 	return releasing(s, {outcome: m.end, said});
+};
+
+/** A person let a step through: what its writer could not test is now what nobody tested. Pure. */
+const letThrough = (carry: Carry): Carry => {
+	const cannot = carry.cannot ?? [];
+	return cannot.length === 0
+		? carry
+		: {...carry, cannot: [], untested: [...(carry.untested ?? []), ...cannot]};
 };
 
 /** A state's held part, and only that: a kept state holds its own phase's keys and no other's. */
@@ -368,7 +448,8 @@ const heldOf = (s: Held): Held => ({
 const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string): Step_ => {
 	const {question} = s;
 	const held: Held = {...heldOf(s), trail: [...s.trail, {step: question.ask, said: pick}]};
-	if (pick === "go_on") return move(held, question.step, NEXT[question.step], pick);
+	if (pick === "go_on")
+		return move({...held, carry: letThrough(held.carry)}, question.step, NEXT[question.step], pick);
 	// The first pick goes on. Any other is the person's no.
 	if (pick !== question.picks[0])
 		return releasing(held, {
@@ -506,7 +587,13 @@ export const lane = defineMachine({
 				carry: {...s.carry, ...m.value.carry},
 				trail: [...s.trail, {step: s.step, said}],
 			};
-			return move(held, s.step, after(s.step, m.value.outcome, s.round), said);
+			return move(
+				held,
+				s.step,
+				after(s.step, m.value.outcome, s.round),
+				said,
+				askWords(s.step, m.value.outcome),
+			);
 		},
 		lane_step_err: (s): Step_ => {
 			if (s.phase !== "running") return [s, []];

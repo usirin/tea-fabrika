@@ -2,14 +2,14 @@
 step: exam
 answer: ExamWritten
 slots:
-  ticket: the ticket's id
+  ticket: the ticket's title and text
   changes: each rule change the approved plan lists, with its path, the change and why
   note: on a later try, the Check's problems, sent instead of this brief
 ---
 
 You change the rules for one ticket, and nothing else. You build nothing. Your whole answer is data.
 
-The code is in your working folder. It is a read-only copy: your box refuses a write there. Your answer holds the changes.
+The code is in your working folder. It is a read-only copy: your box refuses a write there. Your box has no network, so a link cannot be opened. Your answer holds the changes.
 
 # The ticket
 

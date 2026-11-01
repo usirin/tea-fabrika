@@ -10,8 +10,8 @@ import type {Result} from "../../controls.ts";
 //   a file that did not load for any other reason, or a test the report does not hold
 //                                             no answer: something is wrong with the test or the run
 //
-// The second line is a lean from the brief's notes: a test that imports what the build will add
-// cannot load before the build, and that is the red the plan asked for.
+// The second line is what the brief tells the writer too: a test that imports what the build will
+// add cannot load before the build, and that is the red the plan asked for.
 
 const Assertion = Schema.Struct({
 	title: Schema.String,
