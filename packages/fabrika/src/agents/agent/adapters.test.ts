@@ -1,4 +1,11 @@
-import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
@@ -8,7 +15,7 @@ import {Effect, PlatformError, Schema, Stream} from "effect";
 import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {codexHomeOf, codexSystem, type FolderAccess} from "../acp/harness.ts";
+import {codexHomeOf, codexSystem, FENCE_LIMIT, type FolderAccess} from "../acp/harness.ts";
 import {
 	type ClaudeAdapterConfig,
 	claudeAdapter,
@@ -387,14 +394,8 @@ describe("codex: the system prompt", () => {
 		return home;
 	};
 
-	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (
-		system: SystemPrompt,
-		access: FolderAccess,
-		folder: (home: string) => string = () => TURN.folder,
-	) => {
-		const home = madeUpHome();
-		mkdirSync(join(home, "beside"));
+	/** One turn's start in `home`'s folder `copy`. The spawner keeps the command and refuses: nothing runs. */
+	const tryStart = async (home: string, system: SystemPrompt, access: FolderAccess) => {
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
 		const spawner = ChildProcessSpawner.make((command) => {
@@ -411,13 +412,22 @@ describe("codex: the system prompt", () => {
 					access,
 				});
 				return yield* Effect.flip(
-					Effect.scoped(adapter.start({...TURN, system, folder: folder(home)})),
+					Effect.scoped(adapter.start({...TURN, system, folder: join(home, "copy")})),
 				);
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provide(nodeServices),
 			),
 		);
+		return {why, seen, parent};
+	};
+
+	/** The command Codex would be started with for one turn. */
+	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		mkdirSync(join(home, "co-beside"));
+		const {why, seen, parent} = await tryStart(home, system, access);
 		expect(why.why).toBe("start");
 		const command = seen[0];
 		if (command === undefined) throw new Error("codex was never started");
@@ -456,29 +466,41 @@ describe("codex: the system prompt", () => {
 
 	it("leaves the folder writable, or only readable for a turn that reads code", async () => {
 		// Both lines matter: `:workspace` makes the folder writable whatever its own line says.
-		const box = (flags: readonly string[]) => ({
-			base: flags.find((f) => f.startsWith("permissions.fenced.extends=")),
-			folder: flags
-				.find((f) => f.startsWith("permissions.fenced.filesystem="))
-				?.match(/"\/work\/copy"=("\w+")/)?.[1],
-		});
-		expect(box((await startedWith({_tag: "append", text: ""}, "write")).flags)).toEqual({
+		const box = ({flags, owner}: {flags: readonly string[]; owner: string}) => {
+			const table = flags.find((f) => f.startsWith("permissions.fenced.filesystem="));
+			return {
+				base: flags.find((f) => f.startsWith("permissions.fenced.extends=")),
+				folder: ["write", "read"].find((rule) => table?.includes(`"${owner}/copy"="${rule}"`)),
+			};
+		};
+		expect(box(await startedWith({_tag: "append", text: ""}, "write"))).toEqual({
 			base: 'permissions.fenced.extends=":workspace"',
-			folder: '"write"',
+			folder: "write",
 		});
-		expect(box((await startedWith({_tag: "append", text: ""}, "read")).flags)).toEqual({
+		expect(box(await startedWith({_tag: "append", text: ""}, "read"))).toEqual({
 			base: 'permissions.fenced.extends=":read-only"',
-			folder: '"read"',
+			folder: "read",
 		});
 	});
 
 	it("reads home's own listing for a folder under home: home open, what is beside the folder closed", async () => {
-		const {flags, owner} = await startedWith({_tag: "append", text: ""}, "write", (home) =>
-			join(home, "copy"),
-		);
+		const {flags, owner} = await startedWith({_tag: "append", text: ""}, "write");
 		const table = flags.find((f) => f.startsWith("permissions.fenced.filesystem="));
-		expect(table).toContain(`"${owner}/beside"="deny"`);
+		// A near name, so it is closed by name with patterns or without.
+		expect(table).toContain(`"${owner}/co-beside"="deny"`);
 		expect(table).not.toContain(`"${owner}"="deny"`);
+	});
+
+	it("starts nothing and says why when the box could not take the home's table", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		for (let n = 0; n <= FENCE_LIMIT; n++) writeFileSync(join(home, `co-private-${n}`), "");
+		const {why, seen, parent} = await tryStart(home, {_tag: "append", text: ""}, "write");
+		expect(why.why).toBe("contain");
+		expect(why.message).toContain(`at most ${FENCE_LIMIT}`);
+		expect(why.message).not.toContain("co-private");
+		expect(seen).toEqual([]);
+		expect(existsSync(codexHomeOf("session:s", parent))).toBe(false);
 	});
 
 	it("cannot be made without saying what the folder allows", () => {

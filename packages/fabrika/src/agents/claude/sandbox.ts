@@ -14,7 +14,8 @@ import {basename, delimiter, dirname, isAbsolute, join, relative, resolve} from 
 // Until experiment 114 this was the build stage's `check.ts`. The builder's
 // own rule on one tool call stayed there: only the build stage uses it.
 
-const inside = (folder: string, path: string) => {
+/** Is `path` the folder, or under it? */
+export const inside = (folder: string, path: string) => {
 	const rel = relative(folder, path);
 	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 };

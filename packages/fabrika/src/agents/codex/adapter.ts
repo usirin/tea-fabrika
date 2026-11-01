@@ -8,7 +8,8 @@ import {
 	codexHomeOf,
 	codexSystem,
 	type FolderAccess,
-	listFolder,
+	fenceTooBig,
+	localDisk,
 	writeSystem,
 } from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
@@ -34,12 +35,13 @@ import {toolchain} from "../claude/sandbox.ts";
 //   - the permission profile of the ACP row (`codexConfig`): the folder and the
 //     toolchain open and what is beside them under home closed (`homeFence`),
 //     core shell variables only, no login shell, no web search, Codex's
-//     far-reaching features off;
+//     far-reaching features off. A table too big for the box starts nothing
+//     (`fenceTooBig`);
 //   - `--ignore-user-config`, and approvals `never`: nothing asks a person.
 //
 // Node at the edge: `realpathSync` once, to find the folder Codex's own
-// binary runs from, which the profile must leave readable, and `listFolder`,
-// to read home for the profile.
+// binary runs from, which the profile must leave readable, and `localDisk`,
+// to read home and follow links for the profile.
 
 /** Where Codex is, and where the login it links to is. */
 export interface CodexAdapterConfig {
@@ -200,13 +202,23 @@ export const codexAdapter = (
 			holds: {usd: false, schema: true},
 			start: (turn) =>
 				Effect.gen(function* () {
+					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
+					const profile = codexConfig(
+						turn.folder,
+						tools,
+						owner,
+						config.access,
+						localDisk,
+						toolHome(parent),
+					);
+					const tooBig = fenceTooBig(profile.permissions.fenced.filesystem);
+					if (tooBig !== null) return yield* Effect.fail(failed("contain", tooBig));
 					// Our session, not the folder, names the home: a thread lives in the home it was made in.
 					const home = codexHomeOf(`session:${turn.session}`, parent);
 					yield* codexHome(home, login).pipe(
 						Effect.provideService(FileSystem.FileSystem, fs),
 						Effect.mapError((why) => failed("contain", why)),
 					);
-					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
 					// The turn's system prompt, as config (`codexSystem`); a `replace` prompt is a file in the home.
 					const system = codexSystem(turn.system, home);
 					yield* writeSystem(system.file).pipe(
@@ -230,9 +242,7 @@ export const codexAdapter = (
 						...(turn.effort === null ? [] : ["-c", `model_reasoning_effort=${toml(turn.effort)}`]),
 						"-c",
 						'approval_policy="never"',
-						...flagsOf(
-							codexConfig(turn.folder, tools, owner, config.access, listFolder, toolHome(parent)),
-						),
+						...flagsOf(profile),
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),

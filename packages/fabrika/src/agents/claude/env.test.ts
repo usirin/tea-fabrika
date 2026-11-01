@@ -33,6 +33,26 @@ describe("the environment a started process is handed", () => {
 		expect(toolHome(PARENT)).toEqual({});
 	});
 
+	// A shim with no home for its tools looks along the PATH for the real one, finds itself, and waits
+	// on the child it starts. So a Volta folder on the PATH always brings its home, set or not.
+	it.each<[string, string, string]>([
+		["first", "/home/someone/.volta/bin:/bin", "/home/someone/.volta"],
+		["in the middle", "/bin:/elsewhere/.volta/bin:/usr/bin", "/elsewhere/.volta"],
+		["last, with a slash at its end", "/bin:/home/someone/.volta/bin/", "/home/someone/.volta"],
+	])("finds Volta's home from the PATH when none is set and its folder is %s", (_, path, home) => {
+		const parent = {...PARENT, PATH: path};
+		expect(toolHome(parent)).toEqual({VOLTA_HOME: home});
+		for (const env of [runEnv(parent), agentEnv(parent), shellEnv(parent), hostEnv(parent)])
+			expect(env.VOLTA_HOME).toBe(home);
+	});
+
+	it("takes the home that is set over the PATH, and does not read a longer name as Volta's", () => {
+		const set = {...PARENT, PATH: "/a/.volta/bin", VOLTA_HOME: "/set/volta"};
+		expect(toolHome(set)).toEqual({VOLTA_HOME: "/set/volta"});
+		for (const path of ["/a/.volta/bin2", "/a/not.volta/bin", "/a/.volta/bin/more", ".volta/bin"])
+			expect(toolHome({...PARENT, PATH: path})).toEqual({});
+	});
+
 	it("adds the agent's own login for an agent, wherever that login is kept", () => {
 		expect(agentEnv(PARENT)).toEqual({...RUN, USER: "someone"});
 		expect(
