@@ -1,0 +1,14 @@
+{
+	"name": "@tea-fabrika/exp-174-effect-on-cloudflare",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Experiment 174's harness: Effect's rpc, cluster, workflow and eventlog inside a Durable Object, in Miniflare. Only the experiment uses it.",
+	"dependencies": {
+		"@effect/sql-sqlite-do": "catalog:",
+		"effect": "catalog:",
+		"esbuild": "catalog:",
+		"miniflare": "catalog:",
+		"playwright": "catalog:"
+	}
+}

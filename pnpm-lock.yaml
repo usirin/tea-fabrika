@@ -33,6 +33,9 @@ catalogs:
     '@effect/platform-node':
       specifier: 4.0.6
       version: 4.0.6
+    '@effect/sql-sqlite-do':
+      specifier: 4.0.6
+      version: 4.0.6
     '@effect/tsgo':
       specifier: 0.56.0
       version: 0.56.0
@@ -553,6 +556,24 @@ importers:
       miniflare:
         specifier: 'catalog:'
         version: 4.20260730.0
+
+  experiments/174-effect-on-cloudflare:
+    dependencies:
+      '@effect/sql-sqlite-do':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260730.0
+      playwright:
+        specifier: 'catalog:'
+        version: 1.64.1
 
   legacy:
     dependencies:
@@ -1871,6 +1892,11 @@ packages:
 
   '@effect/sql-d1@4.0.6':
     resolution: {integrity: sha512-W149Svo5pR+7eoKtTmMX3aFCJKQmvMdypKhMlFekKvy2UjY6h5Af8d+9YeBeOXkYtDQjxNs4l6iv7EqbF6XBbg==}
+    peerDependencies:
+      effect: ^4.0.6
+
+  '@effect/sql-sqlite-do@4.0.6':
+    resolution: {integrity: sha512-/s0hoRu0/J3Xdp2PoUAsNEc1AwFb+Y9rldXVkZmtdcOSnrx3Vo9DsZaCSK6+qLbhI10jjJftzmmtFtLrUqAwIw==}
     peerDependencies:
       effect: ^4.0.6
 
@@ -5984,6 +6010,10 @@ snapshots:
   '@effect/sql-d1@4.0.6(effect@4.0.6)':
     dependencies:
       '@cloudflare/workers-types': 5.20261027.1
+      effect: 4.0.6
+
+  '@effect/sql-sqlite-do@4.0.6(effect@4.0.6)':
+    dependencies:
       effect: 4.0.6
 
   '@effect/tsgo-darwin-arm64@0.56.0':
