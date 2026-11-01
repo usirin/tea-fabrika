@@ -79,6 +79,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   `field/`. No builder starts before an approved plan and tests that exist
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
+  A step is a program, and a prompt you would have typed is its first source: a rule in
+  a prompt that could be code becomes code. A v0 has no missing parts: quick means each
+  part is small, never absent.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
   lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
@@ -95,10 +98,40 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 
 ## Before you design anything
 
+- **Check what is settled first.** Before any design question or recommendation,
+  search `docs/direction/`, `experiments/` and the plan for the topic. That holds for
+  a question an agent's plan raises and for a pull request you walk: compare its shape
+  with the note it says it builds, and name any place it walks a decision back. A
+  claim about how a piece runs comes from reading that piece's note now, never from a
+  summary. A settled note is evidence, not a tiebreaker: nothing from before experiment
+  107 (the first run on a repo other than demlik) is trusted without a test, and in a
+  redesign every serious branch goes on the table, with what it would undo.
+- **Lead with the known way.** Look up how the makers and the industry do it, and cite
+  it, before you give a lean; a guess comes after, marked as a guess. If the plain way
+  clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
+  behind a custom design.
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
-  with their reason; the first is tsh lines.
+  with their reason; the first is tsh lines. The same goes for coordination (registry,
+  mailbox, links, monitors, supervisors): do what Erlang/OTP does unless a written
+  reason says otherwise.
+- **tea stays small.** A host composes tea and Effect; tea does not grow to fit a host,
+  and it does not take on our conventions. tea code uses the Effect engine
+  (`@demlik/tea/effect`), and the Promise engine stays for those who want it. `./otel`
+  is experimental only because nobody had used it, so use it, and do not work around it.
+  What these experiments decide wins over an older demlik issue or ruling. Real tea bugs
+  stay their own tickets.
+- **Read the installed version.** Agents know older libraries. Before you write or judge
+  code against one, read the lockfile's version and that version's docs. A lint rule that
+  fires a lot means ask why before you call it a false alarm.
+- **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
+  problem. An experiment picks the tech. Aim at two people working together first:
+  packages for others and publishing are recorded as later.
+- **Moving a job from an agent to code?** Say what the agent was absorbing that code will
+  not (the case nobody listed), what the "I don't know" exit is, and whether the rule
+  makes honesty expensive. Check a rule against real moves you made this session: would
+  it have blocked them if a machine had started you?
 - **Protocols first, and a browser is always a client.** Name the protocol a
   boundary speaks before its implementation. A protocol may not need what a
   browser lacks: no Node, no Unix socket, no files, no WebSocket-level frames.
@@ -140,6 +173,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
   const closeTicket = Cmd.define("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
   ```
+- **Names.** Use the industry's word for a thing
+  ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
+  every pull request, prose included. An Effect service name is never plural: one that holds many is
+  `<Thing>Manager`, such as `LeaseManager`.
 - **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
   `reasonCode`. A key does not say again what its parent already says: inside
   an outcome, the reason is `why`, not `outcomeReason`. If a short word could
@@ -216,11 +253,52 @@ code is right and the rule does not fit, and its reason says why in plain words.
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid
 run, estimate the cost, try a handful of cases, look at the answers, then
-scale. Record what it cost in the write-up.
+scale. Jev bills by the token, about $0.04 per million in, so send the least text that
+answers the question. Record what it cost in the write-up. Every model run gets dollars
+at the provider's list price, with the source and date, even when it ran on a subscription: a plan hides the
+number the comparison needs.
+
+A check that can block a pull request needs its false alarms measured first: about 0% to
+block, up to 10% to only advise (Google, CACM 2018). Every number in a rule needs a
+source or our own data. A tool's default is not a source.
+
+### Go easy on the machine
+
+These run on a laptop a person is using. A prompt can't see the load, so every agent
+brief carries these caps. Each one came from a laptop that became unusable.
+
+- Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
+  work, the full suite once at the end. With two or more code agents running:
+  `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
+  about 8 cores, so small jobs add up.
+- "Under load" means at most 2 CPU burners, one test loop, and one Docker box.
+- Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
+  version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`
+  in a subshell first.
+- Searches: `gh search code` first. Locally, `nice -n 19 rg` on working trees, one repo
+  at a time. Never `git grep` across all branches. If a search goes heavy, stop the
+  agent, not its child process.
+- Mutation runs: a fixed-seed sample of about 150, never the whole set (seed 119120 is
+  the shared one), under `nice -n 15`, with a fixed number of runs. Ask before you
+  scale up.
+- A test window always sets its own `FABRIKA_HOME`, with a short path, since a socket
+  path has a 103-byte limit. It never sets `FABRIKA_FOREGROUND=1`.
+- A wait or poll loop runs in the background.
+
+### Tool facts that cost us time
+
+- `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
+- In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent;
+  without it the agent keeps a shell and can read what you meant to hide, git history
+  included.
+- `rg <subfolder>` skips tracked files when a root `.gitignore` re-includes them with
+  `!path`. `rg .` is fine.
 
 ## This repo is public
 
 - No secrets, and never print or write a key.
+- A list of open security holes stays out of this repo. Each fix lands as a normal pull
+  request.
 - No absolute paths from anyone's machine. Use repo-relative paths or `~`.
 - No personal names or account names.
 - Never quote what a person typed in a chat session. Record the decision, not
@@ -255,6 +333,9 @@ live run, each learned from a run:
 Write-ups are read by busy people, some of them not native English speakers.
 
 - Plain everyday words and short sentences. Give the answer first.
+- American English everywhere: color, behavior, canceled. Saved prompts, results and
+  stored data values stay as they are.
+- Size work in files, lines and agent hours, never human days.
 - At most one simple table per section. No box drawings.
 - **Show it in code.** A design or direction document carries code blocks: the
   types, the state, the step function, one example call with its answers. A
@@ -276,6 +357,31 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 ## Changing the product
 
+- **The daily moment comes first.** Cut scope by deferring, never by making the daily
+  flow clunky. An outside tool that "works fine" is no reason to skip an in-app feature,
+  and a design that needs Docker, a second server or a second app to start fails.
+- **The first slice works, later slices harden.** Each tier is a whole vehicle
+  ([tiers](./docs/plan/tiers.md)). Each person answers for their own agents, so a first slice
+  does not defend against them; strangers on a public address are a different case.
+  Tier size never pushes work out: split the tier, and say what a new idea changes now.
+- **Secure and simple.** For any security step, say when a person meets it and how
+  often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
+  chore.
+- **No new paid accounts** until fabrika is a product. Design for the free route and say
+  what it can't do.
+- **All in on Manti.** Never "Manti or native": a better way goes into Manti by pull
+  request, tried first with a `pnpm patch` ([UI on Manti](./docs/direction/ui-on-manti.md)).
+- **Keep the platform's defaults.** On a Mac, closing a window keeps the app running and
+  Cmd-Q quits. Leaving a convention needs the owner's yes.
+- **Subtle, and accessible without apology.** Color is never the only cue (WCAG 1.4.1).
+  Give sources for ARIA and WCAG claims, and say what needs a real screen reader run.
+  Read a design system's docs and components before you map its tokens.
+- **No extra containers.** If something already draws an edge, a second line, box or
+  background goes.
+- **"Like Tuval" means read how Tuval solved the whole feature** before you design. Old
+  code is evidence, not a target.
+- **Mockups use the real thing:** real tickets, steps, programs and fact names, with a
+  "made up" list for anything that isn't.
 - **No rough first versions.** A change to the product (`apps`, `programs`,
   `packages`) lands finished and thought through: all it shows works, with no
   stub, dead button or "(not yet)". A piece that waits on other work stays out

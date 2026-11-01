@@ -7,6 +7,11 @@ Moving a project between the two is one command. The laptop setup never falls
 behind: a cloud piece lands with its local twin in the same pull request, and
 the tests run on the local one.
 
+**Added 2026-10-30:** design from local Miniflare first. Start each design question from
+what local workerd can and can't do (its restarts, no self-eviction, its connection
+limits), then check that Cloudflare does the same. Never design for a Cloudflare-only
+feature and back-fill local. Never `Alchemy.remote()`.
+
 ```ts
 // A sketch. One stack, two places. Only the command differs.
 //   fabrika up --local    alchemy dev: workerd and Docker on the laptop, no Cloudflare account

@@ -44,18 +44,18 @@ has not really started. `next/` has not moved since 2026-10-31.** Each line is a
 today's version unless it says `next/`. The arrow says who has the next move.
 
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo. No real ticket yet. → nothing, until ticket 117
-- **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. A review found a blocker, and CI is red. → an agent fixes it, then a mutation run and a new review, then the owner's yes
+- **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. CI is green, and a second fresh review found no blockers. Its leftovers are ticket 125. The mutation step is not finished. → an agent finishes it, then the owner's yes
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
 - **Skipping work already done, and restarting a stuck lane.** Today, a saved lane does not rerun a finished step, but it cannot skip work done outside the lane, and a stuck lane cannot restart. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
 - **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
 - **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the exam pull request, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
-- **This plan folder and the notes it brought up to date, with [every update builds every layer](../direction/every-update-builds-every-layer.md) (`next/`).** Docs. → the owner's yes
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
-- **[PR 257](https://github.com/usirin/tea-fabrika/pull/257), test windows you can't see.** Green. → the owner's yes, then an agent merges
+- **Test windows.** Merged: [257](https://github.com/usirin/tea-fabrika/pull/257) made them see-through, then [271](https://github.com/usirin/tea-fabrika/pull/271) made them show again, without focus. → nothing
+- **App icon and top bar.** Merged ([274](https://github.com/usirin/tea-fabrika/pull/274), [275](https://github.com/usirin/tea-fabrika/pull/275)). → nothing
 - **[PR 192](https://github.com/usirin/tea-fabrika/pull/192), `claude` and `codex` as programs.** Overlaps pipeline v0. → the owner says yes or no; on a yes, an agent merges
-- **Pipe colors.** Picked, not built. → a pull request through the pipeline
+- **Pipe colors and tiles.** The rules are decided ([pipe colors](../direction/pipe-colors.md), [color principles](../direction/color-principles.md), [tile guidelines](../direction/tile-guidelines.md)), not built. The build is ticket 124. → a pull request through the pipeline, after ticket 117
 - **Studies done, not walked yet.** React tryout, themes, the DeepSeek repo, [Windows](../direction/windows-in-next.md), Effect on Cloudflare. → the owner
-- **demlik.** Epics landed, no release yet. Three issues wait. [756](https://github.com/kamp-us/demlik/issues/756): an operator's working copy has no `node_modules`, so `pnpm exec fabrika` runs a different command-line tool. [782](https://github.com/kamp-us/demlik/issues/782): tea's types accept a hand-built handle that `tell` then refuses when it runs. [777](https://github.com/kamp-us/demlik/issues/777): tea's check on its public names asks for a breaking-change note when only an optional setting was added. → the owner
+- **demlik.** Epics landed, no release yet. The three issues that waited have rulings as of 2026-11-01: [756](https://github.com/kamp-us/demlik/issues/756#issuecomment-6564399911), [782](https://github.com/kamp-us/demlik/issues/782#issuecomment-6564266885) and [777](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162). → demlik's agents build them, and the release stays the owner's call
 - **Copying for the app and Tuval in `next/`.** Lean, 70%: rethink stays the default, plus a named Tier 2 copy list. → the owner decides
 - **Two people before agents, Tier 3 before Tier 5 in `next/`.** Lean yes, 70%. → the owner answers
 - **Conversation branches.** Saved, not designed. → when the agents tier is next
@@ -102,6 +102,9 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs the merge, after a leak grep.
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
 - **Direction notes and plans:** they still get the owner's yes.
+- **A pull request that changes only Markdown or images:** no CI wait, since nothing in CI reads them. A broken relative link can slip through.
+- **To bring a branch up to date:** rebase and force-push with a lease, never a merge commit or `gh pr update-branch`. Linear history, and the diff's `git patch-id --stable` stays the same, so a review of that diff holds. Checks still rerun on the final commit.
+- **After every merge:** fast-forward the main checkout (`git pull --ff-only origin main`). Never reset or stash there; your own work stays in worktrees.
 
 ## Words
 
