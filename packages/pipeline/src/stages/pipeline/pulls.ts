@@ -8,7 +8,7 @@ import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {PrFact} from "../../tickets/ticket.ts";
 import {Tickets, Watcher} from "../../tickets/tickets.ts";
 import type {TextKind} from "../review/pack.ts";
-import type {PrFacts} from "../ship/facts.ts";
+import {type PrFacts, ReviewKind} from "../ship/facts.ts";
 import {LaneWork} from "./work.ts";
 
 // The lane's pull requests on a local code host: a file of them beside a bare remote. Today's
@@ -42,7 +42,7 @@ export const Pull = Schema.Struct({
 	title: Schema.String,
 	body: Schema.String,
 	verdicts: Schema.Array(
-		Schema.Struct({kind: Schema.String, verdict: Schema.Literals(["pass", "fail"])}),
+		Schema.Struct({kind: ReviewKind.fields.kind, verdict: Schema.Literals(["pass", "fail"])}),
 	),
 });
 export type Pull = typeof Pull.Type;
@@ -60,7 +60,7 @@ export class PullWire extends Context.Service<
 			readonly branch: string;
 			readonly title: string;
 			readonly body: string;
-		}) => Effect.Effect<string | null, Failed>;
+		}) => Effect.Effect<string | null, Failed & {readonly says?: string}>;
 		readonly post: (
 			pr: string,
 			head: string,
@@ -191,6 +191,36 @@ const prefixOf = (pull: Pull) => (pull.kind === "exam" ? "a-exam_merge-" : "a-me
 export const mergeAnswered = (ticket: Parameters<typeof said>[0], pull: Pull): boolean =>
 	said(ticket, prefixOf(pull));
 
+/** The reviews only the lane knows. No verdict posted yet is not known, and never passed. Pure. */
+const reviewsFrom = (pull: Pull): PrFacts["reviews"] => {
+	if (pull.kind === "exam") return [{kind: "governance", verdict: "passed"}];
+	const row = ({kind, verdict}: Pull["verdicts"][number]): ReviewKind => ({
+		kind,
+		verdict: verdict === "pass" ? "passed" : "failed",
+	});
+	const [first, ...rest] = pull.verdicts;
+	return first === undefined ? null : [row(first), ...rest.map(row)];
+};
+
+/**
+ * What only the lane knows about a pull request, the same on every host. `yes`: a person said `merge`
+ * to its newest ask. The exam's lands rules for the ticket, so only the lane's own finishes it, and a
+ * person's answer is its one criterion. Pure.
+ */
+export const pullFacts = (
+	pull: Pull,
+	repo: string,
+	yes: boolean,
+): Pick<PrFacts, "ours" | "ticket" | "approval" | "reviews"> => ({
+	ours: true,
+	ticket:
+		pull.kind === "exam"
+			? {id: examTicket(repo, pull.ticket), link: "part_of_it"}
+			: {id: `${repo}#${pull.ticket}`, link: "closes_it"},
+	approval: yes ? "given" : "missing",
+	reviews: reviewsFrom(pull),
+});
+
 /** Where a window links to a pull request: its own url, or one that says it is local. Pure. */
 export const pullUrl = (pr: string): string =>
 	pr.startsWith("https://") ? pr : `https://local.invalid/${pr.replace(/^local:/, "")}`;
@@ -207,14 +237,18 @@ const checksFact = (word: PrFacts["checks"]): PrFact["checks"] => [
 ];
 
 /**
- * The watcher, asked to look. Today's version has no standing watcher anywhere, so the lane calls this
- * right after its push and its merge. The fact holds only what the code host read, and goes through
- * the watcher's own writer: the lane can ask for a look, and never says what it saw. A look that
- * fails leaves a comment on the ticket: the change is where it is whatever the window says.
+ * The watcher. Today's version has no standing watcher anywhere, so the lane calls this right after
+ * its push and its merge, through the watcher's own writer. `look`: a fact that holds only what the
+ * code host read. `merged`: the one thing the lane may say itself, about its own merge, since a read
+ * right after one can lag and would leave the ticket saying open. Either one that fails leaves a
+ * comment on the ticket: the change is where it is whatever the window says.
  */
 export class LaneWatch extends Context.Service<
 	LaneWatch,
-	{readonly look: (n: number, pr: string) => Effect.Effect<void>}
+	{
+		readonly look: (n: number, pr: string) => Effect.Effect<void>;
+		readonly merged: (n: number, pr: string, head: string) => Effect.Effect<void>;
+	}
 >()("LaneWatch") {}
 
 export const laneWatch: Layer.Layer<LaneWatch, never, CodeHost | Watcher | Tickets> = Layer.effect(
@@ -223,26 +257,34 @@ export const laneWatch: Layer.Layer<LaneWatch, never, CodeHost | Watcher | Ticke
 		const host = yield* CodeHost;
 		const watcher = yield* Watcher;
 		const tickets = yield* Tickets;
+		const shown = (n: number, pr: string, facts: Pick<PrFacts, "state" | "head" | "checks">) =>
+			watcher.write(n, `watch-${facts.state}-${facts.head}`, {
+				type: "pr",
+				url: pullUrl(pr),
+				state: facts.state,
+				head: facts.head,
+				checks: checksFact(facts.checks),
+			});
+		const orSaid = <E>(n: number, pr: string, write: Effect.Effect<unknown, E>) =>
+			write.pipe(
+				Effect.catch(() =>
+					tickets.talk(n, `watch-failed-${pr}`, {
+						type: "commented",
+						body: `Could not read ${pr} to show it here.`,
+					}),
+				),
+				Effect.ignore,
+			);
 		return {
 			look: (n, pr) =>
-				host.prFacts(pr).pipe(
-					Effect.flatMap((facts) =>
-						watcher.write(n, `watch-${facts.state}-${facts.head}`, {
-							type: "pr",
-							url: pullUrl(pr),
-							state: facts.state,
-							head: facts.head,
-							checks: checksFact(facts.checks),
-						}),
-					),
-					Effect.catch(() =>
-						tickets.talk(n, `watch-failed-${pr}`, {
-							type: "commented",
-							body: `Could not read ${pr} to show it here.`,
-						}),
-					),
-					Effect.ignore,
+				orSaid(
+					n,
+					pr,
+					Effect.flatMap(host.prFacts(pr), (facts) => shown(n, pr, facts)),
 				),
+			// Only a green head reaches a merge.
+			merged: (n, pr, head) =>
+				orSaid(n, pr, shown(n, pr, {state: "merged", head, checks: "green"})),
 		};
 	}),
 );
@@ -309,8 +351,6 @@ export const laneLocalHost = (
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
 						const {repo} = yield* work.config;
 						const tip = yield* work.main;
-						const id =
-							pull.kind === "exam" ? examTicket(repo, pull.ticket) : `${repo}#${pull.ticket}`;
 						const target = bookTarget(planOf(readTicketId(`${repo}#${pull.ticket}`) as TicketId));
 						const checks = yield* onLocal(pull.tree, (local) =>
 							local.change(target, pull.head).pipe(Effect.map((c) => c.checks.state)),
@@ -318,19 +358,7 @@ export const laneLocalHost = (
 						return {
 							head: pull.head,
 							state: pull.state,
-							ours: true,
-							// The exam's pull request lands rules for the ticket: only the lane's own finishes it.
-							ticket: {id, link: pull.kind === "exam" ? "part_of_it" : "closes_it"} as const,
-							approval: said(ticket, prefixOf(pull)) ? ("given" as const) : ("missing" as const),
-							reviews:
-								pull.kind === "exam"
-									? ([{kind: "governance", verdict: "passed"}] as const)
-									: pull.verdicts.length === 0
-										? null
-										: (pull.verdicts.map((v) => ({
-												kind: v.kind,
-												verdict: v.verdict === "pass" ? "passed" : "failed",
-											})) as never),
+							...pullFacts(pull, repo, mergeAnswered(ticket, pull)),
 							checks: checks === "unknown" ? ("stuck" as const) : checks,
 							mergeable: yield* work.mergeable(pull.head),
 							comments: [],

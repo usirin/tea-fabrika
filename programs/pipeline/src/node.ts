@@ -20,6 +20,9 @@ const briefsFolder = () => (existsSync(here("./briefs")) ? here("./briefs") : he
 /** The ignorer as the app's bundle holds it. `undefined`: not bundled, so the step's own default. */
 const ignorerFile = () => (existsSync(here("./ignorer.mjs")) ? here("./ignorer.mjs") : undefined);
 
+/** The rubrics fabrika ships, as the app's bundle holds them. `undefined`: not bundled, so beside their source. */
+const shippedFolder = () => (existsSync(here("./rubrics")) ? here("./rubrics") : undefined);
+
 /**
  * The lane and all it brings: Stryker, Babel, the agents' SDKs. Loaded when a lane starts, as most
  * hosts never run one, and every host started pays for what it loads (apps/fabrika's bundles.test.ts
@@ -51,6 +54,7 @@ export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledge
 							return;
 						}
 						const ignorer = ignorerFile();
+						const shipped = shippedFolder();
 						yield* laneCode.pipe(
 							Effect.flatMap(({laneLayer, runLane}) =>
 								runLane(n, say).pipe(
@@ -60,6 +64,7 @@ export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledge
 											briefs: briefsFolder(),
 											person: personOf(writer),
 											...(ignorer === undefined ? {} : {ignorer}),
+											...(shipped === undefined ? {} : {shipped}),
 										}),
 									),
 									Effect.provideService(Ledger, ledger),

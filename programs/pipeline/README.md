@@ -32,6 +32,68 @@ triage -> plan -> the person approves -> exam, when rules change -> test writer
 change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-6-astra`, effort
 `high`. Triage defaults to `claude` on `opus`.
 
+`[review] rubrics` names a folder, read from a copy of main's tip, so a change's files cannot rewrite
+the rubrics that judge it. Left out, the lane uses the rubrics fabrika ships. This holds on both hosts.
+
+The same goes for what an agent loads by itself. In the copy of a head that the test writer, the
+mutants step and the review read, these are main's, or gone when main has none, at any depth and in any
+case or compatibility form of the name: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`,
+`CLAUDE.local.md`, `.mcp.json`, `.codex/`, `.agents/`, `.claude/`. A change to one still shows in the
+review's diff. The tests run in the head's own copy, so they see the head's files.
+
+**Run the lane only on work from agents you trust.** The judge's copy stops a head's files from telling
+its judge how to judge. It does not stop a head's running code. The install, the checks and the mutants
+run with no box, as you. They have no login in their environment, but they can reach what you can reach.
+
+The lane's git runs with your ssh agent's socket and your `gh` login in reach, as the build's does, so
+a `git@` remote works. Git's hooks are off. The clone's git config is not held: a head's install or
+checks can change it, and this git obeys it.
+
+## On GitHub
+
+`host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
+(`fixtures/pipeline-lane/gh.mjs`), never against real GitHub. Only the stand-in's answer to the facts
+query is compared with a recorded one in `fixtures/code-host/`. Its other answers and all its refusals
+are written from what the code expects.
+
+- **The review stays local.** It reads the head on this machine, and its checks are `[[checks.run]]`.
+  The push step then opens the pull request and posts the verdicts as comments.
+- **The lane's own verdicts count.** No GitHub approval and no reviewers list is read. A verdict counts
+  only at the head it was posted for. If a person pushes after that, the lane ends `stuck: sent_back`.
+- **The yes is yours, on the ticket.** A GitHub approval does not stand in for it.
+
+Which checks ship waits on, from `[checks] github` at main, read on each call:
+
+| `github` | What ship does |
+|---|---|
+| `every`, or left out | Waits on every check on the head. A failed one is run again once, then the work is sent back. |
+| `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. |
+| `none` | Never waits on GitHub. It runs `[[checks.run]]` on this machine at the head it pushed, and those decide. A file with no `[[checks.run]]` is refused. |
+
+- **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and the lane
+  ends `stuck: checks_stuck`. Set `github = "none"` in `[checks]` to get past this.
+- **A branch rule that wants a GitHub review.** GitHub refuses the merge, and the lane ends
+  `stuck: merge_failed`. The ticket does not say which rule refused it: ship never reads the refusal's
+  words.
+- **Hold other merges during a run.** A commit on main that ship's last read before the merge sees means
+  `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
+  is final. After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned
+  to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
+  GitHub's own merge checks the head and not main, so that commit does not stop it.
+- **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
+  the lane ends `stuck: merge_unknown`. It does not wait and look again.
+- **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
+  Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
+  `stuck: sent_back`. Then typing the line again only says how it ended. The pull request and its branch
+  stay open and nothing more runs, so a person lands it by hand or files a new ticket.
+- **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
+  `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
+  is a new pull request.
+- **A merge ship finds already done shows as GitHub reads it.** The ticket's `pr` fact holds the head that
+  merged and its checks as they read. At the head the lane judged, the lane ends `done`: it cannot tell
+  its own merge with a lost answer from a person's merge of that head, so red checks there show as red.
+  At another head, the lane ends `stuck: merged_elsewhere`, and the ticket says both heads.
+
 ## What it holds to
 
 - **A ticket must be yours.** One filed by someone else is refused before any agent starts.

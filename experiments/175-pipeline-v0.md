@@ -139,8 +139,8 @@ the planted break.
   host and writes as itself. A merge made by hand after the lane ended is not seen. 80% sure this is
   right for v0; a standing watcher is the real answer.
 - **A GitHub branch.** With `host: github`, the host reads GitHub through `gh`, but keeps the ticket
-  from its own row and the approval from the person's answer. So no issue text is read. Only
-  pure parts of it have tests.
+  from its own row and the approval from the person's answer. So no issue text is read. It first
+  had tests for its pure parts only. A later change gave it a whole lane over a stand-in `gh`.
 
 ## What the compiled briefs needed
 
@@ -186,7 +186,8 @@ Kept because they cost time and will come back:
 - The app's map still draws `operate` as the holder of the steps. The lane is not `operate`. That
   map's change is #117's.
 - The map's "not built yet" legend now has nothing to point at.
-- `.done` markers are visible in the disposable copies an agent reads.
+- `.done` markers were visible in the disposable copies an agent reads. A later change moved them
+  beside the copy.
 
 ## What this cannot tell us
 
@@ -195,7 +196,12 @@ Kept because they cost time and will come back:
 - **Whether real Codex fits.** The fake takes the adapter's arguments and speaks its format. It cannot
   show that `gpt-6-astra` is on the plan, that a login works in the adapter's own home, or that a long
   run streams the way the fake does.
-- **Whether real GitHub fits.** `gh pr create`, its checks, a merge queue and a branch rule that wants
-  a real review have not been tried. The last would refuse the merge. Ship would say so.
+- **Whether real GitHub fits.** The whole lane now runs on `host: "github"` over a stand-in `gh`
+  (`fixtures/pipeline-lane/gh.mjs`), with real git on a bare remote. It has never met real GitHub. Only
+  the stand-in's answer to the facts query is compared with a recorded one in `fixtures/code-host/`. Its
+  other answers, its refusals, its branch rule and the timing of its checks are written from what the
+  code expects, so they prove nothing about GitHub itself. A merge queue is not played at all. Over the
+  stand-in, a branch rule that wants a real review refuses the merge and the lane ends
+  `stuck: merge_failed`. Ship does not say which rule refused it.
 - **What it costs.** There is no price for `gpt-6-astra`, and the token counts are made up.
 - **What a big ticket does.** One small file, one task, one mutant, one round.

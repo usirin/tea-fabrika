@@ -331,11 +331,12 @@ const bodies = {
 			const base = round > 1 ? yield* need(carry.head, "no head to add tests on") : tree.base;
 			const properties = propertiesOf(carry, round);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
-			const taken = (yield* work.listAt(tree.tree, base)).filter(includedBy(includes));
+			const taken = (yield* work.judgedFiles(base)).filter(includedBy(includes));
 			const version = (carry.version ?? 1) + round - 1;
 			const summary = carry.plan?.summary ?? at.title;
 			const pointers = carry.plan?.pointers ?? [];
-			yield* at.tell(yield* work.copy(base), "read", {
+			// From the second round on, `base` is a head.
+			yield* at.tell(yield* work.judgeCopy(base), "read", {
 				ticket: at.url,
 				plan: `Version ${version}. ${summary}`,
 				base,
@@ -438,8 +439,8 @@ const bodies = {
 			const head = yield* need(carry.head, "no head the mutants lived on");
 			const tree = yield* work.tree(at.cmd.number);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
-			const taken = (yield* work.listAt(tree.tree, head)).filter(includedBy(includes));
-			yield* at.tell(yield* work.copy(head), "read", {
+			const taken = (yield* work.judgedFiles(head)).filter(includedBy(includes));
+			yield* at.tell(yield* work.judgeCopy(head), "read", {
 				ticket: at.url,
 				head,
 				survived: fenced(JSON.stringify(carry.survived, null, 1), "json"),
@@ -469,16 +470,16 @@ const bodies = {
 		Effect.gen(function* () {
 			const work = yield* LaneWork;
 			const tickets = yield* Tickets;
-			const settings = yield* work.settings;
 			const head = yield* need(at.cmd.carry.head, "no head to review");
-			const folder = yield* work.copy(head);
+			const folder = yield* work.judgeCopy(head);
 			yield* at.tell(folder, "read", {
-				tools: "A shell, in a copy of the code at this head. What you change there is thrown away.",
+				tools:
+					"A shell, in a copy of the code at this head. What you change there is thrown away. Files an agent loads by itself, such as AGENTS.md, are main's here; the diff below shows any change to them.",
 				checked: "The checks below ran at this head.",
 			});
-			const rubrics = `${folder}/${settings.review?.rubrics ?? "docs/rubrics"}`;
 			const target = bookTarget(planOf(at.id));
 			const reviewed: Reviewed = yield* Effect.gen(function* () {
+				const rubrics = yield* work.rubrics(`${at.cmd.number}-${at.run}`);
 				const runtime = yield* at.stages.review
 					.get(at.cmd.intent)
 					.start(
@@ -549,9 +550,23 @@ const bodies = {
 	merge: (at: At) =>
 		Effect.gen(function* () {
 			const pr = yield* need(at.cmd.carry.pr, "no pull request to merge");
+			const head = yield* need(at.cmd.carry.head, "no head to merge");
 			const outcome = yield* shipped(at, pr);
-			if (outcome.kind === "done") yield* (yield* LaneWatch).look(at.cmd.number, pr);
-			return ended(outcome);
+			if (outcome.kind !== "done") return ended(outcome);
+			const watch = yield* LaneWatch;
+			if (outcome.cleanup !== "not_run") {
+				yield* watch.merged(at.cmd.number, pr, head);
+				return ended(outcome);
+			}
+			// Ship found it merged, and its `commit` is the head the host read. That is this lane's own merge
+			// whose answer was lost, or a person's. So the ticket shows what the host reads, and another head
+			// than the one judged is no merge of this lane's.
+			yield* watch.look(at.cmd.number, pr);
+			return outcome.commit === head
+				? ended(outcome)
+				: ended({kind: "stuck", why: "merged_elsewhere"}, {}, [
+						`${pr} was merged at ${outcome.commit}, by someone other than this lane. This lane judged ${head}.`,
+					]);
 		}),
 };
 

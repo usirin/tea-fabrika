@@ -14,6 +14,7 @@ import {bundlesOf, common} from "./bundles.ts";
 //   dist/host-*.mjs    what the host loads later or shares: the lane's code, when a lane starts
 //   dist/ignorer.mjs   the mutation step's ignorer, which Stryker loads by path
 //   dist/briefs/       the pipeline's step briefs, plain files
+//   dist/rubrics/      the rubrics fabrika ships, plain files, for a repository that names none
 //   dist/preload.cjs   the preload: CommonJS, as a sandboxed preload must be
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
@@ -78,6 +79,7 @@ const program = Effect.gen(function* () {
 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
 			// The step briefs stay plain files in the bundle's folder: changing one changes no code.
 			fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), {overwrite: true}),
+			fs.copy(at("../../packages/pipeline/rubrics"), at("dist/rubrics"), {overwrite: true}),
 			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
 			// Flow's own rules for the map program's canvas, then fabrika's theme, which sets Manti's
 			// tokens from the app's values, and the app's rules, which restyle the rest.
