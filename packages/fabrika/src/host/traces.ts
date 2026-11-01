@@ -132,7 +132,7 @@ export type JobTrace = typeof JobTrace.Type;
 
 /**
  * One call to a job's record, as it crosses the door: `POST /<ledger>/job/<trace>` with one of
- * these as its body. The first five are its `Storage` (a `KeyValueStore` and its steps); the
+ * these as its body. The first six are its `Storage` (a `KeyValueStore` and its steps); the
  * door adds who sent it, never the body.
  */
 export const JobCall = Schema.Union([
@@ -140,6 +140,7 @@ export const JobCall = Schema.Union([
 	Schema.Struct({op: Schema.Literal("set"), key: Schema.String, value: Schema.String}),
 	Schema.Struct({op: Schema.Literal("remove"), key: Schema.String}),
 	Schema.Struct({op: Schema.Literal("size")}),
+	Schema.Struct({op: Schema.Literal("keys")}),
 	Schema.Struct({
 		op: Schema.Literal("step"),
 		run: Schema.String,
@@ -191,6 +192,7 @@ const decodeAs =
 
 const Value = Schema.Struct({value: Schema.NullOr(Schema.String)});
 const Size = Schema.Struct({size: Schema.Int});
+const Keys = Schema.Struct({keys: Schema.Array(Schema.String)});
 
 const kvError = (method: string, key?: string) => (e: StorageBroken) =>
 	new KeyValueStore.KeyValueStoreError({
@@ -230,6 +232,11 @@ const recordKv = (calls: RecordCalls, trace: string) =>
 			Effect.flatMap(decodeAs(Size, "answer to size")),
 			Effect.map((a) => a.size),
 			Effect.mapError(kvError("size")),
+		),
+		keys: calls(trace, {op: "keys"}).pipe(
+			Effect.flatMap(decodeAs(Keys, "answer to keys")),
+			Effect.map((a) => a.keys),
+			Effect.mapError(kvError("keys")),
 		),
 	});
 

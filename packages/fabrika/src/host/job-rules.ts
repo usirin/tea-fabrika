@@ -208,6 +208,10 @@ export const callJob = (
 				return {
 					size: num(db.all(`SELECT count(*) AS c FROM state WHERE value IS NOT NULL`)[0], "c"),
 				};
+			case "keys":
+				return {
+					keys: db.all(`SELECT key FROM state WHERE value IS NOT NULL`).map((r) => String(r.key)),
+				};
 			case "step": {
 				const key = headKey(call.run, call.machine, call.id);
 				const head = heads.get(key) ?? headOf(db, call.run, call.machine, call.id);

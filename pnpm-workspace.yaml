@@ -31,10 +31,10 @@ catalog:
   '@demlik/code-graph': 0.12.0
   '@demlik/structure-sweep': 0.3.9
   '@demlik/tea': 0.21.0
-  '@effect/opentelemetry': 4.0.6
-  '@effect/platform-node': 4.0.6
+  '@effect/opentelemetry': 4.1.1
+  '@effect/platform-node': 4.1.1
   '@effect/tsgo': 0.56.0
-  '@effect/vitest': 4.0.6
+  '@effect/vitest': 4.1.1
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
@@ -73,7 +73,7 @@ catalog:
   '@xterm/xterm': 6.0.0
   # React Flow, MIT: the map program's window (programs/map).
   '@xyflow/react': 12.12.0
-  effect: 4.0.6
+  effect: 4.1.1
   electron: 45.0.0
   esbuild: 0.28.2
   fast-check: 4.10.2
@@ -107,9 +107,13 @@ onlyBuiltDependencies:
 
 # The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
-  '@effect/platform-node-shared': 4.0.6
+  '@effect/platform-node-shared': 4.1.1
 
 patchedDependencies:
+  # effect 4.1 deleted effect/Crypto, which alchemy 2.0.0-beta.84 imports, so its Cloudflare
+  # package cannot load. The patch is the fix alchemy already merged
+  # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.
+  alchemy@2.0.0-beta.84: patches/alchemy@2.0.0-beta.84.patch
   # Manti's type files name each relative import without its `.js`, which only a bundler's
   # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`
   # (`./components` becomes `./components/index.js`) and changes no code. Drop it when Manti
