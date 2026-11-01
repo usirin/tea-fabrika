@@ -192,3 +192,33 @@ export const keyName = (press: Press): string | null => {
 	const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${press.meta ? "m-" : ""}`;
 	return `<${mods}${bare}>`;
 };
+
+/** Who a key belongs to: the system and its menu, the app (the desk or a tile), or nobody at all. */
+export type KeyOwner = "system" | "app" | "nobody";
+
+/**
+ * The Command keys that are not the Mac's. Cmd-K is the app's palette. Cmd-W is nobody's for now,
+ * by the owner's choice: it types nothing and closes nothing. Its name has no Shift, so Cmd-Shift-W
+ * goes with it. To give it what it should close later, change this one line.
+ */
+const NOT_THE_MACS: ReadonlyMap<string, KeyOwner> = new Map([
+	["<m-k>", "app"],
+	["<m-w>", "nobody"],
+]);
+
+/**
+ * Who a key belongs to. On a Mac, Command is the system's and the menu's, as in Terminal: Cmd-Q
+ * quits, whatever has focus. Everywhere else the menu's keys are Ctrl keys, and a shell needs
+ * those: Ctrl-C and Ctrl-W stay with tsh.
+ *
+ *   keyOwner({key: "q", ctrl: false, alt: false, meta: true}, true)    "system"
+ *   keyOwner({key: "k", ctrl: false, alt: false, meta: true}, true)    "app": the palette
+ *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, true)    "nobody"
+ *   keyOwner({key: "c", ctrl: true, alt: false, meta: false}, true)    "app": tsh's
+ *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, false)   "app": not a Mac
+ */
+export const keyOwner = (press: Press, mac: boolean): KeyOwner => {
+	if (!mac || !press.meta) return "app";
+	const name = keyName(press);
+	return (name === null ? undefined : NOT_THE_MACS.get(name)) ?? "system";
+};

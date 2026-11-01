@@ -16,6 +16,9 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //   pnpm --filter @kampus/fabrika-app-old e2e
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e     screenshots there, not in a temp folder
 //
+// First, with no screenshot: every key the menu holds goes by a focused tsh tile untouched, while
+// typing, Ctrl-C and Ctrl-D stay with tsh. Then:
+//
 //   1 desk           the window opens on one tile, t1, at tsh's prompt
 //   2 split          Ctrl-B |, then Ctrl-B -: three tiles, each with its own tsh
 //   3 counter        `counter` in t3: counter covers t3, at 1 after a click; t1 and t2 as they were
@@ -311,9 +314,195 @@ const popovers = async (page: Page) => {
 	await prompted(page, "t3");
 };
 
+/**
+ * Press a chord, and wait until it has ended as `want` says: "free" if the page let the key go by
+ * untouched, which is what lets Electron offer it to the menu, or "taken" if something on the page
+ * called `preventDefault`. A key the page's own listener swallows never reaches the spy, so it
+ * never ends "free". What this cannot see is the menu itself: a key sent over the DevTools protocol
+ * has no native event, and Electron offers only a native one to the menu.
+ */
+const pressEnds = async (page: Page, chord: string, want: "free" | "taken") => {
+	await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+	await page.keyboard.press(chord);
+	await until(
+		`${chord} to end ${want}`,
+		() => page.evaluate(() => document.documentElement.dataset.keyEnd),
+		(end) => end === want,
+	);
+};
+
+/**
+ * Cmd-W and Cmd-Shift-W, on a Mac: cancelled, so Electron does not offer them to the menu's Close
+ * Window, and nothing closes. `onKey` swallows them before the spy, so a key that ended "free" is
+ * the failure here. The window count cannot fail on its own: a key sent this way never reaches
+ * the menu, whatever the page does. Cancelling is what this proves.
+ */
+const closeKeysDoNothing = async (app: ElectronApplication, page: Page, where: string) => {
+	const before = await tiles(page);
+	for (const chord of ["Meta+w", "Meta+Shift+w"]) {
+		await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+		await page.keyboard.press(chord);
+		await page.waitForTimeout(200);
+		const end = await page.evaluate(() => document.documentElement.dataset.keyEnd);
+		check(`${chord} is cancelled ${where}`, end !== "free", end);
+		check(`${chord} closes no window`, (await windowCount(app)) === 1);
+		check(`${chord} closes no tile`, (await tiles(page)).join() === before.join());
+	}
+};
+
+/** A menu accelerator, as Playwright spells the same chord. */
+const chordFor = (accelerator: string) =>
+	accelerator
+		.split("+")
+		.map((part) => {
+			if (/^(Command|Cmd|CommandOrControl|CmdOrCtrl)$/.test(part)) return "Meta";
+			if (part === "Option") return "Alt";
+			if (part === "Plus") return "Shift+=";
+			return part.length === 1 ? part.toLowerCase() : part;
+		})
+		.join("+");
+
+/**
+ * Who owns a key, from t1 at an empty prompt: every accelerator in the real menu goes by the tile
+ * untouched and types nothing, as does each key the system or the menu may own, with the prefix
+ * armed or a popover open too. Typing, Ctrl-C and Ctrl-D stay with tsh, and Cmd-W does nothing.
+ */
+const systemKeys = async (app: ElectronApplication, page: Page) => {
+	await page.evaluate(() => {
+		window.addEventListener(
+			"keydown",
+			(e) => {
+				if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+				// Read on the next turn: by then every listener on the page has had the key.
+				setTimeout(() => {
+					document.documentElement.dataset.keyEnd = e.defaultPrevented ? "taken" : "free";
+				});
+			},
+			{capture: true},
+		);
+		// Playwright's Meta+v really pastes, from this machine's clipboard. The spy notes where the
+		// paste would land, and stops it, so what is on the clipboard never reaches a tile or a log.
+		window.addEventListener(
+			"paste",
+			(e) => {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				const at = e.target instanceof Element ? e.target : null;
+				const over = at?.closest("[data-over]")?.id;
+				const tile = at?.closest("[data-tile]")?.getAttribute("data-tile");
+				document.documentElement.dataset.pasteIn = over ?? tile ?? "elsewhere";
+			},
+			{capture: true},
+		);
+	});
+	const accelerators = await app.evaluate(({Menu}) => {
+		const inMenu = (menu: Electron.Menu): string[] =>
+			menu.items.flatMap((item) => [
+				...(item.accelerator ? [item.accelerator] : []),
+				...(item.submenu ? inMenu(item.submenu) : []),
+			]);
+		const menu = Menu.getApplicationMenu();
+		return menu === null ? [] : inMenu(menu);
+	});
+	const chords = accelerators.map(chordFor).filter((chord) => chord !== "Meta+w");
+	check("the menu has Quit on Cmd-Q", chords.includes("Meta+q"), chords);
+	for (const chord of [...chords, "Meta+,", "Meta+`", "Meta+t"]) {
+		await pressEnds(page, chord, "free");
+		const row = lastRow(await screen(page, "t1"));
+		check(`${chord} goes by t1 and types nothing`, row === "tsh$", row);
+	}
+
+	// While the host has not answered Ctrl-B yet, and then with the prefix armed.
+	await page.keyboard.press("Control+b");
+	await pressEnds(page, "Meta+q", "free");
+	await page.waitForTimeout(200);
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by the prefix", true);
+	await page.keyboard.press("q");
+	await page.waitForTimeout(200);
+	await prompted(page, "t1");
+
+	await page.keyboard.press("Meta+k");
+	const palette = page.getByRole("dialog", {name: "Commands"});
+	await palette.waitFor();
+	await page.evaluate(() => {
+		if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+	});
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by a palette without focus", true);
+
+	// Focus can land in a tile under the palette: a split from another window focuses its new
+	// terminal. Focus is put there by hand here. Cmd-V must not paste into a shell nobody sees.
+	const intoTile = async () => {
+		await page.locator('[data-tile="t1"] .screen').focus();
+		check("focus is in t1, under what is open", (await overHolds(page)) === null);
+	};
+	await intoTile();
+	await page.evaluate(() => delete document.documentElement.dataset.pasteIn);
+	await pressEnds(page, "Meta+v", "free");
+	check("Cmd-V moves focus into the palette", (await overHolds(page)) === "pop-palette");
+	await until(
+		"the paste to land",
+		() => page.evaluate(() => document.documentElement.dataset.pasteIn),
+		(pasted) => pasted === "pop-palette",
+	);
+	check("Cmd-V pastes into the palette", true);
+	await intoTile();
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by with focus in a tile under the palette", true);
+	await page.waitForTimeout(200);
+	check("nothing reached t1 under the palette", lastRow(await screen(page, "t1")) === "tsh$");
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+
+	// The asks list gives way to the desk while the prefix is armed. Cmd-V still does not reach t1.
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await page.waitForTimeout(200);
+	await intoTile();
+	await page.keyboard.press("Control+b");
+	await pressEnds(page, "Meta+v", "free");
+	check(
+		"with the prefix armed, Cmd-V moves focus into the list",
+		(await overHolds(page)) === "pop-asks",
+	);
+	await page.keyboard.press("q");
+	await page.waitForTimeout(200);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-asks");
+	await prompted(page, "t1");
+
+	await page.keyboard.type("ab");
+	await shows(page, "t1", "typing", (t) => lastRow(t) === "tsh$ ab");
+	await page.keyboard.press("ArrowLeft");
+	await pressEnds(page, "Control+d", "taken");
+	await shows(page, "t1", "Ctrl-D deleting a character", (t) => lastRow(t) === "tsh$ a");
+	check("Ctrl-D stays with tsh", true);
+	await pressEnds(page, "Control+c", "taken");
+	await prompted(page, "t1");
+	check("Ctrl-C stays with tsh", true);
+	await pressEnds(page, "q", "taken");
+	await shows(page, "t1", "a plain q", (t) => lastRow(t) === "tsh$ q");
+	check("a plain q is typed", true);
+	await page.keyboard.press("Control+u");
+	await prompted(page, "t1");
+
+	await closeKeysDoNothing(app, page, "over t1's tsh");
+	const row = lastRow(await screen(page, "t1"));
+	check("Cmd-W and Cmd-Shift-W type nothing in t1", row === "tsh$", row);
+	await page.keyboard.press("Meta+k");
+	await palette.waitFor();
+	await closeKeysDoNothing(app, page, "over the palette");
+	check("the palette is still open", (await palette.count()) === 1);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+	await prompted(page, "t1");
+};
+
 const flow = async (app: ElectronApplication) => {
 	const page = await app.firstWindow();
 	await prompted(page, "t1");
+	await systemKeys(app, page);
 	check("the desk starts on our own scheme", page.url() === "fabrika://app/desk.html", page.url());
 	await run(page, "t1", "seq --to 3 | double");
 	const answer = await prompted(page, "t1");
@@ -349,6 +538,8 @@ const flow = async (app: ElectronApplication) => {
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
 	check("counter covers t3, at 0", (await countIn(page, "t3").innerText()) === "0");
+	await tile(page, "t3").locator("[data-view]").focus();
+	await closeKeysDoNothing(app, page, "over a program's view");
 	await tile(page, "t3").getByRole("button", {name: "+1"}).click();
 	await countIn(page, "t3").filter({hasText: /^1$/}).waitFor();
 	const t1 = await screen(page, "t1");
