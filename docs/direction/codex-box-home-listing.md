@@ -59,8 +59,8 @@ opened `~/.ssh/id_x` past the narrower deny. Now the table holds real paths.
   opened folder is closed.
 - A link in a folder that is walked is closed like any entry, and never walked through.
 
-Different spellings now work: a home that is a link, `/tmp` and `/private/tmp`, `//`, `./`, `..`, a
-trailing slash. Codex used to refuse a writable folder reached through a link. Its real path in the
+Different spellings now work: a home that is a link, a Mac's `/tmp` and its real path, `//`, `./`,
+`..`, a trailing slash. Codex used to refuse a writable folder reached through a link. Its real path in the
 table fixes that in `codex sandbox`.
 
 These still fail closed:
