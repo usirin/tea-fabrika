@@ -182,12 +182,13 @@ const FRAME =
  * The one window, with the same safe settings the app's windows always had. Quiet, it is made
  * hidden and drawn anyway, then shown without taking focus.
  */
-const deskWindow = (preload: string, launch: Launch) => {
+const deskWindow = (preload: string, icon: string, launch: Launch) => {
 	const quiet = launch.kind === "quiet";
 	const window = new BrowserWindow({
 		width: 1200,
 		height: 760,
 		title: "fabrika",
+		icon,
 		backgroundColor: "#0a0b0c",
 		...FRAME,
 		show: !quiet,
@@ -298,6 +299,9 @@ const main = Effect.gen(function* () {
 	});
 	guard();
 	const path = yield* Path.Path;
+	const icon = path.join(DIST, "icon.png");
+	// A quiet start has no Dock icon to set. An unpackaged app has no icon of its own otherwise.
+	if (launch.kind !== "quiet") app.dock?.setIcon(icon);
 	// Asked for by our own page only: the scheme is registered for nothing else.
 	const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
@@ -466,7 +470,7 @@ const main = Effect.gen(function* () {
 			current.focus();
 			return;
 		}
-		const made = deskWindow(path.join(DIST, "preload.cjs"), launch);
+		const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
 		current = made;
 		made.once("closed", () => {
 			if (current !== made) return;

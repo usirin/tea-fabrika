@@ -1,6 +1,18 @@
+import {readFileSync} from "node:fs";
 import {describe, expect, it} from "vitest";
 import app from "../package.json" with {type: "json"};
 import {launchOf} from "./launch.ts";
+
+describe("the app's icon", () => {
+	it("is a 1024 square with a clear background, as the Dock wants it", () => {
+		const png = readFileSync(new URL("../icon/icon.png", import.meta.url));
+		expect(png.subarray(1, 4).toString()).toBe("PNG");
+		// IHDR: width, height, then bit depth and color type. 8-bit RGBA is what holds clear corners.
+		expect(png.readUInt32BE(16)).toBe(1024);
+		expect(png.readUInt32BE(20)).toBe(1024);
+		expect([png[24], png[25]]).toEqual([8, 6]);
+	});
+});
 
 // Which launch each environment asks for: a home of its own is quiet, unless asked otherwise.
 
