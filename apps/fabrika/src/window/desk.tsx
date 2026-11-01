@@ -2,6 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
 import {
+	type CSSProperties,
 	memo,
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
@@ -28,14 +29,17 @@ import {
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
 import {keyName} from "../desk/keys.ts";
 import {
+	type Box,
 	type ContainerNode,
-	findTile,
+	type Drag,
+	flat,
 	fold,
-	isFolded,
+	inPx,
 	type LayoutNode,
 	lineOf,
 	type NodeId,
-	openShares,
+	type Orientation,
+	type Span,
 	type TileId,
 	type TileNode,
 	tiles,
@@ -546,76 +550,80 @@ const dragged = (
 	return {...sizes, [a]: left, [b]: pair - left};
 };
 
+/** A box as CSS has it: a share of the workspace, plus pixels. */
+const placed = (box: Box): CSSProperties => {
+	const at = (span: Span) => `calc(${span.of * 100}% + ${span.px}px)`;
+	return {left: at(box.x), top: at(box.y), width: at(box.w), height: at(box.h)};
+};
+
 /**
- * A row or a column. An open child gets its share of the space the strips leave (`openShares`),
- * with a border to drag between each two open children; a folded one is a strip in its place.
+ * Every tile of the workspace, as one flat list: each tile's element stays a child of this one,
+ * wherever a split, a turn or a zoom puts it, so React keeps it, with its scroll, its focus and
+ * what is typed in it. The tree says only where each box goes (layout/flat.ts).
  */
-function Container(props: {
-	readonly container: ContainerNode;
+function Tiles(props: {
 	readonly ws: Workspace;
 	readonly desk: Open;
 	readonly views: Model["views"];
 }): ReactNode {
-	const {container, ws, desk, views} = props;
+	const {ws, desk, views} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
-	const [drag, setDrag] = useState<Readonly<Record<string, number>> | null>(null);
-	const shares = openShares(drag === null ? container : {...container, sizes: drag});
-	const row = container.orientation === "horizontal";
-	const open = container.children.filter((child) => !isFolded(child)).map((child) => child.id);
-	const cell = (id: NodeId) =>
-		[...(ref.current?.children ?? [])].find(
-			(el) => el instanceof HTMLElement && el.dataset.cell === id,
-		);
-	const border = (a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
-		e.preventDefault();
-		e.stopPropagation();
-		const [first, second] = [cell(a)?.getBoundingClientRect(), cell(b)?.getBoundingClientRect()];
-		if (first === undefined || second === undefined) return;
-		const [from, to] = row ? [first.left, second.right] : [first.top, second.bottom];
-		const target = e.currentTarget;
-		target.setPointerCapture(e.pointerId);
-		let last = container.sizes;
-		const move = (m: PointerEvent) => {
-			const at = row ? m.clientX : m.clientY;
-			last = dragged(container.sizes, a, b, (at - from) / Math.max(1, to - from));
-			setDrag(last);
+	const [drag, setDrag] = useState<Drag | null>(null);
+	const laid = useMemo(() => flat(ws.layout, drag), [ws.layout, drag]);
+	const press =
+		(container: ContainerNode, a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const [first, second] = [laid.boxes.get(a), laid.boxes.get(b)];
+			const whole = ref.current?.getBoundingClientRect();
+			if (first === undefined || second === undefined || whole === undefined) return;
+			const row = container.orientation === "horizontal";
+			const [from, to] = row
+				? [
+						whole.left + inPx(first.x, whole.width),
+						whole.left + inPx(second.x, whole.width) + inPx(second.w, whole.width),
+					]
+				: [
+						whole.top + inPx(first.y, whole.height),
+						whole.top + inPx(second.y, whole.height) + inPx(second.h, whole.height),
+					];
+			const target = e.currentTarget;
+			target.setPointerCapture(e.pointerId);
+			let last = container.sizes;
+			const move = (m: PointerEvent) => {
+				const at = row ? m.clientX : m.clientY;
+				last = dragged(container.sizes, a, b, (at - from) / Math.max(1, to - from));
+				setDrag({container: container.id, sizes: last});
+			};
+			const up = () => {
+				target.removeEventListener("pointermove", move);
+				target.removeEventListener("pointerup", up);
+				setDrag(null);
+				toHost({type: "resize", container: container.id, sizes: last});
+			};
+			target.addEventListener("pointermove", move);
+			target.addEventListener("pointerup", up);
 		};
-		const up = () => {
-			target.removeEventListener("pointermove", move);
-			target.removeEventListener("pointerup", up);
-			setDrag(null);
-			toHost({type: "resize", container: container.id, sizes: last});
-		};
-		target.addEventListener("pointermove", move);
-		target.addEventListener("pointerup", up);
-	};
 	return (
-		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
-			{container.children.flatMap((child) => {
-				if (isFolded(child)) return [<Strip key={child.id} node={child} />];
-				const before = open[open.indexOf(child.id) - 1];
-				return [
-					...(before === undefined
-						? []
-						: [
-								<hr
-									key={`border-${child.id}`}
-									className="border"
-									aria-orientation={row ? "vertical" : "horizontal"}
-									onPointerDown={border(before, child.id)}
-								/>,
-							]),
-					<div
-						key={child.id}
-						className="cell"
-						data-cell={child.id}
-						style={{flexGrow: shares[child.id] ?? 1}}
-					>
-						<Node node={child} ws={ws} desk={desk} views={views} />
-					</div>,
-				];
-			})}
+		<div className="tiles" ref={ref}>
+			{laid.tiles.map(({tile, box}) => (
+				<div key={tile.id} className="cell" style={placed(box)}>
+					<DeskTile tile={tile} ws={ws} desk={desk} views={views} />
+				</div>
+			))}
+			{laid.strips.map(({node, along, box}) => (
+				<Strip key={node.id} node={node} along={along} box={box} />
+			))}
+			{laid.borders.map(({container, a, b, box}) => (
+				<hr
+					key={`border-${b}`}
+					className={`border ${container.orientation}`}
+					aria-orientation={container.orientation === "horizontal" ? "vertical" : "horizontal"}
+					style={placed(box)}
+					onPointerDown={press(container, a, b)}
+				/>
+			))}
 		</div>
 	);
 }
@@ -624,33 +632,28 @@ function Container(props: {
  * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
  * parent's direction, named by its programs. A click opens every tile it stands for.
  */
-function Strip({node}: {readonly node: LayoutNode}): ReactNode {
+function Strip(props: {
+	readonly node: LayoutNode;
+	readonly along: Orientation;
+	readonly box: Box;
+}): ReactNode {
+	const {node, along, box} = props;
 	const name = nameOf(node);
 	return (
 		<button
 			type="button"
-			className="strip"
+			className={`strip ${along}`}
 			data-strip={node.id}
 			data-tint={tintOf(node)}
 			aria-label={`open ${name}, ${node.id}`}
 			data-info={INFO.strip}
+			style={placed(box)}
 			onPointerDown={noFocus}
 			onClick={() => toHost({type: "unfold", node: node.id})}
 		>
 			<span className="strip-name">{name}</span>
 		</button>
 	);
-}
-
-function Node(props: {
-	readonly node: LayoutNode;
-	readonly ws: Workspace;
-	readonly desk: Open;
-	readonly views: Model["views"];
-}): ReactNode {
-	const {node, ws, desk, views} = props;
-	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} views={views} />;
-	return <Container container={node} ws={ws} desk={desk} views={views} />;
 }
 
 /** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
@@ -781,7 +784,6 @@ function App(): ReactNode {
 	const bare = m.frame.bare;
 	/** With both bars hidden, the bottom line still shows while you are mid-key. */
 	const keying = props.armed || open?.ask != null || m.frame.note !== null;
-	const zoomed = ws?.layout.zoomed ?? null;
 	return (
 		<div
 			className={`desk${view.kind === "over" && view.dim ? " lost" : ""}${MAC ? " mac" : ""}${bare ? " bare" : ""}`}
@@ -796,32 +798,16 @@ function App(): ReactNode {
 					className="workspace"
 					ref={measure}
 					data-workspace={ws.id}
-					data-zoomed={zoomed ?? undefined}
+					data-zoomed={ws.layout.zoomed ?? undefined}
 					inert={view.dim}
 				>
-					{zoomed !== null ? (
-						<ZoomedTile ws={ws} id={zoomed} desk={open} views={m.views} />
-					) : (
-						<Node node={ws.layout.root} ws={ws} desk={open} views={m.views} />
-					)}
+					<Tiles ws={ws} desk={open} views={m.views} />
 				</div>
 			)}
 			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}
 			<Over {...props} />
 		</div>
 	);
-}
-
-function ZoomedTile(props: {
-	readonly ws: Workspace;
-	readonly id: TileId;
-	readonly desk: Open;
-	readonly views: Model["views"];
-}): ReactNode {
-	const {ws, id, desk, views} = props;
-	const tile = findTile(ws.layout, id);
-	if (tile === null) return null;
-	return <DeskTile tile={tile} ws={ws} desk={desk} views={views} />;
 }
 
 const boot = Effect.gen(function* () {

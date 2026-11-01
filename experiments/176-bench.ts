@@ -479,8 +479,8 @@ export const withApp = async <T>(
 		);
 		const coldMs = performance.now() - started;
 		await app.evaluate(({BrowserWindow}: any, size: any) => {
-			if (size.width !== undefined)
-				BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
+			// One size, every run: the window a quiet start opens at was seen to differ from run to run.
+			BrowserWindow.getAllWindows()[0]?.setContentSize(size.width ?? 1280, size.height ?? 800);
 			const {monitorEventLoopDelay} = process.getBuiltinModule("node:perf_hooks");
 			const loop = monitorEventLoopDelay({resolution: 1});
 			loop.enable();
@@ -672,7 +672,12 @@ const deskNow = (b: Bench) =>
 				t.querySelector("[data-view]")?.getAttribute("aria-label")?.replace(" view", "") ?? null,
 		);
 		const workspaces = document.querySelector('nav[aria-label="workspaces"]')?.children.length ?? 1;
-		return {tiles: tiles.length, programs, workspaces};
+		return {
+			tiles: tiles.length,
+			programs,
+			workspaces,
+			window: [window.innerWidth, window.innerHeight],
+		};
 	});
 
 const hostProcess = (home: string) =>
@@ -1027,8 +1032,177 @@ const walk: Moment = async (b) => {
 	for (const line of new Set(consoleLines)) console.log(`  ${line.slice(0, 400)}`);
 };
 
+/**
+ * What a layout change leaves alone: the same element, its scroll, its focus, a draft, the screen.
+ * Pick 4's question. Facts only: how long it took is `split`'s.
+ */
+const keeps: Moment = async (b) => {
+	const mark = (id: string) =>
+		b.page.evaluate((t: string) => {
+			const el: any = document.querySelector(`[data-tile="${t}"]`);
+			el.__kept = true;
+		}, id);
+	const same = (id: string): Promise<boolean> =>
+		b.page.evaluate((t: string) => {
+			const el: any = document.querySelector(`[data-tile="${t}"]`);
+			return el?.__kept === true;
+		}, id);
+	const scrollIn = (id: string, to: number | null): Promise<number> =>
+		b.page.evaluate(
+			([t, y]: [string, number | null]) => {
+				const tile = document.querySelector(`[data-tile="${t}"]`);
+				const box = [...(tile?.querySelectorAll("*") ?? [])].find(
+					(el) =>
+						el.scrollHeight > el.clientHeight + 50 && getComputedStyle(el).overflowY !== "visible",
+				);
+				if (box === undefined) return -1;
+				if (y !== null) box.scrollTop = y;
+				return box.scrollTop;
+			},
+			[id, to],
+		);
+	const facts: Record<string, unknown> = {};
+	const markdown = await tileShowing(b, "markdown");
+	const ticket = await tileShowing(b, "ticket");
+	const terminal = (await focusedNow(b)) ?? "";
+
+	// The markdown window is scrolled, and its tile splits the way that wraps it in a new container.
+	await focusTile(b, markdown);
+	await mark(markdown);
+	await scrollIn(markdown, 900);
+	const fresh = await split(b, "|");
+	await sleep(200);
+	facts.splitWrap = {sameNode: await same(markdown), scrollTop: await scrollIn(markdown, null)};
+
+	// The new tile closes: the container goes, and the tile moves up a level.
+	await mark(markdown);
+	await scrollIn(markdown, 900);
+	await prefixed(b, "x");
+	await sleep(100);
+	await b.page.keyboard.press("y");
+	await waitFor(
+		"the tile gone",
+		() => tilesNow(b),
+		(t) => !t.includes(fresh),
+	);
+	await sleep(200);
+	facts.closeUnwrap = {sameNode: await same(markdown), scrollTop: await scrollIn(markdown, null)};
+
+	// A draft in the ticket's comment box, focus in it, and a zoom in and out.
+	await focusTile(b, ticket);
+	await mark(ticket);
+	const box = b.page.locator(`[data-tile="${ticket}"] #ticket-composer`);
+	await box.click();
+	await b.page.keyboard.type("a draft");
+	await prefixed(b, "z");
+	await sleep(200);
+	const draft = () =>
+		b.page.evaluate((t: string) => {
+			const area = document.querySelector<HTMLTextAreaElement>(
+				`[data-tile="${t}"] #ticket-composer`,
+			);
+			return {
+				value: area?.value ?? null,
+				focusIn: area !== null && document.activeElement === area,
+			};
+		}, ticket);
+	facts.zoomIn = {sameNode: await same(ticket), ...(await draft())};
+	await prefixed(b, "z");
+	await sleep(200);
+	facts.zoomOut = {sameNode: await same(ticket), ...(await draft())};
+	await box.fill("");
+
+	// A bare terminal holds what it printed, and its tile splits the wrapping way.
+	await focusTile(b, terminal);
+	await mark(terminal);
+	await lineTo(b, terminal, "echo kept-by-the-terminal");
+	await waitFor(
+		"the words",
+		() => screen(b, terminal),
+		(t) => t.includes("kept-by-the-terminal"),
+	);
+	await split(b, "-");
+	await sleep(200);
+	facts.terminalSplit = {
+		sameNode: await same(terminal),
+		screenKept: (await screen(b, terminal)).includes("kept-by-the-terminal"),
+	};
+
+	// A turn: every tile stays, in a new shape.
+	const all = await tilesNow(b);
+	for (const id of all) await mark(id);
+	await prefixed(b, " ");
+	await sleep(250);
+	const left = await Promise.all(all.map((id) => same(id)));
+	facts.turn = {sameNodes: left.filter(Boolean).length, of: all.length};
+	keep(await readSample(b, "keeps", [], 0, facts));
+};
+
+/** The boxes tiles are drawn in, for the same layout across two copies. */
+const rects: Moment = async (b) => {
+	const got = await b.page.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>("[data-tile]")]
+			.map((t) => {
+				const r = t.getBoundingClientRect();
+				return [t.dataset.tile, r.left, r.top, r.width, r.height];
+			})
+			.sort(),
+	);
+	keep(await readSample(b, "rects", [], 0, {rects: got}));
+};
+
+const windowSize = (b: Bench, width: number, height: number) =>
+	b.app.evaluate(
+		({BrowserWindow}: any, [w, h]: number[]) => BrowserWindow.getAllWindows()[0].setSize(w, h),
+		[width, height],
+	);
+
+/** The layouts a change that shows must be seen in, saved beside the write-up. */
+const shots = async (b: Bench, prefix: string) => {
+	mkdirSync(SHOTS, {recursive: true});
+	const shot = async (name: string) => {
+		await sleep(400);
+		await b.page.screenshot({path: join(SHOTS, `${prefix}-${name}.png`)});
+	};
+	await lineTo(b, "t1", "tracker");
+	await programIn(b, "t1", "tracker");
+	await fileTicket(b, "t1", "Bench ticket one");
+	await shot("one-tile");
+	const side = await split(b, "|");
+	await shot("side-by-side");
+	await prefixed(b, "x");
+	await sleep(100);
+	await b.page.keyboard.press("y");
+	await waitFor(
+		"one again",
+		() => tilesNow(b),
+		(t) => !t.includes(side),
+	);
+	await focusIs(b, "t1");
+	const below = await split(b, "-");
+	await lineTo(b, below, `markdown --text "# Bench"`);
+	await programIn(b, below, "markdown");
+	await tellMarkdown(b, below, LONG_MARKDOWN(40));
+	await shot("stacked");
+	await focusTile(b, "t1");
+	const right = await split(b, "|");
+	await lineTo(b, right, "ticket --ticket 1");
+	await programIn(b, right, "ticket");
+	await focusTile(b, below);
+	await split(b, "|");
+	await shot("two-by-two");
+	await prefixed(b, "f");
+	await shot("two-by-two-one-folded");
+	await b.page.locator("[data-strip]").first().click();
+	await sleep(200);
+	await windowSize(b, 1024, 700);
+	await shot("small-window");
+};
+
 export const MOMENTS: Record<string, Moment> = {
 	walk,
+	keeps,
+	rects,
 	"keystroke-echo": keystrokeEcho,
 	"focus-move": focusMove,
 	"one-patch": onePatch,
@@ -1068,6 +1242,8 @@ if (command === "build" && label !== undefined) {
 		await b.page.screenshot({path: join(WORK, `${label}-open.png`)});
 		console.log(join(WORK, `${label}-open.png`));
 	});
+} else if (command === "shots" && label !== undefined) {
+	await withApp(label, (b) => shots(b, rest[0] ?? label));
 } else if (command === "list") {
 	console.log(["cold-start", ...Object.keys(MOMENTS)].join("\n"));
 } else if (command === "refs") {
@@ -1120,4 +1296,3 @@ if (command === "build" && label !== undefined) {
 	process.exitCode = 2;
 }
 void spawn;
-void SHOTS;

@@ -182,20 +182,21 @@ body,
 	padding: var(--s-1);
 }
 
-.container {
+/*
+ * Every tile of the workspace is a child of this one, each placed by its own box (layout/flat.ts),
+ * so a tile's element stays where it is in the DOM wherever the layout puts it.
+ */
+.tiles {
+	position: relative;
 	flex: 1;
-	display: flex;
-	gap: 0;
 	min-width: 0;
 	min-height: 0;
 }
 
-.container.horizontal {
-	flex-direction: row;
-}
-
-.container.vertical {
-	flex-direction: column;
+.cell,
+.strip,
+.border {
+	position: absolute;
 }
 
 /*
@@ -204,7 +205,6 @@ body,
  * it lies down. A click opens what it stands for.
  */
 .strip {
-	flex: none;
 	display: grid;
 	place-items: center;
 	margin: 0;
@@ -225,22 +225,12 @@ body,
 	text-overflow: ellipsis;
 }
 
-.container.horizontal > .strip {
-	width: 22px;
-	margin: 0 2px;
-}
-
-.container.horizontal > .strip > .strip-name {
+.strip.horizontal > .strip-name {
 	max-height: 100%;
 	writing-mode: vertical-rl;
 }
 
-.container.vertical > .strip {
-	height: 20px;
-	margin: 2px 0;
-}
-
-.container.vertical > .strip > .strip-name {
+.strip.vertical > .strip-name {
 	max-width: 100%;
 }
 
@@ -251,16 +241,11 @@ body,
 	outline: none;
 }
 
-/* A child's share is its grow: the borders between them are a fixed few pixels. */
 .cell {
-	flex-basis: 0;
 	display: flex;
-	min-width: 0;
-	min-height: 0;
 }
 
 .border {
-	flex: 0 0 4px;
 	margin: 0;
 	border: 0;
 	border-radius: 2px;
@@ -272,11 +257,11 @@ body,
 	background: var(--border);
 }
 
-.container.horizontal > .border {
+.border.horizontal {
 	cursor: col-resize;
 }
 
-.container.vertical > .border {
+.border.vertical {
 	cursor: row-resize;
 }
 
