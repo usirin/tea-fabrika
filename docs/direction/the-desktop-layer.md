@@ -164,8 +164,8 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 - Approve and Remove ask for a finger. Deny does not, since saying no should be easy.
 - On the `cloud` stage the app starts no brain, and keeps only its link to the cloud.
 - **Why:** one thing to open, so nobody manages a service by hand. It costs a spike on an
-  unsigned build (T8). How sure: launchd working there is the doubt, about 70%, and the spike
-  settles it. If it fails, `childBrain` carries this pass, and the owner is told.
+  unsigned build (T8). How sure: launchd working there is the doubt, about 70%, an estimate
+  written for this note and not a measure. The spike settles it. If it fails, `childBrain` carries this pass, and the owner is told.
 
 ## Notes this changes
 

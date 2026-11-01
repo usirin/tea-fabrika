@@ -117,8 +117,11 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 
 ## Use it on a real repository
 
-This is the path as it stands today. **It is wired, but it has not yet taken a real ticket to a
-merged pull request.** Experiment 105 ran the same lane against a fake GitHub. Read
+**This is an older path, not the current way.** To run a ticket today, use
+[Run a ticket through the pipeline](./docs/how-to/run-a-pipeline-ticket.md). This section stays until
+`deliver` is deleted.
+
+**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same lane against a fake GitHub. Read
 [experiment 105](./experiments/105-the-plan-lane-dry-run.md) before you try it.
 
 - **It writes to the repository you name.** It pushes a branch and commits, and opens one pull
@@ -200,7 +203,7 @@ Steps:
 These still run, but they are not the way forward:
 
 - `operate ticket=<url>` in tsh: the older one-ticket loop (build, review, ship). It is going to
-  be deleted. Use `deliver`.
+  be deleted. Use [the pipeline](./docs/how-to/run-a-pipeline-ticket.md).
 - `pnpm demo`: the first-generation factory (`legacy/`) on a toy ticket, with scripted agents. It
   costs nothing and prints every step.
 - `pnpm demo:claude` and `pnpm demo:hard` (a harder toy): the same with real Claude Code. They
@@ -214,6 +217,7 @@ These still run, but they are not the way forward:
 | You want to | Go to |
 |---|---|
 | Know what is next, and who has the move | [`docs/plan/`](./docs/plan/README.md) |
+| Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |

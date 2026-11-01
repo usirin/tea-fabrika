@@ -3,7 +3,7 @@
 Decided 2026-10-22. Written down the same day, after a cleanup was proposed
 that this rules out.
 
-*Changed 2026-10-30, proposed: the core is rebuilt too, not swept in place,
+*Changed 2026-10-30, since decided: the core is rebuilt too, not swept in place,
 and the old code is deleted as each new piece lands. See
 [clean slate](./clean-slate.md).*
 

@@ -113,10 +113,9 @@ Each PR: test writer first (a separate agent, adds its tests, runs them on the b
 **The docs PR,** before the exam, since those notes differ from this plan (gap 9). It holds:
 
 - Real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
-- **`where-each-piece-lives.md`,** since it says Tuval is the app's gui (the entry of 10-22): `@kampus/tuval` is its own package, and it holds all client logic. **`the-desktop-layer.md`:** the desk is a program, `next/programs/desk`, in Tier 2, and Tuval is a package.
-- **A line on names: no bare `of` and no `xOf` names in `next/`.** It's a real rule that lives nowhere a reader can find it, and `AGENTS.md` still names `nameOf` and `outcomesOf` for today's version.
-- **A3's wording.** `the-cloud-is-one-more-host.md` (lines 368 and 450) and `elm-first.md` (line 68) say `useMachine`, which dies under Strict Mode. In `next/` the words become: state lives in a tea machine, read through the one `useSyncExternalStore` hook, never `useState`.
-- **Tag examples.** `AGENTS.md` and the notes in `docs/direction` still show `kind` as a tag key. They move to `_tag`, as [Tags](#tags) says.
+- **The sketches that still show `kind` on ledger entries,** in `a-local-first-sync-engine.md` and `the-cloud-is-one-more-host.md`. They move to `_tag` when the owner approves this plan, as [Tags](#tags) says. Ticket 32 tracks it.
+
+The pull request that added this folder already made the rest of this list: `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
 
 **Why five PRs, not one:** 9,700 and more lines in one review is not a review. Each cut is a whole visible thing, and every layer still moves when it needs to. Cost: a rebase per landing, and five reviews instead of one. Sure: 75%.
 
@@ -1035,7 +1034,7 @@ const allowed = {
 
 ## Tags
 
-**The answer:** every union we define is tagged with `_tag`, Effect's own key, and Effect Schema writes it. Nobody writes it by hand. Settled by the owner. `kind`, `is`, `where`, `use` and the rest stop being tag keys.
+**The answer:** every union we define is tagged with `_tag`, Effect's own key, and Effect Schema writes it. Nobody writes it by hand. Settled by the owner. `kind`, `is`, `where`, `use` and the rest stop being tag keys. This plan proposes that `kind` on ledger entries becomes `_tag` too. That part settles when the owner approves this plan, and ticket 32 tracks it.
 
 ```ts
 // A sketch, on effect 4.0.6.
@@ -1865,8 +1864,9 @@ Plan-115's list stands, with these added:
 
 ## Settled by the owner
 
-**Two questions are still open:**
+**Three questions are still open:**
 
+- **How this plan enters the pipeline:** a plan written by hand meets a pipeline that starts at triage, so how does it go in, and which ticket do Tier 1's pull requests run under? No lean yet.
 - **`transport/link.ts`:** does it stay in the library? Lean: yes, since the MCP bridge dials too and can't import tuval. Sure: 75%. T0 moves files, so this needs an answer before PR A.
 - **Backup:** does it move up from Tier 3, for real notes? Lean: yes, to right after PR D. Sure: 70%. This needs an answer before PR D ends.
 

@@ -47,14 +47,13 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
 - **Tier 1 plan for `next/`.** Written, not approved. → after ticket 117, the owner approves
 - **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the plan is approved
-- **[PR 228](https://github.com/usirin/tea-fabrika/pull/228), every update builds every layer (`next/`).** Docs. → the owner's merge
-- **This plan folder and the notes it brought up to date.** Docs. → the owner's merge
+- **This plan folder and the notes it brought up to date, with [every update builds every layer](../direction/every-update-builds-every-layer.md) (`next/`).** Docs. → the owner's yes
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
 - **[PR 257](https://github.com/usirin/tea-fabrika/pull/257), test windows you can't see.** Green. → the owner's merge
 - **[PR 192](https://github.com/usirin/tea-fabrika/pull/192), `claude` and `codex` as programs.** Overlaps pipeline v0. → the owner: merge, yes or no
 - **Pipe colors.** Picked, not built. → a pull request through the pipeline
 - **Studies done, not walked yet.** React tryout, themes, the DeepSeek repo, [Windows](../direction/windows-in-next.md), Effect on Cloudflare. → the owner
-- **demlik.** Epics landed, no release yet. Issues 756, 782 and 777. → the owner
+- **demlik.** Epics landed, no release yet. Three issues wait: [756, operator worktrees have no node_modules, so `pnpm exec fabrika` runs a different CLI](https://github.com/kamp-us/demlik/issues/756); [782, tell's types accept a hand-built handle that tell refuses at run](https://github.com/kamp-us/demlik/issues/782); [777, tea API ratchet asks a Breaking callout for an added optional option](https://github.com/kamp-us/demlik/issues/777). → the owner
 - **Copying for the app and Tuval in `next/`.** Lean, 70%: rethink stays the default, plus a named Tier 2 copy list. → the owner decides
 - **Two people before agents, Tier 3 before Tier 5 in `next/`.** Lean yes, 70%. → the owner answers
 - **Conversation branches.** Saved, not designed. → when the agents tier is next
@@ -64,9 +63,9 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 | Your job | Read |
 |---|---|
-| Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#packages), then that part's own README |
+| Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
-| Run a real ticket | [AGENTS.md's rules](../../AGENTS.md#running-the-machine-on-a-real-ticket), then [field/](../../field/README.md) for what past runs hit |
+| Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [AGENTS.md's rules](../../AGENTS.md#running-the-machine-on-a-real-ticket), then [field/](../../field/README.md) for what past runs hit |
 | Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
 
@@ -76,6 +75,7 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Approves a plan, in `next/` or today's, before any builder starts.
 - Approves a pull request, and answers a question the machine put to a person. No agent does either.
+- Answers Tier 1's open questions: does `transport/link.ts` stay in the library (lean yes, 75%); does backup move up from Tier 3 (lean yes, 70%); how does a plan written by hand enter a pipeline that starts at triage, and which ticket do Tier 1's pull requests run under (no lean yet).
 - Settles a **proposed** note.
 - Reads each exam pull request. Any diff to the exam files stops the build and asks the owner.
 - Adds an entry to `unreachable-ledger.json`, in a change of its own.
@@ -91,7 +91,31 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
 
-Never, by anyone's agent: merge by hand, arm auto-merge, or push to a target repository's main. A change lands only through the ship stage.
+In a live run on a target repository, never, by anyone's agent: merge by hand, arm auto-merge, or push to its main.
+
+## How a change lands
+
+- **A live run on a target repository:** only through the ship stage.
+- **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs the merge, after a leak grep.
+- **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
+- **Direction notes and plans:** they still get the owner's yes.
+
+## Words
+
+- **lane:** one ticket's whole trip through the steps, held by one machine.
+- **step:** one stage of a lane, such as triage or build.
+- **exam:** what a change is checked against: tests, laws, lint and CI rules. The builder never changes it.
+- **laws:** rules a machine must keep, checked on its real reducer across many orders of messages.
+- **box:** the sandbox a program or agent runs in.
+- **walk:** going through something with the owner, step by step.
+- **Tuval:** the codename of the desktop layer in `next/`, the package `@kampus/tuval`. Users see "fabrika".
+- **demlik:** the repository [kamp-us/demlik](https://github.com/kamp-us/demlik), home of `@demlik/tea` and `@demlik/code-graph`.
+- **Jev:** a small classifier that answers one narrow question, cheaper and faster than a big model.
+- **brain:** in `next/`, the place programs run and the ledger lives, on a laptop or on Cloudflare.
+- **hands:** in `next/`, the process on a computer that does machine work for the brain, such as git and agents.
+- **ledger:** the append-only record of facts. Everything else folds from it.
+- **`@kampus/pipeline`:** the library in `packages/pipeline`, today's stages and services.
+- **`@tea-fabrika/pipeline`:** the program in `programs/pipeline`, the line a person types.
 
 ## Keeping this true
 

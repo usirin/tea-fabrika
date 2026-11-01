@@ -37,6 +37,15 @@ ticket -> triage -> plan (the owner approves its Properties)
   [stage agents](./agents-run-on-codex.md). A step done by hand says in its report what
   ran it.
 
+## How a change lands
+
+- **A live run on a target repository:** only through the ship stage.
+- **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs
+  the merge, after a leak grep.
+- **Rows that only record what happened (field logs, index rows):** they merge after the leak grep,
+  with no yes.
+- **Direction notes and plans:** they still get the owner's yes.
+
 ## Changed
 
 - *Changed 2026-10-31:* from "everything in `next/`, by hand" to every pull request, through

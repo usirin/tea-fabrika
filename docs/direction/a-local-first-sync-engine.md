@@ -294,8 +294,9 @@ What local Miniflare gives us, from our own experiments:
 **Open in transport:** the extra hop through the gateway on Cloudflare is not
 measured (a keystroke-echo test would measure it). JSON-RPC's weight per
 message is not measured. ~~How a browser gets its grant is open (lean: a QR code
-from the Mac).~~ *Settled for `next/`:* the menu bar's row, Approve and a finger, on both
-stages; QR is in Tier 7 ([Tier 1's plan](../plan/tier-1.md)). Background browser tabs slow their timers, which may make a tab
+from the Mac).~~ *Proposed for `next/` with [Tier 1's plan](../plan/tier-1.md), which is not approved:* the
+menu bar's row, Approve and a finger, on both stages; QR is in Tier 7. The owner already picked
+two pieces of it: the menu bar in the first slice, and keeping the one-time link. Background browser tabs slow their timers, which may make a tab
 look away.
 
 ### Layer 2: data (decided 2026-10-30)

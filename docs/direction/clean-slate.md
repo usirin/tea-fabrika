@@ -1,6 +1,6 @@
 # Clean slate: the new code beside the old, the old deleted as it is replaced
 
-**Proposed 2026-10-30.** It starts now that all five layers (transport,
+**Decided: the owner chose it. Proposed 2026-10-30.** It starts now that all five layers (transport,
 data, coordination, app, desktop) have been talked through and decided, one by
 one ([a local-first sync engine](./a-local-first-sync-engine.md) for the lower
 three, [the cloud is one more host](./the-cloud-is-one-more-host.md) for the
@@ -94,7 +94,7 @@ code differs from OTP are fixed on the way.
 // A sketch of the order. Each step is one or more pull requests in next/.
 const order = [
 	"finish the decisions",        // done 2026-10-31: all five layers
-	"a first slice",               // two counters through all five layers, in a browser tab
+	"a first slice",               // two counters through all five layers, in a browser tab; changed: see every-update-builds-every-layer.md
 	"the tracker",                 // real tickets on the new ledger, read only first
 	"the new core",                // the project object, gateways, program objects, the hands, each with its laws
 	"programs, one at a time",     // the old copy goes in the pull request that switches to the new one

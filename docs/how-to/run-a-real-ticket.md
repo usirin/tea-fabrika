@@ -1,5 +1,8 @@
 # Run a real ticket
 
+**Old, kept for the record.** This is the first-generation factory in `legacy/`, not the current way.
+To run a ticket today, use [Run a ticket through the pipeline](./run-a-pipeline-ticket.md).
+
 Run the first-generation factory on one GitHub issue, in a pnpm monorepo
 checked out on this machine. The change lands in a local branch. Nothing is
 pushed, and nothing is written to GitHub.
