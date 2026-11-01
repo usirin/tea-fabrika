@@ -1,13 +1,18 @@
-# A fast check per pull request, a daily run for the rest
+# A fast check per pull request, a mutation queue for the rest
 
-Decided 2026-11-01: a check that takes hours never gates a pull request. The check per pull
-request is very fast, and a daily run covers the whole codebase. The budget and the method
-below are **proposed**. Today's version: the mutation step in
-`packages/pipeline/src/stages/mutation/`. The numbers are from
+Decided 2026-11-01:
+
+- A check that takes hours never gates a pull request. The check on each pull request is
+  very fast.
+- The rest goes to a mutation queue, a program in `next/` shaped like a merge queue (Tier 6).
+- Today's version keeps only the speedups on each pull request. Its daily run is not built.
+
+The budget and the method below are **proposed**. The numbers are from
 [experiment 181](../../experiments/181-fast-and-daily-mutation.md).
 
 ```ts
-// A sketch, not built. Two runs of one tool, with different jobs.
+// A sketch, not built. Two jobs for one tool.
+// Today's version, and `next/` after it: the check on each pull request.
 const fast = mutation({
 	mutants: "changed lines, one per line first, then the rest",
 	limits: {wall: minutes(5), perTest: seconds(10), overRun: seconds(5)},
@@ -15,10 +20,13 @@ const fast = mutation({
 	tests: "related, the lane's end-to-end tests left out",
 	answer: "advice", // a survivor never stops the pull request
 });
-const daily = scheduled("mutation_daily", {every: days(1)}, function* () {
-	const found = yield* gather(readActionsArtifact); // GitHub Actions ran the shards
-	for (const gap of yield* check(newOrChanged, found)) yield* act(fileOrUpdateTicket, gap);
-	for (const gone of yield* check(noLongerLive, found)) yield* act(commentAndClose, gone);
+// `next/` only: the mutation queue, on a Durable Object alarm.
+const queue = scheduled("mutation_queue", {every: days(1)}, function* () {
+	yield* act(enqueue, yield* gather(wholeCodebaseSweep)); // joins what pull requests left over
+	const batch = yield* gather(nextBatch); // in order, repeats dropped by Gap id
+	const found = yield* listen(handsRan(batch)); // hands run Stryker, never the brain
+	for (const ticket of yield* check(newGaps, found)) yield* act(fileOrComment, ticket); // 3 a day
+	for (const gone of yield* check(goneGaps, found)) yield* act(commentAndClose, gone);
 });
 ```
 
@@ -28,11 +36,11 @@ const daily = scheduled("mutation_daily", {every: days(1)}, function* () {
   request.** It runs on a schedule, and what it finds becomes a ticket in our tracker. The
   ticket goes through the lane like any other.
 - **The cost, said plainly.** A gap a long check would have found reaches main, and is found
-  up to a day later. A survivor is a missing test, not a bug. The damage is a real bug that
+  a day or more later. A survivor is a missing test, not a bug. The damage is a real bug that
   sits in that same gap. What limits it:
   - The fast check still runs on the pull request's own changed lines first.
   - Every pull request on main can be reverted.
-  - The daily ticket is picked up by the lane like any other, so how fast it is fixed is how
+  - The queue's ticket is picked up by the lane like any other, so how fast it is fixed is how
     fast the owner slots it.
 - **This is not new here.** CI on a pull request already runs only the tests of changed files
   (`--changed`), and main runs them all, one merge late.
@@ -48,8 +56,8 @@ Times are from 31 recent successful CI runs on this repo (p50, seconds).
 | e2e on macOS | 96 (max 183) | gates |
 | Fast mutation on changed lines | 5 minutes at most, proposed | advises |
 | All tests on main | 171 to 241 per shard | one merge late |
-| Mutation over the whole codebase | about 16 runner hours, a guess | daily |
-| Mutants under the lane's end-to-end tests | about 100 s per mutant | daily, or not at all |
+| Mutation over the whole codebase | about 48 worker hours for a first pass, a guess | the queue, `next/` |
+| Mutants under the lane's end-to-end tests | about 100 s per mutant | not at all, for now |
 | TLA+ drift ([scheduled jobs](./scheduled-jobs-on-the-host.md)) | not measured | daily |
 
 **What never moves to the daily side, whatever it costs.** A check that stops the wrong thing
@@ -60,6 +68,8 @@ one of these ever outgrows the budget, the budget grows or the check gets faster
 moves.
 
 ## The fast check, proposed
+
+Today's version gets this now, through the pipeline. `next/` keeps the same settings.
 
 - **How it runs.** Static mutants off, a 5 s over-run and a 10 s test limit, not 60 s. The
   lane's end-to-end tests and the nested Stryker tests left out. Mutants in a fixed seeded
@@ -72,15 +82,16 @@ moves.
     set) and cut mutant time by 17% to 95%. The test limit alone took the ship gate from
     2,870 s to 931 s. Lines first keeps the cover of one mutant per line without its blind
     spot: one per line alone missed 27% to 40% of the lines where a mutant lived.
-  - Cost: static mutants are only checked daily. A pull request over the cap is partly
-    checked until the next day.
+  - Cost: static mutants are not checked on a pull request. A pull request over the cap is
+    only partly checked.
   - Sure: 75%. The doubt is the rate on slow tests. A week of the real step's timings
     settles it.
 - **The budget: 5 minutes of wall time on 2 workers.** About 90 to 300 mutants. The median
   merged pull request has 98. Why 5: CI's own checks take about 2.5 minutes, and a wait twice
   that is still short. That is our judgment; no source gives a number. Sure: 70%.
-- **Over the budget.** The check stops, says in plain words how many lines and mutants it did
-  not reach, and the daily run reaches them. A pull request is not split to fit the check.
+- **Over the budget.** The check stops and says in plain words how many lines and mutants it
+  did not reach. In `next/`, those enter the mutation queue. In today's version they are only
+  reported, since nothing picks them up. A pull request is not split to fit the check.
   Splitting is for the review.
 
 ```ts
@@ -88,7 +99,7 @@ moves.
 type FastCheck = {
 	ran: number; // mutants that got an answer
 	lines: {changed: number; reached: number};
-	stopped: "done" | "time"; // "time": the rest goes to the daily run
+	stopped: "done" | "time"; // "time": in `next/`, the rest enters the queue
 	survivors: ReadonlyArray<Survivor>;
 };
 // PR 267's first stage, replayed with static off and the 10 s limit: 210 of its 256 mutants,
@@ -112,36 +123,69 @@ type FastCheck = {
   advice must be measured first: shown, rated, and counted.
 - **How it earns more.** With no `noise` in 30 rated survivors in a row, the false alarm rate
   is under 10% with 95% confidence (the rule of three, 3 / 30:
-  [Hanley and Lippman-Hand, 1983](https://doi.org/10.1001/jama.1983.03340130102038)), and the survivors may then be
-  sent to the test writer once, inside the budget. Blocking needs about 300 in a row with no
-  `noise` for 1%. Sure this is the right order: 85%.
+  [Hanley and Lippman-Hand, 1983](https://doi.org/10.1001/jama.1983.03340130102038)), and the
+  survivors may then be sent to the test writer once, inside the budget. Blocking needs about
+  300 in a row with no `noise` for 1%. Sure this is the right order: 85%.
 - **What a fast-check survivor is not.** A static mutant, or one no fast test covers, is "not
   covered by the fast tests", not a gap. In 181, 39% of those were caught by the lane's
   end-to-end tests.
 
-## The daily run, proposed
+## The mutation queue, `next/` only, proposed
 
-- **Where: GitHub Actions on this public repo.** Standard runners are free in public repos.
-  A job may run 6 hours, and the free plan runs 20 jobs at a time. 20 shards over the whole
-  codebase, legacy left out: about 87,000 mutants. After the first pass, incremental reuse
-  runs only what changed; a weekly `force` catches what it cannot see. No new account.
-  Sure: 70%. The doubt is the rate on GitHub's runners.
-- **Actions cannot reach the tracker.** Today's tracker is `ledger.sqlite` in the app's home
-  on the laptop, with a socket for local agents only. `fabrika post` needs a connected home
-  and a grant signed with the person's key (`apps/fabrika/src/host/post.ts`).
+A program in Tier 6, under "Pipeline stages, schedules" in [the tiers](../plan/tiers.md).
 
-| Option | What it costs | What it cannot do |
-|---|---|---|
-| **The laptop fetches.** Actions uploads an artifact; a job on the host's clock fetches it through `CodeHost` and files as `agent:mutation` | One small program; no secret in Actions | Files only while the app runs |
-| The laptop runs it all, when idle | Nothing new | 87,000 mutants keeps the laptop busy for days |
-| The tracker answers from outside | The cloud ledger and a key for CI, stored in Actions | A key on GitHub that can write tickets; the real tickets moved; a security review first |
+```ts
+// A sketch. The queue's state, as data in the ledger.
+type Entry = {
+	gap: Gap["id"]; // the stable id below: a repeat is dropped, never queued twice
+	from: {_tag: "pr"; pr: number} | {_tag: "sweep"; day: string};
+	at: number; // the referee's clock: the queue's order
+};
+type Queue = {waiting: Entry[]; running: {batch: Entry[]; hands: string} | null};
+// One day, made-up numbers: a pull request left 40 lines; the sweep adds 3,000 mutants, 2,960 of them already known
+// and unchanged, so dropped. 80 entries wait; hands take a batch of 80; 6 live; 2 tickets.
+```
 
-**Lean: the laptop fetches.** Why: no key leaves the laptop, and it fits
-[scheduled jobs on the host](./scheduled-jobs-on-the-host.md): a program that listens to the
-clock and files a ticket. Cost: tickets wait for the app to be open. Sure: 80%. GitHub Issues
-as the inbox is out: [tickets start in our tracker](./tickets-start-in-our-tracker.md).
+- **Two ways in.** The lines a pull request's 5-minute cap did not reach, and a daily sweep of
+  the whole codebase.
+- **In order, no repeats.** The queue keeps entries in order. An entry whose id is already
+  waiting, or was run on the same code, is dropped. Leftovers from a pull request go before
+  the sweep.
+- **Hands run Stryker, never the brain.** Running mutants is machine work. The queue hands a
+  batch to hands, as any job ([brain, hands, window, agent](./brain-hands-window-agent.md)),
+  and waits for the answers. A batch that crashes is split and its entries run again alone.
+- **It files tickets from survivors,** at most 3 a day, as below.
+- **It runs on a Durable Object alarm,** as
+  [scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md) says, and it reads
+  and writes the tracker on the ledger. So no GitHub Actions shards and no laptop job fetching
+  through `CodeHost`: experiment 181's first lean for today's version, now replaced.
 
-## Tickets from the daily run, proposed
+**How merge queues work, and what carries over.** GitHub's merge queue puts each pull request
+on top of the base and the ones ahead of it, runs the checks, and "automatically removes" an
+entry whose check fails, then goes on with the rest. It caps how many builds run at once
+("build concurrency") and how many pull requests go in one group ("merge limits")
+([GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)).
+bors checks "the combination, before it goes to master", batches pull requests up to
+`max_batch_size`, and never batches two priorities together
+([pitch](https://bors.tech/essay/2017/02/02/pitch/), [docs](https://bors.tech/documentation/)).
+
+| Merge queue | Mutation queue |
+|---|---|
+| Entries in order | Carries over |
+| Build concurrency | Carries over: how many batches the hands take at once |
+| Merge limits, `max_batch_size` | Carries over: mutants per batch |
+| Priorities never batched together | Carries over: a pull request's leftovers before the sweep |
+| A failing entry is removed, the rest go on | Changed: a crashed batch is split, and a live mutant is a finding, not a failure |
+| Each entry tested on top of the ones ahead | Does not carry over: mutants are tested alone, on main |
+| It merges | Does not carry over: it files tickets |
+| Drops repeats | New here: neither page says a merge queue does; ours drops by `Gap` id |
+
+- **Sure: 70%.** The doubt is the hands. A first pass over about 87,000 mutants is about 48
+  worker hours (a guess), so a laptop's hands take days of rolling batches. After the first
+  pass, only changed code and tests enter. If that is too slow, a VM host is the answer the
+  hands design already has, at no new account if it is free. That is not proposed here.
+
+## Tickets from the queue, proposed
 
 ```ts
 // A sketch. A survivor's name must not change when lines move. The example values are a real
@@ -161,11 +205,11 @@ type Daily = {filed: Gap["id"][]; updated: Gap["id"][]; closed: Gap["id"][]; hel
 
 - **One ticket per real problem.** Survivors group by file and symbol. One function with six
   live mutants is one ticket with six lines in it.
-- **No repeats across days.** The job keeps the ids it has filed, in the ledger, as facts. A
+- **No repeats across days.** The queue keeps the ids it has filed, in the ledger, as facts. A
   known id is never filed again. A new survivor in a symbol with an open ticket is a comment
   on that ticket.
 - **A survivor that goes away.** When every gap of a ticket is killed, or its code is gone,
-  the job comments and closes the ticket.
+  the queue comments and closes the ticket.
 - **No flood.** At most 3 new tickets a day, ranked by how many gaps they hold. The rest are
   held, and `held` says how many. A gap the owner rated `noise` is never filed again. 3 is our
   guess at what the lane takes in a day. Sure: 60%; a week of real tickets settles it.
@@ -187,26 +231,36 @@ A weak-test ticket asks for a test and no product change. Today's lane cannot fi
 
 The test writer's `mutants` job already does the work: a test that is red on the mutant and
 green on the original, or `cannot`, or `noise`. So a weak-test ticket takes a short path:
-triage, the `mutants` job on the ticket's gaps, one review, ship. No builder. Sure: 75%. The
-doubt is whether the plan step is still needed when the ticket already names the gaps.
+triage, the `mutants` job on the ticket's gaps, one review, ship. No builder.
+
+**Where it gets fixed: in `next/`'s pipeline stages, in Tier 6, before the queue files its
+first ticket.** Today's version files no queue tickets, so its lane keeps the gap. Sure: 75%.
+The doubt is whether the plan step is still needed when the ticket already names the gaps.
 
 ## Size of the build
 
-Today's version, through the pipeline, one pull request each.
+**Today's version: the fast check only.** Through the pipeline, one pull request. Its daily run
+is not built: the fetch job, the Actions shards and the weak-test path were 15 to 24 agent
+hours in code that `next/` deletes.
 
 | Part | Files | Lines | Tests | Agent hours |
 |---|---|---|---|---|
-| The fast check: settings, lines first, time cap, batch typecheck, `done` with advice | 3 to 4 | 200 to 300 | 15 to 20 | 3 to 5 |
-| The daily workflow: shards, incremental file, artifact | 3 | 300 to 400 | about 20 | 4 to 6 |
-| The fetch and file job on the host, with the gap ids | 3 to 4 | 300 to 450 | about 25 | 5 to 8 |
-| The weak-test path in the lane | 3 to 4 | 150 to 250 | about 15 | 3 to 5 |
-| **Total** | **12 to 15** | **950 to 1,400** | **75 to 80** | **15 to 24** |
+| Settings: 10 s test limit, static off, slow test files out | 1 to 2 | 30 to 60 | 4 to 6 | about 1 |
+| The 5-minute cap in the step, with the reporter that keeps each answer | 1 to 2 | 80 to 120 | 5 to 8 | 1 to 2 |
+| Lines first, then the rest, and the "not reached" count | 1 | 50 to 80 | 4 to 6 | about 1 |
+| A survivor answers `done` with advice, not `send` | 1 | 20 to 40 | 3 to 4 | under 1 |
+| **Total** | **3 to 5** | **180 to 300** | **16 to 24** | **3 to 5** |
+
+The batch typecheck is left out: as built in 181 it gave wrong answers, and its safe form was
+never run. Survivors keep today's one typecheck each.
+
+**`next/`, Tier 6: the mutation queue, the gap ids and tickets, and the weak-test path.** Not
+sized here. It is planned with that tier.
 
 ## What would change this
 
 - A week of the fast check on real pull requests with more than 10% `noise`: survivors stay
-  report-only, and the daily tickets wait.
-- GitHub's runners much slower than our guess: fewer mutants a day, or a rolling pass over
-  several days.
-- A real bug that reached main and sat a day in a gap the fast check skipped: shorten the
-  test limit less, or run static mutants on changed lines too.
+  report-only, and the queue's tickets wait.
+- Hands much slower than our guess: smaller daily batches, or a VM host for the queue.
+- A real bug that reached main and sat in a gap the fast check skipped: shorten the test
+  limit less, or run static mutants on changed lines too.
