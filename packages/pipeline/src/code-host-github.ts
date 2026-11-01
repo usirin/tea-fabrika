@@ -2,6 +2,7 @@ import {Clock, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
 import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 import {isMachines} from "./comments.ts";
 import {CodeHost, type PullRequest} from "./services.ts";
+import {type Rules, reviewRules, SETTINGS_FILE} from "./settings.ts";
 import {sh} from "./sh.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
@@ -22,7 +23,7 @@ import {verdictsIn} from "./verdict.ts";
 // Three calls, and one more when a team owns a protected file:
 //   1. the head commit and the base branch's name
 //   2. the pull request, with three files read beside it: the base branch's
-//      `.github/CODEOWNERS`, and `.fabrika.jsonc` at the base and at the head
+//      `.github/CODEOWNERS`, and `.fabrika/fabrika.toml` at the base and at the head
 //   3. the members of each team the CODEOWNERS file names
 //   4. main: where the head left the base branch, and where the branch is now
 //      (REST `compare`, base...head)
@@ -182,7 +183,7 @@ const Team = Schema.Struct({
  * facts wherever they are printed, so nobody takes a value for more than it is.
  */
 export const NOT_READ: readonly string[] = [
-	"reviews: which kinds a pull request needs is worked out here, by a copy of today's fabrika's rules (its file-to-kind map and its default governed folders) over the repo's own `.fabrika.jsonc`. It is not asked of fabrika, so the two can drift.",
+	"reviews: which kinds a pull request needs is worked out here, by a copy of today's fabrika's file-to-kind map over `[review]` in the repo's own `.fabrika/fabrika.toml`. It is not asked of fabrika, so the two can drift.",
 	"reviews, approval: the first 100 changed files. With more, both read `unknown`.",
 	"checks: every check on the head commit, required or not. `stuck` is never answered: nothing here says how long is too long.",
 	"comments: unresolved review threads only. An agent that comments from a person's account with no hidden mark reads as that person.",
@@ -259,52 +260,6 @@ const isHead = (head: string, written: string): boolean =>
 
 // ---------------------------------------------------------------- which reviews a pull request needs
 
-/** `JSON.parse` that answers nothing, where the plain one throws. */
-const parseJson = Option.liftThrowable((text: string): unknown => JSON.parse(text));
-
-/** `.fabrika.jsonc` as a value: JSON with comments and trailing commas. `undefined`: it does not parse. */
-export function parseJsonc(text: string): unknown {
-	// Strings are kept whole; a comment is dropped; a comma before a closing bracket is dropped.
-	const bare = text.replace(
-		/("(?:[^"\\\n]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-		(_all, string?: string) => string ?? "",
-	);
-	return Option.getOrUndefined(
-		parseJson(
-			bare.replace(/("(?:[^"\\\n]|\\.)*")|,(?=\s*[}\]])/g, (_all, string?: string) => string ?? ""),
-		),
-	);
-}
-
-/** The two keys of a repo's `.fabrika.jsonc` that say which reviews a change needs. */
-export interface Rules {
-	/** A change under one of these needs the governance review. */
-	readonly governed: readonly string[];
-	/** A change under one of these needs the rendered review. */
-	readonly ui: readonly string[];
-}
-
-/** Fabrika's own default for `governedRoots`, copied from fabrika 0.9: used when a repo's config leaves the key out. */
-const DEFAULT_GOVERNED = [".decisions/", ".claude/", ".github/", ".fabrika.jsonc"];
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-	typeof v === "object" && v !== null && !Array.isArray(v);
-
-/** The rules one `.fabrika.jsonc` gives. `null`: the text is not a config this can read. */
-export function rulesOf(text: string): Rules | null {
-	const config = parseJsonc(text);
-	if (!isRecord(config)) return null;
-	const {governedRoots = DEFAULT_GOVERNED, uiSurfaces = []} = config;
-	if (!Array.isArray(governedRoots) || !governedRoots.every((root) => typeof root === "string"))
-		return null;
-	if (
-		!Array.isArray(uiSurfaces) ||
-		!uiSurfaces.every((s) => isRecord(s) && typeof s.prefix === "string")
-	)
-		return null;
-	return {governed: governedRoots, ui: uiSurfaces.map((s) => s.prefix as string)};
-}
-
 /**
  * Which of the three text reviews reads one file, by today's fabrika's path
  * rule (copied from fabrika 0.9): a file under a plugin or skill folder is
@@ -322,16 +277,11 @@ export function textKindOf(path: string): "review-code" | "review-doc" | "review
 
 /**
  * The base's rules and the head's, together: a change cannot take itself out
- * of a review. A side with no config takes `declared`, the rules the
- * repository's fabrika.toml names in its place. `null`: a config does not
- * read, or one is not there and none is declared, so the rules are not known.
+ * of a review. A side with no file names none. `null`: a side's file does not
+ * read, so the rules are not known.
  */
-export function rulesOfBoth(
-	configs: readonly (string | null)[],
-	declared: Rules | null = null,
-): Rules | null {
-	const rules = configs.map((text) => (text === null ? declared : rulesOf(text)));
-	const known = rules.filter((r): r is Rules => r !== null);
+export function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
+	const known = configs.map(reviewRules).filter((r): r is Rules => r !== null);
 	if (known.length !== configs.length || known.length === 0) return null;
 	return {governed: known.flatMap((r) => r.governed), ui: known.flatMap((r) => r.ui)};
 }
@@ -391,10 +341,9 @@ export function reviewKindsOf(
 	pr: Pr,
 	configs: readonly (string | null)[],
 	reviewers: readonly string[],
-	declared: Rules | null = null,
 ): PrFacts["reviews"] {
 	const files = pr.files.nodes.map((file) => file.path);
-	const all = rulesOfBoth(configs, declared);
+	const all = rulesOfBoth(configs);
 	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
 	const verdicts = verdictsAt(pr.headRefOid, pr.comments.nodes, reviewers);
 	const needed = kindsNeeded(files, all);
@@ -484,8 +433,8 @@ export interface Accounts {
 }
 
 /**
- * What a repository's fabrika.toml declares for a file GitHub would read
- * (../setup.ts). Each is read only where that file is not there: a file at
+ * What a repository's .fabrika/fabrika.toml declares for a file GitHub would
+ * read (./setup.ts). It is read only where that file is not there: a file at
  * the base still binds.
  */
 export interface Declared {
@@ -495,8 +444,6 @@ export interface Declared {
 	 * `unknown`, and ship stops.
 	 */
 	readonly approval?: "codeowners" | "none";
-	/** The review rules for a side with no `.fabrika.jsonc`. Left out: that side's rules are not known. */
-	readonly kinds?: Rules;
 }
 
 /**
@@ -521,7 +468,6 @@ export function factsOf(
 	approval: PrFacts["approval"],
 	configs: readonly (string | null)[],
 	main: Main,
-	declared: Rules | null = null,
 ): PrFacts | null {
 	const [last] = pr.commits.nodes;
 	// The checks must be the head's own, and every thread must be in hand.
@@ -545,7 +491,7 @@ export function factsOf(
 		ours: isOneOf(pr.author, accounts.own),
 		ticket: ticketOf(pr.body, at),
 		approval,
-		reviews: reviewKindsOf(pr, configs, accounts.reviewers, declared),
+		reviews: reviewKindsOf(pr, configs, accounts.reviewers),
 		// No check has reported: it cannot be told from "none will", so it waits.
 		checks: rollup === null ? "pending" : CHECKS[rollup.state],
 		mergeable: MERGEABLE[pr.mergeable],
@@ -639,8 +585,8 @@ export const readPrFacts =
 				...at,
 				// The protected files and their owners are the base branch's: a change cannot take itself out of them.
 				codeowners: `${base}:.github/CODEOWNERS`,
-				baseConfig: `${base}:.fabrika.jsonc`,
-				headConfig: `${head}:.fabrika.jsonc`,
+				baseConfig: `${base}:${SETTINGS_FILE}`,
+				headConfig: `${head}:${SETTINGS_FILE}`,
 			})).data;
 			const pr = repository.pullRequest;
 			// The head moved between the two calls: the files beside it are another commit's.
@@ -658,7 +604,6 @@ export const readPrFacts =
 				approval,
 				[textOf(repository.baseConfig), textOf(repository.headConfig)],
 				main,
-				declared.kinds ?? null,
 			);
 			const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(PrFacts)(facts);
 			return Option.isNone(checked) ? yield* failed : checked.value;
@@ -805,8 +750,8 @@ export function checksOf(
  * Read one pull request at one commit, for a review. `asked`: the commit to
  * read, whole; `null` reads the head as it is now. Five calls:
  *   1. the head commit and the base branch's name
- *   2. the pull request, the checks of the commit, `.fabrika.jsonc` at the
- *      base and at the commit, and the repository's rules for agents
+ *   2. the pull request, the checks of the commit, `.fabrika/fabrika.toml` at
+ *      the base and at the commit, and the repository's rules for agents
  *      (`CLAUDE.md`, `AGENTS.md`) at the base only
  *   3. the ticket the pull request's text names
  *   4. the files that differ between the base and the commit
@@ -815,7 +760,7 @@ export function checksOf(
  * that does not answer is `null` in the change, never a guess.
  */
 export const readChange =
-	(gh: Gh, counted: Counted = "required", declared: Rules | null = null) =>
+	(gh: Gh, counted: Counted = "required") =>
 	(url: string, asked: string | null): Effect.Effect<Change, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
@@ -825,8 +770,8 @@ export const readChange =
 			const {repository} = (yield* ask(gh, ChangeAnswer, CHANGE, {
 				...at,
 				head,
-				baseConfig: `${where.baseRefName}:.fabrika.jsonc`,
-				headConfig: `${head}:.fabrika.jsonc`,
+				baseConfig: `${where.baseRefName}:${SETTINGS_FILE}`,
+				headConfig: `${head}:${SETTINGS_FILE}`,
 				// The base's: a change cannot rewrite the rules it is held to.
 				...rulesAt(where.baseRefName),
 			})).data;
@@ -864,10 +809,7 @@ export const readChange =
 					: yield* gh(["api", range, "-H", "Accept: application/vnd.github.diff"]).pipe(
 							Effect.match({onSuccess: (text): string | null => text, onFailure: () => null}),
 						);
-			const rules = rulesOfBoth(
-				[textOf(repository.baseConfig), textOf(repository.headConfig)],
-				declared,
-			);
+			const rules = rulesOfBoth([textOf(repository.baseConfig), textOf(repository.headConfig)]);
 
 			return {
 				pr: url,
@@ -1219,10 +1161,9 @@ export const codeHostOn = (
 		outPolls: config.outPolls ?? DEFAULT_OUT.outPolls,
 		outMs: config.outMs ?? DEFAULT_OUT.outMs,
 	};
-	const declared = config.declared ?? {};
 	return {
-		prFacts: readPrFacts(gh, config, declared),
-		change: readChange(gh, config.checks, declared.kinds ?? null),
+		prFacts: readPrFacts(gh, config, config.declared ?? {}),
+		change: readChange(gh, config.checks),
 		pullRequests: readPullRequests(gh),
 		checksSettled: (pr, head, after) =>
 			until(

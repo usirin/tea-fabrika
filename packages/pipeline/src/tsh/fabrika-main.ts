@@ -18,10 +18,10 @@ import {ledgerNameOf, localLedger, sqliteLedger} from "./ledger.ts";
 // folder it is started in (./config.ts), its trace rules, and a title that
 // shows a GitHub ticket or pull request by its number.
 //
-// This is the edge, and the one place either file is read. `fabrika.toml`
-// comes from one place (../settings-source.ts): when tsh.toml names a
-// repository to work on, that repository's, as committed on its default
-// branch; else the one at the root of the folder tsh starts in. tsh prints
+// This is the edge, and the one place either file is read.
+// `.fabrika/fabrika.toml` comes from one place (../settings-source.ts): when
+// tsh.toml names a repository to work on, that repository's, as committed on
+// its default branch; else the one in the root of the folder tsh starts in. tsh prints
 // which, in one line, before anything runs. The desk is handed its packs,
 // found from the root of the folder tsh starts in, where fabrika is
 // installed: never from a target's clone. A file that does not fit stops tsh
