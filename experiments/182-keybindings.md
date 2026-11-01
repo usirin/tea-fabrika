@@ -455,10 +455,11 @@ repo: it is twenty lines over a copied file.
   prefix, named tables, rows of key to command word, defaults first and the person's rows
   over them. That is the shape `keys.ts` already has. Confidence 80%: every terminal read
   converged on it, and it matches W5. **Since then** the owner picked, as a tryout, a prefix
-  that is a setting (`prefix = "ctrl+a"`, as tmux's `prefix` option) and bindings written
-  command to key (`zoom = ["z", "enter"]`, `close = []` to unbind), which no tool read does. The
-  cost and what would flip it back are in
-  [the note](../docs/direction/keybindings-are-configurable.md#k6-command-to-key-a-tryout).
+  that is a setting (`prefix = "ctrl+a"`, as tmux's `prefix` option) with `<prefix>` standing
+  in for it, as Vim's `<Leader>`, and one flat list written command to key
+  (`zoom = ["<prefix>z", "<prefix>enter"]`, `detach = []` to unbind), which no tool read does.
+  The cost and what would flip it back are in
+  [the note](../docs/direction/keybindings-are-configurable.md#k6-one-flat-list-command-to-key-a-tryout).
 - **Bind by pressing, like Ableton.** A mode that shows what can take a key, then one press.
   VS Code's "listens for key presses" box is the same idea in a list. Confidence 70%: nobody
   in the tiling world does it, so there is no prior art for a tile desk.

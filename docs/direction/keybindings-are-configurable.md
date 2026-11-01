@@ -1,11 +1,11 @@
 # Keybindings are configurable
 
 **Decided 2026-11-01 by the owner:** every keybinding is configurable from day one, the prefix
-included; the prefix is a setting of its own; the bindings live in the person's own TOML file,
-written command to key inside tables (a tryout); fabrika ships a program to change them; and
-Tier 1 reads the file while that program arrives in Tier 2. **The table names, the key spelling,
-the command names, what a clash from the program does and live reload are proposed,** each with a
-lean below.
+included; the prefix is a setting of its own, and bindings write `<prefix>` for it, as Vim's
+`<Leader>`; the bindings live in the person's own TOML file, as one flat list written command to
+key (a tryout); fabrika ships a program to change them; and Tier 1 reads the file while that
+program arrives in Tier 2. **How modes get their own word later, the key spelling, the command
+names, what a clash from the program does and live reload are proposed,** each with a lean below.
 
 Built from [experiment 182](../../experiments/182-keybindings.md), which read how about twenty
 tools do it, and a clickable page, "Keybinding guidelines", a private page with twelve rules
@@ -13,12 +13,11 @@ you can press. Neither is a measurement.
 
 ```toml
 # ~/.fabrika/keybindings.toml: only what you changed. The defaults ship with the app.
-prefix = "ctrl+a"          # a setting, as tmux's `set -g prefix C-a`
-
-[keys.prefix]              # the table names are a lean: see "Tables" below
-fold  = "g"                # command = key; the left side is a tsh word
-zoom  = ["z", "enter"]     # several keys
-close = []                 # unbound: the key goes on to the program
+prefix  = "ctrl+a"                        # a setting, as tmux's `set -g prefix C-a`
+split   = "<prefix>|"                     # command = key; <prefix> stands in, as Vim's <Leader>
+zoom    = ["<prefix>z", "<prefix>enter"]  # several keys
+palette = "cmd+k"                         # pressed alone
+detach  = []                              # unbound: the key goes on to the program
 ```
 
 ```ts
@@ -39,7 +38,7 @@ close = []                 # unbound: the key goes on to the program
 
 ### K1: every binding is data
 
-- A binding is a row: a command word, a table, and its keys. No key is wired into a handler.
+- A binding is a row: a command word and its keys. No key is wired into a handler.
 - The defaults are just the first rows. A person's rows lay over them.
 - A person can rebind or unbind any of them. The few limits are in
   [keys that cannot be taken away](#keys-that-cannot-be-taken-away), and each one is a
@@ -58,9 +57,8 @@ close = []                 # unbound: the key goes on to the program
 - **Why the home folder:** a key is the person's, like a theme. A repo that rebound your keys
   would choose for your hands. This does not change
   [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md); keys are simply not in it.
-- TOML refuses the same key twice in one table. With command to key (K6), that means one
-  command cannot be written twice in a table; two commands on one key can be, so the load
-  checks for it.
+- TOML refuses the same key twice. With command to key (K6), that means one command cannot be
+  written twice; two commands on one key can be, so the load checks for it.
 
 ### K3: a program for keys
 
@@ -72,7 +70,7 @@ panel called keys, so the word is one people have met.
 keys      search "fold"
   fold        C-b f      default
   > Enter     press a key...   (g)
-  fold        C-b g      yours     the file gets  fold = "g"
+  fold        C-b g      yours     the file gets  fold = "<prefix>g"
   needs a look:  zoom has no key (palette and tsh only)
 ```
 
@@ -94,50 +92,68 @@ since that is where the desk arrives as a program with split, close and prefix k
 program arrives with the keys it edits. The `themes` program, and reading theme files, is in Tier
 2 too. Both are now in [the tiers](../plan/tiers.md).
 
-### K5: the prefix is a setting
+### K5: the prefix is a setting, and `<prefix>` stands in for it
 
 Decided by the owner today.
 
 - The prefix is configurable, like any other key: `prefix = "ctrl+a"`, at the top of the file.
-- It is a setting, not a row. tmux does the same: `prefix` is an option, "Set the key accepted as
-  a prefix key", changed with `set -g prefix C-a`
+- It is a setting, not a binding. tmux does the same: `prefix` is an option, "Set the key
+  accepted as a prefix key", changed with `set -g prefix C-a`
   ([tmux(1)](https://man.openbsd.org/tmux.1)). A setting holds one value, so there is always
   exactly one prefix.
-- The load refuses a root binding on the prefix's own key, with a plain reason: "ctrl+a is your
-  prefix, so it cannot also run split."
-- The no-trap rule stays: the load refuses a table with neither the prefix nor F6.
+- A binding writes `<prefix>` where the prefix goes, as Vim's `<Leader>`: "the special string
+  '<Leader>' can be used. It is replaced with the string value of 'g:mapleader'", set with
+  `let mapleader = ","` ([`:help mapleader`](https://vimhelp.org/map.txt.html#mapleader)). So
+  `split = "<prefix>|"` follows the prefix when it moves.
+- One difference from Vim: Vim reads `mapleader` "at the moment the mapping is defined", so a
+  later change leaves old mappings alone. Ours rebuilds the whole table from the file on every
+  load, so a new `prefix` moves every `<prefix>` binding at once.
 
-### K6: command to key, a tryout
+### K6: one flat list, command to key, a tryout
 
 Decided by the owner today, as a tryout.
 
 ```toml
-prefix = "ctrl+a"
-
-[keys.prefix]
-split = "|"
-zoom  = ["z", "enter"]   # several keys
-close = []               # unbound
+# ~/.fabrika/keybindings.toml
+prefix  = "ctrl+a"
+split   = "<prefix>|"
+close   = "<prefix>x"
+zoom    = ["<prefix>z", "<prefix>enter"]
+palette = "cmd+k"
+detach  = []            # unbound
 ```
 
-- The owner's sketch wrote the table as `[prefix]`. TOML cannot hold that next to
-  `prefix = "ctrl+a"`, so the table name is still open: see "Tables" under
-  [what is proposed](#what-is-proposed).
+- One flat list, with no tables. It is valid TOML: smol-toml 1.9.1, the parser in this repo's
+  lockfile, reads it. An earlier sketch with a `[prefix]` table next to `prefix = "ctrl+a"` was
+  not ("trying to redefine an already defined table or value"); that clash is gone.
+- A key with `<prefix>` is pressed after the prefix. A key without it, like `cmd+k`, is pressed
+  alone.
 - The person's file holds only what they changed. The defaults ship with the app.
 - A command takes one key or a list. An empty list unbinds, and there is no `noop` word.
 - A command's description comes from the command itself, never from the file. VS Code's
   `keybindings.json` carries none either.
 - **The cost, named by the owner.** Key to command (`"|" = "split"`) makes "one key does one
   thing" impossible to break, since TOML rejects a repeated key. Command to key gives that up. So
-  the load refuses a key claimed by two commands in one table and names both, and the keys
-  program shows the reverse view: what does this key do.
+  the load refuses a key claimed by two commands and names both, and the keys program shows the
+  reverse view: what does this key do.
+- **The load refuses,** each with a plain reason:
+  - an unknown `<...>` word: "`<leader>` is not a word here; did you mean `<prefix>`?"
+  - a key claimed by two commands: "`<prefix>x` is on both close and detach."
+  - `prefix` set to a key that is also bound alone: "ctrl+a is your prefix, so it cannot also
+    run split."
+  - no way out of a tile, the no-trap rule: "with neither `<prefix>` nor F6 left, a terminal tile
+    would keep your keys."
+  - and, as before, a bare printable key pressed alone (it would stop typing in tsh, and WCAG
+    2.1.4 wants a one-letter key only where focus is), and a bare letter as the prefix.
 - **We differ from everyone read.** Yazi writes a list of entries, `{ on = [ "g", "d" ], run =
   "cd ~/dev" }` ([Yazi keymap](https://yazi-rs.github.io/docs/configuration/keymap/)). Alacritty
   writes `{ key = "N", mods = "Control|Shift", action = "CreateNewWindow" }` in a `bindings` list
   ([Alacritty](https://alacritty.org/config-alacritty.html)). Rio writes `[[bindings.keys]]` entries
   with `key`, `with` and `action` ([rio-bindings(5)](https://man.archlinux.org/man/rio-bindings.5.en)).
   Helix writes key to command, `C-s = ":w"` under `[keys.normal]`
-  ([Helix remapping](https://docs.helix-editor.com/remapping.html)). None writes command to key.
+  ([Helix remapping](https://docs.helix-editor.com/remapping.html)). None writes command to key,
+  and none read keeps one flat list with a stand-in for the prefix; Vim's `<Leader>` is the
+  nearest.
   **Why we try it anyway:** a person edits by command ("what is zoom on?"), and the file reads the
   same way the keys program lists it, one row per command.
 - **What flips it back to key to command:** two-commands-on-one-key refusals turning up often in
@@ -151,10 +167,11 @@ and sends one finished command. A key never crosses the wire.
 
 ```ts
 // A sketch, next/. The table is a value the window is handed; the window never reads a file.
-type Binding = {does: Command | "ignore"; keys: string[]}; // keys: [] is unbound
+type Key = {_tag: "alone"; key: string} | {_tag: "after_prefix"; key: string}; // "<prefix>z"
+type Binding = {does: Command | "ignore"; keys: Key[]}; // keys: [] is unbound
 type Keys = {
 	prefix: string; // "ctrl+a": a setting, never a binding
-	tables: {root: Binding[]; prefix: Binding[]};
+	bindings: Binding[]; // one flat list, as the file is
 };
 type Via = {_tag: "key"; keys: string} | {_tag: "palette"} | {_tag: "word"} | {_tag: "click"};
 type Did = {type: "did"; does: Command; via: Via};
@@ -206,11 +223,11 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 | Cmd-H, Cmd-Tab, Cmd-Space, Option-Cmd-Esc, Mission Control | the system's; some never reach the app | Never touched |
 | Ctrl-C in a tile, everywhere | the program in the tile owns it | Goes to the program. On Windows and Linux, Ctrl is not the app's modifier inside a tile |
 | Cmd-W, Cmd-T, Cmd-N in a Chrome tab | Chromium keeps them in a normal tab | A binding on one stays in the file and is off in a normal tab, said in the keys program; an installed app window gets it |
-| The last way out of a tile | WCAG 2.1.2, no keyboard trap | The load refuses a table with neither the prefix nor F6 |
+| The last way out of a tile | WCAG 2.1.2, no keyboard trap | The load refuses a file that leaves neither `<prefix>` nor F6 |
 
 - **To change Quit's key,** a person uses System Settings, Keyboard, App Shortcuts, which can
   give any menu item of any app a new key. fabrika never has to own it.
-- **Cmd-W is a binding,** `ignore = ["mod+w"]` by default in `[keys.root]` (today's "nobody"). A
+- **Cmd-W is a binding,** `ignore = ["mod+w"]` by default (today's "nobody"). A
   person can bind it in the app. Cmd-K is a binding too.
 - **Screen reader keys** (Control-Option for VoiceOver, Insert or Caps Lock for NVDA) get a
   warning, not a refusal: a person without a screen reader may want them.
@@ -219,8 +236,8 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 
 | Question | Lean | How sure |
 |---|---|---|
-| Tables | tmux's names, `root` and `prefix`, under one parent: `[keys.root]` and `[keys.prefix]` | 60% |
-| Key spelling | `ctrl+b`, `mod+k`, `shift+f6`, as VS Code, Zed, Ghostty, kitty and Windows Terminal write it | 65% |
+| Modes later | copy mode and others get their own word when they come, as Vim's `nmap` and `vmap`; the shape of that word is open | 60% |
+| Key spelling | `ctrl+a`, `mod+k`, `shift+f6`, as VS Code, Zed, Ghostty, kitty and Windows Terminal write it, not Vim's `<C-a>` | 70% |
 | Command names | the tsh word, `split`, or quoted when it has spaces, `"split --to down"`, decoded by a schema; an unknown word fails with its line | 75% |
 | Swallowing a key | `ignore` is a command, as Ghostty's: `ignore = ["mod+w"]` eats the key; `[]` lets it go on | 75% |
 | A clash | your key beats a default on the same key. From the keys program, the new binding wins, said in words with the command that lost its key, and undo | 70% |
@@ -228,29 +245,26 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 | Live reload | on save, at the next key, no restart, as VS Code and Ghostty | 80% |
 | Matching | the character a press types first, Option folded in; the key's place for Ctrl and Cmd on a non-Latin layout | 60% |
 
-- **Tables, why and cost.** tmux's names. They cannot sit at the top as `[root]` and `[prefix]`:
-  TOML refuses `prefix = "ctrl+a"` and a `[prefix]` table in one file. smol-toml 1.9.1, the
-  parser in this repo's lockfile, answers "trying to redefine an already defined table or
-  value". One parent fixes it, as Helix's `[keys.normal]` does. The other branch keeps
-  `[root]` at the top and renames the second table, such as `[after_prefix]`, which loses tmux's
-  word. The doubt is popovers: their keys (arrows, `J`, `K`, Esc) may need a third table.
-  Building the asks popover on the table settles it.
-- **Spelling, why and cost.** Most tools write `ctrl+b`. Our prose and tmux say `C-b`, so there
-  are two spellings for one key. The keys program shows each platform's own (⌃B on a Mac, Ctrl+B
-  on Windows), so a person rarely types either.
+- **Modes later, why and cost.** Vim keeps one map command per mode (`:nmap`, `:vmap` and
+  more, [`:help map-modes`](https://vimhelp.org/map.txt.html#map-modes)), and Helix a table per
+  mode. The flat list is today's one mode. When copy mode comes, its bindings need their own
+  word. A `[copy]` table is the TOML way, but it would clash with a command named `copy` at the
+  top, the same clash as `[prefix]`. A stand-in in the key, like `<copy>y`, avoids it. Which one
+  is open; popovers (arrows, `J`, `K`, Esc) may need the same. Building copy mode settles it.
+- **Spelling, why and cost.** Most tools write `ctrl+a`, and a person who does not use Vim reads
+  it. Vim writes `<C-a>`, and our prose and tmux say `C-a`, so there are two spellings for one
+  key. The doubt: `<prefix>` is already Vim's angle-bracket style, so `"<prefix>ctrl+x"` mixes
+  two styles in one string. The keys program shows each platform's own (⌃A on a Mac, Ctrl+A on
+  Windows), so a person rarely types either.
 - **Command names, why and cost.** One name to learn: the tsh word is the palette entry and the
   binding. It costs a schema for every word. W5's `split_right` was a sketch; this replaces it.
 - **No `when` clauses.** VS Code's are powerful, but [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
-  already refuses a config that decides what happens next. Tables by mode do the same job.
-- **A clash, why and cost.** In the person's own file, two commands on one key in one table are
-  refused at load (K6). Against a default, the person's key wins, as VS Code's rows over its
+  already refuses a config that decides what happens next. A word per mode does the same job.
+- **A clash, why and cost.** In the person's own file, two commands on one key are refused at
+  load (K6). Against a default, the person's key wins, as VS Code's rows over its
   defaults. From the keys program, VS Code and Ghostty let the later binding win. A silent win is
   a key that stops working with no reason, so we say it. The doubt: whether undo is enough, or a
   clash should ask first. A week of use would tell.
-- **The load refuses,** each with its reason in plain words: a bare printable key in the root
-  table (it would stop typing in tsh, and WCAG 2.1.4 wants a one-letter key only where focus
-  is); a bare letter as the prefix; a root binding on the prefix's own key; a key claimed by two
-  commands in one table, naming both; and a table with no way out of a tile.
 - **Live reload, why and cost.** A swap is a value change. Experiment 177 swapped a theme in 11 to
   19 ms. An armed prefix is disarmed by a swap. Cheap, and how sure: 80%.
 - **Matching, why and the doubt.** On German, French and Turkish-F Macs, `|` needs Option, so
