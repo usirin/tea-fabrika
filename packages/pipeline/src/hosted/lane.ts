@@ -48,7 +48,7 @@ import {laneViewOf} from "../stages/lane/view.ts";
 import {commentOf} from "../stages/operate/writes.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {keptFrom} from "../stages/plan/ids.ts";
-import {PlanDraft, revisionOfDraft} from "../stages/plan/plan.ts";
+import {HeldDraft, revisionOfDraft} from "../stages/plan/plan.ts";
 import {BuildWork, copyAt} from "./build.ts";
 import {childrenOf} from "./children.ts";
 import {Idempotency} from "./idempotency.ts";
@@ -62,7 +62,7 @@ const failed = Effect.fail<Failed>({_tag: "unknown"});
 
 const EVERY = Schedule.spaced(Duration.millis(150));
 const decodeEnd = Schema.decodeUnknownExit(ChildEnd);
-const decodeDraft = Schema.decodeUnknownExit(Schema.Struct({draft: PlanDraft}));
+const decodeDraft = Schema.decodeUnknownExit(Schema.Struct({draft: HeldDraft}));
 
 type Needs =
 	| Self

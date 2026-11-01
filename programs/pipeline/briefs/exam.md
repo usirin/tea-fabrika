@@ -9,7 +9,7 @@ slots:
 
 You change the rules for one ticket, and nothing else. You build nothing. Your whole answer is data.
 
-The code is in your working folder. It is a copy, and what you write there is thrown away.
+The code is in your working folder. It is a read-only copy: your box refuses a write there. Your answer holds the changes.
 
 # The ticket
 

@@ -7,12 +7,19 @@ import {Schema} from "effect";
 /**
  * A mutant by where it is and what it does: `file:line:column:tag`, line and
  * column counted from 1. `tag` is 6 hex digits of its mutator and its
- * replacement, so two mutants at one spot never share an id.
+ * replacement, so two mutants at one spot never share an id. A file's name may
+ * hold any letter but a line break, a space or a colon too, so an id is read
+ * from its end ({@link placeIn}).
  */
-export const MutantId = Schema.String.check(
-	Schema.isPattern(/^[^:\s]+:[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{6}$/),
-);
+const ID = /^([^\r\n]+):([1-9][0-9]*):([1-9][0-9]*):[0-9a-f]{6}$/;
+export const MutantId = Schema.String.check(Schema.isPattern(ID));
 export type MutantId = typeof MutantId.Type;
+
+/** The file and line a mutant's id names. Pure. */
+export const placeIn = (id: MutantId): {readonly file: string; readonly line: number} => {
+	const [, file = "", line = "1"] = ID.exec(id) ?? [];
+	return {file, line: Number(line)};
+};
 
 /** One mutant that survived: no test of the repo failed with it in, and the typecheck took it. */
 export const Survived = Schema.Struct({

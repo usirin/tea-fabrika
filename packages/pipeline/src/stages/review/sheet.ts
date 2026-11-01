@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {Schema} from "effect";
 import {CriterionId} from "../../ids.ts";
 import type {Check} from "../../primitives.ts";
+import {maybe} from "../../schema.ts";
 import {RULE_FILES} from "../rules.ts";
 import type {Brief} from "./gate.ts";
 import {TextKind} from "./pack.ts";
@@ -96,8 +97,7 @@ export const From = Schema.Union([
 ]);
 export type From = typeof From.Type;
 
-/** A finding as the reviewer writes it. */
-export const Found = Schema.Struct({
+const foundFields = {
 	/** The one kind of review it belongs to. */
 	kind: TextKind,
 	from: From,
@@ -109,9 +109,13 @@ export const Found = Schema.Struct({
 	proof: Schema.String,
 	/** What has to be true for it to be closed. Not how to write the fix. */
 	wants: Schema.String,
-	/** `ran`: the reviewer ran it and saw it. `read`: it worked it out from reading. */
-	seen: Schema.optionalKey(Schema.Literals(["ran", "read"])),
-});
+};
+
+/** `ran`: the reviewer ran it and saw it. `read`: it worked it out from reading. */
+const Seen = Schema.Literals(["ran", "read"]);
+
+/** A finding as the reviewer writes it. */
+export const Found = Schema.Struct({...foundFields, seen: maybe(Seen)});
 export type Found = typeof Found.Type;
 
 /**
@@ -121,7 +125,8 @@ export type Found = typeof Found.Type;
 export const Finding = Schema.Struct({
 	id: Schema.String,
 	state: Schema.Literals(["open", "closed"]),
-	...Found.fields,
+	...foundFields,
+	seen: Schema.optionalKey(Seen),
 });
 export type Finding = typeof Finding.Type;
 
@@ -134,9 +139,12 @@ export const Form = Schema.Struct({
 	rows: Schema.Array(Row),
 	findings: Schema.Array(Found),
 	skipped: Schema.Array(Skipped),
-	gaps: Schema.optionalKey(Schema.Array(Schema.String)),
+	gaps: maybe(Schema.Array(Schema.String)),
 });
 export type Form = typeof Form.Type;
+
+/** A reviewer's form as a run holds it, past the read. */
+export const HeldForm = Schema.toType(Form);
 
 export const Sheet = Schema.Struct({
 	/** The commit the sheet is about. */

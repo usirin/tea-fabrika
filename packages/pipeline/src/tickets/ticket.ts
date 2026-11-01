@@ -28,11 +28,33 @@ export const Title = Schema.String.check(
 	Schema.isPattern(/^[^\r\n]*$/),
 );
 
+/** A cut title stays well inside its limit, so a word or two may follow it. */
+const TITLE_CUT = 200;
+
+/**
+ * Any text as a {@link Title}: line breaks to spaces, cut, and trimmed after the cut, since a cut can
+ * land on a space. The one way text that was not written as a title becomes one. Pure.
+ */
+export const titleOf = (text: string): string =>
+	text
+		.replace(/[\r\n]+/g, " ")
+		.trim()
+		.slice(0, TITLE_CUT)
+		.trim() || "(no title)";
+
+const BODY_MOST = 65_536;
+
 /** A ticket's body: any text, empty too. */
-export const Body = Schema.String.check(Schema.isMaxLength(65_536));
+export const Body = Schema.String.check(Schema.isMaxLength(BODY_MOST));
 
 /** A comment's text: a body with something in it besides spaces. */
 export const Said = Body.check(Schema.isPattern(/\S/));
+
+const CUT_NOTE = "\n\n(cut here: it was too long for a comment)";
+
+/** Any text as what a {@link Said} can hold, saying so where it was cut. Pure. */
+export const saidOf = (text: string): string =>
+	text.length <= BODY_MOST ? text : `${text.slice(0, BODY_MOST - CUT_NOTE.length)}${CUT_NOTE}`;
 
 // ---------------------------------------------------------------- what a lane writes
 //
@@ -153,6 +175,8 @@ export const CodeFact = Schema.Union([
 		input: Count,
 		output: Count,
 		turns: Count,
+		/** How many last messages did not fit their schema, each followed by one more try. */
+		misfits: Schema.optionalKey(Count),
 		harness: Schema.optionalKey(Schema.String),
 		model: Schema.optionalKey(Schema.String),
 		effort: Schema.optionalKey(Schema.String),

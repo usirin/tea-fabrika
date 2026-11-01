@@ -161,8 +161,10 @@ export const rawOfLine = (line: string): Raw[] | {readonly broke: string} => {
 		}
 		case "turn.failed":
 			return {broke: `turn failed: ${JSON.stringify(e.error ?? null).slice(0, 300)}`};
+		// A note: Codex says this while it reconnects, and goes on to finish the turn.
+		// Only `turn.failed`, or the process ending with no finished turn, ends one.
 		case "error":
-			return {broke: `error: ${(e.message ?? "").slice(0, 300)}`};
+			return [];
 	}
 };
 

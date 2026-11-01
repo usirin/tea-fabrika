@@ -45,7 +45,7 @@ Read the code at the mutant's line, and the tests that reach it. Then pick one.
 
 A real gap is not noise. A test that pins exact error text, a choice nobody made, or a tool's own string is not a fix, so that mutant is `noise`.
 
-Never put a mutant into the code, even to try it. Run your test with `{test_command}` only on the code as it is.
+Your folder is read-only: your box refuses a write there, so neither a mutant nor a new test can be put in it or run there. Read the code, and work out how your test will end. Code writes your test and runs it with `{test_command}` after you, on the code as it is and with the mutant in.
 
 If several mutants point at one missing check, one test may kill them all. Give each mutant its own answer.
 
