@@ -189,8 +189,13 @@ describe("serve, cut off from the ledger", () => {
 				link.down = false;
 				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
 				yield* until(Effect.map(countOf, (n) => n === 20));
+				// The next renewal says it is back, and the count can get there first.
+				const kindsNow = ledger
+					.readStream("counter:1")
+					.pipe(Effect.map((rows) => rows.map((r) => r.kind)));
+				yield* until(Effect.map(kindsNow, (kinds) => kinds.includes("lease_resumed")));
 				const n = yield* countOf;
-				const kinds = (yield* ledger.readStream("counter:1")).map((r) => r.kind);
+				const kinds = yield* kindsNow;
 				yield* Scope.close(scope, Exit.void);
 				return {n, kinds};
 			}).pipe(Effect.provide(layerMemory())),
