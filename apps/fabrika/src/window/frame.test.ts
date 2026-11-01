@@ -32,6 +32,7 @@ import {
 	keyWord,
 	lineIn,
 	matching,
+	middleFree,
 	nowhereNote,
 	opensOf,
 	prefixLine,
@@ -564,6 +565,35 @@ describe("the job item and the jobs list", () => {
 		expect(open.over).toEqual({kind: "jobs"});
 		expect(frameUpdate(open, {type: "show", what: "jobs"}).over).toEqual({kind: "none"});
 		expect(TABLE.find((b) => b.name === "jobs")?.key).toBe("J");
+	});
+});
+
+describe("the bar's mark and name", () => {
+	const name = {left: 500, right: 560};
+
+	it("keeps the middle with room either side", () => {
+		expect(middleFree(name, [{left: 0, right: 476}])).toBe(true);
+		expect(middleFree(name, [{left: 584, right: 700}])).toBe(true);
+		expect(middleFree(name, [])).toBe(true);
+	});
+
+	it("goes when the bar's words come within 24 of it", () => {
+		expect(middleFree(name, [{left: 0, right: 477}])).toBe(false);
+		expect(middleFree(name, [{left: 583, right: 700}])).toBe(false);
+	});
+
+	it("goes when anything lies over it or across it", () => {
+		expect(middleFree(name, [{left: 510, right: 550}])).toBe(false);
+		expect(middleFree(name, [{left: 0, right: 900}])).toBe(false);
+	});
+
+	it("goes if one item of many is too near", () => {
+		expect(
+			middleFree(name, [
+				{left: 0, right: 100},
+				{left: 570, right: 600},
+			]),
+		).toBe(false);
 	});
 });
 

@@ -41,7 +41,7 @@ From 64 up, the one drawing scales down. At 32 and under, a gap of 28 falls unde
 away, so a small icon needs its own drawing on a 16-pixel grid:
 
 ```ts
-// A sketch for when a packaged app or a menu bar needs it. Nothing uses it yet.
+// The top bar draws this, with corners of 0.5 (./top-bar-name.md). A packaged app needs it too.
 stem   {x: 5, y: 3, w: 2, h: 10}
 top    {x: 8, y: 3, w: 4, h: 3}   // lit
 middle {x: 8, y: 7, w: 3, h: 3}
