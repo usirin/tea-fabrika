@@ -424,21 +424,34 @@ describe("the local code host", () => {
 		const GOVERNS = '[review]\ngoverned = ["policy/"]\n';
 		const CHANGE = {"policy/rule.txt": "a rule\n"};
 
-		/** What `change` says of a branch off `base` that adds `head` and removes `gone`, in a repository of its own. */
+		/** What git holds of one side of a change, deleted from its object store: a real failed read. */
+		type Lost = {readonly side: "base" | "head"; readonly path: string};
+
+		/**
+		 * What `change` says of a branch off `base` that adds `head` and removes `gone`, in a repository
+		 * of its own. `lost`: that object is deleted first, so git exits 128 reading it.
+		 */
 		const kindsAcross = (
 			base: Readonly<Record<string, string>>,
 			head: Readonly<Record<string, string>>,
 			gone: readonly string[] = [],
+			lost?: Lost,
 		) =>
 			onNode(
 				Effect.gen(function* () {
 					const fs = yield* FileSystem.FileSystem;
+					const path = yield* Path.Path;
 					const dir = yield* fs.makeTempDirectoryScoped({prefix: "local-kinds-"});
 					yield* sh(dir, "git", ["init", "-q", "-b", "main"]);
 					yield* commit(dir, {"README.txt": "words\n", ...base}, "base");
 					yield* sh(dir, "git", ["checkout", "-q", "-b", "plan/9"]);
 					for (const name of gone) yield* sh(dir, "git", ["rm", "-q", name]);
 					const at = yield* commit(dir, {...CHANGE, ...head}, "head");
+					if (lost !== undefined) {
+						const side = lost.side === "base" ? "main" : at;
+						const sha = yield* sh(dir, "git", ["rev-parse", `${side}:${lost.path}`]);
+						yield* fs.remove(path.join(dir, ".git", "objects", sha.slice(0, 2), sha.slice(2)));
+					}
 					const settings: LocalSettings = {...SETTINGS(dir), base: "main"};
 					const read = yield* Effect.gen(function* () {
 						return yield* (yield* CodeHost).change(TASK, at);
@@ -492,6 +505,20 @@ describe("the local code host", () => {
 			["a fabrika.toml at the root", "fabrika.toml", GOVERNS],
 		])("%s on both sides is not read for the rules", async (_name, name, text) => {
 			expect(await kindsAcross({[name]: text}, {[name]: text})).toEqual(["review-code"]);
+		});
+
+		describe("a read that broke is not no file: the kinds are not known", () => {
+			const OTHER = '[review]\nui = ["apps/"]\n';
+
+			it.each<[string, Lost, Readonly<Record<string, string>>, Readonly<Record<string, string>>]>([
+				["the base's file", {side: "base", path: FILE}, {[FILE]: GOVERNS}, {[FILE]: OTHER}],
+				["the head's file", {side: "head", path: FILE}, {[FILE]: GOVERNS}, {[FILE]: OTHER}],
+				["the head's file, none at the base", {side: "head", path: FILE}, {}, {[FILE]: GOVERNS}],
+				// One folder both sides share, so the diff never opens it, and only listing the file fails.
+				["the folder the file is in", {side: "base", path: ".fabrika"}, {[FILE]: GOVERNS}, {}],
+			])("%s cannot be read", async (_name, lost, base, head) => {
+				expect(await kindsAcross(base, head, [], lost)).toBeNull();
+			});
 		});
 	});
 });
