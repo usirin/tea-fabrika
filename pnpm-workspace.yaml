@@ -33,7 +33,7 @@ catalog:
   '@demlik/tea': 0.21.0
   '@effect/opentelemetry': 4.1.1
   '@effect/platform-node': 4.1.1
-  '@effect/tsgo': 0.56.0
+  '@effect/tsgo': 0.63.0
   '@effect/vitest': 4.1.1
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
