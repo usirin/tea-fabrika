@@ -4,15 +4,17 @@ import type {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "./child.ts";
 import {
 	DEFAULT_SETTINGS,
+	OLD_SETTINGS_FILE,
 	readSettings,
 	SETTINGS_FILE,
+	SETTINGS_MOVED,
 	type Settings,
 	type SettingsInvalid,
 	settingsFrom,
 } from "./settings.ts";
 import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 
-// Where fabrika.toml is read from: one place, never two
+// Where .fabrika/fabrika.toml is read from: one place, never two
 // (docs/direction/one-fabrika-toml-per-repo.md).
 //
 //   a target repo   tsh.toml names one (`repo`, or `clone`): the file as it is
@@ -22,7 +24,7 @@ import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 //                     git clone --no-checkout <url> <clone>          (when it is not there)
 //                     git -C <clone> fetch --prune origin
 //                     git -C <clone> remote set-head origin --auto   (the default branch)
-//                     git -C <clone> cat-file blob <commit>:fabrika.toml
+//                     git -C <clone> cat-file blob <commit>:.fabrika/fabrika.toml
 //
 //   no target       the folder tsh starts in, or the root of the repository
 //                   it is in (./settings.ts, `repoOf`).
@@ -30,6 +32,10 @@ import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 // Committed, never a working tree: a lane's own branch, or a file left in the
 // clone's folder, cannot change the settings the lane runs under. A
 // `--no-checkout` clone has no working tree to read anyway.
+//
+// A `fabrika.toml` still at the root, in that same one place, stops the read
+// with one line that says to move it (`SETTINGS_MOVED`). The new file beside it
+// does not save it: two spellings must not stand side by side.
 //
 // git runs through Effect's `ChildProcess`, under `hostEnv` (it may need the
 // login to fetch a private repository), with the repository's hooks off.
@@ -44,7 +50,7 @@ export interface Target {
 	readonly url: string | null;
 }
 
-/** Where to read fabrika.toml. */
+/** Where to read .fabrika/fabrika.toml. */
 export type Where =
 	| {readonly from: "repo"; readonly target: Target}
 	| {readonly from: "folder"; readonly folder: string};
@@ -154,7 +160,10 @@ const fromRepo = (
 					ran.code === 0 ? Effect.succeed(ran.out) : said(`read ${file} of`)(ran),
 				),
 			);
-		const found = (yield* present([SETTINGS_FILE])).has(SETTINGS_FILE);
+		const listed = yield* present([SETTINGS_FILE, OLD_SETTINGS_FILE]);
+		if (listed.has(OLD_SETTINGS_FILE))
+			return yield* Effect.fail(invalid(`${name}@${branch}: ${SETTINGS_MOVED}`));
+		const found = listed.has(SETTINGS_FILE);
 		const settings = found
 			? yield* settingsFrom(yield* blob(SETTINGS_FILE)).pipe(
 					Effect.mapError((error) => invalid(`${name}@${branch}:${SETTINGS_FILE}: ${error.why}`)),
@@ -187,6 +196,8 @@ const fromFolder = (
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
 		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
+		if (yield* exists(path.join(folder, OLD_SETTINGS_FILE)))
+			return yield* Effect.fail(invalid(`${folder}: ${SETTINGS_MOVED}`));
 		const found = yield* exists(file);
 		const settings = yield* readSettings(file);
 		const files = new Set<string>();
@@ -203,7 +214,7 @@ const fromFolder = (
 		return {settings, source: {from: "folder", file, found}, holds: {files, rubrics}};
 	});
 
-/** Read fabrika.toml from the one place `where` names. A missing file is every default. */
+/** Read .fabrika/fabrika.toml from the one place `where` names. A missing file is every default. */
 export const loadSettings = (
 	where: Where,
 ): Effect.Effect<

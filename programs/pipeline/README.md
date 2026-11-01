@@ -27,9 +27,9 @@ triage -> plan -> the person approves -> exam, when rules change -> test writer
 ```
 
 `host` is `github` or `local`. `local` is a bare git remote and a file of pull requests, for proof.
-`codex` names another program than the `codex` on the path. The repository holds `fabrika.toml`,
-with `[[checks.run]]` and one `[agents.<step>]` table per step you want to change, and
-`.fabrika.jsonc`, with its review rules. Each step defaults to Codex on `gpt-6-astra`, effort
+`codex` names another program than the `codex` on the path. The repository holds
+`.fabrika/fabrika.toml`, with `[[checks.run]]`, one `[agents.<step>]` table per step you want to
+change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-6-astra`, effort
 `high`. Triage defaults to `claude` on `opus`.
 
 ## What it holds to

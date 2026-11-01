@@ -3,7 +3,14 @@ import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {runChild} from "../../child.ts";
-import {DEFAULT_SETTINGS, readSettings, SETTINGS_FILE, type Settings} from "../../settings.ts";
+import {
+	DEFAULT_SETTINGS,
+	OLD_SETTINGS_FILE,
+	readSettings,
+	SETTINGS_FILE,
+	SETTINGS_MOVED,
+	type Settings,
+} from "../../settings.ts";
 
 // Where a lane works, on the machine it runs on. Read when a step needs it, so a home with no
 // config starts the lane and ends it on a named state that says which file to write.
@@ -73,7 +80,7 @@ export class LaneWork extends Context.Service<
 		readonly config: Effect.Effect<LaneConfig, Failed>;
 		/** Fetch, and answer main's tip now. */
 		readonly main: Effect.Effect<string, Failed>;
-		/** The repository's `fabrika.toml`, at main. */
+		/** The repository's `.fabrika/fabrika.toml`, at main. A `fabrika.toml` still at its root fails it. */
 		readonly settings: Effect.Effect<Settings, Failed>;
 		/** Ticket `n`'s working copy: found, or made from main now. */
 		readonly tree: (n: number) => Effect.Effect<Tree, Failed>;
@@ -172,6 +179,8 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const settings: Effect.Effect<Settings, Failed> = Effect.gen(function* () {
 			const tip = yield* main;
+			if ((yield* show(tip, OLD_SETTINGS_FILE)) !== null)
+				return yield* Effect.fail(failed(SETTINGS_MOVED));
 			const file = at("settings", tip, SETTINGS_FILE);
 			const text = yield* show(tip, SETTINGS_FILE);
 			if (text === null) return DEFAULT_SETTINGS;

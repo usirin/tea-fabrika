@@ -1,7 +1,7 @@
 # Skill review: the default rubric
 
 fabrika ships this rubric. A repository uses its own instead by naming a
-folder in `fabrika.toml` (`[review] rubrics`), or a machine by naming one in
+folder in `.fabrika/fabrika.toml` (`[review] rubrics`), or a machine by naming one in
 `tsh.toml` (`rubrics`).
 
 A skill page is text an agent reads and acts on. Read it as that agent would.

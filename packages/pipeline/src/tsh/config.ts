@@ -2,6 +2,7 @@ import {Crypto, Effect, FileSystem, Path, Schema} from "effect";
 import {Hex} from "effect/encoding";
 import {parse, TomlError} from "smol-toml";
 import type {Where} from "../settings-source.ts";
+import {SETTINGS_FILE} from "../settings.ts";
 import type {Local} from "../setup.ts";
 import {cloneIn, urlOf} from "../stages/build/github.ts";
 import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/review/reviewer.ts";
@@ -144,7 +145,7 @@ export const configFrom = (
 		if (MOVED.some((key) => Object.hasOwn(raw, key)))
 			return yield* Effect.fail(
 				invalid(
-					'add-on packs moved to fabrika.toml, at the root of the repository fabrika works on: move the packs line and each [pack."<name>"] table there',
+					`add-on packs moved to ${SETTINGS_FILE}, in the repository fabrika works on: move the packs line and each [pack."<name>"] table there`,
 				),
 			);
 		for (const [key, why] of Object.entries(GONE))
@@ -182,7 +183,7 @@ export const configFrom = (
 	});
 
 /**
- * Where the repository's fabrika.toml is read from. A config that names a
+ * Where the repository's .fabrika/fabrika.toml is read from. A config that names a
  * repository to work on (`repo`, or only a `clone`): that repository's, from
  * its clone. None: the one in `start`, the root of the folder tsh starts in.
  */

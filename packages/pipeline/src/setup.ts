@@ -1,16 +1,23 @@
 import {Effect, FileSystem, Path} from "effect";
-import type {Rules} from "./code-host-github.ts";
-import {AGENT_STEPS, type AgentStep, type EFFORTS, type Settings} from "./settings.ts";
+import {
+	AGENT_STEPS,
+	type AgentStep,
+	type EFFORTS,
+	type Rules,
+	SETTINGS_FILE,
+	type Settings,
+} from "./settings.ts";
 
 // What one run of fabrika works by in one repository, picked once at the edge
 // from three places, and printed, one line per pick, before anything runs:
 //
-//   fabrika.toml   the repository's own picks (./settings.ts)
-//   tsh.toml       this machine's: the model, effort and budget an agent step
-//                  falls back to, and a rubrics folder (./tsh/config.ts)
-//   the repository what it holds at the commit fabrika.toml was read at: its
-//                  lockfile, CODEOWNERS, .fabrika.jsonc, CLAUDE.md, AGENTS.md,
-//                  a workflow folder (`Holds`, read by ./settings-source.ts)
+//   .fabrika/fabrika.toml  the repository's own picks (./settings.ts)
+//   tsh.toml               this machine's: the model, effort and budget an agent
+//                          step falls back to, and a rubrics folder (./tsh/config.ts)
+//   the repository         what it holds at the commit the file was read at: its
+//                          lockfile, CODEOWNERS, .fabrika.jsonc (only to say it is
+//                          not read), CLAUDE.md, AGENTS.md, a workflow folder
+//                          (`Holds`, read by ./settings-source.ts)
 //
 // A key left out of both files gets a named default, and the line says so and
 // why. A pick that will stop the run later (approval asked of a CODEOWNERS
@@ -38,7 +45,7 @@ export const ASKED = [
 /** The rubric files a folder of rubrics holds. */
 export const RUBRIC_FILES = ["code.md", "doc.md", "skill.md"] as const;
 
-/** What the repository holds at the commit fabrika.toml was read at. */
+/** What the repository holds at the commit .fabrika/fabrika.toml was read at. */
 export interface Holds {
 	/** Each path of `ASKED` that is there. */
 	readonly files: ReadonlySet<string>;
@@ -88,7 +95,7 @@ export interface Setup {
 	readonly told: Picked<readonly (readonly string[])[]>;
 	/** The folder the reviewer's rubrics are read from, on this machine. */
 	readonly rubrics: Picked<string>;
-	/** The review rules where a change's base or head has no `.fabrika.jsonc`. */
+	/** `[review]`'s lists, as the start of a run prints them. A change's own come from its base and head. */
 	readonly kinds: Picked<Rules>;
 	/** Which of GitHub's checks count. */
 	readonly github: Picked<"every" | "required" | "none">;
@@ -219,9 +226,12 @@ export function setupLines(setup: Setup, holds: Holds, settings: Settings): read
 						`review.rubrics: ${file} is not in the repository's folder: a change of that kind stops at rubric_unknown`,
 				)
 			: [];
-	const kinds = has(".fabrika.jsonc")
-		? "review kinds: .fabrika.jsonc at main, read at each change's base and head"
-		: `review kinds: no .fabrika.jsonc at main, so governed [${setup.kinds.value.governed.join(", ")}] and ui [${setup.kinds.value.ui.join(", ")}] (${said(setup.kinds.from)})${setup.kinds.value.governed.length === 0 && setup.kinds.value.ui.length === 0 ? ": text reviews only" : ""}`;
+	const kinds = `review kinds: governed [${setup.kinds.value.governed.join(", ")}] and ui [${setup.kinds.value.ui.join(", ")}] (${said(setup.kinds.from)}), read at each change's base and head${setup.kinds.value.governed.length === 0 && setup.kinds.value.ui.length === 0 ? ": text reviews only" : ""}`;
+	const notRead = has(".fabrika.jsonc")
+		? [
+				`review kinds: .fabrika.jsonc at main is not read: review rules are [review] in ${SETTINGS_FILE}`,
+			]
+		: [];
 	const github =
 		setup.github.value === "none"
 			? `checks.github: none (${said(setup.github.from)}): GitHub's checks do not count`
@@ -247,6 +257,7 @@ export function setupLines(setup: Setup, holds: Holds, settings: Settings): read
 		rubrics,
 		...missingRubrics,
 		kinds,
+		...notRead,
 		github,
 		run,
 		approval,
