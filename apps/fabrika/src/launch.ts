@@ -3,13 +3,14 @@
 //
 //   no FABRIKA_HOME                   owner       Electron's own folder, a normal window
 //   FABRIKA_HOME=<folder>             quiet       a test or an agent: no Dock icon, never the
-//                                                 active app, the window shown without focus
+//                                                 active app, the window see-through, no focus
 //   FABRIKA_HOME=<folder>
 //     FABRIKA_FOREGROUND=1            foreground  a test home on purpose, as the owner's window
 //
 // Why quiet: agents start the app on a home of their own to test it, while a person works on the
-// same screen. A window that takes focus takes the person's keys. The agent reads the window's
-// frames and types into it over the DevTools protocol, which needs no focus.
+// same screen. A window that takes focus takes the person's keys, and windows that flash in and
+// out are hard to work beside. The agent reads the window's frames and types into it over the
+// DevTools protocol, which needs neither focus nor anyone seeing it.
 
 /** One start of the app: whose it is, and so how it shows itself. */
 export type Launch =

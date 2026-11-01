@@ -103,8 +103,9 @@ import {Unattached, type Wire} from "./wire.ts";
 // A test sets it, to run on a fresh one. The host is started on the same home, by name, always.
 //
 // A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
-// accessory app, with no Dock icon, never the active app. Its window is shown without focus,
-// drawn while hidden and covered, and never focused, not even by the dock-activate path.
+// accessory app, with no Dock icon, never the active app. Its window is shown without focus, and
+// fully see-through: it draws as usual, so a test's frames are real, but no person sees it come and
+// go, and a click goes through it. It is never focused, not even by the dock-activate path.
 // FABRIKA_FOREGROUND=1 shows it as the owner's. DOM focus inside the page is not OS focus: a
 // tile's terminal still takes keys sent over the DevTools protocol.
 //
@@ -201,7 +202,12 @@ const deskWindow = (preload: string, launch: Launch) => {
 			preload,
 		},
 	});
-	if (quiet) window.showInactive();
+	if (quiet) {
+		window.setOpacity(0);
+		window.setIgnoreMouseEvents(true);
+		if (process.platform === "darwin") window.setHiddenInMissionControl(true);
+		window.showInactive();
+	}
 	window
 		.loadURL(DESK)
 		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
