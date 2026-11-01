@@ -60,7 +60,7 @@ const arbs: MsgArbitraryTable<Msg> = {
 		session: fc.constant("s"),
 	}),
 	mutant_kill_control_ok: fc.constant(kills.run.ok(KILL, "red", 0)),
-	mutant_kill_control_err: fc.constant(kills.run.err(KILL, {_tag: "unknown"}, 0)),
+	mutant_kill_control_err: fc.constant(kills.run.err(KILL, {_tag: "could_not_run"}, 0)),
 };
 
 // The commit sits three right answers in. A list drawn at random rarely gets there, so a list may

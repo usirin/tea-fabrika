@@ -230,8 +230,7 @@ const refusedStaysRefused = (machine: Machine) =>
 					msg.type !== "build_push_err" ||
 					msg.error._tag !== "exam_touched" ||
 					before?.phase !== "pushing" ||
-					msg.cmd.ticket !== before.asked.ticket ||
-					msg.cmd.round !== before.asked.round
+					msg.cmd.ticket !== before.asked.ticket
 				)
 					return;
 				expect(after).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "exam_touched"}});
