@@ -506,7 +506,7 @@ expect(resultWithBadSignature).toBe("refused when folded");
 
 - **Where the ledger lives for one owner with two machines.** On Cloudflare
   (HTTPS only, no private network), or on the always-on Linux machine, which
-  the sync note allows ("any always-on peer can be" the referee). A laptop's
+  the sync note allows ("any always-on host can be" the referee). A laptop's
   ledger is gone when the laptop sleeps.
 - **The merge queue.** Run our checks on GitHub's queue branch, or turn the
   queue off for repos on our own CI.

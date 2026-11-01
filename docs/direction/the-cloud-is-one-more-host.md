@@ -16,6 +16,11 @@ is workerd on the laptop too. See
 [the app layer](#decided-2026-10-31-the-app-layer). It is layer 4 of
 [the five layers](./a-local-first-sync-engine.md#decided-2026-10-30-and-2026-10-31-five-layers-central-first).*
 
+*Changed 2026-10-31: in the new version, a `host` is a place hands can run: a Mac,
+a VM or a browser profile. This draft uses it differently, for a place that runs
+programs; read that as the brain. See
+[brain, hands, window, agent](./brain-hands-window-agent.md).*
+
 ```ts
 // A sketch. Every place fabrika runs is a host, and every host is the same kind of thing.
 type Where = "laptop" | "cloudflare"; // where it runs; nothing else differs
@@ -307,7 +312,7 @@ The seven open questions, each with its lean. Proposed, not decided.
 - **Decided: single-purpose objects, plus one project object.** This answers
   "one object per program instance, or one per tree". *Changed 2026-10-31:
   no terminal objects and no presence object. A shell's bytes are never saved,
-  and who is online is read from the gateways' last ping. A gateway per peer
+  and who is online is read from the gateways' last ping. A gateway per client
   takes their place.*
 
   ```ts
@@ -315,7 +320,7 @@ The seven open questions, each with its lean. Proposed, not decided.
   //   program:build:7   one program instance: its state, update, sleep and wake
   //   job:7             one job's record
   //   desk:<person>     one person's desk: its workspaces, settings, tsh history
-  //   gateway:<peer>    one peer's WebSocket: a computer's hands, a window, a browser tab
+  //   gateway:<client>  one client's WebSocket: a computer's hands, a window, an agent
   //   project           the ledger, slimmed: the log, claims, inboxes, the process tree, limits
   //
   // build:7 crashes. One step inside the project object:
@@ -468,7 +473,7 @@ const view = {
   it: one layer down, and any exception is named with its reason. How a program
   writes a fact others read is open. Lean, 70%: a `Topic` service in coordination,
   named after `Phoenix.PubSub` topics, which owns who may write and who to wake.
-  The poke in D4 covers peers on a socket, not sleeping objects, so this fills
+  The poke in D4 covers clients on a socket, not sleeping objects, so this fills
   that gap too. The doubt is that it ends up a thin pass-through over the log.
   The tracker in `next/` will settle it.
 

@@ -512,7 +512,7 @@ Other shapes, weighed:
 
 - **One ledger, everyone on it equal** → the lean above.
 - **One ledger per person, shared by sync** → the vision in the sync note. It
-  needs signed lines, gossip and a referee elected among peers. Too much for
+  needs signed lines, gossip and a referee elected among computers. Too much for
   the first two people. Kept open, behind the same `Ledger` service.
 - **One Durable Object per ticket or lane** → section 9.
 - **A central list of users across ledgers** → no, by the decision above.

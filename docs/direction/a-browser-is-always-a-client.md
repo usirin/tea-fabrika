@@ -1,21 +1,24 @@
-# Protocols first, and a browser is always a peer
+# Protocols first, and a browser is always a client
 
 **Decided 2026-10-30,** during the walk of the transport layer. Every protocol
 fabrika speaks is written so that a browser tab could speak it too, even when
 nobody builds the browser side yet. The protocol comes first; each
 implementation (the Mac's hands, the VM's hands, a browser tab, a test) is one
-peer that speaks it.
+client that speaks it.
+
+*Changed 2026-10-31: this note said "peer". The word is gone; see
+[brain, hands, window, agent](./brain-hands-window-agent.md).*
 
 *Changed 2026-10-31 (T3): the window no longer talks to its own hands over a
-Unix socket. Every window is a peer, the Electron window too, and dials its
+Unix socket. Every window is a client, the Electron window too, and dials its
 own gateway over a WebSocket with its own key (kept in the macOS Keychain in
 Electron). The brain checks the page's origin. The window row below and the
 "local shortcut" bullet are kept as the earlier answer. See
 [the five layers](./a-local-first-sync-engine.md#layer-1-transport-decided-2026-10-30-t3-changed-2026-10-31).*
 
 ```ts
-// A sketch. One protocol, many peers. Only the transport and the key store differ.
-//   peer           transport                      key kept in            has
+// A sketch. One protocol, many clients. Only the transport and the key store differ.
+//   client         transport                      key kept in            has
 //   Mac hands      WebSocket to gateway:mac       an SSH key file        git, files, agents
 //   VM hands       WebSocket to gateway:vm        an SSH key file        git, files, docker
 //   browser tab    WebSocket to gateway:<tab>     WebCrypto (Ed25519)    notify, clipboard
@@ -33,26 +36,28 @@ Electron). The brain checks the page's origin. The window row below and the
   its own hands over a Unix socket because it is the same computer; what goes
   over it is the same as what a browser would send over a WebSocket.
 - **Check every design question against it:** could a browser tab be this
-  peer? If not, the protocol changes, not the browser.
+  client? If not, the protocol changes, not the browser.
 
 Three answers in the transport layer follow from it:
 
 | Question | Before | Now |
 |---|---|---|
-| How many connections | one gateway object per computer | one gateway object per peer: a computer's hands, or a browser tab |
-| How a peer proves who it is | its SSH key | a key pair that signs the hello; an SSH file on a Mac, WebCrypto Ed25519 in a browser, granted by its person as `fabrika post` grants an agent's key today |
-| How we know a peer is still there | WebSocket ping frames | a text `"ping"`, answered `"pong"` by the object's auto-response |
+| How many connections | one gateway object per computer | one gateway object per client: a computer's hands, a window or an agent |
+| How a client proves who it is | its SSH key | a key pair that signs the hello; an SSH file on a Mac, WebCrypto Ed25519 in a browser, granted by its person as `fabrika post` grants an agent's key today |
+| How we know a client is still there | WebSocket ping frames | a text `"ping"`, answered `"pong"` by the object's auto-response |
 
-A browser can do some machine work too (show a notification, read the
-clipboard). It says so in its `has` list, the same way the Mac says `git`, and
-a Cmd that `needs` git never goes to it.
+A browser is also a host, with capabilities of its own (show a notification, read
+the clipboard). It says so in its `has` list, the same way the Mac says `git`, and
+a Cmd that `needs` git never goes to it. That list, and not the word "window",
+is what keeps a job away from a tab. See
+[brain, hands, window, agent](./brain-hands-window-agent.md).
 
 ## Why
 
 - **The backbone is cheap to keep open now and expensive to open later.** A
   protocol that leans on a Unix socket or a key file works until the first
-  browser peer, and then every layer above it changes.
-- **The browser is the narrowest place a peer can run.** A protocol a browser
+  browser client, and then every layer above it changes.
+- **The browser is the narrowest place a client can run.** A protocol a browser
   can speak runs in Node, in workerd, in a test, and on a phone, without
   changes.
 - **It is not a general framework.** This is the backbone of an app two people
@@ -82,9 +87,9 @@ A written rule does not stop a change that breaks it. Two checks do:
 
 - **Built: the top level is bundled for a browser.** `pnpm lint` bundles
   `@kampus/fabrika`'s top level for a browser and fails on a Node import. The
-  protocol's schemas and its peer machine live on that top level; a Node or
+  protocol's schemas and the client's state machine live on that top level; a Node or
   Unix-socket transport goes on a subpath.
-- **Proposed: a browser peer in CI.** The CI job starts its own Miniflare and
+- **Proposed: a browser client in CI.** The CI job starts its own Miniflare and
   a headless browser (Playwright) on the CI machine itself; the browser
   connects, signs a hello, pings, sends one message and reads the answer.
   Both stop when the job ends. Nothing connects to anyone's computer. Every transport (WebSocket from Node, the Unix socket, memory) runs
@@ -95,18 +100,18 @@ A written rule does not stop a change that breaks it. Two checks do:
 ## What it costs
 
 - One more test job in CI, with a browser, once the protocol code exists.
-- A browser peer needs its person to grant its key. That flow is not designed
+- A browser client needs its person to grant its key. That flow is not designed
   yet.
 
 **How sure:** 80%. The doubt is a protocol need that a browser truly cannot
-meet, such as a peer that must hold a file lock. What would settle it: the
-browser-peer suite passing on every transport question still open (version,
+meet, such as a client that must hold a file lock. What would settle it: the
+browser-client suite passing on every transport question still open (version,
 reconnect, message shape).
 
 ## What it cannot tell us
 
 - Whether anyone will use fabrika from a browser soon. The browser window
   itself is not built now; only the protocol stays open for it.
-- How a browser peer behaves when its tab sleeps or the phone locks. Browsers
+- How a browser client behaves when its tab sleeps or the phone locks. Browsers
   throttle or close background tabs; reconnecting is the normal path for
-  every peer, but a browser's timing was not measured.
+  every client, but a browser's timing was not measured.
