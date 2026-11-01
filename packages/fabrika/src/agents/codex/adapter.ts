@@ -1,19 +1,22 @@
 import {realpathSync} from "node:fs";
-import {dirname} from "node:path";
+import {dirname, resolve, sep} from "node:path";
 import {Effect, FileSystem, Option, Schema, Stream} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
 import {
 	codexConfig,
 	codexHome,
 	codexHomeOf,
+	codexLogin,
 	codexSystem,
 	type FolderAccess,
+	fenceTooBig,
+	localDisk,
 	writeSystem,
 } from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
-import {type Env, runEnv} from "../claude/env.ts";
-import {toolchain} from "../claude/sandbox.ts";
+import {type Env, runEnv, toolHome} from "../claude/env.ts";
+import {gitOf, onPath, toolchain, toolRoot} from "../claude/sandbox.ts";
 
 // Codex through `codex exec --json`, as an adapter of the interface
 // (../agent/turn.ts). One process per turn: it prints one JSON event per
@@ -30,13 +33,17 @@ import {toolchain} from "../claude/sandbox.ts";
 //   - `HOME` is that home too, so `~/.agents` skills stay out;
 //   - the environment is a keep-list: a program's, `USER`, the home. No key
 //     (`OPENAI_API_KEY`, `CODEX_API_KEY`) is ever handed on;
-//   - the permission profile of the ACP row (`codexConfig`): home unreadable
-//     but for the folder and the toolchain, core shell variables only, no
-//     login shell, no web search, Codex's far-reaching features off;
+//   - the permission profile of the ACP row (`codexConfig`): the folder and the
+//     toolchain open and what is beside them under home closed (`homeFence`),
+//     the login closed wherever it is, core shell variables only, no login
+//     shell, no web search, Codex's far-reaching features off. A worktree's
+//     clone is opened to read (`gitOf`), so git works in a lane's tree. A table
+//     too big for the box starts nothing (`fenceTooBig`);
 //   - `--ignore-user-config`, and approvals `never`: nothing asks a person.
 //
 // Node at the edge: `realpathSync` once, to find the folder Codex's own
-// binary runs from, which the profile must leave readable.
+// binary runs from, which the profile must leave readable, and `localDisk`,
+// to read home and follow links for the profile.
 
 /** Where Codex is, and where the login it links to is. */
 export interface CodexAdapterConfig {
@@ -46,14 +53,17 @@ export interface CodexAdapterConfig {
 	readonly access: FolderAccess;
 }
 
+/** A string as TOML: JSON's, but for DEL, which TOML does not take raw and JSON leaves raw. */
+const tomlText = (text: string) => JSON.stringify(text).replaceAll("\x7f", "\\u007f");
+
 /** A config value as TOML, for `-c key=value`. Objects with plain keys become dotted keys. */
 const toml = (value: unknown): string =>
 	typeof value === "string"
-		? JSON.stringify(value)
+		? tomlText(value)
 		: typeof value === "boolean" || typeof value === "number"
 			? String(value)
 			: `{${Object.entries(value as Record<string, unknown>)
-					.map(([k, v]) => `${JSON.stringify(k)}=${toml(v)}`)
+					.map(([k, v]) => `${tomlText(k)}=${toml(v)}`)
 					.join(", ")}}`;
 
 const PLAIN = /^[A-Za-z0-9_]+$/;
@@ -166,15 +176,20 @@ export const codexEnvOf = (parent: Env, home: string): Record<string, string> =>
 
 /**
  * The folders Codex's own binary runs from, read-only inside its box: the
- * link's folder, and where it points. A standalone install keeps its releases
- * under `~/.codex/packages` behind a `current` link, so the box opens that
- * folder (as experiment 152 did), never the rest of `~/.codex`.
+ * link's folder, and where it points, by the toolchain's own rule (`toolRoot`).
+ * A standalone install keeps its releases under `~/.codex/packages` behind a
+ * `current` link, so the box opens that folder (as experiment 152 did), never
+ * the rest of `~/.codex`. A Codex at `~/codex` answers home here: the fence
+ * opens nothing for it (`homeFence`). A bare name is found on the PATH, as the
+ * system finds it. Not found: no folder, and the start fails on its own.
  */
-const codexFolders = (codex: string, owner: string): string[] => {
-	const real = Option.liftThrowable((p: string) => realpathSync(p))(codex);
+export const codexFolders = (codex: string, owner: string, env: Env): string[] => {
+	const found = codex.includes(sep) ? resolve(codex) : onPath(codex, env);
+	if (found === undefined) return [];
+	const real = Option.liftThrowable((p: string) => realpathSync(p))(found);
 	const packages = `${owner}/.codex/packages`;
-	const target = Option.isSome(real) ? real.value : codex;
-	return [dirname(codex), target.startsWith(`${packages}/`) ? packages : dirname(dirname(target))];
+	const target = Option.isSome(real) ? real.value : found;
+	return [dirname(found), target.startsWith(`${packages}/`) ? packages : toolRoot(target, owner)];
 };
 
 export const codexAdapter = (
@@ -185,20 +200,35 @@ export const codexAdapter = (
 		const fs = yield* FileSystem.FileSystem;
 		const parent = config.parent ?? process.env;
 		const owner = parent.HOME ?? "";
-		const login = `${parent.CODEX_HOME ?? `${owner}/.codex`}/auth.json`;
+		const login = codexLogin(parent);
 		return {
 			name: "codex",
 			// No dollar cap on a plan. A typed answer by `--output-schema`, when strict mode takes the schema.
 			holds: {usd: false, schema: true},
 			start: (turn) =>
 				Effect.gen(function* () {
+					const tools = [
+						...toolchain(parent),
+						...codexFolders(config.codex, owner, parent),
+						...gitOf(turn.folder),
+					];
+					const profile = codexConfig(
+						turn.folder,
+						tools,
+						owner,
+						config.access,
+						localDisk,
+						toolHome(parent),
+						[login],
+					);
+					const tooBig = fenceTooBig(profile.permissions.fenced.filesystem);
+					if (tooBig !== null) return yield* Effect.fail(failed("contain", tooBig));
 					// Our session, not the folder, names the home: a thread lives in the home it was made in.
 					const home = codexHomeOf(`session:${turn.session}`, parent);
 					yield* codexHome(home, login).pipe(
 						Effect.provideService(FileSystem.FileSystem, fs),
 						Effect.mapError((why) => failed("contain", why)),
 					);
-					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
 					// The turn's system prompt, as config (`codexSystem`); a `replace` prompt is a file in the home.
 					const system = codexSystem(turn.system, home);
 					yield* writeSystem(system.file).pipe(
@@ -222,7 +252,7 @@ export const codexAdapter = (
 						...(turn.effort === null ? [] : ["-c", `model_reasoning_effort=${toml(turn.effort)}`]),
 						"-c",
 						'approval_policy="never"',
-						...flagsOf(codexConfig(turn.folder, tools, owner, config.access)),
+						...flagsOf(profile),
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),

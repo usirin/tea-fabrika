@@ -122,7 +122,7 @@ export const NOT_IN_THE_PACK: readonly string[] = [
 	"criteria: the checklist only. The owner's rulings in the ticket's comments, and the rest of the thread, are not read.",
 	"criteria: a criterion whose `[evidence: …]` mark points at the pull request's text cannot be graded here: only the deviations section of that text is in the pack.",
 	"deviations: the section's text as written. Its entries are not parsed, and the diff is not scanned for a change nobody declared.",
-	"kinds: worked out by a copy of today's fabrika's path rules over the repo's own `.fabrika.jsonc`. It is not asked of fabrika, so the two can drift.",
+	"kinds: worked out by a copy of today's fabrika's path rules over `[review]` in the repo's own `.fabrika/fabrika.toml`. It is not asked of fabrika, so the two can drift.",
 	"files: the first 300. With more, the files, the kinds and the diff are not read.",
 	"checks: read once, never waited for and never run again. A repo that requires no check reads as `pending` for ever.",
 	"verdicts already posted on the pull request are not read.",

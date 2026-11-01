@@ -1,9 +1,21 @@
 import {createHash} from "node:crypto";
+import {readdirSync, realpathSync} from "node:fs";
+import {userInfo} from "node:os";
+import {basename, dirname, isAbsolute, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {Effect, FileSystem} from "effect";
+import {Effect, FileSystem, Option} from "effect";
 import type {SystemPrompt} from "../agent/turn.ts";
-import {agentEnv, type Env, runEnv} from "../claude/env.ts";
-import {fencedEnv, filesOf, TOOLS, toolchain} from "../claude/sandbox.ts";
+import {agentEnv, type Env, runEnv, toolHome} from "../claude/env.ts";
+import {
+	fencedEnv,
+	filesOf,
+	gitOf,
+	inside,
+	LOGIN_FILES,
+	opens,
+	TOOLS,
+	toolchain,
+} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
@@ -16,7 +28,8 @@ import type {Spawnable} from "./client.ts";
 // Each adapter is installed apart from the workspace, at an exact version,
 // with its own lockfile (adapters/package.json), and started from there by
 // path: never `npx` of a latest. Node is touched here only to find files:
-// the adapter's script by its path, and node's own binary to run it with.
+// the adapter's script by its path, node's own binary to run it with, and what
+// is in home and where a link leads for Codex's profile (`localDisk`).
 //
 // Containment, as the builder has it (src/stages/build/builder.ts):
 //
@@ -63,13 +76,16 @@ import type {Spawnable} from "./client.ts";
 //   - `CODEX_CONFIG`, merged into every session's config (`codexConfig`): the
 //     shell gets only the core variables and no login shell, no web search,
 //     Codex's features that reach past the folder off, and a permission
-//     profile that makes home unreadable but for the folder and the toolchain.
+//     profile that opens the folder and the toolchain and closes what is beside
+//     them under home (`homeFence`).
 //   - `NO_BROWSER`: no browser login is offered.
 //
 // What it does not hold, measured in experiment 153: writes in the temp
 // folders are open (the adapter sends its own sandbox with every turn, and
 // that one keeps them); reads outside home are open; there is no dollar cap
-// and no typed answer field.
+// and no typed answer field. Nor is home closed whole when something opened is
+// under it: its names can be listed, and an entry made during a run that starts
+// like a way down to an opened folder is open (`homeFence` says why).
 
 export const AGENTS = ["claude", "codex", "fake"] as const;
 export type AgentName = (typeof AGENTS)[number];
@@ -107,12 +123,15 @@ const CLAUDE = `${ADAPTERS}@agentclientprotocol/claude-agent-acp/dist/index.js`;
 const CODEX = `${ADAPTERS}@agentclientprotocol/codex-acp/dist/index.js`;
 const FAKE = at("./fake-agent.ts");
 
+/** Under home, the folder that holds every Codex home. */
+const CODEX_HOMES = ".cache/tea-fabrika/codex";
+
 /**
  * The Codex home of a run in `folder`: one per folder, under home's cache,
  * where the agent's commands can neither read nor write (`codexConfig`).
  */
 export const codexHomeOf = (folder: string, parent: Env = process.env) =>
-	`${parent.HOME ?? ""}/.cache/tea-fabrika/codex/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
+	`${parent.HOME ?? ""}/${CODEX_HOMES}/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
 
 /** The modes a contained Codex may run in. `agent` lets a model answer the asks; full access has no sandbox. */
 export const CODEX_MODES = ["read-only", "workspace-write"] as const;
@@ -126,11 +145,339 @@ const MODE_OF = {
 	read: "read-only",
 } as const satisfies Record<FolderAccess, (typeof CODEX_MODES)[number]>;
 
+/** One thing in a folder, by name. A link is told apart, so it is never followed. */
+export interface Entry {
+	readonly name: string;
+	readonly link: boolean;
+}
+
+/** What a folder holds, or `null` when it cannot be read. */
+export type Listing = (folder: string) => readonly Entry[] | null;
+
+/** What the fence asks of the machine it is made on. All of it comes in here, so `homeFence` is pure. */
+export interface Disk {
+	readonly list: Listing;
+	/** A path with every link followed and its spelling made plain, or `null` when it is not there. */
+	readonly real: (path: string) => string | null;
+	/** How many first characters of a name the box's patterns may close by. 0 lists every entry. */
+	readonly depth: number;
+	/** The account's own home, as the system has it and whatever `HOME` says. `null` when it does not say. */
+	readonly account: string | null;
+}
+
+/** The real disk, as a `Listing`. A read that fails is `null`. */
+export const listFolder: Listing = (folder) =>
+	Option.getOrNull(
+		Option.liftThrowable(() =>
+			readdirSync(folder, {withFileTypes: true}).map((entry) => ({
+				name: entry.name,
+				link: entry.isSymbolicLink(),
+			})),
+		)(),
+	);
+
+/**
+ * How far to trust patterns on a system. Only a Mac's Seatbelt has been tested with them. Nothing
+ * proves them elsewhere, and a pattern that matched nothing would leave a name open, so elsewhere
+ * every entry is listed by name.
+ */
+export const depthFor = (platform: string) => (platform === "darwin" ? 2 : 0);
+
+/** This machine, as a `Disk`: the one place the fence touches it. */
+export const localDisk: Disk = {
+	list: listFolder,
+	real: (path) => Option.getOrNull(Option.liftThrowable(() => realpathSync.native(path))()),
+	depth: depthFor(process.platform),
+	account: Option.getOrNull(Option.liftThrowable(() => userInfo().homedir)()),
+};
+
+/** Under home, where a login is kept, and where each Codex home is made, some of them after the fence is. */
+const LOGINS = [...LOGIN_FILES, ".codex/auth.json", CODEX_HOMES];
+
+/** Closed whether it is there or not. `.codex` is not a login: its `packages` may be opened. */
+const ALWAYS_CLOSED = [...LOGINS, ".codex"];
+
+const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
+
+const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
+	Object.fromEntries(paths.map((path) => [path, rule]));
+
+/** Where a path really is, as far as it is there: a login may not be there yet, under a link that is. */
+const realSoFar = (path: string, real: Disk["real"]): string => {
+	const there = real(path);
+	if (there !== null) return there;
+	return dirname(path) === path ? path : join(realSoFar(dirname(path), real), basename(path));
+};
+
+/**
+ * A path a key cannot name as it is: a pattern character, a quote, or a control character of one
+ * byte. One of two bytes (U+0080 to U+009F) matches as itself, and `?` would not match it.
+ */
+const ODD = /[*?[\]"]|(?![\u0080-\u009f])\p{Cc}/u;
+
+/**
+ * The pattern that matches an odd path. A pattern character, and the two that mean something only
+ * inside a pattern (a brace, a backslash), each stand in brackets. A control character and a quote
+ * cannot, so `?` takes their place: it matches that one byte, and may close a name beside it too.
+ */
+const pattern = (path: string) =>
+	path.replace(/[*?[\]{}\\]/g, "[$&]").replace(/"|(?![\u0080-\u009f])\p{Cc}/gu, "?");
+
+/** The keys that close a path. A pattern closes one name and not what is in it, so an odd path takes two. */
+const closing = (path: string): readonly string[] =>
+	ODD.test(path) ? [pattern(path), `${pattern(path)}/**`] : [path];
+
+/**
+ * What may stand in a pattern: a class and `?` work by byte, so nothing of more than one byte, and
+ * nothing a pattern reads.
+ */
+const IN_A_PATTERN = /^[A-Za-z0-9._ -]*$/;
+
+/** A folder's path that may start a pattern as it is. */
+const PATTERN_FOLDER = /^[A-Za-z0-9._ /-]*$/;
+
+/**
+ * The keys that close all that is in `dir` but the names `kept`. Each folder on the way down is a
+ * few patterns instead of a line per entry, so the table is short and names little.
+ *
+ * A pattern closes what does not share a start with a kept name, up to `depth` characters. Past
+ * that, entries that share the start are listed and closed by name. At depth 0 that is every entry.
+ *
+ * The box's matcher takes no regard of case on a Mac: `l[!a]*` closes `Library` too. So the walk
+ * goes by a prefix with no case, one branch for `Library` and `lab`, each class holds both cases of
+ * a character, and a kept name's start is written in lower case and still closes an entry in either.
+ */
+const closingAllBut = (
+	dir: string,
+	kept: readonly string[],
+	names: readonly string[],
+	depth: number,
+): readonly string[] => {
+	const keys = (key: string) => [key, `${key}/**`];
+	const fold = (text: string) => text.toLowerCase();
+	const listed = (start: string) =>
+		names
+			.filter((name) => fold(name).startsWith(start) && !kept.includes(name))
+			.flatMap((name) => closing(`${dir}/${name}`));
+	/** `start` has no case, and `here` are the kept names that start with it, in any case. */
+	const walk = (start: string, here: readonly string[]): readonly string[] => {
+		const longer = here.filter((name) => name.length > start.length);
+		if (longer.length === 0) return keys(`${dir}/${start}?*`);
+		if (start.length >= depth) return listed(start);
+		const next = [...new Set(longer.map((name) => fold(name.charAt(start.length))))].sort();
+		const isKept = here.some((name) => fold(name) === start);
+		const set = [
+			...next.filter((c) => c !== "-").flatMap((c) => [...new Set([c, c.toUpperCase()])]),
+			// A class matches a slash too: `w[!x]*` would close what is in a kept `w`.
+			...(isKept ? ["/"] : []),
+			// A dash in a class stands for itself only at its end.
+			...next.filter((c) => c === "-"),
+		];
+		// The start is an entry of its own, unless it is kept or names none: a key for `.` or `..`
+		// breaks the box's profile.
+		const hasOwnLine = !isKept && !["", ".", ".."].includes(start);
+		return [
+			...keys(`${dir}/${start}[!${set.join("")}]*`),
+			...(hasOwnLine ? keys(`${dir}/${start}`) : []),
+			...next.flatMap((c) =>
+				walk(
+					`${start}${c}`,
+					longer.filter((name) => fold(name).startsWith(`${start}${c}`)),
+				),
+			),
+		];
+	};
+	return depth === 0 ? listed("") : walk("", kept);
+};
+
+/**
+ * The profile's filesystem table: what is beside the opened folders is closed,
+ * home itself is not. Pure: the machine comes in as `disk`.
+ *
+ * Seatbelt's deny on a folder refuses even `lstat` on that folder. Node's
+ * `realpathSync` looks at every parent of a script, so closing home whole
+ * stops every Node script under it, `pnpm` under `~/.volta` too, with
+ * `EPERM: lstat '<home>'`. So walk down from home. An entry that is an opened
+ * folder is left alone, one that holds an opened folder is walked into, and
+ * every other entry is closed. A folder that cannot be read is closed.
+ *
+ * The table is of real paths, for Codex follows links: `~/t` linking to `~/.ssh`,
+ * as a tool, used to open `~/.ssh/id_x` past the narrower deny. So home, the folder
+ * and every read line are resolved first. A line whose real path would open home
+ * or a login opens nothing (`opens`), and neither does one that is not there or
+ * one inside a login's real target: each gets no line and counts for nothing, so
+ * a `PNPM_HOME` of home, or a Codex at `~/codex`, cannot undo the lines that close
+ * home. A login is closed at its real target as well as its written path, so a
+ * `.ssh` that links into the opened folder is closed. A link in a folder walked
+ * is closed like any entry and never walked through, so a folder named through a
+ * link in home (`~/dev` linking to `~/work`, the folder `~/dev/copy`) has its real
+ * path opened and that link closed: Codex starts and work in the folder runs, and a
+ * command that names the folder by the link is refused. With nothing else opened
+ * under home, home is closed whole, for nothing under it needs to run.
+ *
+ * `HOME` can say another folder than the account's own, so the system's answer is
+ * closed too (`disk.account`): one line when nothing is opened in it, and walked
+ * like home when something is. `logins` are those a variable moved (`CODEX_HOME`).
+ * Each is closed by its path and its real target, wherever that is.
+ *
+ * Codex reads a key with one of `* ? [ ]` in it as a pattern, and a key with a
+ * control character matches nothing (Codex 0.165.0, in `codex sandbox`, by
+ * hand and in the tests). So an odd path is closed by `closing`. Written plainly
+ * it would stay readable, and `Icon\r` is a common file name on a Mac. An odd
+ * path cannot be opened by a key at all: Codex refuses a pattern that opens,
+ * and `/**` does not make the part before it plain. So it gets no line. It does
+ * not need one: the walk leaves it alone, reads are open where nothing closes
+ * them, and `:workspace` makes the working folder writable by itself.
+ *
+ * A folder is closed by patterns as far as `disk.depth` allows (`closingAllBut`).
+ * If its own path or a way down holds anything a pattern cannot carry
+ * (`IN_A_PATTERN`), every entry in it is listed by name, which is also all there is
+ * at depth 0. A table the box could not take is refused before it starts (`fenceTooBig`).
+ *
+ * This is weaker than a whole closed home, in two ways. A command can list the
+ * names in home and in each folder on the way down to an opened one. An
+ * entry made after this table that shares its first characters with a way down
+ * is open. We accept both: the names are not secrets, and the entries that hold
+ * logins exist before a run starts. `ALWAYS_CLOSED` covers one that does not. See
+ * docs/direction/codex-box-home-listing.md.
+ */
+export const homeFence = (
+	home: string,
+	reads: readonly string[],
+	folder: string,
+	access: FolderAccess,
+	disk: Disk,
+	logins: readonly string[] = [],
+): Record<string, FolderAccess | "deny"> => {
+	const realHome = (path: string) => disk.real(plain(path)) ?? plain(path);
+	const root = realHome(home);
+	const account = disk.account === null ? root : realHome(disk.account);
+	const homes = account === root ? [root] : [root, account];
+	const targets = (under: string, paths: readonly string[]) =>
+		paths.map((path) => realSoFar(`${under}/${path}`, disk.real));
+	const loginTargets = homes.flatMap((under) => targets(under, LOGINS));
+	const opensNothing = (path: string) =>
+		homes.some((under) => opens(path, under, LOGINS)) ||
+		loginTargets.some((target) => inside(target, path));
+	const realLine = (path: string) => {
+		const there = disk.real(plain(path));
+		return there === null || opensNothing(there) ? [] : [there];
+	};
+	const tools = reads.flatMap(realLine);
+	const own = realLine(folder);
+	const opened = [...tools, ...own];
+	const holdsOpened = (path: string) => opened.some((open) => open.startsWith(`${path}/`));
+	const nameable = (path: string) => !ODD.test(path);
+	const beside = (dir: string): readonly string[] => {
+		const entries = disk.list(dir);
+		if (entries === null) return closing(dir);
+		const ways = entries.filter(({name, link}) => {
+			const path = `${dir}/${name}`;
+			return !link && (opened.includes(path) || holdsOpened(path));
+		});
+		const kept = ways.map(({name}) => name);
+		const plainEnough =
+			PATTERN_FOLDER.test(dir) &&
+			kept.every((name) => IN_A_PATTERN.test(name.slice(0, disk.depth)));
+		return [
+			...closingAllBut(
+				dir,
+				kept,
+				entries.map(({name}) => name),
+				plainEnough ? disk.depth : 0,
+			),
+			...kept
+				.map((name) => `${dir}/${name}`)
+				.filter((path) => !opened.includes(path))
+				.flatMap(beside),
+		];
+	};
+	const loginLines = (under: string) =>
+		[...ALWAYS_CLOSED.map((path) => `${under}/${path}`), ...targets(under, ALWAYS_CLOSED)]
+			.filter((path) => !holdsOpened(path))
+			.flatMap(closing);
+	return {
+		...lines(
+			homes.flatMap((under) => (holdsOpened(under) ? beside(under) : closing(under))),
+			"deny",
+		),
+		...lines(tools.filter(nameable), "read"),
+		...lines(own.filter(nameable), access),
+		// Last, so a login stays closed even if something asks to open it. One that holds an opened
+		// folder is not closed whole, for the same reason as home: the walk closed what is in it. The
+		// account's home, closed whole, needs no line for what is in it.
+		...lines(
+			[
+				...loginLines(root),
+				...(account !== root && holdsOpened(account) ? loginLines(account) : []),
+				...logins
+					.flatMap((login) => [login, realSoFar(login, disk.real)])
+					// Codex refuses a whole table with a key that is not absolute.
+					.filter(isAbsolute)
+					.flatMap(closing),
+			],
+			"deny",
+		),
+	};
+};
+
+/**
+ * The most lines a table may hold. Plain names at this many take about 2.5 s per command. Off a Mac
+ * nothing has been measured, so the same number stands.
+ */
+export const FENCE_LIMIT = 600;
+
+/**
+ * Two more limits of Codex's box (Codex 0.165.0 on a Mac). Past either it runs nothing, and its answer
+ * comes per command and reads like a broken tool, so we say it first.
+ *
+ * The profile compiles its paths into one pattern of at most 65,535 bytes (exit 65, "pattern
+ * serialization length"). What keys share is stored once, so it costs what is new in each key and about
+ * 7 bytes more: 254 lines of 250-byte names run, 256 do not, and the length of the folder they share
+ * does not matter. Ours stops at 90% of that.
+ */
+const PATTERN_BYTES = 59_000;
+
+/** What a table takes of the box's compiled pattern: each key's bytes, less what it shares with the key before it, sorted. */
+const patternBytes = (keys: readonly string[]): number =>
+	keys
+		.map((key) => Buffer.from(key))
+		.sort(Buffer.compare)
+		.reduce((total, key, n, sorted) => {
+			const before = sorted[n - 1] ?? Buffer.alloc(0);
+			const shared = key.findIndex((byte, at) => byte !== before[at]);
+			return total + 7 + (shared === -1 ? 0 : key.length - shared);
+		}, 0);
+
+/**
+ * The profile also has to fit in a command's arguments, 1 MiB (exit 1, "Argument list too long"). Only
+ * patterns swell it, the deeper the more: 1,346 lines at 6 folders stop it, and 212 at 36. The cost
+ * below is a fit from those runs that comes out high at each, and ours stops at about 86% of the limit.
+ */
+const PROFILE_BYTES = 900_000;
+
+/** What a table takes of the box's profile. A plain key costs next to nothing. */
+const profileBytes = (keys: readonly string[]): number =>
+	keys
+		.filter((key) => /[*?[\]]/.test(key))
+		.reduce((total, key) => total + 5 * Buffer.byteLength(key) + 130 * key.split("/").length, 0);
+
+/** What to say when a table is more than the box can take, or `null` when it fits. Counts only: it names no entry. */
+export const fenceTooBig = (table: Readonly<Record<string, unknown>>): string | null => {
+	const keys = Object.keys(table);
+	const count = keys.length;
+	if (count > FENCE_LIMIT)
+		return `Codex's box would need ${count} lines to close what is beside the opened folders, and it takes at most ${FENCE_LIMIT}. Nothing was started. Use a folder with fewer names beside it.`;
+	return patternBytes(keys) > PATTERN_BYTES || profileBytes(keys) > PROFILE_BYTES
+		? `Codex's box would need ${count} lines to close what is beside the opened folders, and those are too long or too deep for it. Nothing was started. Use a folder nearer the top of home, with fewer long names beside it.`
+		: null;
+};
+
 /**
  * Merged into every Codex session's config by the adapter (`CODEX_CONFIG`).
- * The permission profile is the builder's `filesOf` for reads: home denied
- * but for the folder and the toolchain, and the adapters' own folder, where
- * the Codex that runs inside the box is. The folder is writable
+ * The permission profile opens the folder, the toolchain, and the adapters'
+ * own folder, where the Codex that runs inside the box is, and closes what is
+ * beside them under home (`homeFence`). The folder is writable
  * (`access: "write"`), or only readable for a turn that reads code and
  * changes nothing (`access: "read"`). There is no default: every caller says.
  */
@@ -139,8 +486,14 @@ export const codexConfig = (
 	tools: readonly string[],
 	home: string,
 	access: FolderAccess,
+	/** How home is read and links are followed, for what the profile opens and closes (`homeFence`). */
+	disk: Disk,
+	/** Core variables only, plus this: where a version manager holds the real tools (`toolHome`). */
+	set: Readonly<Record<string, string>> = {},
+	/** Logins a variable moved, by their paths: closed wherever they are (`homeFence`). */
+	logins: readonly string[] = [],
 ) => ({
-	shell_environment_policy: {inherit: "core"},
+	shell_environment_policy: {inherit: "core", ...(Object.keys(set).length > 0 ? {set} : {})},
 	allow_login_shell: false,
 	web_search: "disabled",
 	default_permissions: "fenced",
@@ -149,11 +502,14 @@ export const codexConfig = (
 			// `:workspace` makes the working folder writable whatever the folder's own line says
 			// (experiment 163, part 3), so a read turn starts from `:read-only`.
 			extends: access === "write" ? ":workspace" : ":read-only",
-			filesystem: {
-				[home]: "deny",
-				...Object.fromEntries([...tools, ADAPTERS.replace(/\/$/, "")].map((t) => [t, "read"])),
-				[folder]: access,
-			},
+			filesystem: homeFence(
+				home,
+				[...tools, ADAPTERS.replace(/\/$/, "")],
+				folder,
+				access,
+				disk,
+				logins,
+			),
 		},
 	},
 	// Codex's own features that reach past the folder, on by default in a fresh home (codex 0.159.3).
@@ -174,7 +530,7 @@ export const codexConfig = (
 });
 
 /** The owner's login file, by where Codex keeps it. Only ever linked to. */
-const codexLogin = (parent: Env) =>
+export const codexLogin = (parent: Env) =>
 	`${parent.CODEX_HOME ?? `${parent.HOME ?? ""}/.codex`}/auth.json`;
 
 /**
@@ -228,6 +584,26 @@ export const codexHome = (home: string, login: string) =>
 		yield* fs.symlink(login, link).pipe(Effect.mapError(String));
 	});
 
+/** The config a Codex row's session starts from, for its folder and its home. */
+const rowConfig = (parent: Env, folder: string, access: FolderAccess, tools: readonly string[]) =>
+	codexConfig(
+		folder,
+		[...tools, ...gitOf(folder)],
+		parent.HOME ?? codexHomeOf(folder, parent),
+		access,
+		localDisk,
+		toolHome(parent),
+		[codexLogin(parent)],
+	);
+
+/** Fails, saying why, when the row's table is more than the box can take. */
+const fenceFits = (parent: Env, folder: string, access: FolderAccess) =>
+	Effect.suspend(() => {
+		const config = rowConfig(parent, folder, access, toolchain(parent));
+		const tooBig = fenceTooBig(config.permissions.fenced.filesystem);
+		return tooBig === null ? Effect.void : Effect.fail(tooBig);
+	});
+
 /** The Codex adapter's whole environment: a program's, its home, its mode and config, both by `access`. */
 export const codexEnv = (
 	parent: Env,
@@ -246,7 +622,7 @@ export const codexEnv = (
 		NO_BROWSER: "1",
 		INITIAL_AGENT_MODE: MODE_OF[access],
 		CODEX_CONFIG: JSON.stringify({
-			...codexConfig(folder, tools, parent.HOME ?? home, access),
+			...rowConfig(parent, folder, access, tools),
 			...more,
 		}),
 	};
@@ -381,7 +757,10 @@ export function harnessOf(
 			env: codexEnv(parent, folder, row.access),
 			script: CODEX,
 			meta: undefined,
-			prepare: codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
+			prepare: Effect.andThen(
+				fenceFits(parent, folder, row.access),
+				codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
+			),
 		};
 	switch (row) {
 		case "claude":

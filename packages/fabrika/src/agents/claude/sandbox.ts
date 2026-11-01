@@ -1,6 +1,6 @@
 import {existsSync, readFileSync, realpathSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
-import {basename, delimiter, dirname, isAbsolute, join, relative, resolve} from "node:path";
+import {basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep} from "node:path";
 
 // The sandbox a Claude Code agent works inside, as plain functions: its tool
 // list, the folders its commands may read and write (the Agent SDK's
@@ -14,9 +14,11 @@ import {basename, delimiter, dirname, isAbsolute, join, relative, resolve} from 
 // Until experiment 114 this was the build stage's `check.ts`. The builder's
 // own rule on one tool call stayed there: only the build stage uses it.
 
-const inside = (folder: string, path: string) => {
+/** Is `path` the folder, or under it? */
+export const inside = (folder: string, path: string) => {
 	const rel = relative(folder, path);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+	// By the first part, not by its text: a child named `..y` is inside.
+	return rel.split(sep)[0] !== ".." && !isAbsolute(rel);
 };
 
 /** A path with its links followed, as far as it is there: `/copy/out/x` where `out` links elsewhere is that elsewhere's `x`. */
@@ -43,40 +45,83 @@ export const temps = (): readonly string[] => {
 };
 
 /** The files a login lives in, under the home folder. No folder the builder may read holds one. */
-const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
-const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
+export const LOGIN_FILES = [
+	".git-credentials",
+	".config/gh",
+	".ssh",
+	".netrc",
+	".npmrc",
+	".aws",
+	".cargo/credentials",
+	".cargo/credentials.toml",
+];
 
 /** Folders under home that many programs keep things in: opening one opens them all. */
-const SHARED = [".local", ".config", ".cache", "Library"];
+const SHARED = [
+	".local",
+	".local/share",
+	".config",
+	".cache",
+	"Library",
+	"Library/Application Support",
+];
+
+/** What a tool's own folder calls a login: `.gem` has `credentials`, a `.pulumi` has `credentials.json`. */
+const LOGIN_NAMES = [
+	"credentials",
+	"credentials.toml",
+	"credentials.json",
+	"auth.json",
+	".npmrc",
+	".netrc",
+	".git-credentials",
+];
+
+/**
+ * The folder to open for a program: the one above the one holding it, so a version manager's whole
+ * folder (Volta's shims and the tools they start), or a package's. The holding folder alone where
+ * the one above is shared, is home or above it, or holds a login: `~/.cargo/bin` on a path is no
+ * reason to open `~/.cargo`, where `credentials.toml` is.
+ */
+export const toolRoot = (program: string, home: string): string => {
+	const holder = dirname(program);
+	const above = dirname(holder);
+	const tooMuch =
+		SHARED.some((shared) => above === join(home, shared)) ||
+		opens(above, home, LOGIN_FILES) ||
+		LOGIN_NAMES.some((name) => existsSync(join(above, name)));
+	return tooMuch ? holder : above;
+};
+
+/** Where the system would find `name` on this PATH. A relative entry means no fixed place, so it never counts. */
+export const onPath = (
+	name: string,
+	env: Readonly<Record<string, string | undefined>>,
+): string | undefined =>
+	(env.PATH ?? "")
+		.split(delimiter)
+		.filter((dir) => isAbsolute(dir))
+		.map((dir) => join(dir, name))
+		.find((path) => existsSync(path));
 
 /**
  * The folders under home the builder's commands run from: where `node` and
  * `pnpm` on the PATH are, with their links followed, where the node running
- * this process is, and pnpm's own folder. Each program's is the folder above
- * the one holding it, so a version manager's whole folder (Volta's shims and
- * the tools they start); the holding folder alone where the one above is home
- * or a shared one. The edge is Node's here: `process.execPath`, the PATH and
- * `process.platform`.
+ * this process is, and pnpm's own folder, each by `toolRoot`. The edge is
+ * Node's here: `process.execPath`, the PATH and `process.platform`.
  */
 export const toolchain = (
 	env: Readonly<Record<string, string | undefined>> = process.env,
 	exec: string = process.execPath,
 ): readonly string[] => {
 	const home = homedir();
-	const onPath = (name: string) =>
-		(env.PATH ?? "")
-			.split(delimiter)
-			.filter((dir) => isAbsolute(dir))
-			.map((dir) => join(dir, name))
-			.find((path) => existsSync(path));
-	const programs = [onPath("node"), onPath("pnpm"), exec].flatMap((p) =>
+	const programs = [onPath("node", env), onPath("pnpm", env), exec].flatMap((p) =>
 		p === undefined ? [] : [p, realOf(p)],
 	);
 	const roots = programs.flatMap((program) => {
 		const holder = dirname(program);
-		const above = dirname(holder);
 		if (!inside(home, holder) || holder === home) return [];
-		return [above === home || SHARED.some((s) => above === join(home, s)) ? holder : above];
+		return [toolRoot(program, home)];
 	});
 	return [...new Set([...roots, pnpmHome(env)])].filter(
 		(root, _, all) => inside(home, root) && !all.some((o) => o !== root && inside(o, root)),
@@ -94,14 +139,25 @@ const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => 
 	return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "pnpm");
 };
 
-/** The clone's git folder a worktree's `.git` file leads to, which holds the worktree's own. None for a plain clone: its `.git` is in it. */
+/**
+ * The clone's git folder a worktree's `.git` file leads to, which holds the worktree's own. None for
+ * a plain clone: its `.git` is in it.
+ *
+ * An agent may write that file, and the next turn's box is made from it. So it counts only for a
+ * worktree of this very tree, in the place git keeps one: `<common>/worktrees/<name>`, whose own
+ * `gitdir` leads back here. A folder the agent cannot write cannot be made to say that, and one it
+ * can write is open to it already.
+ */
 export const gitOf = (tree: string): readonly string[] => {
 	try {
 		const line = readFileSync(join(tree, ".git"), "utf8").match(/^gitdir:\s*(.+)$/m);
 		if (line?.[1] === undefined) return [];
 		const own = resolve(tree, line[1].trim());
-		const common = readFileSync(join(own, "commondir"), "utf8").trim();
-		return [resolve(own, common)];
+		const common = resolve(own, readFileSync(join(own, "commondir"), "utf8").trim());
+		const back = resolve(own, readFileSync(join(own, "gitdir"), "utf8").trim());
+		const isOurs =
+			dirname(own) === join(common, "worktrees") && realOf(back) === realOf(join(tree, ".git"));
+		return isOurs ? [common] : [];
 	} catch {
 		// A plain clone, or no git at all: nothing outside the copy to open.
 		return [];
@@ -128,10 +184,13 @@ export const filesOf = (
 	};
 };
 
+/** Would reading this folder open `home`, or one of `logins` under it? */
+export const opens = (path: string, home: string, logins: readonly string[]) =>
+	inside(path, home) ||
+	logins.some((login) => inside(path, join(home, login)) || inside(join(home, login), path));
+
 /** Would reading this folder open the home folder, or a file a login lives in? */
-export const opensHome = (path: string) =>
-	inside(path, homedir()) ||
-	loginFiles().some((login) => inside(path, login) || inside(login, path));
+export const opensHome = (path: string) => opens(path, homedir(), LOGIN_FILES);
 
 /**
  * The agent's environment as its commands need it inside `filesOf`, which

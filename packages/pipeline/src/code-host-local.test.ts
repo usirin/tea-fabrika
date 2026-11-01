@@ -92,7 +92,7 @@ const BASE_FILES: Readonly<Record<string, string>> = {
 		"",
 	].join("\n"),
 	"AGENTS.md": "# Rules\n\nEvery change comes with a test.\n",
-	".fabrika.jsonc": "{}\n",
+	".fabrika/fabrika.toml": '[review]\ngoverned = [".fabrika/"]\n',
 };
 const WORDS = [
 	"export const count = (text) => text.split(/\\s+/).filter(Boolean).length;",
@@ -417,5 +417,123 @@ describe("the local code host", () => {
 		const unplanned = await read(TASK);
 		expect(unplanned).toMatchObject({_tag: "Success", success: {criteria: null, ticket: "none"}});
 		expect(await read(PLAN)).toMatchObject({_tag: "Failure", failure: {_tag: "unknown"}});
+	});
+
+	describe("which reviews a task needs, by .fabrika/fabrika.toml at the base and at the head", () => {
+		const FILE = ".fabrika/fabrika.toml";
+		const GOVERNS = '[review]\ngoverned = ["policy/"]\n';
+		const CHANGE = {"policy/rule.txt": "a rule\n"};
+
+		/** What git holds of one side of a change, deleted from its object store: a real failed read. */
+		type Lost = {readonly side: "base" | "head"; readonly path: string};
+
+		/**
+		 * What `change` says of a branch off `base` that adds `head` and removes `gone`, in a repository
+		 * of its own. `lost`: that object is deleted first, so git exits 128 reading it.
+		 */
+		const changeAcross = (
+			base: Readonly<Record<string, string>>,
+			head: Readonly<Record<string, string>>,
+			gone: readonly string[] = [],
+			lost?: Lost,
+		) =>
+			onNode(
+				Effect.gen(function* () {
+					const fs = yield* FileSystem.FileSystem;
+					const path = yield* Path.Path;
+					const dir = yield* fs.makeTempDirectoryScoped({prefix: "local-kinds-"});
+					yield* sh(dir, "git", ["init", "-q", "-b", "main"]);
+					yield* commit(dir, {"README.txt": "words\n", ...base}, "base");
+					yield* sh(dir, "git", ["checkout", "-q", "-b", "plan/9"]);
+					for (const name of gone) yield* sh(dir, "git", ["rm", "-q", name]);
+					const at = yield* commit(dir, {...CHANGE, ...head}, "head");
+					if (lost !== undefined) {
+						const side = lost.side === "base" ? "main" : at;
+						const sha = yield* sh(dir, "git", ["rev-parse", `${side}:${lost.path}`]);
+						yield* fs.remove(path.join(dir, ".git", "objects", sha.slice(0, 2), sha.slice(2)));
+					}
+					const settings: LocalSettings = {...SETTINGS(dir), base: "main"};
+					return yield* Effect.gen(function* () {
+						return yield* Effect.result((yield* CodeHost).change(TASK, at));
+					}).pipe(
+						Effect.provide(localCodeHost(settings).layer),
+						Effect.provide(memoryLedger().layer),
+					);
+				}).pipe(Effect.scoped),
+			);
+
+		const kindsAcross = async (...args: Parameters<typeof changeAcross>) => {
+			const read = await changeAcross(...args);
+			expect(read._tag).toBe("Success");
+			return read._tag === "Success" ? read.success.kinds : undefined;
+		};
+
+		// A rule file that cannot be read is not a repository with no rules. The read ends with the host's
+		// one failure, and no brief goes out that leaves the rules out.
+		it.each(["CLAUDE.md", "AGENTS.md"])(
+			"a %s at the base that cannot be read ends the read cleanly, never as no rules",
+			async (file) => {
+				const read = await changeAcross({[file]: "# Rules\n"}, {}, [], {side: "base", path: file});
+				expect(read).toMatchObject({_tag: "Failure", failure: {_tag: "unknown"}});
+			},
+		);
+
+		it.each<[string, Readonly<Record<string, string>>, Readonly<Record<string, string>>]>([
+			["no file on either side", {}, {}],
+			["no [review] on either side", {[FILE]: "[ship]\napproval = 'none'\n"}, {}],
+			["an unknown table elsewhere in the file", {[FILE]: "[failure]\nfloor = 1\n"}, {}],
+		])("%s: known, with only the text review", async (_name, base, head) => {
+			expect(await kindsAcross(base, head)).toEqual(["review-code"]);
+		});
+
+		it("the base's rules are enough", async () => {
+			expect(await kindsAcross({[FILE]: GOVERNS}, {})).toContain("governance");
+		});
+
+		it("the head's rules are enough", async () => {
+			expect(await kindsAcross({}, {[FILE]: GOVERNS})).toContain("governance");
+		});
+
+		it("a head that empties governed still owes the review the base asks for", async () => {
+			const head = {[FILE]: "[review]\ngoverned = []\n"};
+			expect(await kindsAcross({[FILE]: GOVERNS}, head)).toContain("governance");
+		});
+
+		it("a head that removes the file still owes the review the base asks for", async () => {
+			expect(await kindsAcross({[FILE]: GOVERNS}, {}, [FILE])).toContain("governance");
+		});
+
+		it.each<[string, string]>([
+			["not TOML", "[review\n"],
+			["governed of the wrong type", '[review]\ngoverned = "all"\n'],
+			["ui of the wrong type", "[review]\nui = [3]\n"],
+		])("a head with %s: the kinds are not known", async (_name, text) => {
+			expect(await kindsAcross({}, {[FILE]: text})).toBeNull();
+		});
+
+		it("a base with a file that does not read: the kinds are not known", async () => {
+			expect(await kindsAcross({[FILE]: "[review\n"}, {})).toBeNull();
+		});
+
+		it.each<[string, string, string]>([
+			["a .fabrika.jsonc", ".fabrika.jsonc", '{ "governedRoots": ["policy/"] }\n'],
+			["a fabrika.toml at the root", "fabrika.toml", GOVERNS],
+		])("%s on both sides is not read for the rules", async (_name, name, text) => {
+			expect(await kindsAcross({[name]: text}, {[name]: text})).toEqual(["review-code"]);
+		});
+
+		describe("a read that broke is not no file: the kinds are not known", () => {
+			const OTHER = '[review]\nui = ["apps/"]\n';
+
+			it.each<[string, Lost, Readonly<Record<string, string>>, Readonly<Record<string, string>>]>([
+				["the base's file", {side: "base", path: FILE}, {[FILE]: GOVERNS}, {[FILE]: OTHER}],
+				["the head's file", {side: "head", path: FILE}, {[FILE]: GOVERNS}, {[FILE]: OTHER}],
+				["the head's file, none at the base", {side: "head", path: FILE}, {}, {[FILE]: GOVERNS}],
+				// One folder both sides share, so the diff never opens it, and only listing the file fails.
+				["the folder the file is in", {side: "base", path: ".fabrika"}, {[FILE]: GOVERNS}, {}],
+			])("%s cannot be read", async (_name, lost, base, head) => {
+				expect(await kindsAcross(base, head, [], lost)).toBeNull();
+			});
+		});
 	});
 });

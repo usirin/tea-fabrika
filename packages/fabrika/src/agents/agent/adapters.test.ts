@@ -1,6 +1,14 @@
-import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {dirname, join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
@@ -8,7 +16,7 @@ import {Effect, PlatformError, Schema, Stream} from "effect";
 import {type ChildProcess, ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {claudeResultOf, rawOfUpdate} from "../acp/adapter.ts";
-import {codexHomeOf, codexSystem, type FolderAccess} from "../acp/harness.ts";
+import {codexHomeOf, codexSystem, FENCE_LIMIT, type FolderAccess} from "../acp/harness.ts";
 import {
 	type ClaudeAdapterConfig,
 	claudeAdapter,
@@ -387,9 +395,8 @@ describe("codex: the system prompt", () => {
 		return home;
 	};
 
-	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
-		const home = madeUpHome();
+	/** One turn's start in `home`'s folder `copy`. The spawner keeps the command and refuses: nothing runs. */
+	const tryStart = async (home: string, system: SystemPrompt, access: FolderAccess) => {
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
 		const spawner = ChildProcessSpawner.make((command) => {
@@ -405,17 +412,28 @@ describe("codex: the system prompt", () => {
 					parent,
 					access,
 				});
-				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
+				return yield* Effect.flip(
+					Effect.scoped(adapter.start({...TURN, system, folder: join(home, "copy")})),
+				);
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provide(nodeServices),
 			),
 		);
+		return {why, seen, parent};
+	};
+
+	/** The command Codex would be started with for one turn. */
+	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		mkdirSync(join(home, "co-beside"));
+		const {why, seen, parent} = await tryStart(home, system, access);
 		expect(why.why).toBe("start");
 		const command = seen[0];
 		if (command === undefined) throw new Error("codex was never started");
 		const flags = command.args.flatMap((a, i) => (command.args[i - 1] === "-c" ? [a] : []));
-		return {flags, home: codexHomeOf("session:s", parent)};
+		return {flags, home: codexHomeOf("session:s", parent), owner: home};
 	};
 
 	const TURN: AdapterTurn = {
@@ -449,20 +467,136 @@ describe("codex: the system prompt", () => {
 
 	it("leaves the folder writable, or only readable for a turn that reads code", async () => {
 		// Both lines matter: `:workspace` makes the folder writable whatever its own line says.
-		const box = (flags: readonly string[]) => ({
-			base: flags.find((f) => f.startsWith("permissions.fenced.extends=")),
-			folder: flags
-				.find((f) => f.startsWith("permissions.fenced.filesystem="))
-				?.match(/"\/work\/copy"=("\w+")/)?.[1],
-		});
-		expect(box((await startedWith({_tag: "append", text: ""}, "write")).flags)).toEqual({
+		const box = ({flags, owner}: {flags: readonly string[]; owner: string}) => {
+			const table = flags.find((f) => f.startsWith("permissions.fenced.filesystem="));
+			return {
+				base: flags.find((f) => f.startsWith("permissions.fenced.extends=")),
+				folder: ["write", "read"].find((rule) => table?.includes(`"${owner}/copy"="${rule}"`)),
+			};
+		};
+		expect(box(await startedWith({_tag: "append", text: ""}, "write"))).toEqual({
 			base: 'permissions.fenced.extends=":workspace"',
-			folder: '"write"',
+			folder: "write",
 		});
-		expect(box((await startedWith({_tag: "append", text: ""}, "read")).flags)).toEqual({
+		expect(box(await startedWith({_tag: "append", text: ""}, "read"))).toEqual({
 			base: 'permissions.fenced.extends=":read-only"',
-			folder: '"read"',
+			folder: "read",
 		});
+	});
+
+	it("reads home's own listing for a folder under home: home open, what is beside the folder closed", async () => {
+		const {flags, owner} = await startedWith({_tag: "append", text: ""}, "write");
+		const table = flags.find((f) => f.startsWith("permissions.fenced.filesystem="));
+		// A near name, so it is closed by name with patterns or without.
+		expect(table).toContain(`"${owner}/co-beside"="deny"`);
+		expect(table).not.toContain(`"${owner}"="deny"`);
+	});
+
+	/** The table of one turn in `home`'s `copy`, with `more` in the parent's environment and Codex at `codex`. */
+	const tableFor = async (
+		home: string,
+		codex: string,
+		more: Readonly<Record<string, string>> = {},
+	) => {
+		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir(), ...more};
+		const seen: ChildProcess.StandardCommand[] = [];
+		const spawner = ChildProcessSpawner.make((command) => {
+			if (command._tag === "StandardCommand") seen.push(command);
+			return Effect.fail(
+				PlatformError.systemError({_tag: "NotFound", module: "test", method: "spawn"}),
+			);
+		});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const adapter = yield* codexAdapter({codex, parent, access: "write"});
+				return yield* Effect.flip(
+					Effect.scoped(adapter.start({...TURN, folder: join(home, "copy")})),
+				);
+			}).pipe(
+				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+				Effect.provide(nodeServices),
+			),
+		);
+		const args = seen[0]?.args ?? [];
+		return args.find((arg) => arg.startsWith("permissions.fenced.filesystem=")) ?? "";
+	};
+
+	it.each<[string, string, string]>([
+		["pnpm's folder on a Mac", "Library/pnpm/codex", "Library"],
+		["a tool's bin, beside its login", ".cargo/bin/codex", ".cargo"],
+		["the shared `.local`", ".local/bin/codex", ".local"],
+		["the shared `.config`", ".config/tool/codex", ".config"],
+	])("opens only the folder a plain Codex is in, in %s", async (_, at, parent) => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const codex = join(home, at);
+		mkdirSync(dirname(codex), {recursive: true});
+		writeFileSync(codex, "");
+		const table = await tableFor(home, codex);
+		expect(table).toContain(`"${dirname(codex)}"="read"`);
+		expect(table).not.toContain(`"${join(home, parent)}"="read"`);
+	});
+
+	it("opens a linked Codex's own package, where its binary is, and only the packages of `.codex`", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const bin = join(home, ".npm-global", "bin");
+		const target = join(home, ".npm-global", "lib", "c", "bin", "codex.js");
+		mkdirSync(bin, {recursive: true});
+		mkdirSync(dirname(target), {recursive: true});
+		writeFileSync(target, "");
+		symlinkSync(target, join(bin, "codex"));
+		const table = await tableFor(home, join(bin, "codex"));
+		expect(table).toContain(`"${join(home, ".npm-global", "lib", "c")}"="read"`);
+		expect(table).not.toContain(`"${join(home, ".npm-global")}"="read"`);
+
+		const packages = join(home, ".codex", "packages");
+		const standalone = join(packages, "standalone", "v1", "bin");
+		mkdirSync(standalone, {recursive: true});
+		writeFileSync(join(standalone, "codex"), "");
+		const standing = await tableFor(home, join(standalone, "codex"));
+		expect(standing).toContain(`"${packages}"="read"`);
+		expect(standing).toContain(`"${join(home, ".codex", "auth.json")}"="deny"`);
+	});
+
+	it("closes the login where `CODEX_HOME` puts it, and where a link there leads", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const moved = realpathSync(mkdtempSync(join(tmpdir(), "codex-moved-")));
+		const away = realpathSync(mkdtempSync(join(tmpdir(), "codex-away-")));
+		writeFileSync(
+			join(away, "real.json"),
+			JSON.stringify({auth_mode: "chatgpt", OPENAI_API_KEY: null}),
+		);
+		symlinkSync(join(away, "real.json"), join(moved, "auth.json"));
+		const table = await tableFor(home, "/nowhere/codex", {CODEX_HOME: moved});
+		expect(table).toContain(`"${join(moved, "auth.json")}"="deny"`);
+		expect(table).toContain(`"${join(away, "real.json")}"="deny"`);
+	});
+
+	it("opens the clone a worktree shares, read-only, for a folder that is one", async () => {
+		const home = madeUpHome();
+		const own = join(home, "clone", ".git", "worktrees", "7");
+		const tree = join(home, "copy");
+		mkdirSync(own, {recursive: true});
+		mkdirSync(tree);
+		writeFileSync(join(tree, ".git"), `gitdir: ${own}\n`);
+		writeFileSync(join(own, "commondir"), "../..\n");
+		writeFileSync(join(own, "gitdir"), `${join(tree, ".git")}\n`);
+		const table = await tableFor(home, "/nowhere/codex");
+		expect(table).toContain(`"${join(home, "clone", ".git")}"="read"`);
+	});
+
+	it("starts nothing and says why when the box could not take the home's table", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		for (let n = 0; n <= FENCE_LIMIT; n++) writeFileSync(join(home, `co-private-${n}`), "");
+		const {why, seen, parent} = await tryStart(home, {_tag: "append", text: ""}, "write");
+		expect(why.why).toBe("contain");
+		expect(why.message).toContain(`at most ${FENCE_LIMIT}`);
+		expect(why.message).not.toContain("co-private");
+		expect(seen).toEqual([]);
+		expect(existsSync(codexHomeOf("session:s", parent))).toBe(false);
 	});
 
 	it("cannot be made without saying what the folder allows", () => {

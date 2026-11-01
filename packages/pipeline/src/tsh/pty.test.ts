@@ -88,7 +88,7 @@ describe("tsh from a script", () => {
 		expect(no.out).toBe("no\n");
 		// The first line says which fabrika.toml was read, and the run's picks under it; then the failure, and nothing else.
 		expect(no.err).toMatch(
-			/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+tsh: false failed: false always fails\n$/,
+			/^\.fabrika\/fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+tsh: false failed: false always fails\n$/,
 		);
 	});
 

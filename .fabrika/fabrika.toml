@@ -1,0 +1,37 @@
+# What the `pipeline` program needs to work on this repository. The steps' order stays in code.
+# Agents the app starts skip a person's own settings, so heavy commands carry their CPU limits here.
+# `nice` may not take effect inside a box. `--maxWorkers=3` is the limit that holds.
+
+[build]
+install = ["pnpm", "install", "--frozen-lockfile"]
+checks = [
+	["nice", "-n", "15", "pnpm", "typecheck"],
+	["nice", "-n", "15", "pnpm", "lint"],
+	["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"],
+]
+
+[test_writer]
+includes = ["**/*.test.ts"]
+# This runs in a box with its own home. No `nice`: it may not take effect here, so `--maxWorkers=3`
+# is the limit.
+run = ["node_modules/.bin/vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"]
+
+[mutation]
+tests = ["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"]
+typecheck = ["nice", "-n", "15", "pnpm", "typecheck"]
+
+[review]
+rubrics = "packages/pipeline/rubrics"
+
+[checks]
+# GitHub's CI runs the whole suite. The two here are the quick ones.
+github = "every"
+
+# Each runs at a head in a fresh copy with no node_modules, so it installs first.
+[[checks.run]]
+name = "typecheck"
+run = ["sh", "-c", "pnpm install --frozen-lockfile && pnpm typecheck"]
+
+[[checks.run]]
+name = "lint"
+run = ["sh", "-c", "pnpm install --frozen-lockfile && pnpm lint"]

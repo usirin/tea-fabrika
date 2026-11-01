@@ -80,11 +80,33 @@ describe("the sandbox's environment", () => {
 	const workspace: Workspace = {root: "/b", home: "/b/home", tmp: "/b/tmp", work: "/b/work"};
 
 	it("holds the run names, its own home and temp folder, and nothing else of the host's", () => {
-		expect(envOf(sh(""), workspace, parent)).toEqual({
-			PATH: parent.PATH,
+		expect(envOf(sh(""), workspace, {...parent, PATH: "/usr/bin:/bin"})).toEqual({
+			PATH: "/usr/bin:/bin",
 			LANG: "C",
 			HOME: "/b/home",
 			TMPDIR: "/b/tmp",
+		});
+	});
+
+	// Under the box's own home a Volta shim finds no tools. It then looks along the PATH, finds itself,
+	// and waits on each child it starts: thousands of processes, or "Could not download" in a repo
+	// with a Volta pin. No box starts here: the environment is the whole fix.
+	it("keeps where Volta holds the real tools, set or read from the PATH", () => {
+		const shim = "/o/.volta/bin:/usr/bin:/bin";
+		expect(envOf(sh(""), workspace, {PATH: shim, VOLTA_HOME: "/set/volta"})).toMatchObject({
+			HOME: "/b/home",
+			VOLTA_HOME: "/set/volta",
+		});
+		expect(envOf(sh(""), workspace, {PATH: shim})).toMatchObject({
+			HOME: "/b/home",
+			VOLTA_HOME: "/o/.volta",
+		});
+	});
+
+	it("does not let a job's own names replace where Volta holds the tools", () => {
+		const job = sh("", {env: {VOLTA_HOME: "/h"}});
+		expect(envOf(job, workspace, {PATH: "/o/.volta/bin", VOLTA_HOME: "/o/.volta"})).toMatchObject({
+			VOLTA_HOME: "/o/.volta",
 		});
 	});
 
@@ -204,5 +226,33 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 	it("refuses a job whose reads would open the home folder", async () => {
 		const error = await refusal("os", sh("true", {reads: [homedir()]}));
 		expect([error?.why, error?.what]).toEqual(["opens_home", homedir()]);
+	});
+
+	it("hands a Volta shim its home in the real box, so it does not chain", async () => {
+		prepare();
+		const bin = join(elsewhere, ".volta", "bin");
+		mkdirSync(bin, {recursive: true});
+		// Stands for Volta's shim, and stops itself: a chain shows as exit 99, never as a runaway.
+		const shim = join(bin, "tool");
+		writeFileSync(
+			shim,
+			[
+				"#!/bin/sh",
+				`[ "$VOLTA_HOME" = "${join(elsewhere, ".volta")}" ] && exit 0`,
+				"HOPS=$((HOPS + 1))",
+				'[ "$HOPS" -gt 3 ] && exit 99',
+				"export HOPS; tool; exit $?",
+			].join("\n"),
+			{mode: 0o755},
+		);
+		const box = layerOs({parent: {PATH: `${bin}:/usr/bin:/bin`}}).pipe(Layer.provide(nodeServices));
+		const code = await Effect.gen(function* () {
+			const sandbox = yield* Sandbox;
+			const handle = yield* sandbox.start(
+				sh("tool", {reads: [elsewhere], mount: {_tag: "worktree", folder: copy}}),
+			);
+			return Number(yield* handle.exitCode);
+		}).pipe(Effect.scoped, Effect.provide(box), Effect.runPromise);
+		expect(code).toBe(0);
 	});
 });

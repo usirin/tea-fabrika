@@ -66,10 +66,10 @@ or spends money. Run it with `TYPESAFE_API_KEY` unset.
    ```
 
    tsh first prints where it read its settings from, and one line per setting it picked. With no
-   `fabrika.toml` every pick is a default:
+   `.fabrika/fabrika.toml` every pick is a default:
 
    ```text
-   fabrika.toml: <this folder>/fabrika.toml, not there: every default
+   .fabrika/fabrika.toml: <this folder>/.fabrika/fabrika.toml, not there: every default
      agents.plan: opus (default), effort medium (default), at most $2 a run (default)
      ...
      ledger.at: local (default)
@@ -149,7 +149,7 @@ Steps:
    Every other key has a default. The keys are listed at the top of
    [`packages/pipeline/src/tsh/config.ts`](./packages/pipeline/src/tsh/config.ts).
 
-4. In the target repository, commit a `fabrika.toml` on its default branch that turns on the
+4. In the target repository, commit a `.fabrika/fabrika.toml` on its default branch that turns on the
    owner's desk. Without it, nothing can take your answers:
 
    ```toml
@@ -166,13 +166,13 @@ Steps:
    ../../bin/tsh
    ```
 
-   - tsh clones the repository under its home (`~/.tsh/work/`) and reads `fabrika.toml` from
+   - tsh clones the repository under its home (`~/.tsh/work/`) and reads `.fabrika/fabrika.toml` from
      its default branch, as committed.
    - Each pick is printed with why. Fix any line that warns you, for example a missing
      `.github/CODEOWNERS`, which stops ship at `approval_unknown`.
    - `programs` now lists three more: `review`, `plan` and `deliver`.
    - `deliver` is listed only when each review has a check to run: the install that the
-     repository's lockfile names, or a `[[checks.run]]` in its `fabrika.toml`.
+     repository's lockfile names, or a `[[checks.run]]` in its `.fabrika/fabrika.toml`.
 
 6. Look before you run. These only read:
 
@@ -257,7 +257,7 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.
-- `packs/`: add-on packs. A repository turns one on with one line in its `fabrika.toml`; the core
+- `packs/`: add-on packs. A repository turns one on with one line in its `.fabrika/fabrika.toml`; the core
   names none of them.
   - [`packs/owner-desk`](./packs/owner-desk/README.md): the owner's inbox, and their answers back.
   - [`packs/ask-log`](./packs/ask-log/README.md): one line per ask and answer, in a file.

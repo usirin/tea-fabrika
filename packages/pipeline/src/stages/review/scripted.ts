@@ -19,7 +19,8 @@ import type {Heard, Note} from "./tools.ts";
 //   final   the head that merged: the check is green
 //
 // They were trimmed. The repo's name is replaced, the config file is cut to
-// the one key that is read, and the pull request's text is cut to its
+// the one key that is read and written out by hand as `.fabrika/fabrika.toml`,
+// which that repo did not have then, and the pull request's text is cut to its
 // opening, its closing line and two of its deviations. The diffs and the
 // ticket's text are whole. The pull request reads `MERGED` in both, because
 // that is what it is today: a replay of an older head cannot read the state

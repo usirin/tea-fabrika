@@ -1,6 +1,6 @@
 import {execFileSync} from "node:child_process";
 import {describe, expect, it} from "vitest";
-import {agentEnv, hostEnv, runEnv, shellEnv} from "./env.ts";
+import {agentEnv, hostEnv, runEnv, shellEnv, toolHome} from "./env.ts";
 
 // The short environments, on a made-up parent: no test here reads a real key.
 // How each place that starts a process uses them is tested beside that place.
@@ -24,6 +24,33 @@ const RUN = {PATH: "/bin", HOME: "/home/someone", TMPDIR: "/tmp/someone", LANG: 
 describe("the environment a started process is handed", () => {
 	it("is what a program needs to run, for code a ticket or an agent wrote", () => {
 		expect(runEnv(PARENT)).toEqual(RUN);
+	});
+
+	it("keeps where a version manager holds the real tools, so its shim works under another home", () => {
+		const parent = {...PARENT, VOLTA_HOME: "/home/someone/.volta"};
+		expect(runEnv(parent)).toEqual({...RUN, VOLTA_HOME: "/home/someone/.volta"});
+		expect(toolHome(parent)).toEqual({VOLTA_HOME: "/home/someone/.volta"});
+		expect(toolHome(PARENT)).toEqual({});
+	});
+
+	// A shim with no home for its tools looks along the PATH for the real one, finds itself, and waits
+	// on the child it starts. So a Volta folder on the PATH always brings its home, set or not.
+	it.each<[string, string, string]>([
+		["first", "/home/someone/.volta/bin:/bin", "/home/someone/.volta"],
+		["in the middle", "/bin:/elsewhere/.volta/bin:/usr/bin", "/elsewhere/.volta"],
+		["last, with a slash at its end", "/bin:/home/someone/.volta/bin/", "/home/someone/.volta"],
+	])("finds Volta's home from the PATH when none is set and its folder is %s", (_, path, home) => {
+		const parent = {...PARENT, PATH: path};
+		expect(toolHome(parent)).toEqual({VOLTA_HOME: home});
+		for (const env of [runEnv(parent), agentEnv(parent), shellEnv(parent), hostEnv(parent)])
+			expect(env.VOLTA_HOME).toBe(home);
+	});
+
+	it("takes the home that is set over the PATH, and does not read a longer name as Volta's", () => {
+		const set = {...PARENT, PATH: "/a/.volta/bin", VOLTA_HOME: "/set/volta"};
+		expect(toolHome(set)).toEqual({VOLTA_HOME: "/set/volta"});
+		for (const path of ["/a/.volta/bin2", "/a/not.volta/bin", "/a/.volta/bin/more", ".volta/bin"])
+			expect(toolHome({...PARENT, PATH: path})).toEqual({});
 	});
 
 	it("adds the agent's own login for an agent, wherever that login is kept", () => {

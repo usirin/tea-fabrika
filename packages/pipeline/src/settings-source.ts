@@ -2,17 +2,21 @@ import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "./child.ts";
+import {listedAt} from "./git-read.ts";
 import {
 	DEFAULT_SETTINGS,
 	readSettings,
 	SETTINGS_FILE,
+	SETTINGS_PATHS,
 	type Settings,
 	type SettingsInvalid,
 	settingsFrom,
+	settingsRefusal,
+	thereAt,
 } from "./settings.ts";
 import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 
-// Where fabrika.toml is read from: one place, never two
+// Where .fabrika/fabrika.toml is read from: one place, never two
 // (docs/direction/one-fabrika-toml-per-repo.md).
 //
 //   a target repo   tsh.toml names one (`repo`, or `clone`): the file as it is
@@ -22,7 +26,7 @@ import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 //                     git clone --no-checkout <url> <clone>          (when it is not there)
 //                     git -C <clone> fetch --prune origin
 //                     git -C <clone> remote set-head origin --auto   (the default branch)
-//                     git -C <clone> cat-file blob <commit>:fabrika.toml
+//                     git -C <clone> cat-file blob <commit>:.fabrika/fabrika.toml
 //
 //   no target       the folder tsh starts in, or the root of the repository
 //                   it is in (./settings.ts, `repoOf`).
@@ -30,6 +34,11 @@ import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 // Committed, never a working tree: a lane's own branch, or a file left in the
 // clone's folder, cannot change the settings the lane runs under. A
 // `--no-checkout` clone has no working tree to read anyway.
+//
+// In that same one place, an old file stops the read with one line that says to
+// move it (`settingsRefusal`): a `fabrika.toml` at the root, with the new file
+// there or not, since two spellings must not stand side by side, and a
+// `.fabrika.jsonc` with no new file, since its governed folders would read as none.
 //
 // git runs through Effect's `ChildProcess`, under `hostEnv` (it may need the
 // login to fetch a private repository), with the repository's hooks off.
@@ -44,7 +53,7 @@ export interface Target {
 	readonly url: string | null;
 }
 
-/** Where to read fabrika.toml. */
+/** Where to read .fabrika/fabrika.toml. */
 export type Where =
 	| {readonly from: "repo"; readonly target: Target}
 	| {readonly from: "folder"; readonly folder: string};
@@ -95,17 +104,20 @@ const fromRepo = (
 		const path = yield* Path.Path;
 		const env = {...hostEnv(), GIT_TERMINAL_PROMPT: "0"};
 		const {clone, name} = target;
-		/** What git printed when it answered 0; any other answer stops the read, saying which step. */
+		/** A read that broke stops the read of the file, saying which step. */
+		const stopped = (what: string) => (ran: Exited) =>
+			Effect.fail(
+				invalid(
+					`${SETTINGS_FILE}: cannot ${what} ${name} in ${clone}: ${ran.err.trim().split("\n")[0] ?? ""}`,
+				),
+			);
+		/** What git printed when it answered 0. */
 		const said = (what: string) => (ran: Exited) =>
-			ran.code === 0
-				? Effect.succeed(ran.out.trim())
-				: Effect.fail(
-						invalid(
-							`${SETTINGS_FILE}: cannot ${what} ${name} in ${clone}: ${ran.err.trim().split("\n")[0] ?? ""}`,
-						),
-					);
+			ran.code === 0 ? Effect.succeed(ran.out.trim()) : stopped(what)(ran);
+		const inClone = (args: readonly string[]) =>
+			runChild("git", [...GIT_FIRST, "-C", clone, ...args], {env});
 		const git = (what: string, args: readonly string[]) =>
-			runChild("git", [...GIT_FIRST, "-C", clone, ...args], {env}).pipe(Effect.flatMap(said(what)));
+			inClone(args).pipe(Effect.flatMap(said(what)));
 
 		const there = yield* fs
 			.exists(path.join(clone, ".git"))
@@ -142,19 +154,18 @@ const fromRepo = (
 		]);
 		/** The paths of `asked` that are there at the commit. */
 		const present = (asked: readonly string[]) =>
-			git("list the files of", ["ls-tree", "--name-only", commit, "--", ...asked]).pipe(
-				Effect.map((out) => new Set(out.split("\n").filter((line) => line !== ""))),
-			);
+			listedAt(inClone, commit, asked).pipe(Effect.catch(stopped("list the files of")));
 		/** A file's text at the commit, read only when `present` listed it. */
 		const blob = (file: string) =>
-			runChild("git", [...GIT_FIRST, "-C", clone, "cat-file", "blob", `${commit}:${file}`], {
-				env,
-			}).pipe(
+			inClone(["cat-file", "blob", `${commit}:${file}`]).pipe(
 				Effect.flatMap((ran) =>
-					ran.code === 0 ? Effect.succeed(ran.out) : said(`read ${file} of`)(ran),
+					ran.code === 0 ? Effect.succeed(ran.out) : stopped(`read ${file} of`)(ran),
 				),
 			);
-		const found = (yield* present([SETTINGS_FILE])).has(SETTINGS_FILE);
+		const listed = yield* present(SETTINGS_PATHS);
+		const refused = settingsRefusal(listed);
+		if (refused !== null) return yield* Effect.fail(invalid(`${name}@${branch}: ${refused}`));
+		const found = listed.has(SETTINGS_FILE);
 		const settings = found
 			? yield* settingsFrom(yield* blob(SETTINGS_FILE)).pipe(
 					Effect.mapError((error) => invalid(`${name}@${branch}:${SETTINGS_FILE}: ${error.why}`)),
@@ -186,24 +197,33 @@ const fromFolder = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
-		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
-		const found = yield* exists(file);
+		const listed = new Set<string>();
+		for (const asked of SETTINGS_PATHS)
+			if (yield* thereAt(path.join(folder, asked))) listed.add(asked);
+		const refused = settingsRefusal(listed);
+		if (refused !== null) return yield* Effect.fail(invalid(`${folder}: ${refused}`));
+		const found = listed.has(SETTINGS_FILE);
 		const settings = yield* readSettings(file);
 		const files = new Set<string>();
-		for (const asked of ASKED) if (yield* exists(path.join(folder, asked))) files.add(asked);
+		for (const asked of ASKED) if (yield* thereAt(path.join(folder, asked))) files.add(asked);
 		const rubrics: Record<string, string> = {};
 		const named = settings.review?.rubrics;
 		if (named !== undefined)
 			for (const name of RUBRIC_FILES) {
-				const text = yield* fs
-					.readFileString(path.join(folder, named, name))
-					.pipe(Effect.orElseSucceed(() => null));
+				const at = path.join(folder, named, name);
+				const text = yield* fs.readFileString(at).pipe(
+					Effect.catchIf(
+						(error) => error.reason._tag === "NotFound",
+						() => Effect.succeed(null),
+					),
+					Effect.mapError((error) => invalid(`cannot read ${at}: ${error.message}`)),
+				);
 				if (text !== null) rubrics[name] = text;
 			}
 		return {settings, source: {from: "folder", file, found}, holds: {files, rubrics}};
 	});
 
-/** Read fabrika.toml from the one place `where` names. A missing file is every default. */
+/** Read .fabrika/fabrika.toml from the one place `where` names. A missing file is every default. */
 export const loadSettings = (
 	where: Where,
 ): Effect.Effect<

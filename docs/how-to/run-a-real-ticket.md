@@ -83,22 +83,22 @@ CONFIG=<folder>/legacy-knobs.toml ISSUE=owner/repo#n REPO=<folder> BASE=landing-
   RUN=<run folder> PACKAGE=packages/tea TYPESAFE_API_KEY=... pnpm real
 ```
 
-Keep that file apart from the repository's own `fabrika.toml`. The
-repository's file sits at its root and is read by fabrika's tsh
-(`packages/pipeline/src/settings.ts`). It lists the add-on packs (`packs = [...]` and
+Keep that file apart from the repository's own `.fabrika/fabrika.toml`, which
+is read by fabrika's tsh (`packages/pipeline/src/settings.ts`). It lists the add-on packs (`packs = [...]` and
 `[pack."<name>"]`), not these knobs. Each reader refuses the other's keys, so
 one file cannot serve both.
 
-Where fabrika's tsh reads `fabrika.toml` from (`packages/pipeline/src/settings-source.ts`):
+Where fabrika's tsh reads `.fabrika/fabrika.toml` from (`packages/pipeline/src/settings-source.ts`):
 
 - `tsh.toml` names a target (`repo`, or `clone`): the target's file, as
   committed on its default branch. Commit and merge a change to it before you
   start tsh. A change on a branch, or a file in the clone's folder, is not
   read. tsh fetches the clone first, and makes it when it is not there.
-- No target: the file at the root of the folder tsh starts in.
+- No target: the file in the root of the folder tsh starts in.
 - tsh's first line on stderr says which, for example
-  `fabrika.toml: acme/widgets@main (1a2b3c4)`. A missing file reads
+  `.fabrika/fabrika.toml: acme/widgets@main (1a2b3c4)`. A missing file reads
   `, not there: every default`.
+- A `fabrika.toml` still at the root stops tsh, with one line that says to move it.
 - The packs it names are found from the folder tsh starts in, not from the
   target: install them there.
 

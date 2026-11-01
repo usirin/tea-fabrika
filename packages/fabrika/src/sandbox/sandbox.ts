@@ -10,6 +10,7 @@ import {
 	type Scope,
 } from "effect";
 import {ChildProcess, type ChildProcessSpawner} from "effect/process";
+import {toolHome} from "../agents/claude/env.ts";
 
 // The sandbox a program runs in (programs-run-in-a-box.md, slice 6 of
 // a-ticket-runs-from-the-app.md). A job names a program, what is mounted in
@@ -97,7 +98,10 @@ export const GITHUB_KEYS = [
 /** A name a job may not set: one of the above, or anything else gh or GitHub reads. */
 const isGithubName = (name: string) => /^(GH|GITHUB)_/i.test(name);
 
-/** What a program needs to run at all, taken from the host. HOME and TMPDIR are the sandbox's own. */
+/**
+ * What a program needs to run at all, taken from the host. HOME and TMPDIR are the sandbox's own,
+ * and a tool's home goes with them (`toolHome`).
+ */
 const RUN = ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ"] as const;
 
 /** A sandbox's own folders, under one temp folder that goes with the sandbox. */
@@ -137,10 +141,10 @@ const credentialEnv = (credential: Credential, workspace: Workspace): Record<str
 };
 
 /**
- * The sandbox's environment: the run names from the host, the sandbox's own
- * home and temp folder, the credential, and the job's own names. Nothing else
- * of the host's is handed on, so a key the host holds in its environment stays
- * there.
+ * The sandbox's environment: the run names from the host, where a tool on its
+ * PATH holds its real tools, the sandbox's own home and temp folder, the
+ * credential, and the job's own names. Nothing else of the host's is handed on,
+ * so a key the host holds in its environment stays there.
  */
 export const envOf = (job: Job, workspace: Workspace, parent: Env): Record<string, string> => {
 	const run = Object.fromEntries(
@@ -152,6 +156,7 @@ export const envOf = (job: Job, workspace: Workspace, parent: Env): Record<strin
 	return {
 		...job.env,
 		...run,
+		...toolHome(parent),
 		HOME: workspace.home,
 		TMPDIR: workspace.tmp,
 		...credentialEnv(job.credential, workspace),

@@ -88,6 +88,7 @@ describe("what the sandbox lets the builder's commands read", () => {
 		mkdirSync(join(root, "trees", "1"), {recursive: true});
 		writeFileSync(join(root, "trees", "1", ".git"), `gitdir: ${own}\n`);
 		writeFileSync(join(own, "commondir"), "../..\n");
+		writeFileSync(join(own, "gitdir"), `${join(root, "trees", "1", ".git")}\n`);
 		const read = filesOf(join(root, "trees", "1"), [], []).allowRead;
 		rmSync(root, {recursive: true, force: true});
 		expect(read).toEqual([join(root, "trees", "1"), join(root, "clone", ".git")]);

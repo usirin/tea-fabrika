@@ -707,10 +707,11 @@ How the two facts that used to be guessed are read now:
   `control-plane-self-approval @ <commit>` comment. A team is read for its
   members. No CODEOWNERS, or a team that cannot be read, is `unknown`.
 - **`reviews`.** The files a change touches say which kinds of review it
-  needs: code, docs, skill pages, and from the repo's `.fabrika.jsonc`, the
-  rendered review and the governance review. `passed` means every kind it
-  needs has a passing verdict at this head. No `.fabrika.jsonc`, or one that
-  does not read, is `unknown`.
+  needs: code, docs, skill pages, and from `[review]` in the repo's
+  `.fabrika/fabrika.toml`, read at the change's base and head, the rendered
+  review and the governance review. `passed` means every kind it needs has a
+  passing verdict at this head. No such file names neither of those two. One
+  that does not read is `unknown`.
 
 `notRead` says what a fact's value still cannot be taken for. The one that
 matters most: the rule from files to kinds of review is a copy of today's
@@ -802,7 +803,7 @@ The other write, the re-run of red checks, has never run for real.
 
 | Part | What it does on GitHub | Built | Tested on scripted answers | Run on a real repository |
 |---|---|---|---|---|
-| Cmd `ship_facts` | reads the pull request, CODEOWNERS, `.fabrika.jsonc`, the owning team | yes | yes | yes, read only: alone on several pull requests, and once inside each of the two live runs |
+| Cmd `ship_facts` | reads the pull request, CODEOWNERS, `.fabrika/fabrika.toml`, the owning team | yes | yes | yes, read only: alone on several pull requests, and once inside each of the two live runs |
 | Cmd `ship_rerun_checks` | **writes**: starts the failed jobs of the head's red runs again | yes | yes | **no** |
 | Cmd `ship_enqueue` | **writes**: puts the head in the merge queue | yes | yes | **twice**. Both times it answered `queued`. `head_moved`, `conflicts` and a failed call: no |
 | Cmd `ship_finish` | nothing on GitHub. Alone it does nothing; with a working copy it removes that one | yes | yes | twice, under the operator, where it does nothing. With a working copy: no |

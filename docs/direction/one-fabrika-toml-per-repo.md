@@ -32,6 +32,9 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
     do not.
   - `.fabrika.jsonc` (the review's `governed` and `ui` today) moves into the
     folder too, so a repo's fabrika files sit in one place.
+    **Changed 2026-11-01:** it did not move as a file of its own. Its two
+    lists are `[review] governed` and `ui` in `.fabrika/fabrika.toml`, so the
+    folder holds one file with them, not two.
   - `~/.fabrika` is the one home. It replaces the app's own folder
     (Electron's `userData`), `~/.tsh` and `ledger.json`. `FABRIKA_HOME` stays,
     so a test can point at a home of its own.
@@ -70,9 +73,25 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
     it first, like `mise trust` or VS Code's workspace trust. A program runs
     in workerd and can only ask for Cmds, so it never touches the computer
     directly.
-- **Not built yet.** `packages/pipeline/src/settings-source.ts` still reads
-  `fabrika.toml` at the root, and `.fabrika.jsonc` still sits beside it. Both
-  move into the folder when the code does.
+- **Built 2026-11-01: the repo's file.** Today's version reads
+  `.fabrika/fabrika.toml` and nothing else for a repo's settings and review
+  rules.
+  - A `fabrika.toml` left at a repo's root stops the read with one line:
+    `fabrika.toml moved to .fabrika/fabrika.toml: move it there`. That holds
+    with the new file beside it too, so two spellings cannot stand together.
+  - A `.fabrika.jsonc` with no `.fabrika/fabrika.toml` stops the read with one
+    line: `.fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it
+    there`. Read as no file, its governed folders would owe no review, and a
+    printed warning is not a protection.
+  - A `.fabrika.jsonc` beside the new file is not read and not refused, because
+    a repo may keep it for today's fabrika plugin. A run says so at its start,
+    under the rules in force.
+  - A read that broke is not "no file". Not there and git failing are told
+    apart with `git ls-tree` first: an empty list is not there, a non-zero exit
+    is a failure. A side of a change that could not be read leaves the review's
+    kinds unknown, and the lane's read of its settings fails with the reason.
+- **Not built yet.** `~/.fabrika` as the home, `ledger.json` and `tsh.toml`
+  folding in, `fabrika.lock`, nested files, repo programs.
 - **Doubt:** a hidden folder is harder to find than a file at the root, which
   is why Cargo keeps `Cargo.toml` in plain sight. We pick matching the home
   folder over that.
@@ -192,13 +211,17 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
   never two (2026-10-19).
   - **tsh works on a target repository** (`repo` or `clone` in `tsh.toml`):
     the file as committed on that repository's default branch, read in its
-    clone (`git cat-file blob <commit>:fabrika.toml`). tsh fetches first, and
+    clone (`git cat-file blob <commit>:.fabrika/fabrika.toml`). tsh fetches first, and
     makes the clone with `--no-checkout` when it is not there, as build does.
     A lane's own branch, or a file left in the clone's folder, is never read,
     so a lane cannot change the settings it runs under.
   - **No target**: the root of the folder tsh starts in, the nearest folder up
     that holds `.git` (`repoOf`). Outside any repository, that folder itself.
-  - A missing file is every default, in both cases.
+  - A missing file is every default, in both cases. A `fabrika.toml` still at
+    the root, or a `.fabrika.jsonc` with no new file, in that same place, is
+    refused, so it never reads as a missing file. The lane's own read at main's
+    tip (`stages/pipeline/work.ts`) does the same. All three go by one pure
+    check, `settingsRefusal` in `settings.ts`.
   - Not through the typed `CodeHost` service: it has no read of a file at a
     ref, and it is about one pull request. The edge runs git through Effect's
     `ChildProcess`, the way build's clone code does. A `CodeHost` read of a
@@ -206,9 +229,9 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
 - tsh prints which file it read, in one line on stderr, before anything runs:
 
   ```text
-  fabrika.toml: acme/widgets@main (1a2b3c4)
-  fabrika.toml: acme/widgets@main (1a2b3c4), not there: every default
-  fabrika.toml: ~/fabrika/fabrika.toml
+  .fabrika/fabrika.toml: acme/widgets@main (1a2b3c4)
+  .fabrika/fabrika.toml: acme/widgets@main (1a2b3c4), not there: every default
+  .fabrika/fabrika.toml: ~/fabrika/.fabrika/fabrika.toml
   ```
 
 - tsh's edge, `packages/pipeline/src/tsh/fabrika-main.ts`, reads it once and hands the desk
@@ -223,7 +246,7 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
   and says to move them here.
 
   ```toml
-  # fabrika.toml, today: every key the wip reader accepts
+  # .fabrika/fabrika.toml, today: every key the wip reader accepts
   packs = ["@tea-fabrika/owner-desk"]
 
   [pack."@tea-fabrika/owner-desk"]   # must name a pack that packs lists
@@ -255,20 +278,34 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
     `go` and `label` were keys here until 2026-10-21; a file that still sets
     either is refused with one line that says why.
   - `[review]`: `rubrics` (a folder in the repository; else the rubrics
-    fabrika ships), `governed` and `ui` (read only where there is no
-    `.fabrika.jsonc`).
+    fabrika ships), `governed` and `ui` (the only place for review rules;
+    see below).
   - `[checks]`: `github` (`every`, `required` or `none`) and `[[checks.run]]`,
     commands fabrika runs itself at each head, in a copy, with no login.
   - `[ship] approval` (`codeowners` or `none`; a CODEOWNERS file at the base
     still binds) and `[ledger] at` (`local` or `sqlite`).
+- **Review rules are `[review] governed` and `ui`, and nothing else**
+  (2026-11-01). The GitHub reader and the local one read the file at a change's
+  base and at its head, and join the two, so a change cannot take itself out of
+  a review (`rulesOfBoth`). Only `[review]`'s two lists are looked at
+  (`reviewRules` in `settings.ts`). The strict load rules stay with `settingsFrom`.
+
+  ```ts
+  reviewRules(null)                                 // { governed: [], ui: [] }: no file names none
+  reviewRules("[failure]\nfloor = 1")               // { governed: [], ui: [] }: only [review] is read
+  reviewRules('[review]\ngoverned = [".github/"]')  // { governed: [".github/"], ui: [] }
+  reviewRules('[review]\ngoverned = "all"')         // null: the kinds are not known, and the review stops
+  reviewRules("[review")                            // null: the same, for a file that is not TOML
+  ```
+
 - **Every key left out gets a named default, and the run prints it**
   (`setup.ts`). One line per pick, under the line that says where the file
   was read, each with where it came from: this file, `tsh.toml` (a machine's
   fallback model, effort, budget and rubrics folder), what the repository
-  holds at the same commit (its lockfile, CODEOWNERS, `.fabrika.jsonc`,
-  CLAUDE.md, AGENTS.md, a workflow folder), or the code's default. A pick
-  that will stop a run later says so at the start, and names the key that
-  changes it.
+  holds at the same commit (its lockfile, CODEOWNERS, CLAUDE.md, AGENTS.md, a
+  workflow folder, and a `.fabrika.jsonc` beside the file only to say it is not read), or the
+  code's default. A pick that will stop a run later says so at the start, and
+  names the key that changes it.
 - **A pick that says nothing is refused.** `checks.github = "none"` with no
   `[[checks.run]]`, which would pass a change on no check; a rubrics folder
   outside the repository.

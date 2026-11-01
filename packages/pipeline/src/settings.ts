@@ -1,7 +1,7 @@
-import {Effect, FileSystem, Path, Schema, SchemaIssue} from "effect";
+import {Effect, FileSystem, Option, Path, Schema, SchemaIssue} from "effect";
 import {parse, TomlError} from "smol-toml";
 
-// fabrika.toml: one per repository fabrika works on, at its root
+// .fabrika/fabrika.toml: one per repository fabrika works on
 // (docs/direction/one-fabrika-toml-per-repo.md). It holds what differs from
 // one repository to the next. The order of the steps stays in code.
 //
@@ -31,8 +31,8 @@ import {parse, TomlError} from "smol-toml";
 //
 //   [review]
 //   rubrics = "docs/rubrics"        # code.md, doc.md, skill.md, in the repository at its main
-//   governed = [".github/"]           # read only when the repository has no .fabrika.jsonc
-//   ui = []
+//   governed = [".github/"]           # a change under one needs the governance review; read at its base and head
+//   ui = []                           # a change under one needs the rendered review; read the same way
 //
 //   [checks]
 //   github = "every"                  # every: each check on GitHub counts. required: only required ones. none: GitHub's do not count
@@ -58,6 +58,19 @@ import {parse, TomlError} from "smol-toml";
 // One more, so a pick never says something the run will not do:
 // - `checks.github = "none"` with no `[[checks.run]]` fails: a change would pass on no check.
 //
+// The old files never read as "no file, every default". Whatever reads a
+// repository (./settings-source.ts, ./stages/pipeline/work.ts) asks
+// `settingsRefusal` first:
+//
+//   .fabrika/fabrika.toml alone      read it
+//   beside a .fabrika.jsonc          read it; the jsonc may be today's fabrika
+//                                    plugin's (./setup.ts says it is not read)
+//   only a .fabrika.jsonc            refused: `JSONC_MOVED`. Its governed folders
+//                                    would read as none, with no review owed
+//   a fabrika.toml at the root       refused, with the new file there or not:
+//                                    `SETTINGS_MOVED`
+//   none of them                     every default
+//
 // The keys of the new tables are left out of `Settings` when the file leaves
 // them out: what a left-out key means is picked at the edge, beside what the
 // repository holds and what tsh.toml says (./setup.ts), so the run can print
@@ -74,8 +87,32 @@ import {parse, TomlError} from "smol-toml";
 // step that uses it, and a knob a machine decides with is copied into the run
 // when it is filed.
 
-/** The file's name, at the root of the repository. */
-export const SETTINGS_FILE = "fabrika.toml";
+/** The file, from the root of the repository. It has one spelling. */
+export const SETTINGS_FILE = ".fabrika/fabrika.toml";
+
+/** Where the file used to be, from the root of the repository. */
+export const OLD_SETTINGS_FILE = "fabrika.toml";
+
+/** What a repository that still holds `OLD_SETTINGS_FILE` fails with, with the new file there or not. */
+export const SETTINGS_MOVED = `${OLD_SETTINGS_FILE} moved to ${SETTINGS_FILE}: move it there`;
+
+/** Where the review's two lists used to be, from the root of the repository. */
+const JSONC_FILE = ".fabrika.jsonc";
+
+/** What a repository that holds `JSONC_FILE` and no `SETTINGS_FILE` fails with. */
+export const JSONC_MOVED = `${JSONC_FILE} moved to [review] in ${SETTINGS_FILE}: move it there`;
+
+/** The paths `settingsRefusal` needs to know about, each at the one place read. */
+export const SETTINGS_PATHS = [SETTINGS_FILE, OLD_SETTINGS_FILE, JSONC_FILE] as const;
+
+/**
+ * Why a repository that holds `there`, of `SETTINGS_PATHS`, must not be read.
+ * `null`: it may. The one rule every reader goes by. Pure.
+ */
+export const settingsRefusal = (there: ReadonlySet<string>): string | null => {
+	if (there.has(OLD_SETTINGS_FILE)) return SETTINGS_MOVED;
+	return there.has(JSONC_FILE) && !there.has(SETTINGS_FILE) ? JSONC_MOVED : null;
+};
 
 const Name = Schema.String.check(Schema.isNonEmpty({message: "a pack is named by its package"}));
 
@@ -134,10 +171,13 @@ const InRepo = Schema.String.check(
 	}),
 );
 
+/** Folders and files of the repository, as `[review]` lists them. */
+const Paths = Schema.Array(Word);
+
 const Review = Schema.Struct({
 	rubrics: Schema.optionalKey(InRepo),
-	governed: Schema.optionalKey(Schema.Array(Word)),
-	ui: Schema.optionalKey(Schema.Array(Word)),
+	governed: Schema.optionalKey(Paths),
+	ui: Schema.optionalKey(Paths),
 });
 
 const Check = Schema.Struct({name: Word, run: Command});
@@ -258,14 +298,65 @@ export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInva
 		return settings;
 	});
 
+/**
+ * All the code hosts read of one side of a change: `[review]`'s two lists. Any
+ * other key is left alone, so a key this version does not know, at a base
+ * written by an older one, does not make the rules unknown. The strict rules
+ * are `settingsFrom`'s.
+ */
+const ReviewRules = Schema.Struct({
+	review: Schema.Struct({
+		/** A change under one of these needs the governance review. */
+		governed: Paths.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+		/** A change under one of these needs the rendered review. */
+		ui: Paths.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+	}).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+});
+
+/** Which reviews a repository's files need, by the two lists of `[review]`. */
+export type Rules = (typeof ReviewRules.Type)["review"];
+
+const parseToml = Option.liftThrowable((text: string) => parse(text));
+const decodeReviewRules = Schema.decodeUnknownOption(ReviewRules);
+
+/**
+ * The rules one side of a change holds, from the text of its file. `null` for
+ * the text: no file there, the same as an empty one, so it names none. `null`
+ * for the answer: not TOML, or a list that does not fit, so the rules are not
+ * known. Pure.
+ */
+export const reviewRules = (text: string | null): Rules | null =>
+	parseToml(text ?? "").pipe(
+		Option.flatMap(decodeReviewRules),
+		Option.map((file) => file.review),
+		Option.getOrNull,
+	);
+
+/**
+ * Is `file` there? Not there and cannot say are two answers, never one, as in
+ * ./git-read.ts. A file where a folder on the way would be: it is not there, as
+ * at a commit. Any other error stops the read, naming the path.
+ */
+export const thereAt = (
+	file: string,
+): Effect.Effect<boolean, SettingsInvalid, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		return yield* (yield* FileSystem.FileSystem).exists(file);
+	}).pipe(
+		Effect.catchIf(
+			(error) => error.reason._tag === "BadResource",
+			() => Effect.succeed(false),
+		),
+		Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)),
+	);
+
 /** Read the settings at `file`. No file there: every default. */
 export const readSettings = (
 	file: string,
 ): Effect.Effect<Settings, SettingsInvalid, FileSystem.FileSystem> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		const there = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
-		if (!there) return DEFAULT_SETTINGS;
+		if (!(yield* thereAt(file))) return DEFAULT_SETTINGS;
 		const text = yield* fs
 			.readFileString(file)
 			.pipe(Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)));
