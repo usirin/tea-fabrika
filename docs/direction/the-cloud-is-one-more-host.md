@@ -16,9 +16,10 @@ is workerd on the laptop too. See
 [the app layer](#decided-2026-10-31-the-app-layer). It is layer 4 of
 [the five layers](./a-local-first-sync-engine.md#decided-2026-10-30-and-2026-10-31-five-layers-central-first).*
 
-*Changed 2026-10-31: in the new version, `host` means a computer, like a Mac or
-a VM. This draft uses it differently, for a place that runs programs; read that
-as the brain. See [brain, hands, window, agent](./brain-hands-window-agent.md).*
+*Changed 2026-10-31: in the new version, a `host` is a place hands can run: a Mac,
+a VM or a browser profile. This draft uses it differently, for a place that runs
+programs; read that as the brain. See
+[brain, hands, window, agent](./brain-hands-window-agent.md).*
 
 ```ts
 // A sketch. Every place fabrika runs is a host, and every host is the same kind of thing.

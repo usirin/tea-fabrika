@@ -5,21 +5,28 @@
 The word "peer" is gone, and so is "node" as a word for a machine or a
 participant. Three things dial the brain: **hands**, a **window** and an
 **agent**. `client` means any of them, and only when we talk about the door's
-protocol. `host` means a computer.
+protocol. A **host** is a place hands can run: a Mac, a VM or a browser profile.
+What a host can do is its **capabilities**.
+
+**Tier 1 builds the shape.** Each platform Layer says what its host can do, and
+the hello carries that list from the first day, because old hellos can never get
+it back. **Proposed, not decided:** a tab that runs jobs. That waits until hands
+are built for real, with the queue and leases.
 
 ```ts
-// A sketch. One Mac, one VM, one brain.
-//   host    a computer, like the Mac or the VM
-//   brain   runs programs and keeps their state
+// A sketch. Two hosts and one brain.
+//   the Mac             capabilities: git, files, agents
+//   a Chrome profile    capabilities: screen, clipboard, notify
+//   the brain           runs programs and keeps their state
 //
-// Three kinds of client dial the brain. Each has its own gateway and its own key.
-//   hands   run jobs from the queue, on one host
-//   window  draws, and sends a person's keys: a browser tab or an Electron window
-//   agent   comes in through the bridge
-//
-// What each one says in its hello. The `has` list decides who gets a job.
-{"key": "ed25519:mac...", "has": ["git", "files", "agents"]} // the Mac's hands
-{"key": "ed25519:w1...", "has": []}                          // a window: the queue never offers it a job
+// A platform Layer names its host's capabilities, and the hello carries them.
+// The key on the wire stays `has`.
+Layer.succeed(Host, {kind: "browser", has: ["screen", "clipboard", "notify"], cannot: ["Mod-W"], tab});
+
+{"key": "ed25519:mac...", "has": ["git", "files", "agents"]}              // the Mac's hands
+{"key": "ed25519:w1...", "tab": "t1", "has": ["screen", "clipboard", "notify"]} // a tab
+// A Cmd that `needs` git never goes to that tab. How a client says it takes jobs
+// at all is not designed yet: a tab that only draws has capabilities too.
 ```
 
 ## The words
@@ -29,17 +36,18 @@ client." When one kind is meant, name that kind.
 
 | Word | Means | Say it like |
 |---|---|---|
-| hands | what runs jobs from the queue on one computer | "the Mac's hands took c-41" |
+| hands | what takes jobs from the queue | "the Mac's hands took c-41" |
 | window | what draws and sends a person's keys | "two windows show build:7" |
 | agent | an agent, through the bridge | "the agent posts a fact" |
 | client | any of the three, at the door | "the client signs its hello" |
-| host | a computer | "hands run on a host" |
+| host | a place hands can run | "the Mac is a host, and so is that Chrome profile" |
+| capabilities | what a host can do | "only the Mac has git" |
 
 A ledger entry's `said` is "the writer's own clock".
 
-## Windows are not hands
+## Hands and window are jobs, not places
 
-They do different jobs, and they fail differently.
+They do different work, and they fail differently.
 
 ```ts
 // A sketch. Ticket #7.
@@ -49,26 +57,61 @@ They do different jobs, and they fail differently.
 //   w1 and w2 show build:7; w1 dies; w2 still shows it, and nothing is lost
 ```
 
-Temporal splits it the same way:
+Temporal splits the work the same way:
 [Workers run tasks, Clients start and query](https://docs.temporal.io/develop/typescript/client/temporal-client).
 
-## What stops a tab from getting a job
+The split is about the work, so one tab can do both: draw as a window and take
+jobs as hands. A Mac window draws while the Mac's hands run elsewhere. A browser
+tab has no elsewhere, so it may hold both.
 
-Not the names. The names are for talking and reading clearly. The protection is
-the hello's `has` list. A window says it has little or nothing, so the queue
-never offers it a job. A Cmd that `needs` git goes only to a client that says it
-has git.
+## Capabilities
 
-## The other answer we weighed
+- **The word is the industry's.** MCP's client and server state their
+  [capabilities when they start](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle).
+- **The key stays `has`,** next to `needs` on a Cmd. Short everyday keys are the
+  rule here, and it reads as a sentence.
+- **Capabilities are what stops a tab from getting a build.** Not the names. A
+  tab can't run a process, so it never says it has one, and the queue never
+  offers it that job.
+- **A capability says "can", never "may".** A client can claim anything in its
+  hello. A false claim gets it jobs it fails. Whether a client may do something
+  is a grant, on the ledger.
 
-**A window is a set of hands with a small `has`.** This is the strongest
-alternative, because every client already speaks the same wire and `has` already
-does the protecting. One word would cover both, and no code would need to tell
-them apart at the door.
+## Why a browser is a host
 
-We did not pick it because the jobs differ. One set of hands takes a job with a
-lease. All windows mirror one view. Calling both "hands" makes people ask which
-window holds a lease, and no window ever does.
+These are ideas, and none is tried yet.
+
+- Real browser checks: screenshots in real layouts, a real Safari.
+- Jobs that need a person there: passkeys, login flows, clipboard, file picker.
+- Hands with no install: a collaborator on Windows, or a phone.
+- With the laptop closed: the cloud brain has no hands, and an open tab could do
+  browser-safe jobs.
+- A sealed program could run in a Web Worker, since it names no platform.
+
+VS Code does this. Its
+[web extension host](https://code.visualstudio.com/api/advanced-topics/extension-host)
+runs extensions in a browser Web Worker, and `extensionKind` says which side an
+extension prefers.
+
+The limits are real. A tab can't start a process, so there's no `claude`, no
+`git` command and no real build. Closing a tab kills its job, and the lease
+handles that like a crash. Only one tab in a profile should act as the hands, and
+[Web Locks](https://developer.mozilla.org/docs/Web/API/Web_Locks_API) can pick
+it.
+
+## The other answers we weighed
+
+- **A window is a set of hands with a small `has`, and there is one word.** This
+  was the strongest, because every client speaks the same wire. It wasn't picked
+  because the work differs: one set of hands takes a job with a lease, and all
+  windows mirror one view. Calling both "hands" makes people ask which window
+  holds a lease. What it got right stayed: a tab may be both.
+- **`host` for every client.** A host is where things run, and a client is what
+  dials. Three tabs in one profile are three clients on one host, since the
+  key already belongs to the profile.
+- **`host` means only a computer.** That's how
+  [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122.txt) uses it, and it was this
+  note's first answer. It left no word for a browser that runs jobs.
 
 ## Why not the other words
 
@@ -77,10 +120,6 @@ window holds a lease, and no window ever does.
   the brain and meets the others through it (T1 and T2 in the five layers).
 - **Not "node".** In Erlang a node is a running machine, and that word stays when
   we name OTP. As a word of ours it says nothing about what the thing does.
-- **Not "host" for all of them.** A Mac with three tabs would be four hosts. And
-  the brain, which really does host programs, would be the one thing not called
-  a host. [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122.txt) means an end
-  computer by the word, and so do we.
 
 ## What it costs
 
@@ -90,14 +129,19 @@ window holds a lease, and no window ever does.
   their time, so they keep it.
 - `host` still means something else in today's version: a running process that
   hosts programs. Check the path before you trust the word.
+- Our `host` is wider than RFC 1122's, so a reader may picture a computer first.
 
-**How sure:** 70%. Two doubts:
+**How sure:** 70%, for the words and for a browser host. Three doubts:
 
-- A window has a few hand-like jobs, such as opening a link or copying to the
-  clipboard. If that list grows, the split needs another look.
-- Since every client speaks the same wire, the split lives in words and not in
-  the protocol. The first `next/` code that has to treat windows and hands
-  differently, or that never does, would settle it.
+- **Job code beside the window's key.** It could sign as that window, so a job
+  must run sandboxed before a tab runs anything we didn't write. Nobody has
+  designed that yet.
+- **Whether enough real jobs exist for a browser.** A first browser job would
+  settle it.
+- **Capabilities that change.** A tab can lose the screen when it's hidden, while
+  the hello is said only once. Today's `has` assumes they don't change.
+- **Saying "I take jobs".** `has` describes the host, so it can't also say whether
+  this client wants work. That needs its own answer before a tab runs a job.
 
 ## What it cannot tell us
 
@@ -106,4 +150,5 @@ window holds a lease, and no window ever does.
 - How well an agent fits beside the other two. Hands and windows have a written
   place in the transport layer. An agent's trip through the bridge has less
   written down.
-- How long a window's `has` list really gets. Nobody has built one.
+- What to call the place the brain runs on Cloudflare. It runs no hands, so this
+  note doesn't call it a host.

@@ -91,8 +91,9 @@ has no single place that can say who was first.
   machine can run several, and a Durable Object is one. A role (referee,
   tracker, CI runner, builder) is a program on a host, and the shape a role
   needs is an **interface**: the plain type of a program.
-  *Changed 2026-10-31: in the new version, `host` means a computer and the brain
-  runs programs. See [brain, hands, window, agent](./brain-hands-window-agent.md).*
+  *Changed 2026-10-31: in the new version, a `host` is a place hands can run (a
+  Mac, a VM or a browser profile) and the brain runs programs. See
+  [brain, hands, window, agent](./brain-hands-window-agent.md).*
 - **Libraries checked first.** Effect's own event log and cluster modules do
   not fit (the first merges copies with no compare-and-set; the second needs
   one shared database every node reaches). No outside library has

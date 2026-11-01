@@ -46,8 +46,8 @@ Three answers in the transport layer follow from it:
 | How a client proves who it is | its SSH key | a key pair that signs the hello; an SSH file on a Mac, WebCrypto Ed25519 in a browser, granted by its person as `fabrika post` grants an agent's key today |
 | How we know a client is still there | WebSocket ping frames | a text `"ping"`, answered `"pong"` by the object's auto-response |
 
-A browser can do some machine work too (show a notification, read the
-clipboard). It says so in its `has` list, the same way the Mac says `git`, and
+A browser is also a host, with capabilities of its own (show a notification, read
+the clipboard). It says so in its `has` list, the same way the Mac says `git`, and
 a Cmd that `needs` git never goes to it. That list, and not the word "window",
 is what keeps a job away from a tab. See
 [brain, hands, window, agent](./brain-hands-window-agent.md).
