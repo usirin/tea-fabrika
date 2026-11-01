@@ -6,6 +6,13 @@ The desktop is layer 5, on top of the app. It places tiles, owns focus and
 routes keys: the part KDE or GNOME plays on Linux. Its codename is Tuval;
 users only ever see "fabrika".
 
+*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
+day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
+drawn from it. The new version's shell is `fabsh`, so below, `tsh` means `fabsh`. The desk is
+a program, `next/programs/desk`, built in as `fabrika/desk`, and it arrives in Tier 2 with
+split, close and prefix keys. Tier 1 has one fixed layout at wiring, each window keeps its
+own focus, and it has no desk process. See [the app and its menu bar](#the-app-and-its-menu-bar).*
+
 ```ts
 // A sketch. The desktop's own state is one more process in the brain, like a tmux server.
 type Desktop = {
@@ -16,11 +23,11 @@ type Workspace = {
 	layout: Split;                        // in percent, never in pixels or columns
 	focus: TileId;                        // one per workspace: two windows on it mirror
 };
-type Split = {dir: "row" | "column"; parts: {percent: number; then: Split | Tile}[]};
+type Split = {dir: "row" | "column"; parts: {percent: number; inner: Split | Tile}[]}; // not `then`: it makes an object look like a promise
 type Tile = {id: "t3"; shows: Pid; keep: "never" | "failed" | "always"};
 
 // A window is a client. It picks a workspace, folds the layout to its own size, and runs the prefix.
-type Window = {backend: "electron" | "browser" | "headless"; workspace: 1; cannot: Key[]};
+type Window = {platform: "electron" | "browser" | "headless"; workspace: 1; cannot: Key[]};
 ```
 
 The floor is the app layer's window protocol (A3 in
@@ -85,7 +92,7 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
 
 ```ts
 // The desktop monitors the tile's process (OTP's monitor, from coordination).
-{kind: "DOWN", pid: "build:7#2", why: "crashed"}
+{_tag: "DOWN", pid: "build:7#2", why: "crashed"}
 // then the tile follows its keep:
 //   "never"   close it, as a tmux pane closes when its command exits
 //   "failed"  keep it only after a crash, with the final view and the reason (the default)
@@ -134,6 +141,31 @@ const electron = {cannot: ["Cmd-Q", "Cmd-H"]};
 - Linear does not tile, so where its keys clash with ours, the prefix wins.
 - **How sure: 70%.** The doubt: "Ctrl-C over a program" reads a desk that may
   be a moment old. A test with a slow fake link would settle it.
+
+## The app and its menu bar
+
+Added 2026-11-01, for `next/`. The owner settled the shape: the menu bar is in the first
+slice and part of the Electron app, and a person only opens the app, which starts the brain.
+The details are [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built.
+
+```text
+open   write <home>/brain.plist, then  launchctl bootstrap gui/<uid> <home>/brain.plist
+quit   launchctl bootout gui/<uid>/fabrika.brain
+```
+
+```ts
+// A sketch. The menu is pure Elm, drawn by Electron's Tray and a panel, an array in headless.
+export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
+// rows: "Chrome on this Mac, 1 tab, says code 482 109. [Deny] [Approve]"
+```
+
+- The brain is a plain launchd service, with its plist in the app's home, so nothing starts at
+  login. It sits behind `BrainService`, with `launchdBrain`, `childBrain` and a test Layer.
+- Approve and Remove ask for a finger. Deny does not, since saying no should be easy.
+- On the `cloud` stage the app starts no brain, and keeps only its link to the cloud.
+- **Why:** one thing to open, so nobody manages a service by hand. It costs a spike on an
+  unsigned build (T8). How sure: launchd working there is the doubt, about 70%, an estimate
+  written for this note and not a measure. The spike settles it. If it fails, `childBrain` carries this pass, and the owner is told.
 
 ## Notes this changes
 

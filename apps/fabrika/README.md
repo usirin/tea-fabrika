@@ -2,7 +2,7 @@
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
 tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
-`runs` and `trace` loaded. A program with a view runs inside a tile. The design is
+`pipeline`, `runs` and `trace` loaded. A program with a view runs inside a tile. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
 "Decided 2026-10-25: tiles, like tmux".
 

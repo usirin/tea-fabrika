@@ -85,8 +85,8 @@ is what keeps a job away from a tab. See
 
 A written rule does not stop a change that breaks it. Two checks do:
 
-- **Built: the top level is bundled for a browser.** `pnpm lint` bundles
-  `@kampus/fabrika`'s top level for a browser and fails on a Node import. The
+- **Built, in today's version: the top level is bundled for a browser.** `pnpm lint` bundles
+  `@kampus/fabrika-old`'s top level for a browser and fails on a Node import. The
   protocol's schemas and the client's state machine live on that top level; a Node or
   Unix-socket transport goes on a subpath.
 - **Proposed: a browser client in CI.** The CI job starts its own Miniflare and
@@ -100,8 +100,10 @@ A written rule does not stop a change that breaks it. Two checks do:
 ## What it costs
 
 - One more test job in CI, with a browser, once the protocol code exists.
-- A browser client needs its person to grant its key. That flow is not designed
-  yet.
+- A browser client needs its person to grant its key. In `next/`, that flow is
+  designed in [Tier 1's plan](../plan/tier-1.md): a code in the tab, a row in the
+  menu bar, Approve and a finger. That plan was approved 2026-11-01, and this is
+  not built.
 
 **How sure:** 80%. The doubt is a protocol need that a browser truly cannot
 meet, such as a client that must hold a file lock. What would settle it: the

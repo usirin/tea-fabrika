@@ -1,5 +1,10 @@
 # The ledger goes to Cloudflare, for two people
 
+*Changed 2026-11-01, for `next/`, from [the tiers](../plan/tiers.md), proposed. This note
+is built in today's version, invites included. In `next/`, invite and join are Tier 3, and
+so is GitHub as a keys source. Tier 1 has one person: a new client comes in by the menu bar's
+Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
+
 **Decided 2026-10-25: two people share one fabrika.** They work the same
 tickets, and their agents talk to each other across the two machines. This is
 a core goal now, not a later team feature. Cost is not a blocker: a Workers

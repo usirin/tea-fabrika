@@ -1,7 +1,8 @@
 # Working in this repo
 
 For any agent (or person) picking up work here. Read this first, then
-[`docs/direction/README.md`](./docs/direction/README.md).
+[`docs/plan/README.md`](./docs/plan/README.md) for where the work stands, then
+[`docs/direction/README.md`](./docs/direction/README.md) for why.
 
 ## What this repo is
 
@@ -15,13 +16,14 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 | You want to | Read | Write |
 |---|---|---|
+| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
-| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#packages) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
+| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial: its README and its finished files | A folder there with a `package.json` whose `typecheck` covers the files, so a change to the package that breaks the tutorial fails `pnpm typecheck`. Run every step on a fresh clone before it lands. |
 | Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
@@ -37,7 +39,8 @@ private memory, it is in the wrong place: write it here.
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). Everything
+[the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
+[PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
 else (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -70,10 +73,18 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
-- **In `next/`, every change goes through the pipeline's steps, by hand:** plan, test
-  writer, build, mutation step, one review, each by its own agent, with laws. No
-  builder starts before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)).
+- **Every pull request, `next/` or today's, goes through today's pipeline programs:**
+  plan, test writer, build, mutation step, one review, each by its own agent, with
+  laws. A step that cannot run yet goes by hand for that pull request and is logged in
+  `field/`. No builder starts before an approved plan and tests that exist
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). No merged pull request
+  has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
+- **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
+  lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
+  under Strict Mode ([Elm first](./docs/direction/elm-first.md)).
+- **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
+  stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
   goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
@@ -123,7 +134,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   import { Schema } from "effect";
   import { gather } from "./primitives.ts";
 
-  const Ticket = Schema.Struct({ id: Schema.String, kind: Schema.Literals(["bug", "feature"]) });
+  const Ticket = Schema.Struct({ id: Schema.String, state: Schema.Literals(["open", "closed"]) });
   type Ticket = typeof Ticket.Type;
   const Id = Schema.Struct({ id: Schema.String });
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
@@ -135,14 +146,23 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   mean two things, pick a clearer short word before you reach for a long one.
 
   ```ts
+  // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
+  // Today's code says `kind` here.
   // Yes: read it out loud and it is a sentence.
-  { kind: "ask", who: "owner", for: "approval" }
-  { kind: "send", to: "builder", why: "checks_red" }
+  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "send", to: "builder", why: "checks_red" }
 
   // No: longer, and the parent already said it.
-  { kind: "ask", askWho: "owner", forWhat: "owner_approval" }
-  { kind: "send", sendTo: "builder", reasonCode: "checks_red" }
+  { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }
+  { _tag: "send", sendTo: "builder", reasonCode: "checks_red" }
   ```
+- **The tag key is `_tag`, for every union we define.** Effect Schema writes it, with
+  `Schema.TaggedUnion`, `TaggedStruct` and `TaggedError`, never by hand. tea's Msgs and
+  Cmds keep `type`, and third-party shapes keep theirs. Plain fields stay plain words,
+  such as `platform`. This is decided. In `next/`, `kind` on ledger entries becomes `_tag`
+  too, settled when the owner approved [Tier 1](./docs/plan/tier-1.md#tags) on 2026-11-01,
+  and ticket 32 tracks it. Today's code is not changed by this, so its `kind` on an entry or an outcome stays until that code goes
+  ([schema classes](./docs/direction/schema-classes-not-of-helpers.md)).
 - **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
   A new stage machine writes only its own words, with `outcomesOf` in
   `packages/pipeline/src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
@@ -209,11 +229,17 @@ scale. Record what it cost in the write-up.
 
 ## Running the machine on a real ticket
 
-A live run changes a real repository. The rules, each learned from a run:
+A live run changes a real repository. How to run one:
+[Run a ticket through the pipeline](./docs/how-to/run-a-pipeline-ticket.md). How a pull request
+that went by hand lands is in [the plan](./docs/plan/README.md#how-a-change-lands). The rules for a
+live run, each learned from a run:
 
 - The target repository's own merge rules apply. Never merge by hand, never arm
   auto-merge, never push to its main branch. A change lands only through the
   ship stage.
+- A pull request that went by hand is not a live run, and neither is what is left
+  once a lane is finished and stuck. Each lands by
+  [the plan's rule](./docs/plan/README.md#how-a-change-lands).
 - No agent approves a pull request, and no agent answers a question the machine
   put to a person.
 - A dry run is read-only. It starts no agent that could claim or change a real

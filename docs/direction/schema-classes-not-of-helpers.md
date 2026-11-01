@@ -32,8 +32,13 @@ Schema.encodeSync(OpenTicket)({...t, now: 3}); // a spread still encodes, so a k
 - **Helpers are statics, never instance methods or getters.** One instance
   method makes every plain literal and every spread fail to typecheck.
 - **A member of a union is a `Schema.TaggedStruct` wrapped the same way.**
-  `_tag` earns its place only where something switches on it. A tagged member
-  inside a `Schema.Union` was tested and works.
+  Every union we define uses `_tag`, written by Effect Schema and never by hand.
+  tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. In `next/`, `kind`
+  on ledger entries becomes `_tag` too, settled when the owner approved Tier 1 on
+  2026-11-01, and ticket 32 tracks it. Today's code keeps `kind`. A tagged member inside a
+  `Schema.Union` was tested and works. *(Changed 2026-11-01; it used to say `_tag`
+  earns its place only where something switches on it. Today's code is not changed
+  by this.)*
 - **Export the class itself.** `.annotate()` makes a new schema without the
   statics.
 - **A name with no data type to own it is a plain named function,** with no

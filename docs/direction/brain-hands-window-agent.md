@@ -21,7 +21,7 @@ are built for real, with the queue and leases.
 //
 // A platform Layer names its host's capabilities, and the hello carries them.
 // The key on the wire stays `has`.
-Layer.succeed(Host, {kind: "browser", has: ["screen", "clipboard", "notify"], cannot: ["Mod-W"], tab});
+Layer.succeed(Host, {platform: "browser", has: ["screen", "clipboard", "notify"], cannot: ["Mod-W"], tab});
 
 {"key": "ed25519:mac...", "has": ["git", "files", "agents"]}              // the Mac's hands
 {"key": "ed25519:w1...", "tab": "t1", "has": ["screen", "clipboard", "notify"]} // a tab

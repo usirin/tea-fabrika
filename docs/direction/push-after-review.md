@@ -36,7 +36,9 @@ Decided 2026-10-24.
   hold none of the app's own keys as text. GitHub's push protection does the
   same kind of check for secrets it knows
   ([GitHub](https://docs.github.com/en/code-security/secret-scanning/working-with-secret-scanning-and-push-protection)).
-  Ours runs before GitHub sees anything.
+  Ours runs before GitHub sees anything. *Not built in today's version (checked
+  2026-11-01): the check there is a by-hand grep, before the merge yes, when the branch
+  is already public.*
 - **A red CI goes back to build.** The new commit is reviewed again before the
   next push.
 - **This fits [done is per criterion](./done-is-per-criterion.md).** Each task

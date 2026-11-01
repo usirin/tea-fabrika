@@ -20,7 +20,7 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`
-  outside tests and a named list of edge files. They arrive in ticket 115's exam
+  outside tests and a named list of edge files. They arrive in Tier 1's exam
   pull request, along with planted lines that must fire. Until then, this note and
   [AGENTS.md](../../AGENTS.md) are the only guard.
 
@@ -41,7 +41,9 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - A rule the lint can only partly check: it names files, not lines. "One line" is
   checked by a reader.
 - `useMachine` and `useRuntime` in `@demlik/tea` expect Promise verbs, so the
-  window may need its own small hook. That way out is untested (75%).
+  window may need its own small hook. *Updated 2026-11-01:* probes on tea's Effect
+  engine showed one `useSyncExternalStore` hook working, 90% sure, and
+  [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
 
 **How sure: 95%** on the rule. **80%** on the edge list, which ticket 115 sets.
 

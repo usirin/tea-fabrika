@@ -29,6 +29,10 @@ with plain functions, do that. Anything bigger needs a reason written down.
   callback can send to it later. An agent run inside a machine is a Sub, since
   it keeps talking, and each tool call that changes something arrives as a Msg
   when it happens.
+- **In `next/`, a program may say no** (2026-11-01, with [Tier 1](../plan/tier-1.md#notes)).
+  Elm has no refusal, since its Msgs come from its own view. Ours come from a window
+  that may be out of date. So `Program` has a required `refuse`, a pure check of a fresh
+  Msg against the model. It runs on fresh letters only, never on a fold.
 
 ## Why
 
@@ -64,8 +68,14 @@ type Exception = {what: string; why: string; status: "decided" | "proposed"};
 ## Decided 2026-10-30: UI state lives in tea machines
 
 Every piece of state a window keeps lives in a tea machine, even state that
-belongs to one component: a draft comment, a picked row, a drag. A window
-uses `useMachine` from `@demlik/tea/react`, never React's `useState`.
+belongs to one component: a draft comment, a picked row, a drag. In today's
+version, a window uses `useMachine` from `@demlik/tea/react`, never React's
+`useState`.
+
+*Changed 2026-11-01, for `next/`: the rule stands and the hook differs. tea's
+`useMachine` dies under Strict Mode, so a window reads its machine through one
+`useSyncExternalStore` hook on the Effect engine, as [Tier 1's plan](../plan/tier-1.md)
+says, and a lint rule holds it. The sketch below is today's version.*
 
 ```tsx
 // A sketch. A comment box: the draft is a machine, not a useState.

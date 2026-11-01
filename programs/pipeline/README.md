@@ -70,10 +70,14 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 | `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. |
 | `none` | Never waits on GitHub. It runs `[[checks.run]]` on this machine at the head it pushed, and those decide. A file with no `[[checks.run]]` is refused. |
 
-- **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and the lane
-  ends `stuck: checks_stuck`. Set `github = "none"` in `[checks]` to get past this.
-- **A branch rule that wants a GitHub review.** GitHub refuses the merge, and the lane ends
-  `stuck: merge_failed`. The ticket does not say which rule refused it: ship never reads the refusal's
+Stuck words come at two levels. The lane has seven of its own (`stages/pipeline/outcome.ts`). A step's
+own word, such as ship's `checks_stuck`, ends that step, and the lane then ends `stuck: step_stuck`.
+
+- **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and ends
+  `stuck: checks_stuck`, so the lane ends `stuck: step_stuck`. Set `github = "none"` in `[checks]` to get
+  past this.
+- **A branch rule that wants a GitHub review.** GitHub refuses the merge. Ship ends
+  `stuck: merge_failed`, so the lane ends `stuck: step_stuck`. The ticket does not say which rule refused it: ship never reads the refusal's
   words.
 - **Hold other merges during a run.** A commit on main that ship's last read before the merge sees means
   `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
@@ -81,26 +85,31 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
   to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
   GitHub's own merge checks the head and not main, so that commit does not stop it.
 - **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
-  the lane ends `stuck: merge_unknown`. It does not wait and look again.
+  ship ends `stuck: merge_unknown`, so the lane ends `stuck: step_stuck`. It does not wait and look again.
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
   Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
   `stuck: sent_back`. Then typing the line again only says how it ended. The pull request and its branch
-  stay open and nothing more runs, so a person lands it by hand or files a new ticket.
+  stay open and nothing more runs. Inside a live run nothing but ship merges. Once a lane is finished and
+  stuck, what is left is a by-hand change, under the by-hand rule: the owner's yes, green CI, and an agent
+  merges after a leak grep. The other choice is a new ticket.
 - **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
   `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
   is a new pull request.
 - **A merge ship finds already done shows as GitHub reads it.** The ticket's `pr` fact holds the head that
   merged and its checks as they read. At the head the lane judged, the lane ends `done`: it cannot tell
   its own merge with a lost answer from a person's merge of that head, so red checks there show as red.
-  At another head, the lane ends `stuck: merged_elsewhere`, and the ticket says both heads.
+  At another head, the merge step ends `stuck: merged_elsewhere`, so the lane ends `stuck: step_stuck`,
+  and the ticket says both heads.
 
 ## What it holds to
 
 - **A ticket must be yours.** One filed by someone else is refused before any agent starts.
-- **No agent approves.** Both yeses are a person's answer in the ticket window. Merge is `ship`, with
-  its guards.
+- **No agent approves.** The lane asks a person four kinds of question, each answered in the ticket
+  window: `approve` (the plan), `exam_merge` (the exam's own pull request), `merge` (the merge yes), and
+  `step` (a step ended on `ask`, and may be run again). Merge is `ship`, with its guards.
 - **The builder cannot touch the exam.** A change to a file the test writer's commits touched, or to
-  a rule file, ends the lane in `stuck:exam_touched`, and the ticket says so.
+  a rule file, ends the build in `stuck: exam_touched`, so the lane ends `stuck: step_stuck`, and the
+  ticket says so.
 - **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
