@@ -151,6 +151,13 @@ const markersOf = (seen: readonly Entry[]): Marker[] =>
 		return [];
 	});
 
+/**
+ * The time the window draws at. The clock only ticks now and then, so a fresh fact can be newer than
+ * it, and a live playhead at the clock would hide that fact until the next tick.
+ */
+export const liveTime = (timeline: readonly Entry[], now: number): number =>
+	Math.max(now, timeline.at(-1)?.at ?? 0);
+
 /** The trace of a timeline at `now`, with the facts up to `upTo` (the playhead; `now` when live). */
 export const traceOf = (timeline: readonly Entry[], now: number, upTo: number = now): Trace => {
 	const axis = axisOf(timeline, now);
