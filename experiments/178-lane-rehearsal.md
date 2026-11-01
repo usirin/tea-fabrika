@@ -25,6 +25,34 @@ run 4, a rule change      triage -> plan -> yes -> exam -> yes -> exam merge
                           -> push -> yes -> merge -> done                     6m56s
 ```
 
+## After runs 5 and 6: a fresh review and a failed CI run
+
+The runs in this write-up came before these changes. Nothing ran the whole lane on real models again. Each change has its own tests, on stand-in agents.
+
+**A fresh review found one real blocker.** Two questions in a row could share one id, so a person's yes to the first was taken for a second question that was never written on the ticket. A question's number now comes from the lane's trail, which grows with every question. A lane saved while asking keeps the id it holds.
+
+The same review led to these:
+
+- **An unseen review no longer offers `go_on`.** That pick opened a pull request, and the person's merge then ended `stuck:reviews_unknown`. Now it offers `again` and `stop`.
+- **A later round with no change reads the head's checks first.** Red offers `again` and `stop`. Green offers `go_on` and `stop`. If the checks can't run, the lane ends stuck with words. It never guesses green. The earlier test passed only because its stand-in's new test did not stay red.
+- **What a person lets through is said.** The decision question quotes the finding beside the decision, the merge question counts what was let through, and the pull request lists it. This fixes "No deviations" under "Still not fixed" below.
+- **Agent words can't ping or close anything.** `inert` now breaks `@name` mentions too. The plan's Check refuses a rule path with a backtick in it, and a rule path stays inside its code span.
+- **`onceEach` has a test that can fail.** Unwiring it now turns 4 tests red. Before, unwiring it left `kept.test.ts` green.
+
+**Building those found one more bug.** When a mutant had an answer but no test, its commit became the head. The builder's files then joined the exam, and later rounds ended `exam_touched`. A test now pins it.
+
+**CI failed with `E2BIG`.** The prompt went to Codex as one argument. A build's brief holds its long text twice, about 170 KB, and Linux allows 128 KB per argument. A Mac allowed it, so no local run saw this.
+
+```ts
+// packages/fabrika/src/agents/codex/adapter.ts, as it is now
+// The last argument is `-`, and the prompt arrives on stdin.
+stdin: {stream: Stream.make(new TextEncoder().encode(sent))}
+```
+
+I ran real Codex 0.165.0 this way on a Mac: a fresh turn, a resume, and a resume with a 200 KB prompt. All three worked. The appended system prompt still goes by argument, and past 128 KB it fails in words.
+
+**What this cannot tell us:** none of these paths has run on real models from ticket to merge. A real person has still not read these questions. Whether stdin works on Linux rests on this pull request's CI run.
+
 ## Runs 5 and 6, on 9af7b272
 
 Both ran from a clean archive of the commit, each with a fresh `FABRIKA_HOME` and bare remote. Codex and Claude were real. A local host stood in for GitHub, the ledger was in memory, and there was no app or window. The agent running the rehearsal played the person, read each question and answered by file. The `gh` stand-in was never called.
