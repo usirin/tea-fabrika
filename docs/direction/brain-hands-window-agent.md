@@ -131,7 +131,7 @@ it.
   hosts programs. Check the path before you trust the word.
 - Our `host` is wider than RFC 1122's, so a reader may picture a computer first.
 
-**How sure:** 70%, for the words and for a browser host. Three doubts:
+**How sure:** 70%, for the words and for a browser host. Four doubts:
 
 - **Job code beside the window's key.** It could sign as that window, so a job
   must run sandboxed before a tab runs anything we didn't write. Nobody has
