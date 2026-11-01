@@ -34,6 +34,9 @@ type PipeColor = (typeof PipeColors)[number];
   far apart: sky, pink, teal, violet, lime, plum.
 - **A seventh pipe repeats a color.** Colors go round again, as `freeTint` does today, and the letter
   stays its own.
+- **Colors are counted per workspace.** A repeat then needs seven pipes in one workspace. Today
+  `apps/fabrika/src/desk/desk.ts` counts across all of them. The cost: moving a tile to another
+  workspace can still bring two pipes of one color together, and the letter tells them apart.
 
 ## The values
 
@@ -83,5 +86,3 @@ How sure: 80% on the wash and the letter, 70% on six colors.
   the rest of the tile. Whether that passes needs a look at the built tile.
 - The values are plain sRGB hex. Display P3 is still to weigh.
 - Radix's pairings are stated for Western culture. Nobody has tested what these colors say elsewhere.
-- Whether colors should be counted per workspace or across all of them, as `freeTint` does today, is
-  not decided.
