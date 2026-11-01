@@ -16,7 +16,9 @@ settings live in the same shape in their home. One name, two places, like
 
 ```text
 ~/.fabrika/                            the person's home for fabrika
-  fabrika.toml                         their own settings: login, key file
+  fabrika.toml                         their own settings: login, key file, theme = "<name>"
+  keybindings.toml                     their keys
+  themes/                              their themes, one <name>.toml each
   packs/                               a shared cache of pack code, by commit
 acme/.fabrika/                         the repo's
   fabrika.toml                         which ledger, agents, checks, packs
@@ -25,6 +27,12 @@ acme/.fabrika/                         the repo's
   packs/deploy-kit/                    a pack this repo offers to others
 acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
 ```
+
+*Added 2026-11-01: `keybindings.toml` and `themes/` in the home
+([keybindings](./keybindings-are-configurable.md), [themes](./themes.md)).
+Each setting still has one home: the theme pick is `theme` in `fabrika.toml`,
+each theme is its own file, and keys are in `keybindings.toml`. So "one
+spelling" holds.*
 
 - **Decided:**
   - The repo's file is `.fabrika/fabrika.toml`, not `fabrika.toml` at the

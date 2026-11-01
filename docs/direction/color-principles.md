@@ -35,6 +35,8 @@ type Color =
    - [Radix Colors](https://www.radix-ui.com/colors/docs/palette-composition/understanding-the-scale)
      are the values behind Manti's tokens. Nobody hand-rolls a color.
    - Read the docs before picking a step. A bend from a step's job is written down with its reason.
+   - The one exception is a theme a person brings, such as a Base16 file: it keeps its own colors
+     ([themes](./themes.md), 2026-11-01). The default and every Radix pick stay on steps.
 6. **Color replaces, it does not add.**
    - Color goes on something that is already there. A washed title has no line under it.
    - If something already draws an edge, a second line or box beside it goes.
@@ -86,5 +88,5 @@ fact. The title bar and the focus edge do that.
 ## What this cannot tell us
 
 - Nothing here has been built or run in the app yet. The mockups were judged by one person.
-- **Not decided here:** user themes, Display P3, and how `prefers-contrast` and forced colors behave.
-  A theme has to keep these principles or say which one it gives up.
+- **Not decided here:** Display P3, and how `prefers-contrast` and forced colors behave. User themes
+  are in [themes](./themes.md). A theme has to keep these principles or say which one it gives up.

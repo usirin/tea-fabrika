@@ -1,5 +1,37 @@
 # 177: Can people bring their own themes?
 
+## Since this was written (2026-11-01)
+
+The findings below are unchanged. These things changed after them.
+
+- **It led to a decision.** [Themes](../docs/direction/themes.md) records it: people bring their
+  own themes, and a Base16, Base24 or Ghostty file may keep its own colors. The pick is
+  `theme = "<name>"` in `~/.fabrika/fabrika.toml`, and each theme is `~/.fabrika/themes/<name>.toml`.
+  This replaces the study's lean that the pick lives on the person's ledger object (section 3).
+- **Themes are TOML.** The theme examples here are TypeScript values, and the results are JSON.
+  Theme files are now TOML. A shared file is still read in its own format and mapped in.
+- **Pipe colors are now six fixed names.** [Pipe colors](../docs/direction/pipe-colors.md) set sky,
+  pink, teal, violet, lime and plum, with a title wash and a letter. That replaces this study's
+  `lines` and `tint` (section 2, and the tint table). The Radix pick's default lines were amber,
+  blue, teal, violet, ruby and grass (`177-themes/radix.ts`). Amber, ruby and grass sit on running,
+  stuck and done, so they break "a color means one thing"
+  ([color principles](../docs/direction/color-principles.md), principle 2).
+- **Its contrast counts use old steps.** The `own` and `shift` maps put faint text on a10 and the
+  faint border on a5 (`177-themes/radix.ts`). [The tile rules](../docs/direction/tile-guidelines.md)
+  now take a11 for faint text and a4 for the resting edge. The 201 counts were not run again.
+- **Two values are off Radix steps, and the study does not call them bends.** Color principles now
+  says every value is a Radix step, and a bend is written down with its reason. The `shift` map's
+  sunken ground is `#0c0d0e`, which is no step (main's tile notes measure over slate 1, `#111113`).
+  Repair moves colors off their steps too. The study calls `#0c0d0e` a custom value, but that rule
+  came after it.
+- **Display P3 is still open on main.** The study's type is hex only. Pipe colors and color
+  principles both still list Display P3 as not decided, so "hex only" is not settled either way.
+- **Tile work already covers part of the cost.** The tile rules (decided, not built) move faint
+  text to a11, which is the `window.css` change this study names under "The cost in text". They
+  also draw edges with `outline` instead of `box-shadow`, and write a tile's tokens as Radix values.
+  So parts of the first and third steps in [the recommendation](#the-recommendation) are now
+  planned there.
+
 **Yes, and it costs little.** A real shared theme swapped live on the built app, terminal included,
 with no restart and no flash. Today's version, on a spike that does not land.
 
