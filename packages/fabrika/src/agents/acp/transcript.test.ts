@@ -1,4 +1,4 @@
-import type {SessionUpdate} from "@agentclientprotocol/sdk";
+import type {SessionUpdate} from "@agentclientprotocol/sdk/unstable";
 import {replay} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
 import {acpEvents} from "./spans.ts";

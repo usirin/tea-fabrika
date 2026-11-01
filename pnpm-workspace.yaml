@@ -21,7 +21,7 @@ packages:
   - experiments/173-worker-loader
 
 catalog:
-  '@agentclientprotocol/sdk': 1.6.1
+  '@agentclientprotocol/sdk': 2.2.0
   # The ledger server's deploy (packages/ledger-server), held exact: a beta, as experiments 144 and 147 ran it.
   '@alchemy.run/cloudflare': 2.0.0-beta.84
   alchemy: 2.0.0-beta.84

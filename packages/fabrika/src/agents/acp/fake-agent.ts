@@ -1,7 +1,7 @@
 import {appendFileSync, existsSync, mkdirSync, readFileSync} from "node:fs";
 import {join} from "node:path";
 import {Readable, Writable} from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 
 // A scripted ACP agent: the official library's `agent()` app over stdio,
 // with no model behind it. It stands in for a harness in tests and in CI,

@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {type Cause, Effect, Exit, type FileSystem, Queue, Scope, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {

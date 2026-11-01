@@ -1,5 +1,5 @@
 import {fileURLToPath} from "node:url";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type {AgentSpans} from "@demlik/tea/otel";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {
