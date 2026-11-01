@@ -2,11 +2,13 @@ import {applyCell} from "@demlik/tea";
 import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
 import {
+	Activity,
 	type CSSProperties,
 	memo,
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	StrictMode,
+	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
 	useMemo,
@@ -30,6 +32,7 @@ import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../d
 import {keyName} from "../desk/keys.ts";
 import {
 	type Box,
+	byTileId,
 	type ContainerNode,
 	type Drag,
 	flat,
@@ -556,21 +559,24 @@ const placed = (box: Box): CSSProperties => {
 	return {left: at(box.x), top: at(box.y), width: at(box.w), height: at(box.h)};
 };
 
+/** Every tile of the desk, with its workspace, in an order no split, turn or switch changes. */
+const everyTile = (desk: Open) =>
+	desk.workspaces.flatMap((ws) => tilesOf(ws).map((tile) => ({tile, ws}))).toSorted(byTileId);
+
 /**
- * Every tile of the workspace, as one flat list: each tile's element stays a child of this one,
- * wherever a split, a turn or a zoom puts it, so React keeps it, with its scroll, its focus and
- * what is typed in it. The tree says only where each box goes (layout/flat.ts).
+ * Every tile of the desk, as one flat list: each tile's element stays a child of this one, wherever
+ * a split, a turn or a zoom puts it, so React keeps it, with its scroll, its focus and what is typed
+ * in it. The tree says only where each box goes (layout/flat.ts). A tile with no box (folded, behind
+ * a zoom, on another workspace) is hidden, not gone: `Activity` keeps what is in it and stops its
+ * effects.
  */
-function Tiles(props: {
-	readonly ws: Workspace;
-	readonly desk: Open;
-	readonly views: Model["views"];
-}): ReactNode {
-	const {ws, desk, views} = props;
+function Tiles(props: {readonly ws: Workspace; readonly desk: Open}): ReactNode {
+	const {ws, desk} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Drag | null>(null);
 	const laid = useMemo(() => flat(ws.layout, drag), [ws.layout, drag]);
+	const boxes = new Map(laid.tiles.map(({tile, box}) => [tile.id, box]));
 	const press =
 		(container: ContainerNode, a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
 			e.preventDefault();
@@ -607,11 +613,16 @@ function Tiles(props: {
 		};
 	return (
 		<div className="tiles" ref={ref}>
-			{laid.tiles.map(({tile, box}) => (
-				<div key={tile.id} className="cell" style={placed(box)}>
-					<DeskTile tile={tile} ws={ws} desk={desk} views={views} />
-				</div>
-			))}
+			{everyTile(desk).map(({tile, ws: home}) => {
+				const box = boxes.get(tile.id);
+				return (
+					<Activity key={tile.id} mode={box === undefined ? "hidden" : "visible"}>
+						<div className="cell" style={box === undefined ? undefined : placed(box)}>
+							<DeskTile tile={tile} ws={home} desk={desk} />
+						</div>
+					</Activity>
+				);
+			})}
 			{laid.strips.map(({node, along, box}) => (
 				<Strip key={node.id} node={node} along={along} box={box} />
 			))}
@@ -657,14 +668,17 @@ function Strip(props: {
 }
 
 /** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
-function DeskTile(props: {
+function TileOnDesk(props: {
 	readonly tile: TileNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
-	readonly views: Model["views"];
 }): ReactNode {
-	const {tile, ws, desk, views} = props;
+	const {tile, ws, desk} = props;
 	const run = runOf(tile);
+	// Read here, inside the `Activity`: a hidden tile is not subscribed, so a view's patch costs it
+	// nothing, and the first frame it shows again reads the view as it is then.
+	const readView = () => (run === null ? undefined : model.views.get(run.id));
+	const view = useSyncExternalStore(subscribe, readView, readView);
 	return (
 		<Tile
 			tile={tile}
@@ -672,10 +686,13 @@ function DeskTile(props: {
 			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
 			closing={desk.closing.includes(tile.id)}
 			folds={fold(ws.layout, tile.id) !== ws.layout}
-			view={run === null ? undefined : views.get(run.id)}
+			view={view}
 		/>
 	);
 }
+// `memo`, or a view's patch redraws the page's frame, then every tile under it, hidden ones too,
+// and a hidden one's render reads the new view after all.
+const DeskTile = memo(TileOnDesk);
 
 /** What a restart does to the jobs, said before the person confirms. */
 const JOBS_STOP =
@@ -763,6 +780,19 @@ function App(): ReactNode {
 	useLayoutEffect(() => {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
+	// A window shown again runs its effects as if just opened, and some take focus there, after the
+	// effect above. This one runs after theirs, so the desk has the last word on focus.
+	const drawn =
+		ws === null
+			? ""
+			: (ws.layout.zoomed ??
+				tilesOf(ws)
+					.filter((tile) => !tile.folded)
+					.map((tile) => tile.id)
+					.join(" "));
+	useEffect(() => {
+		if (!away && over === "none") focusTile();
+	}, [shown, drawn, away, over]);
 	const tickets = useMemo(() => ticketsShown(m.views), [m.views]);
 	const props: FrameProps = {
 		desk: open,
@@ -801,7 +831,7 @@ function App(): ReactNode {
 					data-zoomed={ws.layout.zoomed ?? undefined}
 					inert={view.dim}
 				>
-					<Tiles ws={ws} desk={open} views={m.views} />
+					<Tiles ws={ws} desk={open} />
 				</div>
 			)}
 			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}

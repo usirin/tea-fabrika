@@ -1,4 +1,4 @@
-export {type Box, type Drag, type Flat, flat, inPx, type Span} from "./flat.ts";
+export {type Box, byTileId, type Drag, type Flat, flat, inPx, type Span} from "./flat.ts";
 export {checkTree, type Violation} from "./invariants.ts";
 export {
 	type Area,

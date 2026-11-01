@@ -81,7 +81,7 @@ const share = (a: Span, k: number): Span => ({of: a.of * k, px: a.px * k});
 const part = (box: Box, along: Orientation, at: Span, size: Span): Box =>
 	along === "horizontal" ? {...box, x: at, w: size} : {...box, y: at, h: size};
 
-const byId = (a: {readonly tile: TileNode}, b: {readonly tile: TileNode}) =>
+export const byTileId = (a: {readonly tile: TileNode}, b: {readonly tile: TileNode}) =>
 	a.tile.id.localeCompare(b.tile.id, undefined, {numeric: true});
 
 /** Every open tile's, strip's and border's box. A zoomed tile is alone, and has it all. */
@@ -135,7 +135,7 @@ export function flat(tree: LayoutTree, drag: Drag | null = null): Flat {
 		}
 	};
 	walk(tree.root, WHOLE);
-	return {tiles: shown.toSorted(byId), strips, borders, boxes};
+	return {tiles: shown.toSorted(byTileId), strips, borders, boxes};
 }
 
 /** A span in pixels, in a workspace `extent` px long. */

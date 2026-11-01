@@ -120,9 +120,13 @@ const screen = async (page: Page, id: string) =>
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
-	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
+	page
+		.locator("[data-tile]:visible")
+		.evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
 const focused = (page: Page) =>
-	page.locator('[data-tile][aria-current="true"]').getAttribute("data-tile", {timeout: 2000});
+	page
+		.locator('[data-tile][aria-current="true"]:visible')
+		.getAttribute("data-tile", {timeout: 2000});
 
 const shows = (page: Page, id: string, what: string, ok: (text: string) => boolean) =>
 	until(`${id}: ${what}`, () => screen(page, id), ok);

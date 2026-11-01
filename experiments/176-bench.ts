@@ -900,6 +900,168 @@ const workspaceSwitch: Moment = async (b) => {
 	);
 };
 
+/**
+ * Pick 5: what comes back when a tile is shown again, each way a tile hides: another workspace, a
+ * zoom, a fold. What it asks of each: is the ticket's draft there, is the long text's scroll there,
+ * is the terminal's size the same, did what it was sent while hidden draw, and does the keyboard's
+ * focus sit on the tile the desk says is focused.
+ */
+const reveal: Moment = async (b) => {
+	const [tracker, ticket, text, term] = await Promise.all([
+		tileShowing(b, "tracker"),
+		tileShowing(b, "ticket"),
+		tileShowing(b, "markdown"),
+		b.page.evaluate(
+			() =>
+				[...document.querySelectorAll<HTMLElement>("[data-tile]")]
+					.filter((t) => t.querySelector("[data-view]") === null)
+					.at(-1)?.dataset.tile,
+		),
+	]);
+	await focusTile(b, ticket);
+	await b.page.locator(`[data-tile="${ticket}"] #ticket-composer`).fill("a draft");
+	await focusTile(b, text);
+	const textRun: string = await b.page.evaluate((t: string) => __probe.runIn(t), text);
+	const look = (): Promise<any> =>
+		b.page.evaluate(
+			([ticketId, textId, termId]: string[]) => {
+				const tile = (id: string) => document.querySelector<HTMLElement>(`[data-tile="${id}"]`);
+				const focused = [
+					...document.querySelectorAll<HTMLElement>('[data-tile][aria-current="true"]'),
+				].find((t) => t.checkVisibility())?.dataset.tile;
+				const at = document.activeElement;
+				const scroller = [...(tile(textId)?.querySelectorAll<HTMLElement>("*") ?? [])].find(
+					(e) => e.scrollHeight > e.clientHeight + 50,
+				);
+				return {
+					draft:
+						tile(ticketId)?.querySelector<HTMLTextAreaElement>("#ticket-composer")?.value ?? null,
+					scrollTop: scroller === undefined ? null : Math.round(scroller.scrollTop),
+					canvas: (() => {
+						const c = tile(termId)?.querySelector("canvas");
+						return c === undefined || c === null ? null : `${c.width}x${c.height}`;
+					})(),
+					screenHasLine:
+						tile(termId)?.querySelector(".screen-text")?.textContent?.includes("heard176") ?? null,
+					focused,
+					focusIn: at?.closest<HTMLElement>("[data-tile]")?.dataset.tile ?? at?.tagName ?? null,
+					focusWhat: at?.id || at?.getAttribute("aria-label") || at?.tagName || null,
+				};
+			},
+			[ticket, text, term ?? ""],
+		);
+	const settle = async (nodes = 400) => {
+		await sleep(nodes);
+	};
+	const scroller = (top: number) =>
+		b.page.evaluate(
+			([id, to]: [string, number]) => {
+				const found = [...document.querySelectorAll<HTMLElement>(`[data-tile="${id}"] *`)].find(
+					(e) => e.scrollHeight > e.clientHeight + 50,
+				);
+				if (found !== undefined) found.scrollTop = to;
+			},
+			[text, top],
+		);
+	await scroller(700);
+	const before = await look();
+	const out: Record<string, unknown> = {tracker, ticket, text, term, before};
+	const times: number[] = [];
+
+	// Another workspace.
+	const one = await visibleTiles(b);
+	await prefixed(b, "N");
+	const two = await waitFor(
+		"a second workspace",
+		() => visibleTiles(b),
+		(t) => t.join() !== one.join(),
+	);
+	await prompted(b, two[0] ?? "");
+	await settle();
+	out.awayFocus = await look();
+	// Sent while hidden: bytes to the terminal, and 30 whole texts to the long window.
+	if (term !== undefined) await lineTo(b, term, "heard176");
+	await resetCounters(b);
+	const patches = Number(process.env.REVEAL_PATCHES ?? 30);
+	for (let i = 0; i < patches; i += 1) {
+		// To its run, not through the tile: with the tile unmounted, its run cannot be read off it.
+		await b.page.evaluate(
+			([run, value]: string[]) =>
+				window.fabrika.send(`run:${run}`, {type: "msg", msg: {type: "text", value}}),
+			[textRun, LONG_MARKDOWN(200, `hidden ${i}`)],
+		);
+		await sleep(25);
+	}
+	await sleep(Number(process.env.REVEAL_WAIT ?? 3000));
+	const hidden = await b.page.evaluate(() => __probe.read());
+	out.hiddenPatches = {
+		patches,
+		total: hidden.total,
+		perTile: hidden.perTile,
+		loaf: hidden.loaf.count,
+		heard: hidden.heard.length,
+	};
+	await resetCounters(b);
+	await b.page.keyboard.press("Control+b");
+	await sleep(30);
+	const backTo = await keyToDom(
+		b,
+		`[...document.querySelectorAll('[data-tile]')].filter((t) => t.checkVisibility()).map((t) => t.dataset.tile).join() === '${one.join()}'`,
+		() => b.page.keyboard.press("1"),
+	);
+	times.push(backTo.dom);
+	await settle();
+	const shownBack = await b.page.evaluate(() => __probe.read());
+	out.revealCost = {
+		dom: round(backTo.dom),
+		frame: round(backTo.frame),
+		total: shownBack.total,
+		perTile: shownBack.perTile,
+		commits: shownBack.commits,
+		loaf: shownBack.loaf,
+	};
+	out.afterWorkspace = await look();
+
+	// Behind a zoom: the tracker sits there, and its window takes focus when it mounts or shows.
+	await scroller(700);
+	await prefixed(b, "z");
+	await waitFor(
+		"zoomed",
+		() => visibleTiles(b),
+		(t) => t.length === 1,
+	);
+	await settle();
+	out.zoomed = await look();
+	await prefixed(b, "z");
+	await waitFor(
+		"back from zoom",
+		() => visibleTiles(b),
+		(t) => t.length === one.length,
+	);
+	await settle();
+	out.afterZoom = await look();
+
+	// Folded: the long text's own tile, then its strip pressed.
+	await scroller(700);
+	await prefixed(b, "f");
+	await waitFor(
+		"folded",
+		() => visibleTiles(b),
+		(t) => t.length === one.length - 1,
+	);
+	await settle();
+	out.foldedFocus = await look();
+	await b.page.locator(`[data-strip="${text}"]`).click();
+	await waitFor(
+		"unfolded",
+		() => visibleTiles(b),
+		(t) => t.length === one.length,
+	);
+	await settle();
+	out.afterFold = await look();
+	keep(await readSample(b, "reveal", times, 1, out));
+};
+
 /** A click on a ticket's row in the tracker's list, to that ticket's page drawn: its comment box. */
 const openTicket: Moment = async (b) => {
 	const tile = await tileShowing(b, "tracker");
@@ -1251,6 +1413,71 @@ const shots = async (b: Bench, prefix: string) => {
 	await shot("small-window");
 };
 
+/**
+ * Pick 5's doubt: memory with many long-lived hidden tiles. Sixteen real terminals on four workspaces,
+ * one folded, three of them under a program; a line to every terminal and a tour of every workspace
+ * once a minute; garbage collected, then one sample a minute.
+ */
+const soak = async (b: Bench, minutes: number) => {
+	const fill = async () => {
+		await split(b, "|");
+		await split(b, "-");
+		await split(b, "|");
+	};
+	await fill();
+	await prefixed(b, "f");
+	await sleep(200);
+	const opened: [string, string][] = [
+		["markdown", `markdown --text "# Soak"`],
+		["tracker", "tracker"],
+		["map", "map --ticket 1"],
+	];
+	for (const [program, line] of opened) {
+		await prefixed(b, "N");
+		await sleep(500);
+		const [first] = await visibleTiles(b);
+		if (first === undefined) throw new Error("no tile on the new workspace");
+		await prompted(b, first);
+		await fill();
+		await lineTo(b, first, line);
+		await programIn(b, first, program);
+		if (program === "markdown") await tellMarkdown(b, first, LONG_MARKDOWN(200));
+		if (program === "tracker") await fileTicket(b, first, "Soak ticket");
+		await sleep(300);
+	}
+	const session = await b.page.context().newCDPSession(b.page);
+	await session.send("Performance.enable");
+	const ids = Array.from({length: 16}, (_, i) => `t${i + 1}`);
+	const started = performance.now();
+	for (let minute = 0; minute <= minutes; minute += 1) {
+		await resetCounters(b);
+		for (const id of ids) await lineTo(b, id, `soak${minute}`);
+		const tour: number[] = [];
+		for (const key of ["2", "3", "4", "1"]) {
+			const at = performance.now();
+			await prefixed(b, key);
+			await sleep(1500);
+			tour.push(performance.now() - at - 1500);
+		}
+		await session.send("HeapProfiler.collectGarbage");
+		const got = await session.send("Performance.getMetrics");
+		const named = Object.fromEntries(got.metrics.map((m: any) => [m.name, m.value]));
+		keep(
+			await readSample(b, "soak", [tour.reduce((a, c) => a + c, 0) / tour.length], ids.length, {
+				minute,
+				elapsedMin: round((performance.now() - started) / 60000),
+				heapMb: round(named.JSHeapUsedSize / 2 ** 20),
+				heapTotalMb: round(named.JSHeapTotalSize / 2 ** 20),
+				nodes: named.Nodes,
+				listeners: named.JSEventListeners,
+				canvases: await b.page.evaluate(() => document.querySelectorAll("canvas").length),
+			}),
+		);
+		const left = started + (minute + 1) * 60000 - performance.now();
+		if (minute < minutes && left > 0) await sleep(left);
+	}
+};
+
 export const MOMENTS: Record<string, Moment> = {
 	walk,
 	keeps,
@@ -1262,6 +1489,7 @@ export const MOMENTS: Record<string, Moment> = {
 	turn: turnLayout,
 	"workspace-switch": workspaceSwitch,
 	"open-ticket": openTicket,
+	reveal,
 };
 
 // ---------------------------------------------------------------- the command line
@@ -1296,6 +1524,8 @@ if (command === "build" && label !== undefined) {
 	});
 } else if (command === "shots" && label !== undefined) {
 	await withApp(label, (b) => shots(b, rest[0] ?? label));
+} else if (command === "soak" && label !== undefined) {
+	await withApp(label, (b) => soak(b, Number(rest[0] ?? 60)));
 } else if (command === "restart" && label !== undefined) {
 	await restartCheck(label);
 } else if (command === "list") {
