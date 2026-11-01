@@ -89,7 +89,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 6  brain checks: the signature is good for this nonce, this url, this tab; the key hashes to the
    name it dialed. The key is unknown, so:  err {why: "not_granted", fingerprint}.
    Nothing is written. Every method but door.knock gets no_hello.
-7  tab says door.knock {label: "Chrome"}. Brain keeps the key and its has in memory and picks a code for it:
+7  tab says door.knock {label: "Chrome"}. Brain keeps the key and its has in a waiting row and picks a code for it:
    {method: "door.waiting", params: {code: "482109", until}}. A second tab with this key gets the
    same code, so both share one row.
 8  tab shows "This window is waiting for you. Code 482 109. Open fabrika in your menu bar to let it
@@ -117,7 +117,7 @@ It asks the door for the ledger's name, prints what it will sign, calls `ssh-key
 
 **Deny.** The row's Deny writes one `denied` fact and needs no finger, because saying no should be easy. It goes over the menu bar's own link as `door.deny`, so `by` comes from the checked key and no signature is needed. Only a person's own client can call it, so an unknown key cannot grow the log. The tab shows "Denied. [Ask again]".
 
-**The code.** The brain picks it fresh, per key. It is for eyes only and carries no power: the door checks the key, and `saw` records what the person looked at. Waiting keys are kept in the brain's memory, in the project object, with a small cap (64, a guess) that drops the oldest, and a 10-minute life, then a new code. Nothing is written for an unknown key.
+**The code.** The brain picks it fresh, per key. It is for eyes only and carries no power: the door checks the key, and `saw` records what the person looked at. Waiting keys are kept in the project object's own storage, outside the log, so they outlive its sleep ([a wait is data](#cloudflare)). They have a small cap (64, a guess) that drops the oldest, and a 10-minute life, then a new code. Nothing goes in the log for an unknown key.
 
 **The first Electron window.** It needs no approve. Electron's main process makes two keys when the app is first opened: a person key and a window key. The first window is named at founding. The private halves stay in the main process, and the page never sees them. A tab's grant does not carry over, because a window is its own client (the note's T3).
 
@@ -909,7 +909,43 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 - **Does Worker Loader need anything on the account?** Yes, one thing: Cloudflare's plan must include Dynamic Workers ([docs](https://developers.cloudflare.com/dynamic-workers/)), and the account's plan does. Our `hash:pid` id is stable, so only a new build counts as a new one.
 - **The address:** Cloudflare's default address for a Worker. Why: no DNS to set up, and the door does the same job. Cost: a domain later means a new origin, so each browser asks again; the ledger's name stays a stable id, so grants stay good. Sure: 85%. Settled by my call, as the owner asked.
 - **The approval flow is the same here.** PR C gives the menu bar a second link, to the cloud stage, and each row says which stage it is from. `founded` on the cloud ledger names the same person key and window key, read from the app's home at deploy. The one-time link works here too. Remove works here too. When `stage.json` says `cloud`, the app starts no local brain and keeps only the cloud link.
-- **A waiting row and a sleeping object.** The project object sleeps after about 10 s, and waiting keys live in its memory. So a waiting tab repeats `door.knock` every 5 s, which keeps the object awake only while someone waits. Cost: a little object time on the cloud. Sure: 70%. T11 measures it.
+- **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `door.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `door.knock` itself stays.
+
+```ts
+// A sketch. transport/answer.ts: Tier 1's Attached, grown. `Row` (waiting.ts) becomes a Schema.Struct, same fields.
+export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
+export const Attached = Schema.TaggedUnion({
+	new: {client: Schema.String, nonce: Schema.String},
+	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String, row: Row}, // the row this tab was shown
+	online: {client: Schema.String, who: Who, waits: Schema.Array(Wait), watching: Schema.Boolean, busy: Schema.Boolean},
+});
+
+// data/project.ts: rings, in the object's own SQLite beside the log. Never a fact, never folded.
+//   ring {gateway, stream, after}   from ledger.wait; kept until `stream` passes `after`
+//   ring {gateway, rows: true}      from door.watch; rung whenever the waiting rows or the let-in list change
+// append(stream) -> rev: read the rings on `stream` with after < rev, call rung(stream, rev) on each gateway, drop them.
+
+// transport/gateway.ts: answer the waits now met, keep the rest. No fiber, no timer.
+const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) => {
+	for (const ws of sockets) {
+		const a = attachmentFor(ws);
+		if (a._tag !== "online") continue; // a rows ring goes to rungRows, which sends door.rows to sockets with `watching`
+		const due = a.waits.filter((w) => w.stream === stream && w.after < rev);
+		if (due.length === 0) continue;
+		for (const w of due) ws.send(ok(w.id, rev));
+		ws.serializeAttachment(Attached.cases.online.make({...a, waits: a.waits.filter((w) => !due.includes(w))}));
+	}
+};
+// One value: tab asks ledger.wait {id: "7", stream: "notes:1", after: 4}. Head is 4, so no answer yet:
+// waits gains {id: "7", stream: "notes:1", after: 4}, the project keeps a ring, both sleep. An append makes rev 5:
+// the project wakes, rings gateway:<tab>, which wakes and sends {"jsonrpc":"2.0","id":"7","result":5}.
+```
+
+  - **The waiting rows** move from memory into the project's own SQLite, beside the rings: still `Waiting` from `waiting.ts`, at most `most` rows, each gone at `until` or when its last tab leaves. Never in the log, so "lost on purpose" below still holds. The gateway keeps the row it showed in `waiting.row`, so a socket that closes leaves its row with no lookup.
+  - **A call lost to an eviction.** `busy` is true while a call is being answered. A deploy or a crash can end the object mid-call. At the next wake, the gateway's constructor closes each socket still marked `busy` with 1012, so the client dials again and resends, and the id keeps it once. A ping never sets `busy`, since the runtime answers it. Alchemy's `RpcWebSocket.ts` does the same.
+  - **The attachment holds 16,384 bytes** ([Cloudflare docs](https://developers.cloudflare.com/durable-objects/api/websockets/)). A `Wait` is about 40 to 100 bytes, so a cap of 64 waits a socket (a guess, like the row cap) leaves room, and a 65th is refused with `too_many_waits`.
+  - **Held by:** p15 gains two cases on the stage. A tab waits, both objects sleep, an append answers it. A gateway aborted mid-call closes with 1012, and the resent call lands once. T4 builds the gateway half, T2 the rings. Plants: a wait kept only in memory; a ring not dropped after it rang.
+  - **Cost:** about 40 lines, 1 agent hour. Sure: 85%. The doubt: 174 parked a wait in one object, not across a gateway and the project, and nothing has run on Cloudflare. T11's run shows it there.
 - **Commands:** the app for a person, `node next/apps/fabrika/dev.ts` for agents and tests. For cloud, `alchemy plan --stage cloud`, the owner reads it, then deploy after their yes, and `drill` the same way. No builder runs either. Never `Alchemy.remote()`.
 - **Local wording.** Alchemy's local stage runs workerd through its own runtime and a TCP relay (exp 171), not the `miniflare` package. All wire tests spawn `dev.ts`, so one runtime is under test. Exp 171's lean was to keep tests on Miniflare; I argue against it, because the owner's rule is one stack. Cost: start 1.2 to 1.4 s, 395 MB against 0.3 to 0.4 s, 285 MB. Sure: 75%. Doubt: load on the laptop; run with `--maxWorkers=3`, and if a suite takes over 3 minutes, share one brain per file.
 - **Differences to expect, and where each is watched:**
@@ -945,7 +981,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
-**Written down as lost, on purpose:** who was refused or knocked and never got an answer. Their codes live in memory only, and a refusal count goes to the Worker's logs only. Why: writing it would let anyone grow the log. Sure: 80%. Also lost: a one-time link nobody used. It granted nothing, and a used one shows in its grant as `how: "link"`.
+**Written down as lost, on purpose:** who was refused or knocked and never got an answer. Their codes live only as long as their row, in the project object's own storage and never in the log, and a refusal count goes to the Worker's logs only. Why: writing it would let anyone grow the log. Sure: 80%. Also lost: a one-time link nobody used. It granted nothing, and a used one shows in its grant as `how: "link"`.
 
 **Also lost, on purpose, with notes:** a refused save, because a refused save writes nothing. Its text stays on that screen until the person keeps it or drops it. Text typed and never saved is lost if that window dies. Why: a keystroke log is a different program, and a person's half-typed words should not sit in a log forever. Which tab of a browser saved is not recorded, only the key. A tool call's own words are not recorded, only its save. Sure: 75%. The doubt is whether a count of stale refusals is wanted while it is in early use; it can go to `field/` by hand if the owner asks.
 
@@ -1103,7 +1139,7 @@ export const writeSshsig: <E>(a: {
 	readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, E>;
 }) => Effect.Effect<string, E>;
 
-// next/packages/libfabrika/src/transport/waiting.ts (new). Pure. Kept in the brain's memory, never written.
+// next/packages/libfabrika/src/transport/waiting.ts (new). Pure. Kept in the project object's own storage, never in the log.
 export type Row = {
 	readonly key: string; readonly label: string; readonly where: string; readonly code: string;
 	readonly until: number; readonly tabs: number; readonly pass: string | null; readonly has: ReadonlyArray<string>;
@@ -1120,10 +1156,11 @@ export const leave: (w: Waiting, key: string) => Waiting;
 // next/packages/libfabrika/src/transport/answer.ts (new): plan-115's, with the door's states.
 export const Who = Schema.Struct({key: Schema.String, person: Schema.String, as: Schema.Literals(["window", "agent"])});
 export type Who = typeof Who.Type;
+export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
 export const Attached = Schema.TaggedUnion({
 	new: {client: Schema.String, nonce: Schema.String},
-	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String},
-	online: {client: Schema.String, who: Who},
+	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String, row: Row}, // Row as a Schema.Struct
+	online: {client: Schema.String, who: Who, waits: Schema.Array(Wait), watching: Schema.Boolean, busy: Schema.Boolean}, // see Cloudflare: a wait is data
 });
 export type Attached = typeof Attached.Type;
 export type Admit<E> = (key: string) => Effect.Effect<Who | {readonly why: "not_granted"}, E>; // transport imports nothing, so E comes from wiring
@@ -1816,7 +1853,7 @@ Plan-115's list stands, with these added:
 - **Whether `safeStorage` is smooth** under Playwright, and whether a dev Electron signed by a self-made card still prompts for the Keychain. Only a run shows it, and the window key has a way out.
 - **Whether launchd takes a brain from an unsigned build,** whether Touch ID prompts from it, and whether IndexedDB holds a key in a local page. T8's spikes tell, and each has a way out.
 - **How the menu bar feels.** Nobody has built one here. No mockup and no run.
-- **How long a row lasts on Cloudflare,** where objects sleep. T11 measures it.
+- **Whether a wait parked as data works on Cloudflare,** across a gateway and the project. Experiment 174 saw it in one object, in Miniflare. T11's run shows it on the cloud.
 - **React's memory with many hidden tiles, and all of it on Safari.** The probes covered Chromium, part of Firefox, and toy trees.
 - **What Cloudflare really does to this shape:** isolate cold load, `abort_all`, a redeploy mid-run. All first seen at p41 and p39.
 - **What the stage does to the speed bar.** Alchemy's relay adds little by exp 171's number, but this exact flow has not been measured.

@@ -71,11 +71,18 @@ is what keeps a job away from a tab. See
   `("ping", "pong")` answered 20 of 20 pings, in about 1.3 ms each, and the
   object's `webSocketMessage` never ran. One message that was not a ping did
   run it.
-- **Not checked locally: a sleeping object.** Miniflare never puts an object
-  to sleep by itself, and `ctx.abort()` drops the socket (close code 1006),
-  so "a ping does not wake the object" rests on
-  [Cloudflare's docs](https://developers.cloudflare.com/durable-objects/examples/websocket-hibernation-server)
-  for now. Waking costs money only on Cloudflare, so the gap is small.
+- **A sleeping object, checked locally on 2026-10-31.** This bullet used to say
+  Miniflare never puts an object to sleep by itself. That was wrong.
+  [Experiment 174](../../experiments/174-effect-on-cloudflare.md) saw an object
+  with one open socket go to sleep within 16 s, with the socket still open, on
+  Miniflare 4.20260730.0 (compatibility date 2026-07-01) and again on workerd
+  1.20261101.1 (date 2026-10-30). Pings did not wake it: 20 of 20 answered at
+  about 2.5 ms, with 0 wakes, and a socket pinged every 5 s still slept. A
+  waiting call parked as data in the socket's attachment came back after a
+  wake, in 6 to 29 ms. A fiber left in memory did not: it died with no frame
+  and no close. `ctx.abort()` still drops the socket (close code 1006). What
+  a wake costs on Cloudflare is still only
+  [Cloudflare's docs](https://developers.cloudflare.com/durable-objects/examples/websocket-hibernation-server).
 - **Ed25519 in WebCrypto** ships in Chrome (137), Firefox and Safari (17)
   ([Chrome 137](https://blog.ipfs.tech/2025-08-ed25519/),
   [the engines' timeline](https://blogs.igalia.com/jfernandez/?p=1913)).
