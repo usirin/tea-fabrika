@@ -79,9 +79,17 @@ acme/apps/web/.fabrika/fabrika.toml    one package's own settings (proposed)
   - A `fabrika.toml` left at a repo's root stops the read with one line:
     `fabrika.toml moved to .fabrika/fabrika.toml: move it there`. That holds
     with the new file beside it too, so two spellings cannot stand together.
-  - A `.fabrika.jsonc` is not read and not refused, because a repo may keep it
-    for today's fabrika plugin. A run says so at its start, under the rules in
-    force.
+  - A `.fabrika.jsonc` with no `.fabrika/fabrika.toml` stops the read with one
+    line: `.fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it
+    there`. Read as no file, its governed folders would owe no review, and a
+    printed warning is not a protection.
+  - A `.fabrika.jsonc` beside the new file is not read and not refused, because
+    a repo may keep it for today's fabrika plugin. A run says so at its start,
+    under the rules in force.
+  - A read that broke is not "no file". Not there and git failing are told
+    apart with `git ls-tree` first: an empty list is not there, a non-zero exit
+    is a failure. A side of a change that could not be read leaves the review's
+    kinds unknown, and the lane's read of its settings fails with the reason.
 - **Not built yet.** `~/.fabrika` as the home, `ledger.json` and `tsh.toml`
   folding in, `fabrika.lock`, nested files, repo programs.
 - **Doubt:** a hidden folder is harder to find than a file at the root, which
@@ -210,9 +218,10 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
   - **No target**: the root of the folder tsh starts in, the nearest folder up
     that holds `.git` (`repoOf`). Outside any repository, that folder itself.
   - A missing file is every default, in both cases. A `fabrika.toml` still at
-    the root, in that same place, is refused, so it never reads as a missing
-    file. The lane's own read at main's tip (`stages/pipeline/work.ts`) does the
-    same.
+    the root, or a `.fabrika.jsonc` with no new file, in that same place, is
+    refused, so it never reads as a missing file. The lane's own read at main's
+    tip (`stages/pipeline/work.ts`) does the same. All three go by one pure
+    check, `settingsRefusal` in `settings.ts`.
   - Not through the typed `CodeHost` service: it has no read of a file at a
     ref, and it is about one pull request. The edge runs git through Effect's
     `ChildProcess`, the way build's clone code does. A `CodeHost` read of a
@@ -294,7 +303,7 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
   was read, each with where it came from: this file, `tsh.toml` (a machine's
   fallback model, effort, budget and rubrics folder), what the repository
   holds at the same commit (its lockfile, CODEOWNERS, CLAUDE.md, AGENTS.md, a
-  workflow folder, and a `.fabrika.jsonc` only to say it is not read), or the
+  workflow folder, and a `.fabrika.jsonc` beside the file only to say it is not read), or the
   code's default. A pick that will stop a run later says so at the start, and
   names the key that changes it.
 - **A pick that says nothing is refused.** `checks.github = "none"` with no

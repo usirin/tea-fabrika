@@ -2,15 +2,16 @@ import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "./child.ts";
+import {listedAt} from "./git-read.ts";
 import {
 	DEFAULT_SETTINGS,
-	OLD_SETTINGS_FILE,
 	readSettings,
 	SETTINGS_FILE,
-	SETTINGS_MOVED,
+	SETTINGS_PATHS,
 	type Settings,
 	type SettingsInvalid,
 	settingsFrom,
+	settingsRefusal,
 } from "./settings.ts";
 import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 
@@ -33,9 +34,10 @@ import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 // clone's folder, cannot change the settings the lane runs under. A
 // `--no-checkout` clone has no working tree to read anyway.
 //
-// A `fabrika.toml` still at the root, in that same one place, stops the read
-// with one line that says to move it (`SETTINGS_MOVED`). The new file beside it
-// does not save it: two spellings must not stand side by side.
+// In that same one place, an old file stops the read with one line that says to
+// move it (`settingsRefusal`): a `fabrika.toml` at the root, with the new file
+// there or not, since two spellings must not stand side by side, and a
+// `.fabrika.jsonc` with no new file, since its governed folders would read as none.
 //
 // git runs through Effect's `ChildProcess`, under `hostEnv` (it may need the
 // login to fetch a private repository), with the repository's hooks off.
@@ -101,17 +103,20 @@ const fromRepo = (
 		const path = yield* Path.Path;
 		const env = {...hostEnv(), GIT_TERMINAL_PROMPT: "0"};
 		const {clone, name} = target;
-		/** What git printed when it answered 0; any other answer stops the read, saying which step. */
+		/** A read that broke stops the read of the file, saying which step. */
+		const stopped = (what: string) => (ran: Exited) =>
+			Effect.fail(
+				invalid(
+					`${SETTINGS_FILE}: cannot ${what} ${name} in ${clone}: ${ran.err.trim().split("\n")[0] ?? ""}`,
+				),
+			);
+		/** What git printed when it answered 0. */
 		const said = (what: string) => (ran: Exited) =>
-			ran.code === 0
-				? Effect.succeed(ran.out.trim())
-				: Effect.fail(
-						invalid(
-							`${SETTINGS_FILE}: cannot ${what} ${name} in ${clone}: ${ran.err.trim().split("\n")[0] ?? ""}`,
-						),
-					);
+			ran.code === 0 ? Effect.succeed(ran.out.trim()) : stopped(what)(ran);
+		const inClone = (args: readonly string[]) =>
+			runChild("git", [...GIT_FIRST, "-C", clone, ...args], {env});
 		const git = (what: string, args: readonly string[]) =>
-			runChild("git", [...GIT_FIRST, "-C", clone, ...args], {env}).pipe(Effect.flatMap(said(what)));
+			inClone(args).pipe(Effect.flatMap(said(what)));
 
 		const there = yield* fs
 			.exists(path.join(clone, ".git"))
@@ -148,21 +153,17 @@ const fromRepo = (
 		]);
 		/** The paths of `asked` that are there at the commit. */
 		const present = (asked: readonly string[]) =>
-			git("list the files of", ["ls-tree", "--name-only", commit, "--", ...asked]).pipe(
-				Effect.map((out) => new Set(out.split("\n").filter((line) => line !== ""))),
-			);
+			listedAt(inClone, commit, asked).pipe(Effect.catch(stopped("list the files of")));
 		/** A file's text at the commit, read only when `present` listed it. */
 		const blob = (file: string) =>
-			runChild("git", [...GIT_FIRST, "-C", clone, "cat-file", "blob", `${commit}:${file}`], {
-				env,
-			}).pipe(
+			inClone(["cat-file", "blob", `${commit}:${file}`]).pipe(
 				Effect.flatMap((ran) =>
-					ran.code === 0 ? Effect.succeed(ran.out) : said(`read ${file} of`)(ran),
+					ran.code === 0 ? Effect.succeed(ran.out) : stopped(`read ${file} of`)(ran),
 				),
 			);
-		const listed = yield* present([SETTINGS_FILE, OLD_SETTINGS_FILE]);
-		if (listed.has(OLD_SETTINGS_FILE))
-			return yield* Effect.fail(invalid(`${name}@${branch}: ${SETTINGS_MOVED}`));
+		const listed = yield* present(SETTINGS_PATHS);
+		const refused = settingsRefusal(listed);
+		if (refused !== null) return yield* Effect.fail(invalid(`${name}@${branch}: ${refused}`));
 		const found = listed.has(SETTINGS_FILE);
 		const settings = found
 			? yield* settingsFrom(yield* blob(SETTINGS_FILE)).pipe(
@@ -196,9 +197,12 @@ const fromFolder = (
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
 		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
-		if (yield* exists(path.join(folder, OLD_SETTINGS_FILE)))
-			return yield* Effect.fail(invalid(`${folder}: ${SETTINGS_MOVED}`));
-		const found = yield* exists(file);
+		const listed = new Set<string>();
+		for (const asked of SETTINGS_PATHS)
+			if (yield* exists(path.join(folder, asked))) listed.add(asked);
+		const refused = settingsRefusal(listed);
+		if (refused !== null) return yield* Effect.fail(invalid(`${folder}: ${refused}`));
+		const found = listed.has(SETTINGS_FILE);
 		const settings = yield* readSettings(file);
 		const files = new Set<string>();
 		for (const asked of ASKED) if (yield* exists(path.join(folder, asked))) files.add(asked);

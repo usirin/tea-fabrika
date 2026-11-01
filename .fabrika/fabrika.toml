@@ -1,33 +1,35 @@
 # What the `pipeline` program needs to work on this repository. The steps' order stays in code.
+# Agents the app starts skip a person's own settings, so heavy commands carry their CPU limits here.
 
 [build]
 install = ["pnpm", "install", "--frozen-lockfile"]
-checks = [["pnpm", "typecheck"], ["pnpm", "lint"], ["pnpm", "test"]]
+checks = [
+	["nice", "-n", "15", "pnpm", "typecheck"],
+	["nice", "-n", "15", "pnpm", "lint"],
+	["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"],
+]
 
 [test_writer]
 includes = ["**/*.test.ts"]
-run = ["pnpm", "exec", "vitest", "run", "--reporter=json", "--outputFile={out}"]
+# This runs in a box with its own home, where a pnpm shim finds no pnpm, and which refuses `nice`.
+run = ["node_modules/.bin/vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"]
 
 [mutation]
-tests = ["pnpm", "test"]
-typecheck = ["pnpm", "typecheck"]
+tests = ["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"]
+typecheck = ["nice", "-n", "15", "pnpm", "typecheck"]
 
 [review]
-# A change under one of these gets a governance review as well as the code review.
-governed = [".fabrika/", ".github/", "AGENTS.md", "docs/direction/", "layer-rules.json", "oxlint-plugins/"]
+rubrics = "packages/pipeline/rubrics"
 
 [checks]
-# GitHub's CI runs the whole suite. The two here are the quick ones, at each head.
+# GitHub's CI runs the whole suite. The two here are the quick ones.
 github = "every"
 
+# Each runs at a head in a fresh copy with no node_modules, so it installs first.
 [[checks.run]]
 name = "typecheck"
-run = ["pnpm", "typecheck"]
+run = ["sh", "-c", "pnpm install --frozen-lockfile && pnpm typecheck"]
 
 [[checks.run]]
 name = "lint"
-run = ["pnpm", "lint"]
-
-[ship]
-# The yes to merge is a person's answer on the ticket. This repository has no CODEOWNERS.
-approval = "none"
+run = ["sh", "-c", "pnpm install --frozen-lockfile && pnpm lint"]

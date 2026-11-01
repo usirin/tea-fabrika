@@ -312,6 +312,8 @@ export const laneMutationScope = Layer.effect(
 				Effect.gen(function* () {
 					const diff = yield* work.diff(base, head);
 					const added = addedIn(diff);
+					// `show` answers `null` only for a file that is not there. A read that broke fails this
+					// read, so it never looks like a kept function or an exam file that went away.
 					const files = diff
 						.split("\n")
 						.filter((l) => l.startsWith("diff --git "))

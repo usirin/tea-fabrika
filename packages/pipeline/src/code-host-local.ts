@@ -8,6 +8,7 @@ import {apply, checksAt, lastAt, NONE, type Ran, type Runs} from "./check-runs.t
 import {type Exited, runChild, runLow} from "./child.ts";
 import {kindsNeeded, MOST_FILES, rulesOfBoth, textKindOf} from "./code-host-github.ts";
 import {currentOf} from "./criteria/book.ts";
+import {textAt} from "./git-read.ts";
 import {type Owner, PLAN, type PlanId, readPlanId, readTaskId, type TaskId} from "./ids.ts";
 import {CodeHost} from "./services.ts";
 import {SETTINGS_FILE} from "./settings.ts";
@@ -117,9 +118,9 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 		/** What git printed, or `null` when it said no. */
 		const maybe = (ran: Exited): string | null => (ran.code === 0 ? ran.out : null);
 		const git = (args: readonly string[]) => gitIn(settings.repo, args);
-		/** A file's text at a commit. `null`: it is not there. */
+		/** A file's text at a commit. `null`: it is not there. Git failing is not that: it fails. */
 		const show = (at: string, file: string) =>
-			git(["show", `${at}:${file}`]).pipe(Effect.map(maybe));
+			textAt(git, at, file).pipe(Effect.catch(() => failed));
 		const commitOf = (dir: string, rev: string) =>
 			gitIn(dir, ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`]).pipe(
 				Effect.flatMap(ok),
@@ -169,11 +170,15 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 						: maybe(
 								yield* git(["diff", "--no-color", "--no-ext-diff", "--no-renames", from, head]),
 							);
-				// The base's and the head's: a change cannot take itself out of a review.
-				const kindRules = rulesOfBoth([
-					yield* show(settings.base, SETTINGS_FILE),
-					yield* show(head, SETTINGS_FILE),
-				]);
+				// The base's and the head's: a change cannot take itself out of a review. A side that
+				// could not be read is not a side with no file: the kinds are not known.
+				const kindRules = yield* Effect.all(
+					[show(settings.base, SETTINGS_FILE), show(head, SETTINGS_FILE)],
+					{concurrency: 1},
+				).pipe(
+					Effect.map(rulesOfBoth),
+					Effect.orElseSucceed(() => null),
+				);
 				const blob = (text: string | null) => (text === null ? null : {text});
 				// The base's only: a change cannot rewrite the rules it is held to.
 				const rules = repoRulesOf({
