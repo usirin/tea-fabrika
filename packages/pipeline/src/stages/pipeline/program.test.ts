@@ -134,8 +134,8 @@ interface Script {
 	 * what it saved, holding `offers` as code from before this change would have.
 	 */
 	readonly savedAsking?: {readonly at: RegExp; readonly offers: readonly string[]};
-	/** From a second test writer on, the repo's own tests can't run at any head, as with a full disk. */
-	readonly checksStopRunning?: boolean;
+	/** When the repo's own tests stop running at any head, as with a full disk: from a second test writer on, or once a lane stopped by `savedAsking` starts again. */
+	readonly checksStopRunning?: "at_second_writer" | "at_restart";
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -164,6 +164,7 @@ interface FakeScript {
 }
 
 const TIMED_OUT = "-- timed out --";
+const KILLED = "-- killed --";
 
 const SAVED_ASK = "a-step-99";
 
@@ -212,7 +213,7 @@ const lane = ({
 	redAfterKill = false,
 	fake,
 	savedAsking,
-	checksStopRunning = false,
+	checksStopRunning,
 }: Script): Promise<Ran> => {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
@@ -233,21 +234,19 @@ const lane = ({
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
 	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
 	const lines: string[] = [];
+	const checksDown = () =>
+		checksStopRunning === "at_second_writer"
+			? codexRuns(dir).filter((run) => run.step === "tests").length > 1
+			: checksStopRunning === "at_restart" && lines.includes(KILLED);
 	const line = () =>
 		runLane(NUMBER, (said) => Effect.sync(() => void lines.push(said))).pipe(
-			Effect.updateService(MutationRunner, (runner) =>
-				checksStopRunning
-					? {
-							...runner,
-							tests: (head) =>
-								Effect.suspend(() =>
-									codexRuns(dir).filter((run) => run.step === "tests").length > 1
-										? Effect.fail({_tag: "could_not_run"} as const)
-										: runner.tests(head),
-								),
-						}
-					: runner,
-			),
+			Effect.updateService(MutationRunner, (runner) => ({
+				...runner,
+				tests: (head) =>
+					Effect.suspend(() =>
+						checksDown() ? Effect.fail({_tag: "could_not_run"} as const) : runner.tests(head),
+					),
+			})),
 			Effect.provide(laneLayer({home, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
@@ -268,14 +267,14 @@ const lane = ({
 				const first = yield* Effect.forkScoped(line());
 				while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
 				yield* Fiber.interrupt(first);
-				lines.push("-- killed --");
+				lines.push(KILLED);
 				yield* keptAsAsking(home, savedAsking.offers);
 			}
 			if (killAt !== undefined) {
 				const first = yield* Effect.forkScoped(line());
 				while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
 				yield* Fiber.interrupt(first);
-				lines.push("-- killed --");
+				lines.push(KILLED);
 				if (redAfterKill) writeFileSync(red, "");
 			}
 			yield* line();
@@ -462,7 +461,7 @@ describe("a lane, whole", () => {
 				title: "[slow-build] Read names in one form",
 				killAt: "test_writer: done",
 			});
-			expect(ran.lines).toContain("-- killed --");
+			expect(ran.lines).toContain(KILLED);
 			expect(ran.stages).toEqual(WHOLE);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
@@ -476,7 +475,7 @@ describe("a lane, whole", () => {
 
 	it("resumes after a kill and does no step twice", {timeout: 300_000}, async () => {
 		const ran = await lane({killAt: "build: done"});
-		expect(ran.lines).toContain("-- killed --");
+		expect(ran.lines).toContain(KILLED);
 		expect(ran.stages).toEqual(WHOLE);
 		expect(ran.lines.at(-1)).toContain("ended: done");
 		const steps = codexRuns(ran.dir).map((r) => r.step);
@@ -1889,7 +1888,7 @@ describe("a lane, on what the real agents answered", () => {
 						within: 90,
 						picks: {step: "go_on"},
 						fake: RUN_3,
-						checksStopRunning: true,
+						checksStopRunning: "at_second_writer",
 					});
 					expect(ran.lines).not.toContain(TIMED_OUT);
 					expect(ran.names.build).toContain('"stuck"');
@@ -1905,23 +1904,61 @@ describe("a lane, on what the real agents answered", () => {
 				},
 			);
 
-			// P28: and the same on a lane that already holds a go_on. Also shows `checksStopRunning` bites.
+			// P28: no question comes if the checks are down when the builder ends, so to hold a go_on on
+			// offer the lane was asked with them up, and they went down while it waited. The go_on carries on
+			// to the mutation step, whose own first run of the checks can't run either.
 			it(
-				"a lane saved with go_on on offer, picked while the checks can't run, lands nothing: green is never guessed",
+				"a lane saved with go_on on offer, picked once the checks can't run, lands nothing: green is never guessed",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane({
 						within: 90,
 						steps: ["go_on"],
 						fake: RUN_3,
-						checksStopRunning: true,
+						checksStopRunning: "at_restart",
 						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
 					});
 					expect(answeredWith(ran, "go_on")).toHaveLength(1);
 					expect(ran.lines).not.toContain(TIMED_OUT);
-					expect(ran.names.mutation).toContain("stuck");
+					// `run_failed`, not `tests_red`: the new test is red here too, and the checks never said so.
+					expect(ran.names.mutation).toContain("run_failed");
 					expect(bye(ran)).toContain("stuck");
 					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+				},
+			);
+
+			/** What makes round 2's test pass: a build's change to the file round 1's build wrote. */
+			const FOLDS = {
+				path: "src/lower.ts",
+				text: 'export function lower(name: string): string {\n\treturn name.trim().toLowerCase().replaceAll("ß", "ss");\n}\n',
+			};
+
+			// Each mutant is answered `cannot` and the commit stays the head, so the head's files are still
+			// the builder's. Round 2's builder must be free to change them, and here the fix needs just that.
+			it(
+				"a mutant answer that writes no test leaves the builder's files out of the exam: a later round changes them, and lands",
+				{timeout: 200_000},
+				async () => {
+					const ran = await lane({
+						within: 180,
+						picks: {step: "go_on"},
+						fake: {
+							cannot: REAL_MUTANT,
+							answers: {review: [found(RUN3_FINDING)], tests: [null, RUN3_ROUND_2]},
+							writesAt: {build: {1: [FOLDS]}},
+						},
+					});
+					expect(ran.lines).not.toContain(TIMED_OUT);
+					// Round 1's mutant answer ran, and wrote nothing: this is the path the fix is on.
+					expect(answeredWith(ran, "go_on")).not.toEqual([]);
+					expect(runsOf(ran, "mutants").length).toBeGreaterThan(0);
+					expect(runsOf(ran, "build")).toHaveLength(2);
+					const builds = ran.facts
+						.filter((f) => f.type === "ended" && f.stage === "build")
+						.map((f) => JSON.stringify(f.outcome));
+					expect(builds.filter((said) => said.includes("exam_touched"))).toEqual([]);
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
 				},
 			);
 
@@ -1944,12 +1981,6 @@ describe("a lane, on what the real agents answered", () => {
 				},
 			);
 
-			/** What makes round 2's test pass, written by a third build. */
-			const FOLDS = {
-				path: "src/lower.ts",
-				text: 'export function lower(name: string): string {\n\treturn name.trim().toLowerCase().replaceAll("ß", "ss");\n}\n',
-			};
-
 			// P28: this replaces a test whose new test passed from the start, which only a fake could write.
 			it(
 				"`again` with a note runs the builder once more with it, and no new test writer: a real fix lands",
@@ -1958,7 +1989,8 @@ describe("a lane, on what the real agents answered", () => {
 					const NOTE = "Fold ß to ss in `lower`, as the new test says.";
 					const ran = await lane({
 						within: 90,
-						steps: ["again"],
+						// The first step's question is round 1's surviving mutant, then the builder's no change.
+						steps: ["go_on", "again"],
 						picks: {step: "go_on"},
 						notes: {step: NOTE},
 						fake: {

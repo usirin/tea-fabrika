@@ -123,15 +123,15 @@ describe("agent words a person or a pull request reads", () => {
 		/** The line with every code span taken out: what GitHub reads as words. */
 		const outsideSpans = (line: string) => line.replace(/(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)/g, "");
 		const PATH = "rules`.json fixes #2 @someone `more";
-		const refused = () =>
+		const refused = (path = PATH) =>
 			planProblems(
 				Schema.decodeUnknownSync(PlanDraft)({
 					summary: "One form.",
-					stories: [],
+					stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
 					tasks: [],
 					pointers: [],
 					questions: [],
-					exam: [{path: PATH, change: "add a rule", why: "it needs one"}],
+					exam: [{path, change: "add a rule", why: "it needs one"}],
 				}),
 				null,
 			).filter((problem) => /backtick/i.test(problem));
@@ -159,6 +159,7 @@ describe("agent words a person or a pull request reads", () => {
 				{path: ".oxlintrc.json", change: "add a rule", why: "it needs one"},
 			]);
 			expect(line).toContain("`.oxlintrc.json`");
+			expect(refused(".oxlintrc.json")).toEqual([]);
 		});
 	});
 });
