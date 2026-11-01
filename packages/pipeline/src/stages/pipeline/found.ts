@@ -10,7 +10,7 @@ import type {MutantAnswer} from "../test-writer/mutants.ts";
 import {Surprise} from "../test-writer/outcome.ts";
 import type {Answer} from "../test-writer/written.ts";
 import {listed} from "./briefs.ts";
-import type {Carry, Untested} from "./machine.ts";
+import type {Carry, Through, Untested} from "./machine.ts";
 
 // What a step found, in the words a person or an agent reads it in. Today's version. All pure: the
 // lane's program writes these on the ticket, in a pull request's body and in a brief.
@@ -27,6 +27,8 @@ const HEADS: Readonly<Record<Surprise, string>> = {
 };
 
 type Named = {readonly id: string; readonly when: string};
+
+const NOTHING: Through = {findings: [], mutants: []};
 
 /** Each Property the writer says no test can check, and its reason. */
 export const untestedRows = (
@@ -79,6 +81,25 @@ export const untestedWords = (rows: readonly Untested[]): readonly string[] =>
 				"No test checks these properties. A person said to go on without one:",
 				listed(rows.map((row) => inert(`${row.when}: ${row.why}`))),
 			];
+
+/**
+ * The findings and mutants a person let through, for the merge question and the pull request.
+ * Nothing let through: nothing said.
+ */
+export const throughWords = ({findings, mutants}: Through = NOTHING): readonly string[] => [
+	...(findings.length === 0
+		? []
+		: [
+				"A person let these findings through, on a call that their decision stands:",
+				listed(findings.map((row) => inert(row.fault))),
+			]),
+	...(mutants.length === 0
+		? []
+		: [
+				"A person let these mutants live, as no test can see the change:",
+				listed(mutants.map((row) => inert(`\`${row.mutant}\`: ${row.why}`))),
+			]),
+];
 
 /** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
 export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>

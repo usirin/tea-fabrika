@@ -22,6 +22,7 @@ import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
+import {MutationRunner} from "../mutation/services.ts";
 import {postsOf} from "../operate/machine.ts";
 import {openItems} from "../operate/stop.ts";
 import {nameOf} from "../outcome.ts";
@@ -49,6 +50,7 @@ import {
 	jobsList,
 	mutantWords,
 	ruleChangeLines,
+	throughWords,
 	untestedRows,
 	untestedWords,
 } from "./found.ts";
@@ -60,6 +62,7 @@ import {
 	type claimLane,
 	Lane,
 	lane,
+	MAX_ROUNDS,
 	type readFiled,
 	type releaseLane,
 	type runStep,
@@ -276,6 +279,30 @@ const propertiesOf = (carry: Carry, round: number) => {
 		}));
 	return (carry.plan?.properties ?? []).map((p, i) => ({...p, id: `p${i + 1}` as PropertyId}));
 };
+
+/**
+ * A later round whose builder changed nothing, by what the head's own checks say when code runs them.
+ *
+ *   green         go_on or stop: the work stands, and the mutation step still has to pass
+ *   red           again or stop, or the lane ends once its rounds are spent: a go_on could not land
+ *   could not run the lane ends stuck: it never guesses green
+ */
+const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
+	Effect.gen(function* () {
+		const head = yield* need(kept.head, "no head to run the checks at");
+		const checks = yield* Effect.result((yield* MutationRunner).tests(head));
+		if (checks._tag === "Failure")
+			return ended({kind: "stuck", why: "checks_not_run"}, kept, [
+				`The builder changed nothing, and the checks could not run at ${head}, so nothing says whether this work holds. ${says}`,
+			]);
+		if (checks.success === "green")
+			return asksFirst("no_change", ended({kind: "done", part: false}, kept), [says]);
+		if (round >= MAX_ROUNDS)
+			return ended({kind: "stuck", why: "rounds_spent"}, kept, [
+				`The builder changed nothing in round ${round} of ${MAX_ROUNDS}, and the new test is still failing. ${says}`,
+			]);
+		return ended({kind: "ask", who: "owner", for: "still_red"}, kept, [says]);
+	});
 
 /** Each step: what its agent is told, and its machine, to its end. */
 const bodies = {
@@ -496,11 +523,13 @@ const bodies = {
 				left: end.report.built?.left ?? [],
 			};
 			// A first round with no change has no work to go on with. A later one has the last round's,
-			// and whether it is enough is the person's call.
+			// and what can be asked about it depends on what the head's checks say now.
 			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change")
-				return asksFirst("no_change", ended({kind: "done", part: false}, kept), [
+				return yield* nothingChanged(
+					round,
+					kept,
 					`The builder says: ${inert(end.report.built?.summary ?? "nothing")}`,
-				]);
+				);
 			return ended(end.outcome, kept, end.report.problems);
 		}),
 
@@ -553,11 +582,25 @@ const bodies = {
 				tries: 3,
 			});
 			const commit = end.report.commit;
-			const files = commit === null ? [] : yield* work.filesOf(tree.tree, commit);
-			return ended(end.outcome, {head: commit ?? head, exam: [...carry.exam, ...files]}, [
-				...end.report.problems,
-				...mutantWords(end.report.answered?.answers ?? []),
-			]);
+			// With no test written the commit is the head itself, and its files are the builder's: they
+			// are not exam, or a later round could not change them.
+			const files =
+				commit === null || commit === head ? [] : yield* work.filesOf(tree.tree, commit);
+			const answers = end.report.answered?.answers ?? [];
+			return ended(
+				end.outcome,
+				{
+					head: commit ?? head,
+					exam: [...carry.exam, ...files],
+					waiting: {
+						findings: [],
+						mutants: answers.flatMap((a) =>
+							a.answer === "cannot" ? [{mutant: a.mutant, why: a.why}] : [],
+						),
+					},
+				},
+				[...end.report.problems, ...mutantWords(answers)],
+			);
 		}),
 
 	review: (at: At) =>
@@ -644,7 +687,16 @@ const bodies = {
 						);
 			// A finding against a decision is no fault of the work: the person says which stands, right
 			// here, and the review's own end, an ordinary finding's round too, waits on their answer.
-			return against.length === 0 ? end : asksFirst("decision", end, againstWords(carry, against));
+			if (against.length === 0) return end;
+			const waiting = {
+				findings: against.map(({id, fault}) => ({id, fault})),
+				mutants: [],
+			};
+			return asksFirst(
+				"decision",
+				{...end, carry: {...end.carry, waiting}},
+				againstWords(carry, against),
+			);
 		}),
 
 	push: (at: At) =>
@@ -654,6 +706,7 @@ const bodies = {
 			const {carry} = at.cmd;
 			const base = yield* need(carry.base, "no base to push from");
 			const head = yield* need(carry.head, "no head to push");
+			const passed = [...untestedWords(carry.untested ?? []), ...throughWords(carry.through)];
 			const end = yield* pushToTheEnd(at.stages.push, at.cmd.intent, {
 				ticket: at.url,
 				number: at.cmd.number,
@@ -666,13 +719,16 @@ const bodies = {
 						"",
 						inert(carry.plan?.summary ?? ""),
 						"",
-						carry.deviations.length === 0 ? "No deviations." : listed(carry.deviations.map(inert)),
+						// "No deviations" would read as all clear, beside what a person let through.
+						...(carry.deviations.length > 0
+							? [listed(carry.deviations.map(inert))]
+							: passed.length === 0
+								? ["No deviations."]
+								: []),
 						...((carry.left ?? []).length === 0
 							? []
 							: ["", "What the builder could not do:", listed((carry.left ?? []).map(inert))]),
-						...((carry.untested ?? []).length === 0
-							? []
-							: ["", ...untestedWords(carry.untested ?? [])]),
+						...(passed.length === 0 ? [] : ["", ...passed]),
 					].join("\n"),
 				),
 				posts: carry.posts,
@@ -758,7 +814,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				yield* tickets
 					.talk(cmd.number, `${cmd.ask}/picks`, {
 						type: "commented",
-						body: saidOf(["What each answer does:", listed(cmd.does ?? [])].join("\n")),
+						body: saidOf(
+							[...(cmd.also ?? []), "What each answer does:", listed(cmd.does ?? [])].join("\n"),
+						),
 					})
 					.pipe(Effect.ignore);
 			yield* tickets.write(cmd.number, cmd.ask, {

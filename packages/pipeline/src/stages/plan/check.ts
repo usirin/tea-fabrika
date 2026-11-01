@@ -232,11 +232,17 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	const names = new Set(known?.names ?? []);
 	const problems: string[] = [];
 	if (plan.summary.trim() === "") problems.push("The summary is empty.");
-	for (const change of plan.exam ?? [])
+	for (const change of plan.exam ?? []) {
 		if (/[\r\n]/.test(change.path))
 			problems.push(
 				`A rule change's path holds a line break: ${JSON.stringify(change.path)}. A path is one line.`,
 			);
+		// A pull request shows a path in a code span, and a backtick would end the span early.
+		if (change.path.includes("`"))
+			problems.push(
+				`A rule change's path holds a backtick: ${JSON.stringify(change.path)}. A path has none.`,
+			);
+	}
 	const stories = storyProblems(plan);
 	problems.push(...stories.problems);
 

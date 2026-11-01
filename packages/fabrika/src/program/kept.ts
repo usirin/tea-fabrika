@@ -119,7 +119,7 @@ export type KeptFailed<C extends Cmd, I> =
  * then as "follow-up", which can land once the copy is closing. `done()` told the parent the first
  * time, and a parent that handles it goes on, so the repeat must not end the program run under it.
  */
-export const onceEach = (tell: OnError): OnError => {
+const onceEach = (tell: OnError): OnError => {
 	const told = new Set<unknown>();
 	return (error, where) => {
 		if (told.has(error)) return;
@@ -127,6 +127,32 @@ export const onceEach = (tell: OnError): OnError => {
 		tell(error, where);
 	};
 };
+
+/**
+ * What a kept run does with what tea reports. A `RuntimeDiscardNotice` is a loss the host asked for:
+ * nothing. Any other error, once: it `fail`s the run while the run is live, and is `broken` once
+ * `closing`, when nobody is waiting on `done()`. See the note at the top of this file.
+ */
+export const failureReport = (
+	label: string,
+	{
+		closing,
+		fail,
+		broken,
+	}: {
+		readonly closing: () => boolean;
+		readonly fail: (ended: Error) => void;
+		readonly broken: (ended: Error) => void;
+	},
+): OnError =>
+	onceEach((error, {phase}) => {
+		if (error instanceof RuntimeDiscardNotice) return;
+		const ended = new Error(`${label} failed (tea's "${phase}"): ${wordsOf(error)}`, {
+			cause: error,
+		});
+		if (closing()) broken(ended);
+		else fail(ended);
+	});
 
 /**
  * Run `machine`, kept under `id` in `handle`'s run through its `state`
@@ -181,13 +207,10 @@ export const runKept = <
 		// How this run ended, when tea reported a failure while it was live. Set once: the first is the cause.
 		const failed = yield* Deferred.make<never>();
 		let closing = false;
-		const onError = onceEach((error, {phase}) => {
-			if (error instanceof RuntimeDiscardNotice) return;
-			const ended = new Error(`${name} run ${id} failed (tea's "${phase}"): ${wordsOf(error)}`, {
-				cause: error,
-			});
-			if (closing) broken(ended);
-			else Deferred.doneUnsafe(failed, Effect.die(ended));
+		const onError = failureReport(`${name} run ${id}`, {
+			closing: () => closing,
+			fail: (ended) => Deferred.doneUnsafe(failed, Effect.die(ended)),
+			broken,
 		});
 		const opts = {
 			...options,

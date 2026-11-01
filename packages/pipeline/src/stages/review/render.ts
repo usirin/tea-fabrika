@@ -1,6 +1,7 @@
 import {Schema} from "effect";
 import {markOf} from "../../criteria/mark.ts";
 import type {CriterionId} from "../../ids.ts";
+import {inert} from "../build/body.ts";
 import type {Brief} from "./gate.ts";
 import {type Criterion, TextKind} from "./pack.ts";
 import {
@@ -29,7 +30,7 @@ export const HEADINGS = {
 const NOTHING = "Nothing.";
 
 const placeOf = (place: Place) =>
-	`\`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
+	`\`${inert(place.file).replaceAll("`", "'")}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
 const fromOf = (from: From) => {
 	switch (from.source) {
 		case "criterion":
@@ -44,12 +45,15 @@ const fromOf = (from: From) => {
 			return `a person's decision on the plan, question ${from.id}`;
 	}
 };
-/** A text on one line: a list item that breaks its line would break the list. */
-const flat = (text: string) => text.replace(/\s+/g, " ").trim();
+/**
+ * An agent's text, for a comment on a pull request: on one line, since a list item that breaks its
+ * line would break the list, and inert, so it pings nobody and closes nothing.
+ */
+const flat = (text: string) => inert(text.replace(/\s+/g, " ").trim());
 
 function findingLines(finding: Finding): string[] {
 	return [
-		`- **${finding.id}** ${finding.at === null ? "(nothing to point at)" : placeOf(finding.at)}, from ${flat(fromOf(finding.from))}`,
+		`- **${flat(finding.id)}** ${finding.at === null ? "(nothing to point at)" : placeOf(finding.at)}, from ${flat(fromOf(finding.from))}`,
 		`  - Fault: ${flat(finding.fault)}`,
 		`  - Proof: ${flat(finding.proof)}`,
 		`  - Wants: ${flat(finding.wants)}`,
