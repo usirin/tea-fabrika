@@ -25,7 +25,7 @@ catalog:
   # The ledger server's deploy (packages/ledger-server), held exact: a beta, as experiments 144 and 147 ran it.
   '@alchemy.run/cloudflare': 2.0.0-beta.84
   alchemy: 2.0.0-beta.84
-  '@anthropic-ai/claude-agent-sdk': 0.3.296
+  '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.12.0
