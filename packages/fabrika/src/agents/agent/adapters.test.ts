@@ -259,6 +259,17 @@ describe("claude: where its settings come from", () => {
 		return {seen, open};
 	};
 
+	// Claude's tool for a typed answer wants `type: "object"`: a schema with nothing in it must not reach it.
+	it("hands on a schema only when it asks for something", async () => {
+		const {seen, open} = keeping();
+		const schema = {type: "object"};
+		const started = (turn: AdapterTurn) =>
+			Effect.runPromise(Effect.scoped(claudeAdapter({open}).start(turn)));
+		await started(TURN);
+		await started({...TURN, schema});
+		expect(seen.map((o) => o.outputFormat)).toEqual([undefined, {type: "json_schema", schema}]);
+	});
+
 	it("reads the folder's rule files and none of its settings, as the stages do", async () => {
 		const {seen, open} = keeping();
 		await Effect.runPromise(Effect.scoped(claudeAdapter({open}).start(TURN)));
@@ -388,7 +399,11 @@ describe("codex: the system prompt", () => {
 	};
 
 	/** The command Codex would be started with for one turn. The spawner keeps it and refuses: nothing runs. */
-	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
+	const startedWith = async (
+		system: SystemPrompt,
+		access: FolderAccess,
+		schema: Record<string, unknown> = {},
+	) => {
 		const home = madeUpHome();
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
@@ -405,7 +420,7 @@ describe("codex: the system prompt", () => {
 					parent,
 					access,
 				});
-				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system})));
+				return yield* Effect.flip(Effect.scoped(adapter.start({...TURN, system, schema})));
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provide(nodeServices),
@@ -415,7 +430,7 @@ describe("codex: the system prompt", () => {
 		const command = seen[0];
 		if (command === undefined) throw new Error("codex was never started");
 		const flags = command.args.flatMap((a, i) => (command.args[i - 1] === "-c" ? [a] : []));
-		return {flags, home: codexHomeOf("session:s", parent)};
+		return {flags, args: command.args, home: codexHomeOf("session:s", parent)};
 	};
 
 	const TURN: AdapterTurn = {
@@ -429,6 +444,25 @@ describe("codex: the system prompt", () => {
 		effort: null,
 		usd: null,
 	};
+
+	it("a schema with nothing in it: no --output-schema, and the prompt stays as it is", async () => {
+		const free = await startedWith({_tag: "append", text: ""}, "read");
+		expect(free.args).not.toContain("--output-schema");
+		expect(free.args.at(-1)).toBe("p");
+		const held = await startedWith({_tag: "append", text: ""}, "read", {
+			type: "object",
+			properties: {},
+			required: [],
+			additionalProperties: false,
+		});
+		expect(held.args).toContain("--output-schema");
+		expect(held.args.at(-1)).toBe("p");
+		// A schema Codex's strict mode refuses goes in the prompt instead.
+		const open = {type: "object", properties: {a: {type: "string"}}};
+		const loose = await startedWith({_tag: "append", text: ""}, "read", open);
+		expect(loose.args).not.toContain("--output-schema");
+		expect(loose.args.at(-1)).toContain(`matching this JSON Schema:\n${JSON.stringify(open)}`);
+	});
 
 	it("hands the stage's line on as developer instructions, on top of Codex's own", async () => {
 		const text = 'You plan; you change no file; hand back one "PlanDraft".';

@@ -72,11 +72,20 @@ export const Update = Schema.Union([
 ]);
 export type Update = typeof Update.Type;
 
+/**
+ * A JSON Schema with nothing in it, as a turn with no `--schema` has: any JSON value fits. No maker
+ * is told it, since it would ask for nothing, and Claude's typed-answer tool wants `type: "object"`.
+ */
+export const asksNothing = (schema: Record<string, unknown>): boolean =>
+	Object.keys(schema).length === 0;
+
 /** The turn's end, with the answer read by the stage's schema. `null`: it did not fit. */
 export interface Ended<A> {
 	readonly _tag: "ended";
 	readonly stop: Stop;
 	readonly answer: A | null;
+	/** What the agent ended with when it did not fit, as it came: only on an `end_turn` with a `null` answer. */
+	readonly misfit?: unknown;
 	readonly tokens: Tokens;
 	readonly counted: Counted;
 	/** Dollars, where the maker says; `null` on a plan or where it does not. */

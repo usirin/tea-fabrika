@@ -27,6 +27,7 @@
 		"./agents/trace": "./src/agents/trace.ts",
 		"./agents/acp": "./src/agents/acp.ts",
 		"./agents/codex": "./src/agents/codex.ts",
+		"./agents/program": "./src/agents/program.ts",
 		"./mcp": "./src/mcp.ts",
 		"./sandbox/os": "./src/sandbox/os.ts",
 		"./package.json": "./package.json"
@@ -92,6 +93,10 @@
 			"./agents/codex": {
 				"types": "./dist/agents/codex.d.ts",
 				"default": "./dist/agents/codex.js"
+			},
+			"./agents/program": {
+				"types": "./dist/agents/program.d.ts",
+				"default": "./dist/agents/program.js"
 			},
 			"./mcp": {
 				"types": "./dist/mcp.d.ts",

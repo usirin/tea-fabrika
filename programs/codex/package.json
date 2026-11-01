@@ -1,0 +1,25 @@
+{
+	"name": "@tea-fabrika/codex",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A program: Codex, each prompt a turn on one session, through the Agents service. Its answer is plain JSON, held to --schema when given; the stage that asked decodes it.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@kampus/fabrika-old": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@demlik/tea": "catalog:",
+		"@effect/vitest": "catalog:",
+		"@kampus/pipeline": "workspace:*",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

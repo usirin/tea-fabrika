@@ -12,19 +12,19 @@ it a JSON Schema, and checks the answer with its own schema.
 export const claude = defineProgram({
 	name: "claude",
 	description: "Claude Code as a program: each prompt is a turn on one session, ...",
-	flags, inputs, outputs,                  // shared, from @kampus/fabrika/agents/program
+	flags, inputs, outputs,                  // shared, from @kampus/fabrika-old/agents/program
 	machines: {conversation: conversationKind},
 	view: {machine: "conversation", data: Conversation, of: (s: Conversation) => s},
 	main: (io) => chat("claude", io),        // the main both programs run
 });
 
-// inputs:  prompt (text), allow / refuse (an ask id), cancel (a turn number, or "now")
-// outputs: started, said, tool, ask, ended {turn, stop, answer: Json | null, tokens, usd, ms, ...}
+// inputs:  prompt (text), cancel (a turn number, or "now")
+// outputs: started, said, tool, ask, ended {turn, stop, answer: Json | null, misfit?, tokens, usd, ms, ...}
 
-// By hand, in tsh: a tile opens with the conversation and a prompt box.
-//   claude --model haiku
-// In a pipe: no tile, outputs go down the pipe.
-//   ticket 41 --brief | claude --schema review.json | review-gate
+// By hand, in tsh (a sketch: no window yet, and the app does not list it): a tile with a prompt box.
+//   claude --folder /work/copy --model haiku
+// In a pipe (a sketch): no tile, outputs go down the pipe. --schema takes the JSON Schema itself.
+//   ticket 41 --brief | claude --folder /work/copy --schema '{"type":"object",...}' | review-gate
 // From a stage (a sketch): started by name through the host, its answer decoded by the stage.
 const sorted = decoder(SortReply);                       // @kampus/pipeline/decoder
 self.startChild("claude", {schema: sorted.schema, folder});
@@ -125,7 +125,8 @@ self.startChild("claude", {schema: sorted.schema, folder});
 | `claude` typed alone in tsh | a tile with the conversation and a prompt box |
 | `codex` in the middle of a pipe | no tile; prompts come in, outputs go down the pipe |
 | review starts `claude` by name as a child run | no tile; review decodes `answer` with `ReviewAnswer`; a misfit ends it stuck |
-| the host restarts mid-turn | the kept session opens again, and the cut-off prompt is sent again (`resent`) |
+| the host restarts mid-turn | the kept session opens again, and the cut-off prompt and every prompt read behind it run again, in order (`resent`) |
+| a child started again after its turn ended | no second turn: the runner hands on the kept end |
 | a person attaches to a running build agent | the same tile as by hand, joined mid-conversation (needs children in the job table) |
 | `cancel 1` sent right after `prompt` | right in 50 of 50 runs on both providers: a cancel by turn number does not depend on order, as LSP cancels by id |
 | `cancel now` sent right after `prompt` | wrong in 50 of 50: read before the turn began, or after it ended, it cancels nothing or the wrong turn. It stays for a person at a tile; a stage always cancels by number |
@@ -136,20 +137,22 @@ self.startChild("claude", {schema: sorted.schema, folder});
   straight, on fake providers. A real turn takes seconds, so this is noise.
 - **Live:** one tiny prompt each. Claude (`haiku`) answered in 3.5 s for
   $0.0029; Codex (`gpt-6-luna`, on a plan) in 3.9 s, $0 shown.
-- **Size:** two 35-line program files; about 360 lines for what they share,
-  100 for the runner, 180 for the conversation, 80 for the fakes, 50 for the
+- **Size:** two 40-line program files; about 420 lines for what they share,
+  130 for the runner, 185 for the conversation, 90 for the fakes, 60 for the
   decoder.
-- **Two gaps, the same on both providers:** nobody can answer a permission
-  ask yet (tracker #90, one way to ask a person), and a turn cannot run
-  without an answer schema.
+- **One gap, the same on both providers:** nobody can answer a permission ask
+  yet (tracker #90, one way to ask a person). The other gap the spike named, a
+  turn with no answer schema, closed in the review: no schema now reaches a
+  provider as no schema (not run live).
 
 ## What it costs
 
 - One more program start per stage, about 0.8 ms a turn.
 - A pipe can no longer check an answer's shape at the line: `ended.answer` is
   JSON on every agent program, and the check is at the stage.
-- The one mailbox (tracker #94, from experiment 164) lands first, so a
-  `prompt` and a `cancel` are read in the order sent.
+- A save per prompt read: the line of prompts is the kept conversation, so a
+  kill loses none (experiment 169, section 14). The one mailbox holds a prompt
+  only until it is read, and `cancel` is a control input beside it.
 - A new provider is its adapter, a row in `Provider`, and one more package.
 
 ## How sure

@@ -25,6 +25,10 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
   cases whose scores changed. No window.
 - [`markdown`](./markdown/README.md): draws any markdown it is told, as `glow` or `less` does,
   in a window. `experiment --n 170 | markdown` draws a page.
+- [`claude`](./claude/README.md) and [`codex`](./codex/README.md): a coding agent as a program,
+  each prompt a turn on one session through the `Agents` service. The two wire the same parts
+  from `@kampus/fabrika-old/agents/program`; only the provider differs. No window yet, so the app
+  does not list them.
 
 A program with a window keeps it in its own package, on `<package>/window`: a React component
 that draws the program's view. The program itself imports no React.
