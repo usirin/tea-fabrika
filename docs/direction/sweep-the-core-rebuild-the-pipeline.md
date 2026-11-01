@@ -7,6 +7,13 @@ that this rules out.
 and the old code is deleted as each new piece lands. See
 [clean slate](./clean-slate.md).*
 
+*Checked 2026-11-01. What is replaced: "the core is swept in place, then copied", since
+`next/` rebuilds it, and "rebuilt small on the swept core", since the pipeline is rebuilt in
+`next/` in Tier 6. What stands, for today's version: the dead-code check, no limit on file
+size, and no cleanup for its own sake. "No cleanup" does not stop finishing today's pipeline
+as v0: it was built as new programs, and it now comes first, because
+[every pull request goes through it](./next-is-a-pipeline-pre-run.md).*
+
 ```text
 the core      program, host, shell, agents, ledger     swept in place, then copied to kamp-us/fabrika
 the pipeline  packages/pipeline                         not swept: rebuilt small on the swept core

@@ -404,8 +404,10 @@ lineOf(head, when); // "waits on you: approve plan v2"
 
 - **Section 2: the nine fact kinds** are in the ticket's `Fact` union
   (`src/ticket.ts`), with the fields above.
-  - They keep the tracker's `type` key, not Effect's `_tag`, so the rows
-    already on a ledger still read. `Head` is not stored, so it uses `_tag`.
+  - In today's version, they keep the tracker's `type` key, not Effect's `_tag`,
+    so the rows already on a ledger still read. `Head` is not stored, so it uses
+    `_tag`. In `next/`, every union we define uses `_tag`, and the tracker there
+    is written new.
   - `asked` is flattened to `{ask, what, picks}`; `answered` is
     `{ask, pick, note}`. The pipeline's own `Ask` is richer; mapping it to
     these is for the pipeline lane that writes them.

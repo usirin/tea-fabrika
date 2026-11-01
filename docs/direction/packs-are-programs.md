@@ -2,6 +2,10 @@
 
 Proposed 2026-10-18.
 
+*Changed 2026-11-01, for `next/`, proposed: packs wait for Tier 7. A program package in
+`next/programs/` is already the shape a pack has, and repo programs in `.fabrika/programs`
+come first, in Tier 5, lean about 60% ([the tiers](../plan/tiers.md)).*
+
 ## The idea
 
 - **fabrika is a small core plus add-on packs.** The core is report, sort,

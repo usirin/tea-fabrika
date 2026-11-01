@@ -116,7 +116,7 @@ The owner walked the architecture one layer at a time on 2026-10-30 and
 //
 //   Mac hands --WebSocket--> gateway:mac --object call--> project, build:7, ...
 //   VM hands  --WebSocket--> gateway:vm  --object call--> project, ...
-//   a window  --WebSocket--> gateway:w1  --object call--> desk, tsh:t1, ...
+//   a window  --WebSocket--> gateway:w1  --object call--> desk, fabsh:t1, ...
 ```
 
 Where each layer is written down:
@@ -234,7 +234,7 @@ connect.pipe(Effect.retry(reconnect));
   `link.ts` does today: `{port: "tile:t3", m: {type: "keys", data: "l"}}`.
   - No terminal objects. A real shell (zsh, an agent's screen) is a process
     the hands own. Its bytes go window to brain to hands on one computer, or
-    gateway to gateway across computers, never saved. tsh is a program, so it
+    gateway to gateway across computers, never saved. The shell (`fabsh` in `next/`, named 2026-11-01) is a program, so it
     is a program object.
   - Only tiles on screen stream. Five workspaces with 20 tiles cost about
     what 4 visible tiles cost. Hidden tiles keep running and send nothing; a
@@ -249,6 +249,10 @@ connect.pipe(Effect.retry(reconnect));
   hands still run as a login service (launchd through SMAppService on the Mac,
   systemd on the VM) and own the local brain's life. The menubar is required,
   and Quit there stops the service.
+  *Changed 2026-11-01, from [Tier 1's plan](../plan/tier-1.md), proposed until it is
+  approved: Tier 1 has no hands, and the Electron app starts the brain itself as a plain
+  launchd service, so nothing starts at login. The menu bar is part of that app. Quit
+  stops the brain. Whether hands still run as a login service is for Tier 4.*
   - ~~The window talks only to its own hands, over a Unix socket~~ **Replaced
     2026-10-31.** [Experiment 172](../../experiments/172-hands-restart-time.md)
     leaned that way at 85%: a hands crash costs 0.4 to 0.8 s until the window
@@ -289,8 +293,9 @@ What local Miniflare gives us, from our own experiments:
 
 **Open in transport:** the extra hop through the gateway on Cloudflare is not
 measured (a keystroke-echo test would measure it). JSON-RPC's weight per
-message is not measured. How a browser gets its grant is open (lean: a QR code
-from the Mac). Background browser tabs slow their timers, which may make a tab
+message is not measured. ~~How a browser gets its grant is open (lean: a QR code
+from the Mac).~~ *Settled for `next/`:* the menu bar's row, Approve and a finger, on both
+stages; QR is in Tier 7 ([Tier 1's plan](../plan/tier-1.md)). Background browser tabs slow their timers, which may make a tab
 look away.
 
 ### Layer 2: data (decided 2026-10-30)

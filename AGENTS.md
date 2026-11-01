@@ -1,7 +1,8 @@
 # Working in this repo
 
 For any agent (or person) picking up work here. Read this first, then
-[`docs/direction/README.md`](./docs/direction/README.md).
+[`docs/plan/README.md`](./docs/plan/README.md) for where the work stands, then
+[`docs/direction/README.md`](./docs/direction/README.md) for why.
 
 ## What this repo is
 
@@ -15,6 +16,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 | You want to | Read | Write |
 |---|---|---|
+| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
@@ -70,10 +72,18 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
-- **In `next/`, every change goes through the pipeline's steps, by hand:** plan, test
-  writer, build, mutation step, one review, each by its own agent, with laws. No
-  builder starts before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)).
+- **Every pull request, `next/` or today's, goes through today's pipeline programs:**
+  plan, test writer, build, mutation step, one review, each by its own agent, with
+  laws. A step that cannot run yet goes by hand for that pull request and is logged in
+  `field/`. No builder starts before an approved plan and tests that exist
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). No merged pull request
+  has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
+- **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
+  lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
+  under Strict Mode ([Elm first](./docs/direction/elm-first.md)).
+- **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
+  stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
   goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
@@ -123,7 +133,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   import { Schema } from "effect";
   import { gather } from "./primitives.ts";
 
-  const Ticket = Schema.Struct({ id: Schema.String, kind: Schema.Literals(["bug", "feature"]) });
+  const Ticket = Schema.Struct({ id: Schema.String, state: Schema.Literals(["open", "closed"]) });
   type Ticket = typeof Ticket.Type;
   const Id = Schema.Struct({ id: Schema.String });
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
@@ -136,13 +146,19 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 
   ```ts
   // Yes: read it out loud and it is a sentence.
-  { kind: "ask", who: "owner", for: "approval" }
-  { kind: "send", to: "builder", why: "checks_red" }
+  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "send", to: "builder", why: "checks_red" }
 
   // No: longer, and the parent already said it.
-  { kind: "ask", askWho: "owner", forWhat: "owner_approval" }
-  { kind: "send", sendTo: "builder", reasonCode: "checks_red" }
+  { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }
+  { _tag: "send", sendTo: "builder", reasonCode: "checks_red" }
   ```
+- **The tag key is `_tag`, for every union we define.** Effect Schema writes it, with
+  `Schema.TaggedUnion`, `TaggedStruct` and `TaggedError`, never by hand. tea's Msgs and
+  Cmds keep `type`, and third-party shapes keep theirs. Plain fields stay plain words,
+  such as `platform`. `kind` on ledger entries stays open under ticket 32. Today's code
+  is not changed by this, so its `kind` on an outcome stays until that code goes
+  ([schema classes](./docs/direction/schema-classes-not-of-helpers.md)).
 - **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
   A new stage machine writes only its own words, with `outcomesOf` in
   `packages/pipeline/src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See

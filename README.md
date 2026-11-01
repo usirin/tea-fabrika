@@ -213,6 +213,7 @@ These still run, but they are not the way forward:
 
 | You want to | Go to |
 |---|---|
+| Know what is next, and who has the move | [`docs/plan/`](./docs/plan/README.md) |
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |

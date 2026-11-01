@@ -370,8 +370,8 @@ tea programs, each in its own object, asking the hands for machine work
 through Cmds. It uses only coordination below it. build:7 never touches git:
 it asks for a commit, the Mac's hands do it, and the answer comes back as a
 Msg to its `update`. The window only shows build:7's model. Every piece of UI
-state lives in a tea machine (`useMachine`), never `useState`
-([Elm first](./elm-first.md)).
+state lives in a tea machine, read through the one `useSyncExternalStore` hook,
+never `useState` ([Elm first](./elm-first.md)).
 
 The owner decided A1 to A5 on 2026-10-31, at 80 to 85% for A1 to A3 (the
 decision log's number).
@@ -452,7 +452,7 @@ const view = {
 - Every Msg from a window carries `saw: <rev>`, and each program decides what
   a stale Msg means.
 - Screen state (scroll, hover, the picked row) lives in the window's own tea
-  machine (`useMachine`).
+  machine, read through the same hook.
 - **Three homes for state (decided 2026-10-31).** Who needs it picks the home.
 
   ```text

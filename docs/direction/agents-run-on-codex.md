@@ -4,14 +4,21 @@ Decided 2026-10-27 by the owner. It replaces
 [agents run on opus, for now](./agents-run-on-opus-for-now.md) for every
 stage but triage, which waits on experiment 159.
 
+*Changed 2026-11-01, about today's version: the default model is now `gpt-6-astra`,
+effort high. The list below is what `DEFAULTS` says in
+`packages/pipeline/src/stages/pipeline/agents.ts`, landed with pipeline v0. The older
+path's `AGENT_DEFAULT` in `packages/pipeline/src/setup.ts` still says opus, effort
+medium. "GPT sol" below is the model this note was written about.*
+
 ```ts
-// A sketch: who runs on what, from today.
-const stages = {
-	triage: {harness: "claude", model: "opus"}, // until experiment 159 says GPT sol answers as well
-	plan: {harness: "codex", model: "gpt-6.1-sol"},
-	test_writer: {harness: "codex", model: "gpt-6.1-sol"},
-	build: {harness: "codex", model: "gpt-6.1-sol"},
-	review: {harness: "codex", model: "gpt-6.1-sol"},
+// From the code. The budget is per run.
+const DEFAULTS = {
+	triage: {harness: "claude", model: "opus", effort: "medium", usd: 2},
+	plan: {harness: "codex", model: "gpt-6-astra", effort: "high", usd: 10},
+	exam: {harness: "codex", model: "gpt-6-astra", effort: "high", usd: 10},
+	test_writer: {harness: "codex", model: "gpt-6-astra", effort: "high", usd: 10},
+	build: {harness: "codex", model: "gpt-6-astra", effort: "high", usd: 10},
+	review: {harness: "codex", model: "gpt-6-astra", effort: "high", usd: 10},
 };
 // The main session, the one a person talks to, stays on opus.
 ```
@@ -66,10 +73,9 @@ const stages = {
 
 ## What it changes
 
-- `AGENT_DEFAULT` in `packages/pipeline/src/setup.ts` (opus, effort medium)
-  becomes a default per stage. Not built; it lands with the slices of the v1
-  plan ([a ticket runs from the app](./a-ticket-runs-from-the-app.md)) that
-  make each stage real.
+- A default per stage. Built 2026-10-31 for pipeline v0, as `DEFAULTS` above.
+  `AGENT_DEFAULT` in `packages/pipeline/src/setup.ts` (opus, effort medium) stays
+  for the older path.
 - Experiments that measure a stage run it on GPT sol first, with opus as the
   comparison.
 

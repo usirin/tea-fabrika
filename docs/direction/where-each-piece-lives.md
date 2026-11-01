@@ -14,6 +14,12 @@ Below, `@kampus/fabrika` still means today's library, as it did when this was wr
 `@kampus/fabrika-app-old`, and each is deleted when `next/` takes its job over. So
 `next/` uses the real names from its first line, and no rename waits at the end.*
 
+*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), proposed until it
+is approved: Tuval is not the app's gui. It is its own package, `@kampus/tuval`, and it holds
+everything a client does. fabrika is the logic, and Tuval is what is drawn from it. The app,
+`next/apps/fabrika`, is only wiring and the deploy stack. Tuval may import
+`@kampus/libfabrika`, never the other way. Each program is a package under `next/programs/`.*
+
 ```ts
 // After the rename, a sketch.
 import {defineProgram, serve} from "@kampus/libfabrika"; // the library: program, host, shell, ledger, agents

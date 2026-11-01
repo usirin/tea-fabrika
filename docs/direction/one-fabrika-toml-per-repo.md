@@ -4,6 +4,10 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 [blog post 10](../../blog/10-knobs-in-a-file.md); the first code is
 `legacy/src/settings.ts`.
 
+*Noted 2026-11-01: this note is about today's version. In `next/`, repo programs in
+`.fabrika/programs` are Tier 5 and packs are Tier 7, both proposed
+([the tiers](../plan/tiers.md)).*
+
 ## Where the files live (2026-10-30)
 
 Decided: the repo's file moves into a `.fabrika/` folder, and a person's own

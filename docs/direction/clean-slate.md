@@ -86,6 +86,10 @@ code differs from OTP are fixed on the way.
 
 ## The order
 
+*Changed 2026-11-01: the list below is the first sorting. The order of work now is in
+[the plan](../plan/README.md): today's pipeline finishes and builds ticket 117, then
+`next/` follows [the tiers](../plan/tiers.md).*
+
 ```ts
 // A sketch of the order. Each step is one or more pull requests in next/.
 const order = [
