@@ -3,9 +3,10 @@
 **Decided 2026-11-01 by the owner:** every keybinding is configurable from day one, the prefix
 included; the prefix is a setting of its own, and bindings write `<prefix>` for it, as Vim's
 `<Leader>`; the bindings live in the person's own TOML file, as one flat list written command to
-key (a tryout); fabrika ships a program to change them; and Tier 1 reads the file while that
-program arrives in Tier 2. **How modes get their own word later, the key spelling, the command
-names, what a clash from the program does and live reload are proposed,** each with a lean below.
+key (a tryout); each mode, such as copy mode, gets a section of its own with a keys sub-section;
+fabrika ships a program to change them; and Tier 1 reads the file while that program arrives in
+Tier 2. **What else a mode section holds, the key spelling, the command names, what a clash from
+the program does and live reload are proposed,** each with a lean below.
 
 Built from [experiment 182](../../experiments/182-keybindings.md), which read how about twenty
 tools do it, and a clickable page, "Keybinding guidelines", a private page with twelve rules
@@ -138,11 +139,12 @@ detach  = []            # unbound
   reverse view: what does this key do.
 - **The load refuses,** each with a plain reason:
   - an unknown `<...>` word: "`<leader>` is not a word here; did you mean `<prefix>`?"
-  - a key claimed by two commands: "`<prefix>x` is on both close and detach."
+  - a key claimed by two commands in the same mode: "`<prefix>x` is on both close and detach."
+    The top list and each mode are checked apart (K7).
   - `prefix` set to a key that is also bound alone: "ctrl+a is your prefix, so it cannot also
     run split."
   - no way out of a tile, the no-trap rule: "with neither `<prefix>` nor F6 left, a terminal tile
-    would keep your keys."
+    would keep your keys." A mode with no key on `exit` is refused the same way (K7).
   - and, as before, a bare printable key pressed alone (it would stop typing in tsh, and WCAG
     2.1.4 wants a one-letter key only where focus is), and a bare letter as the prefix.
 - **We differ from everyone read.** Yazi writes a list of entries, `{ on = [ "g", "d" ], run =
@@ -159,6 +161,41 @@ detach  = []            # unbound
 - **What flips it back to key to command:** two-commands-on-one-key refusals turning up often in
   real files.
 
+### K7: a mode is a section, with its keys inside
+
+Decided by the owner today. Modes are bigger than keys, so each gets a section of its own. The
+top of the file stays the flat list for normal use.
+
+```toml
+prefix = "ctrl+a"
+split  = "<prefix>|"
+
+[mode.copy]
+enter = "<prefix>["          # how you get in, written like any key
+
+[mode.copy.keys]
+select = "v"
+yank   = "y"
+exit   = ["q", "escape"]
+```
+
+- It is valid TOML: smol-toml 1.9.1 reads it as `mode.copy.enter` and `mode.copy.keys`.
+- **The program that owns a mode defines what it does.** Copy mode belongs to the terminal. The
+  person's file sets only how you get in and the mode's keys.
+- **A key in a mode applies only in that mode.** So `v` there never clashes with a top-level key.
+  The two-commands check runs per mode.
+- **The no-trap rule covers modes.** The load refuses a mode with no way out, so `exit` cannot be
+  emptied: "copy mode would have no way out; keep at least one key on exit."
+- `mode` becomes a word the file keeps for itself: a command named `mode` at the top would clash
+  with `[mode.copy]` in TOML, as `[prefix]` did.
+- **How others do modes.** Helix keeps a table per mode, `[keys.normal]` and `[keys.insert]`
+  ([Helix remapping](https://docs.helix-editor.com/remapping.html)). tmux's copy mode "uses one
+  of two key tables", `copy-mode` or `copy-mode-vi` ([tmux(1)](https://man.openbsd.org/tmux.1)).
+  Zellij writes a block per mode, `normal { bind "Ctrl g" { SwitchToMode "locked"; } }`
+  ([Zellij keybindings](https://zellij.dev/documentation/keybindings)). Vim keeps one map command
+  per mode, `:nmap` and `:vmap` ([`:help map-modes`](https://vimhelp.org/map.txt.html#map-modes)).
+  We follow Helix's and Zellij's shape: a named block per mode, holding its keys.
+
 ## Commands are the protocol
 
 Name the protocol first: **a key press maps to a named command, in the client.** The window holds
@@ -169,9 +206,14 @@ and sends one finished command. A key never crosses the wire.
 // A sketch, next/. The table is a value the window is handed; the window never reads a file.
 type Key = {_tag: "alone"; key: string} | {_tag: "after_prefix"; key: string}; // "<prefix>z"
 type Binding = {does: Command | "ignore"; keys: Key[]}; // keys: [] is unbound
+type Mode = {
+	enter: Key[]; // how you get in, written like any key
+	bindings: Binding[]; // apply only in this mode; must keep a key on exit
+};
 type Keys = {
 	prefix: string; // "ctrl+a": a setting, never a binding
-	bindings: Binding[]; // one flat list, as the file is
+	bindings: Binding[]; // the flat list at the top, for normal use
+	modes: Record<string, Mode>; // [mode.copy]; what a mode does is its program's
 };
 type Via = {_tag: "key"; keys: string} | {_tag: "palette"} | {_tag: "word"} | {_tag: "click"};
 type Did = {type: "did"; does: Command; via: Via};
@@ -236,7 +278,7 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 
 | Question | Lean | How sure |
 |---|---|---|
-| Modes later | copy mode and others get their own word when they come, as Vim's `nmap` and `vmap`; the shape of that word is open | 60% |
+| What else a mode section holds | only `enter` and `keys` for now; later, what the bottom line shows while you are in it | 60% |
 | Key spelling | `ctrl+a`, `mod+k`, `shift+f6`, as VS Code, Zed, Ghostty, kitty and Windows Terminal write it, not Vim's `<C-a>` | 70% |
 | Command names | the tsh word, `split`, or quoted when it has spaces, `"split --to down"`, decoded by a schema; an unknown word fails with its line | 75% |
 | Swallowing a key | `ignore` is a command, as Ghostty's: `ignore = ["mod+w"]` eats the key; `[]` lets it go on | 75% |
@@ -245,12 +287,11 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 | Live reload | on save, at the next key, no restart, as VS Code and Ghostty | 80% |
 | Matching | the character a press types first, Option folded in; the key's place for Ctrl and Cmd on a non-Latin layout | 60% |
 
-- **Modes later, why and cost.** Vim keeps one map command per mode (`:nmap`, `:vmap` and
-  more, [`:help map-modes`](https://vimhelp.org/map.txt.html#map-modes)), and Helix a table per
-  mode. The flat list is today's one mode. When copy mode comes, its bindings need their own
-  word. A `[copy]` table is the TOML way, but it would clash with a command named `copy` at the
-  top, the same clash as `[prefix]`. A stand-in in the key, like `<copy>y`, avoids it. Which one
-  is open; popovers (arrows, `J`, `K`, Esc) may need the same. Building copy mode settles it.
+- **A mode section, why and cost.** `enter` and `keys` are all a person needs to set today. The
+  bottom line while in a mode is the next thing a person may want to change, since today's
+  bottom line after `C-b` already lists keys. The doubt: whether that text belongs to the
+  person's file or to the program that owns the mode. Whether popovers (arrows, `J`, `K`, Esc)
+  are modes too is open; building the asks popover settles it.
 - **Spelling, why and cost.** Most tools write `ctrl+a`, and a person who does not use Vim reads
   it. Vim writes `<C-a>`, and our prose and tmux say `C-a`, so there are two spellings for one
   key. The doubt: `<prefix>` is already Vim's angle-bracket style, so `"<prefix>ctrl+x"` mixes
@@ -259,7 +300,7 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 - **Command names, why and cost.** One name to learn: the tsh word is the palette entry and the
   binding. It costs a schema for every word. W5's `split_right` was a sketch; this replaces it.
 - **No `when` clauses.** VS Code's are powerful, but [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
-  already refuses a config that decides what happens next. A word per mode does the same job.
+  already refuses a config that decides what happens next. A section per mode (K7) does the same job.
 - **A clash, why and cost.** In the person's own file, two commands on one key are refused at
   load (K6). Against a default, the person's key wins, as VS Code's rows over its
   defaults. From the keys program, VS Code and Ghostty let the later binding win. A silent win is

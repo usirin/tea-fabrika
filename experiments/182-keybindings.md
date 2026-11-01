@@ -458,6 +458,8 @@ repo: it is twenty lines over a copied file.
   that is a setting (`prefix = "ctrl+a"`, as tmux's `prefix` option) with `<prefix>` standing
   in for it, as Vim's `<Leader>`, and one flat list written command to key
   (`zoom = ["<prefix>z", "<prefix>enter"]`, `detach = []` to unbind), which no tool read does.
+  Each mode gets a section, `[mode.copy]` with `enter` and `[mode.copy.keys]`, in Helix's and
+  Zellij's shape.
   The cost and what would flip it back are in
   [the note](../docs/direction/keybindings-are-configurable.md#k6-one-flat-list-command-to-key-a-tryout).
 - **Bind by pressing, like Ableton.** A mode that shows what can take a key, then one press.
