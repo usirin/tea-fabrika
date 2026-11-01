@@ -428,6 +428,24 @@ describe("rules that apply by path", () => {
 		expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([2]);
 	});
 
+	const EFFECTS = [
+		'import {useEffect, useEffectEvent} from "react";',
+		"export const stale = (n: number) => {",
+		"\tuseEffect(() => console.log(n), []);",
+		"};",
+		"export const fresh = (n: number) => {",
+		"\tconst log = useEffectEvent(() => console.log(n));",
+		"\tuseEffect(() => log(), [n]);",
+		"};",
+		"",
+	].join("\n");
+
+	it.each(["apps", "programs"])("an effect's stale value under %s/ is refused", (folder) => {
+		const {at, file} = plantIn(folder, EFFECTS);
+		made.push(at);
+		expect(fires(file, "react-hooks(exhaustive-deps)")).toEqual([3]);
+	});
+
 	it("a `use` in a .ts file under packages/ is left alone: it is Effect's, not a hook", () => {
 		const {at, file} = plantIn("packages", HOOK);
 		made.push(at);

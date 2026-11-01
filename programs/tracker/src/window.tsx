@@ -6,6 +6,7 @@ import {
 	type KeyboardEvent,
 	type ReactNode,
 	useEffect,
+	useEffectEvent,
 	useRef,
 	useState,
 } from "react";
@@ -212,18 +213,25 @@ function ListPage(props: {
 	};
 
 	// Where the focus goes on coming to the list: the row picked, or the title when there is none.
-	// only on coming to the list, not on every new view.
-	useEffect(() => {
+	// Once, on coming to the list: a new view must not pull the focus back.
+	const focusStart = useEffectEvent(() => {
 		if (picked === undefined) titleRef.current?.focus();
 		else rows.current.get(picked)?.focus();
+	});
+	useEffect(() => {
+		focusStart();
 	}, []);
 
 	// A filter that hides the row in focus leaves the focus nowhere: it goes back to the list.
-	// only when the rows shown change.
-	useEffect(() => {
+	// Checked when the rows shown change.
+	const shownRows = order.join("\n");
+	const refocus = useEffectEvent(() => {
 		const at = document.activeElement;
 		if (at === null || at === document.body) toList();
-	}, [order.join("\n")]);
+	});
+	useEffect(() => {
+		refocus();
+	}, [shownRows]);
 
 	const file = (e?: FormEvent) => {
 		e?.preventDefault();
@@ -582,7 +590,7 @@ function TicketPage(props: {
 	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
-	// only on opening a ticket.
+	// The focus moves in on opening a ticket.
 	useEffect(() => {
 		(boxRef.current ?? backRef.current)?.focus();
 	}, [number]);

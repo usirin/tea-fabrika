@@ -1,4 +1,11 @@
-import {type ReactNode, useCallback, useEffect, useLayoutEffect, useState} from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useEffectEvent,
+	useLayoutEffect,
+	useState,
+} from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
@@ -364,10 +371,13 @@ const ASKS_FOOT: readonly Hint[] = [
  */
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const {asks, desk, step, toHost, toRun, tickets} = props;
-	// Opened, every ask in it is seen: the dot in the top bar goes.
+	// Opened, every ask in it is seen: the dot in the top bar goes. By the asks' keys, not their
+	// count: one ask leaving as another arrives keeps the count, and the new one is seen too.
+	const shown = asks.asks.map((a) => a.key).join("\n");
+	const sayAsksSeen = useEffectEvent(() => toHost({type: "seen"}));
 	useLayoutEffect(() => {
-		toHost({type: "seen"});
-	}, [asks.asks.length]);
+		sayAsksSeen();
+	}, [shown]);
 	const close = useCallback(() => step({type: "close"}), [step]);
 	const open = (row: Row) => {
 		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);

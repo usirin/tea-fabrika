@@ -195,6 +195,8 @@
 		"oxc/misrefactored-assign-op": "error",
 		"oxc/no-const-enum": "error",
 		"react/button-has-type": "error",
+		// An effect that reads a value but should not run when it changes reads it in a `useEffectEvent`.
+		"react/exhaustive-deps": "error",
 		"react/jsx-key": "error",
 		"react/jsx-no-comment-textnodes": "error",
 		"react/jsx-no-duplicate-props": "error",

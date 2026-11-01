@@ -4,6 +4,7 @@ import type {Ghostty} from "ghostty-web";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -715,13 +716,16 @@ function App(): ReactNode {
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
 	// desk is out of reach while the link is down, so focus goes back to it once the link is up,
 	// and while something lies over it, which takes focus (pop.tsx); it goes back once that closes.
-	useLayoutEffect(() => {
-		if (focused === null || away || over !== "none") return;
+	const focusTile = useEffectEvent(() => {
+		if (focused === null) return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
+	});
+	useLayoutEffect(() => {
+		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
 	const props: FrameProps = {
 		desk: open,

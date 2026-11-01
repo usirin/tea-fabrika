@@ -121,19 +121,17 @@ built-in rules did get weaker, and [What it costs](#what-it-costs) lists how.
 | `no-invalid-void-type` | 61 | `Deferred.make<void>()` |
 | `new-for-builtins` | 27 | `Array(4).fill(...)`, `Object(x)` |
 | `prefer-tag-over-role` | 17 | it picks a tag without asking if the tag fits, see below; 2 were Biome's too |
-| `exhaustive-deps` | 9 | ~~effects that mean to run on fewer deps; more deps change behavior~~ **Wrong:** it comes back on, see below |
 | `no-array-index-key` | 9 | it cannot tell whether a list ever moves, see below; 3 were Biome's too |
 | `no-accumulating-spread` | 5 | spreads in loops: a speed hint, not a bug |
 | `no-extraneous-class` | 1 | an ambient class; `no-static-only-class` stays on |
 | `ban-types` | 1 | `string & {}`; three narrower rules replace it |
 
-  - Seven of these stand for Biome rules that were on: `noRedeclare`, `noConfusingVoidType`,
-    `noInvalidBuiltinInstantiation`, `noAccumulatingSpread`, `useExhaustiveDependencies`,
-    `noArrayIndexKey`, `useSemanticElements`. Here is what now passes:
+  - Six of these stand for Biome rules that were on: `noRedeclare`, `noConfusingVoidType`,
+    `noInvalidBuiltinInstantiation`, `noAccumulatingSpread`, `noArrayIndexKey`,
+    `useSemanticElements`. Here is what now passes:
 
 ```ts
-// Each passes pnpm lint today. Under Biome the first two failed in programs/, not in apps/fabrika.
-useEffect(() => log(n), []); // exhaustive-deps: `n` goes stale
+// Each passes pnpm lint today. Under Biome the first failed in programs/, not in apps/fabrika.
 items.map((x, i) => <li key={i}>{x}</li>); // no-array-index-key
 const f = (a: void) => a; // no-invalid-void-type
 var v1 = 1;
@@ -143,7 +141,7 @@ function g(a: number) {
 }
 ```
 
-  - ~~Each of these failed under Biome.~~ **Wrong, 2026-10-31:** not the two React lines in the app's
+  - ~~Each of these failed under Biome.~~ **Wrong, 2026-10-31:** not the React lines in the app's
     windows. Biome ran its React rules only where a package's `react` is a real version range. Every
     program has `^19.0.0`. `apps/fabrika` lists only `catalog:`, so Biome silently skipped them there.
     All measured with Biome 2.5.15 on the old setup:
@@ -153,11 +151,8 @@ function g(a: number) {
     - With the rules forced on, Biome finds 20 diagnostics in `apps/fabrika/src/window/` that nobody
       had ever seen: 16 of `useExhaustiveDependencies` and 4 of `noArrayIndexKey`.
     - So oxlint is a gain here. It does not skip the app. The React rules that are on, such as
-      `rules-of-hooks`, run there now, and `exhaustive-deps` will too. Of its 9 fires, 6 are in the app.
-  - **`exhaustive-deps` comes back on, in a follow-up pull request.** The old reason was wrong: adding
-    deps is not the only fix. Each of the 9 fires moves to React's `useEffectEvent` (in React since
-    19.2, we are on 19.3.1), so the effect keeps its deps and still reads the latest values. No ignore
-    comments. It costs those 9 edits. Until it lands, the stale `n` above passes.
+      `rules-of-hooks` and `exhaustive-deps`, run there now. Of the 9 fires `exhaustive-deps` had, 6
+      were in the app.
   - **`no-array-index-key` stays off.** It cannot tell whether a list ever moves. An index key only
     harms when items move and the row holds state, and the rule sees neither.
   - **`prefer-tag-over-role` stays off.** It maps a role to a tag without asking whether the tag fits.
@@ -165,9 +160,15 @@ function g(a: number) {
     fires by role: 5 img, 4 status, 3 dialog, 2 group, 1 listbox, 1 option, 1 slider.
   - `tsc` does not stand in for `no-redeclare`. It refuses a second `const`, but not those two `var`
     lines, and `experiments/` is not type-checked at all.
-  - `exhaustive-deps`, `no-array-index-key` and `prefer-tag-over-role` had ignore comments on the
-    lines they fired. Those are plain comments now, with the reason kept. These, and one on a CSS
-    line, are the 9 ignores that went. The other 81 became `oxlint-disable` comments.
+  - `no-array-index-key` and `prefer-tag-over-role` had ignore comments on the lines they fired.
+    Those are plain comments now, with the reason kept. These, one on a CSS line, and the ones
+    `exhaustive-deps` had are the 9 ignores that went. The other 81 became `oxlint-disable` comments.
+- **`exhaustive-deps` is back on, and blocks.** It was left off at first as a false alarm on 9 lines,
+  because more deps would change behavior. **Wrong:** adding deps is not the only fix. Those effects
+  mean "run when X changes, and read Y at that moment", and `useEffectEvent` (in React since 19.2, we
+  are on 19.3.1) says exactly that. All 9 are fixed with no ignore comment, and one was a real bug: an
+  ask taking another's place, the count the same, stayed unseen with the list open. A plant under
+  `apps/` and one under `programs/` keep it firing. Biome skipped the app.
 - **Built-in rules still narrower than Biome's:**
   - `import {_a} from "effect"` passes while unused. Biome's unused-import rule ignored no name, but
     oxlint has one pattern for imports and variables. Dropping `^_` makes 18 false fires today: 16
@@ -212,8 +213,8 @@ code would settle it, and so would a CSS linter, which this decision does not al
 - What the lost Biome rules would have caught next. Their worth on new code was not measured.
   ~~The tree is clean of them today.~~ **Wrong:** the app's windows hold the 20 React diagnostics above.
 - How many of those 20 are real, and how close oxlint's React rules are to Biome's. On
-  `apps/fabrika/src/window/`, Biome's rule finds 16 and `exhaustive-deps` finds 6, and nobody has
-  compared them line by line. The follow-up fixes the 6, and the other Biome findings stay unseen.
+  `apps/fabrika/src/window/`, Biome's rule found 16 and `exhaustive-deps` found 6, and nobody has
+  compared them line by line. The 6 are fixed, and the other Biome findings stay unseen.
 - Whether oxfmt's small differences from Biome ever matter. Its first pass changed 122 files, +686
   -745: how an arrow function hugs its call, and in 45 of the 122 the order of the imports. The tests,
   the typecheck and `pnpm promises gate` ran on the result.
