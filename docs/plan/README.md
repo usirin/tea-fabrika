@@ -23,9 +23,12 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
    learns to handle what real agents answer.
 2. **Run ticket 117 for real.** The pipeline builds it, and the owner watches in the app.
    It is a small change to `map`.
-3. **Switch to `next/`.** The owner approved [the Tier 1 plan](./tier-1.md) on 2026-11-01.
-   After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
-   get built through the pipeline, with one tracker ticket per pull request.
+3. **Switch to `next/`.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
+   After ticket 117, that text goes through the planner as
+   [a free-form plan](../direction/free-form-plan-to-planner.md), and the owner approves
+   that plan before builders start. An agent then files each task as a ticket by hand, once, as
+   a named exception. [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest get
+   built through the pipeline, with one tracker ticket per pull request.
 
 Also right after ticket 117, on today's version and beside Tier 1: rename `runs` to
 `timeline` (ticket 86), then the performance program (ticket 114). They and Tier 1 do not
@@ -47,8 +50,8 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. CI is green, and a second fresh review found no blockers. Its leftovers are ticket 125. The mutation step is not finished. → an agent finishes it, then the owner's yes
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
 - **Skipping work already done, and restarting a stuck lane.** Today, a saved lane does not rerun a finished step, but it cannot skip work done outside the lane, and a stuck lane cannot restart. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
-- **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
-- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the exam pull request, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
+- **Tier 1 plan for `next/`.** What it builds was approved by the owner 2026-11-01, not started. Later tiers stay proposed. After ticket 117 its text goes through the planner as [a free-form plan](../direction/free-form-plan-to-planner.md). The old approval does not cover the new breakdown. After the owner's yes, an agent files each task as a ticket by hand, logged in `field/`, and the owner approves each ticket's plan. → the owner approves the planner's plan, then builders start
+- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → it waits for the planner's output on Tier 1, which takes [Tier 1's order of work](./tier-1.md#the-order-of-work) as input. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
 - **Test windows.** Merged: [257](https://github.com/usirin/tea-fabrika/pull/257) made them see-through, then [271](https://github.com/usirin/tea-fabrika/pull/271) made them show again, without focus. → nothing
 - **App icon and top bar.** Merged ([274](https://github.com/usirin/tea-fabrika/pull/274), [275](https://github.com/usirin/tea-fabrika/pull/275)). → nothing
@@ -89,7 +92,7 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Decides which version a job is in when the brief says, or the rule in [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) answers it. If it still cannot tell, it asks.
 - Writes a note marked **proposed**, an experiment, or a field log.
-- Files Tier 1's tracker tickets, for the owner's GitHub id, after ticket 117 lands: the agent running this project session does it.
+- Files Tier 1's ticket, for the owner's GitHub id, after ticket 117 lands, and each task of its plan as a ticket once the owner approves that plan, with the existing tracker command, logged in `field/`: the agent running this project session does it. A named exception, once; no second project gets split by hand without the owner's yes.
 - Fixes a dead-code finding it checked by hand. If the finding is wrong, it stops and tells the owner.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
