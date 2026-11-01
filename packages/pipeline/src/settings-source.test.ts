@@ -11,13 +11,16 @@ import {
 	sourceLine,
 	type Target,
 } from "./settings-source.ts";
-import {DEFAULT_SETTINGS, SETTINGS_FILE} from "./settings.ts";
+import {DEFAULT_SETTINGS, SETTINGS_FILE, SETTINGS_MOVED} from "./settings.ts";
 import {HOLDS_NOTHING} from "./setup.ts";
 
-// Where fabrika.toml is read from (docs/direction/one-fabrika-toml-per-repo.md):
-// a target repository's default branch, as committed, or the folder tsh starts
-// in when there is no target. The target is a local bare repository: no
-// network.
+// Where .fabrika/fabrika.toml is read from
+// (docs/direction/one-fabrika-toml-per-repo.md): a target repository's default
+// branch, as committed, or the folder tsh starts in when there is no target.
+// The target is a local bare repository: no network.
+
+/** Where the file used to be: at a repository's root. */
+const LEFTOVER = "fabrika.toml";
 
 type Services = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 
@@ -66,8 +69,10 @@ const origin = (folder: string) =>
 		const put = (branch: string, files: Readonly<Record<string, string>>) =>
 			Effect.gen(function* () {
 				yield* sh(owner, ["checkout", "-q", "-B", branch]);
-				for (const [name, text] of Object.entries(files))
+				for (const [name, text] of Object.entries(files)) {
+					yield* fs.makeDirectory(path.dirname(path.join(owner, name)), {recursive: true});
 					yield* fs.writeFileString(path.join(owner, name), text);
+				}
 				yield* sh(owner, ["add", "-A"]);
 				yield* sh(owner, ["commit", "-q", "--no-verify", "--allow-empty", "-m", branch]);
 				yield* sh(owner, ["push", "-q", "--no-verify", "-f", "origin", `${branch}:${branch}`]);
@@ -139,6 +144,9 @@ describe("fabrika.toml from a target repository", () => {
 				const first = yield* load(target);
 				// A lane's own branch changes the file, and so does a file left in the clone's folder.
 				yield* put("build/7", {[SETTINGS_FILE]: 'packs = ["@acme/lane-made"]\n'});
+				yield* fs.makeDirectory(path.dirname(path.join(target.clone, SETTINGS_FILE)), {
+					recursive: true,
+				});
 				yield* fs.writeFileString(
 					path.join(target.clone, SETTINGS_FILE),
 					'packs = ["@acme/uncommitted"]\n',
@@ -179,7 +187,60 @@ describe("fabrika.toml from a target repository", () => {
 				return (yield* Effect.flip(load(target))).why;
 			}),
 		);
-		expect(why).toMatch(/^acme\/widgets@main:fabrika\.toml: packs: /);
+		expect(why).toMatch(/^acme\/widgets@main:\.fabrika\/fabrika\.toml: packs: /);
+	});
+
+	it("a file left at the root with none in the folder is refused, never read as every default", async () => {
+		const why = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const {target, put} = yield* origin(folder);
+				yield* put("main", {[LEFTOVER]: 'packs = ["@acme/desk"]\n'});
+				return (yield* Effect.flip(load(target))).why;
+			}),
+		);
+		expect(why).toContain(SETTINGS_MOVED);
+		expect(why).not.toContain("\n");
+	});
+
+	it("a file left at the root beside the new one is refused too: two spellings must not coexist", async () => {
+		const why = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const {target, put} = yield* origin(folder);
+				yield* put("main", {
+					[LEFTOVER]: 'packs = ["@acme/old"]\n',
+					[SETTINGS_FILE]: 'packs = ["@acme/new"]\n',
+				});
+				return (yield* Effect.flip(load(target))).why;
+			}),
+		);
+		expect(why).toContain(SETTINGS_MOVED);
+	});
+
+	it("a file left at the root of a lane's branch is not read: only the default branch counts", async () => {
+		const got = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const {target, put} = yield* origin(folder);
+				yield* put("main", {[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n'});
+				yield* put("build/7", {[LEFTOVER]: 'packs = ["@acme/lane-made"]\n'});
+				return yield* load(target);
+			}),
+		);
+		expect(got.settings.packs).toEqual(["@acme/desk"]);
+	});
+
+	it("a .fabrika.jsonc at main is not refused and not read: it may be another tool's, and it is asked about", async () => {
+		const got = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const {target, put} = yield* origin(folder);
+				yield* put("main", {
+					[SETTINGS_FILE]: '[review]\ngoverned = [".github/"]\n',
+					".fabrika.jsonc": '{ "governedRoots": ["elsewhere/"] }\n',
+				});
+				return yield* load(target);
+			}),
+		);
+		expect(got.settings.review?.governed).toEqual([".github/"]);
+		expect(got.holds.files.has(".fabrika.jsonc")).toBe(true);
 	});
 
 	it("a clone named with nowhere to clone it from, and not there: refused, never every default", async () => {
@@ -202,6 +263,7 @@ describe("fabrika.toml with no target repository", () => {
 				const path = yield* Path.Path;
 				const file = path.join(folder, SETTINGS_FILE);
 				const missing = yield* loadSettings({from: "folder", folder});
+				yield* fs.makeDirectory(path.dirname(file), {recursive: true});
 				yield* fs.writeFileString(file, 'packs = ["@acme/desk"]\n');
 				const there = yield* loadSettings({from: "folder", folder});
 				return {missing, there, file};
@@ -218,23 +280,61 @@ describe("fabrika.toml with no target repository", () => {
 			holds: HOLDS_NOTHING,
 		});
 	});
+
+	/** The folder with `files` written in it: why it is refused. */
+	const refused = (files: readonly string[]) =>
+		inFolder((folder) =>
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const path = yield* Path.Path;
+				for (const name of files) {
+					yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
+					yield* fs.writeFileString(path.join(folder, name), 'packs = ["@acme/desk"]\n');
+				}
+				return (yield* Effect.flip(loadSettings({from: "folder", folder}))).why;
+			}),
+		);
+
+	it("a file left at the root with none in the folder is refused, never read as every default", async () => {
+		const why = await refused([LEFTOVER]);
+		expect(why).toContain(SETTINGS_MOVED);
+		expect(why).not.toContain("\n");
+	});
+
+	it("a file left at the root beside the new one is refused too", async () => {
+		expect(await refused([LEFTOVER, SETTINGS_FILE])).toContain(SETTINGS_MOVED);
+	});
+
+	it("a .fabrika.jsonc in the folder is not refused, and it is asked about", async () => {
+		const got = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const path = yield* Path.Path;
+				yield* fs.writeFileString(path.join(folder, ".fabrika.jsonc"), "{}\n");
+				return yield* loadSettings({from: "folder", folder});
+			}),
+		);
+		expect(got.settings).toEqual(DEFAULT_SETTINGS);
+		expect(got.holds.files.has(".fabrika.jsonc")).toBe(true);
+	});
 });
 
 describe("the line tsh prints at start", () => {
 	const commit = "0123456789abcdef0123456789abcdef01234567";
+	const FILE = "/w/.fabrika/fabrika.toml";
 	it.each<[Source, string]>([
 		[
 			{from: "repo", name: "acme/widgets", branch: "main", commit, found: true},
-			"fabrika.toml: acme/widgets@main (0123456)",
+			".fabrika/fabrika.toml: acme/widgets@main (0123456)",
 		],
 		[
 			{from: "repo", name: "acme/widgets", branch: "main", commit, found: false},
-			"fabrika.toml: acme/widgets@main (0123456), not there: every default",
+			".fabrika/fabrika.toml: acme/widgets@main (0123456), not there: every default",
 		],
-		[{from: "folder", file: "/w/fabrika.toml", found: true}, "fabrika.toml: /w/fabrika.toml"],
+		[{from: "folder", file: FILE, found: true}, `.fabrika/fabrika.toml: ${FILE}`],
 		[
-			{from: "folder", file: "/w/fabrika.toml", found: false},
-			"fabrika.toml: /w/fabrika.toml, not there: every default",
+			{from: "folder", file: FILE, found: false},
+			`.fabrika/fabrika.toml: ${FILE}, not there: every default`,
 		],
 	])("%j prints %s", (source, line) => {
 		expect(sourceLine(source)).toBe(line);

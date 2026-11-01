@@ -99,11 +99,12 @@ describe("tsh.toml", () => {
 		['packs = ["@acme/desk"]'],
 		['[pack."@acme/desk"]\nview = "comment"'],
 		['repo = "acme/widgets"\npacks = ["@acme/desk"]\n[pack."@acme/desk"]\nview = "comment"'],
-	])("refuses packs, saying they moved to fabrika.toml: %s", async (text) => {
+	])("refuses packs, saying they moved to .fabrika/fabrika.toml: %s", async (text) => {
 		const {got} = await read(text);
 		if (typeof got !== "string") throw new Error("read, not refused");
 		expect(got).toContain(CONFIG_FILE);
-		expect(got).toContain("add-on packs moved to fabrika.toml");
+		expect(got).toContain("add-on packs moved to .fabrika/fabrika.toml");
+		expect(got).not.toContain("at the root");
 		expect(got).toContain("move the packs line");
 	});
 

@@ -1,18 +1,23 @@
+import {existsSync, readFileSync} from "node:fs";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
+import {kindsNeeded} from "./code-host-github.ts";
 import {
 	BUILD_GO_GONE,
 	DEFAULT_SETTINGS,
+	type Rules,
 	readSettings,
 	repoOf,
+	reviewRules,
 	SETTINGS_FILE,
+	SETTINGS_MOVED,
 	type Settings,
 	settingsFrom,
 } from "./settings.ts";
 
-// One repository's fabrika.toml, and the three load rules
-// (docs/direction/one-fabrika-toml-per-repo.md).
+// One repository's .fabrika/fabrika.toml, the load rules, and the review rules
+// read from it (docs/direction/one-fabrika-toml-per-repo.md).
 
 /** The settings `text` makes, or why it is refused. */
 const read = (text: string): Promise<Settings | string> =>
@@ -34,6 +39,16 @@ const inFolder = <A, E>(
 	);
 
 describe("fabrika.toml", () => {
+	describe("where it is", () => {
+		it("has one spelling, in the .fabrika folder", () => {
+			expect(SETTINGS_FILE).toBe(".fabrika/fabrika.toml");
+		});
+
+		it("a file left at the root is refused with one line that says to move it", () => {
+			expect(SETTINGS_MOVED).toBe("fabrika.toml moved to .fabrika/fabrika.toml: move it there");
+		});
+	});
+
 	describe("rule 1: an empty or missing file changes nothing", () => {
 		it("an empty file: no packs, no pack settings", async () => {
 			expect(await read("")).toEqual({packs: [], pack: {}});
@@ -94,7 +109,9 @@ describe("fabrika.toml", () => {
 			const got = await inFolder((folder) =>
 				Effect.gen(function* () {
 					const fs = yield* FileSystem.FileSystem;
-					const file = `${folder}/${SETTINGS_FILE}`;
+					const path = yield* Path.Path;
+					const file = path.join(folder, ".fabrika", "fabrika.toml");
+					yield* fs.makeDirectory(path.dirname(file), {recursive: true});
 					yield* fs.writeFileString(file, "packs = 1\n");
 					return yield* readSettings(file).pipe(Effect.flip);
 				}),
@@ -169,6 +186,101 @@ describe("fabrika.toml", () => {
 
 		it("GitHub's checks counted for nothing with no check of fabrika's own is refused", async () => {
 			expect(await read("[checks]\ngithub = 'none'")).toContain("would pass a change on no check");
+		});
+	});
+
+	describe("the review rules one side of a change holds", () => {
+		const NONE: Rules = {governed: [], ui: []};
+
+		it.each<[string, string | null]>([
+			["no file", null],
+			["an empty file", ""],
+			["a file of comments only", "# nothing yet\n"],
+			["no [review] table", '[build]\ninstall = ["npm", "ci"]\n'],
+			["a [review] table with neither key", '[review]\nrubrics = "docs/rubrics"\n'],
+		])("%s: no rules, and known", (_name, text) => {
+			expect(reviewRules(text)).toEqual(NONE);
+		});
+
+		it("a key left out is an empty list, on its own", () => {
+			expect(reviewRules('[review]\ngoverned = [".github/"]\n')).toEqual({
+				governed: [".github/"],
+				ui: [],
+			});
+			expect(reviewRules('[review]\nui = ["apps/web/src/"]\n')).toEqual({
+				governed: [],
+				ui: ["apps/web/src/"],
+			});
+		});
+
+		it("both keys: their values, as written", () => {
+			expect(
+				reviewRules('[review]\ngoverned = [".github/", "AGENTS.md"]\nui = ["apps/web/src/"]\n'),
+			).toEqual({governed: [".github/", "AGENTS.md"], ui: ["apps/web/src/"]});
+		});
+
+		it.each<[string, string]>([
+			["not TOML", "[review\ngoverned = "],
+			["JSON with comments, the old file's way", '{\n\t// a note\n\t"governedRoots": [],\n}\n'],
+			["[review] that is not a table", 'review = "all"\n'],
+			["governed that is not a list", '[review]\ngoverned = ".github/"\n'],
+			["governed with something other than text in it", '[review]\ngoverned = [".github/", 3]\n'],
+			["governed with an empty text in it", '[review]\ngoverned = [""]\n'],
+			["ui that is not a list", '[review]\nui = "apps/web/src/"\n'],
+			["ui with something other than text in it", "[review]\nui = [3]\n"],
+			["ui with an empty text in it", '[review]\nui = [""]\n'],
+			["the old shape of ui", '[[review.ui]]\nprefix = "apps/web/src/"\n'],
+		])("%s: the rules are not known", (_name, text) => {
+			expect(reviewRules(text)).toBeNull();
+		});
+
+		it.each<[string, string]>([
+			["an unknown table", "[failure]\nfloor = 0.9\n"],
+			["an unknown top-level key", 'pakcs = ["@acme/desk"]\n'],
+			["keys fabrika no longer reads", '[build]\ngo = "label"\n'],
+			["a pick the load refuses", '[checks]\ngithub = "none"\n'],
+			["a value elsewhere that does not fit", "packs = 1\n"],
+		])("%s elsewhere in the file leaves the rules known: only [review] is read", (_name, rest) => {
+			expect(reviewRules(`${rest}\n[review]\ngoverned = [".github/"]\n`)).toEqual({
+				governed: [".github/"],
+				ui: [],
+			});
+		});
+
+		it("the old keys are not rules", () => {
+			expect(reviewRules('governedRoots = ["a/"]\n')).toEqual(NONE);
+		});
+	});
+
+	describe("this repository's own file", () => {
+		const ROOT = new URL("../../../", import.meta.url);
+		const text = () => readFileSync(new URL(SETTINGS_FILE, ROOT), "utf8");
+
+		it("passes the load rules, and its [review] governed reaches the kinds a change needs", async () => {
+			const settings = await read(text());
+			if (typeof settings === "string") throw new Error(settings);
+			const rules: Rules = {
+				governed: settings.review?.governed ?? [],
+				ui: settings.review?.ui ?? [],
+			};
+			expect(kindsNeeded([".fabrika/fabrika.toml"], rules)).toContain("governance");
+			expect(kindsNeeded([".github/workflows/ci.yml"], rules)).toContain("governance");
+			expect(kindsNeeded(["packages/pipeline/src/settings.ts"], rules)).not.toContain("governance");
+		});
+
+		it("gives the same rules through the reader the code hosts use", async () => {
+			const settings = await read(text());
+			if (typeof settings === "string") throw new Error(settings);
+			expect(reviewRules(text())?.governed).toEqual(settings.review?.governed);
+		});
+
+		it("governs only what is there: a typo in a path is not a rule that never fires", async () => {
+			const settings = await read(text());
+			if (typeof settings === "string") throw new Error(settings);
+			const missing = (settings.review?.governed ?? []).filter(
+				(root) => !existsSync(new URL(root, ROOT)),
+			);
+			expect(missing).toEqual([]);
 		});
 	});
 

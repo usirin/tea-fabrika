@@ -26,8 +26,8 @@ import {DESK, markerOf, threadOf} from "./comment.ts";
 import {fileOf} from "./markdown.ts";
 import {answerOf} from "./reply.ts";
 
-// The desk end to end, as a host runs it: a fabrika.toml with the one `packs`
-// line, the packs found by name from its folder, the core (the asks
+// The desk end to end, as a host runs it: a .fabrika/fabrika.toml with the one
+// `packs` line, the packs found by name from the repository's root, the core (the asks
 // program) started with them, and the owner answering by typed replies. The
 // core is the same in every test; only the config changes.
 //
@@ -80,7 +80,9 @@ interface Host {
 const host = (folder: string, toml: string, storage: Storage) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		const file = `${folder}/${SETTINGS_FILE}`;
+		const path = yield* Path.Path;
+		const file = path.join(folder, SETTINGS_FILE);
+		yield* fs.makeDirectory(path.dirname(file), {recursive: true});
 		yield* fs.writeFileString(file, toml);
 		const settings = yield* readSettings(file);
 		const packs = yield* loadPacks(settings.packs, folder);

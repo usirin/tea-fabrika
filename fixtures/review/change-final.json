@@ -2,10 +2,10 @@
   "data": {
     "repository": {
       "baseConfig": {
-        "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"],\n}\n"
+        "text": "# The governed folders.\n[review]\ngoverned = [\".claude/\", \".github/\", \".fabrika/\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"]\n"
       },
       "headConfig": {
-        "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"],\n}\n"
+        "text": "# The governed folders.\n[review]\ngoverned = [\".claude/\", \".github/\", \".fabrika/\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"]\n"
       },
       "claudeMd": null,
       "agentsMd": null,
