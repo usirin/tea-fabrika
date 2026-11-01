@@ -8,6 +8,8 @@ The findings below are unchanged. These things changed after them.
   own themes, and a Base16, Base24 or Ghostty file may keep its own colors. The pick is
   `theme = "<name>"` in `~/.fabrika/fabrika.toml`, and each theme is `~/.fabrika/themes/<name>.toml`.
   This replaces the study's lean that the pick lives on the person's ledger object (section 3).
+  The built-in themes are named `fabrika` (dark, the default) and `fabrika-light`. They are the
+  slate and indigo pick measured here; the shot file names below keep the old words.
 - **Themes are TOML.** The theme examples here are TypeScript values, and the results are JSON.
   Theme files are now TOML. A shared file is still read in its own format and mapped in.
 - **Pipe colors are now six fixed names.** [Pipe colors](../docs/direction/pipe-colors.md) set sky,

@@ -7,7 +7,7 @@ not Radix steps. `next/` builds this. Nothing is built yet.
 
 ```toml
 # ~/.fabrika/fabrika.toml, the person's own settings
-theme = "nord"   # a file in ~/.fabrika/themes/; leave the line out for the default
+theme = "nord"   # a file in ~/.fabrika/themes/; leave the line out for "fabrika", the default
 ```
 
 ```text
@@ -53,8 +53,8 @@ Themes and keys follow one rule: **user config, with the defaults as the first r
 [keybindings are configurable](./keybindings-are-configurable.md). Both live in the person's home,
 `~/.fabrika/`, and each setting has one home there.
 
-- The built-in themes ship as files in the same TOML shape. They are the first rows of the list the
-  picker shows. The default pick is one of them.
+- The built-in themes are `fabrika`, the dark default, and `fabrika-light`. They ship as files in
+  the same TOML shape, and they are the first rows of the list the picker shows.
 - A person's own files come after. A guess, to match keys: a file with a built-in's name wins over
   the built-in, as a later row does.
 - One difference from keys: a theme is a full set, so a file is not merged with the default. On the
@@ -63,15 +63,18 @@ Themes and keys follow one rule: **user config, with the defaults as the first r
 
 ## The answer each way in gives
 
-These are sketches of the shape proposed below. The numbers are WCAG contrast over each theme's own
-ground. The Nord numbers come from experiment 177's results, on today's version.
+These are sketches of the shape proposed below. Every number was computed by a script that runs
+this note's rules on the files experiment 177 kept (`experiments/177-themes/schemes/`). They are
+WCAG contrast ratios, each over the worst of the backgrounds the color sits on (desk, ground and
+raised for text; the ground for focus and the turn fill; the fill for `on-turn`). No number here was
+read off a screen.
 
-**A Radix pick, written out by the `themes` program:**
+**The built-in `fabrika`, a Radix pick, written out:**
 
 ```toml
-# ~/.fabrika/themes/slate-indigo.toml (a sketch)
+# ~/.fabrika/themes/fabrika.toml (a sketch); picked by theme = "fabrika", or by no theme line
 format = 1
-name = "slate-indigo"
+name = "fabrika"
 look = "dark"
 
 [from.radix]
@@ -80,29 +83,44 @@ gray = "slate"
 accent = "indigo"
 
 [colors]
+desk = "#0c0d0e"      # no Radix step is darker than slate 1: the one bend, see below
 ground = "#111113"    # slate 1
 raised = "#18191b"    # slate 2
 hover = "#ddeaf814"   # slate a3
-edge = "#d3edf81d"    # slate a4, the one bend color principles records
+edge = "#d3edf81d"    # slate a4, the bend color principles already records
 focus = "#d9edff5d"   # slate a8
 text = "#edeef0"      # slate 12
 faint = "#f1f7feb5"   # slate a11
 turn = "#3e63dd"      # indigo 9: your turn
+on-turn = "#ffffff"   # Radix's own rule for text on step 9
 turn-text = "#9eb1ff" # indigo 11
 done = "#71d083"      # grass 11
 running = "#ffca16"   # amber 11
 stuck = "#ff9592"     # red 11
+closed = "#f1f7feb5"  # slate a11: no hue, the word says closed
 
 [terminal]
 foreground = "#edeef0"
 background = "#111113"
-palette = [ ... ]     # 16 colors, built from steps 9 and 11
+cursor = "#edeef0"
+selection = "#d9edfe25" # slate a5
+palette = [ ... ]     # 16 Radix steps: slate 11, red 9, grass 9, amber 9, blue 9, purple 11,
+                      # cyan 9, slate 11, slate 11, then red, grass, amber, blue, purple, cyan 11,
+                      # slate 12
 ```
 
 ```text
-text 16.25   faint 9.07   turn-text 9.15   done 9.93   running 12.32   stuck 8.95
-moved by repair: 0   every value a Radix step
+text 15.15   faint 8.71   turn-text 8.53   done 9.26   running 11.49   stuck 8.35   closed 8.71
+focus 3.01   turn 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
+terminal: every color 4.82 or more
+moved by repair: 0
 ```
+
+**The built-in `fabrika-light`:** the same pick, `look = "light"`. Two colors are a step up from
+the dark one, because repair would move them there: `running` is amber 12, since amber 11 reads 4.38,
+and `focus` is slate a9, since a8 reads 1.90. With those written in, repair moves nothing: text
+15.58, faint 5.81, done 4.82, running 10.81, stuck 4.96, focus 3.27, and every terminal color 4.65 or
+more. The cost: running reads brown, not amber.
 
 **A Base16 file, mapped in:**
 
@@ -118,27 +136,42 @@ sha256 = "bf0620d47f232657..."   # the bytes it was mapped from
 by = "arcticicestudio"
 
 [colors]
-ground = "#2e3440"   # base00
-text = "#e5e9f0"     # base05
-turn = "#81a1c1"     # base0D
-done = "#a3be8c"     # base0B
-running = "#ebcb8b"  # base0A
-stuck = "#bf616a"    # base08
-# ... the other names, mapped once at import
+desk = "#2a303c"      # mixed from base00 toward base05, as below
+ground = "#2e3440"    # base00
+raised = "#353b47"
+hover = "#3d434f"
+edge = "#444a55"
+focus = "#727882"
+text = "#e5e9f0"      # base05
+faint = "#b6bbc4"
+turn = "#81a1c1"      # base0D
+on-turn = "#000000"   # black or white, whichever reads more on turn
+turn-text = "#81a1c1" # base0D
+done = "#a3be8c"      # base0B
+running = "#ebcb8b"   # base0A
+stuck = "#bf616a"     # base08
+closed = "#b6bbc4"    # the faint gray
 
 [terminal]
 foreground = "#e5e9f0"
 background = "#2e3440"
-palette = [ ... ]    # the Tinted Theming roles, base00 to base0F
+cursor = "#e5e9f0"
+selection = "#434c5e" # base02
+palette = [ ... ]     # the Tinted Theming roles, base00 to base0F
 ```
 
 ```text
-text 10.26   terminal colors under 3:1: 2
+text 9.23   faint 5.83   done 5.51   running 7.20   (all over raised, the worst of the three)
 moved by repair, in the app only, never in the file:
-  stuck  #bf616a -> #e8868d   (2.83 where it is used)
-  turn-text, faint gray and closed: 3 more, each a small move in lightness
-off Radix: 14 of the 16 terminal colors are more than 0.02 in OKLab from the nearest Radix color
+  stuck      #bf616a -> #eb8991   2.75 -> 4.56, over raised
+  turn-text  #81a1c1 -> #89a9c9   4.18 -> 4.59, over raised
+  focus      #727882 -> #787e88   2.81 -> 3.06, over the ground
+terminal: 6 of 16 under 4.5 (2 under 3:1), all 6 moved; cursor 10.26
+bottom line, once: theme nord: 3 colors and 6 terminal colors moved so they read
 ```
+
+The study measured Nord's `stuck` at 2.83 over raised with its own ladder. This note's ladder puts
+raised a little lighter, so it reads 2.75 here.
 
 The Base16 roles are the [Tinted Theming styling guide](https://github.com/tinted-theming/home/blob/main/styling.md)'s:
 base00 the ground, base05 the text, base08 red, base0A yellow, base0B green, base0D blue.
@@ -168,6 +201,33 @@ const Theme = Schema.Struct({
 });
 ```
 
+- **The names.** Fifteen colors, plus the terminal's own.
+  - Backgrounds, never moved by repair: `desk` (behind the tiles), `ground` (a tile), `raised` (what
+    opens over the desk), `hover`.
+  - Lines: `edge` (a tile at rest) and `focus` (the focused tile).
+  - Text: `text`, `faint`, `turn-text`, and the state words `done`, `running`, `stuck`, `closed`.
+  - The turn fill and its text: `turn` and `on-turn`.
+  - `closed` has no hue of its own. It is the faint gray, and the word says closed. Every free hue
+    is taken by a state or a pipe, so a hue for closed would break "a color means one thing". Today's
+    `--closed` is a hue, so this is a change.
+  - The terminal: `foreground`, `background`, `cursor`, `selection` and a `palette` of 16.
+- **How a 16-color file fills the names.** A Base16, Base24 or Ghostty file names a background, a
+  foreground and 16 hues, and none of our grays. So:
+  - `ground` is the background and `text` the foreground (Base16 base00 and base05).
+  - `desk`, `raised`, `hover`, `edge`, `focus` and `faint` are mixed in OKLCH from the background
+    toward the foreground, each at the place it sits in `fabrika`'s own ladder. In a dark theme that
+    is desk -0.026, raised 0.045, hover 0.096, edge 0.136, focus 0.403, faint 0.766; in a light one
+    0.012, 0, 0.059, 0.091, 0.271, 0.656. The study's spike mixed the same way, from today's ladder.
+  - `turn` and `turn-text` are the blue (base0D, Ghostty's palette 4), `done` the green (base0B, 2),
+    `running` the yellow (base0A, 3) and `stuck` the red (base08, 1). `on-turn` is black or white,
+    whichever reads more on `turn`. `closed` is `faint`.
+  - So Base16 and Ghostty map the same way. The cost: Base16's own grays, base01 to base04, are not
+    used. Sure: 65%. Doubt: on a theme whose base01 to base04 were tuned by hand, our mix may look
+    off. A look at real themes side by side settles it.
+- **One value in `fabrika` is not a Radix step: the dark `desk`, `#0c0d0e`.** Radix has nothing
+  darker than step 1, and the tile's ground is step 1. This is a bend from
+  [color principles](./color-principles.md) principle 5, written here with its reason. The light
+  desk is slate 2. `on-turn` is white, which is Radix's own rule for text on step 9, not a step.
 - **Full values, and the source is kept.** A pick can always be written out as values. A shared
   theme can never be said as a pick. So one shape works for both, with `[from]` saying where it came
   from. Sure: 85%, the study's number.
@@ -233,33 +293,69 @@ Sure: 75%. Doubt: no third-party program exists yet, so this is reasoning from t
 
 A brought theme must never make the app unreadable. The app repairs it and does not refuse it.
 
-- **What the app does.** On every load, each text color is checked against the background it sits on:
-  4.5:1 for text ([WCAG 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)),
-  3:1 for a needed edge such as focus
-  ([1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)). A color under the
-  bar moves along its own hue, lightness only, until it reads. The ground never moves. iTerm2's
-  minimum contrast works the same way.
-- **It always ends readable.** Black or white text reaches 4.5:1 on any ground, so the worst case
-  ends there.
+What is checked, on every load:
+
+| Names | Against | Bar |
+|---|---|---|
+| `text`, `faint`, `turn-text`, `done`, `running`, `stuck`, `closed` | the worst of desk, ground and raised | 4.5:1, [WCAG 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) |
+| `on-turn` | `turn` | 4.5:1 |
+| `focus`, `turn` | the ground (focus is drawn inside the tile) | 3:1, [1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) |
+| the 16 terminal colors | the terminal's background | 4.5:1 |
+| the terminal cursor | the terminal's background | 3:1 |
+
+What repair does:
+
+- **Backgrounds never move:** desk, ground, raised, hover, and the terminal's background.
+- **`edge` is not checked and never moves.** It carries no needed fact. It is 1.31:1 in `fabrika`
+  by design, the bend [color principles](./color-principles.md) records, and the title bar and the
+  focus edge carry the tile instead. Moving it would break that look on every theme.
+- **`focus` moves like text, to 3:1.** It is the one line a person must see.
+- **A Radix pick steps up its own scale,** one step at a time, solid or alpha: 11 to 12, a8 to a9,
+  9 to 10 or 11. `on-turn` takes white or slate 1, whichever reads. Run over all 300 picks (6 grays,
+  25 accents, dark and light), this always ended on a Radix step, with no value off the scale. 275
+  of the 300 needed a move: every light pick moves `running` (amber 11 to 12) and `focus` (a8 to
+  a9). So the built-ins are written with those steps already, and repair moves nothing in them.
+- **A shared file moves lightness only,** along each color's own hue, away from the background
+  first, as iTerm2's minimum contrast moves text and never the background. Black or white text
+  reaches 4.5:1 on any ground, so it always ends readable.
+- **The terminal's 16 colors are repaired too,** each as text on the terminal's background, at 4.5:1.
+  In the study's unreadable test (every color near one gray), 16 of 16 were under 3:1; after
+  repair all 16 read, and the cursor goes from 1.07 to 3.05.
+  - The cost, said plainly: a color that a program uses as a fill moves too. Color 0, black in a
+    dark theme, sits near the background on purpose. In `fabrika`, slate has no step between 4.45
+    (slate 10) and 9.06 (slate 11), so black, white and bright black all end on slate 11, and a
+    program that paints a black bar gets a gray one.
+  - The real fix is contrast per cell, so only text moves: Ghostty's `minimum-contrast`, iTerm2's
+    minimum contrast and xterm.js's `minimumContrastRatio` all work that way. ghostty-web has none,
+    so we ask upstream. When it lands, the palette is no longer moved.
 - **The file stays the person's.** Repair happens in the app, in memory. It never rewrites the file.
-- **A Radix pick moves up its own scale**, from step 11 to 12, so a pick stays on Radix steps. The
-  study found light accent 11 on gray 3 under 4.5 in 66 of 150 picks.
 - **A file that does not decode is not applied.** A value that is not a color, a missing name or
-  broken TOML: the app keeps the built-in default and says why in one line.
-- **The terminal palette is only counted.** ghostty-web has no minimum contrast yet. We ask upstream
-  for one, as Ghostty, iTerm2 and xterm.js have. Moving a palette color would change what a
-  program's colors mean.
+  broken TOML: the app keeps `fabrika` and says why.
+
+What the study's files need, from the same script:
+
+| Theme | App colors moved | Terminal colors moved |
+|---|---|---|
+| Nord (Base16) | 3 | 6 |
+| Solarized Light (Base16) | 7 | 14 |
+| Catppuccin Mocha (Base24) | 1 | 2 |
+| Dracula (Ghostty) | 1 | 2 |
+| Catppuccin Latte (Ghostty) | 6 | 14, and the cursor |
+| Unreadable on purpose | 9 | 16, and the cursor |
 
 When a person meets it:
 
 - **In the `themes` program, before they pick.** The preview lists what repair moved, for example
-  `stuck #bf616a -> #e8868d`, and how many terminal colors are under 3:1.
-- **For a hand-edited file, at load.** The bottom line says once: `theme nord: ground is not a color;
-  using the default`. The `themes` program shows the same reason. There is no prompt on opening the
-  app.
+  `stuck #bf616a -> #eb8991`, and the terminal colors it moved.
+- **At load, when repair moved anything.** The bottom line says so once, in one line:
+  `theme nord: 3 colors and 6 terminal colors moved so they read`. The `themes` program lists them.
+- **At load, when a file is refused.** The bottom line says once: `theme nord: ground is not a
+  color; using fabrika`. The `themes` program shows the same reason.
+- There is no prompt on opening the app.
 
-Sure: 75%. Doubts: which measure gates, WCAG or APCA, is open (Radix promises APCA). And repair
-changes a color the person chose, so a "keep my colors" switch may be wanted. A real person using a
+Sure: 75%, and 60% on the terminal. Doubts: which measure gates, WCAG or APCA, is open (Radix
+promises APCA). Repair changes colors the person chose: Solarized Light and Latte lose most of their
+terminal colors as designed, so a "keep my colors" switch may be wanted. A real person using a
 brought theme for a week settles both.
 
 ## The color principles a brought theme gives up
@@ -270,10 +366,17 @@ up.
 - **Principle 5, every value a Radix step.** A brought theme gives it up on purpose. The default and
   every Radix pick keep it.
 - **Principle 2, a color means one thing.** Kept by the mapping: done, running and stuck come from
-  the file's green, yellow and red, and pipes stay Radix. A Radix pick can break it with an accent
-  near a state color: 14 of 25 accents sit within 25 degrees of one. The picker offers the 11 clear
-  ones first (blue, cyan, indigo, iris, mint, pink, plum, purple, sky, teal, violet), and warns on
-  the rest.
+  the file's green, yellow and red, pipes stay Radix, and closed has no hue. A Radix pick can break
+  it two ways, since its accent says your turn:
+  - An accent near a state color. 14 of the 25 Radix accents sit within 25 degrees of grass, amber
+    or red, on step 9 in OKLCH.
+  - An accent that is a pipe color. The six are sky, pink, teal, violet, lime and plum
+    ([pipe colors](./pipe-colors.md)).
+  - That leaves six: blue, cyan, indigo, iris, mint and purple. The picker offers those first, and
+    warns on the rest.
+  - A doubt: cyan sits 4 degrees from sky and mint 4 from teal, iris 10 from violet, and indigo, the
+    default, 21 from violet. A pipe's letter tells them apart (principle 3), but on a desk the
+    accent may look like a pipe. A look on a real desk settles it.
 - **Principle 1, accessible.** Kept by repair, above.
 
 ## What this cannot tell us
@@ -281,5 +384,6 @@ up.
 - Whether anyone beyond the owner wants a brought theme. No user has picked one.
 - How a brought theme looks with Radix pipe washes on it. Nobody has looked.
 - Whether repair feels like the app overruling the person. Nobody has used it for long.
-- Every number is from today's version, on one Mac, in experiment 177. `next/` has no window that
-  shows a theme yet.
+- The live-switching and Nord-at-2.83 numbers are from today's version, on one Mac, in experiment 177.
+  The contrast numbers come from a script on the study's files, not from a screen: alpha colors were
+  composited by hand, and nothing was drawn. `next/` has no window that shows a theme yet.
