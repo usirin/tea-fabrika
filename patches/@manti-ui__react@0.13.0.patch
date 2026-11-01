@@ -107,21 +107,6 @@ index f6daa01a829b7c6e89150be75bfa9eefe0ea0c0b..b6a84358359d2124e58fe9d1e8b639ef
  export interface DatePickerProps {
      /** Optional field label. */
      label?: ReactNode;
-diff --git a/dist/components/Dialog/Dialog.d.ts b/dist/components/Dialog/Dialog.d.ts
-index 87e32afc1bbc532a2eb4c606f84a17a88079232e..8a89b39c3f6b1bea41a3b289f1fea62190bcb8b8 100644
---- a/dist/components/Dialog/Dialog.d.ts
-+++ b/dist/components/Dialog/Dialog.d.ts
-@@ -39,6 +39,10 @@ export interface DialogProps {
-     closeOnInteractOutside?: boolean;
-     /** Close when pressing Escape. @default true */
-     closeOnEscape?: boolean;
-+    /** Elements a press on does not count as outside: an opener that lives elsewhere. */
-+    persistentElements?: Array<() => Element | null>;
-+    /** Draw it with `showModal`: the browser gives the top layer, inertness and focus return. @default false */
-+    native?: boolean;
-     id?: string;
-     className?: string;
- }
 diff --git a/dist/components/Heading/Heading.d.ts b/dist/components/Heading/Heading.d.ts
 index 03a3caca05c37942067f5d079ecf69a7a7f374ca..1daaf2eed57f7600005431674293ce98cfa36280 100644
 --- a/dist/components/Heading/Heading.d.ts
@@ -203,31 +188,16 @@ index c8439abbf5c90b47dd9e2e1bbd1a0c5142debf0b..7026f075a180db79685ec51d43d0cb50
      /** Optional field label. */
      label?: ReactNode;
 diff --git a/dist/components/Popover/Popover.d.ts b/dist/components/Popover/Popover.d.ts
-index 453e85eaa01c41a4044d88d100da8a6293802db2..09f6b762a181b1e86a45f0723df12ad5c18433cb 100644
+index 453e85eaa01c41a4044d88d100da8a6293802db2..06a0d72e5c705348c04da2a39d6fa410708c0f3a 100644
 --- a/dist/components/Popover/Popover.d.ts
 +++ b/dist/components/Popover/Popover.d.ts
-@@ -1,8 +1,8 @@
+@@ -1,5 +1,5 @@
  import type { ReactElement, ReactNode } from 'react';
 -import type { Placement } from '../../internal/floating';
 +import type { Placement } from '../../internal/floating.js';
  export interface PopoverProps {
      /** Element that toggles the popover. Cloned with the machine's trigger props. */
--    trigger: ReactElement;
-+    trigger?: ReactElement;
-     /** Optional heading rendered at the top of the panel. */
-     title?: ReactNode;
-     /** Panel content. */
-@@ -23,6 +23,10 @@ export interface PopoverProps {
-     closeOnInteractOutside?: boolean;
-     /** Close when pressing Escape. @default true */
-     closeOnEscape?: boolean;
-+    /** Elements a press on does not count as outside: an opener that lives elsewhere. */
-+    persistentElements?: Array<() => Element | null>;
-+    /** Draw it in the browser's top layer with `popover`, of this kind. @default none */
-+    native?: "manual" | "auto";
-     id?: string;
-     className?: string;
- }
+     trigger: ReactElement;
 diff --git a/dist/components/Progress/Progress.d.ts b/dist/components/Progress/Progress.d.ts
 index 47950a482108df904148d58241f4e322d4f85c26..93541977947c6803c4cbaf94f5d3438fb72a3634 100644
 --- a/dist/components/Progress/Progress.d.ts
@@ -565,173 +535,6 @@ index 26c07d0b5676a57e3e6b9aea0c53fd811d00f8ad..21eaf3b75eae4f7a07a6d97e5ce3821e
  export type { MantiBuiltinVariant, MantiVariant } from '@manti-ui/tokens';
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
-diff --git a/dist/index.js b/dist/index.js
-index d2933bfdb51f6cc78112f10e0c04d85b913c85d8..0c6bc06c6f681aee9d8607505362a817e2d3fae5 100644
---- a/dist/index.js
-+++ b/dist/index.js
-@@ -712,8 +712,23 @@ var _t = a(function({ size: e = "sm", className: t, ...n }, r) {
- 		className: q(t)
- 	});
- }), vt = () => () => {}, yt = () => !0, bt = () => !1;
-+var TopLayer = r(null);
- function X(e) {
--	return g(vt, yt, bt) ? /* @__PURE__ */ G(Oe, { ...e }) : null;
-+	let t = c(TopLayer);
-+	return g(vt, yt, bt) ? /* @__PURE__ */ G(Oe, { container: t ?? void 0, ...e }) : null;
-+}
-+var NATIVE_RESET = { background: "transparent", border: 0, color: "inherit", margin: 0, maxWidth: "none", maxHeight: "none" };
-+function useTopLayer(show, hide) {
-+	let t = m(null);
-+	return [t, s((e) => {
-+		t.current = e;
-+		if (e === null) return;
-+		show(e);
-+		return () => {
-+			t.current = null;
-+			hide(e);
-+		};
-+	}, [])];
- }
- //#endregion
- //#region src/internal/icons.tsx
-@@ -2600,49 +2615,58 @@ function Kn(e, t) {
- }
- //#endregion
- //#region src/components/Dialog/Dialog.tsx
--function qn({ trigger: e, title: t, description: n, children: r, footer: i, size: a = "md", role: o, showCloseButton: s = !0, open: c, defaultOpen: l, onOpenChange: d, modal: f, closeOnInteractOutside: p, closeOnEscape: m, id: h, className: g }) {
-+function qn({ trigger: e, title: t, description: n, children: r, footer: i, size: a = "md", role: o, showCloseButton: s = !0, open: c, defaultOpen: l, onOpenChange: d, modal: f, closeOnInteractOutside: p, closeOnEscape: m, persistentElements: P, native: N = !1, id: h, className: g }) {
- 	let _ = u(), v = W(O.machine, {
- 		id: h ?? _,
- 		role: o,
- 		open: c,
- 		defaultOpen: l,
--		modal: f,
--		closeOnInteractOutside: p,
-+		modal: N ? !1 : f,
-+		trapFocus: N ? !1 : void 0,
-+		restoreFocus: N ? !1 : void 0,
-+		closeOnInteractOutside: N ? p ?? !0 : p,
- 		closeOnEscape: m,
-+		persistentElements: P,
- 		onOpenChange: d ? (e) => d(e.open) : void 0
--	}), y = O.connect(v, U), b = { close: () => y.setOpen(!1) }, x = (e) => typeof e == "function" ? e(b) : e;
--	return /* @__PURE__ */ K(ke, { children: [Kn(e, y.getTriggerProps()), y.open && /* @__PURE__ */ K(X, { children: [/* @__PURE__ */ G("div", { ...y.getBackdropProps() }), /* @__PURE__ */ G("div", {
--		...y.getPositionerProps(),
--		children: /* @__PURE__ */ K("div", {
--			...y.getContentProps(),
--			"data-size": a,
--			className: q(g),
--			children: [
--				s && /* @__PURE__ */ G("button", {
--					...y.getCloseTriggerProps(),
--					children: /* @__PURE__ */ G(xt, {})
--				}),
--				t != null && /* @__PURE__ */ G("h2", {
--					...y.getTitleProps(),
--					children: t
--				}),
--				n != null && /* @__PURE__ */ G("p", {
--					...y.getDescriptionProps(),
--					children: n
--				}),
--				r != null && /* @__PURE__ */ G("div", {
--					"data-scope": "dialog",
--					"data-part": "body",
--					children: x(r)
--				}),
--				i != null && /* @__PURE__ */ G("div", {
--					"data-scope": "dialog",
--					"data-part": "footer",
--					children: x(i)
--				})
--			]
--		})
--	})] })] });
-+	}), y = O.connect(v, U), b = { close: () => y.setOpen(!1) }, x = (e) => typeof e == "function" ? e(b) : e, [T, A] = useTopLayer((e) => e.open || e.showModal(), (e) => e.close()), content = /* @__PURE__ */ K("div", {
-+		...y.getContentProps(),
-+		"data-size": a,
-+		className: q(g),
-+		children: [
-+			s && /* @__PURE__ */ G("button", {
-+				...y.getCloseTriggerProps(),
-+				children: /* @__PURE__ */ G(xt, {})
-+			}),
-+			t != null && /* @__PURE__ */ G("h2", {
-+				...y.getTitleProps(),
-+				children: t
-+			}),
-+			n != null && /* @__PURE__ */ G("p", {
-+				...y.getDescriptionProps(),
-+				children: n
-+			}),
-+			r != null && /* @__PURE__ */ G("div", {
-+				"data-scope": "dialog",
-+				"data-part": "body",
-+				children: x(r)
-+			}),
-+			i != null && /* @__PURE__ */ G("div", {
-+				"data-scope": "dialog",
-+				"data-part": "footer",
-+				children: x(i)
-+			})
-+		]
-+	}), pos = y.getPositionerProps();
-+	return /* @__PURE__ */ K(ke, { children: [Kn(e, y.getTriggerProps()), y.open && (N ? /* @__PURE__ */ G(X, { children: /* @__PURE__ */ K("dialog", {
-+		...pos,
-+		ref: A,
-+		style: { ...pos.style, ...NATIVE_RESET, width: "100%", height: "100%" },
-+		onCancel: (e) => e.preventDefault(),
-+		children: [/* @__PURE__ */ G("div", { ...y.getBackdropProps(), style: { zIndex: 0 } }), /* @__PURE__ */ G(TopLayer.Provider, { value: T, children: content })]
-+	}) }) : /* @__PURE__ */ K(X, { children: [/* @__PURE__ */ G("div", { ...y.getBackdropProps() }), /* @__PURE__ */ G("div", {
-+		...pos,
-+		children: content
-+	})] }))] });
- }
- //#endregion
- //#region src/components/Drawer/Drawer.tsx
-@@ -3298,7 +3322,7 @@ function xr({ length: e = 4, label: t, size: n = "md", variant: r = "primary", t
- }
- //#endregion
- //#region src/components/Popover/Popover.tsx
--function Sr({ trigger: e, title: t, children: n, placement: r = "bottom", showCloseButton: i = !1, modal: a, open: o, defaultOpen: s, onOpenChange: c, closeOnInteractOutside: l, closeOnEscape: d, id: f, className: p }) {
-+function Sr({ trigger: e, title: t, children: n, placement: r = "bottom", showCloseButton: i = !1, modal: a, open: o, defaultOpen: s, onOpenChange: c, closeOnInteractOutside: l, closeOnEscape: d, persistentElements: P, native: N, id: f, className: p }) {
- 	let m = u(), h = W(ce.machine, {
- 		id: f ?? m,
- 		positioning: { placement: r },
-@@ -3307,10 +3331,21 @@ function Sr({ trigger: e, title: t, children: n, placement: r = "bottom", showCl
- 		defaultOpen: s,
- 		closeOnInteractOutside: l,
- 		closeOnEscape: d,
-+		persistentElements: P,
- 		onOpenChange: c ? (e) => c(e.open) : void 0
--	}), g = ce.connect(h, U);
--	return /* @__PURE__ */ K(ke, { children: [Kn(e, g.getTriggerProps()), g.open && /* @__PURE__ */ G(X, { children: /* @__PURE__ */ G("div", {
--		...g.getPositionerProps(),
-+	}), g = ce.connect(h, U), [T, A] = useTopLayer((e) => e.showPopover(), (e) => {
-+		if (e.isConnected) e.hidePopover();
-+	}), pos = g.getPositionerProps();
-+	return /* @__PURE__ */ K(ke, { children: [Kn(e, g.getTriggerProps()), g.open && /* @__PURE__ */ G(X, { children: /* @__PURE__ */ G(N ? TopLayer.Provider : ke, { ...N ? { value: T } : {}, children: /* @__PURE__ */ G("div", {
-+		...pos,
-+		...N && {
-+			popover: N,
-+			ref: A,
-+			style: { ...pos.style, ...NATIVE_RESET, padding: 0, overflow: "visible" },
-+			onToggle: (e) => {
-+				if (e.newState === "closed" && g.open) g.setOpen(!1);
-+			}
-+		},
- 		children: /* @__PURE__ */ K("div", {
- 			...g.getContentProps(),
- 			className: q(p),
-@@ -3329,7 +3364,7 @@ function Sr({ trigger: e, title: t, children: n, placement: r = "bottom", showCl
- 				})
- 			]
- 		})
--	}) })] });
-+	}) }) })] });
- }
- //#endregion
- //#region src/components/Progress/Progress.tsx
 diff --git a/dist/shortcut/index.d.ts b/dist/shortcut/index.d.ts
 index ce4c6c2e970df784613e659cd9cb7e0b6a682ece..7fe91c0bede9de22c5cb0a6f92b8247abc5f7835 100644
 --- a/dist/shortcut/index.d.ts

@@ -399,10 +399,7 @@ const onKey = (e: KeyboardEvent) => {
 	};
 	if (keyGoesTo(over, name, model.prefix, desk) === "over") {
 		const box = document.querySelector<HTMLElement>("[data-over]");
-		// What Manti portals into the box's top layer (a menu in a panel) is still inside it.
-		const layer = box?.closest("[popover], dialog") ?? box;
-		if (layer === null || (e.target instanceof Element && layer.contains(e.target))) return;
-		if (box === null) return;
+		if (box === null || (e.target instanceof Element && box.contains(e.target))) return;
 		swallow(e);
 		(box.querySelector<HTMLElement>("input") ?? box).focus();
 		return;
