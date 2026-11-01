@@ -13,6 +13,7 @@ import {
 	settingsRefusal,
 } from "../../settings.ts";
 import {shippedRubrics} from "../../setup.ts";
+import {titleOf} from "../../tickets/ticket.ts";
 
 // Where a lane works, on the machine it runs on. Read when a step needs it, so a home with no
 // config starts the lane and ends it on a named state that says which file to write.
@@ -96,7 +97,15 @@ export const LaneConfig = Schema.Struct({
 });
 export type LaneConfig = typeof LaneConfig.Type;
 
-const GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.pager=cat"];
+const GIT = [
+	"-c",
+	"core.hooksPath=/dev/null",
+	"-c",
+	"core.pager=cat",
+	// A name as the disk has it, never git's quoted form of one.
+	"-c",
+	"core.quotepath=off",
+];
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fabrika lane",
 	GIT_AUTHOR_EMAIL: "lane@fabrika.invalid",
@@ -170,7 +179,10 @@ export class LaneWork extends Context.Service<
 		readonly remoteHead: (branch: string) => Effect.Effect<string | null, Failed>;
 		readonly mergeBase: (a: string, b: string) => Effect.Effect<string, Failed>;
 		/** The text of `git diff --unified=0` from `from` to `to`. */
-		readonly diff: (from: string, to: string) => Effect.Effect<string, Failed>;
+		/** The files a change touches, each named as the disk has it. */
+		readonly changedFiles: (from: string, to: string) => Effect.Effect<readonly string[], Failed>;
+		/** What a change does to one of them, as `git diff --unified=0`. */
+		readonly diff: (from: string, to: string, file: string) => Effect.Effect<string, Failed>;
 		/** The commits after `from` up to `to`, oldest first. */
 		readonly commits: (
 			from: string,
@@ -212,11 +224,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			on(runChild("git", [...GIT, "-C", dir, ...args], {env: {...hostEnv(), ...IDENTITY}}));
 		const said = (step: string, ran: Exited) =>
 			failed(`git ${step}: ${ran.err.trim().slice(0, 300)}`);
-		const git = (dir: string, args: readonly string[]) =>
+		const gitOut = (dir: string, args: readonly string[]) =>
 			gitIn(dir, args).pipe(
 				Effect.flatMap((ran) =>
-					ran.code === 0 ? Effect.succeed(ran.out.trim()) : Effect.fail(said(args[0] ?? "", ran)),
+					ran.code === 0 ? Effect.succeed(ran.out) : Effect.fail(said(args[0] ?? "", ran)),
 				),
+			);
+		const git = (dir: string, args: readonly string[]) =>
+			gitOut(dir, args).pipe(Effect.map((out) => out.trim()));
+		/** File names, read with `-z`: each as the disk has it, whatever letters or spaces it holds. */
+		const names = (dir: string, args: readonly string[]) =>
+			gitOut(dir, [...args, "-z"]).pipe(
+				Effect.map((out) => out.split("\0").filter((name) => name !== "")),
 			);
 		const inClone = (args: readonly string[]) => gitIn(clone, args);
 		const lines = (out: string) => out.split("\n").filter((line) => line !== "");
@@ -337,6 +356,12 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			return Effect.gen(function* () {
 				if (yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))
 					return yield* quiet(fs.realPath(tree));
+				// A try that broke may have left a folder shut, and nothing can be removed from one.
+				yield* on(
+					runChild("find", [tree, "-type", "d", "-exec", "chmod", "u+rwx", "{}", ";"], {
+						env: runEnv(),
+					}),
+				).pipe(Effect.ignore);
 				yield* quiet(fs.remove(tree, {recursive: true, force: true}));
 				yield* quiet(fs.makeDirectory(tree, {recursive: true}));
 				yield* unpacked(tree, sha);
@@ -450,16 +475,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			staged: (folder, from) =>
 				Effect.gen(function* () {
 					yield* git(folder, ["add", "-A"]);
-					return lines(
-						yield* git(folder, ["diff", "--cached", "--no-renames", "--name-only", from]),
-					);
+					return yield* names(folder, ["diff", "--cached", "--no-renames", "--name-only", from]);
 				}),
 			filesOf: (folder, sha) =>
-				git(folder, ["show", "--no-renames", "--format=", "--name-only", sha]).pipe(
-					Effect.map(lines),
-				),
-			listAt: (folder, sha) =>
-				git(folder, ["ls-tree", "-r", "--name-only", sha]).pipe(Effect.map(lines)),
+				names(folder, ["show", "--no-renames", "--format=", "--name-only", sha]),
+			listAt: (folder, sha) => names(folder, ["ls-tree", "-r", "--name-only", sha]),
 			show,
 			copy,
 			judgeCopy,
@@ -483,14 +503,24 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					return ran.code === 0 ? ran.out.trim() : null;
 				}),
 			mergeBase: (a, b) => git(clone, ["merge-base", a, b]),
-			diff: (from, to) =>
-				git(clone, ["diff", "--unified=0", "--no-color", "--no-renames", from, to]),
+			changedFiles: (from, to) => names(clone, ["diff", "--no-renames", "--name-only", from, to]),
+			diff: (from, to, file) =>
+				gitOut(clone, [
+					"diff",
+					"--unified=0",
+					"--no-color",
+					"--no-renames",
+					from,
+					to,
+					"--",
+					`:(literal)${file}`,
+				]),
 			commits: (from, to) =>
 				git(clone, ["log", "--reverse", "--format=%H%x09%s", `${from}..${to}`]).pipe(
 					Effect.map((out) =>
 						lines(out).map((line) => {
 							const [sha = "", ...title] = line.split("\t");
-							return {sha, title: title.join(" ").slice(0, 200) || "(no title)"};
+							return {sha, title: titleOf(title.join(" "))};
 						}),
 					),
 				),

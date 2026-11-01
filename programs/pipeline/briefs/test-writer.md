@@ -51,7 +51,7 @@ A helper shared by several tests goes in a new file under a pattern above.
 
 Write down what each Property promises from its own words before you read the tests near that code. That keeps your test from taking the code's view.
 
-Run each test with `{test_command}`. Read why it fails. Your answer holds the files whole, so anything else you leave on disk is not kept. Code runs the tests again after you and keeps only red or green.
+Your folder is read-only: your box refuses a write there, so a new test cannot be put in it or run there. Read the code, and work out how each test will end. Your answer holds the files whole. Code writes them, runs each with `{test_command}` after you, and keeps only red or green.
 
 **For each Property, one test.**
 
@@ -81,7 +81,7 @@ A law that holds only because nothing tried to break it is not a law.
 
 - `files`: each new file, whole: `path` and `text`.
 - `answers`: one for each Property. Either `kind: "test"` with `file` and the test's exact `name`, or `kind: "cannot"` with `why`.
-- `plants`: for each law, the plant's test `name` and the law it must break.
+- `plants`: one sentence for each law: the planted fault's test, by its name, and the law it must break.
 - `gaps`: what this brief or the repo's notes left unclear, what it blocked, and what you did.
 
 Plain short sentences.

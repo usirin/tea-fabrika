@@ -2,12 +2,12 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema, Struct} from "effect";
 import {LaneId} from "../../ids.ts";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
-import {Outcome} from "../../tickets/ticket.ts";
+import {Outcome, titleOf} from "../../tickets/ticket.ts";
 import {Item} from "../build/ticket.ts";
 import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
-import {PlanDraft} from "../plan/plan.ts";
+import {HeldDraft} from "../plan/plan.ts";
 import {LaneOutcome} from "./outcome.ts";
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
@@ -58,7 +58,7 @@ export const MAX_ROUNDS = 3;
 /** What one step leaves for the steps after it. */
 const carried = {
 	/** The plan as data, once it is written. Every later step reads it. */
-	plan: Schema.NullOr(PlanDraft),
+	plan: Schema.NullOr(HeldDraft),
 	/** The plan's version, once it is written. */
 	version: Schema.NullOr(Schema.Finite),
 	/** The rule files the exam step changes. */
@@ -75,6 +75,8 @@ const carried = {
 	open: Schema.Array(Item),
 	/** What the builder declared it did other than asked. */
 	deviations: Schema.Array(Schema.String),
+	/** What the builder says it could not do. Optional: a lane saved before this key still reads. */
+	left: Schema.optionalKey(Schema.Array(Schema.String)),
 	/** The mutants the mutation step saw live: the test writer's second job. */
 	survived: Schema.Array(Survived),
 	/** The review's verdicts: the push step posts them on the pull request. */
@@ -307,9 +309,9 @@ const questionFor = (
 ): Question => {
 	const what = {
 		approve: `approve plan v${s.carry.version ?? 1}`,
-		exam_merge: `merge the rule changes: ${s.carry.rules.join(", ")}`.slice(0, 200),
+		exam_merge: titleOf(`merge the rule changes: ${s.carry.rules.join(", ")}`),
 		merge: `merge ${s.carry.pr ?? "the change"}`,
-		step: `${step} asks: ${said}`.slice(0, 200),
+		step: titleOf(`${step} asks: ${said}`),
 	}[kind];
 	return {ask: `a-${kind}-${s.count}`, what, picks: picksFor(kind, step), for: kind, step};
 };

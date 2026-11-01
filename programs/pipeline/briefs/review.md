@@ -34,7 +34,7 @@ The rows are not the whole job. A change can meet every criterion and still be w
 
 - **Bugs a person would hit.** Name a concrete input and what comes out. Try what a user would try first, and what they would try next.
 - **Your own hard cases.** Make them different from the repo's tests: an empty input, a repeat, a restart, a kill partway, the same call twice.
-- **Tests that pass whatever the code does.** Does each test really fail when its code breaks? Where you can run things, break a line, see it, and put it back.
+- **Tests that pass whatever the code does.** Does each test really fail when its code breaks? Your folder is read-only, so you cannot change a line to see it. Follow the test to what it checks, and name the change it would miss.
 - **Claims with nothing behind them.** Check what the pull request's text, a write-up or a comment says against the code and the saved answers.
 - **What got weaker.** A law, a rule, a check, a limit or a guard that is looser than on the base. List each, even if everything is green.
 - **Rules.** The rules below are the ones this change is judged by. A rule that only this change adds or loosens does not count. Old names and old faults elsewhere are not findings.
@@ -96,7 +96,7 @@ Use the judgment each asks for. Leave out its steps about posting and labels. Wh
 `findings`: what must change before this can land. Each blocks, so leave out what does not.
 
 - `kind`: the one review it belongs to.
-- `from`: a criterion, a standing check above by its name, a deviation, or a rule.
+- `from`: a criterion, a standing check above by its name, a deviation, or a rule. A rule's `file` is `CLAUDE.md` or `AGENTS.md`, the repository's top-level rule files. A rule from any other file is a standing check or goes in `gaps`.
 - `fault`: what is wrong, in a sentence or two. No proof and no fix.
 - `at`: the lines, or null when it is something missing.
 - `proof`: what shows it: the input and what came out.

@@ -33,7 +33,10 @@ import {LaneWork} from "./work.ts";
 // prompt is not used. A later try keeps the machine's prompt, which is only the Check's problems.
 // The first turn of a Codex run is contained as experiments 152 and 153 say: its own home, a
 // keep-list for its environment, no key, and a permission profile. A read-only step's folder is a
-// copy of the code with no history, and what it writes there is thrown away.
+// copy of the code with no history, and its box refuses a write there.
+//
+// A last message that does not fit its schema gets one more try here, in the same conversation, for
+// every step alike. A step's machine only ever hears how the second try ended: an answer, or a misfit.
 //
 // What a run spent is counted here (`Meter`), and the step that ran it writes it on the ticket.
 
@@ -86,9 +89,11 @@ export interface Spent extends Tokens {
 	readonly turns: number;
 	/** What the maker says it billed. `null`: it says nothing, as on a flat plan. */
 	readonly usd: number | null;
+	/** How many last messages did not fit their schema, each followed by one more try. */
+	readonly misfits: number;
 }
 
-const NOTHING: Spent = {input: 0, cached: 0, output: 0, turns: 0, usd: null};
+const NOTHING: Spent = {input: 0, cached: 0, output: 0, turns: 0, usd: null, misfits: 0};
 
 /** What the step now running told the agents: the brief, its slots, who runs it and where. */
 export interface StepNow {
@@ -111,7 +116,11 @@ export class LaneNow extends Context.Service<
 	{
 		readonly set: (now: StepNow) => Effect.Effect<void>;
 		readonly get: Effect.Effect<StepNow>;
-		readonly spend: (spent: Omit<Spent, "usd"> & {readonly usd: number}) => Effect.Effect<void>;
+		readonly spend: (
+			spent: Omit<Spent, "usd" | "misfits"> & {readonly usd: number},
+		) => Effect.Effect<void>;
+		/** A last message did not fit. */
+		readonly misfit: Effect.Effect<void>;
 		/** What was spent since the last call. */
 		readonly take: Effect.Effect<Spent>;
 		/** The exam files the builder may not touch, for the step on now. */
@@ -142,8 +151,12 @@ export const laneNow = Layer.sync(LaneNow, () => {
 					output: spent.output + s.output,
 					turns: spent.turns + s.turns,
 					usd: (spent.usd ?? 0) + s.usd,
+					misfits: spent.misfits,
 				};
 			}),
+		misfit: Effect.sync(() => {
+			spent = {...spent, misfits: spent.misfits + 1};
+		}),
 		take: Effect.sync(() => {
 			const was = spent;
 			spent = NOTHING;
@@ -249,6 +262,52 @@ const metered = <A, R>(
 		),
 	);
 
+/** What the most of a message a second try is shown. */
+const MISFIT_SHOWN = 2_000;
+
+/** What a second try is told: the message that did not fit, in its own words. Pure. */
+const misfitPrompt = (said: string): string =>
+	[
+		"Your last message is not the answer asked for, so code could read nothing from it. It said:",
+		fenced(said.slice(0, MISFIT_SHOWN)),
+		"Do not do the work again. Answer now with the whole answer, as one JSON object in the shape you were given, and nothing else.",
+	].join("\n");
+
+/**
+ * A step's turn on the agents, counted as it ends, with one more try on a last message that does not
+ * fit. The first try's end is never heard: only the second's, an answer or a misfit, which ends the
+ * step as a misfit always has. Every step comes through here, so a machine's own limit on its tries
+ * stays a limit on what its Check sent back.
+ */
+const tried = <A>(
+	agents: typeof Agent.Agents.Service,
+	lane: LaneNow["Service"],
+	turn: Agent.Turn<A>,
+): Stream.Stream<Agent.Heard<A>, Agent.AgentFailed> =>
+	Stream.unwrap(
+		Effect.sync(() => {
+			let last = "";
+			return metered(agents.run(turn), lane.spend).pipe(
+				Stream.tap((heard) =>
+					heard._tag === "said"
+						? Effect.sync(() => {
+								last = heard.text;
+							})
+						: Effect.void,
+				),
+				Stream.flatMap((heard) =>
+					heard._tag === "ended" && heard.stop === "end_turn" && heard.answer === null
+						? Stream.unwrap(
+								lane.misfit.pipe(
+									Effect.as(metered(agents.run({...turn, prompt: misfitPrompt(last)}), lane.spend)),
+								),
+							)
+						: Stream.succeed(heard),
+				),
+			);
+		}),
+	);
+
 /** A Draft's run on the agents: the same three Msgs, the same Sub. `slot`: the brief's slot its own prompt fills. */
 export const draftRunner = <N extends string, O>(
 	name: N,
@@ -260,11 +319,8 @@ export const draftRunner = <N extends string, O>(
 		const {agents} = yield* LaneAgents;
 		const held = yield* agents;
 		const now = yield* lane.get;
-		const metering: typeof held = {
-			...held,
-			run: (turn) => metered(held.run(turn), lane.spend),
-		};
-		return Agent.agentRunner(name, metering, (run) =>
+		const trying: typeof held = {...held, run: (turn) => tried(held, lane, turn)};
+		return Agent.agentRunner(name, trying, (run) =>
 			turnOf(now, {session: run.session.id, prompt: promptFor(now, run, slot)}, answer),
 		);
 	});
@@ -276,10 +332,7 @@ const wholeRun = <A>(turn: (now: StepNow) => Agent.Turn<A>) =>
 		const {agents} = yield* LaneAgents;
 		const held = yield* agents;
 		const now = yield* lane.get;
-		const heard = yield* metered(held.run(turn(now)), lane.spend).pipe(
-			Stream.runLast,
-			Effect.result,
-		);
+		const heard = yield* tried(held, lane, turn(now)).pipe(Stream.runLast, Effect.result);
 		return heard;
 	});
 

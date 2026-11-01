@@ -451,7 +451,12 @@ describe("the schema", () => {
 			additionalProperties: boolean;
 		};
 		expect([...schema.required].sort()).toEqual([
+			"exam",
+			"gaps",
+			"goal",
+			"interface",
 			"pointers",
+			"properties",
 			"questions",
 			"stories",
 			"summary",

@@ -61,7 +61,7 @@ Properties go in `properties` at the top of the plan. The rest are the task's `c
 - `behavior: "existing"`: its test must pass on {base} and after the build. So its test can use only names that stay.
 - `why`: what goes wrong if it breaks.
 - `code`: the file and top-level name it checks, as they stand after the build. Empty when that code does not exist yet.
-- `tool`: `"test"`. Use `"tla"` only for a design with no code yet, about order or about ending.
+- `tool`: `"test"`.
 
 **`interface`.** Tests are written before the code, so they need names to compile against. Write a TypeScript block with every public name a `new` test uses: services, methods, types, errors.
 

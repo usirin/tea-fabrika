@@ -14,8 +14,10 @@ import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
-import {type CodeFact, type Outcome, TicketNumber} from "../../tickets/ticket.ts";
+import {type CodeFact, type Outcome, saidOf, TicketNumber} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
+import {inert} from "../build/body.ts";
+import type {Built} from "../build/form.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
@@ -218,6 +220,23 @@ const ended = (
 	problems,
 });
 
+/**
+ * What a builder says it could not do and which of its own checks it saw fail, for the ticket. Neither
+ * decides anything: the code's own checks judge the change. `null`: nothing to say. Pure.
+ */
+const builderSaid = (built: Built | null): string | null => {
+	const left = built?.left ?? [];
+	const failedRuns = (built?.ran ?? []).filter((r) => !r.passed).map((r) => `\`${r.command}\``);
+	if (left.length === 0 && failedRuns.length === 0) return null;
+	return inert(
+		[
+			"From the builder's own form. This decides nothing: the code's checks judge the change.",
+			...(left.length === 0 ? [] : ["", "What it could not do:", listed(left)]),
+			...(failedRuns.length === 0 ? [] : ["", "Checks it saw fail:", listed(failedRuns)]),
+		].join("\n"),
+	);
+};
+
 const propertiesOf = (carry: Carry, round: number) => {
 	if (round > 1)
 		return carry.open.map((item, i) => ({
@@ -287,7 +306,7 @@ const bodies = {
 			if (last !== undefined)
 				yield* tickets.talk(at.cmd.number, `${at.run}/plan-text`, {
 					type: "commented",
-					body: planMarkdown(last.data, at.title),
+					body: saidOf(planMarkdown(last.data, at.title)),
 				});
 			return ended(end.outcome, {
 				plan: draft,
@@ -401,11 +420,18 @@ const bodies = {
 				budgetOf(at) as never,
 				at.stages.build as never,
 			);
+			const told = builderSaid(end.report.built);
+			if (told !== null)
+				yield* (yield* Tickets).talk(at.cmd.number, `${at.run}/left`, {
+					type: "commented",
+					body: saidOf(told),
+				});
 			return ended(
 				end.outcome,
 				{
 					head: end.report.head ?? carry.head,
 					deviations: end.report.built?.deviations ?? [],
+					left: end.report.built?.left ?? [],
 				},
 				end.report.problems,
 			);
@@ -474,7 +500,7 @@ const bodies = {
 			const folder = yield* work.judgeCopy(head);
 			yield* at.tell(folder, "read", {
 				tools:
-					"A shell, in a copy of the code at this head. What you change there is thrown away. Files an agent loads by itself, such as AGENTS.md, are main's here; the diff below shows any change to them.",
+					"A shell, in a read-only copy of the code at this head: your box refuses a write there. Files an agent loads by itself, such as AGENTS.md, are main's here; the diff below shows any change to them.",
 				checked: "The checks below ran at this head.",
 			});
 			const target = bookTarget(planOf(at.id));
@@ -503,8 +529,22 @@ const bodies = {
 					head: reviewed.head,
 					met: reviewed.criteria.length - open.length,
 					of: reviewed.criteria.length,
-					findings: open.map((c) => c.text),
+					findings: open.map((c) => saidOf(c.text)),
 				});
+			// The review stage asks nobody, so it stops on what no one could see. A person can: the lane
+			// asks one, with the reviewer's reason, as a step that ended on `ask`.
+			if (reviewed.outcome.kind === "stuck" && reviewed.outcome.why === "unseen") {
+				yield* tickets.talk(at.cmd.number, `${at.run}/unseen`, {
+					type: "commented",
+					body: saidOf(
+						[
+							"The review could not see all it needed, so it cannot say this holds:",
+							listed(open.map((c) => inert(c.says))),
+						].join("\n"),
+					),
+				});
+				return ended({kind: "ask", who: "owner", for: "unseen"});
+			}
 			return ended(
 				reviewed.outcome,
 				{
@@ -527,14 +567,19 @@ const bodies = {
 				number: at.cmd.number,
 				head,
 				title: at.title,
-				// Named in words: this text must not close a number on the code host.
-				body: [
-					`From tracker ticket ${at.cmd.number}.`,
-					"",
-					carry.plan?.summary ?? "",
-					"",
-					carry.deviations.length === 0 ? "No deviations." : listed(carry.deviations),
-				].join("\n"),
+				// Named in words: this text must not close a number on the code host. Nor may an agent's.
+				body: saidOf(
+					[
+						`From tracker ticket ${at.cmd.number}.`,
+						"",
+						inert(carry.plan?.summary ?? ""),
+						"",
+						carry.deviations.length === 0 ? "No deviations." : listed(carry.deviations.map(inert)),
+						...((carry.left ?? []).length === 0
+							? []
+							: ["", "What the builder could not do:", listed((carry.left ?? []).map(inert))]),
+					].join("\n"),
+				),
 				posts: carry.posts,
 			});
 			if (end.outcome.kind !== "done") return ended(end.outcome);
@@ -698,6 +743,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					input: spent.input,
 					output: spent.output,
 					turns: spent.turns,
+					misfits: spent.misfits,
 					cached: spent.cached,
 					billed: spent.usd,
 					listUsd,

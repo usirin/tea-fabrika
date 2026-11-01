@@ -5,7 +5,7 @@ import {createRefineLoop, refiningOf} from "../../combos.ts";
 import {gather, keptCmd, listen} from "../../primitives.ts";
 import {planProblems} from "./check.ts";
 import {PlanOutcome} from "./outcome.ts";
-import {PlanDraft} from "./plan.ts";
+import {HeldDraft} from "./plan.ts";
 import {Brief, planDraft, promptFor} from "./planner.ts";
 import {Facts, type PlanMsg, PlanTicket, Settings} from "./services.ts";
 
@@ -72,7 +72,7 @@ export const PlanReport = Schema.Struct({
 	 * As the planner wrote it, with no ids: the ledger gives them when it keeps
 	 * the plan (../../asks/rules.ts). `null`: none came back.
 	 */
-	plan: Schema.NullOr(PlanDraft),
+	plan: Schema.NullOr(HeldDraft),
 	/** What the Check still found, or why it stopped, in words. */
 	problems: Schema.Array(Schema.String),
 	tries: Schema.Finite,
@@ -116,7 +116,7 @@ export const PlanState = Schema.Union([
 	Schema.Struct({
 		...Read.fields,
 		phase: Schema.Literal("drafting"),
-		refining: refiningOf(Brief, PlanDraft),
+		refining: refiningOf(Brief, HeldDraft),
 		facts: Schema.Boolean,
 		spend: Spent,
 		/** Times a restart started the planner over. */

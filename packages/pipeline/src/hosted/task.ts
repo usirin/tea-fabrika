@@ -22,7 +22,7 @@ import {
 	type BuildBrief,
 	type BuildDrafted,
 	Builder,
-	Built,
+	HeldBuilt,
 	type Ran,
 	Settings,
 } from "../stages/build/form.ts";
@@ -83,7 +83,7 @@ const msgOf =
 	(d: BuildDrafted): TaskMsg => {
 		const ran = ranOf(d);
 		if (d.answer === "built") {
-			const built = Schema.decodeUnknownOption(Built)(d.built);
+			const built = Schema.decodeUnknownOption(HeldBuilt)(d.built);
 			return Option.isSome(built)
 				? {type: "task_built", ...at, built: built.value, ran}
 				: {type: "task_failed", ...at, why: "misfit", error: null, ran};

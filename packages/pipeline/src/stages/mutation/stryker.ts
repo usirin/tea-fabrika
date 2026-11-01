@@ -126,6 +126,35 @@ const Report = Schema.Struct({
 });
 type Reported = (typeof Report.Type)["files"][string]["mutants"][number];
 
+/** What Stryker says, and exits 1 on, when the repo's tests never reach the code it mutates. */
+const NO_TESTS = "No tests were executed";
+
+/**
+ * The report of a run with no test to run: every mutant uncaught, as a report says one no test
+ * covers. A new file no test imports is a gap in the tests, never a broken run. Pure.
+ */
+const untested = (picked: readonly Made[]): typeof Report.Type => ({
+	files: Object.fromEntries(
+		[...new Set(picked.map((m) => m.fileName))].map((fileName) => [
+			fileName,
+			{
+				source: "",
+				mutants: picked
+					.filter((m) => m.fileName === fileName)
+					.map((m) => ({
+						mutatorName: m.mutatorName,
+						replacement: m.replacement,
+						status: "NoCoverage",
+						location: {
+							start: {line: m.location.start.line + 1, column: m.location.start.column + 1},
+							end: {line: m.location.end.line + 1, column: m.location.end.column + 1},
+						},
+					})),
+			},
+		]),
+	),
+});
+
 const KILLED = new Set(["Killed", "Timeout"]);
 const UNCAUGHT = new Set(["Survived", "NoCoverage"]);
 
@@ -240,7 +269,7 @@ const services = (setup: StrykerSetup) =>
 				return mutants;
 			});
 
-		/** Stryker over `mutate`, its JSON report read back. */
+		/** Stryker over `mutate`, its JSON report read back. `null`: there was no test to run. */
 		const strykerRun = (folder: string, mutate: readonly string[]) =>
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -266,14 +295,25 @@ const services = (setup: StrykerSetup) =>
 						}),
 					);
 					const ran = yield* low(["node", stryker, "run", config], folder);
-					if (ran.code !== 0) return yield* couldNotRun;
+					if (ran.code !== 0)
+						return `${ran.out}${ran.err}`.includes(NO_TESTS) ? null : yield* couldNotRun;
 					const text = yield* fs.readFileString(report);
 					return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Report))(text);
 				}),
 			);
 
-		/** Whether the typecheck takes `m`: put in alone, checked, then the file put back as it was. */
-		const takes = (folder: string, file: string, m: Reported) =>
+		/**
+		 * Whether the typecheck takes `m`: put in alone, checked, then the file put back as it was. A
+		 * refusal only counts if the code passes with no mutant in (`clean`): a typecheck that fails
+		 * whatever the mutant, say on a test's import, says nothing about it, and must not read as
+		 * every mutant being refused.
+		 */
+		const takes = (
+			folder: string,
+			file: string,
+			m: Reported,
+			clean: Effect.Effect<boolean, CouldNotRun>,
+		) =>
 			Effect.gen(function* () {
 				const at = path.join(folder, file);
 				const text = yield* fs.readFileString(at);
@@ -282,7 +322,8 @@ const services = (setup: StrykerSetup) =>
 				const checked = yield* low(setup.typecheck, folder).pipe(
 					Effect.ensuring(fs.writeFileString(at, text).pipe(Effect.orDie)),
 				);
-				return {takes: checked.code === 0, original: mutated.original};
+				const taken = checked.code === 0 || !(yield* clean);
+				return {takes: taken, original: mutated.original};
 			});
 
 		const run = (ask: RunAsk) =>
@@ -306,7 +347,10 @@ const services = (setup: StrykerSetup) =>
 					picked.length === kept.length
 						? ask.spans.map((s) => `${s.file}:${s.from}-${s.to}`)
 						: picked.map((m) => exactly(folder, m));
-				const report = yield* strykerRun(folder, mutate);
+				const report = (yield* strykerRun(folder, mutate)) ?? untested(picked);
+				const clean = yield* Effect.cached(
+					low(setup.typecheck, folder).pipe(Effect.map((checked) => checked.code === 0)),
+				);
 				const wanted = new Set(picked.map((m) => madeId(folder, m)));
 				let killed = 0;
 				let compileErrors = 0;
@@ -321,7 +365,7 @@ const services = (setup: StrykerSetup) =>
 						if (KILLED.has(m.status)) killed++;
 						else if (!UNCAUGHT.has(m.status)) compileErrors++;
 						else {
-							const said = yield* takes(folder, file, m);
+							const said = yield* takes(folder, file, m, clean);
 							if (!said.takes) compileErrors++;
 							else
 								survived.push({

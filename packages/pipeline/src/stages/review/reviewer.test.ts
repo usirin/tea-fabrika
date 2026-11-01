@@ -576,7 +576,7 @@ describe("the reviewer's answer", () => {
 		expect(reviewerDraft.name).toBe("reviewer");
 		expect(reviewerDraft.schema).toMatchObject({
 			type: "object",
-			required: ["rows", "findings", "skipped"],
+			required: ["rows", "findings", "skipped", "gaps"],
 			additionalProperties: false,
 		});
 	});

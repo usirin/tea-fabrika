@@ -3,7 +3,7 @@ import {CodeHost} from "../../services.ts";
 import type {ChecksSub, gatherPack, ReviewMsg, RunSub} from "./machine.ts";
 import {readPack} from "./pack.ts";
 import {type Drafted, type Ran, Reviewer, type Said} from "./reviewer.ts";
-import {Form} from "./sheet.ts";
+import {HeldForm} from "./sheet.ts";
 
 // What answers the review machine's Cmds and runs its Subs, kept by what
 // each may do:
@@ -39,7 +39,7 @@ export const msgOf =
 		const ran = ranOf(drafted);
 		switch (drafted.answer) {
 			case "form": {
-				const form = Schema.decodeUnknownOption(Form)(drafted.form);
+				const form = Schema.decodeUnknownOption(HeldForm)(drafted.form);
 				return Option.isSome(form)
 					? {type: "review_reviewed", ...at, form: form.value, ran}
 					: {type: "review_failed", ...at, why: "misfit", error: null, ran};

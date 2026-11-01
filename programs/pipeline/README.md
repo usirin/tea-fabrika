@@ -83,7 +83,8 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
   is final. After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned
   to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
-  GitHub's own merge checks the head and not main, so that commit does not stop it.
+  ship's merge names only the head, so ship itself does not stop on that commit. A rule that requires
+  up-to-date branches may refuse the merge. A real run is what will settle that.
 - **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
   ship ends `stuck: merge_unknown`, so the lane ends `stuck: step_stuck`. It does not wait and look again.
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
