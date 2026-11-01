@@ -49,14 +49,17 @@ export interface CodexAdapterConfig {
 	readonly access: FolderAccess;
 }
 
+/** A string as TOML: JSON's, but for DEL, which TOML does not take raw and JSON leaves raw. */
+const tomlText = (text: string) => JSON.stringify(text).replaceAll("\x7f", "\\u007f");
+
 /** A config value as TOML, for `-c key=value`. Objects with plain keys become dotted keys. */
 const toml = (value: unknown): string =>
 	typeof value === "string"
-		? JSON.stringify(value)
+		? tomlText(value)
 		: typeof value === "boolean" || typeof value === "number"
 			? String(value)
 			: `{${Object.entries(value as Record<string, unknown>)
-					.map(([k, v]) => `${JSON.stringify(k)}=${toml(v)}`)
+					.map(([k, v]) => `${tomlText(k)}=${toml(v)}`)
 					.join(", ")}}`;
 
 const PLAIN = /^[A-Za-z0-9_]+$/;
@@ -171,7 +174,9 @@ export const codexEnvOf = (parent: Env, home: string): Record<string, string> =>
  * The folders Codex's own binary runs from, read-only inside its box: the
  * link's folder, and where it points. A standalone install keeps its releases
  * under `~/.codex/packages` behind a `current` link, so the box opens that
- * folder (as experiment 152 did), never the rest of `~/.codex`.
+ * folder (as experiment 152 did), never the rest of `~/.codex`. A Codex at
+ * `~/codex` or `~/bin/codex` answers home here: the fence opens nothing for it
+ * (`homeFence`).
  */
 const codexFolders = (codex: string, owner: string): string[] => {
 	const real = Option.liftThrowable((p: string) => realpathSync(p))(codex);

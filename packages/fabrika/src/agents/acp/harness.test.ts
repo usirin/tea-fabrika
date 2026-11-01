@@ -23,6 +23,7 @@ import {
 	codexConfig,
 	codexHome,
 	codexHomeOf,
+	type FolderAccess,
 	harnessOf,
 	homeFence,
 	type Listing,
@@ -159,7 +160,7 @@ describe("the codex row", () => {
 			harnessOf({name: "codex", access: "write"}, folder, null, parentOf(home)).env.CODEX_CONFIG ??
 				"",
 		);
-		const fs = config.permissions.fenced.filesystem as Record<string, string>;
+		const fs = config.permissions.fenced.filesystem;
 		expect(fs[home]).toBeUndefined();
 		expect(fs[join(home, "work")]).toBeUndefined();
 		expect(fs[join(home, "beside")]).toBe("deny");
@@ -255,10 +256,49 @@ describe("the fence around home, from a listing", () => {
 		expect(table["/h/.ssh"]).toBe("deny");
 	});
 
-	it("keeps a login path closed inside a folder that opens its parent", () => {
+	it("opens nothing for a tool that holds a login directly, and keeps that login closed", () => {
 		const table = homeFence("/h", ["/h/.config"], "/tmp/copy", "write", disk({"/h": [".config"]}));
-		expect(table["/h/.config"]).toBe("read");
+		expect(table["/h"]).toBe("deny");
+		expect(table["/h/.config"]).toBeUndefined();
 		expect(table["/h/.config/gh"]).toBe("deny");
+	});
+
+	it("opens nothing for a tool inside a login, or one that holds a Codex home", () => {
+		const table = homeFence(
+			"/h",
+			["/h/.ssh/keys", "/h/.cache", "/h/.codex"],
+			"/h/copy",
+			"write",
+			disk({"/h": [".ssh", ".cache", ".codex", "copy"]}),
+		);
+		for (const closed of ["/h/.ssh", "/h/.cache", "/h/.codex"]) expect(table[closed]).toBe("deny");
+		expect(table["/h/.ssh/keys"]).toBeUndefined();
+	});
+
+	it.each<[string, readonly string[], string]>([
+		["home, the folder elsewhere", ["/h"], "/tmp/copy"],
+		["home with a slash at its end", ["/h/"], "/tmp/copy"],
+		["above home", ["/"], "/tmp/copy"],
+	])("closes home whole when a tool is %s: such a tool opens nothing", (_, tools, folder) => {
+		const table = homeFence("/h", tools, folder, "write", () => {
+			throw new Error("nothing under home to walk for");
+		});
+		expect(table["/h"]).toBe("deny");
+		expect(table["/"]).toBeUndefined();
+	});
+
+	it("walks home as ever when a tool is home and the folder is under it", () => {
+		const table = homeFence("/h", ["/h"], "/h/copy", "write", disk({"/h": [".gnupg", "copy"]}));
+		expect(table["/h"]).toBeUndefined();
+		expect(table["/h/.gnupg"]).toBe("deny");
+		expect(table["/h/copy"]).toBe("write");
+	});
+
+	it("gives a folder that is home no line of its own: home stays closed", () => {
+		const table = homeFence("/h", [], "/h", "write", () => {
+			throw new Error("nothing under home to walk for");
+		});
+		expect(table).toMatchObject({"/h": "deny"});
 	});
 
 	it("closes a folder it cannot read, and home too if that is the one", () => {
@@ -284,6 +324,72 @@ describe("the fence around home, from a listing", () => {
 		expect(asked).toEqual(["/h"]);
 	});
 
+	// Codex reads a key with one of `* ? [ ]` as a pattern, and a control character does not match as
+	// itself. Each of these names, written plainly, left the entry open.
+	it.each<[string, string]>([
+		["a*b", "a[*]b"],
+		["a?b", "a[?]b"],
+		["a[1]", "a[[]1[]]"],
+		["*", "[*]"],
+		["[!a]", "[[]!a[]]"],
+		["**", "[*][*]"],
+		["a]b", "a[]]b"],
+		["a\nb", "a?b"],
+		["a\tb", "a?b"],
+		["Icon\r", "Icon?"],
+		["a\x7fb", "a?b"],
+		// In a pattern a backslash and a brace mean something too, and a quote breaks the box's profile.
+		["a\\*b", "a[\\][*]b"],
+		["a*{b,c}", "a[*][{]b,c[}]"],
+		['a"*b', "a?[*]b"],
+	])("closes the entry %j as a pattern, itself and what is in it", (name, pattern) => {
+		const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": [name, "copy"]}));
+		expect(table[`/h/${pattern}`]).toBe("deny");
+		expect(table[`/h/${pattern}/**`]).toBe("deny");
+		expect(table[`/h/${name}`]).toBeUndefined();
+		expect(table["/h/copy"]).toBe("write");
+	});
+
+	it.each(["a{b}", "a\\b", "a b", "a\u0085b", "é"])(
+		"writes the entry %j as it is: Codex matches it, and a pattern's one-byte `?` would not",
+		(name) => {
+			const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": [name, "copy"]}));
+			expect(table[`/h/${name}`]).toBe("deny");
+			expect(Object.keys(table).filter((key) => key.endsWith("/**"))).toEqual([]);
+		},
+	);
+
+	it("closes the login paths as patterns too when home's own path is odd", () => {
+		const table = homeFence("/h[1]", [], "/h[1]/copy", "write", disk({"/h[1]": ["copy", "x"]}));
+		expect(table["/h[[]1[]]/x"]).toBe("deny");
+		expect(table["/h[[]1[]]/x/**"]).toBe("deny");
+		expect(table["/h[[]1[]]/.ssh"]).toBe("deny");
+		expect(table["/h[[]1[]]/.ssh/**"]).toBe("deny");
+		expect(table["/h[1]/.ssh"]).toBeUndefined();
+	});
+
+	it.each<[string, string]>([
+		["wo[rk]", "wok"],
+		["wo*k", "wowk"],
+		["wo?k", "woxk"],
+		["wo]k", "wok"],
+		["wo\rk", "woxk"],
+		['wo"k', "wok"],
+	])("gives an opened path %j no line, since Codex refuses a pattern that opens", (name, near) => {
+		const table = homeFence(
+			"/h",
+			[`/h/tools/${name}`],
+			`/h/${name}`,
+			"write",
+			disk({"/h": [name, near, "tools"], "/h/tools": [name, near]}),
+		);
+		expect(Object.values(table).filter((rule) => rule !== "deny")).toEqual([]);
+		// The walk still leaves it alone, and closes the name next to it.
+		expect(table[`/h/${near}`]).toBe("deny");
+		expect(table[`/h/tools/${near}`]).toBe("deny");
+		expect(Object.keys(table).filter((key) => key.includes(name))).toEqual([]);
+	});
+
 	it("reads a path the same with or without a slash at its end", () => {
 		const table = homeFence("/h/", [], "/h/copy/", "write", disk({"/h": ["copy", "other"]}));
 		expect(closed(table)).toContain("/h/other");
@@ -302,43 +408,210 @@ describe("the fence around home, from a listing", () => {
 	});
 });
 
+describe("a config as flags", () => {
+	it("writes DEL so TOML takes it: left raw, Codex refuses the whole value", () => {
+		expect(flagsOf({said: "a\x7fb"})).toEqual(["-c", 'said="a\\u007fb"']);
+	});
+});
+
 // In Codex's own box, with no model: `codex sandbox` runs a command under the real profile, on a
-// made-up home. It needs no login. Left out where Codex is not there or cannot start its box.
+// made-up home. It needs no login. This finds `codex` on the PATH, as the `codex exec` adapter does
+// by default. ACP's row runs the Codex it pins instead (adapters/), which this does not test.
 const boxHome = realpathSync(mkdtempSync(join(tmpdir(), "codex-box-")));
 afterAll(() => rmSync(boxHome, {recursive: true, force: true}));
+const boxEnv = codexEnvOf(process.env, boxHome);
 const codexBox = (cwd: string, config: Record<string, unknown>, line: string) =>
 	spawnSync("codex", ["sandbox", ...flagsOf(config), "--", "/bin/sh", "-c", line], {
 		cwd,
-		env: codexEnvOf(process.env, boxHome),
+		env: boxEnv,
 		stdio: "ignore",
 	}).status;
-const boxRuns = process.platform === "darwin" && codexBox(boxHome, {}, "exit 0") === 0;
-
-describe.skipIf(!boxRuns)("the fence, in Codex's own box", () => {
-	it("runs a Node script under home, and refuses what is beside it", () => {
-		const home = fakeHome();
-		const folder = join(home, "work", "copy");
-		mkdirSync(folder, {recursive: true});
-		mkdirSync(join(home, ".ssh"));
-		mkdirSync(join(home, "beside"));
-		writeFileSync(join(home, "beside", "note"), "");
-		writeFileSync(join(folder, "x.js"), "");
-		const config = codexConfig(folder, [], home, "write", listFolder);
-		// Made after the table, as during a run.
-		writeFileSync(join(home, ".netrc"), "");
-		writeFileSync(join(home, "later"), "");
-
-		expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
-		expect(codexBox(folder, config, `ls "${home}" >/dev/null`)).toBe(0);
-		expect(codexBox(folder, config, `ls "${home}/.ssh" >/dev/null`)).not.toBe(0);
-		expect(codexBox(folder, config, `cat "${home}/.codex/auth.json" >/dev/null`)).not.toBe(0);
-		expect(codexBox(folder, config, `cat "${home}/beside/note" >/dev/null`)).not.toBe(0);
-		expect(codexBox(folder, config, `cat "${home}/.netrc" >/dev/null`)).not.toBe(0);
-		expect(codexBox(folder, config, `echo x > "${home}/beside/y"`)).not.toBe(0);
-		// What is weaker than a whole closed home, kept in sight: an ordinary entry made later is open.
-		expect(codexBox(folder, config, `cat "${home}/later" >/dev/null`)).toBe(0);
-	});
+const tried = spawnSync("codex", ["sandbox", "--", "/bin/sh", "-c", "exit 0"], {
+	cwd: boxHome,
+	env: boxEnv,
+	encoding: "utf8",
+	stdio: ["ignore", "ignore", "pipe"],
 });
+// Each is how a look along the PATH says no. A folder a box closes answers EPERM, not ENOENT.
+const noCodex =
+	tried.error !== undefined &&
+	"code" in tried.error &&
+	["ENOENT", "EACCES", "EPERM"].includes(String(tried.error.code));
+// A box cannot start inside another box, and nothing is wrong with either. Agents run these tests
+// inside one, with `codex` on the PATH. Only this one line says so: any other failure is a failure.
+const insideABox = tried.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
+/** Why Codex's box did not start, with its version. Empty when it did. */
+const boxBroken = (): string => {
+	if (tried.status === 0) return "";
+	const version = spawnSync("codex", ["--version"], {env: boxEnv, encoding: "utf8"}).stdout?.trim();
+	const said = (tried.stderr ?? "").trim().split("\n").slice(-3).join(" ");
+	return `${version} found, its box does not start (exit ${tried.status}): ${tried.error?.message ?? said}`;
+};
+const SLOW = 120_000;
+
+describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
+	"the fence, in Codex's own box",
+	() => {
+		it("has a box that starts", () => {
+			expect(boxBroken()).toBe("");
+		});
+
+		describe.skipIf(tried.status !== 0)("run inside it", () => {
+			it("runs a Node script under home, and refuses what is beside it", () => {
+				const home = fakeHome();
+				const folder = join(home, "work", "copy");
+				mkdirSync(folder, {recursive: true});
+				mkdirSync(join(home, ".ssh"));
+				mkdirSync(join(home, "beside"));
+				writeFileSync(join(home, "beside", "note"), "");
+				writeFileSync(join(folder, "x.js"), "");
+				const config = codexConfig(folder, [], home, "write", listFolder);
+				// Made after the table, as during a run.
+				writeFileSync(join(home, ".netrc"), "");
+				writeFileSync(join(home, "later"), "");
+
+				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+				expect(codexBox(folder, config, `ls "${home}" >/dev/null`)).toBe(0);
+				expect(codexBox(folder, config, `ls "${home}/.ssh" >/dev/null`)).not.toBe(0);
+				expect(codexBox(folder, config, `cat "${home}/.codex/auth.json" >/dev/null`)).not.toBe(0);
+				expect(codexBox(folder, config, `cat "${home}/beside/note" >/dev/null`)).not.toBe(0);
+				expect(codexBox(folder, config, `cat "${home}/.netrc" >/dev/null`)).not.toBe(0);
+				expect(codexBox(folder, config, `echo x > "${home}/beside/y"`)).not.toBe(0);
+				// What is weaker than a whole closed home, kept in sight: an ordinary entry made later is open.
+				expect(codexBox(folder, config, `cat "${home}/later" >/dev/null`)).toBe(0);
+			});
+
+			/** A path as one word of a shell line, whatever it holds. */
+			const word = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
+
+			it.each([
+				"a*b",
+				"a?b",
+				"a[1]",
+				"*",
+				"[!a]",
+				"**",
+				"a]b",
+				"a\nb",
+				"a\tb",
+				"Icon\r",
+				"a\x7fb",
+				"a\\*b",
+				"a*{b,c}",
+				'a"*b',
+				"a{b}",
+				"a\\b",
+				"a\u0085b",
+			])(
+				"closes %j, a file and a folder, with the opened folder still working",
+				(name) => {
+					const home = fakeHome();
+					const folder = join(home, "copy");
+					mkdirSync(folder);
+					writeFileSync(join(folder, "x.js"), "");
+					writeFileSync(join(home, name), "");
+					const inner = `${name}-folder`;
+					mkdirSync(join(home, inner));
+					writeFileSync(join(home, inner, "note"), "");
+					const config = codexConfig(folder, [], home, "write", listFolder);
+
+					expect(codexBox(folder, config, `cat ${word(join(home, name))}`)).not.toBe(0);
+					expect(codexBox(folder, config, `cat ${word(join(home, inner, "note"))}`)).not.toBe(0);
+					expect(codexBox(folder, config, `ls ${word(join(home, inner))}`)).not.toBe(0);
+					expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+					expect(codexBox(folder, config, "echo x > y")).toBe(0);
+				},
+				SLOW,
+			);
+
+			it.each<[string, string]>([
+				["wo[rk]", "wok"],
+				["wo*k", "wowk"],
+				["wo?k", "woxk"],
+				["wo]k", "wok"],
+				["wo\rk", "woxk"],
+			])(
+				"opens a folder and a tool named %j, and not the name beside them",
+				(name, near) => {
+					const home = fakeHome();
+					const folder = join(home, name);
+					mkdirSync(join(home, "tools"));
+					const tool = join(home, "tools", name);
+					for (const open of [folder, tool, join(home, near), join(home, "tools", near)]) {
+						mkdirSync(open);
+						writeFileSync(join(open, "f"), "");
+					}
+					writeFileSync(join(folder, "x.js"), "");
+					const accesses: readonly FolderAccess[] = ["write", "read"];
+					for (const access of accesses) {
+						const config = codexConfig(folder, [tool], home, access, listFolder);
+						expect(codexBox(folder, config, "cat f")).toBe(0);
+						expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+						expect(codexBox(folder, config, "echo x > y") === 0).toBe(access === "write");
+						expect(codexBox(folder, config, `cat ${word(join(tool, "f"))}`)).toBe(0);
+						expect(codexBox(folder, config, `cat ${word(join(home, near, "f"))}`)).not.toBe(0);
+						expect(
+							codexBox(folder, config, `cat ${word(join(home, "tools", near, "f"))}`),
+						).not.toBe(0);
+					}
+				},
+				SLOW,
+			);
+
+			it("fails closed when a `?` also matches the folder that holds the opened one", () => {
+				const home = fakeHome();
+				const folder = join(home, "c1", "copy");
+				mkdirSync(folder, {recursive: true});
+				writeFileSync(join(home, "c\r"), "");
+				const config = codexConfig(folder, [], home, "write", listFolder);
+
+				expect(codexBox(folder, config, `cat ${word(join(home, "c\r"))}`)).not.toBe(0);
+				expect(codexBox(folder, config, "echo x > y")).not.toBe(0);
+			});
+
+			it("works under a home whose own path holds a `[`", () => {
+				const home = join(fakeHome(), "odd[1]");
+				const folder = join(home, "copy");
+				for (const made of [folder, join(home, ".ssh"), join(home, "beside")]) {
+					mkdirSync(made, {recursive: true});
+					writeFileSync(join(made, "f"), "");
+				}
+				writeFileSync(join(folder, "x.js"), "");
+				const config = codexConfig(folder, [], home, "write", listFolder);
+
+				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+				expect(codexBox(folder, config, "echo x > y")).toBe(0);
+				expect(codexBox(folder, config, `cat ${word(join(home, ".ssh", "f"))}`)).not.toBe(0);
+				expect(codexBox(folder, config, `cat ${word(join(home, "beside", "f"))}`)).not.toBe(0);
+			});
+
+			it("keeps what is in home closed when a tool is home itself", () => {
+				const home = fakeHome();
+				const elsewhere = fakeHome();
+				mkdirSync(join(home, ".gnupg"));
+				writeFileSync(join(home, ".gnupg", "key"), "");
+				const under = join(home, "copy");
+				mkdirSync(under);
+				const beside = codexConfig(elsewhere, [home], home, "write", listFolder);
+				const inside = codexConfig(under, [home], home, "write", listFolder);
+
+				expect(codexBox(elsewhere, beside, "exit 0")).toBe(0);
+				expect(codexBox(elsewhere, beside, `cat "${home}/.gnupg/key"`)).not.toBe(0);
+				expect(codexBox(under, inside, "exit 0")).toBe(0);
+				expect(codexBox(under, inside, `cat "${home}/.gnupg/key"`)).not.toBe(0);
+			});
+
+			it("keeps what is in home closed when the folder is home itself", () => {
+				const home = fakeHome();
+				mkdirSync(join(home, ".gnupg"));
+				writeFileSync(join(home, ".gnupg", "key"), "");
+				const config = codexConfig(home, [], home, "write", listFolder);
+
+				expect(codexBox(home, config, `cat "${home}/.gnupg/key"`)).not.toBe(0);
+			});
+		});
+	},
+);
 
 describe("the Codex home", () => {
 	const run = <A, E>(e: Effect.Effect<A, E, never>) => Effect.runPromise(Effect.result(e));

@@ -431,7 +431,7 @@ describe("the local code host", () => {
 		 * What `change` says of a branch off `base` that adds `head` and removes `gone`, in a repository
 		 * of its own. `lost`: that object is deleted first, so git exits 128 reading it.
 		 */
-		const kindsAcross = (
+		const changeAcross = (
 			base: Readonly<Record<string, string>>,
 			head: Readonly<Record<string, string>>,
 			gone: readonly string[] = [],
@@ -453,15 +453,30 @@ describe("the local code host", () => {
 						yield* fs.remove(path.join(dir, ".git", "objects", sha.slice(0, 2), sha.slice(2)));
 					}
 					const settings: LocalSettings = {...SETTINGS(dir), base: "main"};
-					const read = yield* Effect.gen(function* () {
-						return yield* (yield* CodeHost).change(TASK, at);
+					return yield* Effect.gen(function* () {
+						return yield* Effect.result((yield* CodeHost).change(TASK, at));
 					}).pipe(
 						Effect.provide(localCodeHost(settings).layer),
 						Effect.provide(memoryLedger().layer),
 					);
-					return read.kinds;
 				}).pipe(Effect.scoped),
 			);
+
+		const kindsAcross = async (...args: Parameters<typeof changeAcross>) => {
+			const read = await changeAcross(...args);
+			expect(read._tag).toBe("Success");
+			return read._tag === "Success" ? read.success.kinds : undefined;
+		};
+
+		// A rule file that cannot be read is not a repository with no rules. The read ends with the host's
+		// one failure, and no brief goes out that leaves the rules out.
+		it.each(["CLAUDE.md", "AGENTS.md"])(
+			"a %s at the base that cannot be read ends the read cleanly, never as no rules",
+			async (file) => {
+				const read = await changeAcross({[file]: "# Rules\n"}, {}, [], {side: "base", path: file});
+				expect(read).toMatchObject({_tag: "Failure", failure: {_tag: "unknown"}});
+			},
+		);
 
 		it.each<[string, Readonly<Record<string, string>>, Readonly<Record<string, string>>]>([
 			["no file on either side", {}, {}],

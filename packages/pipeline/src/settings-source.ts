@@ -12,6 +12,7 @@ import {
 	type SettingsInvalid,
 	settingsFrom,
 	settingsRefusal,
+	thereAt,
 } from "./settings.ts";
 import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 
@@ -196,23 +197,27 @@ const fromFolder = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
-		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
 		const listed = new Set<string>();
 		for (const asked of SETTINGS_PATHS)
-			if (yield* exists(path.join(folder, asked))) listed.add(asked);
+			if (yield* thereAt(path.join(folder, asked))) listed.add(asked);
 		const refused = settingsRefusal(listed);
 		if (refused !== null) return yield* Effect.fail(invalid(`${folder}: ${refused}`));
 		const found = listed.has(SETTINGS_FILE);
 		const settings = yield* readSettings(file);
 		const files = new Set<string>();
-		for (const asked of ASKED) if (yield* exists(path.join(folder, asked))) files.add(asked);
+		for (const asked of ASKED) if (yield* thereAt(path.join(folder, asked))) files.add(asked);
 		const rubrics: Record<string, string> = {};
 		const named = settings.review?.rubrics;
 		if (named !== undefined)
 			for (const name of RUBRIC_FILES) {
-				const text = yield* fs
-					.readFileString(path.join(folder, named, name))
-					.pipe(Effect.orElseSucceed(() => null));
+				const at = path.join(folder, named, name);
+				const text = yield* fs.readFileString(at).pipe(
+					Effect.catchIf(
+						(error) => error.reason._tag === "NotFound",
+						() => Effect.succeed(null),
+					),
+					Effect.mapError((error) => invalid(`cannot read ${at}: ${error.message}`)),
+				);
 				if (text !== null) rubrics[name] = text;
 			}
 		return {settings, source: {from: "folder", file, found}, holds: {files, rubrics}};

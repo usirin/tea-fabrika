@@ -108,6 +108,7 @@ until the owner confirms it.
 | [Exact npm versions only](./pin-exact-versions.md) | Every version we name is exact: the catalog, overrides and all four dependency fields, peers as `catalog:`. `pnpm lint` fails on a range, a tag, `git:` or `file:`, and `pnpm add` writes exact. A bump is one line someone chose. Only the lockfile holds what our dependencies depend on, and this does not touch that. | decided 2026-10-31 |
 | [Color principles](./color-principles.md) | Eight rules for any color on screen: quiet and accessible, one meaning per color, never color alone, gray and tint on one ladder, Radix steps for their jobs, color replaces and does not add, few colors that may repeat, numbers check and eyes pick. | decided 2026-11-01 |
 | [A pipe is marked by a title wash, one of six colors, and a letter](./pipe-colors.md) | Today's version, not built yet. A tile's title fills with step 2 of its color at rest and step 3 when focused, gray for a plain tile, with a letter as the second cue. The six are sky, pink, teal, violet, lime and plum, all clear of the state colors. A seventh pipe repeats a color and keeps its own letter. | decided 2026-11-01 |
+| [Codex's box closes what is in home, not home itself](./codex-box-home-listing.md) | Today's version. Denying home whole stops every Node script under it, so a listing of home is denied entry by entry. Names can be listed, and an entry made later is open unless it is on the login list. | proposed |
 
 ## Adding a note
 

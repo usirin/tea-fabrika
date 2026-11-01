@@ -332,14 +332,31 @@ export const reviewRules = (text: string | null): Rules | null =>
 		Option.getOrNull,
 	);
 
+/**
+ * Is `file` there? Not there and cannot say are two answers, never one, as in
+ * ./git-read.ts. A file where a folder on the way would be: it is not there, as
+ * at a commit. Any other error stops the read, naming the path.
+ */
+export const thereAt = (
+	file: string,
+): Effect.Effect<boolean, SettingsInvalid, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		return yield* (yield* FileSystem.FileSystem).exists(file);
+	}).pipe(
+		Effect.catchIf(
+			(error) => error.reason._tag === "BadResource",
+			() => Effect.succeed(false),
+		),
+		Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)),
+	);
+
 /** Read the settings at `file`. No file there: every default. */
 export const readSettings = (
 	file: string,
 ): Effect.Effect<Settings, SettingsInvalid, FileSystem.FileSystem> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		const there = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
-		if (!there) return DEFAULT_SETTINGS;
+		if (!(yield* thereAt(file))) return DEFAULT_SETTINGS;
 		const text = yield* fs
 			.readFileString(file)
 			.pipe(Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)));

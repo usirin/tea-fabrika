@@ -1,5 +1,6 @@
 # What the `pipeline` program needs to work on this repository. The steps' order stays in code.
 # Agents the app starts skip a person's own settings, so heavy commands carry their CPU limits here.
+# `nice` may not take effect inside a box. `--maxWorkers=3` is the limit that holds.
 
 [build]
 install = ["pnpm", "install", "--frozen-lockfile"]
@@ -11,7 +12,8 @@ checks = [
 
 [test_writer]
 includes = ["**/*.test.ts"]
-# This runs in a box with its own home, where a pnpm shim finds no pnpm, and which refuses `nice`.
+# This runs in a box with its own home, where a pnpm shim finds no pnpm. No `nice`: it may not take
+# effect here, so `--maxWorkers=3` is the limit.
 run = ["node_modules/.bin/vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"]
 
 [mutation]

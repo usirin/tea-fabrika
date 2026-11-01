@@ -4,7 +4,7 @@ import {fileURLToPath} from "node:url";
 import {Effect, FileSystem, Option} from "effect";
 import type {SystemPrompt} from "../agent/turn.ts";
 import {agentEnv, type Env, runEnv, toolHome} from "../claude/env.ts";
-import {fencedEnv, filesOf, LOGIN_FILES, TOOLS, toolchain} from "../claude/sandbox.ts";
+import {fencedEnv, filesOf, LOGIN_FILES, opens, TOOLS, toolchain} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
@@ -72,8 +72,9 @@ import type {Spawnable} from "./client.ts";
 // What it does not hold, measured in experiment 153: writes in the temp
 // folders are open (the adapter sends its own sandbox with every turn, and
 // that one keeps them); reads outside home are open; there is no dollar cap
-// and no typed answer field. Nor is home closed whole: its names can be listed,
-// and an ordinary entry made during a run is open (`homeFence` says why).
+// and no typed answer field. Nor is home closed whole when something opened is
+// under it: its names can be listed, and an ordinary entry made during a run is
+// open (`homeFence` says why).
 
 export const AGENTS = ["claude", "codex", "fake"] as const;
 export type AgentName = (typeof AGENTS)[number];
@@ -153,16 +154,34 @@ export const listFolder: Listing = (folder) =>
 		)(),
 	);
 
-/**
- * Under home, closed whether it is there or not: where a login is kept, and
- * where each Codex home is made, some of them after the fence is.
- */
-const ALWAYS_CLOSED = [...LOGIN_FILES, ".codex", ".codex/auth.json", CODEX_HOMES];
+/** Under home, where a login is kept, and where each Codex home is made, some of them after the fence is. */
+const LOGINS = [...LOGIN_FILES, ".codex/auth.json", CODEX_HOMES];
+
+/** Closed whether it is there or not. `.codex` is not a login: its `packages` may be opened. */
+const ALWAYS_CLOSED = [...LOGINS, ".codex"];
 
 const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
 
 const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
 	Object.fromEntries(paths.map((path) => [path, rule]));
+
+/**
+ * A path a key cannot name as it is: a pattern character, a quote, or a control character of one
+ * byte. One of two bytes (U+0080 to U+009F) matches as itself, and `?` would not match it.
+ */
+const ODD = /[*?[\]"]|(?![\u0080-\u009f])\p{Cc}/u;
+
+/**
+ * The pattern that matches an odd path. A pattern character, and the two that mean something only
+ * inside a pattern (a brace, a backslash), each stand in brackets. A control character and a quote
+ * cannot, so `?` takes their place: it matches that one byte, and may close a name beside it too.
+ */
+const pattern = (path: string) =>
+	path.replace(/[*?[\]{}\\]/g, "[$&]").replace(/"|(?![\u0080-\u009f])\p{Cc}/gu, "?");
+
+/** The keys that close a path. A pattern closes one name and not what is in it, so an odd path takes two. */
+const closing = (path: string): readonly string[] =>
+	ODD.test(path) ? [pattern(path), `${pattern(path)}/**`] : [path];
 
 /**
  * The profile's filesystem table: what is beside the opened folders is closed,
@@ -174,14 +193,31 @@ const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule>
  * `EPERM: lstat '<home>'`. So walk down from home. An entry that is an opened
  * folder is left alone, one that holds an opened folder is walked into, and
  * every other entry is closed. A folder that cannot be read is closed. A link
- * is closed like any entry, and never walked through. With nothing opened
- * under home, nothing under it needs to run, and home is closed whole.
+ * is closed like any entry, and never walked through. So a folder named through
+ * a link in home (`~/dev` linking to `~/work`, the folder `~/dev/copy`) has that
+ * link closed, and Node stops on it: it fails closed, and the real path works.
+ *
+ * Only an opened path under home is walked for. A tool or a folder that would
+ * open home or a login opens nothing (`opens`): it gets no line and counts for
+ * nothing, so a `PNPM_HOME` of home, or a Codex at `~/codex`, cannot undo the
+ * lines that close home. With nothing else opened under home, home is closed
+ * whole, for nothing under it needs to run.
+ *
+ * Codex reads a key with one of `* ? [ ]` in it as a pattern, and a key with a
+ * control character matches nothing (Codex 0.165.0, in `codex sandbox`, by
+ * hand and in the tests). So an odd path is closed by `closing`. Written plainly
+ * it would stay readable, and `Icon\r` is a common file name on a Mac. An odd
+ * path cannot be opened by a key at all: Codex refuses a pattern that opens,
+ * and `/**` does not make the part before it plain. So it gets no line. It does
+ * not need one: the walk leaves it alone, reads are open where nothing closes
+ * them, and `:workspace` makes the working folder writable by itself.
  *
  * This is weaker than a whole closed home, in two ways. A command can list the
  * names in home and in each folder on the way down to an opened one. An
  * ordinary entry made in those folders after this table is made is open. We
  * accept both: the names are not secrets, and the entries that hold logins
- * exist before a run starts. `ALWAYS_CLOSED` covers one that does not.
+ * exist before a run starts. `ALWAYS_CLOSED` covers one that does not. See
+ * docs/direction/codex-box-home-listing.md.
  */
 export const homeFence = (
 	home: string,
@@ -191,8 +227,12 @@ export const homeFence = (
 	list: Listing,
 ): Record<string, FolderAccess | "deny"> => {
 	const root = plain(home);
-	const opened = [...reads, folder].map(plain);
+	const allowed = (path: string) => !opens(path, root, LOGINS);
+	const tools = reads.map(plain).filter(allowed);
+	const own = [plain(folder)].filter(allowed);
+	const opened = [...tools, ...own];
 	const holdsOpened = (path: string) => opened.some((open) => open.startsWith(`${path}/`));
+	const nameable = (path: string) => !ODD.test(path);
 	const beside = (dir: string): readonly string[] => {
 		const entries = list(dir);
 		if (entries === null) return [dir];
@@ -203,13 +243,15 @@ export const homeFence = (
 		});
 	};
 	return {
-		...lines(holdsOpened(root) ? beside(root) : [root], "deny"),
-		...lines(reads.map(plain), "read"),
-		[plain(folder)]: access,
+		...lines((holdsOpened(root) ? beside(root) : [root]).flatMap(closing), "deny"),
+		...lines(tools.filter(nameable), "read"),
+		...lines(own.filter(nameable), access),
 		// Last, so a login stays closed even if something asks to open it. One that holds an opened
 		// folder is not closed whole, for the same reason as home: the walk closed what is in it.
 		...lines(
-			ALWAYS_CLOSED.map((path) => `${root}/${path}`).filter((path) => !holdsOpened(path)),
+			ALWAYS_CLOSED.map((path) => `${root}/${path}`)
+				.filter((path) => !holdsOpened(path))
+				.flatMap(closing),
 			"deny",
 		),
 	};

@@ -44,7 +44,6 @@ export const temps = (): readonly string[] => {
 
 /** The files a login lives in, under the home folder. No folder the builder may read holds one. */
 export const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
-const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
 
 /** Folders under home that many programs keep things in: opening one opens them all. */
 const SHARED = [".local", ".config", ".cache", "Library"];
@@ -128,10 +127,13 @@ export const filesOf = (
 	};
 };
 
+/** Would reading this folder open `home`, or one of `logins` under it? */
+export const opens = (path: string, home: string, logins: readonly string[]) =>
+	inside(path, home) ||
+	logins.some((login) => inside(path, join(home, login)) || inside(join(home, login), path));
+
 /** Would reading this folder open the home folder, or a file a login lives in? */
-export const opensHome = (path: string) =>
-	inside(path, homedir()) ||
-	loginFiles().some((login) => inside(path, login) || inside(login, path));
+export const opensHome = (path: string) => opens(path, homedir(), LOGIN_FILES);
 
 /**
  * The agent's environment as its commands need it inside `filesOf`, which

@@ -342,6 +342,61 @@ describe("fabrika.toml with no target repository", () => {
 			}),
 		);
 
+	// Not there and cannot read are two answers, as in ./git-read.ts. A root user reads a shut folder.
+	describe.skipIf(process.getuid?.() === 0)("a read that broke is not no file", () => {
+		/** Why the read stops with `shut` closed to everyone, `files` written first. Opened again after, so the folder can go. */
+		const stoppedBy = (shut: string, files: Readonly<Record<string, string>>) =>
+			inFolder((folder) =>
+				Effect.gen(function* () {
+					const fs = yield* FileSystem.FileSystem;
+					const path = yield* Path.Path;
+					for (const [name, text] of Object.entries(files)) {
+						yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
+						yield* fs.writeFileString(path.join(folder, name), text);
+					}
+					const at = path.join(folder, shut);
+					const mode = (yield* fs.stat(at)).mode;
+					yield* fs.chmod(at, 0o000);
+					return yield* Effect.flip(loadSettings({from: "folder", folder})).pipe(
+						Effect.ensuring(Effect.orDie(fs.chmod(at, mode))),
+					);
+				}),
+			);
+
+		it("the settings' folder shut: refused, never every default", async () => {
+			const got = await stoppedBy(".fabrika", {[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n'});
+			expect(got.why).toContain("cannot read");
+			expect(got.why).toContain(SETTINGS_FILE);
+		});
+
+		it("a folder one of the asked files is in shut: refused, never read as not there", async () => {
+			const got = await stoppedBy(".github", {".github/CODEOWNERS": "* @acme/owners\n"});
+			expect(got.why).toContain("cannot read");
+			expect(got.why).toContain(".github/CODEOWNERS");
+		});
+
+		it("a named rubric shut: refused, never read as no rubric", async () => {
+			const got = await stoppedBy("rubrics/code.md", {
+				[SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
+				"rubrics/code.md": "# our code rubric\n",
+			});
+			expect(got.why).toContain("cannot read");
+			expect(got.why).toContain("code.md");
+		});
+	});
+
+	it("a file named .fabrika, where the folder would be: the settings are not there, as at a commit", async () => {
+		const got = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				yield* fs.writeFileString(`${folder}/.fabrika`, "not a folder\n");
+				return yield* loadSettings({from: "folder", folder});
+			}),
+		);
+		expect(got.settings).toEqual(DEFAULT_SETTINGS);
+		expect(got.source).toMatchObject({from: "folder", found: false});
+	});
+
 	it("a file left at the root with none in the folder is refused, never read as every default", async () => {
 		const why = await refused([LEFTOVER]);
 		expect(why).toContain(SETTINGS_MOVED);

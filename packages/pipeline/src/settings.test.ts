@@ -70,6 +70,28 @@ describe("fabrika.toml", () => {
 			expect(got).toEqual(DEFAULT_SETTINGS);
 		});
 
+		// A root user reads a shut folder.
+		it.skipIf(process.getuid?.() === 0)(
+			"a folder that cannot be read is not no file: it stops, never every default",
+			async () => {
+				const got = await inFolder((folder) =>
+					Effect.gen(function* () {
+						const fs = yield* FileSystem.FileSystem;
+						const path = yield* Path.Path;
+						const file = path.join(folder, SETTINGS_FILE);
+						yield* fs.makeDirectory(path.dirname(file), {recursive: true});
+						yield* fs.writeFileString(file, 'packs = ["@acme/desk"]\n');
+						yield* fs.chmod(path.dirname(file), 0o000);
+						return yield* readSettings(file).pipe(
+							Effect.flip,
+							Effect.ensuring(Effect.orDie(fs.chmod(path.dirname(file), 0o755))),
+						);
+					}),
+				);
+				expect(got.why).toContain("cannot read");
+			},
+		);
+
 		it("a pack listed with no table of its own: listed, with no settings", async () => {
 			expect(await read('packs = ["@acme/desk"]')).toEqual({packs: ["@acme/desk"], pack: {}});
 		});
