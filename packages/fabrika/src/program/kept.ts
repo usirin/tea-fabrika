@@ -115,6 +115,20 @@ export type KeptFailed<C extends Cmd, I> =
 	| CellErrors<C, I>;
 
 /**
+ * Hands `tell` each error once. tea reports a reducer's throw twice, the same error: as "reduce",
+ * then as "follow-up", which can land once the copy is closing. `done()` told the parent the first
+ * time, and a parent that handles it goes on, so the repeat must not end the program run under it.
+ */
+export const onceEach = (tell: OnError): OnError => {
+	const told = new Set<unknown>();
+	return (error, where) => {
+		if (told.has(error)) return;
+		told.add(error);
+		tell(error, where);
+	};
+};
+
+/**
  * Run `machine`, kept under `id` in `handle`'s run through its `state`
  * schema, from where it was kept. `show` is called with the booted machine before its first Msg, so a viewer
  * sees it from the kept state on. `drawing`: how its trace shows it
@@ -167,20 +181,14 @@ export const runKept = <
 		// How this run ended, when tea reported a failure while it was live. Set once: the first is the cause.
 		const failed = yield* Deferred.make<never>();
 		let closing = false;
-		let told: unknown;
-		const onError: OnError = (error, {phase}) => {
+		const onError = onceEach((error, {phase}) => {
 			if (error instanceof RuntimeDiscardNotice) return;
 			const ended = new Error(`${name} run ${id} failed (tea's "${phase}"): ${wordsOf(error)}`, {
 				cause: error,
 			});
-			// tea reports a reducer's throw twice, the same error: as "reduce", then as "follow-up", which
-			// can land once the copy is closing. `done()` told the parent the first time, and a parent that
-			// handles it goes on, so the repeat must not end the program run under it.
-			if (error === told) return;
-			told = error;
 			if (closing) broken(ended);
 			else Deferred.doneUnsafe(failed, Effect.die(ended));
-		};
+		});
 		const opts = {
 			...options,
 			subscribe: held,

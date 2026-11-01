@@ -3,6 +3,7 @@ import {run} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
+import {onceEach} from "./kept.ts";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
 import {memoryStorage, StateRefused, type Storage} from "./storage.ts";
@@ -555,6 +556,59 @@ describe("a failure tea reports ends the run, never the process", () => {
 		expect(w.writes).toEqual([1]);
 		expect(endOf(called).kind).toBe("failed");
 		expect(endOf(called).why).toContain(`job run j failed (tea's "stop-save")`);
+	});
+});
+
+const thrown = new Error("the reducer broke");
+
+/** A machine whose reducer throws on the answer its Listen gives at once. */
+const breaks = defineMachine({
+	types: {
+		model: {} as {readonly run: number},
+		msg: {} as {readonly type: "job_done"; readonly run: number},
+		sub: {} as WorkSub,
+		ctx: undefined,
+	},
+	cmds: [],
+	init: () => [{run: 1}, []],
+	update: {
+		job_done: () => {
+			throw thrown;
+		},
+	},
+	subs: [{type: "job_work", deps: (s) => ({run: s.run})}],
+});
+
+describe("one failure tea reports twice", () => {
+	it.live("a reducer's throw on a Listen's answer: two reports of one error, told once", () =>
+		Effect.gen(function* () {
+			const reports: string[] = [];
+			const told: unknown[] = [];
+			const tell = onceEach((error) => told.push(error));
+			yield* run(breaks, {
+				ctx: undefined,
+				subscribe: {
+					job_work: (sub: WorkSub) => Stream.make({type: "job_done", run: sub.deps.run} as const),
+				},
+				onError: (error, where) => {
+					reports.push(`${where.phase}: ${error === thrown ? "the throw" : "another"}`);
+					tell(error, where);
+				},
+			});
+			while (reports.length < 2) yield* Effect.sleep("1 millis");
+			// If tea ever stops repeating itself, this says the rule can go.
+			expect(reports).toEqual(["reduce: the throw", "follow-up: the throw"]);
+			expect(told).toEqual([thrown]);
+		}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+	);
+
+	it("tells apart two errors, and an error that is `undefined`", () => {
+		const told: unknown[] = [];
+		const tell = onceEach((error) => told.push(error));
+		const where = {phase: "sub"} as const;
+		for (const error of [undefined, undefined, "the disk", "the disk", "the feed"])
+			tell(error, where);
+		expect(told).toEqual([undefined, "the disk", "the feed"]);
 	});
 });
 
