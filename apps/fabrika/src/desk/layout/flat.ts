@@ -84,6 +84,15 @@ const part = (box: Box, along: Orientation, at: Span, size: Span): Box =>
 export const byTileId = (a: {readonly tile: TileNode}, b: {readonly tile: TileNode}) =>
 	a.tile.id.localeCompare(b.tile.id, undefined, {numeric: true});
 
+const shapeOf = (node: LayoutNode): string =>
+	node.tag === "tile"
+		? `${node.id}${node.folded ? "-" : ""}`
+		: `${node.orientation}(${node.children.map(shapeOf).join()})`;
+
+/** Do two trees differ only by sizes? A dragged border changes sizes; a split or a turn, the shape. */
+export const sameShape = (a: LayoutTree, b: LayoutTree): boolean =>
+	a === b || (a.zoomed === b.zoomed && shapeOf(a.root) === shapeOf(b.root));
+
 /** Every open tile's, strip's and border's box. A zoomed tile is alone, and has it all. */
 export function flat(tree: LayoutTree, drag: Drag | null = null): Flat {
 	const shown: {tile: TileNode; box: Box}[] = [];

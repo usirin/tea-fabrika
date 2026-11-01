@@ -1401,6 +1401,358 @@ const turnLayout: Moment = async (b) => {
 };
 
 /** Every kind of thing the desk does, once, for what React and the page say about it: not timed. */
+declare const __vt: {
+	runs: number;
+	active: number;
+	presses: {active: number; target: string}[];
+	frames: number[];
+	groups: number[];
+};
+
+/**
+ * Pick 8: a tile move with a view transition. What it costs at each moment one can fall into it:
+ * what starts one and what must not, frames, a key and a press during it, text changing during it.
+ */
+const moves: Moment = async (b) => {
+	const facts: Record<string, unknown> = {};
+	await b.page.evaluate(() => {
+		const seen: typeof __vt = {runs: 0, active: 0, presses: [], frames: [], groups: []};
+		Object.assign(window, {__vt: seen});
+		const start = document.startViewTransition.bind(document);
+		document.startViewTransition = (update: any) => {
+			const t = start(update);
+			seen.runs += 1;
+			seen.active += 1;
+			// How many tiles really travel in it: a group with a moving box has an animation.
+			t.ready
+				.then(() => {
+					seen.groups.push(
+						document
+							.getAnimations()
+							.filter((a) =>
+								((a.effect as KeyframeEffect | null)?.pseudoElement ?? "").startsWith(
+									"::view-transition-group",
+								),
+							).length,
+					);
+				})
+				.catch(() => seen.groups.push(-1));
+			const tick = (() => {
+				let last = performance.now();
+				const on = () => {
+					if (seen.active === 0) return;
+					const at = performance.now();
+					seen.frames.push(at - last);
+					last = at;
+					requestAnimationFrame(on);
+				};
+				return on;
+			})();
+			requestAnimationFrame(tick);
+			t.finished.finally(() => {
+				seen.active -= 1;
+			});
+			return t;
+		};
+		document.addEventListener(
+			"pointerdown",
+			(e) => {
+				const t = e.target as HTMLElement;
+				seen.presses.push({
+					active: seen.active,
+					target: t.closest("[data-tile]")?.getAttribute("data-tile") ?? t.tagName,
+				});
+			},
+			true,
+		);
+	});
+	const runs = (): Promise<number> => b.page.evaluate(() => __vt.runs);
+	const settled = () =>
+		waitFor(
+			"no move running",
+			() => b.page.evaluate(() => __vt.active),
+			(n) => n === 0,
+			4000,
+		);
+	const running = () =>
+		waitFor(
+			"a move running",
+			() => b.page.evaluate(() => __vt.active),
+			(n) => n > 0,
+			1500,
+		).catch(() => 0);
+
+	const tracker = await tileShowing(b, "tracker");
+	const markdown = await tileShowing(b, "markdown");
+	const terminal: string | null = await b.page.evaluate(
+		() =>
+			[...document.querySelectorAll("[data-tile]")]
+				.find(
+					(t) =>
+						t.checkVisibility() &&
+						t.querySelector(".screen-text") !== null &&
+						t.querySelector("[data-view]") === null,
+				)
+				?.getAttribute("data-tile") ?? null,
+	);
+	const other = markdown;
+	await focusTile(b, tracker);
+
+	// What starts one, and what must not. Keys: turn, fold, zoom. Drag, window resize, workspace.
+	const counted = async (name: string, act: () => Promise<void>) => {
+		await settled();
+		const was = await runs();
+		await act();
+		await sleep(400);
+		await settled();
+		facts[name] = (await runs()) - was;
+		facts[`${name}_groups`] = await b.page.evaluate(() => __vt.groups.splice(0));
+	};
+	for (const [name, key] of [
+		["turn", " "],
+		["turnBack", " "],
+		["zoom", "z"],
+		["zoomOut", "z"],
+		["fold", "f"],
+	] as const)
+		await counted(`runs_${name}`, () => prefixed(b, key));
+	await counted("runs_unfold", () => b.page.locator("button:has(.strip-name)").first().click());
+	await counted("runs_splitAndClose", async () => {
+		const fresh = await split(b, "|");
+		await prefixed(b, "x");
+		await sleep(80);
+		await b.page.keyboard.press("y").catch(() => undefined);
+		await waitFor(
+			"it closed",
+			() => tilesNow(b),
+			(t) => !t.includes(fresh),
+		);
+	});
+	await counted("runs_drag", async () => {
+		const box = await b.page.locator("hr.border").first().boundingBox();
+		if (box === null) throw new Error("no border");
+		const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+		await b.page.mouse.move(x, y);
+		await b.page.mouse.down();
+		for (let i = 1; i <= 20; i += 1) await b.page.mouse.move(x + i * 3, y, {steps: 1});
+		await b.page.mouse.up();
+	});
+	await counted("runs_programOpens", async () => {
+		const fresh = await split(b, "|");
+		await settled();
+		await sleep(50);
+		await b.page.evaluate(() => {
+			__vt.runs = 0;
+			__vt.groups = [];
+		});
+		await lineTo(b, fresh, "counter");
+		await programIn(b, fresh, "counter");
+		await sleep(300);
+		facts.runsOnlyProgramOpen = await b.page.evaluate(() => __vt.runs);
+		facts.groupsOnlyProgramOpen = await b.page.evaluate(() => __vt.groups);
+		await b.page.keyboard.press("Control+c");
+		await prompted(b, fresh);
+		await prefixed(b, "x");
+		await sleep(80);
+		await b.page.keyboard.press("y").catch(() => undefined);
+		await waitFor(
+			"it closed",
+			() => tilesNow(b),
+			(t) => !t.includes(fresh),
+		);
+	});
+	await counted("runs_windowResize", async () => {
+		await b.app.evaluate(({BrowserWindow}: any) =>
+			BrowserWindow.getAllWindows()[0].setContentSize(1100, 760),
+		);
+		await sleep(200);
+		await b.app.evaluate(({BrowserWindow}: any) =>
+			BrowserWindow.getAllWindows()[0].setContentSize(1280, 800),
+		);
+	});
+	await focusTile(b, tracker);
+
+	// A key held through a split lands on the new tile, as it does without a move.
+	await settled();
+	const before = await tilesNow(b);
+	await prefixed(b, "|");
+	await b.page.keyboard.type("zzz");
+	const fresh = await waitFor(
+		"the new tile",
+		() => tilesNow(b),
+		(t) => t.length === before.length + 1,
+	);
+	const made = fresh.find((t) => !before.includes(t)) ?? "";
+	await prompted(b, made).catch(() => undefined);
+	await waitFor(
+		"the typed keys",
+		() => screen(b, made),
+		(t) => t.includes("zzz"),
+		3000,
+	).catch(() => undefined);
+	facts.typedRightAfterSplit = {landed: (await screen(b, made)).includes("zzz")};
+	await b.page.keyboard.press("Backspace");
+	await b.page.keyboard.press("Backspace");
+	await b.page.keyboard.press("Backspace");
+	await prefixed(b, "x");
+	await sleep(80);
+	await b.page.keyboard.press("y").catch(() => undefined);
+	await waitFor(
+		"it closed",
+		() => tilesNow(b),
+		(t) => !t.includes(made),
+	);
+	await settled();
+
+	// Timing, and frames while it runs, ten turns. The move's own clock, from the key.
+	await focusTile(b, tracker);
+	await resetCounters(b);
+	await b.page.evaluate(() => {
+		__vt.frames = [];
+	});
+	const times: number[] = [];
+	const rect = `(() => { const r = document.querySelector('[data-tile="${tracker}"]').getBoundingClientRect(); return r.width + 'x' + r.height; })()`;
+	for (let i = 0; i < 10; i += 1) {
+		const was: string = await b.page.evaluate(rect);
+		await b.page.keyboard.press("Control+b");
+		await sleep(30);
+		const got = await keyToDom(b, `${rect} !== '${was}'`, () => b.page.keyboard.press(" "));
+		times.push(got.dom);
+		await settled();
+		await sleep(100);
+	}
+	const frames: number[] = await b.page.evaluate(() => __vt.frames);
+	keep(
+		await readSample(b, "moves-turn", times, 10, {
+			frameGap: summary(frames),
+			framesSeen: frames.length,
+		}),
+	);
+
+	// A key and a press while it runs: the press aims at a tile that is not focused.
+	const keyDuring = [];
+	const pressDuring = [];
+	const titleOf = async (id: string) => {
+		const box = await b.page.locator(`[data-tile="${id}"] .titlebar`).boundingBox();
+		if (box === null) throw new Error(`no title on ${id}`);
+		return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+	};
+	for (let i = 0; i < 10; i += 1) {
+		await focusTile(b, tracker);
+		await settled();
+		const aim = await titleOf(other);
+		await b.page.evaluate(() => {
+			__vt.presses = [];
+		});
+		await prefixed(b, " ");
+		const during = await running();
+		const landed = await b.page.evaluate(() => __vt.active);
+		await b.page.mouse.click(aim.x, aim.y);
+		await settled();
+		await sleep(120);
+		const presses = await b.page.evaluate(() => __vt.presses);
+		pressDuring.push({
+			moveSeen: during > 0,
+			activeWhenSent: landed,
+			press: presses.at(-1) ?? null,
+			focused: await focusedNow(b),
+			active: await b.page.evaluate(() => document.activeElement?.tagName ?? null),
+		});
+		await prefixed(b, " ");
+		await sleep(50);
+		await settled();
+	}
+	facts.pressDuring = {
+		// The move has its boxes elsewhere by then: any tile under the pointer counts.
+		pressSeenByTile: pressDuring.filter((p) => /^t\d+$/.test(p.press?.target ?? "")).length,
+		tileFocused: pressDuring.filter((p) => p.focused !== tracker).length,
+		bodyFocus: pressDuring.filter((p) => p.active === "BODY").length,
+		duringMove: pressDuring.filter((p) => (p.press?.active ?? 0) > 0).length,
+		of: pressDuring.length,
+		rows: pressDuring.slice(0, 3),
+	};
+	if (terminal !== null) {
+		// The control: the same key with no move.
+		await focusTile(b, terminal);
+		await settled();
+		await b.page.keyboard.type("c0");
+		await waitFor(
+			"the key",
+			() => screen(b, terminal),
+			(t) => t.includes("c0"),
+			2000,
+		).catch(() => undefined);
+		facts.keyNoMove = (await screen(b, terminal)).slice(-60);
+		await b.page.keyboard.press("Backspace");
+		await b.page.keyboard.press("Backspace");
+		for (let i = 0; i < 5; i += 1) {
+			await focusTile(b, terminal);
+			await settled();
+			await prefixed(b, " ");
+			await running();
+			const mark = `k${i}`;
+			await b.page.keyboard.type(mark);
+			await settled();
+			await waitFor(
+				"the key",
+				() => screen(b, terminal),
+				(t) => t.includes(mark),
+				2000,
+			).catch(() => undefined);
+			const text = await screen(b, terminal);
+			keyDuring.push(text.includes(mark));
+			facts.keyDuringLast = {
+				screen: text.slice(-60),
+				focused: await focusedNow(b),
+				active: await b.page.evaluate(() => document.activeElement?.tagName ?? null),
+			};
+			await b.page.keyboard.press("Backspace");
+			await b.page.keyboard.press("Backspace");
+			await prefixed(b, " ");
+			await sleep(50);
+			await settled();
+		}
+		facts.keyDuring = {landed: keyDuring.filter(Boolean).length, of: keyDuring.length};
+	}
+
+	// Slowed to two seconds, so a picture can be taken: text told during the move, then a key
+	// during it to the terminal. What is drawn, the old text or the new?
+	await focusTile(b, tracker);
+	await settled();
+	await b.page.evaluate(() => {
+		const slow = new CSSStyleSheet();
+		slow.replaceSync("::view-transition-group(*) { animation-duration: 2s !important; }");
+		document.adoptedStyleSheets = [...document.adoptedStyleSheets, slow];
+	});
+	await prefixed(b, " ");
+	await running();
+	await tellMarkdown(b, markdown, "# NEW TEXT DURING THE MOVE\n\nThe old text is gone.");
+	await b.page
+		.locator(`[data-tile="${markdown}"]`)
+		.getByText("NEW TEXT DURING")
+		.first()
+		.waitFor({timeout: 1500})
+		.catch(() => undefined);
+	facts.newTextInDom = await b.page
+		.locator(`[data-tile="${markdown}"]`)
+		.getByText("NEW TEXT DURING")
+		.count();
+	facts.activeAtShot = await b.page.evaluate(() => __vt.active);
+	await b.page.screenshot({path: join(SHOTS, `${b.label}-text-during.png`)}).catch(() => undefined);
+	await settled();
+	const shown = await visibleTiles(b);
+	await counted("runs_workspaceNew", async () => {
+		await prefixed(b, "N");
+		await waitFor(
+			"a second workspace",
+			() => visibleTiles(b),
+			(t) => t.join() !== shown.join(),
+		);
+	});
+	await counted("runs_workspaceBack", () => prefixed(b, "1"));
+	keep(await readSample(b, "moves", [], 1, facts));
+};
+
 const walk: Moment = async (b) => {
 	const tile = await tileShowing(b, "terminal").catch(() => null);
 	const pressOver = async (open: () => Promise<void>, css: string) => {
@@ -1694,6 +2046,7 @@ export const MOMENTS: Record<string, Moment> = {
 	"open-ticket": openTicket,
 	reveal,
 	overlays,
+	moves,
 };
 
 // ---------------------------------------------------------------- the command line

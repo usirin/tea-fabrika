@@ -8,6 +8,7 @@ import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	StrictMode,
+	useDeferredValue,
 	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
@@ -15,6 +16,7 @@ import {
 	useRef,
 	useState,
 	useSyncExternalStore,
+	ViewTransition,
 } from "react";
 import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
@@ -39,10 +41,12 @@ import {
 	fold,
 	inPx,
 	type LayoutNode,
+	type LayoutTree,
 	lineOf,
 	type NodeId,
 	type Orientation,
 	type Span,
+	sameShape,
 	type TileId,
 	type TileNode,
 	tiles,
@@ -126,6 +130,10 @@ interface Model {
 	readonly desk: Desk | null;
 	/** A desk came once: a link down after it is the host down. */
 	readonly attachedOnce: boolean;
+	/** How many tile moves there have been: what the page defers to draw a move as one. */
+	readonly moves: number;
+	/** The layout the last move left. */
+	readonly movedFrom: LayoutTree | null;
 	/** The desk's Ctrl-B key, as the host's table says. */
 	readonly prefix: string;
 	/** The desk's Ctrl-B table, each key with its name. */
@@ -146,6 +154,8 @@ interface Model {
 let model: Model = {
 	desk: null,
 	attachedOnce: false,
+	moves: 0,
+	movedFrom: null,
 	prefix: "",
 	table: [],
 	shapes: new Map(),
@@ -206,6 +216,16 @@ const follow = (run: string) =>
  * Make what the desk shows, and let go of what it no longer does: a terminal for each tile with a
  * tsh, in any workspace, and the view of each run shown in one. A line's window has no terminal.
  */
+/**
+ * A tile move is a new shape in the same workspace: a split, a close, a turn, a fold or a zoom.
+ * Not a dragged border (sizes only), not a program opening in a tile, not another workspace.
+ */
+const movedFrom = (was: Desk | null, now: Desk): LayoutTree | null => {
+	if (was?.at !== "open" || now.at !== "open") return null;
+	const [before, after] = [activeOf(was), activeOf(now)];
+	return before.id === after.id && !sameShape(before.layout, after.layout) ? before.layout : null;
+};
+
 const follows = (desk: Desk) => {
 	const all = desk.at === "open" ? desk.workspaces.flatMap((ws) => tilesOf(ws)) : [];
 	const tiles = new Set(all.flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])));
@@ -347,7 +367,16 @@ const heard = (raw: unknown) => {
 			follows(m.desk);
 			// The wire made every object new. What did not change gets its old object back, so a
 			// tile the change did not touch keeps its props, and its `memo` skips it.
-			model = {...model, desk: share(model.desk, m.desk), attachedOnce: true};
+			{
+				const from = movedFrom(model.desk, m.desk);
+				model = {
+					...model,
+					desk: share(model.desk, m.desk),
+					attachedOnce: true,
+					moves: from === null ? model.moves : model.moves + 1,
+					movedFrom: from ?? model.movedFrom,
+				};
+			}
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(notify);
 			holdStep({type: "takes", takes: m.takes});
@@ -570,13 +599,20 @@ const everyTile = (desk: Open) =>
  * a zoom, on another workspace) is hidden, not gone: `Activity` keeps what is in it and stops its
  * effects.
  */
-function Tiles(props: {readonly ws: Workspace; readonly desk: Open}): ReactNode {
-	const {ws, desk} = props;
+function Tiles(props: {
+	readonly ws: Workspace;
+	readonly desk: Open;
+	readonly layout: LayoutTree;
+}): ReactNode {
+	const {ws, desk, layout} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Drag | null>(null);
-	const laid = useMemo(() => flat(ws.layout, drag), [ws.layout, drag]);
-	const boxes = new Map(laid.tiles.map(({tile, box}) => [tile.id, box]));
+	const laid = useMemo(() => flat(layout, drag), [layout, drag]);
+	const now = useMemo(() => flat(ws.layout), [ws.layout]);
+	// A tile the layout drawn does not hold yet has its place at once: the focus it was just given
+	// and the key held for it land on it, before the move starts.
+	const boxes = new Map([...now.tiles, ...laid.tiles].map(({tile, box}) => [tile.id, box]));
 	const press =
 		(container: ContainerNode, a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
 			e.preventDefault();
@@ -617,9 +653,11 @@ function Tiles(props: {readonly ws: Workspace; readonly desk: Open}): ReactNode 
 				const box = boxes.get(tile.id);
 				return (
 					<Activity key={tile.id} mode={box === undefined ? "hidden" : "visible"}>
-						<div className="cell" style={box === undefined ? undefined : placed(box)}>
-							<DeskTile tile={tile} ws={home} desk={desk} />
-						</div>
+						<ViewTransition name={`tile-${tile.id}`} default="tile-move">
+							<div className="cell" style={box === undefined ? undefined : placed(box)}>
+								<DeskTile tile={tile} ws={home} desk={desk} />
+							</div>
+						</ViewTransition>
 					</Activity>
 				);
 			})}
@@ -790,9 +828,14 @@ function App(): ReactNode {
 					.filter((tile) => !tile.folded)
 					.map((tile) => tile.id)
 					.join(" "));
+	// A deferred value is what starts a `ViewTransition`; a store update starts none. So the count of
+	// moves is deferred, nothing else: until it catches up, the layout drawn is the one before.
+	const movesDrawn = useDeferredValue(m.moves);
+	const layout =
+		ws === null ? null : movesDrawn === m.moves || m.movedFrom === null ? ws.layout : m.movedFrom;
 	useEffect(() => {
 		if (!away && over === "none") focusTile();
-	}, [shown, drawn, away, over]);
+	}, [shown, drawn, layout, away, over]);
 	const tickets = useMemo(() => ticketsShown(m.views), [m.views]);
 	const props: FrameProps = {
 		desk: open,
@@ -821,7 +864,7 @@ function App(): ReactNode {
 			{bare || view.kind === "instead" ? <Band /> : <TopBar {...props} />}
 			{view.kind === "instead" ? (
 				view.page
-			) : open === null || ws === null ? (
+			) : open === null || ws === null || layout === null ? (
 				<p className="starting">{desk === null ? "starting" : "closing"}</p>
 			) : (
 				<div
@@ -831,7 +874,7 @@ function App(): ReactNode {
 					data-zoomed={ws.layout.zoomed ?? undefined}
 					inert={view.dim}
 				>
-					<Tiles ws={ws} desk={open} />
+					<Tiles ws={ws} desk={open} layout={layout} />
 				</div>
 			)}
 			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}
@@ -842,6 +885,27 @@ function App(): ReactNode {
 
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
+	// While a tile moves, the browser's picture of the page lies over it and takes every press, so
+	// focus would drop to the body. Keep focus, end the move, and give the press to what lies there.
+	window.addEventListener(
+		"mousedown",
+		(e) => {
+			const moving = document.activeViewTransition;
+			if (moving === null || moving === undefined || e.target !== document.documentElement) return;
+			e.preventDefault();
+			moving.skipTransition();
+			const {clientX: x, clientY: y} = e;
+			void moving.finished.finally(() => {
+				const under = document.elementFromPoint(x, y);
+				if (!(under instanceof HTMLElement)) return;
+				under.dispatchEvent(
+					new PointerEvent("pointerdown", {bubbles: true, clientX: x, clientY: y}),
+				);
+				under.click();
+			});
+		},
+		{capture: true},
+	);
 	window.addEventListener("keydown", onKey, {capture: true});
 	window.addEventListener("pointerover", onPointerOver);
 	window.fabrika.onMessage("desk", heard);
