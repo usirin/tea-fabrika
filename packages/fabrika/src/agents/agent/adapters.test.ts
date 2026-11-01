@@ -423,6 +423,25 @@ describe("codex: the system prompt", () => {
 		return {why, seen, parent};
 	};
 
+	// Over what any system lets one command carry, so Node's own spawn throws: no fake, and no clock.
+	it("a prompt too long to start Codex with fails the turn in words, and kills nothing", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
+		const why = await Effect.runPromise(
+			Effect.gen(function* () {
+				const adapter = yield* codexAdapter({codex: "/bin/echo", parent, access: "write"});
+				return yield* Effect.flip(
+					Effect.scoped(
+						adapter.start({...TURN, prompt: "x".repeat(8_000_000), folder: join(home, "copy")}),
+					),
+				);
+			}).pipe(Effect.provide(nodeServices)),
+		);
+		expect(why.why).toBe("start");
+		expect(why.message).toContain("E2BIG");
+	});
+
 	/** The command Codex would be started with for one turn. */
 	const startedWith = async (system: SystemPrompt, access: FolderAccess) => {
 		const home = madeUpHome();
