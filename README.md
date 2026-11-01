@@ -50,7 +50,7 @@ Every decision has a short note in [`docs/direction/`](./docs/direction/README.m
 
 ## Try it in two minutes
 
-You need Node 26 (the repository pins `26.12.0`), pnpm 10 and git. Nothing here needs an API key
+You need Node 26 (the repository pins `26.13.0`), pnpm 12 and git. Nothing here needs an API key
 or spends money. Run it with `TYPESAFE_API_KEY` unset.
 
 1. Clone this repository, open its folder, and install:

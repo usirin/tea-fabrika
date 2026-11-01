@@ -101,9 +101,9 @@ catalog:
 # `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
 savePrefix: ''
 
-onlyBuiltDependencies:
-  - esbuild
-  - workerd
+allowBuilds:
+  esbuild: true
+  workerd: true
 
 # The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
