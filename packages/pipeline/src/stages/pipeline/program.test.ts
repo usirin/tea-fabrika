@@ -20,6 +20,7 @@ import {hashOf, textOf} from "../../tickets/approval.ts";
 import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
+import {MutationRunner} from "../mutation/services.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {Lane} from "./machine.ts";
@@ -133,6 +134,8 @@ interface Script {
 	 * what it saved, holding `offers` as code from before this change would have.
 	 */
 	readonly savedAsking?: {readonly at: RegExp; readonly offers: readonly string[]};
+	/** From a second test writer on, the repo's own tests can't run at any head, as with a full disk. */
+	readonly checksStopRunning?: boolean;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -209,6 +212,7 @@ const lane = ({
 	redAfterKill = false,
 	fake,
 	savedAsking,
+	checksStopRunning = false,
 }: Script): Promise<Ran> => {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
@@ -231,6 +235,19 @@ const lane = ({
 	const lines: string[] = [];
 	const line = () =>
 		runLane(NUMBER, (said) => Effect.sync(() => void lines.push(said))).pipe(
+			Effect.updateService(MutationRunner, (runner) =>
+				checksStopRunning
+					? {
+							...runner,
+							tests: (head) =>
+								Effect.suspend(() =>
+									codexRuns(dir).filter((run) => run.step === "tests").length > 1
+										? Effect.fail({_tag: "could_not_run"} as const)
+										: runner.tests(head),
+								),
+						}
+					: runner,
+			),
 			Effect.provide(laneLayer({home, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
@@ -1806,10 +1823,105 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
 					const {text} = readBy(ran, "a-step");
 					expect(text).toMatch(/still failing/i);
+					expect(text).not.toMatch(/checks pass\b/i);
 					const again = text.split("\n").filter((line) => /`?again`?/.test(line));
 					expect(again.filter((line) => /note/i.test(line) && /builder/i.test(line))).not.toEqual(
 						[],
 					);
+				},
+			);
+
+			// P28, the checks green: a person let a test that already passes through, the builder has
+			// nothing to do, and the checks at the head pass when code runs them.
+			const ALL_GREEN: Script = {
+				within: 90,
+				picks: {step: "go_on", merge: "no"},
+				fake: {
+					// Each mutant is answered `cannot`, so a second mutation run writes no test twice.
+					cannot: REAL_MUTANT,
+					answers: {
+						review: [found(RUN3_FINDING)],
+						build: [null, {with: {summary: "Nothing is left to change.", left: []}}],
+					},
+				},
+			};
+			/** The question the last build ended on, as a person reads it. */
+			const afterLastBuild = (ran: Ran) => {
+				const built = ran.facts.findLastIndex((f) => f.type === "ended" && f.stage === "build");
+				const asked = ran.facts
+					.slice(built)
+					.find((f) => f.type === "asked" && String(f.ask).startsWith("a-step"));
+				return readBy(ran, String(asked?.ask));
+			};
+
+			it(
+				"the checks pass at the head: it offers go_on and stop, says so, and does not say failing",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane(ALL_GREEN);
+					expect(ran.names.build).toContain('"ask"');
+					const {text, picks} = afterLastBuild(ran);
+					expect(picks).toEqual(["go_on", "stop"]);
+					expect(text).toMatch(/changed nothing/i);
+					expect(text).toMatch(/checks pass\b/i);
+					expect(text).not.toMatch(/still failing/i);
+				},
+			);
+
+			it(
+				"the checks pass at the head: go_on carries on to the mutation step, and the lane lands",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({...ALL_GREEN, picks: {step: "go_on"}});
+					expect(runsOf(ran, "build")).toHaveLength(2);
+					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).toContain("mutation");
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).not.toBeNull();
+				},
+			);
+
+			// P28, the checks not run at all: neither answer is known, so nobody is asked to pick on one.
+			it(
+				"the checks can't run at the head: the lane ends stuck in words, asks nothing, and lands nothing",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						picks: {step: "go_on"},
+						fake: RUN_3,
+						checksStopRunning: true,
+					});
+					expect(ran.lines).not.toContain(TIMED_OUT);
+					expect(ran.names.build).toContain('"stuck"');
+					expect(
+						ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-step")),
+					).toEqual([]);
+					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).not.toContain("mutation");
+					const told = [bye(ran), ...commentsOf(ran)];
+					expect(
+						told.filter((said) => /checks/i.test(said) && /could not run/i.test(said)),
+					).not.toEqual([]);
+					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+				},
+			);
+
+			// P28: and the same on a lane that already holds a go_on. Also shows `checksStopRunning` bites.
+			it(
+				"a lane saved with go_on on offer, picked while the checks can't run, lands nothing: green is never guessed",
+				{timeout: 100_000},
+				async () => {
+					const ran = await lane({
+						within: 90,
+						steps: ["go_on"],
+						fake: RUN_3,
+						checksStopRunning: true,
+						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
+					});
+					expect(answeredWith(ran, "go_on")).toHaveLength(1);
+					expect(ran.lines).not.toContain(TIMED_OUT);
+					expect(ran.names.mutation).toContain("stuck");
+					expect(bye(ran)).toContain("stuck");
+					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 				},
 			);
 
