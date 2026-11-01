@@ -38,8 +38,8 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 
   The sorter, the ACP builder and the interface's `acp-claude` row stay on
   `settingSources: []`: the sorter has no rules to read, and the ACP
-  adapter's older SDK (0.3.286) was not tested. The ACP paths keep pasting
-  the rules into the prompt.
+  adapter's own SDK (0.3.286 then, 0.3.312 now) was not tested. The ACP paths
+  keep pasting the rules into the prompt.
   - **Wrong guess, kept:** this note first said `["project"]` brings in the
     repository's `.claude/settings.json` with the rules and that the two might
     not come apart. The first half was right: hooks, env and the
