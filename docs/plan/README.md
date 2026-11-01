@@ -23,9 +23,9 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
    learns to handle what real agents answer.
 2. **Run ticket 117 for real.** The pipeline builds it, and the owner watches in the app.
    It is a small change to `map`.
-3. **Switch to `next/`.** The owner approves [the Tier 1 plan](./tier-1.md). Then
-   [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest get built through
-   the pipeline.
+3. **Switch to `next/`.** The owner approved [the Tier 1 plan](./tier-1.md) on 2026-11-01.
+   After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
+   get built through the pipeline, with one tracker ticket per pull request.
 
 After ticket 117, on today's version: rename `runs` to `timeline` (ticket 86), then the
 performance program (ticket 114). Past that, [seven tiers](./tiers.md), proposed.
@@ -45,7 +45,8 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo. No real ticket yet. → nothing, until ticket 117
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. A review found a blocker, and CI is red. → an agent fixes it, then a mutation run and a new review, then the owner's yes
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
-- **Tier 1 plan for `next/`.** Written, not approved. One question is still open, under [who decides what](#who-decides-what). → the owner answers it, and after ticket 117 approves the plan
+- **Skipping work already done, and restarting a stuck lane.** Today's pipeline does neither. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
+- **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
 - **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the docs and exam pull requests, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says
 - **This plan folder and the notes it brought up to date, with [every update builds every layer](../direction/every-update-builds-every-layer.md) (`next/`).** Docs. → the owner's yes
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
@@ -75,7 +76,6 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Approves a plan, in `next/` or today's, before any builder starts.
 - Approves a pull request, and answers a question the machine put to a person. No agent does either. Rows that only record what happened need no yes: see [how a change lands](#how-a-change-lands).
-- Answers Tier 1's one open question: how does a plan written by hand enter a pipeline that starts at triage, and which ticket do Tier 1's pull requests run under (no lean yet).
 - Settles a **proposed** note.
 - Reads each exam pull request. Any diff to the exam files stops the build and asks the owner.
 - Adds an entry to `unreachable-ledger.json`, in a change of its own.

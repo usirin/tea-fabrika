@@ -1,10 +1,10 @@
 # The tiers: the whole plan for `next/`
 
-**Proposed, 2026-10-31. Order of work set 2026-11-01.** All the work on `next/` is one
-plan of seven tiers. Each tier is one pass across all five layers, and each ends with
-something a person can use. No layer gets finished alone. Once the owner approves its
-plan, only Tier 1 is committed. It is not approved yet and has not started: today's
-pipeline finishes first and builds ticket 117, and then it builds Tier 1
+**Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** All
+the work on `next/` is one plan of seven tiers. Each tier is one pass across all five
+layers, and each ends with something a person can use. No layer gets finished alone. Only
+Tier 1 is committed. It has not started: today's pipeline finishes first and builds
+ticket 117, and then it builds Tier 1
 ([where we are](./README.md#where-we-are-now)).
 
 ```text

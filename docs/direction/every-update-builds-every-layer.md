@@ -47,7 +47,7 @@ smallest version that really works end to end, before any part gets thick.
 
 ## Where this stands
 
-The first-pass plan is written and not approved. Nothing from it is built, and
+The first-pass plan was approved 2026-11-01. Nothing from it is built, and
 nothing from `next/` is on main. Today's pipeline comes first
 ([the plan](../plan/README.md)).
 

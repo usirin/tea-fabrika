@@ -175,11 +175,11 @@ them. The desktop has a note of its own. Config for every layer is one
 
   ```ts
   // recorded: lands in the ledger, can be replayed
-  {kind: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
+  {_tag: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
   // ephemeral: at-most-once, may be lost, nothing breaks
-  {kind: "poke", stream: "counter:1/inbox", rev: 41}
-  {kind: "presence", client, at: "tile:t1"}
-  {kind: "bytes", port: "tile:t1", data: "l"}
+  {_tag: "poke", stream: "counter:1/inbox", rev: 41}
+  {_tag: "presence", client, at: "tile:t1"}
+  {_tag: "bytes", port: "tile:t1", data: "l"}
   ```
 
 ### Layer 1: transport (decided 2026-10-30; T3 changed 2026-10-31)
@@ -249,8 +249,8 @@ connect.pipe(Effect.retry(reconnect));
   hands still run as a login service (launchd through SMAppService on the Mac,
   systemd on the VM) and own the local brain's life. The menubar is required,
   and Quit there stops the service.
-  *Changed 2026-11-01, from [Tier 1's plan](../plan/tier-1.md), proposed until it is
-  approved: Tier 1 has no hands, and the Electron app starts the brain itself as a plain
+  *Changed 2026-11-01, from [Tier 1's plan](../plan/tier-1.md), approved the same day
+  and not built: Tier 1 has no hands, and the Electron app starts the brain itself as a plain
   launchd service, so nothing starts at login. The menu bar is part of that app. Quit
   stops the brain. Whether hands still run as a login service is for Tier 4.*
   - ~~The window talks only to its own hands, over a Unix socket~~ **Replaced
@@ -294,7 +294,7 @@ What local Miniflare gives us, from our own experiments:
 **Open in transport:** the extra hop through the gateway on Cloudflare is not
 measured (a keystroke-echo test would measure it). JSON-RPC's weight per
 message is not measured. ~~How a browser gets its grant is open (lean: a QR code
-from the Mac).~~ *Proposed for `next/` with [Tier 1's plan](../plan/tier-1.md), which is not approved:* the
+from the Mac).~~ *Settled for `next/` by [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built:* the
 menu bar's row, Approve and a finger, on both stages; QR is in Tier 7. The owner already picked
 two pieces of it: the menu bar in the first slice, and keeping the one-time link. Background browser tabs slow their timers, which may make a tab
 look away.
@@ -322,7 +322,7 @@ interface Data {
 	at: "23:12:04",    // the referee's clock: leases, limits and order use only this
 	by: "mac@owner",   // stamped by the door from the signed-in key
 	said: "23:10:01",  // the writer's own clock: shown, never used to decide
-	kind: "claimed",
+	_tag: "claimed",   // `kind` until Tier 1's approval, 2026-11-01; today's code keeps `kind`
 	body: {lease: "30s"},
 }
 ```
@@ -387,7 +387,7 @@ written, so it needs no table.
 yield* ProcessManager.exit("build:7", {why: "limit", charge}); // C1
 //   -> the charge, build:7's exit, and mail in its parent's inbox: one write, or none
 // A message that crashes its reader 3 times moves aside (C2):
-{stream: "build:7/dead", kind: "dead", body: {tries: 3, limit: 3, m: "m-17"}}
+{stream: "build:7/dead", _tag: "dead", body: {tries: 3, limit: 3, m: "m-17"}}
 ```
 
 - **C1, stopping a job together with a note:** when the app sees an agent

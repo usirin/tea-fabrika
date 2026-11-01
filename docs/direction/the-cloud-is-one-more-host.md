@@ -7,6 +7,9 @@ note says what replaces its shape after that. The design draft below was
 added the same day. The owner walked it on 2026-10-30; the open questions
 now carry proposed answers (end of the note). Still proposed.
 
+*Changed 2026-11-01: the sketches below say `_tag` where they said `kind`, as Tier 1's
+approval settled. Today's code keeps `kind`.*
+
 *Changed 2026-10-30, later: a program is a Durable Object, run by the brain,
 with the hands doing its machine work. Open question 1 is answered: the brain
 is workerd on the laptop too. See
@@ -283,8 +286,8 @@ The seven open questions, each with its lean. Proposed, not decided.
 // One program instance is one Durable Object, its process:
 //   wake on a message or its alarm -> rebuild from storage -> update -> save -> sleep
 // What the program wants done on a computer is a Cmd, owed until the hands answer:
-{kind: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
-{kind: "done", id: "c-41", ok: {sha: "1a2b3c4"}}   // the hands' answer, a Msg to the program
+{_tag: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
+{_tag: "done", id: "c-41", ok: {sha: "1a2b3c4"}}   // the hands' answer, a Msg to the program
 ```
 
 - **Decided:**
@@ -380,9 +383,9 @@ decision log's number).
 
 ```ts
 // A sketch. build:7 writes a Cmd; the project object pokes the hands whose `has` matches.
-{kind: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
+{_tag: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
 // one set of hands claims it with a lease (C3), does it, posts the answer
-{kind: "done", id: "c-41", ok: {sha: "1a2b3c4"}}
+{_tag: "done", id: "c-41", ok: {sha: "1a2b3c4"}}
 // the Mac's hands crash mid-commit: the lease runs out, the VM's hands take c-41
 ```
 
@@ -405,7 +408,7 @@ yield* LimitManager.charge("build:7", {
 	tokens: {in: 41_000, out: 2_100, cached: 30_000}, model: "gpt-sol", dollars: 0.27, estimate: 0.3,
 });
 // crossing the soft line writes, once:
-{kind: "limit.crossed", body: {name: "build:7", meter: "dollars", line: "soft", used: 4.02}}
+{_tag: "limit.crossed", body: {name: "build:7", meter: "dollars", line: "soft", used: 4.02}}
 ```
 
 - It lives in the project object, so a hold checks every parent in one step,
@@ -481,7 +484,7 @@ const view = {
   // A sketch. The runtime gives this Layer, tied to this process.
   const close = Effect.gen(function* () {
   	const topic = yield* Topic;
-  	yield* topic.publish("tickets", {kind: "closed", ticket: 7});
+  	yield* topic.publish("tickets", {_tag: "closed", ticket: 7});
   });
   ```
 - Not now: Relay. A study found it a second store, with no patches and its own

@@ -1,6 +1,6 @@
 # Tier 1: the plan for the first pass of the new fabrika
 
-**Proposed, not approved, as of 2026-11-01.** No builder starts until the owner approves it. Nothing here is built. [The plan's way in](./README.md) says where this sits, and [the tiers](./tiers.md) say what comes after.
+**Approved by the owner on 2026-11-01. Not started.** Builders start after ticket 117. Nothing here is built, and later tiers stay proposed. [The plan's way in](./README.md) says where this sits, and [the tiers](./tiers.md) say what comes after.
 
 Every claim here is about `next/` at PR 223's head (`7c1d073`), unless it says "today's version". A path with no `next/` in front starts inside its package: see [Packages](#packages).
 
@@ -99,7 +99,7 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 ## The order of work
 
-1. The owner approves this plan. One question is still open, and the rest are settled: see [Settled by the owner](#settled-by-the-owner).
+1. The owner approved this plan on 2026-11-01, and every question is settled: see [Settled by the owner](#settled-by-the-owner). Today's pipeline builds ticket 117 first, and builders start after it. Each pull request below runs under [its own ticket](#one-ticket-per-pull-request).
 2. Start from main at `05a43d0` or later. PR 226 (oxlint and oxfmt replace Biome) and PR 229 (the `-old` rename) are merged.
 3. The docs PR lands, as the list below says. The notes it names were first brought in line on 2026-11-01, in the same change that added this file. Re-check them against this plan before PR A.
 4. The exam PR lands, by an agent that is not the builder. See [The exam PR](#the-exam-pr-not-in-this-plan).
@@ -115,9 +115,8 @@ Each PR: test writer first (a separate agent, adds its tests, runs them on the b
 **The docs PR,** before the exam, since those notes differ from this plan (gap 9). It holds:
 
 - Real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
-- **The sketches that still show `kind` on ledger entries,** in `a-local-first-sync-engine.md` and `the-cloud-is-one-more-host.md`. They move to `_tag` when the owner approves this plan, as [Tags](#tags) says. Ticket 32 tracks it.
 
-The pull request that added this folder already made the rest of this list: `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
+The pull request that added this folder already made the rest of this list: the sketches of ledger entries in `a-local-first-sync-engine.md` and `the-cloud-is-one-more-host.md`, now on `_tag` as [Tags](#tags) says, `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
 
 **Why six PRs, not one:** 9,700 and more lines in one review is not a review. Each cut is a whole visible thing, and every layer still moves when it needs to. Cost: a rebase per landing, and six reviews instead of one. Sure: 75%.
 
@@ -1036,7 +1035,7 @@ const allowed = {
 
 ## Tags
 
-**The answer:** every union we define is tagged with `_tag`, Effect's own key, and Effect Schema writes it. Nobody writes it by hand. Settled by the owner. `kind`, `is`, `where`, `use` and the rest stop being tag keys. This plan proposes that `kind` on ledger entries becomes `_tag` too. That part settles when the owner approves this plan, and ticket 32 tracks it.
+**The answer:** every union we define is tagged with `_tag`, Effect's own key, and Effect Schema writes it. Nobody writes it by hand. Settled by the owner. `kind`, `is`, `where`, `use` and the rest stop being tag keys. In `next/`, `kind` on ledger entries becomes `_tag` too, settled when the owner approved this plan, and ticket 32 tracks it. Today's code keeps `kind`.
 
 ```ts
 // A sketch, on effect 4.0.6.
@@ -1057,7 +1056,7 @@ class KeyDown extends Schema.TaggedError<KeyDown>()("KeyDown", {why: Schema.Stri
 
 | Shape | Its key | Why |
 |---|---|---|
-| A union we define: states, menu rows, faults, stages, wire messages we own. Facts on the ledger too, which the owner's approval of this plan settles, and ticket 32 tracks | `_tag`, through the schema tools | Makers, `match` and guards come with it |
+| A union we define: states, menu rows, faults, stages, wire messages we own, and facts on the ledger (ticket 32 tracks those) | `_tag`, through the schema tools | Makers, `match` and guards come with it |
 | A tea Msg or Cmd | `type` stays. Do not "fix" it. | tea's engine reads `msg.type` |
 | Someone else's shape: JSON-RPC's `method`, JSON Patch's `op`, mdast's `type`, MCP's fields, the HTTP `Host` header | Its own | It is not ours to rename |
 | A plain field, on a struct with the same fields every time | A plain word: `Host.platform`, `Saw.where`, `Who.as` | Nothing picks a shape by it, so it is no tag |
@@ -1870,11 +1869,26 @@ Plan-115's list stands, with these added:
 
 ## Settled by the owner
 
-**One question is still open:**
+The owner approved this plan on 2026-11-01, and no question is left open.
 
-- **How this plan enters the pipeline:** a plan written by hand meets a pipeline that starts at triage, so how does it go in, and which ticket do Tier 1's pull requests run under? No lean yet.
+### One ticket per pull request
 
-Every other old question closed this way.
+**How this plan enters the pipeline:** one tracker ticket per pull request, each a child of a Tier 1 parent plan, as [a project is a parent plan](../direction/a-project-is-a-parent-plan.md) says.
+
+```text
+Tier 1, the parent     for now, a line in each ticket: pipeline v0 has no parent plans
+  docs, exam, A, B, C, D, D2, E     one tracker ticket each
+
+each ticket:  triage -> plan step -> the owner approves -> the steps as usual
+                        turns its part of tier-1.md into the pipeline's plan format
+```
+
+- **Each ticket** goes through triage and the plan step and points at its part of this file. A step that cannot run yet goes by hand and is logged, as [the deal](./README.md#where-we-want-to-go) says.
+- **Why:** it needs no new code.
+- **Cost:** one short look per pull request. The plan step could drift from this file, and that look catches it.
+- **How sure:** 75%. The doubt is whether PR D fits one plan step. Running PR D's plan step settles it.
+
+### The other questions
 
 - **`transport/link.ts`:** yes, it stays in the library, since the MCP bridge dials too and can't import tuval.
 - **Backup:** yes, the backup sheet and recovery move up from Tier 3, to right after PR D, as PR D2.

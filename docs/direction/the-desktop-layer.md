@@ -6,8 +6,8 @@ The desktop is layer 5, on top of the app. It places tiles, owns focus and
 routes keys: the part KDE or GNOME plays on Linux. Its codename is Tuval;
 users only ever see "fabrika".
 
-*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), proposed until it
-is approved. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
+*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
+day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
 drawn from it. The new version's shell is `fabsh`, so below, `tsh` means `fabsh`. The desk is
 a program, `next/programs/desk`, built in as `fabrika/desk`, and it arrives in Tier 2 with
 split, close and prefix keys. Tier 1 has one fixed layout at wiring, each window keeps its
@@ -146,7 +146,7 @@ const electron = {cannot: ["Cmd-Q", "Cmd-H"]};
 
 Added 2026-11-01, for `next/`. The owner settled the shape: the menu bar is in the first
 slice and part of the Electron app, and a person only opens the app, which starts the brain.
-The details are [Tier 1's plan](../plan/tier-1.md), proposed until it is approved.
+The details are [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built.
 
 ```text
 open   write <home>/brain.plist, then  launchctl bootstrap gui/<uid> <home>/brain.plist

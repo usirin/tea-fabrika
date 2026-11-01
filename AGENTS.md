@@ -157,9 +157,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **The tag key is `_tag`, for every union we define.** Effect Schema writes it, with
   `Schema.TaggedUnion`, `TaggedStruct` and `TaggedError`, never by hand. tea's Msgs and
   Cmds keep `type`, and third-party shapes keep theirs. Plain fields stay plain words,
-  such as `platform`. This is decided. [Tier 1](./docs/plan/tier-1.md#tags) proposes that
-  `kind` on ledger entries becomes `_tag` too; that settles when the owner approves Tier 1,
-  and ticket 32 tracks it. Today's code is not changed by this, so its `kind` on an outcome stays until that code goes
+  such as `platform`. This is decided. In `next/`, `kind` on ledger entries becomes `_tag`
+  too, settled when the owner approved [Tier 1](./docs/plan/tier-1.md#tags) on 2026-11-01,
+  and ticket 32 tracks it. Today's code is not changed by this, so its `kind` on an entry or an outcome stays until that code goes
   ([schema classes](./docs/direction/schema-classes-not-of-helpers.md)).
 - **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
   A new stage machine writes only its own words, with `outcomesOf` in
