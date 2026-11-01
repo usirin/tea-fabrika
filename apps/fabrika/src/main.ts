@@ -98,6 +98,8 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   settings turn it off. Never on a quiet start, and nothing is focused by it
 //
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
+// Electron names its own folder after package.json's `productName`, so that field holds the home's
+// name when the package is renamed.
 // A test sets it, to run on a fresh one. The host is started on the same home, by name, always.
 //
 // A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
