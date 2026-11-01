@@ -1,0 +1,29 @@
+# What the `pipeline` program needs to work on this repository. The steps' order stays in code.
+
+[build]
+install = ["pnpm", "install", "--frozen-lockfile"]
+checks = [["pnpm", "typecheck"], ["pnpm", "lint"], ["pnpm", "test"]]
+
+[test_writer]
+includes = ["**/*.test.ts"]
+run = ["pnpm", "exec", "vitest", "run", "--reporter=json", "--outputFile={out}"]
+
+[mutation]
+tests = ["pnpm", "test"]
+typecheck = ["pnpm", "typecheck"]
+
+[checks]
+# GitHub's CI runs the whole suite. The two here are the quick ones, at each head.
+github = "every"
+
+[[checks.run]]
+name = "typecheck"
+run = ["pnpm", "typecheck"]
+
+[[checks.run]]
+name = "lint"
+run = ["pnpm", "lint"]
+
+[ship]
+# The yes to merge is a person's answer on the ticket. This repository has no CODEOWNERS.
+approval = "none"
