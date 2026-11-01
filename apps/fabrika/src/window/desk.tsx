@@ -4,6 +4,7 @@ import type {Ghostty} from "ghostty-web";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
+	StrictMode,
 	useEffectEvent,
 	useLayoutEffect,
 	useRef,
@@ -795,7 +796,12 @@ const boot = Effect.gen(function* () {
 	window.addEventListener("pointerover", onPointerOver);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
-	if (root !== null) createRoot(root).render(<App />);
+	if (root !== null)
+		createRoot(root).render(
+			<StrictMode>
+				<App />
+			</StrictMode>,
+		);
 });
 
 Effect.runFork(

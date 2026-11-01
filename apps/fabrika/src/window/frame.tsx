@@ -4,6 +4,7 @@ import {
 	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
+	useRef,
 	useState,
 } from "react";
 import type {AsksNow} from "../asks.ts";
@@ -375,7 +376,11 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	// count: one ask leaving as another arrives keeps the count, and the new one is seen too.
 	const shown = asks.asks.map((a) => a.key).join("\n");
 	const sayAsksSeen = useEffectEvent(() => toHost({type: "seen"}));
+	// Said once per list of keys: an effect may run again with nothing new (Strict Mode's rehearsal).
+	const said = useRef<string | null>(null);
 	useLayoutEffect(() => {
+		if (said.current === shown) return;
+		said.current = shown;
 		sayAsksSeen();
 	}, [shown]);
 	const close = useCallback(() => step({type: "close"}), [step]);
