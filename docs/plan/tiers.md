@@ -5,7 +5,7 @@ the work on `next/` is one plan of seven tiers. Each tier is one pass across all
 layers, and each ends with something a person can use. No layer gets finished alone. Only
 Tier 1 is committed. It has not started: today's pipeline finishes first and builds
 ticket 117. Then Tier 1's free-form plan goes through the planner, the owner approves that
-output, and the pipeline builds it
+plan, an agent files its tasks as tickets by hand, once, and the pipeline builds them
 ([where we are](./README.md#where-we-are-now), [the flow](../direction/free-form-plan-to-planner.md)).
 A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds, not its breakdown.
 
@@ -32,8 +32,23 @@ will change. So is splitting the old Tier 4 into hands and agents, which makes s
 | **3. Two people** | Invite and join, typed codes on Cloudflare, GitHub as a keys source | `knocked`, `joined` (`added` and the backup moved up to Tier 1's PR D2, settled by the owner) | Two members, removing a member, each person's windows | The tracker shared, who filed what, who may start chaos; notes shared, with comments | Join screen, Windows list, password helper for a docked Mac, releases through GitHub Actions |
 | **4. Hands (proposed split)** | Hands as a client; how a client says it takes jobs | The queue, claims, leases | Mac and VM hands, work queues; mail delivery, leases, restarts and OTP calls (C2 to C5) | Secrets; `kill -9` from chaos through real hands, and `kill_brain` as a chaos button | Terminal tile; a first tab that runs a job |
 | **5. Agents (proposed split)** | Agent keys and grants in real use | Spend, limits | Hands run agents | `claude` and `codex` programs, repo programs (`.fabrika/programs`, lean about 60%) | Chat tile (not a copy of regular chat; several branches of a conversation at once stays possible), asks list; the agent box |
-| **6. Daily use** | Reconnect and offline, tested hard; D4's poke, the sync-engine note's T7 as a Sub | Moving data, keeping history cheap, paging | Pipeline stages, schedules | Pipeline and tracker views take jobs over one at a time; notes gain tabs, search and delete | Drag, zoom, workspaces, command palette, speed budgets; formatted typing in place for notes; native dialog and popover against Zag |
+| **6. Daily use** | Reconnect and offline, tested hard; D4's poke, the sync-engine note's T7 as a Sub | Moving data, keeping history cheap, paging | Pipeline stages, schedules, and [the whole plan flow](#a-requirement-the-whole-plan-flow) | Pipeline and tracker views take jobs over one at a time; notes gain tabs, search and delete | Drag, zoom, workspaces, command palette, speed budgets; formatted typing in place for notes; native dialog and popover against Zag |
 | **7. Others use it** | Phone as approver, QR, a real domain (a phone tab already works from Tier 1) | More than two people, roles, signing each letter | Other people's programs, kept apart, `limits: {cpuMs}` | How others write programs, packs; for notes: live co-editing, any CRDT, pages that run code in a box | Apple signing, auto-update, Windows and Linux |
+
+### A requirement: the whole plan flow
+
+Tier 6 in `next/`, since that is where its pipeline stages land. How sure: 70%, since the order
+of Tiers 3 to 6 is only proposed. It is built properly there:
+
+```text
+free-form plan in an artifact -> reported as a ticket -> the planner writes the plan from it
+  -> the owner approves -> the planner's output becomes several small tickets
+a rerun after a partial filing files nothing twice
+```
+
+Tier 1's split goes by hand, once, as [a named exception](../direction/free-form-plan-to-planner.md).
+Tiers 2 to 5 come first and each is a project, so each needs the owner's yes to split by hand,
+or this moves up. That is the cost of placing it here.
 
 ## The rules
 
