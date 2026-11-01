@@ -12,6 +12,10 @@ run = ["pnpm", "exec", "vitest", "run", "--reporter=json", "--outputFile={out}"]
 tests = ["pnpm", "test"]
 typecheck = ["pnpm", "typecheck"]
 
+[review]
+# A change under one of these gets a governance review as well as the code review.
+governed = [".fabrika/", ".github/", "AGENTS.md", "docs/direction/", "layer-rules.json", "oxlint-plugins/"]
+
 [checks]
 # GitHub's CI runs the whole suite. The two here are the quick ones, at each head.
 github = "every"
