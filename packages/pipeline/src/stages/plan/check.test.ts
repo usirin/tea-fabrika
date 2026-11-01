@@ -14,7 +14,7 @@ import {
 	type DraftTask as Task,
 	textOf,
 } from "./plan.ts";
-import {namesBrief} from "./planner.ts";
+import {namesBrief, promptFor} from "./planner.ts";
 import {planMarkdown} from "./render.ts";
 
 /** A draft the Check passes, numbered as the plan's first version. */
@@ -312,6 +312,38 @@ describe("planProblems: the whole plan", () => {
 		expect(planProblems({...two, goal: {job, criteria: [bad]}}, null)).toContain(
 			`The plan's goal, criterion 1 ("When a run ends, add a flag; print it"): its \`result\` reads as a step to take, not a result someone sees: say what is true after.`,
 		);
+	});
+
+	// P24. A real planner took this line over its brief and wrote "in one pull request" into the plan a
+	// person approved, and two landed.
+	it("a plan with a rule change is told two pull requests, not one", () => {
+		const two = {...good, tasks: [task, {...task, title: "second"}]};
+		const exam = [{path: "src/slug.laws.test.ts", change: "Hold slugs to 80.", why: "The ticket."}];
+		const said = planProblems({...two, exam}, null).join("\n");
+		expect(said).toMatch(/two pull requests/i);
+		expect(said).not.toMatch(/All the tasks land in one pull request/i);
+	});
+
+	// P24
+	it("the planner's own prompt names the rule changes where it says one pull request", () => {
+		const prompt = promptFor(
+			{
+				ticket: {
+					url: "https://github.com/example/lane/issues/1",
+					number: 1,
+					state: "open",
+					title: "t",
+					body: "b",
+					at: null,
+				},
+				facts: null,
+				names: [],
+			},
+			null,
+		);
+		const lines = prompt.split("\n").filter((line) => /one pull request/i.test(line));
+		expect(lines).not.toEqual([]);
+		expect(lines.filter((line) => !/rule change/i.test(line))).toEqual([]);
 	});
 
 	it("sends back a plan with no task", () => {

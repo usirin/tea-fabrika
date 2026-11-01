@@ -83,6 +83,44 @@ describe("what a brief offers, its schema takes", () => {
 	const brief = (file: string) => readFileSync(`${FOLDER}${file}`, "utf8");
 	const fitsForm = (form: unknown) => Option.isSome(reader(Form)(form));
 
+	// P21
+	it("review.md offers a finding's mark against a decision, and the form takes it only with the question's id", () => {
+		const finding = (from: unknown) => ({
+			rows: [],
+			findings: [
+				{
+					kind: "review-code",
+					from,
+					fault: "It loses a letter.",
+					at: null,
+					proof: "Read from the code.",
+					wants: "The letter stays.",
+					seen: "read",
+				},
+			],
+			skipped: [],
+			gaps: [],
+		});
+		expect(brief("review.md")).toMatch(/`source: "decision"`/);
+		expect(fitsForm(finding({source: "decision", id: "q1"}))).toBe(true);
+		expect(fitsForm(finding({source: "decision"}))).toBe(false);
+	});
+
+	// P20
+	it.each(["review.md", "test-writer.md", "test-writer-mutants.md"])(
+		"%s has a `decided` slot, in its text",
+		(file) => {
+			const read = parseBrief(file, brief(file));
+			expect(read.slots).toContain("decided");
+			expect(read.body).toContain("{decided}");
+		},
+	);
+
+	// P20
+	it("review.md says a decision is not a finding, and where a disagreement goes", () => {
+		expect(brief("review.md")).toMatch(/not a finding/i);
+	});
+
 	it("plan.md offers only a `tool` and a `behavior` a Property can hold", () => {
 		const plan = brief("plan.md");
 		const offered = (pattern: RegExp) =>
