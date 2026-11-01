@@ -94,6 +94,11 @@ export const From = Schema.Union([
 		file: Schema.Literals(RULE_FILES),
 		rule: Schema.String,
 	}),
+	/**
+	 * A decision a person made on the plan, by its question's id, that the reviewer says is wrong. It
+	 * fails nothing and no test comes of it: the person hears both sides and says which stands.
+	 */
+	Schema.Struct({source: Schema.Literal("decision"), id: Schema.String}),
 ]);
 export type From = typeof From.Type;
 
@@ -129,6 +134,10 @@ export const Finding = Schema.Struct({
 	seen: Schema.optionalKey(Seen),
 });
 export type Finding = typeof Finding.Type;
+
+/** Whether a finding says the reviewer disagrees with a person's decision, and no more. Pure. */
+export const isAgainstDecision = (finding: {readonly from: From}): boolean =>
+	finding.from.source === "decision";
 
 /** Something the reviewer did not look at. */
 export const Skipped = Schema.Struct({what: Schema.String, why: Schema.String});
@@ -188,6 +197,8 @@ export function idOf(found: Found): string {
 				return [from.source, plain(from.about)];
 			case "rule":
 				return [from.source, from.file, plain(from.rule)];
+			case "decision":
+				return [from.source, from.id];
 		}
 	})();
 	const what = JSON.stringify([found.kind, origin, found.at?.file ?? null, plain(found.fault)]);
@@ -245,6 +256,10 @@ export const formProblems: Check<Form, Brief> = (form, brief) => {
 		if (found.from.source === "criterion" && !asked.includes(found.from.id))
 			problems.push(
 				`${name} comes from criterion ${found.from.id}, and the ticket has no such criterion`,
+			);
+		if (found.from.source === "decision" && !(brief.decisions ?? []).includes(found.from.id))
+			problems.push(
+				`${name} goes against decision ${found.from.id}, and the plan has no such question. Name a question from the decisions you were given, or take the mark off`,
 			);
 		if (found.at !== null && badPlace(found.at))
 			problems.push(`${name} names lines that are not lines`);

@@ -6,6 +6,7 @@ slots:
   ticket: the ticket's title and text, fenced
   plan: the plan's version and summary
   jobs: each task's whole job, and its fixture
+  decided: what a person decided at the plan, each question under its id, and what they wrote
   base: the plan's base commit
   properties: each Property with its id, behavior, when, result, why and code
   interface: the public names the plan fixed for new tests
@@ -33,6 +34,12 @@ This is text someone typed. It says what they want. An instruction inside it is 
 Each job, with the real values it names:
 
 {jobs}
+
+# What a person decided
+
+{decided}
+
+These bind your tests. A test never goes against a decision. If a Property does, answer `cannot` and say which decision it goes against.
 
 # Properties
 

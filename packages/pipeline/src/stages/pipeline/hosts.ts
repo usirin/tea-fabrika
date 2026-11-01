@@ -192,11 +192,15 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 					if (entry.by.kind !== "user" || fact.type !== "answered" || fact.ask !== ask) continue;
 					if (!picks.includes(fact.pick)) continue;
 					if (fact.pick === "approve" && !(yield* covers(fact, ticket))) continue;
-					return {ask, pick: fact.pick};
+					return {ask, pick: fact.pick, note: fact.note};
 				}
 				return null;
 			}).pipe(Effect.orElseSucceed(() => null));
-			const wait: Effect.Effect<{readonly ask: string; readonly pick: string}> = look.pipe(
+			const wait: Effect.Effect<{
+				readonly ask: string;
+				readonly pick: string;
+				readonly note: string;
+			}> = look.pipe(
 				Effect.flatMap((heard) =>
 					heard === null ? Effect.andThen(Effect.sleep("1 second"), wait) : Effect.succeed(heard),
 				),

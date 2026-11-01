@@ -9,6 +9,7 @@ import {ticketsOnLedger, watcherOnLedger} from "../../tickets/tickets.ts";
 import {noFacts} from "../plan/services.ts";
 import {ledgerPlans} from "../sort/services.ts";
 import {laneAgents, laneBuilder, laneNow, lanePlanner, laneReviewer, laneSorter} from "./agents.ts";
+import {brokeWords} from "./found.ts";
 import {laneGitHubHost} from "./github.ts";
 import {laneBuildHost, lanePlanHost, laneSortHost, laneSortWrites} from "./hosts.ts";
 import {laneProgram} from "./program.ts";
@@ -122,7 +123,9 @@ export const runLane = (n: number, say: (line: string) => Effect.Effect<void>) =
 		);
 		if (started.kind !== "running") return yield* Effect.die(started.why);
 		const printing = yield* Stream.fromQueue(lines).pipe(Stream.runForEach(say), Effect.forkScoped);
-		yield* started.run.ended;
+		const end = yield* started.run.ended;
+		// The lane's own end says itself, on `ended`. A run that broke past it has only this line.
+		for (const line of brokeWords(n, end)) heard(line);
 		yield* Queue.end(lines);
 		yield* Fiber.await(printing);
 	}).pipe(Effect.scoped);

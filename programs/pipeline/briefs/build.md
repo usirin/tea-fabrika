@@ -82,7 +82,7 @@ The repository's rule files are loaded for you. Follow each rule about the chang
 Stop and say so under `left` when:
 
 - the job looks far bigger than the plan says;
-- it needs a design choice the plan and {decided} do not settle;
+- it needs a design choice the plan and the owner's calls do not settle;
 - a check blocks you and the only way past it is the exam.
 
 # The form

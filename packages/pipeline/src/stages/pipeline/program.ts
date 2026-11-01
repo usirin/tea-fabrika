@@ -42,7 +42,16 @@ import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
 import {listUsdOf, LaneNow, pickedFor, type Picked} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
-import {foundWords, jobsList, mutantWords, untestedRows, untestedWords} from "./found.ts";
+import {
+	againstWords,
+	decidedWords,
+	foundWords,
+	jobsList,
+	mutantWords,
+	ruleChangeLines,
+	untestedRows,
+	untestedWords,
+} from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
 import {leaveBehind} from "./leave.ts";
 import {
@@ -225,6 +234,18 @@ const ended = (
 	problems,
 });
 
+/** A question a person decides, with the step's end kept for a `go_on`. `found`: what they read before it. */
+const asksFirst = (
+	about: "decision" | "no_change",
+	end: BodyEnd,
+	found: readonly string[],
+): BodyEnd => ({
+	outcome: factOutcome({kind: "ask", who: "owner", for: about}),
+	after: end.outcome,
+	carry: end.carry,
+	problems: found,
+});
+
 /**
  * What a builder says it could not do and which of its own checks it saw fail, for the ticket. Neither
  * decides anything: the code's own checks judge the change. `null`: nothing to say. Pure.
@@ -314,7 +335,7 @@ const bodies = {
 				tasks,
 			});
 			if (last !== undefined) {
-				const view = planMarkdown(last.data, at.title);
+				const view = planMarkdown(last.data, at.title, draft.exam ?? []);
 				yield* tickets.talk(at.cmd.number, `${at.run}/plan-text`, {
 					type: "commented",
 					body: saidOf(view),
@@ -335,6 +356,7 @@ const bodies = {
 				plan: draft,
 				version,
 				rules: (draft.exam ?? []).map((c) => c.path),
+				decided: {questions: last?.data.questions ?? [], said: []},
 			});
 		}),
 
@@ -355,7 +377,13 @@ const bodies = {
 				changes,
 				tries: 3,
 			});
-			return ended(end.outcome, {examPr: end.report.pr ?? null}, end.report.problems);
+			return ended(
+				end.outcome,
+				{examPr: end.report.pr ?? null},
+				end.outcome.kind === "ask"
+					? ["These rule changes are in a pull request of their own:", ...ruleChangeLines(changes)]
+					: end.report.problems,
+			);
 		}),
 
 	exam_merge: (at: At) =>
@@ -390,6 +418,7 @@ const bodies = {
 				includes: listed(includes),
 				taken: listed(taken),
 				test_command: (settings.test_writer?.run ?? []).join(" "),
+				decided: decidedWords(carry),
 				note: "",
 			});
 			const end = yield* testsToTheEnd(at.stages.tests, at.cmd.intent, {
@@ -447,7 +476,7 @@ const bodies = {
 						? []
 						: [(settings.mutation?.tests ?? []).join(" ")],
 				),
-				decided: "None.",
+				decided: decidedWords(carry),
 			});
 			const end = yield* buildToTheEnd(
 				at.cmd.intent,
@@ -461,15 +490,18 @@ const bodies = {
 					type: "commented",
 					body: saidOf(told),
 				});
-			return ended(
-				end.outcome,
-				{
-					head: end.report.head ?? carry.head,
-					deviations: end.report.built?.deviations ?? [],
-					left: end.report.built?.left ?? [],
-				},
-				end.report.problems,
-			);
+			const kept = {
+				head: end.report.head ?? carry.head,
+				deviations: end.report.built?.deviations ?? [],
+				left: end.report.built?.left ?? [],
+			};
+			// A first round with no change has no work to go on with. A later one has the last round's,
+			// and whether it is enough is the person's call.
+			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change")
+				return asksFirst("no_change", ended({kind: "done", part: false}, kept), [
+					`The builder says: ${inert(end.report.built?.summary ?? "nothing")}`,
+				]);
+			return ended(end.outcome, kept, end.report.problems);
 		}),
 
 	mutation: (at: At) =>
@@ -510,6 +542,7 @@ const bodies = {
 				includes: listed(includes),
 				taken: listed(taken),
 				test_command: (settings.test_writer?.run ?? []).join(" "),
+				decided: decidedWords(carry),
 				note: "",
 			});
 			const end = yield* answersToTheEnd(at.stages.answers, at.cmd.intent, {
@@ -531,23 +564,34 @@ const bodies = {
 		Effect.gen(function* () {
 			const work = yield* LaneWork;
 			const tickets = yield* Tickets;
-			const head = yield* need(at.cmd.carry.head, "no head to review");
+			const {carry} = at.cmd;
+			const head = yield* need(carry.head, "no head to review");
 			const folder = yield* work.judgeCopy(head);
 			yield* at.tell(folder, "read", {
 				body: ticketWords(at),
-				tools:
+				tools: [
 					"A shell, in a read-only copy of the code at this head: your box refuses a write there. Files an agent loads by itself, such as AGENTS.md, are main's here; the diff below shows any change to them.",
+					"The repo's test runner may not start in this copy, since one such as Vitest writes a file as it starts. Do not spend your turn on that: code already ran the checks. To try one piece of the code by hand, run a short script with `node`.",
+				].join("\n\n"),
 				checked: "The checks below ran at this head.",
+				decided: decidedWords(carry),
 			});
 			const target = bookTarget(planOf(at.id));
 			const reviewed: Reviewed = yield* Effect.gen(function* () {
 				const rubrics = yield* work.rubrics(`${at.cmd.number}-${at.run}`);
-				const runtime = yield* at.stages.review
-					.get(at.cmd.intent)
-					.start(
-						{type: "start", ask: {pr: target, head: null, rubrics}, settings: budgetOf(at)},
-						{conflict: "use_existing"},
-					);
+				const runtime = yield* at.stages.review.get(at.cmd.intent).start(
+					{
+						type: "start",
+						ask: {
+							pr: target,
+							head: null,
+							rubrics,
+							decisions: (carry.decided?.questions ?? []).map((q) => q.id),
+						},
+						settings: budgetOf(at),
+					},
+					{conflict: "use_existing"},
+				);
 				const end = yield* runtime.done();
 				if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
 				yield* keepRows(end.report, target);
@@ -559,14 +603,20 @@ const bodies = {
 				} as Reviewed;
 			}).pipe(Effect.scoped);
 			const open = reviewed.criteria.filter((c) => c.state === "open");
+			const counted = {
+				title: at.title,
+				met: reviewed.criteria.length - open.length,
+				of: reviewed.criteria.length,
+			};
 			if (reviewed.head !== null)
 				yield* tickets.write(at.cmd.number, `${at.run}/reviewed`, {
 					type: "reviewed",
 					head: reviewed.head,
-					met: reviewed.criteria.length - open.length,
-					of: reviewed.criteria.length,
+					met: counted.met,
+					of: counted.of,
 					findings: open.map((c) => saidOf(c.text)),
 				});
+			const against = reviewed.against ?? [];
 			// The review stage asks nobody, so it stops on what no one could see. A person can: the lane
 			// asks one, with the reviewer's reason, as a step that ended on `ask`.
 			if (reviewed.outcome.kind === "stuck" && reviewed.outcome.why === "unseen") {
@@ -579,16 +629,22 @@ const bodies = {
 						].join("\n"),
 					),
 				});
-				return ended({kind: "ask", who: "owner", for: "unseen"});
 			}
-			return ended(
-				reviewed.outcome,
-				{
-					posts: postsOf(reviewed),
-					open: reviewed.outcome.kind === "send" ? openItems(reviewed) : [],
-				},
-				reviewed.problems,
-			);
+			const end =
+				reviewed.outcome.kind === "stuck" && reviewed.outcome.why === "unseen"
+					? ended({kind: "ask", who: "owner", for: "unseen"}, {reviewed: counted})
+					: ended(
+							reviewed.outcome,
+							{
+								reviewed: counted,
+								posts: postsOf(reviewed),
+								open: reviewed.outcome.kind === "send" ? openItems(reviewed) : [],
+							},
+							reviewed.problems,
+						);
+			// A finding against a decision is no fault of the work: the person says which stands, right
+			// here, and the review's own end, an ordinary finding's round too, waits on their answer.
+			return against.length === 0 ? end : asksFirst("decision", end, againstWords(carry, against));
 		}),
 
 	push: (at: At) =>
@@ -803,7 +859,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems} = exit.value.end;
+				const {outcome, carry, problems, after: past} = exit.value.end;
 				yield* write(outcome);
 				yield* said(
 					[
@@ -831,7 +887,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 							body: saidOf(problems.join("\n")),
 						})
 						.pipe(Effect.ignore);
-				return {outcome, carry};
+				return {outcome, carry, ...(past === undefined ? {} : {after: past})};
 			}
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);

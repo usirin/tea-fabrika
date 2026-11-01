@@ -277,7 +277,11 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	if (plan.goal !== undefined) claims("The plan's goal", plan.goal);
 	else if (plan.tasks.length > 1)
 		problems.push(
-			"The plan has more than one task but no `goal`: say what a user sees only when every task is in, as a job and criteria of the whole plan. All the tasks land in one pull request, and the last review judges the goal there.",
+			`The plan has more than one task but no \`goal\`: say what a user sees only when every task is in, as a job and criteria of the whole plan. ${
+				(plan.exam ?? []).length === 0
+					? "All the tasks land in one pull request, and the last review judges the goal there."
+					: "This plan makes two pull requests: the rule changes land first in their own, then all the tasks together in the other, and the last review judges the goal there."
+			}`,
 		);
 	plan.stories.forEach((story, i) => {
 		if (story.id !== "" && !served.has(story.id))

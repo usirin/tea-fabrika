@@ -3,7 +3,14 @@ import {markOf} from "../../criteria/mark.ts";
 import type {CriterionId} from "../../ids.ts";
 import type {Brief} from "./gate.ts";
 import {type Criterion, TextKind} from "./pack.ts";
-import type {Finding, From, Graded, Place, Sheet} from "./sheet.ts";
+import {
+	type Finding,
+	type From,
+	type Graded,
+	isAgainstDecision,
+	type Place,
+	type Sheet,
+} from "./sheet.ts";
 import type {KindVerdict} from "./verdict.ts";
 
 // The printout: the sheet as a comment a person can read, one per kind of
@@ -33,6 +40,8 @@ const fromOf = (from: From) => {
 			return `deviation: ${from.about}`;
 		case "rule":
 			return `the repository's ${from.file}: ${from.rule}`;
+		case "decision":
+			return `a person's decision on the plan, question ${from.id}`;
 	}
 };
 /** A text on one line: a list item that breaks its line would break the list. */
@@ -57,9 +66,11 @@ function rowLines(row: Graded, criterion: Criterion | undefined): string[] {
 
 /** One kind's comment. */
 export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerdict): string {
-	const open = sheet.findings.filter(
+	const found = sheet.findings.filter(
 		(finding) => finding.kind === kind && finding.state === "open",
 	);
+	const open = found.filter((finding) => !isAgainstDecision(finding));
+	const against = found.filter(isAgainstDecision);
 	const criterionOf = (id: CriterionId) => brief.criteria.find((criterion) => criterion.id === id);
 	const notLooked = [
 		...sheet.rows.flatMap((row) =>
@@ -78,6 +89,16 @@ export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerd
 		"",
 		...(open.length === 0 ? [NOTHING] : open.flatMap(findingLines)),
 		"",
+		...(against.length === 0
+			? []
+			: [
+					"## Against a person's decision",
+					"",
+					"These fail nothing. The reviewer disagrees, and the call is the person's.",
+					"",
+					...against.flatMap(findingLines),
+					"",
+				]),
 		HEADINGS.rows,
 		"",
 		...sheet.rows.flatMap((row) => rowLines(row, criterionOf(row.id))),

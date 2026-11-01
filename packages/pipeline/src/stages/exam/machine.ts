@@ -108,6 +108,8 @@ const LandIn = Schema.Struct({
 	number: Schema.Finite,
 	base: Schema.String,
 	files: Schema.Array(ExamFile),
+	/** What the plan says of each, for the pull request's text. Left out: a land saved before this key still reads. */
+	changes: Schema.optionalKey(Schema.Array(ExamChange)),
 });
 /** The pull request the rule changes are on, and its head. */
 export const Landed = Schema.Struct({pr: Schema.String, head: Schema.String});
@@ -199,12 +201,13 @@ const drafted = (s: Exam, m: Exclude<ExamMsg, {type: "start" | "resume"}>): Step
 		case "drafting":
 			return [{...s, refining: next}, []];
 		case "done": {
-			const {ticket, number, base} = s.ask;
+			const {ticket, number, base, changes} = s.ask;
 			const asked = landExam({
 				ticket,
 				number,
 				base,
 				files: next.output.files,
+				changes,
 				intent: intentOf("exam", ticket, "land"),
 			});
 			return [{...held(s), phase: "landing", guard: s.guard, asked}, [asked]];
