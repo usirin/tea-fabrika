@@ -60,7 +60,7 @@ export class PullWire extends Context.Service<
 			readonly branch: string;
 			readonly title: string;
 			readonly body: string;
-		}) => Effect.Effect<string | null, Failed>;
+		}) => Effect.Effect<string | null, Failed & {readonly says?: string}>;
 		readonly post: (
 			pr: string,
 			head: string,
@@ -237,14 +237,18 @@ const checksFact = (word: PrFacts["checks"]): PrFact["checks"] => [
 ];
 
 /**
- * The watcher, asked to look. Today's version has no standing watcher anywhere, so the lane calls this
- * right after its push and its merge. The fact holds only what the code host read, and goes through
- * the watcher's own writer: the lane can ask for a look, and never says what it saw. A look that
- * fails leaves a comment on the ticket: the change is where it is whatever the window says.
+ * The watcher. Today's version has no standing watcher anywhere, so the lane calls this right after
+ * its push and its merge, through the watcher's own writer. `look`: a fact that holds only what the
+ * code host read. `merged`: the one thing the lane may say itself, about its own merge, since a read
+ * right after one can lag and would leave the ticket saying open. Either one that fails leaves a
+ * comment on the ticket: the change is where it is whatever the window says.
  */
 export class LaneWatch extends Context.Service<
 	LaneWatch,
-	{readonly look: (n: number, pr: string) => Effect.Effect<void>}
+	{
+		readonly look: (n: number, pr: string) => Effect.Effect<void>;
+		readonly merged: (n: number, pr: string, head: string) => Effect.Effect<void>;
+	}
 >()("LaneWatch") {}
 
 export const laneWatch: Layer.Layer<LaneWatch, never, CodeHost | Watcher | Tickets> = Layer.effect(
@@ -253,26 +257,34 @@ export const laneWatch: Layer.Layer<LaneWatch, never, CodeHost | Watcher | Ticke
 		const host = yield* CodeHost;
 		const watcher = yield* Watcher;
 		const tickets = yield* Tickets;
+		const shown = (n: number, pr: string, facts: Pick<PrFacts, "state" | "head" | "checks">) =>
+			watcher.write(n, `watch-${facts.state}-${facts.head}`, {
+				type: "pr",
+				url: pullUrl(pr),
+				state: facts.state,
+				head: facts.head,
+				checks: checksFact(facts.checks),
+			});
+		const orSaid = <E>(n: number, pr: string, write: Effect.Effect<unknown, E>) =>
+			write.pipe(
+				Effect.catch(() =>
+					tickets.talk(n, `watch-failed-${pr}`, {
+						type: "commented",
+						body: `Could not read ${pr} to show it here.`,
+					}),
+				),
+				Effect.ignore,
+			);
 		return {
 			look: (n, pr) =>
-				host.prFacts(pr).pipe(
-					Effect.flatMap((facts) =>
-						watcher.write(n, `watch-${facts.state}-${facts.head}`, {
-							type: "pr",
-							url: pullUrl(pr),
-							state: facts.state,
-							head: facts.head,
-							checks: checksFact(facts.checks),
-						}),
-					),
-					Effect.catch(() =>
-						tickets.talk(n, `watch-failed-${pr}`, {
-							type: "commented",
-							body: `Could not read ${pr} to show it here.`,
-						}),
-					),
-					Effect.ignore,
+				orSaid(
+					n,
+					pr,
+					Effect.flatMap(host.prFacts(pr), (facts) => shown(n, pr, facts)),
 				),
+			// Only a green head reaches a merge.
+			merged: (n, pr, head) =>
+				orSaid(n, pr, shown(n, pr, {state: "merged", head, checks: "green"})),
 		};
 	}),
 );

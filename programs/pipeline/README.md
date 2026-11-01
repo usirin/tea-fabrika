@@ -35,10 +35,21 @@ change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-
 `[review] rubrics` names a folder, read from a copy of main's tip, so a change cannot rewrite the
 rubrics that judge it. Left out, the lane uses the rubrics fabrika ships. This holds on both hosts.
 
+The same goes for what an agent loads by itself. In the copy of a head that the test writer, the
+mutants step and the review read, these are main's, or gone when main has none, at any depth and in any
+case: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`, `.codex/`,
+`.agents/`, `.claude/`. A change to one still shows in the review's diff. The tests run in the head's
+own copy, so they see the head's files.
+
+The lane's git runs with your ssh agent's socket and your `gh` login in reach, as the build's does, so
+a `git@` remote works. Git's hooks are off, and the install runs without that socket or login.
+
 ## On GitHub
 
 `host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
-(`fixtures/pipeline-lane/gh.mjs`), never against real GitHub.
+(`fixtures/pipeline-lane/gh.mjs`), never against real GitHub. Only the stand-in's answer to the facts
+query is compared with a recorded one in `fixtures/code-host/`. Its other answers and all its refusals
+are written from what the code expects.
 
 - **The review stays local.** It reads the head on this machine, and its checks are `[[checks.run]]`.
   The push step then opens the pull request and posts the verdicts as comments.
@@ -51,7 +62,7 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 | `github` | What ship does |
 |---|---|
 | `every`, or left out | Waits on every check on the head. A failed one is run again once, then the work is sent back. |
-| `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. `required` changes only what `CodeHost.change` reads for a pull request, and no step of the lane reads that. |
+| `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. |
 | `none` | Never waits on GitHub. It runs `[[checks.run]]` on this machine at the head it pushed, and those decide. A file with no `[[checks.run]]` is refused. |
 
 - **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and the lane
@@ -59,6 +70,17 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 - **A branch rule that wants a GitHub review.** GitHub refuses the merge, and the lane ends
   `stuck: merge_failed`. The ticket does not say which rule refused it: ship never reads the refusal's
   words.
+- **Hold other merges during a run.** Any commit on main before the merge means `behind`, even one that
+  touches nothing of this change. The lane then ends `stuck: sent_back`, and that is final.
+- **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
+  the lane ends `stuck: merge_unknown`. It does not wait and look again.
+- **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
+  Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
+  `stuck: sent_back`. Then typing the line again only says how it ended. The pull request and its branch
+  stay open and nothing more runs, so a person lands it by hand or files a new ticket.
+- **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
+  `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
+  is a new pull request.
 
 ## What it holds to
 

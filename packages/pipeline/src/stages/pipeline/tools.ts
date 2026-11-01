@@ -230,12 +230,47 @@ export const laneTestsAgents = Layer.effect(
 	}),
 );
 
+/**
+ * The pull request on this branch. Resumed after a kill, the one opened before is the one. Else the
+ * code host is told. A step's failure keeps no words, so what the host said goes on the ticket.
+ */
+const pullOnBranch = (
+	{
+		pulls,
+		wire,
+		tickets,
+	}: {
+		readonly pulls: LanePulls["Service"];
+		readonly wire: PullWire["Service"];
+		readonly tickets: Tickets["Service"];
+	},
+	number: number,
+	pull: {readonly branch: string; readonly title: string; readonly body: string},
+) =>
+	Effect.flatMap(pulls.onBranch(pull.branch), (known) =>
+		known !== null
+			? Effect.succeed(known)
+			: wire.open(pull).pipe(
+					Effect.tapError(({says}) =>
+						says === undefined
+							? Effect.void
+							: Effect.ignore(
+									tickets.talk(number, `open-failed/${pull.branch}`, {
+										type: "commented",
+										body: says,
+									}),
+								),
+					),
+				),
+	);
+
 export const laneExamWork = Layer.effect(
 	ExamWork,
 	Effect.gen(function* () {
 		const work = yield* LaneWork;
 		const pulls = yield* LanePulls;
 		const wire = yield* PullWire;
+		const tickets = yield* Tickets;
 		const lane = yield* LaneNow;
 		const agents = yield* LaneAgents;
 		return {
@@ -246,10 +281,11 @@ export const laneExamWork = Layer.effect(
 					yield* work.pushTo(side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
 					const body = `The rule changes the plan for ticket ${number} lists.`;
-					// Resumed after a kill: the pull request opened before it is the one.
-					const id =
-						(yield* pulls.onBranch(side.branch)) ??
-						(yield* wire.open({branch: side.branch, title, body}));
+					const id = yield* pullOnBranch({pulls, wire, tickets}, number, {
+						branch: side.branch,
+						title,
+						body,
+					});
 					const pr = yield* pulls.open(
 						{kind: "exam", ticket: number, branch: side.branch, head, tree: side.tree, title, body},
 						id ?? undefined,
@@ -274,6 +310,7 @@ export const lanePushWork = Layer.effect(
 		const work = yield* LaneWork;
 		const pulls = yield* LanePulls;
 		const wire = yield* PullWire;
+		const tickets = yield* Tickets;
 		return {
 			push: (_ticket, number, head) =>
 				Effect.gen(function* () {
@@ -284,8 +321,7 @@ export const lanePushWork = Layer.effect(
 			open: (_ticket, number, head, title, body) =>
 				Effect.gen(function* () {
 					const {tree, branch} = yield* work.tree(number);
-					// Resumed after a kill: the pull request opened before it is the one.
-					const id = (yield* pulls.onBranch(branch)) ?? (yield* wire.open({branch, title, body}));
+					const id = yield* pullOnBranch({pulls, wire, tickets}, number, {branch, title, body});
 					return yield* pulls.open(
 						{kind: "lane", ticket: number, branch, head, tree, title, body},
 						id ?? undefined,

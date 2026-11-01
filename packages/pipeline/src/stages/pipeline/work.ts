@@ -1,6 +1,6 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
-import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
+import {hostEnv, runEnv} from "@kampus/fabrika-old/agents/sandbox";
+import {Context, Effect, FileSystem, Layer, Path, Schema, type Scope} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild} from "../../child.ts";
 import {listedAt, textAt} from "../../git-read.ts";
@@ -20,9 +20,11 @@ import {shippedRubrics} from "../../setup.ts";
 //   <home>/pipeline.json     {"repo": "owner/name", "remote": "<a git url>", "host": "local"}
 //   <home>/work/clone        the repository, fetched before each read
 //   <home>/work/trees/<n>    ticket n's working copy, on branch lane/<n>: tests, then the build
-//   <home>/work/copies/<c>   the code at commit c, plain files with no .git: what a read-only agent sees
-//   <home>/work/mains/<c>    the same at a tip of main, with nothing installed: where rubrics are read
-//   <home>/work/pulls.json   the pull requests of a local code host
+//   <home>/work/copies/<c>   the code at commit c, plain files with no .git: what tests run in
+//   <home>/work/judges/<c>   the same, with what an agent loads by itself put back as main has it:
+//                            what a read-only agent sees
+//   <home>/work/main-<name>  main's tip, with nothing installed, while rubrics are read from it
+//   <home>/work/pulls.json   the pull requests of the lane
 //
 // The tree's commits stay on this machine until the push step. So what the builder does, what the
 // mutation step tests and what the review reads are one local head.
@@ -55,6 +57,31 @@ export const rubricsFolder = (
 	named: string | undefined,
 	places: {readonly main: string; readonly shipped: string},
 ): string => (named === undefined ? places.shipped : `${places.main}/${named}`);
+
+/**
+ * What an agent loads by itself from the folder it runs in, before it reads anything it was asked to.
+ * In a head, each of these is the head telling its judge how to judge.
+ *
+ * Codex, from its docs and `codex exec --help` at 0.165.0: `AGENTS.override.md` and `AGENTS.md` from
+ * the project root down to its folder, `.codex/` (config, hooks, rules) and `.agents/skills`. Claude
+ * (`agents/claude/rules.ts`): `CLAUDE.md`, `CLAUDE.local.md`, `.claude/`, `.mcp.json`, and `AGENTS.md`
+ * through a plugin, with a nested `CLAUDE.md` loaded once a file beside it is read. So these count at
+ * any depth, and in any case, since a Mac's disk opens `agents.md` as `AGENTS.md`.
+ */
+const LOADED_FILES = new Set([
+	"agents.md",
+	"agents.override.md",
+	"claude.md",
+	"claude.local.md",
+	".mcp.json",
+]);
+const LOADED_FOLDERS = new Set([".codex", ".agents", ".claude"]);
+
+/** Does an agent load this file by itself? Pure. */
+const loadsItself = (file: string): boolean => {
+	const parts = file.toLowerCase().split("/");
+	return LOADED_FILES.has(parts.at(-1) ?? "") || parts.some((part) => LOADED_FOLDERS.has(part));
+};
 
 /** `<home>/pipeline.json`. `host`: `local` is a bare git remote and a file of pull requests. */
 export const LaneConfig = Schema.Struct({
@@ -115,10 +142,20 @@ export class LaneWork extends Context.Service<
 		readonly listAt: (folder: string, commit: string) => Effect.Effect<readonly string[], Failed>;
 		/** A file's text at a commit. `null`: it is not there. Git failing is not that: it fails, with the reason. */
 		readonly show: (commit: string, path: string) => Effect.Effect<string | null, Failed>;
-		/** The code at `commit`, as plain files with no history and no links, installed once. */
+		/** The code at `commit`, as plain files with no history and no links, installed once. Where its tests run. */
 		readonly copy: (commit: string) => Effect.Effect<string, Failed>;
-		/** The folder of rubrics that judges a change, on this machine: `rubricsFolder`, read now. */
-		readonly rubrics: Effect.Effect<string, Failed>;
+		/**
+		 * The same, for an agent that reads a head: every file an agent loads by itself is main's, or
+		 * gone when main has none. So the head cannot tell its judge how to judge. A change to one still
+		 * shows in the diff, which comes from git.
+		 */
+		readonly judgeCopy: (commit: string) => Effect.Effect<string, Failed>;
+		/**
+		 * The folder of rubrics that judges a change, on this machine: `rubricsFolder`, read now. One from
+		 * main lasts as long as the scope. `name`: a kept review holds the path, so the same read comes
+		 * back at the same place.
+		 */
+		readonly rubrics: (name: string) => Effect.Effect<string, Failed, Scope.Scope>;
 		/** An empty folder: for an agent with no reason to see code. */
 		readonly empty: Effect.Effect<string, Failed>;
 		/** `head` on the remote's branch `branch`. Never main. */
@@ -141,7 +178,7 @@ export class LaneWork extends Context.Service<
 	}
 >()("LaneWork") {}
 
-/** `LaneWork` on this machine: git, as a program, under `runEnv`. */
+/** `LaneWork` on this machine: git, as a program, under `hostEnv`, and what is installed under `runEnv`. */
 export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 	LaneWork,
 	Effect.gen(function* () {
@@ -154,8 +191,10 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const on = <A, E>(effect: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner>) =>
 			Effect.provideService(effect, ChildProcessSpawner.ChildProcessSpawner, spawner);
 
+		// `hostEnv`, as the build's git has: a remote may need the person's ssh key. No head's code runs
+		// here, since hooks are off.
 		const gitIn = (dir: string, args: readonly string[]) =>
-			on(runChild("git", [...GIT, "-C", dir, ...args], {env: {...runEnv(), ...IDENTITY}}));
+			on(runChild("git", [...GIT, "-C", dir, ...args], {env: {...hostEnv(), ...IDENTITY}}));
 		const said = (step: string, ran: Exited) =>
 			failed(`git ${step}: ${ran.err.trim().slice(0, 300)}`);
 		const git = (dir: string, args: readonly string[]) =>
@@ -248,27 +287,42 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					return yield* Effect.fail(failed(`[build] install: ${ran.err.trim().slice(0, 300)}`));
 			});
 
+		/** `paths` at `sha`, or all of it when none are named, unpacked into `tree`. Its tar goes either way. */
+		const unpacked = (tree: string, sha: string, paths: readonly string[] = []) => {
+			const packed = `${tree}.tar`;
+			return Effect.gen(function* () {
+				// A commit a tree holds is in the clone's own object store: every tree is one of its worktrees.
+				yield* git(clone, [
+					"archive",
+					"--format=tar",
+					"-o",
+					packed,
+					sha,
+					...paths.map((file) => `:(literal)${file}`),
+				]);
+				const untar = yield* on(runChild("tar", ["-xf", packed, "-C", tree], {env: runEnv()}));
+				if (untar.code !== 0)
+					return yield* Effect.fail(failed(`the code at ${sha} could not be copied`));
+			}).pipe(Effect.ensuring(Effect.ignore(fs.remove(packed, {force: true}))));
+		};
+
 		/** The code at `sha`, as plain files with no links, in `<place>/<sha>`, and `ready` run in it, once. */
-		const copyTo = <R>(
+		const copyTo = (
 			place: string,
 			sha: string,
-			ready: (tree: string) => Effect.Effect<void, Failed, R>,
+			ready: (tree: string) => Effect.Effect<void, Failed>,
 		) =>
 			Effect.gen(function* () {
 				const tree = at(place, sha);
 				if (yield* fs.exists(path.join(tree, ".done")).pipe(Effect.orElseSucceed(() => false)))
 					return yield* quiet(fs.realPath(tree));
 				yield* quiet(fs.makeDirectory(tree, {recursive: true}));
-				const packed = at(place, `${sha}.tar`);
-				// A commit a tree holds is in the clone's own object store: every tree is one of its worktrees.
-				yield* git(clone, ["archive", "--format=tar", "-o", packed, sha]);
-				const untar = yield* on(runChild("tar", ["-xf", packed, "-C", tree], {env: runEnv()}));
+				yield* unpacked(tree, sha);
 				const unlinked = yield* on(
 					runChild("find", [tree, "-type", "l", "-delete"], {env: runEnv()}),
 				);
-				if (untar.code !== 0 || unlinked.code !== 0)
+				if (unlinked.code !== 0)
 					return yield* Effect.fail(failed(`the code at ${sha} could not be copied`));
-				yield* quiet(fs.remove(packed));
 				yield* ready(tree);
 				yield* quiet(fs.writeFileString(path.join(tree, ".done"), ""));
 				return yield* quiet(fs.realPath(tree));
@@ -276,14 +330,64 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const copy = (sha: string) => copyTo("copies", sha, install);
 
-		const rubrics = Effect.gen(function* () {
-			const named = (yield* settings).review?.rubrics;
-			return rubricsFolder(named, {
-				// Rubrics are plain text, so this copy installs nothing.
-				main: yield* copyTo("mains", yield* main, () => Effect.void),
-				shipped: shipped ?? (yield* shippedRubrics().pipe(Effect.provideService(Path.Path, path))),
+		/** The plain files at `sha`: no link, and no folder a submodule stands for. */
+		const plainAt = (sha: string) =>
+			gitIn(clone, ["ls-tree", "-r", "-z", sha]).pipe(
+				Effect.flatMap((ran) =>
+					ran.code === 0
+						? Effect.succeed(
+								ran.out
+									.split("\0")
+									.filter((row) => /^100(644|755) /.test(row))
+									.map((row) => row.slice(row.indexOf("\t") + 1)),
+							)
+						: Effect.fail(said("ls-tree", ran)),
+				),
+			);
+
+		// After the install, since the install runs the head's own code and it can write these too.
+		// `find`, since it stays out of a link where Node's recursive read goes through one and would find
+		// files outside the copy. `remove` takes a link away and leaves what it points at.
+		const judgeCopy = (sha: string) =>
+			copyTo("judges", sha, (tree) =>
+				Effect.gen(function* () {
+					yield* install(tree);
+					const found = yield* on(runChild("find", [tree, "-print0"], {env: runEnv()}));
+					if (found.code !== 0)
+						return yield* Effect.fail(failed(`the copy at ${sha} could not be read`));
+					const files = found.out.split("\0").map((file) => file.slice(tree.length + 1));
+					for (const file of files.filter(loadsItself))
+						yield* quiet(fs.remove(path.join(tree, file), {recursive: true, force: true}));
+					const tip = yield* main;
+					const kept = (yield* plainAt(tip)).filter(loadsItself);
+					if (kept.length > 0) yield* unpacked(tree, tip, kept);
+				}),
+			);
+
+		const rubrics = (name: string) =>
+			Effect.gen(function* () {
+				const named = (yield* settings).review?.rubrics;
+				// Left out, nothing reads main, so no copy of it is made.
+				const fromMain =
+					named === undefined
+						? ""
+						: yield* Effect.gen(function* () {
+								const tree = at(`main-${name}`);
+								const gone = fs.remove(tree, {recursive: true, force: true});
+								yield* Effect.addFinalizer(() => Effect.ignore(gone));
+								// A hard kill leaves the last one here.
+								yield* quiet(gone);
+								yield* quiet(fs.makeDirectory(tree, {recursive: true}));
+								// Rubrics are plain text, so this copy installs nothing.
+								yield* unpacked(tree, yield* main);
+								return yield* quiet(fs.realPath(tree));
+							});
+				return rubricsFolder(named, {
+					main: fromMain,
+					shipped:
+						shipped ?? (yield* shippedRubrics().pipe(Effect.provideService(Path.Path, path))),
+				});
 			});
-		});
 
 		const empty = Effect.gen(function* () {
 			const folder = at("empty");
@@ -323,6 +427,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				git(folder, ["ls-tree", "-r", "--name-only", sha]).pipe(Effect.map(lines)),
 			show,
 			copy,
+			judgeCopy,
 			rubrics,
 			empty,
 			pushTo: (folder, sha, branch) =>

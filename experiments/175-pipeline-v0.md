@@ -196,10 +196,11 @@ Kept because they cost time and will come back:
   show that `gpt-6-astra` is on the plan, that a login works in the adapter's own home, or that a long
   run streams the way the fake does.
 - **Whether real GitHub fits.** The whole lane now runs on `host: "github"` over a stand-in `gh`
-  (`fixtures/pipeline-lane/gh.mjs`), with real git on a bare remote. It has never met real GitHub. The
-  stand-in's shapes come from recorded answers, but its refusals, its branch rule and the timing of
-  its checks are written from what the code expects, so they prove nothing about GitHub itself. A merge
-  queue is not played at all. Over the stand-in, a branch rule that wants a real review refuses the
-  merge and the lane ends `stuck: merge_failed`. Ship does not say which rule refused it.
+  (`fixtures/pipeline-lane/gh.mjs`), with real git on a bare remote. It has never met real GitHub. Only
+  the stand-in's answer to the facts query is compared with a recorded one in `fixtures/code-host/`. Its
+  other answers, its refusals, its branch rule and the timing of its checks are written from what the
+  code expects, so they prove nothing about GitHub itself. A merge queue is not played at all. Over the
+  stand-in, a branch rule that wants a real review refuses the merge and the lane ends
+  `stuck: merge_failed`. Ship does not say which rule refused it.
 - **What it costs.** There is no price for `gpt-6-astra`, and the token counts are made up.
 - **What a big ticket does.** One small file, one task, one mutant, one round.
