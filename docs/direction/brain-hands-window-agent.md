@@ -72,9 +72,9 @@ window holds a lease, and no window ever does.
 
 ## Why not the other words
 
-- **Not "peer".** A peer sounds like an equal you talk to directly. These never
-  talk directly. Every one dials the brain and meets the others through it
-  (T1 and T2 in the five layers).
+- **Not "peer".** Too vague: it says nothing about what the thing does. It also
+  sounds like an equal you talk to directly, and these never do. Every one dials
+  the brain and meets the others through it (T1 and T2 in the five layers).
 - **Not "node".** In Erlang a node is a running machine, and that word stays when
   we name OTP. As a word of ours it says nothing about what the thing does.
 - **Not "host" for all of them.** A Mac with three tabs would be four hosts. And
