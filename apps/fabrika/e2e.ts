@@ -659,7 +659,9 @@ const again = async (app: ElectronApplication, left: string) => {
 	const gone = page.waitForEvent("close");
 	await prefixed(page, "x");
 	await askedIs(page, `close ${left}? (y/n)`);
-	await page.keyboard.press("y");
+	// The window closes on the key going down, so the key's release may find no page, and press
+	// throws. That is this step working. If the window stays, `gone` still fails the run.
+	await page.keyboard.press("y").catch(() => {});
 	await gone;
 	await until(
 		"no window",
