@@ -24,7 +24,7 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 - **This plan is Tier 1 of seven.** All later work sits in the other six, in an order that is proposed, not settled, and each tier is one pass across all five layers. See [Later tiers](#later-tiers).
 - **Tier 1 only has to work, in a shape later tiers can harden.** Each person answers for their own agents, so this tier does not defend against them. The door stays real: an unknown key is refused, on the laptop and on the cloud.
-- **One walking skeleton through all five layers, in five pull requests.** Each one ends with the demo working and better than before.
+- **One walking skeleton through all five layers, in six pull requests.** Each one ends with the demo working and better than before.
 - **The demo.** An agent starts the app, and the owner clicks. The app starts the brain. The owner gets one Electron window and one browser tab, each with a counter, presses in one and sees it in the other. Same stack on Alchemy's local stage and on the owner's Cloudflare account, one command apart. **It ends with a real job:** an agent saves a doc through MCP. The owner sees it drawn in another window, a phone tab on Cloudflare included, and adjusts it. The agent's next save, on the old `base`, is refused.
 - **Notes are Tier 1's first real program,** a sealed program beside the counter and chaos, and this is dogfooding: agents write the owner's docs, and the owner reads and adjusts them. The counter stays as the test. Every save is one fact and is never overwritten. A stale save is refused, and the writer's text stays where it was. See [Notes](#notes).
 - **Notes draw Markdown,** by copying today's `programs/markdown` under a second named exception to "never copy across". A note opens drawn; `e` shows the plain text box. The fact keeps the raw text, and the window parses it. See [Drawing a note](#drawing-a-note).
@@ -50,9 +50,10 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 | Packages: moving the slice, six `package.json` and `tsconfig.json`, public names, config | 250 to 350 | 60 to 120 | 2 to 3 |
 | Host and capabilities | 60 to 100 | 65 to 110 | about 1 |
 | Tags: `no-hand-tag`, and the slice's `kind` and `is` moved to schemas | 80 to 120 | 70 to 100 | about 1 |
-| **Total** | **5,210 to 7,140** | **4,780 to 6,880** | **42 to 66** |
+| Backup sheet and recovery, added after the owner moved them up. A guess, with no design yet | 150 to 300 | 160 to 320 | 2 to 4 |
+| **Total** | **5,360 to 7,440** | **4,940 to 7,200** | **44 to 70** |
 
-- **Total agent hours: 42 to 66,** builder and test writer, plus mutation runs (50 to 125 machine minutes). **The steps stay as they are.** Nothing is cut to fit a date: plan, test writer, build, mutation sample and one review, for each PR.
+- **Total agent hours: 44 to 70,** builder and test writer, plus mutation runs (50 to 125 machine minutes). **The steps stay as they are.** Nothing is cut to fit a date: plan, test writer, build, mutation sample and one review, for each PR.
 - **How the size is worked out.** Written lines use the plan's own rate, about 150 lines an hour. Tests on written code keep its ratio of about 1.06 to 1. A copied line is guessed at a third of a written line's time, about 450 an hour, since it needs reading and fitting, not thinking up. How sure of that third: 40%. The doubt is what a copy carries over. If copied lines cost the same as written ones, the total rises by about 6 hours. The bigger doubt is still the menu bar and launchd, which nobody has built here, and how many laws break on the new stage. PR B's real numbers settle those, and PR D's the rest.
 
 **The biggest calls.**
@@ -98,7 +99,7 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 ## The order of work
 
-1. The owner approves this plan. Two questions are still open, and the rest are settled: see [Settled by the owner](#settled-by-the-owner).
+1. The owner approves this plan. One question is still open, and the rest are settled: see [Settled by the owner](#settled-by-the-owner).
 2. Start from main at `05a43d0` or later. PR 226 (oxlint and oxfmt replace Biome) and PR 229 (the `-old` rename) are merged.
 3. The docs PR lands, as the list below says. The notes it names were first brought in line on 2026-11-01, in the same change that added this file. Re-check them against this plan before PR A.
 4. The exam PR lands, by an agent that is not the builder. See [The exam PR](#the-exam-pr-not-in-this-plan).
@@ -106,7 +107,8 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 6. **PR B, the app:** T7, T8, T15, T9, in that order. Demo: the owner opens the app, types their own name (the person a grant's `for` points at), and gets a window. "Open in browser" brings a tab online, and a tab typed by hand comes in with Approve. Remove takes a let-in window out.
 7. **PR C, cloud:** T10 and T11. Demo: the same on Cloudflare, with the same approval flow, after the owner reads `alchemy plan` and says yes. It still proves the counter.
 8. **PR D, notes:** a small exam PR for p22's new wording and the copies' laws, then T16, T17, T18, T20, T21 and T19, in that order. Demo: on Cloudflare, an agent runs `notes_save` through MCP, let in once by Approve. The doc shows drawn in another window and in a phone tab. The owner presses `e`, adjusts it, and saves. The agent's next save, on the old `base`, is refused, and it reads and saves again. From here the Cloudflare ledger holds real notes.
-9. **PR E, chaos:** T12 to T14. Demo: a run with a seed, a verdict on the screen, on a throwaway ledger on each stage, pressing the counter and saving notes while faults fire.
+9. **PR D2, backup:** T22. A small PR right after notes, since the owner moved it up from Tier 3, so Tier 1 grew by it. Its size is a guess. Demo: a new Mac comes back to the same notes from the sheet.
+10. **PR E, chaos:** T12 to T14. Demo: a run with a seed, a verdict on the screen, on a throwaway ledger on each stage, pressing the counter and saving notes while faults fire.
 
 Each PR: test writer first (a separate agent, adds its tests, runs them on the base), builder with local commits (cannot touch the tests), mutation sample, one review by another agent, screenshots, the owner's yes. Runs and notes go to `field/` the same day.
 
@@ -117,7 +119,7 @@ Each PR: test writer first (a separate agent, adds its tests, runs them on the b
 
 The pull request that added this folder already made the rest of this list: `where-each-piece-lives.md` and `the-desktop-layer.md` on `@kampus/tuval` and the desk, the line in `AGENTS.md` on no `of` names, the `useSyncExternalStore` wording by version, and the tag examples in `AGENTS.md`. Today's version keeps `useMachine`, `nameOf` and `outcomesOf` until that code goes.
 
-**Why five PRs, not one:** 9,700 and more lines in one review is not a review. Each cut is a whole visible thing, and every layer still moves when it needs to. Cost: a rebase per landing, and five reviews instead of one. Sure: 75%.
+**Why six PRs, not one:** 9,700 and more lines in one review is not a review. Each cut is a whole visible thing, and every layer still moves when it needs to. Cost: a rebase per landing, and six reviews instead of one. Sure: 75%.
 
 **Why notes come before chaos:** see biggest call 10. Chaos keeps its T numbers, so T16 to T21 run before T12. PR D is the largest, at about 1,500 to 2,000 product lines, roughly half of them copied. Its copied files land as a commit of their own, unchanged, so the review reads the fitting as a diff.
 
@@ -1055,7 +1057,7 @@ class KeyDown extends Schema.TaggedError<KeyDown>()("KeyDown", {why: Schema.Stri
 
 | Shape | Its key | Why |
 |---|---|---|
-| A union we define: states, menu rows, faults, stages, facts, wire messages we own | `_tag`, through the schema tools | Makers, `match` and guards come with it |
+| A union we define: states, menu rows, faults, stages, wire messages we own. Facts on the ledger too, which the owner's approval of this plan settles, and ticket 32 tracks | `_tag`, through the schema tools | Makers, `match` and guards come with it |
 | A tea Msg or Cmd | `type` stays. Do not "fix" it. | tea's engine reads `msg.type` |
 | Someone else's shape: JSON-RPC's `method`, JSON Patch's `op`, mdast's `type`, MCP's fields, the HTTP `Host` header | Its own | It is not ours to rename |
 | A plain field, on a struct with the same fields every time | A plain word: `Host.platform`, `Saw.where`, `Who.as` | Nothing picks a shape by it, so it is no tag |
@@ -1413,6 +1415,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 | T20 drawing a note | D | new `programs/notes/{root.ts,drawn.tsx,highlight.ts,highlighter.ts}`, `programs/notes/{tile.ts,view.tsx}`, `window/style.css`, `window/page.ts`, `brain.ts` for the policy and `/highlight.js`, `build.ts`, `entry/electron-main.ts` for links, `next/programs/notes/package.json` |
 | T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `app/program.ts` `Input`, `transport/answer.ts`, `transport/waiting.ts`, `desktop/menu.ts`, `coordination/mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
 | T19 where notes live, and the demo | D | `entry/electron-main.ts`, `launchd.ts`, `desktop/menu.ts` for the status words, `alchemy.run.ts`, `README.md`, `docs/*.png`; the run in `field/` |
+| T22 backup and recovery | D2 | not designed yet, so its files are not named |
 | T12 program | E | new package `next/programs/chaos`, `app/nemesis.ts`, the layout in `entry/views.ts` |
 | T13 live faults | E | `brain.ts`, `transport/gateway.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
 | T14 drill and run | E | `chaos-drill.ts` on `mcp/client.ts`, `README.md`, `docs/*.png`, `field/` |
@@ -1451,6 +1454,10 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 - **T20.** `ends`: local commit. First commit: the copied files, unchanged, each with its comment. Scenario p61. Other: p62, p57's reading half. Criterion c16.
 - **T21.** `ends`: local commit. Fixture: the bridge against real `dev.ts`, with the SDK's own client. Scenario p63. Other: p64. Spike first: does Claude Code list the tools through `fabrika mcp --as claude` while waiting for Approve. Criterion c17.
 - **T19.** Scenario p58, p59. Criteria c9, c15. `ends`: PR D. Spike first: open the tile on the owner's phone, on the deployed stage, with the content security policy on. If its browser does not keep the key, tell the owner. The owner reads `alchemy plan` and says yes before the deploy that makes notes real, and an agent starts the app, and the owner clicks.
+
+### PR D2
+
+- **T22.** The backup sheet and recovery on a new Mac, plus the `added` fact on the `founded.keys` list. The owner moved these up from Tier 3. Not designed yet: its scenario, properties and laws are written and read by the owner before its test writer starts, in the same small way as the exam PR before PR D.
 
 ### PR E
 
@@ -1734,7 +1741,7 @@ There are seven tiers, in a proposed order, 60% sure on Tiers 3 to 6, and each i
 
 No fact is lost by waiting on any of these. Each adds a kind of fact, and old saves still fold.
 
-**Replacing the Mac matters once notes are real.** The text is safe on Cloudflare. But the person key is on that Mac, and in this tier a new Mac means a new ledger. **If the owner would miss their notes, the backup sheet and recovery move up from Tier 3,** to right after PR D. Using it tells. Cost: a new fact, `added`, on a list kept for it, plus the sheet. Nothing is lost by the wait except the time it stays a risk. Sure: 70% that it moves up.
+**Replacing the Mac matters once notes are real.** The text is safe on Cloudflare. But the person key is on that Mac, and until PR D2 a new Mac means a new ledger. **So the backup sheet and recovery moved up from Tier 3, to right after PR D, settled by the owner.** Cost: a new fact, `added`, on a list kept for it, plus the sheet.
 
 **Tier 2, programs that work on tickets.** The first tile runs `tracker | ticket`.
 
@@ -1751,7 +1758,6 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 
 - Typed codes on Cloudflare. `saw.how` gains a word; nothing lost.
 - Invites and join. New facts on a `founded.keys` list; nothing lost.
-- Backup sheet and lost-Mac recovery, plus the `added` fact. A new fact, and `founded.keys` is a list; nothing lost. Moves up if the owner would miss their notes, as above.
 - Windows list tile, in full: last seen, host, every tab. The panel's small list and Remove land in Tier 1. It folds from grants, `revoked` and `door/hellos`, kept now; nothing lost.
 - Docked-Mac password helper. **`saw.check` is kept in Tier 1 for this;** old grants say how their person was checked.
 - GitHub Actions releases. Records no fact.
@@ -1811,7 +1817,7 @@ Their open questions wait with them.
 
 Plan-115's list stands, with these added:
 
-1. **"One plan, one PR" against a pass this large.** No note says how a plan splits into landings. Resolved: tasks name their PR, and the owner settled five.
+1. **"One plan, one PR" against a pass this large.** No note says how a plan splits into landings. Resolved: tasks name their PR, and the owner settled five, then a sixth for the backup.
 2. **What a test writer does with a Property that needs a person.** p41's deploy needs a yes, the real finger needs the owner, and only the owner can say no prompt appeared. Resolved: a test `PersonCheck` in the laws, and a run recorded in `field/` for the rest.
 3. **Rethink against "copy the styles".** A named exception has no marker a check could read. Resolved: a comment naming source and commit, read at c7.
 4. **A law on an outside tool.** `sshsig` vectors come from `ssh-keygen` once and are saved; p29 runs it live. The notes do not say which is right. Both, here.
@@ -1864,16 +1870,16 @@ Plan-115's list stands, with these added:
 
 ## Settled by the owner
 
-**Three questions are still open:**
+**One question is still open:**
 
 - **How this plan enters the pipeline:** a plan written by hand meets a pipeline that starts at triage, so how does it go in, and which ticket do Tier 1's pull requests run under? No lean yet.
-- **`transport/link.ts`:** does it stay in the library? Lean: yes, since the MCP bridge dials too and can't import tuval. Sure: 75%. T0 moves files, so this needs an answer before PR A.
-- **Backup:** does it move up from Tier 3, for real notes? Lean: yes, to right after PR D. Sure: 70%. This needs an answer before PR D ends.
 
 Every other old question closed this way.
 
-- **Q1, the PRs with the demo growing in each:** yes, with the menu bar in PR B. Four then, and five with notes.
-- **Q2, the founder key:** the passphrase key is no longer needed in this tier. The founder's key is the app's person key. What stays is the condition, as a law: opening a let-in tab or Electron window, and reopening after a quit, shows no prompt of any kind. If the Keychain asks on open, the window key moves to WebCrypto, and the plan does not stop. Cost: a lost Mac means a new ledger in this tier, since recovery is in Tier 3. With real notes that cost is close, so [the backup can move up](#later-tiers).
+- **`transport/link.ts`:** yes, it stays in the library, since the MCP bridge dials too and can't import tuval.
+- **Backup:** yes, the backup sheet and recovery move up from Tier 3, to right after PR D, as PR D2.
+- **Q1, the PRs with the demo growing in each:** yes, with the menu bar in PR B. Four then, five with notes, and six with the backup.
+- **Q2, the founder key:** the passphrase key is no longer needed in this tier. The founder's key is the app's person key. What stays is the condition, as a law: opening a let-in tab or Electron window, and reopening after a quit, shows no prompt of any kind. If the Keychain asks on open, the window key moves to WebCrypto, and the plan does not stop. Cost: a lost Mac means a new ledger until PR D2 brings recovery.
 - **Q3, how a new window comes in:** the menu bar's row, Approve and a finger, on both stages. The terminal command is the way in only until PR B brings Approve, and a developer path after that. QR is in Tier 7.
 - **Q4, chaos:** off on the real ledger, on a throwaway ledger by default, and on the real one only by a deploy with its name typed out. The owner settled the rule, and the shape is my call, 85%. This replaces the earlier "on, on both stages": notes are the real work that answer was waiting for.
 - **Q5, the address:** Cloudflare's default address for a Worker. My call, 85%.

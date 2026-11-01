@@ -5,12 +5,13 @@ Work does not finish one layer and then start the next. Each pass goes through a
 five layers, thin but real, and ends with something a person can use.
 
 ```text
-first pass (Tier 1), five pull requests, the demo working after each:
+first pass (Tier 1), six pull requests, the demo working after each:
 
 A  door and plumbing   two browser tabs, each let in by a person, on the laptop
 B  app                 one tab and one Electron window share a counter; a menu bar approves
 C  Cloudflare          the same demo on a real account
 D  notes               real notes, drawn as Markdown, that agents write through MCP
+D2 backup              a backup sheet, and the same notes back on a new Mac
 E  chaos               a run that breaks things on purpose, with a verdict on screen
 
 layer             what the first pass gives it
@@ -32,7 +33,7 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
 - **"Every layer" has one way out.** If a layer gets nothing new in a tier, the tier
   says so and says why ([the tiers](../plan/tiers.md)).
 - **A pass can land as several pull requests.** Each one is whole, and its demo
-  works. More than 9,700 lines in one review is not a review, so Tier 1 is five.
+  works. More than 9,700 lines in one review is not a review, so Tier 1 is six.
 - **Debugging tools come in the first pass, not after.** A program that breaks
   things on purpose is part of the foundation, so failures are seen from day one.
   It runs on a throwaway ledger by default, never on real notes.
@@ -64,10 +65,10 @@ nothing from `next/` is on main. Today's pipeline comes first
 
 ## What it costs
 
-- More at once. The first pass is 5,210 to 7,140 lines of product code, 4,780 to
-  6,880 lines of tests, and 42 to 66 builder agent hours, 50% sure. Its first pull
+- More at once. The first pass is 5,360 to 7,440 lines of product code, 4,940 to
+  7,200 lines of tests, and 44 to 70 builder agent hours, 50% sure. Its first pull
   request will give real numbers.
-- Five landings and five reviews instead of one.
+- Six landings and six reviews instead of one.
 - A change in one layer can touch all of them while the shapes are still moving.
 
 **How sure:** 80% that this is the right way to build. The doubt is whether every

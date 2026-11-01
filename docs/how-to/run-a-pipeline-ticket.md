@@ -20,29 +20,69 @@ Ticket 117 is on the app's own tracker, in the owner's app. It is not a GitHub i
 - **The fix:** the `ticket` flag becomes optional, so `map` takes a ticket from a pipe.
 - **The target repository:** this one.
 
+## What must be true first
+
+An agent goes through this list and tells the owner what is missing.
+
+1. **[PR 267](https://github.com/usirin/tea-fabrika/pull/267) is merged.** Until it is, the lane cannot
+   handle what real agents answer.
+2. **The owner answered both questions in [the plan](../plan/README.md#where-we-are-now):**
+   - May `pipeline.json` go in the app's real home? Without it, a lane is not started there.
+   - May this first run go without a box? The lane has no box setting for head code: the install, the
+     checks and the mutants run as the person. So a "no" means this run does not happen until head code
+     is boxed. Lean: yes, 75%.
+3. **`.fabrika/fabrika.toml` is on the repository.** This one has it.
+4. **Everyone is logged in.** Run these as they are, so no token is printed, and do not paste their
+   output anywhere, since it can name the account:
+   - `codex login status`
+   - `gh auth status`
+   - `claude auth status`. Triage defaults to `claude` on `opus`, and this repository does not change
+     that.
+5. **The ticket was filed by the owner, or by an agent of theirs.** Read the first row of
+   `ticket --ticket 117`: it says who filed it, such as `user:owner` or `agent:claude`. The lane makes
+   the same check when it starts. If the ticket is not theirs, it ends `stuck:not_yours` before any agent
+   starts.
+6. **No other merges to main during the run.** A commit on main before a pinned merge (a merge that names
+   the main it read) sends the lane back, and that is final. The agent preparing the run tells the owner
+   and any other agent session that pushes to main.
+
 ## Who starts it
 
-1. **An agent prepares:** it checks the list below and tells the owner what is missing.
-2. **After the owner's yes,** an agent writes `<home>/pipeline.json`. `<home>` is the app's own data
-   folder. The lane reads the file when it starts.
+1. **After the owner's yes,** an agent writes `<home>/pipeline.json`. The lane reads this file each time
+   a lane starts, so writing it needs no restart.
 
    ```json
    {"repo": "owner/name", "remote": "git@host:owner/name.git", "host": "github"}
    ```
 
-3. **The owner restarts the app,** then types the line in their app. No agent types it, because no agent
-   answers the questions the lane puts to a person.
+   `<home>` is the app's own data folder. It is `FABRIKA_HOME` when that is set, and otherwise Electron's
+   userData folder (`apps/fabrika/src/main.ts`). The owner's normal start does not set it. Electron names
+   that folder after `productName` in `apps/fabrika/package.json`, and on a Mac it is under
+   `~/Library/Application Support/`. The right folder holds `ledger.sqlite` and `host/sock`.
 
-## What must be true first
+2. **Get the host onto main's code.** The lane runs in the host, not in the app, and Cmd-Q leaves the host
+   running. So quitting and opening again may keep old code. The steps:
 
-- `.fabrika/fabrika.toml` is on the repository. This one has it.
-- `codex login status` and `gh auth status` both pass. Run them as they are, so no token is printed.
-  Triage defaults to `claude` on `opus`, and this repository does not change that, so `claude` must be
-  logged in too.
-- The ticket was filed for the owner's own id. Otherwise the lane refuses it with `not_yours`, before
-  any agent starts.
-- **No other merges to main during the run.** A commit on main before a pinned merge sends the lane
-  back, and that is final. Tell anyone with work waiting.
+   ```sh
+   # In the app: Cmd-Q. A second start would only bring the open window forward.
+   git pull --ff-only origin main      # in the checkout the app is built from
+   pnpm install --frozen-lockfile
+   pnpm fabrika                        # builds, then opens the app
+   ```
+
+   Every build gets an id made from its source files. If the code changed, the window says the host is
+   another build and offers **Stop the old host and start this one**. The owner presses it. Any jobs in
+   that host stop, and they come back with `attach %n`. With no such offer the host already runs this
+   code. `Ctrl-B H` shows the host's build.
+
+   **There is no other way for a person to stop the host.** That button appears only when the host is
+   another version or build. A plain way to stop it is listed as not built in `apps/fabrika/README.md`.
+
+   If a tile says `pipeline could not load`, the host outlived a rebuild and its files are gone. Stopping
+   it takes that same button.
+
+3. **The owner types the line in their app.** No agent types it, because no agent answers the questions
+   the lane puts to a person.
 
 ## The steps
 
@@ -57,20 +97,35 @@ Every step answers in the same five verbs, and the lane does too:
 |---|---|
 | `done` | The step finished, and the lane goes on. For the lane: merged, or triage closed the ticket. |
 | `send` | It goes to someone else, such as back to the builder. |
-| `ask` | It waits for a person. Answer in the `ticket` window. There are two yeses: the plan and the merge. |
+| `ask` | It waits for a person. Answer in the `ticket` window. |
 | `skip` | Nothing more to do, on someone's decision: `closed`, `owner_no`, `research`. |
 | `stuck` | It stopped and did not guess. The word after it says why. |
+
+The lane asks a person four kinds of question (`packages/pipeline/src/stages/pipeline/machine.ts`):
+
+| Ask | What it is about |
+|---|---|
+| `approve` | The plan. Open questions in the plan are read here too. |
+| `exam_merge` | The exam's own pull request is open, and rules are the person's call. |
+| `merge` | The merge yes, after the push. |
+| `step` | A step ended on `ask`, and it may be run again. |
 
 ## When a lane is stuck
 
 **A stuck lane is final. Restarting is not built.** Typing the line again only says how it ended, and
 runs nothing.
 
-1. Read the reason on the ticket: for example `not_yours`, `claim_held`, `step_stuck`, `rounds_spent`,
-   `sent_back`, `exam_touched`, `checks_stuck`, `merge_failed`, `merge_unknown`, `merged_elsewhere`.
-   The program's README says what each GitHub one means.
+Stuck words come at two levels. The ticket shows both.
+
+| Level | Words | Where |
+|---|---|---|
+| The lane, seven words | `not_yours`, `no_ticket`, `claim_held`, `step_failed`, `step_stuck`, `rounds_spent`, `sent_back` | `stages/pipeline/outcome.ts` |
+| One step, under a lane's `step_stuck` | Such as `exam_touched` (build), `checks_stuck`, `merge_failed`, `merge_unknown` (ship), `merged_elsewhere` (merge) | That step's own outcome, in the line it printed |
+
+1. Read both words on the ticket. The program's README says what each GitHub one means.
 2. Say exactly what is left: a claim, a branch, a pull request.
-3. The owner picks: land the open pull request by hand, or file a new ticket.
+3. **An agent does not merge the open pull request.** The owner decides. On a yes, it lands as a by-hand
+   change, under [the plan's rule](../plan/README.md#how-a-change-lands). The other choice is a new ticket.
 4. Log it in `field/`. A stuck lane teaches as much as a merged one.
 
 ## The leak check
@@ -83,10 +138,11 @@ personal names and account names. Do not give the merge yes until that is clean.
 
 The same day, in [`field/`](../../field/README.md):
 
-- **`runs.jsonl`, one `pipeline` row:** the lane as a whole, with `lane` as `<owner>/<repo>#117` and
-  `outcome` as it ended.
-- **`runs.jsonl`, one `step` row per agent run:** its step in `why`, with model, effort and both token
-  measures, `tokens` and `billed`.
+- **`runs.jsonl`, one `pipeline` row:** the lane as a whole, with `lane` as `<owner>/<repo>#117`.
+- **`runs.jsonl`, one `step` row per agent run.** Its `why` starts `pipeline, tracker ticket 117, <step>:`,
+  so it cannot be taken for an older row with the same number.
+- **The numbers:** the lane prints them for each step and keeps them on the ticket. `field/README.md`
+  says which goes where.
 - **Dollars:** `gpt-6-astra` has no known price, so the app's cost reads zero for it. Write `costUsd`
   for Claude only, and say the Codex dollars are unknown.
 - **`notes.jsonl`, one note per thing** that broke, cost too much, needed a person or worked well.

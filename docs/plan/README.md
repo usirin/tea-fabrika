@@ -45,19 +45,19 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo. No real ticket yet. → nothing, until ticket 117
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. A review found a blocker, and CI is red. → an agent fixes it, then a mutation run and a new review, then the owner's yes
 - **First real run, ticket 117.** Waits on 267. → then the owner answers two questions: may `pipeline.json` go in the app's real home, and may this first run go without a box (lean yes, 75%)
-- **Tier 1 plan for `next/`.** Written, not approved. → after ticket 117, the owner approves
-- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the plan is approved
+- **Tier 1 plan for `next/`.** Written, not approved. One question is still open, under [who decides what](#who-decides-what). → the owner answers it, and after ticket 117 approves the plan
+- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the docs and exam pull requests, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says
 - **This plan folder and the notes it brought up to date, with [every update builds every layer](../direction/every-update-builds-every-layer.md) (`next/`).** Docs. → the owner's yes
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
-- **[PR 257](https://github.com/usirin/tea-fabrika/pull/257), test windows you can't see.** Green. → the owner's merge
-- **[PR 192](https://github.com/usirin/tea-fabrika/pull/192), `claude` and `codex` as programs.** Overlaps pipeline v0. → the owner: merge, yes or no
+- **[PR 257](https://github.com/usirin/tea-fabrika/pull/257), test windows you can't see.** Green. → the owner's yes, then an agent merges
+- **[PR 192](https://github.com/usirin/tea-fabrika/pull/192), `claude` and `codex` as programs.** Overlaps pipeline v0. → the owner says yes or no; on a yes, an agent merges
 - **Pipe colors.** Picked, not built. → a pull request through the pipeline
 - **Studies done, not walked yet.** React tryout, themes, the DeepSeek repo, [Windows](../direction/windows-in-next.md), Effect on Cloudflare. → the owner
-- **demlik.** Epics landed, no release yet. Three issues wait: [756, operator worktrees have no node_modules, so `pnpm exec fabrika` runs a different CLI](https://github.com/kamp-us/demlik/issues/756); [782, tell's types accept a hand-built handle that tell refuses at run](https://github.com/kamp-us/demlik/issues/782); [777, tea API ratchet asks a Breaking callout for an added optional option](https://github.com/kamp-us/demlik/issues/777). → the owner
+- **demlik.** Epics landed, no release yet. Three issues wait. [756](https://github.com/kamp-us/demlik/issues/756): an operator's working copy has no `node_modules`, so `pnpm exec fabrika` runs a different command-line tool. [782](https://github.com/kamp-us/demlik/issues/782): tea's types accept a hand-built handle that `tell` then refuses when it runs. [777](https://github.com/kamp-us/demlik/issues/777): tea's check on its public names asks for a breaking-change note when only an optional setting was added. → the owner
 - **Copying for the app and Tuval in `next/`.** Lean, 70%: rethink stays the default, plus a named Tier 2 copy list. → the owner decides
 - **Two people before agents, Tier 3 before Tier 5 in `next/`.** Lean yes, 70%. → the owner answers
 - **Conversation branches.** Saved, not designed. → when the agents tier is next
-- **Left for later.** The third step of the two trackers walk, and native `<dialog>` against Zag.
+- **Left for later.** The third step of going through the two trackers with the owner, and whether popovers use the browser's own `<dialog>` or a library.
 
 ## What to read for your job
 
@@ -74,8 +74,8 @@ today's version unless it says `next/`. The arrow says who has the next move.
 **Only the owner:**
 
 - Approves a plan, in `next/` or today's, before any builder starts.
-- Approves a pull request, and answers a question the machine put to a person. No agent does either.
-- Answers Tier 1's open questions: does `transport/link.ts` stay in the library (lean yes, 75%); does backup move up from Tier 3 (lean yes, 70%); how does a plan written by hand enter a pipeline that starts at triage, and which ticket do Tier 1's pull requests run under (no lean yet).
+- Approves a pull request, and answers a question the machine put to a person. No agent does either. Rows that only record what happened need no yes: see [how a change lands](#how-a-change-lands).
+- Answers Tier 1's one open question: how does a plan written by hand enter a pipeline that starts at triage, and which ticket do Tier 1's pull requests run under (no lean yet).
 - Settles a **proposed** note.
 - Reads each exam pull request. Any diff to the exam files stops the build and asks the owner.
 - Adds an entry to `unreachable-ledger.json`, in a change of its own.
@@ -114,6 +114,14 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **brain:** in `next/`, the place programs run and the ledger lives, on a laptop or on Cloudflare.
 - **hands:** in `next/`, the process on a computer that does machine work for the brain, such as git and agents.
 - **ledger:** the append-only record of facts. Everything else folds from it.
+- **fold:** to work a state out by reading the facts in order. For a tile, to shrink it to a thin strip.
+- **slice:** one thin piece of work that goes through every layer.
+- **leak grep:** a text search of a change's added lines for keys, machine paths and names, before it lands in this public repository.
+- **ratchet:** a limit that only tightens.
+- **tsh:** today's shell, which runs only tea programs. In `next/` the shell is `fabsh`.
+- **tile:** one pane in the app's window.
+- **claim:** a lane's hold on a ticket, on the ledger, so no second lane runs it.
+- **pinned merge:** a merge that names the main it read, so a newer commit on main stops it.
 - **`@kampus/pipeline`:** the library in `packages/pipeline`, today's stages and services.
 - **`@tea-fabrika/pipeline`:** the program in `programs/pipeline`, the line a person types.
 

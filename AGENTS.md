@@ -235,6 +235,8 @@ live run, each learned from a run:
 - The target repository's own merge rules apply. Never merge by hand, never arm
   auto-merge, never push to its main branch. A change lands only through the
   ship stage.
+- A pull request that went by hand is not a live run. It lands by
+  [the plan's rule](./docs/plan/README.md#how-a-change-lands).
 - No agent approves a pull request, and no agent answers a question the machine
   put to a person.
 - A dry run is read-only. It starts no agent that could claim or change a real
