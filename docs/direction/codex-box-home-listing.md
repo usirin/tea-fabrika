@@ -5,18 +5,18 @@
 ```ts
 // A sketch of the table Codex gets on a Mac, for a run in ~/work/copy with Volta as a tool.
 const filesystem = {
-	"~/[!.w]*": "deny", // what starts with neither `.` nor `w`, and what is in it
-	"~/[!.w]*/**": "deny",
-	"~/.[!v]*": "deny", // what starts with `.`, then not `v`
-	"~/.[!v]*/**": "deny",
-	"~/w[!o]*": "deny", // what starts with `w`, then not `o`
-	"~/w[!o]*/**": "deny",
+	"~/[!.wW]*": "deny", // what starts with neither `.` nor `w`, in either case, and what is in it
+	"~/[!.wW]*/**": "deny",
+	"~/.[!vV]*": "deny", // what starts with `.`, then not `v`
+	"~/.[!vV]*/**": "deny",
+	"~/w[!oO]*": "deny", // what starts with `w`, then not `o`
+	"~/w[!oO]*/**": "deny",
 	"~/w": "deny", // a prefix that is an entry of its own
 	"~/w/**": "deny",
 	"~/.vscode": "deny", // past two characters, what shares them is listed by name
 	"~/work2": "deny",
-	"~/work/[!c]*": "deny", // and the same one folder down
-	"~/work/[!c]*/**": "deny",
+	"~/work/[!cC]*": "deny", // and the same one folder down
+	"~/work/[!cC]*/**": "deny",
 	"~/.volta": "read", // a tool, by its real path
 	"~/work/copy": "write", // the folder, by its real path
 	"~/.ssh": "deny", // a login path, closed whether it is there or not
@@ -36,8 +36,13 @@ So the table is now short, and made from real paths.
 
 - **Patterns first.** At each folder on the way down, a pattern closes what does not share a start
   with a kept name, up to two characters. Past that, entries that share the start are closed by name.
-- **Case does not count.** The box's class matches with no regard to case, so names are compared the
-  same way. A near name in another case is closed by name.
+- **Case does not count.** The box's matcher takes no regard of case on a Mac: `l[!a]*` also closes
+  `Library`. So the walk goes by a start with no case, with one branch per start, and each class holds
+  both cases of a character. `~/Library/pnpm` with `~/lab/copy` gives `~/[!lL]*`, then `~/l[!aAiI]*`. A
+  near name in either case is closed by name.
+- **A case-sensitive volume gets the same table.** We ran it on a case-sensitive APFS image in the real
+  box: the opened folders work, and `~/Lab` and `~/LAB` beside `~/lab` are closed. Twins that exist
+  before the run are listed by name. One made during a run is open, as below.
 - **Odd names are listed.** A class and `?` work by byte. So if a way down has anything outside
   `[A-Za-z0-9._ -]` in its first two characters, or its folder's path does, that folder lists every
   entry by name.
@@ -46,6 +51,28 @@ So the table is now short, and made from real paths.
 
 Rules from before still stand. A name Codex would read as a pattern is written as a pattern that
 matches it. Codex refuses a pattern that opens, so an opened path with such a name gets no line.
+
+## Which home, and which login
+
+`HOME` can say another folder than the account's own. So the table closes both: the one in `HOME`, and
+the one the system gives for the account. A home with nothing opened in it is one `deny` line.
+
+`CODEX_HOME` can move the login out of home. So the login is closed by its path and by its real target,
+wherever those are, in the exec adapter and in ACP's row.
+
+## What a tool opens
+
+A tool opens the folder above the one holding it, so a version manager's whole folder. Only the holding
+folder opens if the one above is shared, is home or above it, or holds a login. Holding a login means a
+known login path (`~/.cargo/credentials.toml`) or a file named like one in that folder itself
+(`credentials`, `auth.json`, `.npmrc`). The toolchain and Codex's own binary follow this one rule, so
+`~/.cargo/bin/codex` opens `~/.cargo/bin` and never `~/.cargo`.
+
+A run in a lane's tree also opens the clone's `.git`, to read. A tree's `.git` is a file that leads
+there, and `git status`, `git diff` and `git log` need it. It counts only for a real worktree of that
+tree, so a `.git` an agent wrote opens nothing next turn. `git add` and `git commit` are refused in the
+box, which is fine: the lane stages and commits outside it. In the box, Codex's own rule also refuses
+any change to the tree's `.git`, and nothing in the clone is writable.
 
 ## What links do now
 
@@ -69,6 +96,10 @@ These still fail closed:
 - A folder named through a link in home. Work in it runs, but a command that names it by the link is
   refused, for the link is closed.
 - A writable folder with a `"` in its path. Codex's own box does not start there.
+- A login that is a link to a folder holding the run's folder, or a tool. That folder gets no line.
+- A link in a walked folder that leads to something a run needs. The box follows a key that is a link, so
+  closing the link closes where it leads. `~/c` to `~/work/copy` stops the run, `~/work2` to `~/work`
+  stops Node, which looks at each parent, and `~/bin4` to `/bin` stops what is in `/bin`.
 
 A tool that really is a link to a plain folder opens that folder. That is what it asked for.
 
@@ -76,14 +107,37 @@ A tool that really is a link to a plain folder opens that folder. That is what i
 
 - A command can list the names in home, and in each folder on the way down to an opened one.
 - An entry made after the table that shares its first two characters with a way down is open. With
-  `~/work` as the way, a `~/work3` made during a run stays open, and so does a `~/WORK3`. In a folder
-  that lists every entry, and off a Mac, anything made later is open.
+  `~/work` as the way, a `~/work3` made during a run stays open, and so does a `~/WORK3`. With
+  `~/.codex/packages` opened, so is any new `~/.c*`. In a folder that lists every entry, and off a Mac,
+  anything made later is open.
 - A `?` can also close a name beside the one it stands for. If that name holds the opened folder, the
   run fails closed.
+- Reads outside home are open. So a key inside a login folder that links outside home (`~/.ssh/id_x` to
+  a file elsewhere) is closed by its path, and readable at its target by whoever names it. We do not read
+  a login folder's insides to find such a link. Codex's own login is the one exception, as above.
+- A login we do not know the name of is not seen. A tool's folder is checked for known names in it, not
+  any deeper.
+- A run in a lane's tree can read the clone's whole `.git`: every branch, and the remote's address.
+- No box caps its processes. See the next section.
 
-We accept the first two because the names are not secrets, and the files that hold logins exist
-before a run starts. `ALWAYS_CLOSED` covers the login paths that do not. An entry made after the table
-that starts differently from every way down is closed.
+We accept the second because the files that hold logins exist before a run starts, and
+`ALWAYS_CLOSED` covers the login paths that do not. An entry made after the table that starts
+differently from every way down is closed.
+
+## A Volta shim can start itself without end
+
+A Volta shim under another home finds no tools. It looks along the `PATH` for the real tool, finds
+itself, and waits on the child it starts. That chain grows until the account's process limit stops it.
+`toolHome` keeps `VOLTA_HOME` for the plain case: a `.volta/bin` on the `PATH`, under that exact name.
+The chain can still happen with:
+
+- `VOLTA_HOME=""`, which is passed on as it is;
+- a `VOLTA_HOME` other than the shim's own folder;
+- a shim's folder not named `.volta`;
+- `.VOLTA/bin`, which the rule's exact name does not match.
+
+No box caps its processes, so nothing here stops such a chain but the account's own limit. We have not
+built a cap.
 
 ## Which names reach the model
 
@@ -117,7 +171,9 @@ the same home, with `depth` 0.
 | Input tokens in that turn | 349,002 | 131,370 |
 | Bytes of the developer message that holds the table | 37,800 | 10,946 |
 
-A box with almost no table takes 0.024 s, so the short table costs about 0.04 s per command.
+A box with almost no table takes 0.024 s, so the short table costs about 0.04 s per command. With names
+walked without case, the same home took 104 lines, `date` 0.044 s and `node` 0.066 s in `codex sandbox`.
+No real turn has run on that table.
 
 The turn was the same one both times: `node x.js`, `pnpm --version`, `date +%s` five times, one at a
 time, model `gpt-6-astra`, effort `low`, on a Codex plan. The "before" turn ran under the old code.
@@ -132,47 +188,57 @@ On this home `node`, `pnpm` and a write in the folder exit 0. These are refused,
 
 ## How big a table can get
 
-Over the limit, Codex's box runs nothing: that part fails closed by itself. But its answer comes per
-command, and reads like a broken tool. So `fenceTooBig` stops a table over 600 lines first. The turn
-fails with why `contain`, no Codex starts, no Codex home is made, and the message gives the counts and
-names no entry.
+Past what it can take, Codex's box runs nothing: that part fails closed by itself. But its answer comes
+per command, and reads like a broken tool. So `fenceTooBig` stops the table first. The turn fails with
+why `contain`, no Codex starts, no Codex home is made, and the message gives the counts and names no
+entry.
 
 ```ts
 fenceTooBig(table);
-// "Codex's box would need 701 lines to close what is beside the opened folders,
-//  and it takes at most 600. Nothing was started. Use a folder with fewer names beside it."
+// "Codex's box would need 240 lines to close what is beside the opened folders, and those are too
+//  long or too deep for it. Nothing was started. Use a folder nearer the top of home, with fewer
+//  long names beside it."
 ```
 
-Where the real box stops, in `codex sandbox`, by what the keys are:
+Where the real box stops, in `codex sandbox`, by what the keys are. A depth counts folders from the
+top of the disk.
 
 | Keys | Works at | Stops at | How it stops |
 |---|---|---|---|
-| Plain names | 1,889 lines (32 s per command) | 1,921 | exit 65, "profile compilation failed" |
-| Pairs of patterns, short path | 1,665 lines | 1,697 | exit 1, "Argument list too long" |
-| Half names, half patterns | 2,161 lines | 2,209 | exit 1, "Argument list too long" |
-| Pairs, a path 80 characters longer | 1,025 lines | 1,041 | exit 1, "Argument list too long" |
-| Pairs, 8 folders down | 753 lines | 769 | exit 1, "Argument list too long" |
-| Pairs, 8 folders down, a long path | 441 lines | 449 | exit 1, "Argument list too long" |
+| Plain names, 250 bytes | 254 lines | 256 | exit 65, "pattern serialization length exceeds 65535" |
+| Plain names, 100 bytes | 614 lines | 618 | exit 65, the same |
+| Plain names, 50 bytes | 1,171 lines | 1,182 | exit 65, the same |
+| Plain names, short | 1,889 lines | 1,921 | exit 65, "profile compilation failed" |
+| Pairs of patterns, depth 6 | 1,325 lines | 1,346 | exit 1, "Argument list too long" |
+| Pairs of patterns, depth 10 | 855 lines | 865 | exit 1, "Argument list too long" |
+| Pairs of patterns, depth 22 | 375 lines | 380 | exit 1, "Argument list too long" |
+| Pairs of patterns, depth 36 | 209 lines | 212 | exit 1, "Argument list too long" |
 
-We never saw "too many levels of backtracking". Exit 65 here says only "profile compilation failed".
+So there are three limits, and `fenceTooBig` weighs each.
 
-The real home's 127 lines are 21% of the limit. Plain names at 600 lines take about 2.5 s per command,
-slow but working. Patterns do not grow with the names in home, only with the opened folders and their
-depth, so a real table should not get near the last two rows. If one does, it is under our limit and
-the box still runs nothing, with Codex's own message. A test holds that: 600 lines of patterns 20
-folders down run nothing.
+- **Lines.** At most 600. Plain names at 600 lines take about 2.5 s per command, slow but working.
+- **Bytes the keys do not share.** The box compiles its paths into one pattern of at most 65,535 bytes,
+  and what keys share is stored once. A long folder the keys share does not count. Each key costs what
+  is new in it and about 7 bytes more. Ours stops at 59,000, 90% of the limit.
+- **The profile's size.** It must fit in a command's arguments, 1 MiB, and only patterns swell it. A
+  pattern costs about 5 per byte and 130 per folder. That fit comes out high at each row above. Ours
+  stops at 900,000.
 
-Why 600 and not a formula: the cost grows with depth and length, about 100 bytes of the compiled
-profile per folder and 4 per character for each pattern, against the system's 1 MiB. That fit comes
-from six rows on one machine. A count is plain to read and to test. It costs one wrong answer: a very
-deep table gets Codex's message instead of ours.
+The real home's 127 lines are 21% of the first limit. Tests hold each side in the real box: a table we
+allow runs, and one past the real stop gets our message, not Codex's.
+
+We never saw "too many levels of backtracking".
 
 ## How sure
 
 About 85% that this is the right table on a Mac. Each near name, odd name, link and spelling above is
-tested in the real box, and the 470 by-hand attack boxes found nothing open but a tool that really
-links to a plain folder. The doubt is what one home and one turn cannot show. More runs on other
-homes would settle it.
+tested in the real box, and the by-hand attack boxes found nothing open but a tool that really links to
+a plain folder. The doubt is what one home and one turn cannot show. More runs on other homes would
+settle it.
+
+About 75% on the size weights. They are fits from eight rows on one machine, and a wrong one costs
+Codex's message instead of ours, or a refusal the box did not need. Measuring more shapes would settle
+it.
 
 The other way is to deny home whole. It is stronger and needs no table, but no Node tool under home
 could run. If Codex adds a way to deny a folder's contents and still allow `lstat` on it, this note
@@ -185,7 +251,8 @@ should be dropped.
   beside an opened folder is refused without proof it had to be.
 - It has not run on the Codex this repo pins for ACP's row, 0.159.3. That version's box does not
   start on the Mac tested (`unbound variable: TIOCSTI`), so the same table is unproved there.
-- A writable folder reached through a link is proved in `codex sandbox`, not in `codex exec`.
+- A writable folder reached through a link is proved in `codex sandbox`, not in `codex exec`. So are git
+  in a lane's tree, and Codex's own refusal of changes to its `.git`: no model was called.
 - Whether a real run hits an odd name it has not met yet. The tests cover the names we thought of.
 - Whether the token drop is all the table's doing. The turn's commands were the same, but a model does
   not answer the same way twice.

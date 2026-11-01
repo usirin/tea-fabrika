@@ -18,7 +18,7 @@ import {Effect} from "effect";
 import {ear} from "../../program/ear.ts";
 import {start} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
-import {LOGIN_FILES, temps} from "../claude/sandbox.ts";
+import {gitOf, LOGIN_FILES, temps} from "../claude/sandbox.ts";
 import {codexEnvOf, flagsOf} from "../codex/adapter.ts";
 import {
 	codexConfig,
@@ -63,6 +63,12 @@ const parentOf = (home: string) => ({
 
 /** A folder that is there, by its real path. A table has no line for one that is not. */
 const scratchFolder = () => realpathSync(mkdtempSync(join(tmpdir(), "a-scratch-folder-")));
+
+/**
+ * The real disk, with no account's home but the made-up one a test names. On the machine's own, the
+ * node running these tests is under a home each of these tables would close.
+ */
+const oneHome: Disk = {...localDisk, account: null};
 
 describe("the codex row", () => {
 	it("hands the adapter a keep-list: its own home, workspace-write, no key", () => {
@@ -172,6 +178,35 @@ describe("the codex row", () => {
 		expect([bare, nameOnly, typeof config]).toEqual(["codex", {name: "codex"}, "object"]);
 	});
 
+	it("closes the login where `CODEX_HOME` puts it, outside home, in the table it starts on", () => {
+		const home = fakeHome();
+		const moved = scratchFolder();
+		writeFileSync(join(moved, "auth.json"), PLAN);
+		const folder = scratchFolder();
+		const parent = {...parentOf(home), CODEX_HOME: moved};
+		const row = harnessOf({name: "codex", access: "write"}, folder, null, parent);
+		const fs = JSON.parse(row.env.CODEX_CONFIG ?? "").permissions.fenced.filesystem;
+		expect(fs[join(moved, "auth.json")]).toBe("deny");
+	});
+
+	it("opens the clone a worktree's folder shares, read-only, and nothing for a plain folder", () => {
+		const home = fakeHome();
+		const own = join(home, "work", "clone", ".git", "worktrees", "7");
+		const tree = join(home, "work", "trees", "7");
+		mkdirSync(own, {recursive: true});
+		mkdirSync(tree, {recursive: true});
+		writeFileSync(join(tree, ".git"), `gitdir: ${own}\n`);
+		writeFileSync(join(own, "commondir"), "../..\n");
+		writeFileSync(join(own, "gitdir"), `${join(tree, ".git")}\n`);
+		const row = (folder: string) =>
+			JSON.parse(
+				harnessOf({name: "codex", access: "write"}, folder, null, parentOf(home)).env
+					.CODEX_CONFIG ?? "",
+			).permissions.fenced.filesystem;
+		expect(row(tree)[join(home, "work", "clone", ".git")]).toBe("read");
+		expect(row(scratchFolder())[join(home, "work", "clone", ".git")]).toBeUndefined();
+	});
+
 	it("opens a folder under home with home itself left open, the folder's siblings closed", () => {
 		const home = fakeHome();
 		const folder = join(home, "work", "copy");
@@ -202,6 +237,7 @@ const disk = (
 		tree[folder]?.map((name) => ({name: name.replace(/@$/, ""), link: name.endsWith("@")})) ?? null,
 	real: (path) => path,
 	depth: 0,
+	account: null,
 	...more,
 });
 
@@ -224,6 +260,8 @@ const linked =
 /** What a home at `/h` always closes, by name. */
 const ALWAYS = {
 	"/h/.git-credentials": "deny",
+	"/h/.cargo/credentials": "deny",
+	"/h/.cargo/credentials.toml": "deny",
 	"/h/.config/gh": "deny",
 	"/h/.ssh": "deny",
 	"/h/.netrc": "deny",
@@ -444,13 +482,13 @@ describe("the fence, a short table by patterns", () => {
 		);
 		expect(table).toEqual({
 			...ALWAYS,
-			"/h/[!.c]*": "deny",
-			"/h/[!.c]*/**": "deny",
-			"/h/.[!v]*": "deny",
-			"/h/.[!v]*/**": "deny",
+			"/h/[!.cC]*": "deny",
+			"/h/[!.cC]*/**": "deny",
+			"/h/.[!vV]*": "deny",
+			"/h/.[!vV]*/**": "deny",
 			"/h/.vim": "deny",
-			"/h/c[!o]*": "deny",
-			"/h/c[!o]*/**": "deny",
+			"/h/c[!oO]*": "deny",
+			"/h/c[!oO]*/**": "deny",
 			"/h/c": "deny",
 			"/h/c/**": "deny",
 			"/h/copy2": "deny",
@@ -491,24 +529,24 @@ describe("the fence, a short table by patterns", () => {
 		);
 		expect(table).toEqual({
 			...ALWAYS,
-			"/h/[!L]*": "deny",
-			"/h/[!L]*/**": "deny",
-			"/h/L[!i]*": "deny",
-			"/h/L[!i]*/**": "deny",
-			"/h/L": "deny",
-			"/h/L/**": "deny",
+			"/h/[!lL]*": "deny",
+			"/h/[!lL]*/**": "deny",
+			"/h/l[!iI]*": "deny",
+			"/h/l[!iI]*/**": "deny",
+			"/h/l": "deny",
+			"/h/l/**": "deny",
 			"/h/Li": "deny",
-			"/h/Library/[!A]*": "deny",
-			"/h/Library/[!A]*/**": "deny",
-			"/h/Library/A[!p]*": "deny",
-			"/h/Library/A[!p]*/**": "deny",
-			"/h/Library/A": "deny",
-			"/h/Library/A/**": "deny",
+			"/h/Library/[!aA]*": "deny",
+			"/h/Library/[!aA]*/**": "deny",
+			"/h/Library/a[!pP]*": "deny",
+			"/h/Library/a[!pP]*/**": "deny",
+			"/h/Library/a": "deny",
+			"/h/Library/a/**": "deny",
 			"/h/Library/Apples": "deny",
-			"/h/Library/App/[!c]*": "deny",
-			"/h/Library/App/[!c]*/**": "deny",
-			"/h/Library/App/c[!o]*": "deny",
-			"/h/Library/App/c[!o]*/**": "deny",
+			"/h/Library/App/[!cC]*": "deny",
+			"/h/Library/App/[!cC]*/**": "deny",
+			"/h/Library/App/c[!oO]*": "deny",
+			"/h/Library/App/c[!oO]*/**": "deny",
 			"/h/Library/App/c": "deny",
 			"/h/Library/App/c/**": "deny",
 			"/h/Library/App/copy-old": "deny",
@@ -537,7 +575,7 @@ describe("the fence, a short table by patterns", () => {
 		expect(table["/h/ab"]).toBe("read");
 		expect(table["/h/abc"]).toBe("write");
 		expect(table["/h/abd"]).toBe("deny");
-		expect(table["/h/a[!b]*"]).toBe("deny");
+		expect(table["/h/a[!bB]*"]).toBe("deny");
 	});
 
 	it("never writes a key for `.` or `..`, which breaks the box's profile", () => {
@@ -590,7 +628,7 @@ describe("the fence, a short table by patterns", () => {
 			"write",
 			two({"/h": ["wo[rk]", "near"], "/h/wo[rk]": ["copy", "old"]}),
 		);
-		expect(below["/h/[!w]*"]).toBe("deny");
+		expect(below["/h/[!wW]*"]).toBe("deny");
 		expect(below["/h/wo[[]rk[]]/old"]).toBe("deny");
 		expect(below["/h/wo[[]rk[]]/old/**"]).toBe("deny");
 		expect(Object.keys(below).filter((key) => key.startsWith("/h/wo[[]rk[]]/["))).toEqual([]);
@@ -627,6 +665,88 @@ describe("the fence, a short table by patterns", () => {
 	it("lists every entry at depth 0, with one key for each and no pattern", () => {
 		const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": ["copy", "copy2", "n"]}));
 		expect(table).toEqual({...ALWAYS, "/h/copy2": "deny", "/h/n": "deny", "/h/copy": "write"});
+	});
+
+	// The box's matcher ignores case on a Mac: `l[!a]*` also closes `Library`, so one prefix in two
+	// cases has to be one branch of the walk.
+	it("walks one branch per prefix with no case, each class holding both cases", () => {
+		const table = homeFence(
+			"/h",
+			["/h/Library/pnpm"],
+			"/h/lab/copy",
+			"write",
+			two({
+				"/h": ["Library", "lab", "L", "lib2", "LAB2", "Local"],
+				"/h/Library": ["pnpm", "Keychains"],
+				"/h/lab": ["copy", "old"],
+			}),
+		);
+		expect(table).toEqual({
+			...ALWAYS,
+			"/h/[!lL]*": "deny",
+			"/h/[!lL]*/**": "deny",
+			"/h/l[!aAiI]*": "deny",
+			"/h/l[!aAiI]*/**": "deny",
+			"/h/l": "deny",
+			"/h/l/**": "deny",
+			"/h/LAB2": "deny",
+			"/h/lib2": "deny",
+			"/h/Library/[!pP]*": "deny",
+			"/h/Library/[!pP]*/**": "deny",
+			"/h/Library/p[!nN]*": "deny",
+			"/h/Library/p[!nN]*/**": "deny",
+			"/h/Library/p": "deny",
+			"/h/Library/p/**": "deny",
+			"/h/lab/[!cC]*": "deny",
+			"/h/lab/[!cC]*/**": "deny",
+			"/h/lab/c[!oO]*": "deny",
+			"/h/lab/c[!oO]*/**": "deny",
+			"/h/lab/c": "deny",
+			"/h/lab/c/**": "deny",
+			"/h/Library/pnpm": "read",
+			"/h/lab/copy": "write",
+		});
+	});
+
+	it.each<[string, string, readonly string[]]>([
+		["Documents/tool", "dev/copy", ["/h/[!dD]*", "/h/d[!eEoO]*"]],
+		["Abc/tool", "axy/copy", ["/h/[!aA]*", "/h/a[!bBxX]*"]],
+		["LIBa/tool", "libb/copy", ["/h/[!lL]*", "/h/l[!iI]*"]],
+		[".A/tool", ".b/copy", ["/h/[!.]*", "/h/.[!aAbB]*"]],
+		["w/tool", "Wx/copy", ["/h/[!wW]*", "/h/w[!xX/]*", "/h/wx?*"]],
+	])("closes no way down by another's case: %s and %s", (tool, copy, keys) => {
+		const [toolWay = "", toolName = ""] = tool.split("/");
+		const [copyWay = "", copyName = ""] = copy.split("/");
+		const table = homeFence(
+			"/h",
+			[`/h/${tool}`],
+			`/h/${copy}`,
+			"write",
+			two({"/h": [toolWay, copyWay], [`/h/${toolWay}`]: [toolName], [`/h/${copyWay}`]: [copyName]}),
+		);
+		for (const key of keys) expect(table[key]).toBe("deny");
+		expect(table[`/h/${tool}`]).toBe("read");
+		expect(table[`/h/${copy}`]).toBe("write");
+	});
+
+	// Codex refuses a whole table with a key that is not absolute, so every command would stop.
+	it("writes no key for a login at a relative path, and closes where it really is", () => {
+		const table = homeFence("/h", [], "/h/copy", "write", two({"/h": ["copy"]}), ["x/auth.json"]);
+		expect(table["x/auth.json"]).toBeUndefined();
+		expect(Object.keys(table).filter((key) => !key.startsWith("/"))).toEqual([]);
+	});
+
+	it("gives a way down that is its own prefix in another case no line of its own", () => {
+		const table = homeFence(
+			"/h",
+			["/h/W/tool"],
+			"/h/wx/copy",
+			"write",
+			two({"/h": ["W", "wx"], "/h/W": ["tool"], "/h/wx": ["copy"]}),
+		);
+		expect(table["/h/w"]).toBeUndefined();
+		expect(table["/h/W"]).toBeUndefined();
+		expect(table["/h/[!wW]*"]).toBe("deny");
 	});
 
 	it("trusts patterns only on a Mac, the one box where they are proved", () => {
@@ -684,6 +804,84 @@ describe("the fence around home, from a listing", () => {
 		expect(table["/h"]).toBe("deny");
 		expect(table["/usr/local/node"]).toBe("read");
 		expect(table["/tmp/copy"]).toBe("write");
+	});
+
+	it("closes the account's own home as one line when `HOME` says another and nothing is opened in it", () => {
+		const table = homeFence("/b", [], "/b/copy", "write", disk({"/b": ["copy"]}, {account: "/a"}));
+		expect(table["/a"]).toBe("deny");
+		expect(Object.keys(table).filter((key) => key.startsWith("/a/"))).toEqual([]);
+		expect(table["/b/copy"]).toBe("write");
+	});
+
+	it("walks the account's own home when something is opened in it, its logins closed", () => {
+		const table = homeFence(
+			"/b",
+			["/a/.volta"],
+			"/b/copy",
+			"write",
+			disk({"/b": ["copy"], "/a": [".volta", ".ssh", "beside"]}, {account: "/a"}),
+		);
+		expect(table["/a"]).toBeUndefined();
+		expect(table["/a/.volta"]).toBe("read");
+		expect(table["/a/beside"]).toBe("deny");
+		for (const login of [...LOGIN_FILES, ".codex", ".codex/auth.json"])
+			expect(table[`/a/${login}`]).toBe("deny");
+	});
+
+	it("opens nothing that would open the account's home or a login in it", () => {
+		const table = homeFence(
+			"/b",
+			["/a", "/a/.ssh", "/a/.ssh/x", "/"],
+			"/b/copy",
+			"write",
+			disk({"/b": ["copy"]}, {account: "/a"}),
+		);
+		expect(openLines(table)).toEqual([["/b/copy", "write"]]);
+		expect(table["/a"]).toBe("deny");
+	});
+
+	it("adds nothing when the account's home is `HOME`, by another spelling too", () => {
+		const made = {"/h": ["copy"]};
+		const same = homeFence("/h", [], "/h/copy", "write", disk(made));
+		expect(homeFence("/h", [], "/h/copy", "write", disk(made, {account: "/h"}))).toEqual(same);
+		expect(
+			homeFence(
+				"/h",
+				[],
+				"/h/copy",
+				"write",
+				disk(made, {account: "/spelled", real: linked({"/spelled": "/h"})}),
+			),
+		).toEqual(same);
+	});
+
+	it("closes a login that is not under home, by its path and its real target", () => {
+		const table = homeFence(
+			"/h",
+			[],
+			"/h/copy",
+			"write",
+			disk({"/h": ["copy"]}, {real: linked({"/moved/auth.json": "/keys/real.json"})}),
+			["/moved/auth.json"],
+		);
+		expect(table["/moved/auth.json"]).toBe("deny");
+		expect(table["/keys/real.json"]).toBe("deny");
+	});
+
+	it("closes a moved login that is not there yet, and one in the opened folder", () => {
+		const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": ["copy"]}), [
+			"/h/copy/auth.json",
+		]);
+		expect(table["/h/copy"]).toBe("write");
+		expect(table["/h/copy/auth.json"]).toBe("deny");
+	});
+
+	it("closes a moved login with an odd path by a pattern, as any other", () => {
+		const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": ["copy"]}), [
+			"/mo[ved/auth.json",
+		]);
+		expect(table["/mo[[]ved/auth.json"]).toBe("deny");
+		expect(table["/mo[[]ved/auth.json/**"]).toBe("deny");
 	});
 
 	it("does not read a longer name as being under home", () => {
@@ -890,6 +1088,41 @@ describe("the fence around home, from a listing", () => {
 	});
 });
 
+/** `count` lines of plain names of 250 bytes, the longest a disk takes, each one its own. */
+const longNames = (count: number) =>
+	Object.fromEntries(
+		Array.from({length: count}, (_, n): [string, "deny"] => [
+			`/private/var/tmp/box/${String(n).padStart(5, "0")}${"y".repeat(245)}`,
+			"deny",
+		]),
+	);
+/** The box runs 254 lines of `longNames` and stops at 256, so these two stand on each side of what we allow. */
+const FENCE_BYTES_MOST = 220;
+const FENCE_BYTES_LEAST = 240;
+
+/** `count` lines of patterns 30 folders down. */
+const deepPatterns = (count: number) =>
+	Object.fromEntries(
+		Array.from({length: count}, (_, n): [string, "deny"] => {
+			const key = `/private/var/tmp/box${"/d".repeat(30)}/${String(n >> 1).padStart(5, "0")}[!x]*`;
+			return [n % 2 === 0 ? key : `${key}/**`, "deny"];
+		}),
+	);
+/** The box runs about 210 lines of `deepPatterns`, so these two stand on each side of what we allow. */
+const DEEP_MOST = 140;
+const DEEP_LEAST = 180;
+/** What the box stops on, past all doubt. */
+const DEEP_STOPS = 240;
+const NAMES_STOP = 260;
+
+/** 590 lines of names as long as a disk takes, all but their ends shared. */
+const sharedNames = Object.fromEntries(
+	Array.from({length: 590}, (_, n): [string, "deny"] => [
+		`/private/var/tmp/box/${"p".repeat(245)}${n}`,
+		"deny",
+	]),
+);
+
 describe("the fence, too big for the box", () => {
 	const lines = (count: number) =>
 		Object.fromEntries(Array.from({length: count}, (_, n) => [`/home/x/private-${n}`, "deny"]));
@@ -901,6 +1134,26 @@ describe("the fence, too big for the box", () => {
 		expect(said).toContain(`at most ${FENCE_LIMIT}`);
 		expect(said).toContain("Nothing was started");
 		expect(said).not.toContain("private");
+	});
+
+	// One test on each side of each of the box's own two limits: the same tables run in the box below.
+	it("lets through what the box's pattern limit takes, and refuses what it does not", () => {
+		expect(fenceTooBig(longNames(FENCE_BYTES_MOST))).toBe(null);
+		const said = fenceTooBig(longNames(FENCE_BYTES_LEAST));
+		expect(said).toContain("Nothing was started");
+		expect(said).toContain(`${FENCE_BYTES_LEAST} lines`);
+		expect(said).not.toContain("yyy");
+	});
+
+	it("counts once what names share, as the box does", () => {
+		expect(fenceTooBig(sharedNames)).toBe(null);
+	});
+
+	it("lets through patterns the box can expand, and refuses ones too deep for it", () => {
+		expect(fenceTooBig(deepPatterns(DEEP_MOST))).toBe(null);
+		const said = fenceTooBig(deepPatterns(DEEP_LEAST));
+		expect(said).toContain("Nothing was started");
+		expect(said).toContain(`${DEEP_LEAST} lines`);
 	});
 
 	/** A real home with more near names than the box takes: patterns cannot close them, at any depth. */
@@ -1012,7 +1265,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				mkdirSync(join(home, "beside"));
 				writeFileSync(join(home, "beside", "note"), "");
 				writeFileSync(join(folder, "x.js"), "");
-				const config = codexConfig(folder, [], home, "write", localDisk);
+				const config = codexConfig(folder, [], home, "write", oneHome);
 				// Made after the table, as during a run.
 				writeFileSync(join(home, ".netrc"), "");
 				writeFileSync(join(home, "later"), "");
@@ -1040,9 +1293,9 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					const folder = join(home, "copy");
 					mkdirSync(folder);
 					writeFileSync(join(folder, "x.js"), "");
-					const room = FENCE_LIMIT - tableKeys(codexConfig(folder, [], home, "write", localDisk));
+					const room = FENCE_LIMIT - tableKeys(codexConfig(folder, [], home, "write", oneHome));
 					for (let n = 0; n < room; n++) writeFileSync(join(home, `co-near-${n}`), "");
-					const names = codexConfig(folder, [], home, "write", localDisk);
+					const names = codexConfig(folder, [], home, "write", oneHome);
 					expect(tableKeys(names)).toBe(FENCE_LIMIT);
 					expect(fenceTooBig(names.permissions.fenced.filesystem)).toBe(null);
 					// One box, for each command in it takes seconds at this size.
@@ -1057,19 +1310,255 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 			);
 
 			it(
-				"runs nothing on a table too deep for it, even under the limit",
+				"runs nothing on a table too deep for it, which we refuse first",
 				() => {
 					const home = fakeHome();
 					const folder = join(home, "copy");
 					mkdirSync(folder);
-					const config = codexConfig(folder, [], home, "write", localDisk);
+					const config = codexConfig(folder, [], home, "write", oneHome);
 					const deep = patternsBelow(config, home, Array(20).fill("d").join("/"));
 					expect(tableKeys(deep)).toBe(FENCE_LIMIT);
+					expect(fenceTooBig(deep.permissions.fenced.filesystem)).not.toBe(null);
 					expect(codexBox(folder, deep, `touch ran`)).not.toBe(0);
 					expect(existsSync(join(folder, "ran"))).toBe(false);
 				},
 				SLOW,
 			);
+
+			/** A config whose whole table is `filesystem`, to try what the box takes by itself. */
+			const onlyTable = (config: Config, filesystem: Record<string, "deny">): Config => ({
+				...config,
+				permissions: {fenced: {...config.permissions.fenced, filesystem}},
+			});
+
+			it(
+				"runs names that share a start, which count once",
+				() => {
+					const home = fakeHome();
+					const folder = join(home, "copy");
+					mkdirSync(folder);
+					const config = codexConfig(folder, [], home, "write", oneHome);
+					expect(codexBox(folder, onlyTable(config, sharedNames), "exit 0")).toBe(0);
+				},
+				SLOW,
+			);
+
+			it.each<[string, Record<string, "deny">, Record<string, "deny">]>([
+				["long names", longNames(FENCE_BYTES_MOST), longNames(NAMES_STOP)],
+				["deep patterns", deepPatterns(DEEP_MOST), deepPatterns(DEEP_STOPS)],
+			])(
+				"runs what we let through and stops on what we refuse, for %s",
+				(_, passed, refused) => {
+					const home = fakeHome();
+					const folder = join(home, "copy");
+					mkdirSync(folder);
+					const config = codexConfig(folder, [], home, "write", oneHome);
+					expect(fenceTooBig(passed)).toBe(null);
+					expect(codexBox(folder, onlyTable(config, passed), "exit 0")).toBe(0);
+					expect(fenceTooBig(refused)).not.toBe(null);
+					expect(codexBox(folder, onlyTable(config, refused), "exit 0")).not.toBe(0);
+				},
+				SLOW,
+			);
+
+			// Two ways down whose first letters differ only in case stopped every command: the pattern
+			// that closes what is beside one also closed the other.
+			it.each<[string, string, readonly string[]]>([
+				[
+					"Library/pnpm",
+					"lab/copy",
+					[
+						"Library/Keychains/k",
+						"Li/s",
+						"L/s",
+						"lib2/s",
+						"LAB2/s",
+						"la/s",
+						"lb/s",
+						"LZ/s",
+						"zed/s",
+						"Library/PN/s",
+						"lab/CO/s",
+						"lab/old/s",
+					],
+				],
+				[
+					"Documents/tool",
+					"dev/copy",
+					[
+						"Documents/secret",
+						"do/s",
+						"DOCS/s",
+						"Documents2/s",
+						"de/s",
+						"DEV2/s",
+						"D/s",
+						"dz/s",
+						"Dz2/s",
+						"Downloads/s",
+						"dev/old/s",
+					],
+				],
+				[
+					"LIBa/tool",
+					"libb/copy",
+					[
+						"LIBa/secret",
+						"libb/old/s",
+						"lib/s",
+						"LIB/s2",
+						"LIBc/s",
+						"libd/s",
+						"L/s",
+						"lz/s",
+						"Lz2/s",
+						"z/s",
+					],
+				],
+				// A class also matches a slash, so a one-letter way down needs it named.
+				["wx/tool", "W/copy", ["wx/secret", "W/old/s", "w2/s", "WZ/s", "wxy/s", "z/s"]],
+				["w/tool", "Wx/copy", ["w/secret", "Wx/old/s", "w2/s", "WZ/s", "wxy/s", "z/s"]],
+			])(
+				"runs with %s opened and a folder in %s, near names closed in either case",
+				(tool, way, closed) => {
+					const home = fakeHome();
+					const folder = join(home, way);
+					mkdirSync(folder, {recursive: true});
+					mkdirSync(join(home, tool), {recursive: true});
+					writeFileSync(join(folder, "x.js"), "");
+					writeFileSync(join(home, tool, "t"), "");
+					for (const name of closed) {
+						mkdirSync(dirname(join(home, name)), {recursive: true});
+						writeFileSync(join(home, name), "");
+					}
+					const config = codexConfig(folder, [join(home, tool)], home, "write", oneHome);
+
+					expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+					expect(codexBox(folder, config, "echo x > y")).toBe(0);
+					expect(codexBox(folder, config, `cat ${word(join(home, tool, "t"))}`)).toBe(0);
+					const open = closed.filter(
+						(name) => codexBox(folder, config, `cat ${word(join(home, name))}`) === 0,
+					);
+					expect(open).toEqual([]);
+					// By another spelling: the disk takes it, so the box must refuse it.
+					const spelled = closed.filter(
+						(name) =>
+							codexBox(folder, config, `cat ${word(join(home, name.toUpperCase()))}`) === 0 ||
+							codexBox(folder, config, `cat ${word(join(home, name.toLowerCase()))}`) === 0,
+					);
+					expect(spelled).toEqual([]);
+					// Made after the table, sharing no first two characters with a way down, in each case.
+					for (const later of ["lz-after", "LZ-AFTER", "qafter", "QAFTER"]) {
+						writeFileSync(join(home, later), "");
+						expect(codexBox(folder, config, `cat ${word(join(home, later))}`)).not.toBe(0);
+					}
+				},
+				SLOW,
+			);
+
+			it("closes the account's own home when `HOME` says another", () => {
+				const account = fakeHome();
+				const other = fakeHome();
+				const folder = join(other, "copy");
+				mkdirSync(folder);
+				mkdirSync(join(account, ".ssh"));
+				writeFileSync(join(account, ".ssh", "id_x"), "");
+				writeFileSync(join(account, "beside"), "");
+				writeFileSync(join(account, "t"), "");
+				const closes = (config: Config) => [
+					codexBox(folder, config, `cat ${word(join(account, ".ssh", "id_x"))}`),
+					codexBox(folder, config, `cat ${word(join(account, "beside"))}`),
+					codexBox(folder, config, `cat ${word(join(account, ".codex", "auth.json"))}`),
+				];
+				const trusting = codexConfig(folder, [], other, "write", oneHome);
+				expect(closes(trusting)[0]).toBe(0);
+
+				const config = codexConfig(folder, [], other, "write", {...oneHome, account});
+				expect(closes(config).filter((code) => code === 0)).toEqual([]);
+				expect(codexBox(folder, config, "echo x > y")).toBe(0);
+				const walked = join(account, "tool");
+				mkdirSync(walked);
+				writeFileSync(join(walked, "t"), "");
+				const opened = codexConfig(folder, [walked], other, "write", {...oneHome, account});
+				expect(closes(opened).filter((code) => code === 0)).toEqual([]);
+				expect(codexBox(folder, opened, `cat ${word(join(walked, "t"))}`)).toBe(0);
+			});
+
+			it("closes a login outside home, by its path and where it leads", () => {
+				const home = fakeHome();
+				const folder = join(home, "copy");
+				mkdirSync(folder);
+				const moved = scratchFolder();
+				writeFileSync(join(moved, "auth.json"), PLAN);
+				writeFileSync(join(moved, "other"), "");
+				const away = scratchFolder();
+				writeFileSync(join(away, "real.json"), PLAN);
+				symlinkSync(join(away, "real.json"), join(moved, "linked.json"));
+				const direct = codexConfig(folder, [], home, "write", oneHome, {}, [
+					join(moved, "auth.json"),
+				]);
+				const linkedLogin = codexConfig(folder, [], home, "write", oneHome, {}, [
+					join(moved, "linked.json"),
+				]);
+
+				expect(codexBox(folder, direct, `cat ${word(join(moved, "auth.json"))}`)).not.toBe(0);
+				expect(codexBox(folder, direct, `cat ${word(join(moved, "other"))}`)).toBe(0);
+				expect(codexBox(folder, linkedLogin, `cat ${word(join(moved, "linked.json"))}`)).not.toBe(
+					0,
+				);
+				expect(codexBox(folder, linkedLogin, `cat ${word(join(away, "real.json"))}`)).not.toBe(0);
+			});
+
+			describe("in a tree as the lane makes it, a worktree of a clone beside it", () => {
+				/** `<home>/work/clone` and its worktrees `<home>/work/trees/<n>`, by real git, with no owner's config. */
+				const lane = () => {
+					const home = fakeHome();
+					const clone = join(home, "work", "clone");
+					const tree = join(home, "work", "trees", "7");
+					mkdirSync(clone, {recursive: true});
+					const git = (cwd: string, ...args: readonly string[]) =>
+						spawnSync(
+							"git",
+							["-c", "user.name=lane", "-c", "user.email=lane@fabrika.invalid", ...args],
+							{
+								cwd,
+								stdio: "ignore",
+								env: {
+									PATH: process.env.PATH,
+									GIT_CONFIG_GLOBAL: "/dev/null",
+									GIT_CONFIG_SYSTEM: "/dev/null",
+								},
+							},
+						).status;
+					expect(git(clone, "init", "--quiet", "-b", "main")).toBe(0);
+					writeFileSync(join(clone, "tracked"), "one\n");
+					expect(git(clone, "add", "tracked")).toBe(0);
+					expect(git(clone, "commit", "--quiet", "-m", "first")).toBe(0);
+					expect(git(clone, "worktree", "add", "--quiet", "-b", "lane/7", tree)).toBe(0);
+					expect(git(clone, "worktree", "add", "--quiet", "-b", "lane/8", `${tree}/../8`)).toBe(0);
+					writeFileSync(join(tree, "tracked"), "two\n");
+					return {home, clone, tree, sibling: join(home, "work", "trees", "8")};
+				};
+				const GIT = "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null /usr/bin/git";
+
+				it("reads with git, and nothing of the clone's or a sibling's files", () => {
+					const {home, clone, tree, sibling} = lane();
+					const config = codexConfig(tree, gitOf(tree), home, "write", oneHome);
+
+					expect(codexBox(tree, config, `${GIT} status`)).toBe(0);
+					expect(codexBox(tree, config, `${GIT} diff`)).toBe(0);
+					expect(codexBox(tree, config, `${GIT} log -1`)).toBe(0);
+					expect(codexBox(tree, config, `cat ${word(join(clone, "tracked"))}`)).not.toBe(0);
+					expect(codexBox(tree, config, `cat ${word(join(sibling, "tracked"))}`)).not.toBe(0);
+				});
+
+				it("reads nothing with git when no read line opens the clone", () => {
+					const {home, tree} = lane();
+					const config = codexConfig(tree, [], home, "write", oneHome);
+
+					expect(codexBox(tree, config, `${GIT} status`)).not.toBe(0);
+				});
+			});
 
 			it(
 				"closes every name beside the way down, near names and other cases too",
@@ -1124,7 +1613,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 						mkdirSync(dirname(join(home, name)), {recursive: true});
 						writeFileSync(join(home, name), "");
 					}
-					const config = codexConfig(folder, [join(home, tool)], home, "write", localDisk);
+					const config = codexConfig(folder, [join(home, tool)], home, "write", oneHome);
 
 					expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 					expect(codexBox(folder, config, "echo x > y")).toBe(0);
@@ -1170,7 +1659,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				symlinkSync(join(home, ".codex", "auth.json"), join(home, "a"));
 				symlinkSync(join(home, ".ssh"), join(home, "dir"));
 				const tools = ["t", "h", "c", "o", "a", "dir/sub"].map((name) => join(home, name));
-				const config = codexConfig(folder, tools, home, "write", localDisk);
+				const config = codexConfig(folder, tools, home, "write", oneHome);
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 				for (const secret of [
@@ -1195,7 +1684,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				writeFileSync(join(folder, "keys", "id_x"), "");
 				writeFileSync(join(folder, "x.js"), "");
 				symlinkSync(join(folder, "keys"), join(home, ".ssh"));
-				const config = codexConfig(folder, [], home, "write", localDisk);
+				const config = codexConfig(folder, [], home, "write", oneHome);
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 				expect(codexBox(folder, config, `cat ${word(join(home, ".ssh", "id_x"))}`)).not.toBe(0);
@@ -1212,7 +1701,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				writeFileSync(join(real, "beside"), "");
 				const link = `${real}-link`;
 				symlinkSync(real, link);
-				const config = codexConfig(join(link, "copy"), [], link, "write", localDisk);
+				const config = codexConfig(join(link, "copy"), [], link, "write", oneHome);
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 				expect(codexBox(folder, config, "echo x > y")).toBe(0);
@@ -1251,7 +1740,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					const inner = `${name}-folder`;
 					mkdirSync(join(home, inner));
 					writeFileSync(join(home, inner, "note"), "");
-					const config = codexConfig(folder, [], home, "write", localDisk);
+					const config = codexConfig(folder, [], home, "write", oneHome);
 
 					expect(codexBox(folder, config, `cat ${word(join(home, name))}`)).not.toBe(0);
 					expect(codexBox(folder, config, `cat ${word(join(home, inner, "note"))}`)).not.toBe(0);
@@ -1282,7 +1771,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					writeFileSync(join(folder, "x.js"), "");
 					const accesses: readonly FolderAccess[] = ["write", "read"];
 					for (const access of accesses) {
-						const config = codexConfig(folder, [tool], home, access, localDisk);
+						const config = codexConfig(folder, [tool], home, access, oneHome);
 						expect(codexBox(folder, config, "cat f")).toBe(0);
 						expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 						expect(codexBox(folder, config, "echo x > y") === 0).toBe(access === "write");
@@ -1301,7 +1790,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				const folder = join(home, "co1", "copy");
 				mkdirSync(folder, {recursive: true});
 				writeFileSync(join(home, "co\r"), "");
-				const config = codexConfig(folder, [], home, "write", localDisk);
+				const config = codexConfig(folder, [], home, "write", oneHome);
 
 				expect(codexBox(folder, config, `cat ${word(join(home, "co\r"))}`)).not.toBe(0);
 				expect(codexBox(folder, config, "echo x > y")).not.toBe(0);
@@ -1315,7 +1804,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					writeFileSync(join(made, "f"), "");
 				}
 				writeFileSync(join(folder, "x.js"), "");
-				const config = codexConfig(folder, [], home, "write", localDisk);
+				const config = codexConfig(folder, [], home, "write", oneHome);
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 				expect(codexBox(folder, config, "echo x > y")).toBe(0);
@@ -1330,8 +1819,8 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				writeFileSync(join(home, ".gnupg", "key"), "");
 				const under = join(home, "copy");
 				mkdirSync(under);
-				const beside = codexConfig(elsewhere, [home], home, "write", localDisk);
-				const inside = codexConfig(under, [home], home, "write", localDisk);
+				const beside = codexConfig(elsewhere, [home], home, "write", oneHome);
+				const inside = codexConfig(under, [home], home, "write", oneHome);
 
 				expect(codexBox(elsewhere, beside, "exit 0")).toBe(0);
 				expect(codexBox(elsewhere, beside, `cat "${home}/.gnupg/key"`)).not.toBe(0);
@@ -1343,7 +1832,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				const home = fakeHome();
 				mkdirSync(join(home, ".gnupg"));
 				writeFileSync(join(home, ".gnupg", "key"), "");
-				const config = codexConfig(home, [], home, "write", localDisk);
+				const config = codexConfig(home, [], home, "write", oneHome);
 
 				expect(codexBox(home, config, `cat "${home}/.gnupg/key"`)).not.toBe(0);
 			});

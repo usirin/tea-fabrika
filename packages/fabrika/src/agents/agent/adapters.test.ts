@@ -4,10 +4,11 @@ import {
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {dirname, join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
@@ -489,6 +490,101 @@ describe("codex: the system prompt", () => {
 		// A near name, so it is closed by name with patterns or without.
 		expect(table).toContain(`"${owner}/co-beside"="deny"`);
 		expect(table).not.toContain(`"${owner}"="deny"`);
+	});
+
+	/** The table of one turn in `home`'s `copy`, with `more` in the parent's environment and Codex at `codex`. */
+	const tableFor = async (
+		home: string,
+		codex: string,
+		more: Readonly<Record<string, string>> = {},
+	) => {
+		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir(), ...more};
+		const seen: ChildProcess.StandardCommand[] = [];
+		const spawner = ChildProcessSpawner.make((command) => {
+			if (command._tag === "StandardCommand") seen.push(command);
+			return Effect.fail(
+				PlatformError.systemError({_tag: "NotFound", module: "test", method: "spawn"}),
+			);
+		});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const adapter = yield* codexAdapter({codex, parent, access: "write"});
+				return yield* Effect.flip(
+					Effect.scoped(adapter.start({...TURN, folder: join(home, "copy")})),
+				);
+			}).pipe(
+				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+				Effect.provide(nodeServices),
+			),
+		);
+		const args = seen[0]?.args ?? [];
+		return args.find((arg) => arg.startsWith("permissions.fenced.filesystem=")) ?? "";
+	};
+
+	it.each<[string, string, string]>([
+		["pnpm's folder on a Mac", "Library/pnpm/codex", "Library"],
+		["a tool's bin, beside its login", ".cargo/bin/codex", ".cargo"],
+		["the shared `.local`", ".local/bin/codex", ".local"],
+		["the shared `.config`", ".config/tool/codex", ".config"],
+	])("opens only the folder a plain Codex is in, in %s", async (_, at, parent) => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const codex = join(home, at);
+		mkdirSync(dirname(codex), {recursive: true});
+		writeFileSync(codex, "");
+		const table = await tableFor(home, codex);
+		expect(table).toContain(`"${dirname(codex)}"="read"`);
+		expect(table).not.toContain(`"${join(home, parent)}"="read"`);
+	});
+
+	it("opens a linked Codex's own package, where its binary is, and only the packages of `.codex`", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const bin = join(home, ".npm-global", "bin");
+		const target = join(home, ".npm-global", "lib", "c", "bin", "codex.js");
+		mkdirSync(bin, {recursive: true});
+		mkdirSync(dirname(target), {recursive: true});
+		writeFileSync(target, "");
+		symlinkSync(target, join(bin, "codex"));
+		const table = await tableFor(home, join(bin, "codex"));
+		expect(table).toContain(`"${join(home, ".npm-global", "lib", "c")}"="read"`);
+		expect(table).not.toContain(`"${join(home, ".npm-global")}"="read"`);
+
+		const packages = join(home, ".codex", "packages");
+		const standalone = join(packages, "standalone", "v1", "bin");
+		mkdirSync(standalone, {recursive: true});
+		writeFileSync(join(standalone, "codex"), "");
+		const standing = await tableFor(home, join(standalone, "codex"));
+		expect(standing).toContain(`"${packages}"="read"`);
+		expect(standing).toContain(`"${join(home, ".codex", "auth.json")}"="deny"`);
+	});
+
+	it("closes the login where `CODEX_HOME` puts it, and where a link there leads", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		const moved = realpathSync(mkdtempSync(join(tmpdir(), "codex-moved-")));
+		const away = realpathSync(mkdtempSync(join(tmpdir(), "codex-away-")));
+		writeFileSync(
+			join(away, "real.json"),
+			JSON.stringify({auth_mode: "chatgpt", OPENAI_API_KEY: null}),
+		);
+		symlinkSync(join(away, "real.json"), join(moved, "auth.json"));
+		const table = await tableFor(home, "/nowhere/codex", {CODEX_HOME: moved});
+		expect(table).toContain(`"${join(moved, "auth.json")}"="deny"`);
+		expect(table).toContain(`"${join(away, "real.json")}"="deny"`);
+	});
+
+	it("opens the clone a worktree shares, read-only, for a folder that is one", async () => {
+		const home = madeUpHome();
+		const own = join(home, "clone", ".git", "worktrees", "7");
+		const tree = join(home, "copy");
+		mkdirSync(own, {recursive: true});
+		mkdirSync(tree);
+		writeFileSync(join(tree, ".git"), `gitdir: ${own}\n`);
+		writeFileSync(join(own, "commondir"), "../..\n");
+		writeFileSync(join(own, "gitdir"), `${join(tree, ".git")}\n`);
+		const table = await tableFor(home, "/nowhere/codex");
+		expect(table).toContain(`"${join(home, "clone", ".git")}"="read"`);
 	});
 
 	it("starts nothing and says why when the box could not take the home's table", async () => {

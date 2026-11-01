@@ -40,7 +40,9 @@ const VOLTA_ON_PATH = /(?:^|:)(\/[^:]*\/\.volta)\/bin\/?(?::|$)/;
  * looks for them under the home folder unless this says where they are. Under another home it finds
  * none, looks along the PATH for the real tool, finds itself, and waits on the child it starts: a
  * chain that grows to the user's process limit. With a Volta pin it says "Could not download"
- * instead. So its folder on the PATH brings its home, set in the parent or not.
+ * instead. So its folder on the PATH brings its home, set in the parent or not. The chain still
+ * happens for `VOLTA_HOME=""`, another `VOLTA_HOME`, or a shim's folder not named `.volta`, and no
+ * box caps its processes: docs/direction/codex-box-home-listing.md.
  */
 export const toolHome = (parent: Env = process.env): Record<string, string> => {
 	const home = parent.VOLTA_HOME ?? VOLTA_ON_PATH.exec(parent.PATH ?? "")?.[1];

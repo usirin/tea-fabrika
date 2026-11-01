@@ -6,6 +6,7 @@ import {
 	codexConfig,
 	codexHome,
 	codexHomeOf,
+	codexLogin,
 	codexSystem,
 	type FolderAccess,
 	fenceTooBig,
@@ -15,7 +16,7 @@ import {
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
 import {type Env, runEnv, toolHome} from "../claude/env.ts";
-import {toolchain} from "../claude/sandbox.ts";
+import {gitOf, toolchain, toolRoot} from "../claude/sandbox.ts";
 
 // Codex through `codex exec --json`, as an adapter of the interface
 // (../agent/turn.ts). One process per turn: it prints one JSON event per
@@ -34,9 +35,10 @@ import {toolchain} from "../claude/sandbox.ts";
 //     (`OPENAI_API_KEY`, `CODEX_API_KEY`) is ever handed on;
 //   - the permission profile of the ACP row (`codexConfig`): the folder and the
 //     toolchain open and what is beside them under home closed (`homeFence`),
-//     core shell variables only, no login shell, no web search, Codex's
-//     far-reaching features off. A table too big for the box starts nothing
-//     (`fenceTooBig`);
+//     the login closed wherever it is, core shell variables only, no login
+//     shell, no web search, Codex's far-reaching features off. A worktree's
+//     clone is opened to read (`gitOf`), so git works in a lane's tree. A table
+//     too big for the box starts nothing (`fenceTooBig`);
 //   - `--ignore-user-config`, and approvals `never`: nothing asks a person.
 //
 // Node at the edge: `realpathSync` once, to find the folder Codex's own
@@ -174,17 +176,17 @@ export const codexEnvOf = (parent: Env, home: string): Record<string, string> =>
 
 /**
  * The folders Codex's own binary runs from, read-only inside its box: the
- * link's folder, and where it points. A standalone install keeps its releases
- * under `~/.codex/packages` behind a `current` link, so the box opens that
- * folder (as experiment 152 did), never the rest of `~/.codex`. A Codex at
- * `~/codex` or `~/bin/codex` answers home here: the fence opens nothing for it
- * (`homeFence`).
+ * link's folder, and where it points, by the toolchain's own rule (`toolRoot`).
+ * A standalone install keeps its releases under `~/.codex/packages` behind a
+ * `current` link, so the box opens that folder (as experiment 152 did), never
+ * the rest of `~/.codex`. A Codex at `~/codex` answers home here: the fence
+ * opens nothing for it (`homeFence`).
  */
 const codexFolders = (codex: string, owner: string): string[] => {
 	const real = Option.liftThrowable((p: string) => realpathSync(p))(codex);
 	const packages = `${owner}/.codex/packages`;
 	const target = Option.isSome(real) ? real.value : codex;
-	return [dirname(codex), target.startsWith(`${packages}/`) ? packages : dirname(dirname(target))];
+	return [dirname(codex), target.startsWith(`${packages}/`) ? packages : toolRoot(target, owner)];
 };
 
 export const codexAdapter = (
@@ -195,14 +197,18 @@ export const codexAdapter = (
 		const fs = yield* FileSystem.FileSystem;
 		const parent = config.parent ?? process.env;
 		const owner = parent.HOME ?? "";
-		const login = `${parent.CODEX_HOME ?? `${owner}/.codex`}/auth.json`;
+		const login = codexLogin(parent);
 		return {
 			name: "codex",
 			// No dollar cap on a plan. A typed answer by `--output-schema`, when strict mode takes the schema.
 			holds: {usd: false, schema: true},
 			start: (turn) =>
 				Effect.gen(function* () {
-					const tools = [...toolchain(parent), ...codexFolders(config.codex, owner)];
+					const tools = [
+						...toolchain(parent),
+						...codexFolders(config.codex, owner),
+						...gitOf(turn.folder),
+					];
 					const profile = codexConfig(
 						turn.folder,
 						tools,
@@ -210,6 +216,7 @@ export const codexAdapter = (
 						config.access,
 						localDisk,
 						toolHome(parent),
+						[login],
 					);
 					const tooBig = fenceTooBig(profile.permissions.fenced.filesystem);
 					if (tooBig !== null) return yield* Effect.fail(failed("contain", tooBig));
