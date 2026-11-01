@@ -1,5 +1,5 @@
 import {type FakeScript, fakeAdapter} from "../agent/fake.ts";
-import type {Adapter, AdapterTurn, Raw} from "../agent/turn.ts";
+import type {Adapter, AdapterTurn, Raw, Tokens} from "../agent/turn.ts";
 
 // Two fake providers for the agent programs (experiment 169), one per real
 // one, each holding what its real adapter holds and saying a turn the way its
@@ -12,13 +12,22 @@ import type {Adapter, AdapterTurn, Raw} from "../agent/turn.ts";
 //   const {claude, codex} = fakeProviders((turn) => story(turn));
 //   makeAgents({adapters: {claude, codex}, sessions: memorySessions(), reaper: noReaper})
 
-/** One turn, as both providers would tell it. `answer`: the JSON the agent ends with. `hang`: it never ends. */
+/**
+ * One turn, as both providers would tell it. `answer`: the JSON the agent ends with. `hang`: it
+ * never ends. `spent`: tokens it says before it hangs, which neither real adapter does today: it
+ * is the case of a provider that counts as it goes.
+ */
 export interface Story {
 	readonly tool?: {readonly id: string; readonly title: string};
 	readonly said: string;
 	readonly answer: unknown;
 	readonly hang?: boolean;
+	readonly spent?: Tokens;
 }
+
+/** A hanging turn's tokens so far, if its story says any. */
+const spentRaws = (s: Story): readonly Raw[] =>
+	s.spent === undefined ? [] : [{_tag: "tokens", tokens: s.spent, whole: false}];
 
 /** Claude through its SDK: a tool call, then its result, the text, the turn's tokens, dollars and typed answer. */
 export const claudeRaws = (s: Story): readonly Raw[] => [
@@ -30,7 +39,7 @@ export const claudeRaws = (s: Story): readonly Raw[] => [
 			]),
 	{_tag: "said", text: s.said},
 	...(s.hang === true
-		? []
+		? spentRaws(s)
 		: [
 				{_tag: "tokens", tokens: {input: 1200, cached: 900, output: 40}, whole: true} as const,
 				{_tag: "ended", stop: "end_turn", structured: s.answer, usd: 0.012, requests: 2} as const,
@@ -51,7 +60,7 @@ export const codexRaws = (s: Story): readonly Raw[] => [
 			]),
 	{_tag: "said", text: s.said},
 	...(s.hang === true
-		? []
+		? spentRaws(s)
 		: [
 				{_tag: "said", text: JSON.stringify(s.answer)} as const,
 				{_tag: "tokens", tokens: {input: 1100, cached: 800, output: 35}, whole: true} as const,

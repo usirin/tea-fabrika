@@ -11,7 +11,7 @@ import {
 	writeSystem,
 } from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
-import {type Adapter, failed, type Raw} from "../agent/turn.ts";
+import {type Adapter, asksNothing, failed, type Raw} from "../agent/turn.ts";
 import {type Env, runEnv} from "../claude/env.ts";
 import {toolchain} from "../claude/sandbox.ts";
 
@@ -205,7 +205,8 @@ export const codexAdapter = (
 						Effect.provideService(FileSystem.FileSystem, fs),
 						Effect.mapError((why) => failed("start", why)),
 					);
-					const strict = strictOk(turn.schema);
+					const free = asksNothing(turn.schema);
+					const strict = !free && strictOk(turn.schema);
 					const schemaFile = `${home}/answer-schema.json`;
 					if (strict)
 						yield* fs
@@ -226,7 +227,7 @@ export const codexAdapter = (
 						...flagsOf(system.config),
 						...(strict ? ["--output-schema", schemaFile] : []),
 						...(turn.resume === null ? [] : ["resume", turn.resume]),
-						strict ? turn.prompt : `${turn.prompt}\n${formOf(turn.schema)}`,
+						strict || free ? turn.prompt : `${turn.prompt}\n${formOf(turn.schema)}`,
 					];
 					const handle = yield* spawner
 						.spawn(

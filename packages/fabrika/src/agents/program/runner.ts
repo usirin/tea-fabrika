@@ -1,5 +1,5 @@
-import {Effect, Queue, type Schema, Stream} from "effect";
-import {type Kept, type Program, start, tell} from "../../program/program.ts";
+import {Cause, Deferred, Effect, Queue, type Schema, Stream} from "effect";
+import {type Ended, type Kept, type Program, start, tell} from "../../program/program.ts";
 import {Agents} from "../agent/turn.ts";
 import type {DraftMsg, DraftRun, Spend} from "../claude/draft.ts";
 import type {AgentFlags, chat, flags, inputs, outputs} from "./chat.ts";
@@ -16,6 +16,25 @@ import {type conversationKind, End} from "./conversation.ts";
 //   subscribe: {sort_run: (sub) => runner(sub.deps.run).pipe(Stream.map(sorted.decode))}
 //
 // The child run lives while the Sub is on: the Sub turned off stops the run, and its turn.
+//
+// A child started again under the same id tells no second prompt. What it kept says what to do:
+//
+//   no turn yet         a fresh run: tell the prompt
+//   a turn not ended    the program runs it again by itself: wait for its end
+//   a turn ended        the answer is paid for: hand it on, and start no turn
+//
+// An answer the provider held to `--schema` and refused goes on as the Msg's `output`, so the
+// stage's decode names what is wrong with it, instead of `null`. So a stage on this runner must
+// decode (`decoder` in the pipeline): `output` is plain JSON that may not fit.
+
+/** Why a run ended with no turn's end, in the program's own words where it gave any. */
+const whyEnded = (ended: Ended<unknown>): string => {
+	if (ended.kind !== "failed") return `the agent program ${ended.kind} with no answer`;
+	const why = Cause.squash(ended.cause);
+	const words =
+		typeof why === "object" && why !== null && "message" in why ? why.message : String(why);
+	return `the agent program failed with no answer: ${String(words)}`;
+};
 
 /** What `claude` and `codex` are, as `defineProgram` made them: their main is `chat`. */
 type AgentProgram = Program<
@@ -48,10 +67,28 @@ export const programRunner =
 			Effect.gen(function* () {
 				const out = yield* Queue.unbounded<Msg>();
 				const tools = new Set<string>();
+				const opened = yield* Deferred.make<void>();
+				/** The Msg of a turn's end, heard now or read back from what the run kept. */
+				const msgOfEnd = (e: End): Msg => {
+					const spend = End.toSpend(e);
+					return e.stop === "end_turn"
+						? ({
+								type: `${name}_finished`,
+								key,
+								id,
+								output: e.answer ?? e.misfit ?? null,
+								session: run.session.id,
+								spend,
+							} as Msg)
+						: failedMsg(e.error ?? e.stop, spend);
+				};
 				const started = yield* start(
 					config.program,
 					config.flags(run),
 					{
+						started: () => {
+							Deferred.doneUnsafe(opened, Effect.void);
+						},
 						// One Msg per tool call, at its first update, as `agentRunner` does.
 						tool: (t) => {
 							if (tools.has(t.id)) return;
@@ -59,20 +96,7 @@ export const programRunner =
 							Queue.offerUnsafe(out, {type: `${name}_tool`, key, id, tool: t.title} as Msg);
 						},
 						ended: (e) => {
-							const spend = End.toSpend(e);
-							Queue.offerUnsafe(
-								out,
-								e.stop === "end_turn"
-									? ({
-											type: `${name}_finished`,
-											key,
-											id,
-											output: e.answer,
-											session: run.session.id,
-											spend,
-										} as Msg)
-									: failedMsg(e.error ?? e.stop, spend),
-							);
+							Queue.offerUnsafe(out, msgOfEnd(e));
 						},
 					},
 					config.keeping(run),
@@ -81,16 +105,24 @@ export const programRunner =
 					return Stream.make(
 						failedMsg(`the agent program refused ${started.name}: ${started.why}`, none),
 					);
-				// A run that ends with no turn's end (refused at start) still ends the Draft.
+				// A run that ends with no turn's end (refused at start) still ends the Draft, and says why.
 				yield* Effect.forkScoped(
 					started.run.ended.pipe(
-						Effect.flatMap((ended) =>
-							Queue.offer(out, failedMsg(`the agent program ${ended.kind} with no answer`, none)),
-						),
+						Effect.flatMap((ended) => Queue.offer(out, failedMsg(whyEnded(ended), none))),
 					),
 				);
-				// A fresh run's mailbox is empty: one value never finds it full.
-				yield* tell(started.run, "prompt", run.prompt).pipe(Effect.orDie);
+				// Its conversation is there once it says `started`; a refused run never does.
+				const open = yield* Effect.raceFirst(
+					Effect.as(Deferred.await(opened), true),
+					Effect.as(started.run.ended, false),
+				);
+				if (open) {
+					const last = started.run.machines.conversation.state()?.turns.at(-1);
+					if (last === undefined)
+						// A fresh run's mailbox is empty: one value never finds it full.
+						yield* tell(started.run, "prompt", run.prompt).pipe(Effect.orDie);
+					else if (last.end !== null) yield* Queue.offer(out, msgOfEnd(last.end));
+				}
 				// Stdin's end: one prompt, then the run ends after its turn, as `claude -p` does.
 				started.close("prompt");
 				return Stream.fromQueue(out).pipe(Stream.takeUntil((m) => m.type !== `${name}_tool`));

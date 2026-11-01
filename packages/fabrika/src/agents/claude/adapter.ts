@@ -3,7 +3,7 @@ import {randomUUID} from "node:crypto";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
 import {claudeOptions, claudeSystem} from "../acp/harness.ts";
-import {type Adapter, failed, type Raw, type Tokens} from "../agent/turn.ts";
+import {type Adapter, asksNothing, failed, type Raw, type Tokens} from "../agent/turn.ts";
 import {extraTools, NotStarted, type Open, openLive} from "./draft.ts";
 import {agentEnv} from "./env.ts";
 import {ownRules, settingsRefusal} from "./rules.ts";
@@ -163,7 +163,9 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 				...(turn.model === null ? {} : {model: turn.model}),
 				...(turn.effort === null ? {} : {effort: turn.effort as NonNullable<Options["effort"]>}),
 				...(turn.resume === null ? {sessionId: own} : {resume: own}),
-				outputFormat: {type: "json_schema", schema: turn.schema},
+				...(asksNothing(turn.schema)
+					? {}
+					: {outputFormat: {type: "json_schema" as const, schema: turn.schema}}),
 				spawnClaudeCodeProcess: (o) => {
 					const child = spawn(o.command, o.args, {
 						...(o.cwd === undefined ? {} : {cwd: o.cwd}),

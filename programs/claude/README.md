@@ -9,24 +9,28 @@ prompt and closes it gets `claude -p`. The design and its numbers are in
 // src/index.ts: one program, wired from the parts it shares with `codex`
 export const claude = defineProgram({
 	name: "claude",
-	flags, inputs, outputs,                         // @kampus/fabrika/agents/program
+	flags, inputs, outputs,                         // @kampus/fabrika-old/agents/program
 	machines: {conversation: conversationKind},
 	view: {machine: "conversation", data: Conversation, of: (s: Conversation) => s},
 	main: (io) => chat("claude", io),
 });
 
-// tsh> claude --folder /work/copy prompt="what is 2+3?"
+// start(claude, {folder: "/work/copy", ...}, listeners, keeping)
+// tell(run, "prompt", "what is 2+3?")
 // started {provider: "claude", session: "claude/…", resumed: false, resent: 0}
 // said {turn: 1, text: "5"}
 // ended {turn: 1, stop: "end_turn", answer: …, usd: 0.0029, requests: 3, …}
 ```
 
 - **The answer is plain JSON.** With `--schema <JSON Schema>`, as `claude -p --json-schema`
-  takes one, Claude is held to it and a misfit is `null`. A stage decodes the answer with its own
+  takes one, Claude is held to it and a misfit is `null`, with what it gave kept beside it as
+  `misfit`. A stage decodes the answer with its own
   Effect schema when it arrives (`decoder` in `@kampus/pipeline/decoder`), so a check JSON
   Schema cannot say still holds.
 - **What differs from `codex`** is data only: Claude says its dollars and its request count, and
   holds a `--usd` cap.
+- **A kill loses no prompt it read.** Each is kept in the conversation before the next is read, and
+  a start runs every one not ended, in order (`resent`).
 - **Inputs are `prompt` and `cancel`.** A permission ask is refused at once and shown on `ask`;
   no input answers one ([one way to ask a person](../../docs/direction/one-ask-and-one-meter.md),
   proposed).

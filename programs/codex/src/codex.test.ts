@@ -8,12 +8,12 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
-import {type AgentFlags, fakeProviders, type Story} from "@kampus/fabrika/agents/program";
-import {Duration, Effect, Schema} from "effect";
+} from "@kampus/fabrika-old";
+import {type AgentFlags, fakeProviders, type Story} from "@kampus/fabrika-old/agents/program";
+import {Duration, Effect, Latch, Schema} from "effect";
 import {codex} from "./index.ts";
 
-// `codex` on its fake provider (`fakeProviders` in @kampus/fabrika/agents/program), which says a
+// `codex` on its fake provider (`fakeProviders` in @kampus/fabrika-old/agents/program), which says a
 // turn the way the real Codex adapter does. programs/claude/src/claude.test.ts is the same file
 // for `claude`: a difference between the two shows as a row that differs, side by side.
 
@@ -80,6 +80,30 @@ const until = (check: () => boolean) =>
 	Effect.gen(function* () {
 		while (!check()) yield* Effect.sleep(Duration.millis(2));
 	}).pipe(Effect.timeout("2 seconds"), Effect.orDie);
+
+/** A storage whose saves wait while it is held: a slow disk, on purpose. */
+const heldStorage = (inner: Storage) => {
+	const open = Effect.runSync(Latch.make(true));
+	return {
+		hold: open.close,
+		release: open.open,
+		record: inner.record,
+		remove: inner.remove,
+		open: (run: string, given: unknown) =>
+			inner.open(run, given).pipe(
+				Effect.map((handle) => ({
+					...handle,
+					store: <S>(machine: string, id: string, state: Schema.Codec<S, unknown>) => {
+						const store = handle.store(machine, id, state);
+						return {
+							...store,
+							save: (s: S) => Effect.runPromise(open.await).then(() => store.save(s)),
+						};
+					},
+				})),
+			),
+	} satisfies Storage & {readonly hold: unknown; readonly release: unknown};
+};
 
 describe("codex", () => {
 	it.live("its outputs, in order; Codex says no dollars and no request count", () =>
@@ -162,16 +186,21 @@ describe("codex", () => {
 			const w = world();
 			const ended = ear<{readonly turn: number; readonly stop: string}>();
 			const said = ear<unknown>();
+			const storage = heldStorage(memoryStorage());
 			const started = yield* start(
 				codex,
 				flags(),
 				{ended: ended.hear, said: said.hear},
-				{id: "codex:busy", storage: memoryStorage()},
+				{id: "codex:busy", storage},
 			).pipe(Effect.provideService(Agent.Agents, w.agents));
 			if (started.kind !== "running") return yield* Effect.die("not started");
 			yield* tell(started.run, "prompt", "hang");
-			// Turn 1 runs: every prompt told now waits in the mailbox, until it is full.
 			yield* until(() => said.values.length > 0);
+			// Turn 1 runs, and a slow disk holds the next prompt's save: every prompt told now waits in
+			// the mailbox, until it is full.
+			yield* storage.hold;
+			yield* tell(started.run, "prompt", "sort #7");
+			yield* until(() => started.run.mailbox().length === 0);
 			const words: Record<string, number> = {};
 			for (let i = 0; i <= CAPACITY; i++) {
 				const word = yield* tell(started.run, "prompt", "sort #7").pipe(
@@ -181,6 +210,9 @@ describe("codex", () => {
 			}
 			const behind = started.run.mailbox();
 			const told = yield* tell(started.run, "cancel", "now");
+			// It reaches the turn with the prompts' handler still held.
+			yield* until(() => w.fake.seen.stopped === 1);
+			yield* storage.release;
 			const [first] = yield* ended.upTo(1);
 			yield* started.stop;
 			const none = {length: 0, waiting: 0};

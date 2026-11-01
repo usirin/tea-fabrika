@@ -1,5 +1,5 @@
 import {run} from "@demlik/tea/effect";
-import {type DraftMsg, jsonSchema, type Spend} from "@kampus/fabrika/agents/claude";
+import {type DraftMsg, jsonSchema, type Spend} from "@kampus/fabrika-old/agents/claude";
 import {Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {decoder, MISFIT} from "./decoder.ts";
@@ -58,6 +58,25 @@ describe("decoder: the stage's schema, both ways", () => {
 		}
 		const lost = sorted.decode(finished({label: "bug", ticket: "7"}));
 		expect(lost.type === "sort_failed" && lost.error).toContain("a ticket starts with #");
+	});
+
+	it("a misfit's words show the answer that did not fit, cut short when it is long", () => {
+		const short = sorted.decode(finished({label: "bogus", ticket: "#7"}));
+		expect(short.type === "sort_failed" && short.error).toContain(
+			'\n  the answer was: {"label":"bogus","ticket":"#7"}',
+		);
+		const none = sorted.decode(finished(null));
+		expect(none.type === "sort_failed" && none.error).toContain("\n  the answer was: null");
+		const words = sorted.decode(finished("the answer is five"));
+		expect(words.type === "sort_failed" && words.error).toContain(
+			'the answer was: "the answer is five"',
+		);
+		const atEdge = "x".repeat(498);
+		const edge = sorted.decode(finished(atEdge));
+		expect(edge.type === "sort_failed" && edge.error.endsWith(`"${atEdge}"`)).toBe(true);
+		const long = sorted.decode(finished("x".repeat(600)));
+		expect(long.type === "sort_failed" && long.error.endsWith("... (602 characters)")).toBe(true);
+		expect(long.type === "sort_failed" && long.error.includes("x".repeat(500))).toBe(false);
 	});
 
 	it("a tool Msg and a failed Msg pass as they came", () => {

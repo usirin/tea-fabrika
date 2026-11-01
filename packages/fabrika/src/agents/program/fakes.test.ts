@@ -15,7 +15,7 @@ const STORY: Story = {tool: {id: "t1", title: "Read"}, said: "Read the ticket.",
 describe("the fakes say what each real adapter makes of its provider's events", () => {
 	it("claude: the SDK's messages, through rawOf", () => {
 		const sdk = (m: Record<string, unknown>) =>
-			// biome-ignore lint/plugin: a fixture holds the few fields rawOf reads; the SDK's full type has dozens more
+			// oxlint-disable-next-line fabrika/no-type-assertions -- a fixture holds the few fields rawOf reads; the SDK's full type has dozens more
 			m as unknown as SDKMessage;
 		const raws = [
 			sdk({

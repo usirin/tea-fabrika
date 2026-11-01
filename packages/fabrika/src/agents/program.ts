@@ -1,4 +1,4 @@
-// `@kampus/fabrika/agents/program`: what the `claude` and `codex` programs
+// `@kampus/fabrika-old/agents/program`: what the `claude` and `codex` programs
 // share (experiment 169). Each program is its own package in `programs/`,
 // with one `defineProgram`; here are the parts it wires: the kept
 // conversation and its kind, the flags, inputs and outputs, `chat` (the main

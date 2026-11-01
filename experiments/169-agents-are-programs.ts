@@ -1,6 +1,6 @@
 // Experiment 169: `claude` and `codex` as tea programs, one package each
 // (programs/claude, programs/codex), on the parts they share in
-// `@kampus/fabrika/agents/program`. Each stage that wants a typed answer hands
+// `@kampus/fabrika-old/agents/program`. Each stage that wants a typed answer hands
 // the program a JSON Schema on `--schema` and decodes the plain answer with
 // its own Effect schema (`decoder` in `@kampus/pipeline/decoder`). The saved
 // numbers in results/169-agents-are-programs.json were measured on the first
@@ -25,20 +25,21 @@ import {homedir, tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Agent, call, ear, memoryStorage, start, tell} from "@kampus/fabrika";
-import {codexHomeOf} from "@kampus/fabrika/agents/acp";
-import {claudeAdapter, type DraftRun} from "@kampus/fabrika/agents/claude";
-import {codexAdapter, psReaper} from "@kampus/fabrika/agents/codex";
+import {Agent, call, ear, memoryStorage, start, tell} from "@kampus/fabrika-old";
+import {codexHomeOf} from "@kampus/fabrika-old/agents/acp";
+import {claudeAdapter, type DraftRun} from "@kampus/fabrika-old/agents/claude";
+import {codexAdapter, psReaper} from "@kampus/fabrika-old/agents/codex";
 import {
 	type AgentFlags,
 	fakeProviders,
 	type Provider,
 	programRunner,
-} from "@kampus/fabrika/agents/program";
+} from "@kampus/fabrika-old/agents/program";
 import {decoder} from "@kampus/pipeline/decoder";
 import {claude} from "@tea-fabrika/claude";
 import {codex} from "@tea-fabrika/codex";
 import {Duration, Effect, Result, Schema, Stream} from "effect";
+import {LUNA, usdAt} from "./lib/list-price.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RESULTS = join(HERE, "results", "169-agents-are-programs.json");
@@ -263,8 +264,12 @@ const live = Effect.gen(function* () {
 			end?.name === "ended" ? end.value.answer : null,
 		);
 		const decoded = Result.isSuccess(read) ? read.success : `misfit: ${read.failure.message}`;
-		out[provider] = {ms, settings: LIVE[provider], heard, decoded};
-		console.log(provider, ms, JSON.stringify(heard), JSON.stringify(decoded));
+		const tokens = end?.name === "ended" ? end.value.tokens : null;
+		// Every token billed, and, on the plan's row, what they cost at OpenAI's list price.
+		const billed = tokens === null ? null : tokens.input + tokens.output;
+		const listUsd = provider === "codex" && tokens !== null ? usdAt(LUNA, tokens) : null;
+		out[provider] = {ms, settings: LIVE[provider], heard, decoded, billed, listUsd};
+		console.log(provider, ms, JSON.stringify(heard), JSON.stringify(decoded), billed, listUsd);
 		rmSync(folder, {recursive: true, force: true});
 		if (provider === "codex")
 			rmSync(codexHomeOf(`session:${session}`, process.env), {recursive: true, force: true});

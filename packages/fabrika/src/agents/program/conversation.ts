@@ -47,6 +47,8 @@ export class End extends Schema.Opaque<End>()(
 		 * or the turn did not end on its own. A plain value: the stage that asked decodes it.
 		 */
 		answer: Schema.NullOr(Schema.Json),
+		/** What the agent gave that did not fit, kept as it came. Only beside a `null` answer. */
+		misfit: Schema.optionalKey(Schema.Json),
 		tokens: Tokens,
 		counted: Counted,
 		usd: Schema.NullOr(Schema.Finite),
@@ -74,7 +76,7 @@ export const TurnSeen = Schema.Struct({
 	said: Schema.Array(Schema.String),
 	tools: Schema.Array(ToolSeen),
 	asks: Schema.Array(AskSeen),
-	/** `null`: not ended yet, so sent again at the next start. */
+	/** `null`: not ended yet, so it runs at the next start, whether it had begun or still waited. */
 	end: Schema.NullOr(End),
 });
 export type TurnSeen = typeof TurnSeen.Type;

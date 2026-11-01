@@ -1,4 +1,4 @@
-import {type DraftMsg, jsonSchema} from "@kampus/fabrika/agents/claude";
+import {type DraftMsg, jsonSchema} from "@kampus/fabrika-old/agents/claude";
 import {Result, Schema} from "effect";
 
 // A stage's answer schema, for an agent program (experiment 169). The program
@@ -16,7 +16,8 @@ import {Result, Schema} from "effect";
 // An answer that does not fit is a `<name>_failed` Msg with the schema's own
 // words: the stage handles it as it handles any failed draft, and it is never
 // dropped. That holds for a check JSON Schema cannot say, which the provider
-// and the program let through.
+// and the program let through, and for an answer `--schema` refused, which
+// `programRunner` hands on as it came so the words here name what is wrong.
 
 /** What the agent was told it must fit: a JSON Schema, as the program's `--schema` flag holds it. */
 const JsonObject = Schema.Record(Schema.String, Schema.Json);
@@ -24,10 +25,20 @@ const JsonObject = Schema.Record(Schema.String, Schema.Json);
 /** Why a decoded answer failed: the start of a `<name>_failed` Msg's error. */
 export const MISFIT = "the answer did not fit the schema";
 
+/** How much of a bad answer a failed Msg quotes. The whole of it stays in the run's conversation. */
+const QUOTED = 500;
+
+/** A bad answer, as a failed Msg's error shows it. */
+const quote = (answer: unknown): string => {
+	const text = JSON.stringify(answer) ?? String(answer);
+	return text.length > QUOTED ? `${text.slice(0, QUOTED)}... (${text.length} characters)` : text;
+};
+
 /**
  * The stage's schema, both ways: `schema`, the JSON Schema to hand the agent
  * program, and `decode`, which reads each Draft Msg's answer back by the
- * Effect schema itself. Tool and failed Msgs pass as they came.
+ * Effect schema itself. Tool and failed Msgs pass as they came. A failed
+ * Msg says where the answer went wrong, and what the answer was.
  */
 export const decoder = <A>(answer: Schema.Codec<A, unknown>) => {
 	const read = Schema.decodeUnknownResult(Schema.toCodecJson(answer));
@@ -43,7 +54,7 @@ export const decoder = <A>(answer: Schema.Codec<A, unknown>) => {
 				type: `${msg.type.slice(0, -"finished".length)}failed` as `${N}_failed`,
 				key: msg.key,
 				id: msg.id,
-				error: `${MISFIT}: ${got.failure.message}`,
+				error: `${MISFIT}: ${got.failure.message}\n  the answer was: ${quote(msg.output)}`,
 				spend: msg.spend,
 			};
 		},

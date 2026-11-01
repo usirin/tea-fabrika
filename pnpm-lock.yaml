@@ -903,7 +903,7 @@ importers:
 
   programs/claude:
     dependencies:
-      '@kampus/fabrika':
+      '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
       effect:
@@ -931,7 +931,7 @@ importers:
 
   programs/codex:
     dependencies:
-      '@kampus/fabrika':
+      '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
       effect:

@@ -10,7 +10,8 @@ child run, decoded its plain answer with its own schema, and heard the same
 Draft Msgs it hears today. A program costs about 0.8 ms a turn over
 `Agents.run` on fake providers. Two gaps showed up, the same on both
 providers: nobody can answer a permission ask, and a turn cannot run without an
-answer schema.
+answer schema. A review on 2026-10-31 found more, and closed the second gap:
+section 14 says what it found, what changed and what stays.
 
 The first version of this spike made both programs from one function
 (`agentProgram(provider)`, `typedAgentProgram(provider, schema)`). The owner
@@ -22,7 +23,7 @@ rejected that API on 2026-10-30; section 11 says why and what replaced it.
 export const claude = defineProgram({
 	name: "claude",
 	description: "Claude Code as a program: each prompt is a turn on one session, ...",
-	flags, inputs, outputs,                         // from @kampus/fabrika/agents/program
+	flags, inputs, outputs,                         // from @kampus/fabrika-old/agents/program
 	machines: {conversation: conversationKind},
 	view: {machine: "conversation", data: Conversation, of: (s: Conversation) => s},
 	main: (io) => chat("claude", io),
@@ -32,7 +33,7 @@ export const claude = defineProgram({
 // inputs:  prompt (text), cancel (a turn number, or "now"); allow and refuse are gone (13)
 // outputs: started {provider, session, resumed, resent}
 //          said {turn, text}   tool {turn, id, title, status}   ask {turn, id, title, answer}
-//          ended {turn, stop, answer: Json | null, tokens, counted, usd, requests, ms, error}
+//          ended {turn, stop, answer: Json | null, misfit?, tokens, counted, usd, requests, ms, error}
 
 // A stage holds its own schema: it hands the program the JSON Schema, and decodes the answer.
 const sorted = decoder(SortReply);   // @kampus/pipeline/decoder
@@ -92,11 +93,14 @@ interface Conversation { provider: "claude" | "codex"; session: string; told: nu
 
 - **Prompts queue.** Each prompt is a turn, run in order on one session.
   Since the port to the mailbox (12), the run's mailbox is that queue.
+  **Wrong (2026-10-31, 14):** the mailbox is in memory, so a kill lost every
+  prompt in it. The queue is now the kept conversation.
 - **The input closing ends it.** A tile keeps `prompt` open: a chat. A parent
   tells one prompt and closes it: that is `claude -p` or `codex exec`. The
   program does the same thing in both.
 - **Restart.** The conversation is kept. A turn cut off by a kill is sent
-  again on start (`resent` counts them). A known session id resumes (`resumed`).
+  again on start, and so is every prompt read behind it (`resent` counts them).
+  A session id this provider knows resumes (`resumed`).
 - **Cancel.** `cancel now` stops whatever turn runs when it is read. `cancel 2`
   stops turn 2 now if it runs, or when it comes up. `cancel` is a control
   input (12), so it is read at once while a turn runs. Cancel by id is how LSP
@@ -139,7 +143,8 @@ shape (the stage's schema at definition, way C in 5):
 | Tokens in / cached / out | 20,809 / 7,488 / 62 | 9,915 / 0 / 15 |
 | Requests | 3 | null |
 | Time | 3.5 s | 3.9 s |
-| Cost | $0.0029 | null (ChatGPT plan, $0) |
+| Cost | $0.0029 | null (ChatGPT plan, $0); $0.001 at list price (14) |
+| Billed tokens (in + out) | 20,871 | 9,930 |
 
 ## 5. The typed answer across the boundary
 
@@ -169,8 +174,9 @@ sorted.decode({type: "sort_finished", output: {sort: {answer: "duplicate", of: "
 The same three answers as below, now:
 
 - **Right:** the program hands on the value; the decode types it, and the stage goes on.
-- **Wrong label:** the program hands on `null`; the decode makes it `sort_failed`, and the stage
-  ends `stuck`, `draft_failed`.
+- **Wrong label:** the program's `answer` is `null`, with what the agent gave beside it as
+  `misfit` (14); the decode makes it `sort_failed`, naming both, and the stage ends `stuck`,
+  `draft_failed`.
 - **Ticket without `#`:** the program hands on the value, its filter lost in JSON Schema; the
   decode makes it `sort_failed`, naming the filter (`decoder.test.ts`).
 
@@ -296,7 +302,7 @@ interface Started { readonly tty: boolean }
 ## 10. Recommendation
 
 **Two programs, one package each: `programs/claude` and `programs/codex`, each
-one `defineProgram`, wiring the same parts from `@kampus/fabrika/agents/program`.
+one `defineProgram`, wiring the same parts from `@kampus/fabrika-old/agents/program`.
 A stage hands its JSON Schema on `--schema` and decodes the plain answer with
 its own schema (`decoder`).**
 
@@ -310,9 +316,9 @@ provider as the name." The owner rejected it (11).
   is its own package named after itself; these are too. The decode at the
   stage keeps every check the stage's schema has, which way C kept, without
   a program made per stage.
-- **Cost:** two 35-line program files that repeat each other on purpose; 360
-  lines for what they share (`chat` and the shapes), 100 for the runner, 180
-  for the conversation, 80 for the fakes, 50 for the decoder. The program
+- **Cost:** two 35-line program files that repeat each other on purpose; 415
+  lines for what they share (`chat` and the shapes), 130 for the runner, 185
+  for the conversation, 90 for the fakes, 60 for the decoder. The program
   tests are written twice, one file per program. 0.8 ms a turn. A pipe can no
   longer check an answer's shape at the line with `fit`: `ended.answer` is
   JSON on every agent program, and the check happens at the stage. A new
@@ -336,7 +342,8 @@ Two gaps to fix in the service, not in the program, the same on both providers:
   still proposed, takes them out; 13 does it.
 - **No chat turn without a schema.** `Turn.answer` is required, and
   `Schema.Json` makes the JSON Schema `{}`. Proposal: `answer: null` in `Turn`
-  for a plain chat turn.
+  for a plain chat turn. **Closed another way (14):** `Turn.answer` stays, and
+  an empty JSON Schema is not handed to the provider at all.
 
 ## 11. The rework (2026-10-30): programs live in `programs/`
 
@@ -353,7 +360,7 @@ The owner rejected the first API: `agentProgram(provider)`,
   - `programs/claude` and `programs/codex`, each one `defineProgram`. Some
     lines repeat between the two on purpose: parity is visible in the code.
   - What they share stays in the SDK as parts, the way `trace` uses `kind`
-    and its machine from `@kampus/fabrika`: `Conversation`, `conversation` and
+    and its machine from `@kampus/fabrika-old`: `Conversation`, `conversation` and
     `conversationKind`; `flags`, `inputs`, `outputs`; `chat`, the main;
     `programRunner`; the fake providers. No function there returns a program.
   - Way C is gone. The program takes `--schema` (a JSON Schema) and hands on
@@ -391,20 +398,25 @@ yield* serve(handlers, {until: ["prompt"]});
   handler, as tsh runs a line. A prompt told during a turn waits in the
   mailbox, and `mailbox()` shows it. Past the program's capacity (1000) a
   tell fails `MailboxFull`. The program's own unbounded queue is gone.
+  **Wrong (2026-10-31, 14):** the mailbox is in memory, so this lost every
+  waiting prompt at a kill.
 - **`cancel` is a control input.** It must be read while a turn runs, and
   the turn now runs inside `serve`. It is tsh's Ctrl-C again.
 - **Why not acp's shape.** 195 kept acp's cancel ordinary: its handlers only
   queue work, and the turns run beside `serve`. That works, but it keeps a
   second queue with no bound, and a full mailbox refuses the cancel. Here the
-  mailbox stays the one queue.
+  mailbox stays the one queue. **Wrong (2026-10-31, 14):** the handlers that
+  only queue work were the right shape, with the queue in the kept state and a
+  bound on it. A control cancel already answers the full mailbox.
 - **`allow` and `refuse` are unchanged** (they wait on PR 194). They are
   ordinary inputs, so one told during a turn is said back as `not_waiting`
   once the turn ends. Nothing waits on them today (10). **Since gone (13).**
 - **A turn a kill cut off** runs again first, in a fiber of its own, while
   the mailbox is served, so a cancel reaches it. Every prompt waits for it.
   If `prompt` closes first, `chat` keeps serving until that turn ends.
+  (Since 14 no fiber of its own: the one worker takes it first.)
 
-**The proof** (`programs/claude/src/claude.test.ts` and
+**The proof, as it ran then; 14 says how the test changed** (`programs/claude/src/claude.test.ts` and
 `programs/codex/src/codex.test.ts`, the same test): turn 1 hangs. 1000 prompts
 are told behind it, `queued`, and the next one fails `MailboxFull`. Then
 `cancel now` answers `queued`, and turn 1 ends `cancelled`. With `cancel` made
@@ -458,6 +470,102 @@ export const inputs = {
   its numbers (program p50 1.0 to 1.3 ms, `Agents.run` p50 0.09 to 0.54 ms)
   say little. The saved results file is left as it was.
 
+## 14. The review (2026-10-31)
+
+A review of the PR named eleven things. None was wrong when checked against
+the code. One was true but deeper than it said (item 5). All of this is today's
+version, on fake providers, $0.
+
+```ts
+// packages/fabrika/src/agents/program/chat.ts, now: handlers only save; a worker runs the turns
+const worker = Effect.gen(function* () {
+	while (true) {
+		const [next] = Conversation.waiting(kept.getState());
+		if (next !== undefined) {
+			yield* runTurn(next);
+			yield* room.release(1);
+		} else if (reading) yield* Queue.take(nudge);
+		else return;
+	}
+});
+// prompt handler: room.take(1), then dispatch told (saved), then nudge
+```
+
+| Item | What it said | Now |
+|---|---|---|
+| 1 | Prompts waiting in the mailbox are lost at a kill | Fixed |
+| 2 | A child restarted after its turn ended throws away an answer already paid for | Fixed |
+| 3 | The stage never hears why a run was refused | Fixed |
+| 4 | Misfit words say almost nothing, and the bad answer is not kept | Fixed |
+| 5 | A cancelled turn records zero spend | Fixed in the program; stays for real providers |
+| 6 | 23 of 31 broken lines passed, `programRunner` has no tests | Fixed, counts below |
+| 7 | The no-schema path may die on a real provider | Plausible; closed by not sending it, not run live |
+| 8 | No list price for Codex, no `billed`, no field rows | Fixed |
+| 9 | Stale text in the note and a header | Fixed |
+| 10 | `started.resumed` is true for the other provider | Fixed |
+| 11 | Names: `ear`, `Heard`, `Reads`, `Counted`, `Raw` | Left, one rename done |
+
+- **Prompts at a kill (1).** A prompt is now saved in the kept conversation as
+  soon as it is read. A worker beside `serve` takes the first turn not ended,
+  so a restart runs every kept prompt, in order. `room` is the bound: 1000 told
+  and not ended. Past it the handler waits, the mailbox fills, and `tell` fails
+  `MailboxFull` as before. A control cancel gets through all of this.
+- **A paid answer (2).** The runner reads the kept conversation once the run
+  opens. If the last turn already ended, it hands that end on and does not tell
+  the prompt again. A restart mid-turn still runs the cut-off turn once.
+- **Refusals (3).** The Msg now carries the program's own words:
+  `the agent program failed with no answer: --folder must be an absolute path`.
+- **Misfits (4).** `End.misfit` keeps the answer that broke the schema, and the
+  runner hands it on as the output. The decoder quotes up to 500 characters of
+  a bad answer in its error.
+- **Spend when cut (5).** `chat` keeps the last tokens it heard, so a cancelled
+  or failed turn records them. **It stays zero on Claude and Codex:** both
+  adapters report tokens only at the end. A real cancelled turn still says
+  `tokens` zero, `counted: "none"`, dollars `null`. A turn a kill cuts keeps
+  nothing either. Fixing that means reading usage from the provider's stream.
+- **No schema (7).** The installed Claude SDK takes `{}` through its local
+  check and would pass it on as a tool's input schema, which needs
+  `type: "object"`. That is from reading the bundle; it was not run. Now an
+  empty schema is simply not sent: no `outputFormat` for Claude, no
+  `--output-schema` for Codex. A real schema that reads back empty is refused.
+- **Codex's money (8).** `gpt-6-luna` has a list price, read 2026-10-31. The
+  live case saves `billed` and `listUsd`. The two live rows are now in
+  `field/runs.jsonl`, written from the saved results, no new run.
+- **`resumed` (10).** True only when this provider knows the session.
+- **Names (11).** `ear`, `Heard`, `Reads`, `Counted` and `Raw` are in about 96
+  files on main, so renaming them here would bury this change. It should be a
+  change of its own. Only `onHeard` became `onUpdate`, since it was in code
+  already being rewritten.
+
+**Tests.** `packages/fabrika/src/agents/program/runner.test.ts` is new and runs
+on both providers. Planted breaks, one at a time, in `chat`, the runner, the
+conversation, `core`, both adapters and the decoder: 43 of 45 were caught at
+first. The two that slipped by (a cancel by number read while a turn starts,
+and the runner closing `prompt`) each got a test, and then both were caught, so
+45 of 45. One existing test changed:
+"a cancel is taken while a turn runs, with the mailbox full of prompts behind
+it", in `programs/claude` and `programs/codex`. Prompts no longer sit unread
+during a turn, so it now holds the disk to fill the mailbox. Every assertion it
+had is still there, and it adds one: the cancel reaches the turn while the
+handler is held. No law changed.
+
+**The way not taken for 1.** Keep each letter on the run's record inside the
+program runtime, so every program gets it. Why not: `tell` would wait on the
+disk, and it is promised never to wait. That is a runtime change, the owner's
+call. This one costs a worker and a semaphore in `chat`, about 40 lines. How
+sure: about 70%. What is still open:
+
+- Prompts past the 1000th sit in the mailbox, not kept. A kill loses those.
+- There is a small gap between `tell` answering `queued` and the save. A kill
+  there loses that one prompt. Only keeping letters in the runtime would close
+  it.
+- A kill after the input closes but before `told` is saved: the next start has
+  no turn to run, and the Msg fails with "no answer". It is loud and pays
+  nothing twice, but the prompt is lost.
+
+**Wrong guesses, kept.** 12 said the mailbox is the line of prompts and that
+handlers that only queue work were not worth it. Both are marked wrong there.
+
 ## What this cannot tell us
 
 - One live prompt per provider. It shows the wiring, not quality or cost at
@@ -478,11 +586,21 @@ export const inputs = {
   back: today a failed draft ends the stage, it does not retry.
 - The cost of the mailbox port is not measured cleanly: the rerun ran on a
   loaded machine (12).
+- The fixes in 14 ran only on fake providers. The no-schema path and a real
+  misfit never ran live, and whether `{}` truly fails on Claude's API comes from
+  reading its SDK, not from a call.
+- A real cancelled turn still records zero tokens (14), so what a cut turn costs
+  is not known from this data.
+- Planted breaks are ones the fixer chose in the fixer's own code. They show
+  the tests catch those breaks, not that nothing else slips by.
+- A kill was tested by stopping and starting a run in one process. No process
+  died for real.
 
 ## Cost
 
-- Live: claude $0.0029, codex $0 on the ChatGPT plan (9,930 tokens). About
-  $0.003 in all.
-- Everything else: fake providers, $0.
+- Live: claude $0.0029, codex $0 on the ChatGPT plan (9,930 tokens, $0.001 at
+  OpenAI's list price for `gpt-6-luna`, read 2026-10-31). About $0.003 in all,
+  or $0.004 at list price. Both rows are in `field/runs.jsonl`.
+- Everything else, the review's work too: fake providers, $0.
 - Left behind: nothing. The temp folders, the Codex home and the one Claude
   Code session record the live run made were removed.

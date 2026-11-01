@@ -3,6 +3,7 @@ import {jsonSchema, reader} from "../claude/schema.ts";
 import {
 	type Adapter,
 	type Agents,
+	asksNothing,
 	type Counted,
 	type Ended,
 	failed,
@@ -64,6 +65,14 @@ export const lastFit = <A>(read: (value: unknown) => Option.Option<A>, text: str
 		if (at === 0) break;
 	}
 	return null;
+};
+
+/** What the agent ended with, whether it fits or not: its typed answer, else its last message, as JSON if it is. */
+const lastGiven = (structured: unknown, text: string): unknown => {
+	if (structured !== undefined) return structured;
+	const trimmed = text.trim();
+	if (trimmed === "") return undefined;
+	return Option.getOrElse(Option.liftThrowable(JSON.parse)(trimmed), () => trimmed);
 };
 
 const add = (a: Tokens, b: Tokens): Tokens => ({
@@ -137,7 +146,10 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 					const read = reader(turn.answer);
 					const running = yield* adapter.start({
 						folder: turn.folder,
-						prompt: adapter.holds.schema ? turn.prompt : `${turn.prompt}\n${formOf(schema)}`,
+						prompt:
+							adapter.holds.schema || asksNothing(schema)
+								? turn.prompt
+								: `${turn.prompt}\n${formOf(schema)}`,
 						system,
 						schema,
 						resume: known?.own ?? null,
@@ -172,10 +184,16 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 					): Ended<A> => {
 						const typed = more.structured === undefined ? Option.none() : read(more.structured);
 						const measured = state.whole !== null || state.sawRequest;
+						const answer = Option.isSome(typed) ? typed.value : lastFit(read, state.text);
+						const misfit =
+							answer === null && stop === "end_turn"
+								? lastGiven(more.structured, state.text)
+								: undefined;
 						return {
 							_tag: "ended",
 							stop,
-							answer: Option.isSome(typed) ? typed.value : lastFit(read, state.text),
+							answer,
+							...(misfit === undefined ? {} : {misfit}),
 							tokens: measured ? tokens() : (more.last ?? NO_TOKENS),
 							counted: counted(more.last !== undefined),
 							usd: more.usd ?? null,

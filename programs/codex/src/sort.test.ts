@@ -1,7 +1,7 @@
 import {run} from "@demlik/tea/effect";
-import {Agent, memoryStorage} from "@kampus/fabrika";
-import type {DraftRun} from "@kampus/fabrika/agents/claude";
-import {fakeProviders, programRunner} from "@kampus/fabrika/agents/program";
+import {Agent, memoryStorage} from "@kampus/fabrika-old";
+import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
+import {fakeProviders, programRunner} from "@kampus/fabrika-old/agents/program";
 import {decoder, MISFIT} from "@kampus/pipeline/decoder";
 import {SortReply} from "@kampus/pipeline/stages/sort/answer";
 import {
