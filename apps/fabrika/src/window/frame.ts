@@ -665,6 +665,19 @@ export type Over =
 /** A part of the app the top bar names, whose few lines open under it: a click, its key or its tsh word. */
 export type Part = "agents" | "sync" | "host";
 
+/** Where something sits along the top bar. */
+export interface Span {
+	readonly left: number;
+	readonly right: number;
+}
+
+/** The least empty space either side of the bar's mark and name. */
+const NAME_ROOM = 24;
+
+/** The mark and name keep the middle of the bar only while nothing else comes near them. */
+export const middleFree = (name: Span, items: readonly Span[]): boolean =>
+	items.every((at) => at.right + NAME_ROOM <= name.left || name.right + NAME_ROOM <= at.left);
+
 export interface Frame {
 	readonly over: Over;
 	/** Info mode: the bottom line explains whatever the pointer is over. */

@@ -1,9 +1,11 @@
 import {
 	type ReactNode,
+	type RefObject,
 	useCallback,
 	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
+	useRef,
 	useState,
 } from "react";
 import type {AsksNow} from "../asks.ts";
@@ -29,6 +31,7 @@ import {
 	jobsList,
 	lineIn,
 	matching,
+	middleFree,
 	nowhereNote,
 	opensOf,
 	type Part,
@@ -187,8 +190,11 @@ export function TopBar(props: FrameProps): ReactNode {
 		id: POP.lines,
 		open: over.kind === "item" && over.what === what,
 	});
+	const bar = useRef<HTMLElement>(null);
+	const brand = useRef<HTMLDivElement>(null);
+	const free = useFreeMiddle(bar, brand, desk !== null);
 	return (
-		<header className="topbar">
+		<header className="topbar" ref={bar}>
 			<div className="lights-room" aria-hidden="true" />
 			{desk !== null && (
 				<nav className="workspaces" aria-label="workspaces">
@@ -330,8 +336,57 @@ export function TopBar(props: FrameProps): ReactNode {
 					)}
 				</span>
 			</div>
+			<div className="brand" data-free={free} ref={brand} aria-hidden="true">
+				<Mark />
+				<span>fabrika</span>
+			</div>
 		</header>
 	);
+}
+
+/** The app's icon as a small size draws it, on its 16 grid (docs/direction/app-icon.md). */
+function Mark(): ReactNode {
+	return (
+		<svg className="mark" viewBox="0 0 16 16" width="16" height="16">
+			<rect className="dim" x="5" y="3" width="2" height="10" rx="0.5" />
+			<rect className="lit" x="8" y="3" width="4" height="3" rx="0.5" />
+			<rect className="dim" x="8" y="7" width="3" height="3" rx="0.5" />
+		</svg>
+	);
+}
+
+/**
+ * Whether the middle of the bar is free for the mark and name. They take no room: they sit over the
+ * bar, and are gone when what the bar has to say reaches them. Each item that changes size moves
+ * the others, so watching sizes is enough. The workspaces come and go with the desk, so `hasDesk`
+ * watches them anew.
+ */
+function useFreeMiddle(
+	bar: RefObject<HTMLElement | null>,
+	brand: RefObject<HTMLElement | null>,
+	hasDesk: boolean,
+): boolean {
+	const [free, setFree] = useState(true);
+	useLayoutEffect(() => {
+		const header = bar.current;
+		const name = brand.current;
+		if (header === null || name === null) return;
+		const items = [...header.children].filter(
+			(item) => item !== name && !item.classList.contains("drag"),
+		);
+		const check = () =>
+			setFree(
+				middleFree(
+					name.getBoundingClientRect(),
+					items.map((item) => item.getBoundingClientRect()),
+				),
+			);
+		const watch = new ResizeObserver(check);
+		watch.observe(header);
+		for (const item of items) watch.observe(item);
+		return () => watch.disconnect();
+	}, [bar, brand, hasDesk]);
+	return free;
 }
 
 /** What lies over the desk now: the asks list, the jobs list, an item's lines, or the palette. Shown with the bars hidden too. */

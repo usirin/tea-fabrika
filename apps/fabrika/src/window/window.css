@@ -653,6 +653,39 @@ main.program > [role="alert"] {
 }
 
 /*
+ * The mark and the name, in the middle of the window and not of the free space. It takes no room
+ * and no press, and goes when the bar needs the middle (frame.tsx, `useFreeMiddle`). On macOS only:
+ * elsewhere the system's own title bar already says "fabrika", right above this one.
+ */
+.topbar .brand {
+	position: absolute;
+	inset: 0 auto 0 50%;
+	display: none;
+	align-items: center;
+	gap: 4px;
+	transform: translateX(-50%);
+	pointer-events: none;
+	color: var(--text-faint);
+	font: 400 var(--fs-small) / 1 var(--font);
+}
+
+.mac .topbar .brand {
+	display: flex;
+}
+
+.topbar .brand[data-free="false"] {
+	visibility: hidden;
+}
+
+.topbar .mark .dim {
+	fill: var(--wire);
+}
+
+.topbar .mark .lit {
+	fill: var(--text-muted);
+}
+
+/*
  * The host's item: up, only its ring and check, in the bar's faint gray, still. Not up, the word
  * follows a shape of its own (frame.ts, `HostShape`), in the item's color: faint, or red where it
  * is broken. The icon is the bar's text size, so the bar keeps its height.

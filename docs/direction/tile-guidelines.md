@@ -347,7 +347,8 @@ touch.
 
 ### Title bar
 
-- **Job:** name the tile and hold its marks. **Linear:** headers made consistent ([2026
+- **Job:** name the tile and hold its marks. It never carries the app's icon: that sits once, in
+  [the window's top bar](./top-bar-name.md). **Linear:** headers made consistent ([2026
   changelog][cl26]); heights not documented.
 - **Rule:** a `header`, not a `button`, 20px, no tab stop. Slot, name, state word, then the id at the far
   right. Id and state are never cut; the name cuts first. A double-click still folds, and `C-b f` is the

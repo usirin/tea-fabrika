@@ -517,6 +517,22 @@ const flow = async (app: ElectronApplication) => {
 	);
 	check("the app's icon loads as a real image, 1024 wide", iconWidth === 1024, iconWidth);
 
+	const brand = await page.locator(".topbar .brand").evaluate((el) => {
+		const at = el.getBoundingClientRect();
+		const style = getComputedStyle(el);
+		return {
+			off: Math.abs((at.left + at.right) / 2 - innerWidth / 2),
+			shown: style.display !== "none",
+			drags: style.getPropertyValue("app-region"),
+			press: style.pointerEvents,
+		};
+	});
+	check(
+		"the bar's mark and name sit on the window's middle, and the window drags through them",
+		brand.shown && brand.off < 1 && brand.drags === "drag" && brand.press === "none",
+		brand,
+	);
+
 	const reach = await reachOf(page);
 	check(
 		"the page has send, onMessage and forget only, and no Node",
