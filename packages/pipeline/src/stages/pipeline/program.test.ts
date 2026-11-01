@@ -238,7 +238,7 @@ describe("a lane, whole", () => {
 		{timeout: 300_000},
 		async () => {
 			const ran = await lane({});
-			expect(ran.stages).toEqual(WHOLE);
+			expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
 			expect(onMain(ran.remote, "src/lower.test.ts")).toContain("lowers capitals");
