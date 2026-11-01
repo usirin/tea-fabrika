@@ -11,9 +11,9 @@ import {memoryLedger} from "../../asks/ledger.ts";
 import {checksOf, codeHostOn, type Gh} from "../../code-host-github.ts";
 import {CodeHost} from "../../services.ts";
 import {nameOf} from "../../tickets/ticket.ts";
-import {ghOn} from "../operate/writes.ts";
+import {ghOn, markerOf} from "../operate/writes.ts";
 import {reviewsOf, type PrFacts} from "../ship/facts.ts";
-import {laneFactsOver, openArgs} from "./github.ts";
+import {createdUrl, laneFactsOver, openArgs} from "./github.ts";
 import {fakeEnv, type GhStory, LANE_REPO, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer} from "./layer.ts";
 import {examTicket, LanePulls, type Pull, pullFacts, pullUrl, PullWire} from "./pulls.ts";
@@ -84,6 +84,31 @@ describe("what GitHub says, under the lane's own facts", () => {
 	});
 });
 
+describe("what `gh pr create` answers", () => {
+	const URL_IN_REPO = "https://github.com/o/r/pull/9";
+
+	it("is the new pull request's url", () => {
+		expect(createdUrl("o/r", `${URL_IN_REPO}\n`)).toBe(URL_IN_REPO);
+	});
+
+	it("may say something first: the url is its last line", () => {
+		expect(createdUrl("o/r", `Warning: 1 uncommitted change\n${URL_IN_REPO}\n\n`)).toBe(
+			URL_IN_REPO,
+		);
+	});
+
+	it.each([
+		["nothing", ""],
+		["words", "not a url\n"],
+		["a url with no pull request in it", "https://github.com/o/r\n"],
+		["a pull request with no number", "https://github.com/o/r/pull/x\n"],
+		["a pull request in another repository", "https://github.com/o/other/pull/9\n"],
+		["words after the url", `${URL_IN_REPO}\nand then something broke\n`],
+	])("is refused when it is %s", (_name, out) => {
+		expect(createdUrl("o/r", out)).toBeNull();
+	});
+});
+
 describe("the lane's verdicts count, on both hosts", () => {
 	it("a verdict the lane posted counts, with no reviewers list and no GitHub approval", () => {
 		// What GitHub's reader answers with no reviewers: every kind it needs reads missing.
@@ -111,7 +136,22 @@ describe("the lane's verdicts count, on both hosts", () => {
 	it("a verdict for another head does not count on the head GitHub now has", () => {
 		// The local host has one head. GitHub's can move: a person pushed after the lane posted.
 		const read = laneFactsOver({...FACTS, head: "someone-pushed"}, PASSED, "o/r", true);
-		expect(reviewsOf(read.reviews)).not.toBe("passed");
+		expect(read.reviews).toEqual([{kind: "review-code", verdict: "missing"}]);
+	});
+
+	it("a verdict for another head reads missing on every row, not only the first", () => {
+		const both: Pull = {
+			...PULL,
+			verdicts: [
+				{kind: "review-code", verdict: "pass"},
+				{kind: "review-doc", verdict: "fail"},
+			],
+		};
+		const read = laneFactsOver({...FACTS, head: "someone-pushed"}, both, "o/r", true);
+		expect(read.reviews).toEqual([
+			{kind: "review-code", verdict: "missing"},
+			{kind: "review-doc", verdict: "missing"},
+		]);
 	});
 
 	it("one pure function holds the rule, and it is what the GitHub host lays over", () => {
@@ -220,8 +260,8 @@ const IDENTITY = {
 	GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
 };
 
-const RUNNING_THEN = (ends: "SUCCESS" | "FAILURE", required = false): GhStory => ({
-	checks: [{name: "ci", required, ends}],
+const RUNNING_THEN = (ends: "SUCCESS" | "FAILURE"): GhStory => ({
+	checks: [{name: "ci", ends}],
 });
 
 describe("the GitHub host, over a stand-in gh", () => {
@@ -297,7 +337,8 @@ describe("the GitHub host, over a stand-in gh", () => {
 		});
 
 		it.each([
-			["a command it does not know", ["pr", "list"]],
+			["a command it does not know", ["pr", "view", "1"]],
+			["a pr list with no flags", ["pr", "list"]],
 			["a query it does not know", ["api", "graphql", "-f", "query=query { viewer { login } }"]],
 			["a route it does not know", ["api", `repos/${LANE_REPO}/issues/1`]],
 			["a comments read with no page size", ["api", `repos/${LANE_REPO}/issues/1/comments`]],
@@ -328,20 +369,20 @@ describe("the GitHub host, over a stand-in gh", () => {
 						"POST",
 						`repos/${LANE_REPO}/issues/1/comments`,
 						"-f",
-						"body=review-code: PASS @ abc — fine",
+						`body=${markerOf({pr, head: "abc", kind: "review-code", verdict: "pass", reason: "fine", text: ""})}`,
 					]);
 					yield* codeHostOn(watching, {own: [], reviewers: []}).prFacts(pr);
 					return seen.find((c) => c.args.some((a) => a.startsWith("codeowners=")))?.out ?? "";
 				}),
 			);
-			const shapeOf = (value: unknown): unknown =>
+			const shape = (value: unknown): unknown =>
 				Array.isArray(value)
-					? value.slice(0, 1).map(shapeOf)
+					? value.slice(0, 1).map(shape)
 					: value !== null && typeof value === "object"
 						? Object.fromEntries(
 								Object.entries(value)
 									.sort(([a], [b]) => a.localeCompare(b))
-									.map(([key, kept]) => [key, shapeOf(kept)]),
+									.map(([key, kept]) => [key, shape(kept)]),
 							)
 						: typeof value;
 			const pullIn = Schema.decodeUnknownSync(
@@ -351,8 +392,8 @@ describe("the GitHub host, over a stand-in gh", () => {
 					}),
 				),
 			);
-			expect(shapeOf(pullIn(answer).data.repository.pullRequest)).toEqual(
-				shapeOf(pullIn(FIXTURE("open-clean")).data.repository.pullRequest),
+			expect(shape(pullIn(answer).data.repository.pullRequest)).toEqual(
+				shape(pullIn(FIXTURE("open-clean")).data.repository.pullRequest),
 			);
 			expect(fake.calls().filter((c) => c.kind === "unknown")).toEqual([]);
 		});
@@ -363,8 +404,9 @@ describe("the GitHub host, over a stand-in gh", () => {
 				home,
 				Effect.gen(function* () {
 					yield* opened(A_FILE);
+					const gh = yield* ghOn;
 					return yield* Effect.result(
-						(yield* PullWire).open({branch: "lane/7", title: "Again", body: "Again."}),
+						gh(openArgs(LANE_REPO, {branch: "lane/7", title: "Again", body: "Again."})),
 					);
 				}),
 			);
@@ -373,48 +415,178 @@ describe("the GitHub host, over a stand-in gh", () => {
 		});
 	});
 
+	describe("a kill between GitHub opening a pull request and the lane writing it down", () => {
+		/** Pushed, and told to open: what a resumed lane does when the row was never written. */
+		const asked = (branch: string) => {
+			const pull = {branch, title: "A change", body: "It changes one thing."};
+			return Effect.gen(function* () {
+				return yield* (yield* PullWire).open(pull);
+			});
+		};
+
+		it("finds the one it opened and uses it, and does not ask again", async () => {
+			const {home, fake} = scene({});
+			const {first, second} = await run(
+				home,
+				Effect.gen(function* () {
+					const work = yield* LaneWork;
+					const tree = yield* work.tree(NUMBER);
+					const head = yield* work.commit(tree.tree, A_FILE, "A change");
+					yield* work.pushTo(tree.tree, head, tree.branch);
+					const first = yield* asked(tree.branch);
+					return {first, second: yield* asked(tree.branch)};
+				}),
+			);
+			expect(first).toBe(`https://github.com/${LANE_REPO}/pull/1`);
+			expect(second).toBe(first);
+			expect(fake.calls().map((c) => c.kind)).toEqual(["pr_list", "pr_create", "pr_list"]);
+			expect(fake.calls().filter((c) => c.refused)).toEqual([]);
+		});
+
+		it("asks by the branch, for open pull requests into main", async () => {
+			const {home, fake} = scene({});
+			await run(
+				home,
+				Effect.gen(function* () {
+					const work = yield* LaneWork;
+					const tree = yield* work.tree(NUMBER);
+					const head = yield* work.commit(tree.tree, A_FILE, "A change");
+					yield* work.pushTo(tree.tree, head, tree.branch);
+					return yield* asked(tree.branch);
+				}),
+			);
+			const list = fake.calls().find((c) => c.kind === "pr_list");
+			const flag = (name: string) => list?.args[(list?.args.indexOf(name) ?? 0) + 1];
+			expect(list?.args.slice(0, 2)).toEqual(["pr", "list"]);
+			expect(flag("--repo")).toBe(LANE_REPO);
+			expect(flag("--head")).toBe("lane/7");
+			expect(flag("--base")).toBe("main");
+			expect(flag("--state")).toBe("open");
+		});
+
+		it("does not take a fork's pull request on a branch of the same name for its own", async () => {
+			const {home} = scene({story: {forkOn: "lane/7"}});
+			const said = await run(
+				home,
+				Effect.gen(function* () {
+					const work = yield* LaneWork;
+					const tree = yield* work.tree(NUMBER);
+					const head = yield* work.commit(tree.tree, A_FILE, "A change");
+					yield* work.pushTo(tree.tree, head, tree.branch);
+					return yield* asked(tree.branch);
+				}),
+			);
+			expect(said).toBe(`https://github.com/${LANE_REPO}/pull/1`);
+		});
+	});
+
+	describe("an answer `gh pr create` should not have given", () => {
+		it.each(["not a url\n", `https://github.com/example/other/pull/1\n`])(
+			"fails, and says what it answered: %j",
+			async (createSays) => {
+				const {home} = scene({story: {createSays}});
+				const got = await run(
+					home,
+					Effect.gen(function* () {
+						const work = yield* LaneWork;
+						const tree = yield* work.tree(NUMBER);
+						const head = yield* work.commit(tree.tree, A_FILE, "A change");
+						yield* work.pushTo(tree.tree, head, tree.branch);
+						return yield* Effect.result(
+							(yield* PullWire).open({branch: tree.branch, title: "T", body: "B"}),
+						);
+					}),
+				);
+				if (got._tag === "Success") throw new Error(`took ${got.success} for a pull request`);
+				expect(got.failure.says).toContain("gh pr create");
+				expect(got.failure.says).toContain(createSays.trim());
+			},
+		);
+	});
+
+	describe("a pull request once it has merged", () => {
+		/** The ref move a merge on a branch with no rules makes, here by hand. */
+		const moved = (head: string) =>
+			Effect.gen(function* () {
+				const gh = yield* ghOn;
+				yield* gh([
+					"api",
+					"--method",
+					"PATCH",
+					`repos/${LANE_REPO}/git/refs/heads/main`,
+					"-f",
+					`sha=${head}`,
+					"-F",
+					"force=false",
+				]);
+			});
+
+		it("the facts say merged: its row says so, and the branch has no open one", async () => {
+			const {home} = scene({});
+			const got = await run(
+				home,
+				Effect.gen(function* () {
+					const {pr, head} = yield* opened(A_FILE);
+					yield* moved(head);
+					const facts = yield* (yield* CodeHost).prFacts(pr);
+					const pulls = yield* LanePulls;
+					return {
+						facts: facts.state,
+						row: (yield* pulls.find(pr)).state,
+						on: yield* pulls.onBranch("lane/7"),
+					};
+				}),
+			);
+			expect(got).toEqual({facts: "merged", row: "merged", on: null});
+		});
+
+		it("a new head on that branch is a new pull request, and never reads as landed", async () => {
+			const {home, fake} = scene({});
+			const got = await run(
+				home,
+				Effect.gen(function* () {
+					const {pr, head} = yield* opened(A_FILE);
+					yield* moved(head);
+					const host = yield* CodeHost;
+					yield* host.prFacts(pr);
+					const again = yield* opened([{path: "src/b.ts", text: "export const b = 1;\n"}]);
+					return {pr, again: again.pr, state: (yield* host.prFacts(again.pr)).state};
+				}),
+			);
+			expect(got.again).not.toBe(got.pr);
+			expect(got.state).toBe("open");
+			expect(fake.pulls().map((p) => p.state)).toEqual(["MERGED", "OPEN"]);
+		});
+	});
+
 	describe("[checks] github, read when a call needs it", () => {
 		const standing = (home: string) =>
 			run(
 				home,
 				Effect.gen(function* () {
-					const {pr, head} = yield* opened(A_FILE);
-					return yield* (yield* CodeHost).change(pr, head);
+					const {pr} = yield* opened(A_FILE);
+					return (yield* (yield* CodeHost).prFacts(pr)).checks;
 				}),
 			);
 
-		it("left out, every check counts: one that is not required and passed is green", async () => {
+		it("left out, every check counts: one that passed is green", async () => {
 			const {home} = scene({story: RUNNING_THEN("SUCCESS")});
-			expect((await standing(home)).checks).toEqual({
-				state: "green",
-				required: [{name: "ci", state: "green"}],
-			});
+			expect(await standing(home)).toBe("green");
 		});
 
-		it("left out, one that is not required and failed is red", async () => {
+		it("left out, one that failed is red", async () => {
 			const {home} = scene({story: RUNNING_THEN("FAILURE")});
-			expect((await standing(home)).checks.state).toBe("red");
+			expect(await standing(home)).toBe("red");
 		});
 
-		it("left out, one that is not required and still running waits", async () => {
+		it("left out, one still running waits", async () => {
 			const {home} = scene({story: {...RUNNING_THEN("SUCCESS"), settleAfter: 1}});
-			expect((await standing(home)).checks.state).toBe("pending");
+			expect(await standing(home)).toBe("pending");
 		});
 
-		it("required: one that is not required and failed does not count", async () => {
-			const {home} = scene({
-				github: "required",
-				story: {
-					checks: [
-						{name: "lint", required: false, ends: "FAILURE"},
-						{name: "test", required: true, ends: "SUCCESS"},
-					],
-				},
-			});
-			expect((await standing(home)).checks).toEqual({
-				state: "green",
-				required: [{name: "test", state: "green"}],
-			});
+		it("required: reads as every does, one that failed is red", async () => {
+			const {home} = scene({github: "required", story: RUNNING_THEN("FAILURE")});
+			expect(await standing(home)).toBe("red");
 		});
 
 		it("a file changed on main between two calls is read by the second", async () => {
@@ -424,26 +596,68 @@ describe("the GitHub host, over a stand-in gh", () => {
 			const {first, second} = await run(
 				home,
 				Effect.gen(function* () {
-					const {pr, head} = yield* opened(A_FILE);
+					const {pr} = yield* opened(A_FILE);
 					const host = yield* CodeHost;
-					const first = yield* host.change(pr, head);
+					const first = yield* host.prFacts(pr);
 					const file = join(seed, ".fabrika/fabrika.toml");
 					writeFileSync(
 						file,
 						readFileSync(file, "utf8").replace(
 							"[[checks.run]]",
-							'[checks]\ngithub = "required"\n\n[[checks.run]]',
+							'[checks]\ngithub = "none"\n\n[[checks.run]]',
 						),
 					);
 					git("add", "-A");
-					git("commit", "--quiet", "-m", "Count only what is required.");
+					git("commit", "--quiet", "-m", "GitHub's checks do not count here.");
 					git("push", "--quiet", "origin", "main");
-					return {first, second: yield* host.change(pr, head)};
+					return {first, second: yield* host.prFacts(pr)};
 				}),
 			);
-			expect(first.checks.state).toBe("red");
-			// The one check is not required, so under the new setting nothing counts and it waits.
-			expect(second.checks).toEqual({state: "pending", required: []});
+			expect(first.checks).toBe("red");
+			// GitHub's red no longer counts, and the repo's own checks have not run at this head yet.
+			expect(second.checks).toBe("pending");
+		});
+
+		it("none: a head a person moved reads pending, whatever the pushed head's checks said", async () => {
+			const {home} = scene({github: "none"});
+			const {before, after} = await run(
+				home,
+				Effect.gen(function* () {
+					const {pr} = yield* opened(A_FILE);
+					const host = yield* CodeHost;
+					yield* host
+						.checksSettled(pr, (yield* (yield* LanePulls).find(pr)).head, [])
+						.pipe(Stream.take(1), Stream.runDrain);
+					const before = (yield* host.prFacts(pr)).checks;
+					// The branch moves on GitHub, and the lane's row still names what it pushed.
+					const work = yield* LaneWork;
+					const tree = yield* work.tree(NUMBER);
+					const moved = yield* work.commit(
+						tree.tree,
+						[{path: "src/moved.ts", text: "export const moved = 1;\n"}],
+						"A person's commit",
+					);
+					yield* work.pushTo(tree.tree, moved, tree.branch);
+					return {before, after: (yield* host.prFacts(pr)).checks};
+				}),
+			);
+			// Green at the head the checks ran on proves the next line is about the move.
+			expect(before).toBe("green");
+			expect(after).toBe("pending");
+		});
+
+		it("a pull request's change is not read from GitHub: only a plan's book has one", async () => {
+			const {home, fake} = scene({});
+			const got = await run(
+				home,
+				Effect.gen(function* () {
+					const {pr, head} = yield* opened(A_FILE);
+					const before = fake.calls().length;
+					const said = yield* Effect.result((yield* CodeHost).change(pr, head));
+					return {tag: said._tag, asked: fake.calls().length - before};
+				}),
+			);
+			expect(got).toEqual({tag: "Failure", asked: 0});
 		});
 
 		const settledThenFacts = (home: string, files: readonly {path: string; text: string}[]) =>

@@ -38,6 +38,8 @@ export function makeLaneHome({
 	host = "local",
 	rubrics = "docs/rubrics",
 	github,
+	mainFiles = [],
+	alsoCheck,
 }: {
 	readonly dir: string;
 	readonly nodeModules: string;
@@ -48,6 +50,10 @@ export function makeLaneHome({
 	readonly rubrics?: string | null;
 	/** `[checks] github`. Left out: the file does not say. */
 	readonly github?: "every" | "required" | "none";
+	/** More files on main from the first commit. */
+	readonly mainFiles?: readonly {readonly path: string; readonly text: string}[];
+	/** One more `[[checks.run]]`: `sh -c <this>`. */
+	readonly alsoCheck?: string;
 }) {
 	const git = (cwd: string, ...args: readonly string[]) =>
 		execFileSync("git", args, {cwd, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
@@ -107,6 +113,7 @@ export function makeLaneHome({
 	put("docs/rubrics/code.md", "Code that does what its ticket says.\n");
 	put("docs/rubrics/doc.md", "Words that say what is true.\n");
 	put("docs/rubrics/skill.md", "A skill that does one job.\n");
+	for (const {path, text} of mainFiles) put(path, text);
 	put(
 		".fabrika/fabrika.toml",
 		[
@@ -134,6 +141,14 @@ export function makeLaneHome({
 			'name = "test"',
 			`run = ["sh", "-c", ${JSON.stringify(`${link} && node_modules/.bin/vitest run`)}]`,
 			"",
+			...(alsoCheck === undefined
+				? []
+				: [
+						"[[checks.run]]",
+						'name = "also"',
+						`run = ["sh", "-c", ${JSON.stringify(alsoCheck)}]`,
+						"",
+					]),
 		].join("\n"),
 	);
 	git(seed, "add", "-A");
@@ -151,7 +166,6 @@ export function makeLaneHome({
 /** One check on GitHub, as the stand-in `gh` tells it. `ends`: how it ends once the checks settle. */
 export interface FakeCheck {
 	readonly name: string;
-	readonly required: boolean;
 	readonly ends: "SUCCESS" | "FAILURE";
 }
 
@@ -163,8 +177,14 @@ export interface GhStory {
 	readonly settleAfter?: number;
 	/** The base branch's rule. `refuses`: GitHub refuses the merge. `allows`: it merges by GitHub's own merge. */
 	readonly rule?: "none" | "refuses" | "allows";
-	/** A person pushes one more commit just as the merge is about to be written. */
-	readonly moveHeadAt?: "merge_read";
+	/** A person pushes one more commit: at the first facts read, or just as the merge is about to be written. */
+	readonly moveHeadAt?: "facts" | "merge_read";
+	/** The merge's ref moves, and GitHub has not marked the pull request merged by the end of the run. */
+	readonly marksLate?: boolean;
+	/** A fork has a pull request open from a branch of this name, into this repository. */
+	readonly forkOn?: string;
+	/** What `gh pr create` prints, in place of the new pull request's url. */
+	readonly createSays?: string;
 }
 
 const GhCall = Schema.Struct({
