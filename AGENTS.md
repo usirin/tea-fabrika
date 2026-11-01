@@ -168,6 +168,7 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
+Exact npm versions only, never a range: `pnpm lint` fails on one ([exact versions](./docs/direction/pin-exact-versions.md)).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,

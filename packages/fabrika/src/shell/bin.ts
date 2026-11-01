@@ -34,14 +34,18 @@ const installed = (name: string): boolean => {
 
 const missing = NEEDS.filter((name) => !installed(name));
 if (missing.length > 0) {
-	// The install line carries the package's own peer ranges: a bare `npm install` takes each
-	// package's latest, which can fall outside them. `src/shell/` and `dist/shell/` both sit two
-	// levels down.
+	// The install line carries the package's own peer versions: a bare `npm install` takes each
+	// package's latest, which can differ. `src/shell/` and `dist/shell/` both sit two levels down. In
+	// this repo the manifest says `catalog:`, which npm cannot read, and `pnpm install` is the fix; a
+	// pack holds the versions.
 	const {peerDependencies: peers} = JSON.parse(
 		readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
 	) as {peerDependencies: Record<string, string>};
+	const install = missing.some((name) => peers[name] === "catalog:")
+		? "pnpm install"
+		: `npm install ${missing.map((name) => `"${name}@${peers[name]}"`).join(" ")}`;
 	process.stderr.write(
-		`tsh: tsh needs ${missing.join(", ")}, not installed. Install: npm install ${missing.map((name) => `"${name}@${peers[name]}"`).join(" ")}\n`,
+		`tsh: tsh needs ${missing.join(", ")}, not installed. Install: ${install}\n`,
 	);
 	process.exitCode = 1;
 } else {
