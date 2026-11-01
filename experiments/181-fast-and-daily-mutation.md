@@ -1,4 +1,4 @@
-# 181: A fast mutation check per pull request, and a daily run for the rest
+# 181: A fast mutation check per pull request, and a mutation queue for the rest
 
 Done 2026-11-01. Today's version: the mutation step in
 `packages/pipeline/src/stages/mutation/`, StrykerJS 10.1.1 with the vitest runner. No model,
@@ -28,16 +28,23 @@ run over the whole codebase gets planned.
   90 to 300 mutants after the first test run, by how slow the code's tests are. The median
   merged pull request has 98 mutants, so it about fits. The 75th percentile has 761, so a
   third to a half of pull requests do not fit whole. Over the cap, the
-  check stops, keeps what it has, and says which lines it did not reach. The daily run covers
-  the rest. Sure: 70%.
-- **The daily run: about 87,000 mutants once legacy is out, about 16 runner hours for a full
-  pass.** On GitHub Actions' free public runners, 20 shards at a time, a full pass is about an
-  hour of wall time. After the first pass, incremental reuse runs only what changed. The
-  tracker is on the laptop, so Actions cannot file tickets; a job on the laptop fetches the
-  results and files them.
+  check stops, keeps what it has, and says which lines it did not reach. Sure: 70%.
+- **What it means, as the owner then shaped it:**
+  - **Today's version gets only the speedups on each pull request:** the 10 s test limit,
+    static mutants off, slow test files out, the 5-minute cap in the step, and lines first.
+    About 3 to 5 agent hours. Its daily run is not built: that was 15 to 24 agent hours in
+    code that `next/` deletes.
+  - **In `next/`, the rest goes to a mutation queue,** a program shaped like a merge queue, in
+    Tier 6. A pull request's unreached lines and a daily sweep go in, repeats drop by a stable
+    id, hands run Stryker, and survivors come out as at most 3 tickets a day. It runs on a
+    Durable Object alarm and writes the tracker on the ledger. See
+    [the direction note](../docs/direction/fast-and-daily-mutation.md).
+- **The whole codebase: about 87,000 mutants once legacy is out,** about 48 worker hours for a
+  first pass, a guess. After the first pass, incremental reuse runs only what changed.
 - **No Tier 1 pull request has to be split for mutation.** Only C and D2 fit the cap whole.
-  The others get a lines-first part per pull request and the rest the next day. If the owner
-  wants every mutant checked per pull request, the limit is about 100 to 350 product lines.
+  The others get a lines-first part. In today's version, the rest is only reported. If the
+  owner wants every mutant checked per pull request, the limit is about 100 to 350 product
+  lines.
 
 ## 1. Where the time goes
 
@@ -185,9 +192,9 @@ mutant time on 2 workers, not wall time.
 - **When a pull request does not fit.** The check runs lines first: one mutant on each
   changed line, in a fixed seeded order, then the rest. At 5 minutes it stops. It keeps every
   answer it has (a reporter writes each one as it comes) and says in plain words how many
-  lines and mutants it did not reach. Those go to the daily run, which reaches them by the
-  next day. A pull request is not split to fit the check: splitting is for the review's
-  sake.
+  lines and mutants it did not reach. In `next/`, those enter the mutation queue. In today's
+  version they are only reported. A pull request is not split to fit the check: splitting is
+  for the review's sake.
 
 Sure of 5 minutes: 70%. The doubt is the rate. It came from three sets on a busy laptop, and
 the ship gate's tests are ten times slower than the mutation step's own. A week of the real
@@ -203,23 +210,19 @@ step's timings settles it.
   48 worker hours. A public repo's standard Linux runner has 4 cores
   ([GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)), so 3
   workers each: about 16 runner hours. Sure: 50%; the rate is from three files.
-- **Where.** GitHub Actions on this public repo. Standard runners are free in public repos
-  ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). A
-  job may run 6 hours, a matrix may hold 256 jobs, and the free plan runs 20 jobs at a time
-  ([limits](https://docs.github.com/en/actions/reference/limits)). So the first full pass is
-  20 shards of about 50 minutes. After it, incremental reuse runs only the mutants on code
-  and tests that changed, and a weekly `force` catches what incremental cannot see. No new
-  account.
-- **Scheduled runs can be late.** GitHub says a schedule may be delayed under load, and is
-  turned off after 60 days without activity in a public repo
-  ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)).
-  This repo has commits every day.
-- **The tracker is not on the internet.** Today's tracker is `ledger.sqlite` in the app's
-  home on the laptop. Its socket only takes local agents, and `fabrika post` needs a
-  connected home and the person's key (`apps/fabrika/src/host/post.ts`). So Actions uploads
-  its results as an artifact (kept 90 days), and a job on the laptop fetches them through
-  `CodeHost` and files tickets as an agent. The design is in
+- **Where it runs: in `next/`, as a mutation queue on hands.** The owner set this after the
+  first draft. The queue is a program on a Durable Object alarm. It reads and writes the
+  tracker on the ledger, and hands run Stryker. Today's version gets no daily run. See
   [the direction note](../docs/direction/fast-and-daily-mutation.md).
+- **The first lean, replaced.** The first draft put the daily run on GitHub Actions' free
+  shards: 6 hours a job and 20 jobs at a time on the free plan
+  ([limits](https://docs.github.com/en/actions/reference/limits)), so about 20 shards of 50
+  minutes. Today's tracker is `ledger.sqlite` on the laptop, which Actions cannot reach
+  (`fabrika post` needs a connected home and the person's key, `apps/fabrika/src/host/post.ts`),
+  so a laptop job would have fetched the results through `CodeHost`. That was about 15 to 24
+  agent hours in code that `next/` deletes. It is kept here as the road not taken.
+- **What the queue's hands face.** 48 worker hours is days of rolling batches on a laptop's
+  hands for the first pass. After it, only changed code and tests go in.
 
 ## 6. Pull request size
 
@@ -241,16 +244,16 @@ counts, a guess. The mutation step's own skip list takes out the files no test p
 mutate, so the real numbers are lower.
 
 - **None needs splitting for the check.** Lines first reaches every changed line of C and D2
-  and most of B and E. The rest comes the next day.
+  and most of B and E. The rest enters the mutation queue, once Tier 6 builds it.
 - **The plan's "10 to 25 machine minutes per PR" becomes 5.** And its "Survivors go back to the
   test writer" becomes "survivors are advice, rated by the owner".
-- **`next/` is not on main yet,** so the daily run reaches its code only once PR A lands.
+- **Until Tier 6, nothing reaches the unreached lines.** Tier 1's pull requests come long
+  before the queue, so their leftovers are only reported.
 
 ## What this cannot tell us
 
 - **The rate is from three files on a busy laptop.** The load moved between 7 and 20 all
-  day, with other agents running. GitHub's runners are slower per core than this laptop's.
-  The daily run's 16 hours could be 8 or 30.
+  day, with other agents running. The first pass's 48 worker hours could be half or double.
 - **The fast arm was not run on PR 267's own sample.** That set's by-hand folder belongs to
   another agent. The replay of its report is the closest we have.
 - **No survivor has been checked against a real bug on a real pull request.** The lane's own

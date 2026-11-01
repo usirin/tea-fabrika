@@ -1,6 +1,6 @@
 # Scheduled jobs run on the host's alarms
 
-Proposed 2026-10-24.
+Proposed 2026-10-24. Decided by the owner 2026-11-01.
 
 ```ts
 // A sketch, not built. A scheduled job is a program that listens to the clock.
