@@ -94,32 +94,33 @@ look = "dark"
 version = "3.0.0"   # a new Radix version changes a pick's colors, so it is kept
 gray = "slate"
 accent = "indigo"
+# fixed for every pick: done grass, running amber, stuck red, and the palette's
+# red, grass, amber, blue, purple and cyan, in that order
 
 [colors]
-desk = "#0c0d0e"      # no Radix step is darker than slate 1: the one bend, see below
-ground = "#111113"    # slate 1
-raised = "#18191b"    # slate 2
-hover = "#ddeaf814"   # slate a3
-edge = "#d3edf81d"    # slate a4, the bend color principles already records
-focus = "#d9edff5d"   # slate a8
-text = "#edeef0"      # slate 12
-faint = "#f1f7feb5"   # slate a11
-turn = "#3e63dd"      # indigo 9: your turn
+desk = "#0c0d0e"      # no gray step is darker than 1: the one bend, see below
+ground = "#111113"    # gray 1
+raised = "#18191b"    # gray 2
+hover = "#ddeaf814"   # gray a3
+edge = "#d3edf81d"    # gray a4, the bend color principles already records
+focus = "#d9edff5d"   # gray a8
+text = "#edeef0"      # gray 12
+faint = "#f1f7feb5"   # gray a11
+turn = "#3e63dd"      # accent 9: your turn
 on-turn = "#ffffff"   # Radix's own rule for text on step 9
-turn-text = "#9eb1ff" # indigo 11
-done = "#71d083"      # grass 11
-running = "#ffca16"   # amber 11
-stuck = "#ff9592"     # red 11
-closed = "#f1f7feb5"  # slate a11: no hue, the word says closed
+turn-text = "#9eb1ff" # accent 11
+done = "#71d083"      # step 11
+running = "#ffca16"   # step 11
+stuck = "#ff9592"     # step 11
+closed = "#f1f7feb5"  # gray a11: no hue, the word says closed
 
 [terminal]
 foreground = "#edeef0"
 background = "#111113"
 cursor = "#edeef0"
-selection = "#d9edfe25" # slate a5
-palette = [ ... ]     # 16 Radix steps: slate 3 (black, a fill), red 9, grass 9, amber 9, blue 9,
-                      # purple 11, cyan 9, slate 12, slate 11, then red, grass, amber, blue,
-                      # purple, cyan 11, slate 12
+selection = "#d9edfe25" # gray a5
+palette = [ ... ]     # 16 Radix steps: gray 3 (black, a fill); the six at 9, 9, 9, 9, 11, 9;
+                      # gray 12, gray 11; the six at 11; gray 12
 ```
 
 ```text
@@ -414,6 +415,40 @@ is open (Radix promises APCA). Repair changes colors the person chose: Solarized
 most of their terminal text when drawn, so a "keep my colors" switch may be wanted. A `-fabrika`
 file is a copy: when the scheme's author ships a new version, it must be imported again. A real person using a
 brought theme for a week settles both.
+
+### 5. Two names nobody has set yet (proposed)
+
+Both are guesses. Nothing above sets them, and no other tool was found that answers them.
+
+- **A repaired cursor.** A guess: it gets its own row in `[repaired]`, keyed `cursor`, and the
+  import line names it apart from the app colors. Latte, from the same script:
+
+  ```toml
+  [repaired]
+  # ... the six app colors, as for Nord
+  cursor = { was = "#dc8a78", now = "#c67665", why = "under 3:1 on background" }
+  ```
+
+  ```text
+  Imported Catppuccin Latte as catppuccin-latte-fabrika: 6 colors and the cursor changed to stay readable
+  ```
+
+  - Why: no app color is named `cursor`, so the key cannot be misread, and one table stays the one
+    place a person looks. For this row, `now` must match `[terminal]`'s `cursor`, not `[colors]`.
+    The line says "the cursor" apart because the note says the terminal's colors are never changed,
+    and this is the one that is. A cursor-only repair still renames the file, since import changed
+    a color.
+  - Sure: 60%. Doubt: a `[repaired.terminal]` table may read clearer once a second terminal color
+    can move. None can today.
+- **A pick made in the picker.** A guess: it is named by what was picked, `<gray>-<accent>`, with
+  `-light` for the light look, as `fabrika-light` is: `mauve-iris`, `mauve-iris-light`. Slate and
+  indigo are `fabrika` and `fabrika-light`, so that pick writes only the `theme` line and no file.
+  It keeps its name, as the guess in point 4 says.
+  - Why: the name says what the file holds, no prompt asks for one, and two picks never share a
+    file. VS Code and Zed have no answer to copy, since their pickers only choose themes that
+    already exist.
+  - Sure: 55%. Doubt: the built-ins were named `fabrika` on purpose, not by their scales, so the
+    owner may want a person to name a pick. Asking costs one text box in the picker.
 
 ## The color principles a brought theme gives up
 
