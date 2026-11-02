@@ -162,7 +162,7 @@ export const withRed = (
 export const redWords = (failed: readonly string[], tail: string, most: number): string =>
 	[
 		"The repository's own tests fail at this head:",
-		listed(failed.slice(0, most).map(inert), "No test was named."),
+		listed(failed.slice(0, most).map(codeSpan), "No test was named."),
 		...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
 		...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
 	].join("\n");
