@@ -68,7 +68,7 @@ desk.detach  = []                              # unbound: the key goes on to the
 ### K3: a program for keys
 
 fabrika ships a built-in program to search the bindings, press a key to rebind one, see clashes,
-and write `keybindings.toml`. **Its name is proposed: `keys`.** Today's `C-b ?` already opens a
+and write `keybindings.toml`. **Its name is `keys`, decided 2026-11-01.** Today's `C-b ?` already opens a
 panel called keys, so the word is one people have met.
 
 ```text
@@ -524,8 +524,8 @@ The owner approved each lean below on 2026-11-01. The numbers stay as written.
 ## Where this differs from settled notes
 
 - **W5 says a binding on a key the backend cannot have fails at load.** With one file for the app
-  and a tab, a whole-file failure would be wrong in one of them. Proposed: that binding is off in
-  that window only, and said. The owner to pick, 80% (was 65%): no app read refuses a file, and
+  and a tab, a whole-file failure would be wrong in one of them. Decided 2026-11-01: that binding is off in
+  that window only, and said. 80% (was 65%): no app read refuses a file, and
   VS Code's source turns such keys off per window
   ([experiment 182](../../experiments/182-keybindings.md#apps-with-a-desktop-and-a-web-version)).
 - **[The GUI is an Electron app first](./the-gui-is-electron-first.md) lists "keys a project
