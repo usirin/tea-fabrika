@@ -1,0 +1,3291 @@
+{
+	"read": "2026-11-02T02:56:23.742Z",
+	"runsFile": "field/runs.jsonl",
+	"extraFile": null,
+	"teaFabrika": {
+		"mergedOnMain": 250,
+		"firstRun": "2026-10-23",
+		"mergedSinceFirstRun": 219,
+		"runsOnItsLanes": 105,
+		"joinedRuns": 91,
+		"joinedPrs": 71,
+		"named": 4,
+		"dated": 67,
+		"notJoined": {
+			"its PR merged into a branch, not main": 4,
+			"no merged PR has its number": 2,
+			"no minutes recorded": 7,
+			"a copy of another row's run": 1
+		},
+		"all": {
+			"prs": 71,
+			"hours": 53.8,
+			"writtenLines": 100115,
+			"pooled": 1860,
+			"median": 1659,
+			"p25": 1055,
+			"p75": 2510,
+			"min": 43,
+			"max": 20014
+		},
+		"namedOnly": {
+			"prs": 4,
+			"hours": 7.1,
+			"writtenLines": 11840,
+			"pooled": 1674,
+			"median": 1682,
+			"p25": 1079,
+			"p75": 6570,
+			"min": 485,
+			"max": 20014
+		},
+		"byBucket": {
+			"code": {
+				"prs": 10,
+				"hours": 7.5,
+				"writtenLines": 11093,
+				"pooled": 1489,
+				"median": 1485,
+				"p25": 705,
+				"p75": 2371,
+				"min": 43,
+				"max": 5161
+			},
+			"code and tests": {
+				"prs": 19,
+				"hours": 8.8,
+				"writtenLines": 25131,
+				"pooled": 2868,
+				"median": 2036,
+				"p25": 1303,
+				"p75": 2966,
+				"min": 164,
+				"max": 7662
+			},
+			"test": {
+				"prs": 9,
+				"hours": 10,
+				"writtenLines": 20891,
+				"pooled": 2090,
+				"median": 1276,
+				"p25": 602,
+				"p75": 2353,
+				"min": 242,
+				"max": 8378
+			},
+			"docs": {
+				"prs": 8,
+				"hours": 3.5,
+				"writtenLines": 7286,
+				"pooled": 2093,
+				"median": 1965,
+				"p25": 585,
+				"p75": 3331,
+				"min": 161,
+				"max": 20014
+			},
+			"experiment": {
+				"prs": 17,
+				"hours": 16.8,
+				"writtenLines": 22807,
+				"pooled": 1354,
+				"median": 1563,
+				"p25": 1058,
+				"p75": 2043,
+				"min": 704,
+				"max": 2794
+			},
+			"mixed": {
+				"prs": 8,
+				"hours": 7.3,
+				"writtenLines": 12907,
+				"pooled": 1768,
+				"median": 1854,
+				"p25": 1486,
+				"p75": 2726,
+				"min": 1326,
+				"max": 4212
+			}
+		},
+		"byKind": {
+			"code": {
+				"prs": 47,
+				"lines": 27426,
+				"hours": 37.8,
+				"pooled": 725
+			},
+			"test": {
+				"prs": 46,
+				"lines": 30485,
+				"hours": 34.9,
+				"pooled": 874
+			},
+			"docs": {
+				"prs": 63,
+				"lines": 19217,
+				"hours": 50.3,
+				"pooled": 382
+			},
+			"experiment": {
+				"prs": 30,
+				"lines": 22987,
+				"hours": 28.1,
+				"pooled": 819
+			}
+		},
+		"testRatio": {
+			"prs": 44,
+			"pooled": 1.1,
+			"median": 0.9,
+			"p25": 0.46,
+			"p75": 1.42
+		}
+	},
+	"demlik": {
+		"issuesWithRuns": 89,
+		"joinedUnits": 48,
+		"joinedRuns": 130,
+		"notJoinedLeafRuns": {
+			"no merged PR closes its issue": 39,
+			"minutes of those": 215,
+			"no minutes recorded": 2
+		},
+		"driverRunsLeftOut": {
+			"runs": 83,
+			"hours": 38.8
+		},
+		"all": {
+			"prs": 48,
+			"hours": 20.1,
+			"writtenLines": 34705,
+			"pooled": 1728,
+			"median": 1364,
+			"p25": 527,
+			"p75": 3898,
+			"min": 0,
+			"max": 19589
+		},
+		"wholeLanes": {
+			"prs": 11,
+			"hours": 5.7,
+			"writtenLines": 3429,
+			"pooled": 601,
+			"median": 602,
+			"p25": 279,
+			"p75": 740,
+			"min": 11,
+			"max": 1207,
+			"roleHours": {
+				"triager": 0.4,
+				"builder": 2.2,
+				"reviewer": 1.6,
+				"shipper": 1.5
+			},
+			"testRatio": {
+				"prs": 7,
+				"pooled": 2.11,
+				"median": 1.63,
+				"p25": 0.99,
+				"p75": 3.97
+			}
+		},
+		"byBucket": {
+			"code and tests": {
+				"prs": 13,
+				"hours": 5.8,
+				"writtenLines": 11039,
+				"pooled": 1918,
+				"median": 1306,
+				"p25": 684,
+				"p75": 2212,
+				"min": 297,
+				"max": 9083
+			},
+			"test": {
+				"prs": 29,
+				"hours": 12.8,
+				"writtenLines": 23411,
+				"pooled": 1836,
+				"median": 1989,
+				"p25": 754,
+				"p75": 4277,
+				"min": 19,
+				"max": 19589
+			},
+			"docs": {
+				"prs": 4,
+				"hours": 1.3,
+				"writtenLines": 240,
+				"pooled": 180,
+				"median": 11,
+				"p25": 9,
+				"p75": 169,
+				"min": 5,
+				"max": 639
+			},
+			"mixed": {
+				"prs": 1,
+				"hours": 0.1,
+				"writtenLines": 15,
+				"pooled": 167,
+				"median": 167,
+				"p25": 167,
+				"p75": 167,
+				"min": 167,
+				"max": 167
+			},
+			"none": {
+				"prs": 1,
+				"hours": 0.2,
+				"writtenLines": 0,
+				"pooled": 0,
+				"median": 0,
+				"p25": 0,
+				"p75": 0,
+				"min": 0,
+				"max": 0
+			}
+		},
+		"byKind": {
+			"code": {
+				"prs": 38,
+				"lines": 10213,
+				"hours": 16.7,
+				"pooled": 610
+			},
+			"test": {
+				"prs": 43,
+				"lines": 21228,
+				"hours": 18.6,
+				"pooled": 1141
+			},
+			"docs": {
+				"prs": 44,
+				"lines": 3264,
+				"hours": 18.7,
+				"pooled": 174
+			},
+			"experiment": {
+				"prs": 0,
+				"lines": 0,
+				"hours": 0,
+				"pooled": null
+			}
+		},
+		"testRatio": {
+			"prs": 38,
+			"pooled": 2.04,
+			"median": 2.75,
+			"p25": 1.2,
+			"p75": 4.54
+		}
+	},
+	"both": {
+		"all": {
+			"prs": 119,
+			"hours": 73.9,
+			"writtenLines": 134820,
+			"pooled": 1824,
+			"median": 1582,
+			"p25": 768,
+			"p75": 2662,
+			"min": 0,
+			"max": 20014
+		},
+		"byBucket": {
+			"code": {
+				"prs": 10,
+				"hours": 7.5,
+				"writtenLines": 11093,
+				"pooled": 1489,
+				"median": 1485,
+				"p25": 705,
+				"p75": 2371,
+				"min": 43,
+				"max": 5161
+			},
+			"code and tests": {
+				"prs": 32,
+				"hours": 14.5,
+				"writtenLines": 36170,
+				"pooled": 2492,
+				"median": 1914,
+				"p25": 1006,
+				"p75": 2881,
+				"min": 164,
+				"max": 9083
+			},
+			"test": {
+				"prs": 38,
+				"hours": 22.7,
+				"writtenLines": 44302,
+				"pooled": 1948,
+				"median": 1654,
+				"p25": 686,
+				"p75": 4206,
+				"min": 19,
+				"max": 19589
+			},
+			"docs": {
+				"prs": 12,
+				"hours": 4.8,
+				"writtenLines": 7526,
+				"pooled": 1563,
+				"median": 628,
+				"p25": 124,
+				"p75": 2292,
+				"min": 5,
+				"max": 20014
+			},
+			"experiment": {
+				"prs": 17,
+				"hours": 16.8,
+				"writtenLines": 22807,
+				"pooled": 1354,
+				"median": 1563,
+				"p25": 1058,
+				"p75": 2043,
+				"min": 704,
+				"max": 2794
+			},
+			"mixed": {
+				"prs": 9,
+				"hours": 7.4,
+				"writtenLines": 12922,
+				"pooled": 1749,
+				"median": 1621,
+				"p25": 1349,
+				"p75": 2433,
+				"min": 167,
+				"max": 4212
+			},
+			"none": {
+				"prs": 1,
+				"hours": 0.2,
+				"writtenLines": 0,
+				"pooled": 0,
+				"median": 0,
+				"p25": 0,
+				"p75": 0,
+				"min": 0,
+				"max": 0
+			}
+		}
+	},
+	"failedRunShare": {
+		"runs": 221,
+		"failed": 47,
+		"failedHours": 4.4
+	},
+	"guesses": [
+		{
+			"at": "docs/plan/tier-1-detail.md:28",
+			"what": "Tier 1, the stated rate",
+			"lines": 150,
+			"hours": 1,
+			"perHour": 150
+		},
+		{
+			"at": "docs/plan/tier-1-detail.md:24",
+			"what": "Tier 1, all of it, product and tests",
+			"lines": 12470,
+			"hours": 77.5,
+			"perHour": 161
+		},
+		{
+			"at": "docs/plan/ticket-115.md:24",
+			"what": "ticket 115, product and tests",
+			"lines": 1600,
+			"hours": 3,
+			"perHour": 533
+		},
+		{
+			"at": "docs/direction/tile-guidelines.md:512",
+			"what": "tiles and the wash",
+			"lines": 410,
+			"hours": 8.5,
+			"perHour": 48
+		},
+		{
+			"at": "docs/direction/modes.md:327",
+			"what": "the desk's modes",
+			"lines": 80,
+			"hours": 1,
+			"perHour": 80
+		},
+		{
+			"at": "docs/direction/windows-in-next.md:52",
+			"what": "windows in Tier 1",
+			"lines": 320,
+			"hours": 4,
+			"perHour": 80
+		},
+		{
+			"at": "experiments/171-alchemy-local-twin.md:363",
+			"what": "the twin child",
+			"lines": 140,
+			"hours": 4,
+			"perHour": 35
+		},
+		{
+			"at": "experiments/177-themes.md:411",
+			"what": "misused tokens",
+			"lines": 20,
+			"hours": 0.5,
+			"perHour": 40
+		},
+		{
+			"at": "experiments/177-themes.md:412",
+			"what": "tones, not RGB",
+			"lines": 60,
+			"hours": 1,
+			"perHour": 60
+		},
+		{
+			"at": "experiments/177-themes.md:413",
+			"what": "Theme and Radix picks",
+			"lines": 300,
+			"hours": 2.5,
+			"perHour": 120
+		},
+		{
+			"at": "experiments/177-themes.md:414",
+			"what": "theme file readers",
+			"lines": 150,
+			"hours": 1,
+			"perHour": 150
+		},
+		{
+			"at": "experiments/177-themes.md:415",
+			"what": "code highlighter",
+			"lines": 100,
+			"hours": 1.5,
+			"perHour": 67
+		},
+		{
+			"at": "experiments/177-themes.md:417",
+			"what": "store on the person",
+			"lines": 200,
+			"hours": 2,
+			"perHour": 100
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:367",
+			"what": "attention view",
+			"lines": 100,
+			"hours": 1,
+			"perHour": 100
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:374",
+			"what": "brief test",
+			"lines": 200,
+			"hours": 2.5,
+			"perHour": 80
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:384",
+			"what": "write-time facts",
+			"lines": 60,
+			"hours": 1,
+			"perHour": 60
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:408",
+			"what": "comment test",
+			"lines": 350,
+			"hours": 4,
+			"perHour": 88
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:417",
+			"what": "message test",
+			"lines": 200,
+			"hours": 2,
+			"perHour": 100
+		},
+		{
+			"at": "experiments/185-dsh-superagent-study.md:423",
+			"what": "ask cap",
+			"lines": 100,
+			"hours": 1,
+			"perHour": 100
+		}
+	],
+	"units": [
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				32
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.4,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 386,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 2464
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				33
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 80.8,
+			"lines": {
+				"code": 675,
+				"test": 347,
+				"docs": 572,
+				"experiment": 223,
+				"record": 0,
+				"config": 228,
+				"other": 16
+			},
+			"bucket": "mixed",
+			"perHour": 1349
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				34
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.8,
+			"lines": {
+				"code": 295,
+				"test": 53,
+				"docs": 214,
+				"experiment": 126,
+				"record": 317,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 4212
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				35
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 16.5,
+			"lines": {
+				"code": 448,
+				"test": 45,
+				"docs": 323,
+				"experiment": 175,
+				"record": 301,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 3604
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				36
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 25.1,
+			"lines": {
+				"code": 838,
+				"test": 179,
+				"docs": 368,
+				"experiment": 213,
+				"record": 121,
+				"config": 68,
+				"other": 70
+			},
+			"bucket": "code and tests",
+			"perHour": 3820
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				37
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 13.7,
+			"lines": {
+				"code": 184,
+				"test": 79,
+				"docs": 6,
+				"experiment": 27,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 1296
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				39
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 52.6,
+			"lines": {
+				"code": 325,
+				"test": 80,
+				"docs": 484,
+				"experiment": 1244,
+				"record": 11141,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 2433
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				40
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 98.6,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 232,
+				"experiment": 925,
+				"record": 34708,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 704
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				42
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 66.3,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 411,
+				"experiment": 961,
+				"record": 6634,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 1242
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				43
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 100.7,
+			"lines": {
+				"code": 1020,
+				"test": 187,
+				"docs": 435,
+				"experiment": 584,
+				"record": 26073,
+				"config": 34,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 1326
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				45
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 19.7,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 203,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 618
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				44
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 33.6,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 90,
+				"experiment": 0,
+				"record": 28,
+				"config": 15,
+				"other": 3
+			},
+			"bucket": "docs",
+			"perHour": 161
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				47
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 48.4,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 285,
+				"experiment": 991,
+				"record": 2637,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 1582
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				48
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 38.2,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 272,
+				"experiment": 723,
+				"record": 1195,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 1563
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				49
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 24.5,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 294,
+				"experiment": 847,
+				"record": 930,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 2794
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				50
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 20.4,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 268,
+				"experiment": 283,
+				"record": 624,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 1621
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				52
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 53.4,
+			"lines": {
+				"code": 1229,
+				"test": 722,
+				"docs": 221,
+				"experiment": 0,
+				"record": 0,
+				"config": 335,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2440
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				51
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 43.4,
+			"lines": {
+				"code": 24,
+				"test": 0,
+				"docs": 7,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 5
+			},
+			"bucket": "code",
+			"perHour": 43
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				54
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 61.2,
+			"lines": {
+				"code": 125,
+				"test": 67,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 188
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				55
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 11.2,
+			"lines": {
+				"code": 134,
+				"test": 135,
+				"docs": 28,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1591
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				56
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 22.9,
+			"lines": {
+				"code": 5,
+				"test": 86,
+				"docs": 7,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 257
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				63
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 25.1,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 293,
+				"experiment": 543,
+				"record": 1735,
+				"config": 0,
+				"other": 156
+			},
+			"bucket": "experiment",
+			"perHour": 1998
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				62
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 30.9,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 873,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 1695
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				65
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 35.2,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 248,
+				"experiment": 519,
+				"record": 365,
+				"config": 0,
+				"other": 1106
+			},
+			"bucket": "experiment",
+			"perHour": 1307
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				68
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 66.9,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 298,
+				"experiment": 679,
+				"record": 2259,
+				"config": 0,
+				"other": 738
+			},
+			"bucket": "experiment",
+			"perHour": 876
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				69
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 35.8,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 281,
+				"experiment": 1321,
+				"record": 859,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 2685
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				72
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 104.2,
+			"lines": {
+				"code": 669,
+				"test": 77,
+				"docs": 553,
+				"experiment": 1361,
+				"record": 30842,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 1532
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				75
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 10.7,
+			"lines": {
+				"code": 85,
+				"test": 76,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 903
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				76
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 11.7,
+			"lines": {
+				"code": 179,
+				"test": 218,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2036
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				77
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 12.6,
+			"lines": {
+				"code": 279,
+				"test": 250,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2519
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				78
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.4,
+			"lines": {
+				"code": 66,
+				"test": 93,
+				"docs": 4,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1040
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				79
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 22.1,
+			"lines": {
+				"code": 1334,
+				"test": 566,
+				"docs": 1,
+				"experiment": 0,
+				"record": 0,
+				"config": 12,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 5161
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				80
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 13.6,
+			"lines": {
+				"code": 114,
+				"test": 165,
+				"docs": 22,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1328
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				82
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 52.2,
+			"lines": {
+				"code": 1529,
+				"test": 968,
+				"docs": 231,
+				"experiment": 0,
+				"record": 0,
+				"config": 15,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 3136
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				83
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 69.3,
+			"lines": {
+				"code": 1310,
+				"test": 522,
+				"docs": 101,
+				"experiment": 0,
+				"record": 0,
+				"config": 70,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 1674
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				84
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 63,
+			"lines": {
+				"code": 2466,
+				"test": 1561,
+				"docs": 317,
+				"experiment": 188,
+				"record": 154,
+				"config": 5,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 4316
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				85
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 32.3,
+			"lines": {
+				"code": 424,
+				"test": 477,
+				"docs": 96,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1852
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				87
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 10.4,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 1028,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 5931
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				88
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 77.1,
+			"lines": {
+				"code": 35,
+				"test": 0,
+				"docs": 288,
+				"experiment": 1281,
+				"record": 4110,
+				"config": 140,
+				"other": 124
+			},
+			"bucket": "experiment",
+			"perHour": 1248
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				90
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 74.9,
+			"lines": {
+				"code": 1538,
+				"test": 805,
+				"docs": 129,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 1980
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				92
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 52.2,
+			"lines": {
+				"code": 2162,
+				"test": 5104,
+				"docs": 23,
+				"experiment": 0,
+				"record": 0,
+				"config": 8,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 8378
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				94
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 42,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 494,
+				"experiment": 1077,
+				"record": 905,
+				"config": 1211,
+				"other": 12
+			},
+			"bucket": "experiment",
+			"perHour": 2244
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				96
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 8.8,
+			"lines": {
+				"code": 65,
+				"test": 30,
+				"docs": 4,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 675
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				98
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 90.2,
+			"lines": {
+				"code": 73,
+				"test": 0,
+				"docs": 426,
+				"experiment": 1091,
+				"record": 1,
+				"config": 0,
+				"other": 779
+			},
+			"bucket": "experiment",
+			"perHour": 1058
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				101
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 55.9,
+			"lines": {
+				"code": 80,
+				"test": 925,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1079
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				106
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 84.4,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 212,
+				"experiment": 889,
+				"record": 1739,
+				"config": 0,
+				"other": 5
+			},
+			"bucket": "experiment",
+			"perHour": 783
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				109
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 21.1,
+			"lines": {
+				"code": 247,
+				"test": 406,
+				"docs": 42,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1976
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				110
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 31.8,
+			"lines": {
+				"code": 34,
+				"test": 47,
+				"docs": 6,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 164
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				111
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 80.9,
+			"lines": {
+				"code": 804,
+				"test": 256,
+				"docs": 11,
+				"experiment": 0,
+				"record": 0,
+				"config": 2,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 794
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				113
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 21.9,
+			"lines": {
+				"code": 448,
+				"test": 1338,
+				"docs": 16,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 4937
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				114
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 15.3,
+			"lines": {
+				"code": 0,
+				"test": 423,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1659
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				115
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 95.7,
+			"lines": {
+				"code": 966,
+				"test": 2739,
+				"docs": 42,
+				"experiment": 6,
+				"record": 0,
+				"config": 0,
+				"other": 3
+			},
+			"bucket": "test",
+			"perHour": 2353
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				116
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 37.9,
+			"lines": {
+				"code": 595,
+				"test": 2714,
+				"docs": 396,
+				"experiment": 1135,
+				"record": 1821,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 7662
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				117
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 18.1,
+			"lines": {
+				"code": 0,
+				"test": 73,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 242
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				118
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 27.5,
+			"lines": {
+				"code": 60,
+				"test": 216,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 602
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				119
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 32.7,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 405,
+				"experiment": 870,
+				"record": 569,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 2339
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				120
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 45,
+			"lines": {
+				"code": 1164,
+				"test": 698,
+				"docs": 77,
+				"experiment": 0,
+				"record": 0,
+				"config": 11,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 2585
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				122
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 53.8,
+			"lines": {
+				"code": 178,
+				"test": 193,
+				"docs": 352,
+				"experiment": 1109,
+				"record": 1167,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 2043
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				126
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 99.7,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 444,
+				"experiment": 2175,
+				"record": 468,
+				"config": 910,
+				"other": 37
+			},
+			"bucket": "experiment",
+			"perHour": 1576
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				124
+			],
+			"issues": [],
+			"join": "named",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 52.9,
+			"lines": {
+				"code": 448,
+				"test": 371,
+				"docs": 346,
+				"experiment": 676,
+				"record": 1260,
+				"config": 0,
+				"other": 67
+			},
+			"bucket": "mixed",
+			"perHour": 2088
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				128
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 18.9,
+			"lines": {
+				"code": 705,
+				"test": 616,
+				"docs": 91,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 4483
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				127
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 91.9,
+			"lines": {
+				"code": 14,
+				"test": 36,
+				"docs": 297,
+				"experiment": 745,
+				"record": 5717,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "experiment",
+			"perHour": 713
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				129
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 29.2,
+			"lines": {
+				"code": 600,
+				"test": 683,
+				"docs": 78,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2797
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				130
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 27.8,
+			"lines": {
+				"code": 724,
+				"test": 335,
+				"docs": 100,
+				"experiment": 0,
+				"record": 0,
+				"config": 1052,
+				"other": 0
+			},
+			"bucket": "code",
+			"perHour": 2501
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				131
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 23.6,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 879,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 2235
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				132
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 26.8,
+			"lines": {
+				"code": 205,
+				"test": 230,
+				"docs": 136,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 33
+			},
+			"bucket": "code and tests",
+			"perHour": 1278
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				134
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 40.3,
+			"lines": {
+				"code": 872,
+				"test": 901,
+				"docs": 87,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2769
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				140
+			],
+			"issues": [],
+			"join": "dated",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 24.5,
+			"lines": {
+				"code": 186,
+				"test": 243,
+				"docs": 1,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1053
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				267
+			],
+			"issues": [],
+			"join": "named",
+			"runs": 10,
+			"failed": 1,
+			"minutes": 290.1,
+			"lines": {
+				"code": 1466,
+				"test": 4150,
+				"docs": 556,
+				"experiment": 0,
+				"record": 5661,
+				"config": 0,
+				"other": 3
+			},
+			"bucket": "test",
+			"perHour": 1276
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				269
+			],
+			"issues": [],
+			"join": "named",
+			"runs": 3,
+			"failed": 3,
+			"minutes": 9.7,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 3249,
+				"experiment": 0,
+				"record": 4,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 20014
+		},
+		{
+			"repo": "tea-fabrika",
+			"prs": [
+				272
+			],
+			"issues": [],
+			"join": "named",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 71.6,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 578,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 485
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				618
+			],
+			"issues": [
+				605
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 18.9,
+			"lines": {
+				"code": 12,
+				"test": 96,
+				"docs": 6,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 362
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				620
+			],
+			"issues": [
+				616
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 2.6,
+			"lines": {
+				"code": 19,
+				"test": 51,
+				"docs": 24,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2169
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				619
+			],
+			"issues": [
+				599
+			],
+			"join": "closes",
+			"runs": 4,
+			"failed": 2,
+			"minutes": 52.9,
+			"lines": {
+				"code": 426,
+				"test": 236,
+				"docs": 73,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 10061
+			},
+			"bucket": "code and tests",
+			"perHour": 834
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				614
+			],
+			"issues": [
+				601
+			],
+			"join": "closes",
+			"runs": 4,
+			"failed": 1,
+			"minutes": 33,
+			"lines": {
+				"code": 109,
+				"test": 178,
+				"docs": 44,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 602
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				606
+			],
+			"issues": [
+				600
+			],
+			"join": "closes",
+			"runs": 4,
+			"failed": 1,
+			"minutes": 35.8,
+			"lines": {
+				"code": 187,
+				"test": 166,
+				"docs": 55,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 684
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				617
+			],
+			"issues": [
+				604,
+				608,
+				612
+			],
+			"join": "closes",
+			"runs": 7,
+			"failed": 4,
+			"minutes": 30.9,
+			"lines": {
+				"code": 1922,
+				"test": 1401,
+				"docs": 713,
+				"experiment": 0,
+				"record": 0,
+				"config": 87,
+				"other": 36
+			},
+			"bucket": "code and tests",
+			"perHour": 7837
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				626
+			],
+			"issues": [
+				559
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 11.1,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 2,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 11
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				634
+			],
+			"issues": [
+				622
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 22.8,
+			"lines": {
+				"code": 218,
+				"test": 497,
+				"docs": 41,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1989
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				629
+			],
+			"issues": [
+				623
+			],
+			"join": "closes",
+			"runs": 5,
+			"failed": 2,
+			"minutes": 23.4,
+			"lines": {
+				"code": 59,
+				"test": 57,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 4,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 297
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				628
+			],
+			"issues": [
+				625
+			],
+			"join": "closes",
+			"runs": 9,
+			"failed": 5,
+			"minutes": 35.6,
+			"lines": {
+				"code": 42,
+				"test": 161,
+				"docs": 24,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 383
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				632
+			],
+			"issues": [
+				561
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 5.4,
+			"lines": {
+				"code": 0,
+				"test": 8,
+				"docs": 7,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "mixed",
+			"perHour": 167
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				650
+			],
+			"issues": [
+				631
+			],
+			"join": "closes",
+			"runs": 5,
+			"failed": 2,
+			"minutes": 41.1,
+			"lines": {
+				"code": 102,
+				"test": 561,
+				"docs": 164,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1207
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				655
+			],
+			"issues": [
+				640
+			],
+			"join": "closes",
+			"runs": 5,
+			"failed": 2,
+			"minutes": 45.9,
+			"lines": {
+				"code": 233,
+				"test": 236,
+				"docs": 140,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 796
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				671
+			],
+			"issues": [
+				656
+			],
+			"join": "closes",
+			"runs": 4,
+			"failed": 2,
+			"minutes": 36.2,
+			"lines": {
+				"code": 91,
+				"test": 374,
+				"docs": 63,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 875
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				658
+			],
+			"issues": [
+				635
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 21.7,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 231,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 639
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				713
+			],
+			"issues": [
+				710
+			],
+			"join": "closes",
+			"runs": 6,
+			"failed": 2,
+			"minutes": 11.8,
+			"lines": {
+				"code": 101,
+				"test": 187,
+				"docs": 10,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1515
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				846
+			],
+			"issues": [
+				777
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 4.2,
+			"lines": {
+				"code": 68,
+				"test": 401,
+				"docs": 58,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 7529
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				769
+			],
+			"issues": [
+				752
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 21.1,
+			"lines": {
+				"code": 358,
+				"test": 323,
+				"docs": 97,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 2212
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				768
+			],
+			"issues": [
+				762
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9,
+			"lines": {
+				"code": 91,
+				"test": 436,
+				"docs": 53,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 3867
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				774
+			],
+			"issues": [
+				764
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 52,
+			"lines": {
+				"code": 449,
+				"test": 1604,
+				"docs": 53,
+				"experiment": 0,
+				"record": 0,
+				"config": 347,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 2430
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				771
+			],
+			"issues": [
+				737
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 1,
+			"minutes": 20.9,
+			"lines": {
+				"code": 225,
+				"test": 207,
+				"docs": 23,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1306
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				778
+			],
+			"issues": [
+				689
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 33.9,
+			"lines": {
+				"code": 338,
+				"test": 373,
+				"docs": 63,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 1370
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				792
+			],
+			"issues": [
+				695
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 63.1,
+			"lines": {
+				"code": 119,
+				"test": 528,
+				"docs": 50,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 663
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				800
+			],
+			"issues": [
+				793
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 37.5,
+			"lines": {
+				"code": 158,
+				"test": 723,
+				"docs": 150,
+				"experiment": 0,
+				"record": 0,
+				"config": 8,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1650
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				708
+			],
+			"issues": [
+				700
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 148.9,
+			"lines": {
+				"code": 1440,
+				"test": 2362,
+				"docs": 121,
+				"experiment": 0,
+				"record": 0,
+				"config": 19,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1581
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				784
+			],
+			"issues": [
+				740
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.3,
+			"lines": {
+				"code": 87,
+				"test": 520,
+				"docs": 56,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 4277
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				806
+			],
+			"issues": [
+				698
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.2,
+			"lines": {
+				"code": 80,
+				"test": 507,
+				"docs": 25,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 3991
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				808
+			],
+			"issues": [
+				728
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 20.7,
+			"lines": {
+				"code": 545,
+				"test": 651,
+				"docs": 261,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 4223
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				781
+			],
+			"issues": [
+				765
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.1,
+			"lines": {
+				"code": 687,
+				"test": 2100,
+				"docs": 184,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 19589
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				815
+			],
+			"issues": [
+				795
+			],
+			"join": "closes",
+			"runs": 4,
+			"failed": 1,
+			"minutes": 33.3,
+			"lines": {
+				"code": 0,
+				"test": 130,
+				"docs": 15,
+				"experiment": 0,
+				"record": 0,
+				"config": 49,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 261
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				820
+			],
+			"issues": [
+				809
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 45.6,
+			"lines": {
+				"code": 78,
+				"test": 478,
+				"docs": 17,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 754
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				811
+			],
+			"issues": [
+				745
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 8.8,
+			"lines": {
+				"code": 238,
+				"test": 839,
+				"docs": 48,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 7670
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				812
+			],
+			"issues": [
+				735
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 0,
+			"minutes": 9.1,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 9,
+				"other": 0
+			},
+			"bucket": "none",
+			"perHour": 0
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				816
+			],
+			"issues": [
+				697
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 0,
+			"minutes": 21.3,
+			"lines": {
+				"code": 80,
+				"test": 800,
+				"docs": 57,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 2639
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				822
+			],
+			"issues": [
+				807
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 25.8,
+			"lines": {
+				"code": 0,
+				"test": 145,
+				"docs": 51,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 456
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				848
+			],
+			"issues": [
+				810
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 4.8,
+			"lines": {
+				"code": 62,
+				"test": 270,
+				"docs": 29,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 4513
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				850
+			],
+			"issues": [
+				817
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 4.9,
+			"lines": {
+				"code": 70,
+				"test": 299,
+				"docs": 80,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 5498
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				828
+			],
+			"issues": [
+				814
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 22.4,
+			"lines": {
+				"code": 0,
+				"test": 88,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 2,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 236
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				824
+			],
+			"issues": [
+				789
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 1,
+			"minutes": 17,
+			"lines": {
+				"code": 87,
+				"test": 61,
+				"docs": 8,
+				"experiment": 0,
+				"record": 0,
+				"config": 201,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 551
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				825
+			],
+			"issues": [
+				821
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 25.1,
+			"lines": {
+				"code": 0,
+				"test": 8,
+				"docs": 0,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 19
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				826
+			],
+			"issues": [
+				335
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 0,
+			"minutes": 25.2,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 5,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 12
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				839
+			],
+			"issues": [
+				788
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 1,
+			"minutes": 16.5,
+			"lines": {
+				"code": 201,
+				"test": 563,
+				"docs": 32,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 2895
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				844
+			],
+			"issues": [
+				799
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 5.6,
+			"lines": {
+				"code": 298,
+				"test": 774,
+				"docs": 28,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 11786
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				845
+			],
+			"issues": [
+				802
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 5.5,
+			"lines": {
+				"code": 111,
+				"test": 299,
+				"docs": 44,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 4953
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				832
+			],
+			"issues": [
+				804
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 24.2,
+			"lines": {
+				"code": 344,
+				"test": 667,
+				"docs": 23,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 2564
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				847
+			],
+			"issues": [
+				805
+			],
+			"join": "closes",
+			"runs": 1,
+			"failed": 1,
+			"minutes": 7.2,
+			"lines": {
+				"code": 476,
+				"test": 586,
+				"docs": 28,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "code and tests",
+			"perHour": 9083
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				833
+			],
+			"issues": [
+				827
+			],
+			"join": "closes",
+			"runs": 3,
+			"failed": 1,
+			"minutes": 22,
+			"lines": {
+				"code": 0,
+				"test": 0,
+				"docs": 2,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "docs",
+			"perHour": 5
+		},
+		{
+			"repo": "demlik",
+			"prs": [
+				840
+			],
+			"issues": [
+				837
+			],
+			"join": "closes",
+			"runs": 2,
+			"failed": 1,
+			"minutes": 12.6,
+			"lines": {
+				"code": 2,
+				"test": 277,
+				"docs": 6,
+				"experiment": 0,
+				"record": 0,
+				"config": 0,
+				"other": 0
+			},
+			"bucket": "test",
+			"perHour": 1357
+		}
+	],
+	"teaFabrikaNotJoined": [
+		{
+			"lane": "#93",
+			"why": "its PR merged into a branch, not main"
+		},
+		{
+			"lane": "#93",
+			"why": "its PR merged into a branch, not main"
+		},
+		{
+			"lane": "#93",
+			"why": "its PR merged into a branch, not main"
+		},
+		{
+			"lane": "#93",
+			"why": "its PR merged into a branch, not main"
+		},
+		{
+			"lane": "#112",
+			"why": "no merged PR has its number"
+		},
+		{
+			"lane": "#135",
+			"why": "no merged PR has its number"
+		},
+		{
+			"lane": "#154",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#155",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#157",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#173",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#269",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#228",
+			"why": "a copy of another row's run"
+		},
+		{
+			"lane": "#270",
+			"why": "no minutes recorded"
+		},
+		{
+			"lane": "#271",
+			"why": "no minutes recorded"
+		}
+	]
+}
