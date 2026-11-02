@@ -205,3 +205,43 @@ describe("the wait for a person's answer, on a clock the test owns", () => {
 		},
 	);
 });
+
+// Memory's doorbell does not ring when it starts listening, so a ring before it listens is never
+// heard: the lane must be listening before its first look.
+describe("the doorbell, listened to before the first look", () => {
+	it("an answer that lands right after the first look is heard with no second passing", async () => {
+		const {got, at} = await onClock(
+			watching,
+			Effect.gen(function* () {
+				yield* filed;
+				yield* asked;
+				const tickets = yield* Tickets;
+				const answer = answered(OWNER).pipe(
+					Effect.provideContext(yield* Effect.context<Tickets | Ledger>()),
+					Effect.orDie,
+				);
+				// The first look reads the ticket, and the answer lands before the lane waits.
+				let looks = 0;
+				const late: Tickets["Service"] = {
+					...tickets,
+					read: (n) => Effect.tap(tickets.read(n), () => (looks++ === 0 ? answer : Effect.void)),
+				};
+				const listening = yield* answerHeard(NUMBER, ASK, ["again", "stop"]).pipe(
+					Stream.runHead,
+					Effect.provideService(Tickets, late),
+					Effect.forkChild,
+				);
+				// Only the test's own wait runs on real time: the lane's second stays on the test's clock.
+				const got = yield* Fiber.join(listening).pipe(
+					Effect.timeoutOption("2 seconds"),
+					TestClock.withLive,
+					Effect.map(Option.flatten),
+					Effect.map(Option.getOrNull),
+				);
+				return {got, at: yield* Clock.currentTimeMillis};
+			}),
+		);
+		expect(got).toEqual({ask: ASK, pick: "stop", note: ""});
+		expect(at).toBe(0);
+	});
+});

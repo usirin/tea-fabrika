@@ -189,12 +189,15 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
 			const ledger = yield* Ledger;
-			// Listened to for the whole wait, so a ring during a look is kept: one, since a look reads it
-			// all. A bell that ends rings no more, and the wait is left with its second.
+			// Listening starts here, before the first look, so an answer that lands between a look and
+			// the wait still rings: the listener runs at once, up to its first wait. A bell that starts
+			// listening later rings once when it does (the ledger's door does). A ring during a look is
+			// kept: one, since a look reads it all. A bell that ends rings no more, and the wait is left
+			// with its second.
 			const rang = yield* Queue.sliding<void>(1);
 			yield* ledger.watch(streams(nameOf(number)).inbox).pipe(
 				Stream.runForEach(() => Queue.offer(rang, undefined)),
-				Effect.forkScoped,
+				Effect.forkScoped({startImmediately: true}),
 			);
 			const look = Effect.gen(function* () {
 				const ticket = yield* tickets.read(number);
