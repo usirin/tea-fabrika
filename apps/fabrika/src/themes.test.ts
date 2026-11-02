@@ -584,4 +584,14 @@ describe("the terminal and the window's frame take their colors from the themes 
 		expect(literalsIn(MAIN)).toEqual([]);
 		expect(MAIN).toMatch(/from "\.\/themes\.ts"/);
 	});
+
+	// main.ts is Electron's entry and starts the app when it loads, so no test imports it. This reads
+	// the desk window's maker instead: the frame follows the look only if it hands its window to
+	// followLook (themes.frame.test.ts holds what followLook does). A seam main.ts calls would let a
+	// test run it; until one exists, the call is pinned as written.
+	it("main.ts hands the desk window to followLook, so its frame follows the look", () => {
+		const code = MAIN.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+		const maker = /const deskWindow = [\s\S]*?\n};/.exec(code)?.[0] ?? "";
+		expect(maker).toMatch(/\bfollowLook\(\s*nativeTheme\s*,\s*window\s*\)/);
+	});
 });

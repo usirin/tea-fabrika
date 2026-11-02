@@ -22,19 +22,28 @@ class FakeTerminal {
 	cols = 80;
 	rows = 24;
 	readonly buffer = {active: {length: 0, cursorY: 0, getLine: () => undefined}};
+	/** Where its keys are typed: what the page focuses, as ghostty-web's hidden textarea is. */
+	readonly textarea = {};
+	element: object | undefined;
+	/** Who hears its keys and its new sizes. */
+	readonly keys: ((data: string) => void)[] = [];
+	readonly sizes: ((size: {cols: number; rows: number}) => void)[] = [];
 	constructor(options: Record<string, unknown>) {
 		this.options = {...options};
 		this.drawn = options["theme"];
 		FakeTerminal.made.push(this);
 	}
 	loadAddon() {}
-	open() {
+	open(parent: object) {
 		this.opened = true;
+		this.element = parent;
 	}
-	onData() {
+	onData(fn: (data: string) => void) {
+		this.keys.push(fn);
 		return {dispose: () => {}};
 	}
-	onResize() {
+	onResize(fn: (size: {cols: number; rows: number}) => void) {
+		this.sizes.push(fn);
 		return {dispose: () => {}};
 	}
 	write(data: string, done?: () => void) {
@@ -48,7 +57,9 @@ class FakeTerminal {
 	refresh() {}
 	resize() {}
 	scrollToBottom() {}
-	focus() {}
+	focus() {
+		page.activeElement = this.textarea;
+	}
 	dispose() {
 		this.disposed = true;
 	}
@@ -83,29 +94,41 @@ const element = (): Record<string, unknown> => {
 	return el;
 };
 
-/** The system's look, and every query list made on it, as a browser's matchMedia gives them. */
+/** The page: what it makes, and which element has focus. */
+const page: {createElement: typeof element; activeElement: unknown} = {
+	createElement: element,
+	activeElement: undefined,
+};
+
+type Heard = (e: {matches: boolean}) => void;
+
+/**
+ * The system's look, and every query list made on it, as a browser's matchMedia gives them. A list
+ * keeps its listeners by event name, as an EventTarget does, and only "change" is fired, so a
+ * listener added or removed under another name is never heard or never goes.
+ */
 let look: "dark" | "light" = "dark";
-const lists: {query: string; heard: ((e: {matches: boolean}) => void)[]; list: object}[] = [];
+const lists: {query: string; heard: Map<string, Heard[]>; list: object}[] = [];
 const matches = (query: string) =>
 	query.includes("light") ? look === "light" : query.includes("dark") ? look === "dark" : false;
 const matchMedia = (query: string) => {
-	const heard: ((e: {matches: boolean}) => void)[] = [];
+	const heard = new Map<string, Heard[]>();
+	const add = (name: string, fn: Heard) => heard.set(name, [...(heard.get(name) ?? []), fn]);
+	const remove = (name: string, fn: Heard) =>
+		heard.set(
+			name,
+			(heard.get(name) ?? []).filter((f) => f !== fn),
+		);
 	const list = {
 		media: query,
 		get matches() {
 			return matches(query);
 		},
-		onchange: null as ((e: {matches: boolean}) => void) | null,
-		addEventListener: (_: string, fn: (e: {matches: boolean}) => void) => heard.push(fn),
-		removeEventListener: (_: string, fn: (e: {matches: boolean}) => void) => {
-			const at = heard.indexOf(fn);
-			if (at >= 0) heard.splice(at, 1);
-		},
-		addListener: (fn: (e: {matches: boolean}) => void) => heard.push(fn),
-		removeListener: (fn: (e: {matches: boolean}) => void) => {
-			const at = heard.indexOf(fn);
-			if (at >= 0) heard.splice(at, 1);
-		},
+		onchange: null as Heard | null,
+		addEventListener: add,
+		removeEventListener: remove,
+		addListener: (fn: Heard) => add("change", fn),
+		removeListener: (fn: Heard) => remove("change", fn),
 	};
 	lists.push({query, heard, list});
 	return list;
@@ -114,25 +137,30 @@ const switchTo = (next: "dark" | "light") => {
 	look = next;
 	for (const {query, heard, list} of lists) {
 		const event = {matches: matches(query), media: query};
-		for (const fn of [...heard]) fn(event);
-		(list as {onchange: ((e: {matches: boolean}) => void) | null}).onchange?.(event);
+		for (const fn of [...(heard.get("change") ?? [])]) fn(event);
+		(list as {onchange: Heard | null}).onchange?.(event);
 	}
 };
 
-/** What the tile's port heard, so a test can send it bytes. */
+/** What the tile's port heard, so a test can send it bytes, and what it was sent. */
 let toTile: ((raw: unknown) => void) | undefined;
+let sent: {port: string; msg: unknown}[] = [];
 
 beforeEach(() => {
 	look = "dark";
 	lists.length = 0;
 	FakeTerminal.made = [];
 	toTile = undefined;
-	vi.stubGlobal("document", {createElement: element});
+	sent = [];
+	page.activeElement = undefined;
+	vi.stubGlobal("document", page);
 	vi.stubGlobal("requestAnimationFrame", (fn: () => void) => fn());
 	vi.stubGlobal("window", {
 		matchMedia,
 		fabrika: {
-			send: () => {},
+			send: (port: string, msg: unknown) => {
+				sent.push({port, msg});
+			},
 			forget: () => {},
 			onMessage: (_: string, fn: (raw: unknown) => void) => {
 				toTile = fn;
@@ -145,14 +173,17 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-/** A tile's terminal, open in its slot, that has shown `hello`. */
-const openTerminal = async () => {
+/** A tile's terminal, open in its slot, that has been sent `writes` (by default, `hello`). */
+const openTerminal = async (writes: readonly string[] = ["hello"]) => {
 	const {terminalFor} = await import("./terminal.ts");
 	const term = terminalFor({} as never, "t1" as never);
 	term.attach(element() as never);
-	toTile?.({type: "write", data: "hello"});
+	for (const data of writes) toTile?.({type: "write", data});
 	return term;
 };
+
+/** What the terminal made in the new look was written: the replay, and nothing else yet. */
+const replayed = () => showing()[0]?.written.join("");
 
 /** The terminals open now and not disposed: what the tile shows. */
 const showing = () => FakeTerminal.made.filter((t) => t.opened && !t.disposed);
@@ -167,7 +198,65 @@ describe("an open terminal follows the system's look", () => {
 		await openTerminal();
 		switchTo("light");
 		expect(showing().map((t) => t.drawn)).toEqual([terminalTheme(fabrikaLight)]);
-		expect(showing()[0]?.written.join("")).toContain("hello");
+		expect(replayed()).toBe("hello");
+	});
+
+	it("writes again only what came after the last full reset (RIS, ESC c)", async () => {
+		await openTerminal(["old", "older\x1bcnew"]);
+		switchTo("light");
+		expect(replayed()).toBe("\x1bcnew");
+		switchTo("dark");
+		toTile?.({type: "write", data: " more"});
+		toTile?.({type: "write", data: "x\x1bcfresh"});
+		switchTo("light");
+		expect(replayed()).toBe("\x1bcfresh");
+	});
+
+	// A tile keeps the newest 1 MiB to write again (experiment 177's spike), dropping whole writes
+	// from the oldest.
+	it("keeps the newest 1 MiB, dropping the oldest writes past it", async () => {
+		const part = (c: string) => c.repeat(400 * 1024);
+		await openTerminal([part("a"), part("b")]);
+		switchTo("light");
+		expect(replayed()).toBe(part("a") + part("b"));
+		toTile?.({type: "write", data: part("c")});
+		switchTo("dark");
+		expect(replayed()).toBe(part("b") + part("c"));
+	});
+
+	it("opens nothing on a look change before it is attached, and opens in the new look", async () => {
+		const {terminalFor} = await import("./terminal.ts");
+		const term = terminalFor({} as never, "t1" as never);
+		switchTo("light");
+		expect(FakeTerminal.made.filter((t) => t.opened)).toEqual([]);
+		term.attach(element() as never);
+		expect(showing().map((t) => t.drawn)).toEqual([terminalTheme(fabrikaLight)]);
+	});
+
+	it("sends the remade terminal's keys and its size on the tile's port", async () => {
+		await openTerminal();
+		const before = sent.length;
+		switchTo("light");
+		expect(sent.slice(before)).toEqual([
+			{port: "tile:t1", msg: {type: "size", cols: 80, rows: 24}},
+		]);
+		const now = showing()[0];
+		for (const fn of now?.keys ?? []) fn("ls\r");
+		for (const fn of now?.sizes ?? []) fn({cols: 100, rows: 30});
+		expect(sent.slice(-2)).toEqual([
+			{port: "tile:t1", msg: {type: "keys", data: "ls\r"}},
+			{port: "tile:t1", msg: {type: "size", cols: 100, rows: 30}},
+		]);
+	});
+
+	it("keeps focus: a focused terminal's remake is focused, an unfocused one's is not", async () => {
+		const term = await openTerminal();
+		term.focus();
+		switchTo("light");
+		expect(page.activeElement).toBe(showing()[0]?.textarea);
+		page.activeElement = undefined;
+		switchTo("dark");
+		expect(page.activeElement).toBeUndefined();
 	});
 
 	it("goes back to fabrika when the system turns dark again", async () => {
