@@ -161,10 +161,17 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * tile's port. The kept bytes are written before the terminal is heard: answers to old
 	 * questions in them (where is the cursor?) must not reach tsh again, and ghostty-web answers as
 	 * it writes.
+	 *
+	 * Its wasm terminal is reset first, below the terminal, so what is written stays only what was
+	 * kept. Every tile's terminal lives in one Ghostty, and ghostty-web 0.4's wasm does not clear
+	 * the memory it hands out again: a terminal made after another was freed starts with the freed
+	 * one's rows, and a look change frees and makes one per tile. Without the reset, a tile showed
+	 * another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts).
 	 */
 	const open = () => {
 		term.open(screen);
 		fit.fit();
+		term.wasmTerm?.write(FULL_RESET);
 		for (const bytes of kept) term.write(bytes);
 		fit.observeResize();
 		term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
