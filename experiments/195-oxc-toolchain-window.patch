@@ -1,0 +1,402 @@
+diff --git a/next/build.ts b/next/build.ts
+index f7e11d45..5b2c506d 100644
+--- a/next/build.ts
++++ b/next/build.ts
+@@ -1,14 +1,67 @@
+ import {createHash} from "node:crypto";
+ import {fileURLToPath} from "node:url";
+ import {build} from "esbuild";
++import {transformSync} from "oxc-transform-react";
++import {rolldown} from "rolldown";
+ 
+ // What the hands do before a brain can run (A4): bundle each program into one module, keyed by the
+ // sha256 of its code, and bundle the brain and the window's script. Node at the edge, all of it.
++//
++// Experiment 195 part 2 (scratch, not for PR 223): BUILD=rolldown builds every bundle with Rolldown
++// and runs oxc's React Compiler on the window's .tsx files. TILE_MEMO=1 wraps the tile in a hand
++// `memo`. MODE=development builds React's development copy, where Strict Mode runs twice.
+ 
+ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
++const BUILD = process.env.BUILD ?? "esbuild";
++const MODE = process.env.MODE ?? "production";
++const TILE_MEMO = process.env.TILE_MEMO ?? "0";
++
++const workerdDefine = {"process.env.DESK_TILES": JSON.stringify(process.env.DESK_TILES ?? "2")};
++const define = {
++	...workerdDefine,
++	"process.env.NODE_ENV": JSON.stringify(MODE),
++	"process.env.TILE_MEMO": JSON.stringify(TILE_MEMO),
++	"process.env.TILE_SHAPE": JSON.stringify(process.env.TILE_SHAPE ?? "inline"),
++};
++
++/** What the Compiler did, per file: the bundle's report. */
++export const compilerReport: {file: string; compiled: number; diagnostics: string[]}[] = [];
++
++const reactCompiler = {
++	name: "react-compiler",
++	transform: {
++		filter: {id: {include: /\.tsx$/, exclude: /node_modules/}},
++		handler(code: string, id: string) {
++			const out = transformSync(id, code, {
++				jsx: {runtime: "automatic", development: MODE === "development"},
++				reactCompiler: {reportDiagnostics: true},
++			});
++			if (out.fatal) throw new Error(out.errors.map((e) => e.message).join("\n"));
++			compilerReport.push({
++				file: id.slice(id.indexOf("/next/") + 1),
++				compiled: (out.code.match(/= _c\(\d+\)/g) ?? []).length,
++				diagnostics: out.errors.map((e) => e.message),
++			});
++			return {code: out.code, moduleType: "js" as const};
++		},
++	},
++};
+ 
+ /** One ES module for workerd: `cloudflare:*` is left to the runtime. */
+ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
++	if (BUILD === "rolldown") {
++		const b = await rolldown({
++			input: here(entry),
++			platform: "neutral",
++			logLevel: "silent",
++			external: [/^cloudflare:/],
++			resolve: {mainFields: ["module", "main"], conditionNames: ["workerd", "worker", "browser", "import"]},
++			transform: {target: "es2022", define: workerdDefine},
++		});
++		const out = await b.generate({format: "esm", minify, comments: {legal: false}});
++		await b.close();
++		return out.output[0].code;
++	}
+ 	const out = await build({
+ 		entryPoints: [here(entry)],
+ 		bundle: true,
+@@ -19,6 +72,7 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
+ 		mainFields: ["module", "main"],
+ 		conditions: ["workerd", "worker", "browser", "import"],
+ 		external: ["cloudflare:workers"],
++		define: workerdDefine,
+ 		minify,
+ 		legalComments: "none",
+ 		logLevel: "silent",
+@@ -27,6 +81,19 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
+ };
+ 
+ const forBrowser = async (entry: string): Promise<string> => {
++	const minify = MODE === "production";
++	if (BUILD === "rolldown") {
++		const b = await rolldown({
++			input: here(entry),
++			platform: "browser",
++			logLevel: "silent",
++			transform: {jsx: "react-jsx", target: "es2022", define},
++			plugins: [reactCompiler],
++		});
++		const out = await b.generate({format: "esm", minify, comments: {legal: false}});
++		await b.close();
++		return out.output[0].code;
++	}
+ 	const out = await build({
+ 		entryPoints: [here(entry)],
+ 		bundle: true,
+@@ -35,8 +102,9 @@ const forBrowser = async (entry: string): Promise<string> => {
+ 		platform: "browser",
+ 		target: "es2022",
+ 		jsx: "automatic",
+-		define: {"process.env.NODE_ENV": '"production"'},
+-		minify: true,
++		jsxDev: MODE === "development",
++		define,
++		minify,
+ 		legalComments: "none",
+ 		logLevel: "silent",
+ 	});
+@@ -55,11 +123,19 @@ export type Bundles = {
+ };
+ 
+ export const buildAll = async (): Promise<Bundles> => {
++	const t0 = performance.now();
+ 	const [brain, window, counter, desk] = await Promise.all([
+ 		forWorkerd("src/brain.ts", false),
+ 		forBrowser("src/window/main.tsx"),
+ 		program("src/programs/counter/entry.ts"),
+ 		program("src/desktop/desk-entry.ts"),
+ 	]);
++	if (process.env.BUILD_REPORT !== undefined) {
++		const {writeFileSync} = await import("node:fs");
++		writeFileSync(
++			process.env.BUILD_REPORT,
++			JSON.stringify({build: BUILD, mode: MODE, memo: TILE_MEMO, ms: Math.round(performance.now() - t0), bytes: {brain: brain.length, window: window.length, counter: counter.code.length, desk: desk.code.length}, compiler: compilerReport}),
++		);
++	}
+ 	return {brain, window, programs: {counter, desk}};
+ };
+diff --git a/next/src/desktop/desk.ts b/next/src/desktop/desk.ts
+index b9c5730b..32acfb99 100644
+--- a/next/src/desktop/desk.ts
++++ b/next/src/desktop/desk.ts
+@@ -57,11 +57,26 @@ type DeskMsg = typeof DeskMsg.Type;
+ /** The desk's pid: one person's desk, with its numbered workspaces inside. */
+ export const DESK = "desk:owner";
+ 
++/** Experiment 195 part 2: DESK_TILES=9 starts a 3 by 3 desk, for the render bench. */
++const grid = (side: number): Split => ({
++	dir: "row",
++	parts: Array.from({length: side}, (_, col) => ({
++		percent: 100 / side,
++		inner: {
++			dir: "column" as const,
++			parts: Array.from({length: side}, (_, row) => {
++				const k = col * side + row + 1;
++				return {percent: 100 / side, inner: {id: `t${k}`, shows: `counter:${k}`, keep: "failed" as const}};
++			}),
++		},
++	})),
++});
++
+ const first: Desktop = {
+ 	workspaces: [
+ 		{
+ 			n: 1,
+-			layout: {
++			layout: process.env.DESK_TILES === "9" ? grid(3) : {
+ 				dir: "row",
+ 				parts: [
+ 					{percent: 50, inner: {id: "t1", shows: "counter:1", keep: "failed"}},
+diff --git a/next/src/window/main.tsx b/next/src/window/main.tsx
+index 02fac44f..291a7953 100644
+--- a/next/src/window/main.tsx
++++ b/next/src/window/main.tsx
+@@ -2,6 +2,7 @@ import type {BootedRunHandle} from "@demlik/tea";
+ import {run} from "@demlik/tea/effect";
+ import {useRuntime} from "@demlik/tea/react";
+ import {Effect, Option, Queue, Stream} from "effect";
++import {memo, StrictMode} from "react";
+ import {createRoot} from "react-dom/client";
+ import {DESK, type Workspace} from "../desktop/desk.ts";
+ import {fold, type Placed, type Size} from "../desktop/fold.ts";
+@@ -102,6 +103,58 @@ function Tile(props: {
+ 	);
+ }
+ 
++/**
++ * Experiment 195 part 2: the same tile, given only stable props (the dispatch and the workspace's
++ * number), so it builds its own handlers. The shape a skip needs; the one above is the slice's own.
++ */
++function StableTile(props: {
++	readonly tile: Placed;
++	readonly focused: boolean;
++	readonly data: unknown;
++	readonly n: number;
++	readonly dispatch: (msg: Msg) => void;
++}) {
++	const {tile, focused, data, n, dispatch} = props;
++	const box = {left: tile.x, top: tile.y, width: tile.w, height: tile.h};
++	const focus = () => {
++		if (focused) return;
++		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: tile.id}, said: new Date().toISOString()});
++	};
++	const press = (m: {readonly type: "plus"}) =>
++		dispatch({type: "press", pid: tile.shows, m, said: new Date().toISOString()});
++	return (
++		<div
++			className={`tile${focused ? " focused" : ""}${tile.folded ? " folded" : ""}`}
++			data-tile={tile.id}
++			data-folded={tile.folded}
++			data-focused={focused}
++			style={box}
++			onClick={focus}
++		>
++			{tile.folded ? (
++				<>
++					<span className="strip-name">{tile.id}</span>
++					<span className="strip-count" data-count="">
++						{countIn(data)}
++					</span>
++				</>
++			) : (
++				<>
++					<header className="tile-head">
++						<span>{tile.id}</span>
++						<span className="tile-shows">{tile.shows}</span>
++					</header>
++					<CounterView data={data} press={press} />
++				</>
++			)}
++		</div>
++	);
++}
++
++/** Experiment 195 part 2: a hand `memo` per tile, on or off at build time. */
++const TileView = process.env.TILE_MEMO === "1" ? memo(Tile) : Tile;
++const StableView = process.env.TILE_MEMO === "1" ? memo(StableTile) : StableTile;
++
+ const statusWords = (model: Model): string => {
+ 	switch (model.link.is) {
+ 		case "online":
+@@ -150,8 +203,18 @@ function Desk(props: {
+ 	};
+ 	return (
+ 		<main className="desk" data-layout={JSON.stringify(workspace.layout)}>
+-			{fold(workspace.layout, model.size, workspace.focus).map((tile) => (
+-				<Tile
++			{fold(workspace.layout, model.size, workspace.focus).map((tile) =>
++				process.env.TILE_SHAPE === "stable" ? (
++					<StableView
++						key={tile.id}
++						tile={tile}
++						focused={workspace.focus === tile.id}
++						data={model.views[tile.shows]?.data}
++						n={workspace.n}
++						dispatch={dispatch}
++					/>
++				) : (
++				<TileView
+ 					key={tile.id}
+ 					tile={tile}
+ 					focused={workspace.focus === tile.id}
+@@ -159,11 +222,123 @@ function Desk(props: {
+ 					focus={() => focus(tile.id)}
+ 					press={(m) => dispatch({type: "press", pid: tile.shows, m, said: said()})}
+ 				/>
++				),
++			)}
++		</main>
++	);
++}
++
++/**
++ * Experiment 195 part 2: the stable tile, with the fold on its own line, so the Compiler keeps each
++ * placed tile while the layout, size and focus stay the same.
++ */
++function HoistedDesk(props: {
++	readonly model: Model;
++	readonly workspace: Workspace;
++	readonly dispatch: (msg: Msg) => void;
++}) {
++	const {model, workspace, dispatch} = props;
++	const placed = fold(workspace.layout, model.size, workspace.focus);
++	return (
++		<main className="desk" data-layout={JSON.stringify(workspace.layout)}>
++			{placed.map((tile) => (
++				<StableView
++					key={tile.id}
++					tile={tile}
++					focused={workspace.focus === tile.id}
++					data={model.views[tile.shows]?.data}
++					n={workspace.n}
++					dispatch={dispatch}
++				/>
++			))}
++		</main>
++	);
++}
++
++/** Experiment 195 part 2: the tile with plain values only, so a hand `memo` can compare them. */
++function FlatTile(props: {
++	readonly id: string;
++	readonly shows: string;
++	readonly x: number;
++	readonly y: number;
++	readonly w: number;
++	readonly h: number;
++	readonly folded: boolean;
++	readonly focused: boolean;
++	readonly data: unknown;
++	readonly n: number;
++	readonly dispatch: (msg: Msg) => void;
++}) {
++	const {id, shows, folded, focused, data, n, dispatch} = props;
++	const box = {left: props.x, top: props.y, width: props.w, height: props.h};
++	const focus = () => {
++		if (focused) return;
++		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: id}, said: new Date().toISOString()});
++	};
++	const press = (m: {readonly type: "plus"}) =>
++		dispatch({type: "press", pid: shows, m, said: new Date().toISOString()});
++	return (
++		<div
++			className={`tile${focused ? " focused" : ""}${folded ? " folded" : ""}`}
++			data-tile={id}
++			data-folded={folded}
++			data-focused={focused}
++			style={box}
++			onClick={focus}
++		>
++			{folded ? (
++				<>
++					<span className="strip-name">{id}</span>
++					<span className="strip-count" data-count="">
++						{countIn(data)}
++					</span>
++				</>
++			) : (
++				<>
++					<header className="tile-head">
++						<span>{id}</span>
++						<span className="tile-shows">{shows}</span>
++					</header>
++					<CounterView data={data} press={press} />
++				</>
++			)}
++		</div>
++	);
++}
++
++const FlatView = process.env.TILE_MEMO === "1" ? memo(FlatTile) : FlatTile;
++
++function FlatDesk(props: {
++	readonly model: Model;
++	readonly workspace: Workspace;
++	readonly dispatch: (msg: Msg) => void;
++}) {
++	const {model, workspace, dispatch} = props;
++	return (
++		<main className="desk" data-layout={JSON.stringify(workspace.layout)}>
++			{fold(workspace.layout, model.size, workspace.focus).map((tile) => (
++				<FlatView
++					key={tile.id}
++					id={tile.id}
++					shows={tile.shows}
++					x={tile.x}
++					y={tile.y}
++					w={tile.w}
++					h={tile.h}
++					folded={tile.folded}
++					focused={workspace.focus === tile.id}
++					data={model.views[tile.shows]?.data}
++					n={workspace.n}
++					dispatch={dispatch}
++				/>
+ 			))}
+ 		</main>
+ 	);
+ }
+ 
++const DeskView =
++	process.env.TILE_SHAPE === "hoisted" ? HoistedDesk : process.env.TILE_SHAPE === "flat" ? FlatDesk : Desk;
++
+ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
+ 	const [model, dispatch] = useRuntime(handle);
+ 	const desk = deskIn(model);
+@@ -173,7 +348,7 @@ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
+ 	return (
+ 		<>
+ 			{workspace !== undefined ? (
+-				<Desk model={model} workspace={workspace} dispatch={dispatch} />
++				<DeskView model={model} workspace={workspace} dispatch={dispatch} />
+ 			) : (
+ 				<main className="desk empty">waiting for the desk</main>
+ 			)}
+@@ -216,7 +391,11 @@ const program = Effect.gen(function* () {
+ 		},
+ 	};
+ 	const root = document.getElementById("root");
+-	if (root !== null) createRoot(root).render(<App handle={handle} />);
++	if (root !== null) createRoot(root).render(
++			<StrictMode>
++				<App handle={handle} />
++			</StrictMode>,
++		);
+ 	return yield* Effect.never;
+ });
+ 

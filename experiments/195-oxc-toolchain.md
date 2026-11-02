@@ -6,6 +6,8 @@ oxc's Rust port of the React Compiler over every window and program `.tsx` file 
 against Babel's Compiler, and times the window's bundle five ways. No window was opened, no
 model was called, nothing in the app changed. It answers the open question in experiment 194
 ([PR 320](https://github.com/usirin/tea-fabrika/pull/320)) after the owner ruled out Babel.
+**[Part 2: a real window](#part-2-a-real-window)**, the same day, built `next/`'s window this way
+and ran it, and measured 194's tile `memo` question on it.
 
 **Which version.** "Today" and "main" mean today's app (`apps/fabrika`, `programs/*`) at
 `d691f694`. `next/` means PR 223's branch at `7c1d0730`. **Decided before this study (the owner,
@@ -56,9 +58,18 @@ const bundle = await rolldown({input: "src/window/main.tsx", platform: "browser"
    about 13 ms for esbuild with no Compiler. The whole window bundle stays between 200 and 330 ms
    every way it was built.
 
-**Lean for `next/`, 75%: Rolldown as a library in `next/build.ts`, with the Compiler as the
-20-line plugin above, for the window and for the Workers. No Vite dev server and no Cloudflare Vite
-plugin.** Vitest stays as it is. Why, cost and doubt are in
+6. **Part 2: a window built this way runs right.** PR 223's own end-to-end test passes on it,
+   in React's production build and in its development build with Strict Mode on, with no console
+   error. Rolldown built the brain and both programs too, and they ran in workerd. The first draw
+   halves, and the window bundle is about half the size.
+7. **Part 2: the tile `memo` question has a split answer.** On a 3 by 3 desk, the Compiler alone
+   skips what is inside a tile that did not change, but only once the tile gets stable props, and
+   it never skips the tile function itself. A hand `memo` skips nothing until the tile's props are
+   plain values. Details in [the tile memo](#the-tile-memo).
+
+**Lean for `next/`, 85% after part 2 (was 75%): Rolldown as a library in `next/build.ts`, with the
+Compiler as the 20-line plugin above, for the window and for the Workers. No Vite dev server and no
+Cloudflare Vite plugin.** Vitest stays as it is. Why, cost and doubt are in
 [the toolchain](#the-toolchain-what-the-makers-say-then-the-lean).
 
 **Lean for today's app, 85%: keep esbuild and put the same Compiler in an `onLoad` plugin on the
@@ -246,8 +257,8 @@ with oxc and not esbuild [s15].
 So the maker way fits a web app with a dev server. `next/` is not built that way, and moving to
 Vite would undo the hot reload note. The owner may want that; it is a call to make in the open.
 
-**Lean for `next/`, 75%: Rolldown as a library, the Compiler as a plugin, one bundler for
-everything `next/build.ts` makes.**
+**Lean for `next/`, 85% after part 2 (75% before it): Rolldown as a library, the Compiler as a
+plugin, one bundler for everything `next/build.ts` makes.**
 
 - **Why:** `next/build.ts` already calls a bundler from code (esbuild today) for the brain, the
   window and each program. Rolldown does the same job with the same shape, and it is what Alchemy
@@ -266,6 +277,10 @@ everything `next/build.ts` makes.**
   end-to-end run with a compiled window settles the first part. For the second: bump
   `oxc-transform-react` with oxlint, since they come from one repository, and let `lint:compiler`'s
   count be the alarm.
+- **After part 2:** the first part is settled. The compiled window passed PR 223's end-to-end
+  test, and the Workers built by Rolldown ran in workerd. What is left is the second part, a
+  weekly 0.x port, on a slice of 5 functions. That doubt only shrinks as `next/` grows on it, with
+  `lint:compiler`'s count and the end-to-end test as the alarms. Hence 85%, not more.
 - **Not now:** Vite for `next/`'s window (it undoes the hot reload note); `@cloudflare/vite-plugin`
   (Alchemy's local stage is chosen, and the two do not mix); swc (a second engine beside oxlint's);
   React's port (nothing to install).
@@ -283,8 +298,8 @@ bundle.**
 
 ## Open calls, with leans
 
-1. **`next/`: Rolldown from code, or Vite 8?** Lean Rolldown, 75%, as above. Vite wins if the owner
-   wants the dev server's hot reload over the brain's.
+1. **`next/`: Rolldown from code, or Vite 8?** Lean Rolldown, 85% after part 2, as above. Vite wins if
+   the owner wants the dev server's hot reload over the brain's.
 2. **Purity: 194 gave it to the Compiler's own check, with 0 false alarms.** That was Babel's
    check. The native one has the false alarm oxlint's `purity` had in 194 (1 of 9 findings, 11%). Lean: purity
    advises and does not block, until oxc fixes the handler case, 70%. Filing that case with oxc
@@ -298,11 +313,13 @@ bundle.**
 
 ## What this cannot tell us
 
-- Whether a window built this way runs right. No bundle was loaded and no window opened.
+- Whether a window built this way runs right. No bundle was loaded and no window opened. **Part 2
+  answers it for `next/`: yes.** Today's app was still not started with its compiled bundle.
 - Fast Refresh and hot reload with the native Compiler. `jsx.refresh` exists; it was not tried.
 - How often the port is wrong. 108 functions in 13 files is a small sample. oxc's 100k-file claim
   has no published percentage.
-- Why Rolldown's bundle is 440 KB smaller.
+- Why Rolldown's bundle is 440 KB smaller. Part 2 found that on `next/` it is mostly Effect, which
+  Rolldown shakes harder. Not checked on main.
 - Build times on a quiet machine. Another agent was running, and the ranges overlap.
 - Whether oxlint 1.90.0 holds the same Compiler code as `oxc-transform-react` 0.156.0. They share a
   repository; the versions were not matched.
@@ -313,6 +330,171 @@ bundle.**
 $0. No model was called and nothing was deployed. The native tools are in this experiment's
 workspace package. Babel was installed in a scratch folder outside the repo and is not in the
 lockfile.
+
+## Part 2: a real window
+
+Run 2026-11-02, the same day, on `next/` only. **`next/`'s window, built with Rolldown 1.2.13 and
+oxc's Compiler from `oxc-transform-react` 0.156.0, runs right.** PR 223's own end-to-end test
+passes on it: 3 of 3 on React's production build, 1 of 1 on its development build with Strict Mode
+on. No page error, no console error, no warning. The Compiler compiles 5 functions and skips 0, and
+the bundle that runs holds the compiled code. Rolldown also built the brain and both programs, and
+they ran in workerd. **Nothing in the experimental port broke.**
+
+**The tile `memo`: C6 holds for the inside of a tile, not for the tile.** On a 3 by 3 desk, the
+Compiler alone never stops a tile's own function from running on a patch. It does skip what is
+inside a tile that did not change, once the tile gets stable props. A hand `memo` skips nothing
+until the tile's props are plain values; then a patch drops from 13 renders to 5.
+
+```tsx
+// What the memo answer turns on: the props the desk gives each tile (from the bench's shapes).
+// The slice's own desk: new handlers on every render. Nothing skips, compiled or not.
+<Tile tile={tile} focus={() => focus(tile.id)} press={(m) => dispatch(...)} ... />
+// Plain values and `dispatch`: the Compiler skips the counter view inside; a memo skips the tile.
+<FlatTile id={tile.id} shows={tile.shows} x={tile.x} y={tile.y} w={tile.w} h={tile.h}
+	folded={tile.folded} focused={focused} data={data} n={workspace.n} dispatch={dispatch} />
+```
+
+### What was run
+
+- A scratch worktree at PR 223's head, `7c1d0730`, detached. Nothing was pushed there, and it was
+  removed after. `next/` on that branch starts workerd through Miniflare 4.20260730.0, not Alchemy's
+  local stage, and serves its window as a web page. So the window here is a headless Chromium tab
+  (Playwright 1.64.1), not Electron.
+- `next/build.ts` got one switch, `BUILD=rolldown`: all four bundles through Rolldown, and part 1's
+  Compiler plugin on the window's `.tsx` files. The default stays esbuild 0.28.2, the way that
+  branch builds today. The whole change is `195-oxc-toolchain-window.patch`.
+- `main.tsx` got `<StrictMode>` around the app; the slice does not turn it on. React's production
+  build ignores Strict Mode, so the end-to-end test also ran on React's development build
+  (`MODE=development`), where Strict Mode renders twice and runs each effect twice.
+- PR 223's own checks, unchanged: `node next/e2e.ts` (two windows, clicks, mirroring, the fold,
+  `kill -9` of workerd and of Node, a hung brain, a restart on the same data), and vitest over
+  `next/` with one worker.
+- The bench, `195-oxc-toolchain-window.ts`: experiment 176's devtools-hook probe, cut down, on the
+  production build. Per run: build time, cold start, first draw, keys, the console, and renders on
+  10 focus moves, 10 patches heard from the other window, and 10 presses in this window. 3 runs of
+  each variant, interleaved. React 19.3.1, tea 0.21.0, Node 22.22.3. Results:
+  `results/195-oxc-toolchain-window.json`.
+- **Too few tiles to measure, so more were made.** The slice has 2 tiles, and a focus move changes
+  both, so a `memo` can show nothing there. A build switch, `DESK_TILES=9`, gives the desk program
+  a 3 by 3 first layout. Same code paths, 9 tiles.
+
+`env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 19 node next/bench-195.ts
+--out=<file> --runs=3`, from a PR 223 checkout set up as the script's header says. About 10
+minutes for the 48 runs, with two other code agents on the laptop.
+
+### Does it run right
+
+| Check | esbuild, today's way | Rolldown and the oxc Compiler |
+|---|---|---|
+| `e2e.ts`, React production build | 3 of 3 | 3 of 3 |
+| `e2e.ts`, development build, Strict Mode | 1 of 1 | 1 of 1 |
+| vitest over `next/` | 67 of 67 | the same 67 |
+| Page errors, console errors and warnings | 0 | 0 |
+| A patch from the other window reaches the screen | every time | every time |
+| Enter and Space on `+1`; Tab moves on | yes | yes |
+| Compiler verdicts | none | 5 compiled, 0 skipped |
+
+- **No console noise, in either React build.** The 0 covers the 48 bench runs and 3 more bench
+  runs on React's development build, which warns about much more.
+- **No frozen desk.** In every run of every variant, each count the other window changed was
+  redrawn here. Click to count stayed 16 ms at the median in the end-to-end test, both ways.
+- **The compiled code is what runs.** The 5 are `Tile`, `Status`, `Desk`, `App` and
+  `CounterView`. The development bundle holds Rolldown's region for
+  `react/cjs/react-compiler-runtime.development.js` and 5 calls of
+  `(0, import_compiler_runtime.c)(n)`, one per compiled function. The production bundle is
+  minified, so there the evidence is the renders below: compiled variants render differently.
+- **vitest is no evidence for the build.** No test in `next/` imports `build.ts` or a `.tsx` file.
+  The end-to-end test is the check that runs the built window.
+- **Keys:** the slice has no keys of its own yet (W5 in PR 223's README), so this checks the
+  browser's own. Enter and Space press a focused `+1`, and Tab moves to the next tile's button.
+- One Rolldown 1.2.13 detail: `legalComments` prints a deprecation warning; `comments: {legal:
+  false}` replaces it.
+
+### Time and size
+
+| What | esbuild | Rolldown and the Compiler |
+|---|---|---|
+| `buildAll`, all four bundles | 125 to 159 ms, median 141 | 101 to 112 ms, median 108 |
+| Start to brain up: Node, build, Miniflare | 554 to 602 ms, median 578 | 516 to 563 ms, median 530 |
+| Miniflare ready, inside that | 101 to 111 ms | 90 to 102 ms |
+| Page open to all 9 counts drawn | 222 to 239 ms, median 228 | 111 to 130 ms, median 114 |
+| Window bundle, minified | 664,017 B | 351,047 B |
+| Brain | 624,067 B | 482,596 B |
+| Each program, counter and desk | 271,765 and 272,430 B | 76,701 and 78,240 B |
+
+24 runs each way, all shapes together. Byte counts are for the slice's own desk with no `memo`.
+
+- **The first draw halves.** The page parses half as much script before it dials the brain.
+- **Why the bundles are smaller: mostly Effect.** Before minifying, Effect is 916 KB of esbuild's
+  window bundle and 558 KB of Rolldown's; React DOM is 642 KB against 537 KB. Rolldown drops about
+  40% more of Effect. The end-to-end test passing is the only check that what it dropped was dead.
+- **The programs shrink most, 272 KB to 77 KB.** Worker Loader loads a program by hash (173), so
+  this should make a cold load cheaper. Not measured here.
+- The build is faster too, but both are near 100 ms, and with other agents running the gap means
+  little.
+
+### The tile memo
+
+Renders in the window that only hears, per moment, summed over every component. Counts were the
+same in all 3 runs of every variant. One focus move is three commits (the press, its answer, the
+desk's patch). A patch of 21 is 9 tile functions, 9 counter views, and `App`, `Desk`, `Status`.
+
+| Desk shape | Build | No memo: focus, patch, press | Hand `memo`: focus, patch, press |
+|---|---|---|---|
+| `inline`, the slice's own | esbuild | 63, 21, 63 | 63, 21, 63 |
+| `inline` | Rolldown and the Compiler | 63, 21, 63 | 63, 21, 63 |
+| `stable`: `dispatch`, not handlers | esbuild | 63, 21, 63 | 63, 21, 63 |
+| `stable` | Rolldown and the Compiler | 36, 13, 37 | 36, 13, 37 |
+| `hoisted`: also the fold on its own line | Rolldown and the Compiler | 36, 13, 37 | 36, 13, 37 |
+| `flat`: the tile as plain values | esbuild | 63, 21, 63 | 13, 5, 11 |
+| `flat` | Rolldown and the Compiler | 36, 13, 37 | 11, 5, 11 |
+
+`hoisted` on esbuild matched `stable` on esbuild. A patch of 13 is 9 tile functions, 1 counter view
+(the one that changed) and 3 outside; 5 is 1 tile, 1 counter view and 3 outside, the least a patch
+can cost.
+
+- **On the slice as written, the Compiler saves nothing.** `Desk` passes
+  `focus={() => focus(tile.id)}` and a `press` arrow, new on every render. The Compiler caches the
+  whole `.map` as one value, and that value reads `model.views`, which every patch changes. So
+  every tile and every counter view runs again, as with no Compiler.
+- **With stable props, the Compiler skips the inside of a tile.** A tile that makes its own
+  handlers from `dispatch` caches its `<CounterView>` element. A patch drops from 21 to 13, a
+  focus move from 63 to 36. The 9 tile functions still run: each one checks its cache and returns.
+- **A hand `memo` skips nothing until the props are plain.** `fold` makes a new object per tile on
+  every call. Putting it on its own line did not help: the compiled `HoistedDesk` still calls
+  `fold` inside the same cached block as the `.map`, so it runs again on every patch. Why the
+  Compiler joins them is a guess: it cannot tell that `.map` leaves the array alone. Passing the
+  tile as plain values lets `memo` compare: a patch drops from 13 to 5, compiled or not.
+- **Against 176.** There, compiled with and without `memo` matched, and untouched tiles barely ran.
+  Here they match too, but because `memo` cannot skip, not because the Compiler does. Today's desk
+  must hand its tiles props that stay the same object; which ones was not checked.
+
+**What it means for C6, lean 70%: keep "the Compiler memoizes, no hand `memo`", and add one rule
+for whoever lists tiles: a tile gets plain values and `dispatch`, never a fresh handler or object.**
+
+- **Why:** the props rule is what makes the Compiler's skip work at all (21 to 13), with or without
+  `memo`. What `memo` adds on top is 8 tile functions per patch on 9 tiles, each a cache check. 176
+  found the Compiler "saves renders, not milliseconds you can feel".
+- **Cost:** none in code; the rule is a review point, or a lint rule later.
+- **The doubt:** no time was measured, only renders, on 9 small tiles. On a desk of 30 tiles, or a
+  tile whose own function is heavy, `memo` may earn its place. A second way, not tried: each tile
+  reads its own view through the store hook, so `Desk` never reads `model.views` and the Compiler
+  can keep every tile's element. Timing a patch on a 30-tile desk with and without `memo` settles
+  the first; trying the second is a bench shape away.
+
+### What part 2 cannot tell us
+
+- How the window behaves in Electron. `next/` serves a page, so a Chromium tab ran it.
+- Whether the oxc port is right on code bigger than 5 functions in a real window. Part 1 matched
+  Babel on 108; only these 5 ran.
+- Time per render, or whether 8 extra cache checks per patch can be felt. Only renders were counted.
+- Hot reload and Fast Refresh, and Rolldown for Electron's main and preload. Not tried.
+- Whether Rolldown's harder tree shaking ever drops code that was needed. Only this slice's tests
+  say it did not.
+- Times on a quiet machine. Two other code agents were running.
+
+$0 again: no model, no deploy, no network beyond the npm registry for two packages. Rolldown and
+`oxc-transform-react` were added only in the scratch worktree; nothing changed on main.
 
 ## Links
 
