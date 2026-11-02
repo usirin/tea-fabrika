@@ -122,7 +122,7 @@ The lane asks a person seven kinds of question (`packages/pipeline/src/stages/pi
 | `merge` | The merge yes, after the push. |
 | `step` | A step ended on `ask`, and it may be run again. |
 | `rounds_spent` | Review sent the build back too many times. `again` runs one more round; `stop` pauses. |
-| `exam_touched` | The builder changed the test writer's files. `builder_wrong` runs the build again; `test_wrong` runs the test writer, then the build. |
+| `exam_touched` | The builder changed the test writer's files. `builder_wrong` puts them back on the builder's work and runs the build there; `test_wrong` has the test writer write only them again, then the build goes on. Either adds one round to the bound. |
 | `exam_conflict` | Main changed the test writer's files while the lane was stopped. `again` runs the test writer, then the build; `stop` pauses. |
 
 ## When a lane is stuck
@@ -146,8 +146,10 @@ spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pi
 2. Fix what stopped it, if it needs fixing, then type the same line again. The ticket gets a
    `restarted` row: the step it goes on from, and main then and now.
 3. If main changed a file the lane also changed, main's side stands. A test writer's file asks you
-   `exam_conflict`: `again` runs the test writer, then the build. Any other file sends the build
-   round again.
+   `exam_conflict`, and so does a test whose check no longer holds on main: `again` has the test
+   writer write only those files again, then the build goes on. Any other file sends the build round
+   again. A pull request already pushed takes main in by a merge, and its new head is reviewed and
+   pushed again before the merge question.
 4. **Inside a live run nothing but ship merges.** If the lane cannot go on, what is left is a by-hand
    change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green CI,
    and an agent merges after a leak grep. The other choice is a new ticket. Say exactly what is left:

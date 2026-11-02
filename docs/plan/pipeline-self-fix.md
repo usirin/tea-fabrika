@@ -299,10 +299,12 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   - Law: the fold of a lane's facts equals its saved `Held`, at every point a lane can stop.
   - On the local host fixture, main moves by one commit while the lane is stuck. The restart
     rebases, writes `restarted` with both bases, and goes on.
-  - An old `over` with no `Held`: the fold gives the carry from the fixture's facts. With the
-    `approve` answer removed, the restart names `decided` and asks the plan's yes again; the
-    plan, triage and the test writer do not run. With the test writer's commit removed, it
-    names `exam` and resumes at the test writer; triage, the plan and its yes do not run.
+  - An old `over` with no `Held`: the fold gives the carry from the fixture's facts. For a lane
+    saved before this PR, the ledger keeps the plan's revision but not its draft. So the fold
+    names `plan`, and the restart runs the plan again; triage stays done. With the `approve`
+    answer removed, it names `decided` and asks the plan's yes again. With the test writer's
+    commit removed, it names `exam` and resumes at the test writer. "The plan does not run"
+    holds only for a lane saved after this PR, whose `ended` facts keep their carry.
   - A `stop` on `rounds_spent`, then the same line: build runs, round + 1. A stop on
     `rounds_spent` ends `stuck:rounds_spent` today, not `skip:owner_no`.
   - A `no` on the plan's yes, then the same line: the plan runs with the note; triage does

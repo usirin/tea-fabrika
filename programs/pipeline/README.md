@@ -123,8 +123,12 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   `exam_touched` (the builder changed the test writer's files) and `exam_conflict` (main changed them
   while the lane was stopped). Merge is `ship`, with its guards.
 - **The builder cannot touch the exam.** A change to a file the test writer's commits touched, or to
-  a rule file, ends the build in `stuck: exam_touched`. The lane asks the person which side was wrong:
-  `builder_wrong` runs the build again, `test_wrong` runs the test writer, then the build.
+  a rule file, ends the build in `stuck: exam_touched`. Its work is held as a commit of its own, and the
+  lane asks the person which side was wrong. `builder_wrong` puts those files back as the test writer
+  wrote them, on top of that work, and the build runs there. `test_wrong` has the test writer write only
+  those files again, with the person's note, on its own commit; its check runs, and the build goes on
+  from the builder's work with the new files. Either pick is the next round, and adds one round to the
+  bound, as a spent round's `again` does.
 - **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
 - **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
@@ -135,10 +139,13 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
 - **A stopped lane goes on.** A stop saves what the lane held and the step it goes on at. Typing the
   same line again claims the ticket, reads the ticket and main fresh, and goes on at that step: no step
-  that ended done runs again. If main moved, a branch never pushed is rebased onto it, and a pushed one
-  has main merged in; the ticket gets a `restarted` row with main's old and new commit, and code's checks
-  run at the new head. A file that conflicts keeps main's side: a test writer's file asks
-  `exam_conflict`, any other file sends the build round again. A lane saved before this change goes on
+  that ended done runs again. If main moved, a branch never pushed is rebased onto it: the test writer's
+  commit first, where its check runs again, then the builder's. A pushed one has main merged in, so the
+  pushed head stays under it; that new head is one no review read, so the review and the push run again
+  before a merge. The ticket gets a `restarted` row with main's old and new commit, and code's checks
+  run at the new head. A file that conflicts keeps main's side: a test writer's file, or a test whose
+  check no longer holds on main, asks `exam_conflict`, whose `again` has the test writer write only those
+  files again; any other file sends the build round again. A lane saved before this change goes on
   from what the ticket's facts prove (`stages/pipeline/restart.ts`).
 - **A person's `no` or `stop` pauses.** It ends the line `ask: owner: paused` (or `stuck: rounds_spent`
   for a stop on the spent rounds), saved where the pick goes on. A `no` on the plan writes it again with
