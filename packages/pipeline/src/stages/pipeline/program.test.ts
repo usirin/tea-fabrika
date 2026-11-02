@@ -199,6 +199,8 @@ interface Script {
 	readonly readFailsAt?: number;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
 	readonly beforeChecks?: boolean;
+	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
+	readonly beforeCarries?: boolean;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -265,6 +267,14 @@ const withoutChecks = (entry: Entry): readonly Entry[] => {
 		return [entry];
 	const carry = Object.fromEntries(Object.entries(fact.carry).filter(([key]) => key !== "checked"));
 	return [{...entry, fact: {...fact, carry}}];
+};
+
+/** A ticket's fact as a lane from before self-fix PR 5 wrote it: an end kept no carry. */
+const withoutCarry = (entry: Entry): Entry => {
+	const {fact} = entry;
+	if (fact.type !== "ended") return entry;
+	const {carry: _, ...rest} = fact;
+	return {...entry, fact: rest};
 };
 
 /** The stopped lane, saved again as code from before self-fix PR 5 kept a stop: no `Held`, nowhere to go on. */
@@ -368,8 +378,14 @@ const lane = ({
 	checksSay,
 	readFailsAt,
 	beforeChecks = false,
+	beforeCarries = false,
 }: Script): Promise<Ran> => {
 	let checksRan = 0;
+	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
+	const olderThan = (timeline: readonly Entry[]): readonly Entry[] => {
+		const checks = beforeChecks ? timeline.flatMap(withoutChecks) : timeline;
+		return beforeCarries ? checks.map(withoutCarry) : checks;
+	};
 	/** The line whose first ticket read already failed. */
 	let readFailed = false;
 	/** How many times the line was typed again. */
@@ -466,9 +482,7 @@ const lane = ({
 								.read(n)
 								.pipe(
 									Effect.map((ticket) =>
-										beforeChecks && typed > 0
-											? {...ticket, timeline: ticket.timeline.flatMap(withoutChecks)}
-											: ticket,
+										typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
 									),
 								);
 						readFailed = true;
@@ -1870,6 +1884,45 @@ describe("a stopped lane, typed again", () => {
 			expect(after[checked]).toMatchObject({result: "green"});
 			expect(after[checked]?.head).not.toBe(headBefore(ran));
 			expect(after[started]?.stage).toBe("mutation");
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a lane from before its ends kept a carry, typed again: the fold names `plan`, the branch starts again from main, and the old head stays under the ref the restart names",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				beforeCarries: true,
+				fake: {see: SEE},
+				again: [{between: ({home}) => keptAsLegacy(home)}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(secondLine(ran), said).toMatch(/restart: #1 from plan\b/);
+			const old = headBefore(ran);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			// The test writer runs again on main's head, not on the old build.
+			const writers = codexRuns(ran.dir).filter((r) => r.step === "tests");
+			expect(writers, said).toHaveLength(2);
+			expect(writers[1]?.seen["src/lower.ts"] ?? "", said).not.toContain("toLowerCase");
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			const written = ran.facts
+				.slice(restarted)
+				.filter((f) => f.type === "ended" && f.stage === "test_writer")
+				.flatMap((f) => {
+					const kept = Schema.decodeUnknownOption(Schema.Struct({head: Schema.String}))(f.carry);
+					return Option.isSome(kept) ? [kept.value.head] : [];
+				});
+			expect(written, said).toHaveLength(1);
+			expect(inClone(ran, "rev-parse", `${written[0]}^`)).toBe(restartOf(ran)?.onto);
+			// The old head is kept: on the fact, and under a ref the restart names, still reachable.
+			const fact = restartOf(ran);
+			expect(fact, said).toMatchObject({head: old, kept: expect.stringMatching(/^refs\//)});
+			expect(inClone(ran, "rev-parse", String(fact?.kept))).toBe(old);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 		},
 	);
