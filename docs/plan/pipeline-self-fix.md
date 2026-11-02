@@ -194,6 +194,11 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   old and new base. Then the runs, as on any lane.
 - **What.**
   - `over` keeps the lane's `Held` (carry, count, round, claim) and the step that stopped.
+    A stuck `over` without `Held` is not a value the type allows, so no new code path can
+    forget to save it.
+  - The fold from facts stays as the second copy. A law checks that it gives the same carry
+    as the saved `Held` on every lane the tests run, so a lost or broken save can always be
+    rebuilt, and a fact the lane forgets to write fails a test the day it is forgotten.
   - A `restart` Msg on a stuck `over`: claim again, read main fresh, then run the step that
     stopped. No step that ended `done` runs again, except PR 4's checks on a head that has
     none.
@@ -221,6 +226,10 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     message does nothing.
   - Laws: a restart never writes a second `approve` ask while the plan's version is the
     same; it never runs a step that ended `done` before the stop; `not_yours` never restarts.
+  - Law: for every step and every stuck reason it can end on, stop there, then restart. The
+    restart runs that step with the same carry it had. A new step or a new stuck reason
+    joins this law by being in the union, not by someone adding a case.
+  - Law: the fold of a lane's facts equals its saved `Held`, at every point a lane can stop.
   - On the local host fixture, main moves by one commit while the lane is stuck. The restart
     rebases, writes `restarted` with both bases, and goes on.
   - An old `over` with no `Held`: the fold gives the carry from the fixture's facts; with one
