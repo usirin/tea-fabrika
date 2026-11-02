@@ -29,6 +29,9 @@ import {parse, TomlError} from "smol-toml";
 //   tests = ["npx", "vitest", "run"]  # the repository's own tests, at a head
 //   typecheck = ["npx", "tsc", "--noEmit"]
 //
+//   [format]
+//   run = ["npx", "prettier", "--write", "{files}"]  # formats files in place; {files}: the paths
+//
 //   [review]
 //   rubrics = "docs/rubrics"        # code.md, doc.md, skill.md, in the repository at its main
 //   governed = [".github/"]           # a change under one needs the governance review; read at its base and head
@@ -164,6 +167,42 @@ const MutationTable = Schema.Struct({
 	vitest: Schema.optionalKey(Word),
 });
 
+/** The word in a formatter's command that stands for the files it formats. */
+export const FILES = "{files}";
+
+/** A formatter's command: the program first, and `{files}` once, as a word of its own after it. */
+const FormatCommand = Command.check(
+	Schema.makeFilter(
+		(words) =>
+			(words[0] !== FILES && words.filter((word) => word === FILES).length === 1) ||
+			`a command with ${FILES} once, as a word of its own after the program`,
+	),
+);
+export type FormatCommand = typeof FormatCommand.Type;
+
+/** The repository's formatter. A table with no `run` names none, so `run` is not optional. */
+const FormatTable = Schema.Struct({
+	/** Formats the files it is given in place, run from the repository's root. */
+	run: FormatCommand,
+});
+
+/**
+ * The formatter's command for `files`, each a path from the repository's root, in place of `{files}`.
+ * Each path is led by `./`, so it is a path and nothing else: oxfmt reads a word that starts with `-`
+ * as an option, and one that starts with `!` as "every file but this". It takes one file at least: a
+ * formatter given no path formats the whole repository. Pure.
+ *
+ *   formatCommand(["node", "fmt.mjs", "{files}"], ["a.ts", "!b.ts"])   // ["node", "fmt.mjs", "./a.ts", "./!b.ts"]
+ */
+export const formatCommand = (
+	run: FormatCommand,
+	files: readonly [string, ...string[]],
+): readonly [string, ...string[]] => {
+	const [program, ...args] = run;
+	const paths = files.map((file) => (file.startsWith("./") ? file : `./${file}`));
+	return [program, ...args.flatMap((word) => (word === FILES ? paths : [word]))];
+};
+
 /** A path inside the repository: never out of it, never from the root of the machine. */
 const InRepo = Schema.String.check(
 	Schema.isPattern(/^(?!\/)(?!(?:.*\/)?\.\.(?:\/|$)).+$/, {
@@ -212,6 +251,7 @@ const File = Schema.Struct({
 	build: Schema.optionalKey(Build),
 	test_writer: Schema.optionalKey(TestWriterTable),
 	mutation: Schema.optionalKey(MutationTable),
+	format: Schema.optionalKey(FormatTable),
 	review: Schema.optionalKey(Review),
 	checks: Schema.optionalKey(Checks),
 	ship: Schema.optionalKey(Ship),

@@ -94,6 +94,19 @@ export const laneBuildWrites = Layer.effect(
 							.pipe(Effect.ignore);
 						return yield* Effect.fail({_tag: "exam_touched" as const});
 					}
+					// The builder's files through the repository's formatter, which leaves out the ones it took
+					// away and any a link leads through. One that failed keeps what it wrote, and the ticket says
+					// so: the checks still judge the change.
+					const formatted = yield* work.format(copied.tree, changed);
+					if (formatted._tag === "failed")
+						yield* tickets
+							.talk(numberOf(ticket), `format-build-failed/${copied.base}`, {
+								type: "commented",
+								body: saidOf(
+									`The formatter failed on the builder's files, so what it could not format is kept as the builder wrote it. ${formatted.says}`,
+								),
+							})
+							.pipe(Effect.ignore);
 					const head = yield* work.commit(copied.tree, [], message);
 					return {head, changed: head !== copied.base};
 				}),
@@ -170,10 +183,17 @@ export const laneTestsWork = Layer.effect(
 					Effect.map((files) => files.filter(includedBy(includes))),
 					Effect.mapError(() => failed),
 				),
+			// Through the repository's formatter first. One that failed keeps what it wrote: the lane says so
+			// before the next build round, or after the mutants' answers, where it formats the exam again.
 			commit: (ticket, _base, files) =>
 				Effect.gen(function* () {
 					const {tree} = yield* work.tree(numberOf(ticket));
-					return yield* work.commit(tree, files, `tests for ${ticket}`);
+					yield* work.write(tree, files);
+					yield* work.format(
+						tree,
+						files.map((file) => file.path),
+					);
+					return yield* work.commit(tree, [], `tests for ${ticket}`);
 				}).pipe(Effect.mapError(() => failed)),
 			onBase: (commit, tests) =>
 				tested(commit).pipe(
