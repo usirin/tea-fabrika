@@ -140,8 +140,13 @@ restart: (s, m) =>
   branch already on the code host takes main in by a merge, as that note says, so this
   walks nothing back. After a rebase, code runs the test writer's check on the new base
   again: new tests red, old tests green.
-- **Not restartable:** `not_yours`, `merged_elsewhere` and `exam_touched`. Each is a
-  person's call, and the ticket says what to do instead.
+- **Not restartable:** `not_yours` and `merged_elsewhere`. Each is a person's call, and
+  the ticket says what to do instead.
+- **`exam_touched` stops the line and asks, then goes on from the step before.** The
+  person picks one of two. "The builder was wrong": code puts the exam files back as the
+  test writer left them, and build runs again. "The test is wrong": the test writer runs
+  again with the person's note, then build. Triage, the plan's approval and every other
+  finished step stay. Nothing starts from scratch.
 - **A step that could not run** is run once more on its own, on the same intent, before
   the lane stops (OTP's default intensity is 1).
 - **What the ticket shows:** a `restarted` row with who, when, from which step, and the old
@@ -226,7 +231,7 @@ counts once.
 | 39 | `stuck:draft_failed` | machine-fixable | The builder starts again, as today, then stop, restartable. |
 | 40 | `stuck:over_budget` | judgment | A spend ask. |
 | 41 | `stuck:no_change`, first round | machine-fixable | Once more, told it changed nothing. Then ask. |
-| 42 | `stuck:exam_touched` | judgment | Keep. Decided: a builder's change to its exam ends the lane, and the owner reads why. |
+| 42 | `stuck:exam_touched` | judgment | Keep the stop. Decided: a builder never changes its exam. Now an ask with two picks, the builder was wrong (exam put back, build again) or the test is wrong (test writer again with the note), then the lane goes on. |
 | 43 | the lane's `stuck:checks_not_run` | machine-fixable | Code's checks run outside the box. Run once more, then stop, restartable. Never `done`. |
 | 44 | the lane's `stuck:rounds_spent`: changed nothing, still red | judgment | The same ask as row 8. |
 | 45 | the lane's `ask:owner:no_change`: checks green, nothing changed | machine-fixable | A fresh review reads the builder's `disputed`. Ask only if the finding still holds. |
