@@ -57,17 +57,47 @@ type Color =
 | 3 | component background | title when focused |
 | 4 | component hover | resting tile edge, a bend (below) |
 | 8 | strong border and focus | focus edge |
-| 11 | low-contrast text | name at rest |
-| 12 | high-contrast text | name when focused, the letter |
+| 11 | low-contrast text | name at rest, and all quieter text |
+| 12 | high-contrast text | name when focused, the letter, every title and main line |
 
-**The one bend.** Radix gives borders steps 6 to 8. Our resting tile edge is step 4, because a higher
-one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so it cannot carry a needed
-fact. The title bar and the focus edge do that.
+**Two text steps, no third gray (decided 2026-11-02 by the owner, from the screenshot review).**
+Text uses step 12 and the look's low step only: slate 11, or a11 where 11 fails (in today's app,
+slate a11 in both looks). Secondary, muted and faint text are all the low step. Rank comes from
+weight and size, never from a gray between the two. A title is always step 12, so it never reads
+weaker than the text beside it on a row at rest, hovered or selected. A row set aside stays at the
+low step, since that is a state and not a rank, and its dashed ring carries it too (principle 3).
+
+**The bends.** Four, each with its reason, listed in `apps/fabrika/src/themes.ts`: the dark desk
+(`#0c0d0e`, darker than slate 1), white text on a step 9 fill (Radix's own rule for that step), the
+resting tile edge, and the light focus edge (slate a9 as a line, since a8 reads 1.90 on the desk).
+The one that needs a word here is the edge. Radix gives borders steps 6 to 8. Our resting tile edge
+is step 4, because a higher one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so
+it cannot carry a needed fact. The title bar and the focus edge do that.
+
+**A line or a fill is never text (added 2026-11-01, approved by the owner from the design review).**
+Principle 5 holds for each use, not only for each value. A token made from a border step (4 to 8)
+or a solid fill (9, 10) is never a `color:`. Text takes 11 or 12, and it must read 4.5:1 on every
+place it sits, hovered and selected rows included, not only on the page.
+
+```css
+/* Before: the wire line's step used as words, 1.87 to 3.02 */
+.topbar .num { color: var(--wire); }       /* slate a8 */
+/* After: the text step the top bar's other words use, 5.32 or more */
+.topbar .num { color: var(--text-faint); } /* slate a11 */
+```
+
+- What it changed: in `fabrika-light`, done and stuck moved from step 11 to step 12 and turn-text
+  from indigo 11 to indigo a11, since step 11 fails on a selected row. The values are in
+  [themes](./themes.md).
+- What it costs: done and stuck in light read close to black, so the word and the mark carry the
+  state more than the hue does. Quiet top-bar numbers and pipes get as strong as its other quiet
+  words.
 
 ## What today's code still breaks
 
-- Colors are hand-written oklch in `apps/fabrika/src/window/window.css`, and some are written straight
-  into `apps/fabrika/src/window/terminal.ts` and `apps/fabrika/src/main.ts`.
+- The grays and the state colors in `apps/fabrika/src/window/window.css` are Radix steps since
+  ticket 144, and the terminal and the window's frame read them from `apps/fabrika/src/themes.ts`.
+  The hues are still hand-written oklch: the line tints, the type colors and the service colors.
 - Three of the six tints sit on amber, red and green, so they break principle 2.
 - Pipes have no second cue yet, so they break principle 3.
 

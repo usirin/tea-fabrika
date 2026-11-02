@@ -244,9 +244,11 @@ describe("a table from tsh", () => {
 		]);
 	});
 
-	it("is drawn in the app's colors, and no text in it can move the cursor or clear the screen", () => {
+	// The colors themselves are the theme's, per look: screen.test.ts holds them.
+	it("is drawn in color, and no text in it can move the cursor or clear the screen", () => {
 		const {bytes} = run([{type: "table", table}], {cols: 80});
-		expect(bytes).toContain("\x1b[1;38;2;235;235;236mExperiments\x1b[0m");
+		// oxlint-disable-next-line eslint/no-control-regex -- the color's escape is what it looks for.
+		expect(bytes).toMatch(/\x1b\[[\d;]+mExperiments\x1b\[0m/);
 		expect(bytes).toContain("^[[2Jcut");
 		expect(bytes).not.toContain("\x1b[2J");
 	});

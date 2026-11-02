@@ -219,6 +219,22 @@ describe("the roles each one draws", () => {
 		expect(html.match(/class="side"/g)).toHaveLength(3);
 	});
 
+	// Its title stays at the low step (themes.test.ts), so the shape says "set aside" too: color is
+	// never alone (WCAG 1.4.1). Its ring is dashed; a live row's is not.
+	it("draws a set-aside row with its own icon, a dashed ring, beside a live row's solid one", () => {
+		const html = menu([
+			{...LIVE, rows: [row("7", "Approve plan")]},
+			{...LATER, fold: false, rows: [{...row("4", "Pick a name"), icon: "later"}]},
+		]);
+		const rowOf = (icon: string) =>
+			new RegExp(
+				`data-icon="${icon}"[^>]*>\\s*<span class="lead">(<svg[^>]*>\\s*<circle[^>]*>)`,
+			).exec(html)?.[1] ?? `(no ${icon} row with an icon)`;
+		expect(rowOf("later")).toMatch(/class="ic ic-later"[\s\S]*stroke-dasharray="[\d.]+ [\d.]+"/);
+		expect(rowOf("ask")).toMatch(/class="ic ic-ask"/);
+		expect(rowOf("ask")).not.toMatch(/stroke-dasharray/);
+	});
+
 	it("draws an empty menu as one calm line, a dialog with nothing to pick, and no footer", () => {
 		const html = menu([{...LIVE, rows: []}]);
 		expect(html).toContain('role="dialog"');

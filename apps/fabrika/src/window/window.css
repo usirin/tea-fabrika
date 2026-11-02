@@ -1,53 +1,50 @@
 /*
- * The app's tokens: round 6's graphite palette (oklch), its type scale and spacing. What each
- * colour means is held strictly: the accent means "your turn" and nothing else; red means stuck
- * or broken; amber running; green done. The four type colours live only on the program map's
- * ports and wires, never on text.
+ * The app's tokens: the built-in themes' colors (docs/direction/themes.md; src/themes.ts holds the
+ * same values for the terminal and the window's frame), its type scale and spacing. Radix 3.0.0,
+ * gray slate, accent indigo: every color is a Radix step, used for that step's job (color
+ * principles, principle 5). Text takes steps 11 and 12, lines 4 to 8, solid fills 9 and 10. Each
+ * is light-dark(<fabrika-light>, <fabrika>), so the window follows the system's look.
+ *
+ * What each color means is held strictly: the accent means "your turn" and nothing else; red means
+ * stuck or broken; amber running; green done. A line or a fill token is never a text color. The
+ * four type colors live only on the program map's ports and wires, never on text.
  */
 :root {
-	color-scheme: dark;
-	--n-1: oklch(0.15 0.003 260);
-	--n-2: oklch(0.178 0.004 260);
-	--n-3: oklch(0.205 0.004 260);
-	--n-4: oklch(0.232 0.004 260);
-	--n-5: oklch(0.256 0.004 260);
-	--n-6: oklch(0.28 0.004 260);
-	--n-7: oklch(0.322 0.004 260);
-	--n-8: oklch(0.4 0.004 260);
-	--n-9: oklch(0.625 0.004 260);
-	--n-10: oklch(0.695 0.004 260);
-	--n-11: oklch(0.79 0.002 260);
-	--n-12: oklch(0.94 0.001 260);
-	--a-3: oklch(0.27 0.035 266);
-	--a-5: oklch(0.33 0.059 266);
-	--a-9: oklch(0.54 0.14 266);
-	--a-10: oklch(0.59 0.14 266);
-	--a-11: oklch(0.8 0.084 266);
+	color-scheme: light dark;
 
-	--surface-sunken: var(--n-1);
-	--surface: var(--n-2);
-	--surface-raised: var(--n-3);
-	--surface-hover: var(--n-4);
-	--surface-selected: var(--n-5);
-	--border-faint: var(--n-5);
-	--border: var(--n-6);
-	--border-strong: var(--n-7);
-	--wire: var(--n-8);
-	--text-faint: var(--n-9);
-	--text-muted: var(--n-10);
-	--text-secondary: var(--n-11);
-	--text-primary: var(--n-12);
-	--focus: var(--n-11);
-	--tile-focus: var(--n-9);
-	--turn: var(--a-11);
-	--turn-fill: var(--a-9);
-	--turn-fill-hover: var(--a-10);
-	--turn-fg: oklch(0.985 0 0);
-	--done: oklch(0.78 0.1 155);
-	--running: oklch(0.82 0.1 82);
-	--stuck: oklch(0.72 0.15 25);
-	--person-bg: var(--n-7);
-	--agent-bg: var(--n-4);
+	--surface-sunken: light-dark(
+		#f9f9fb,
+		#0c0d0e
+	); /* slate 2; dark: a bend, under slate 1 (themes.ts) */
+	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
+	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
+	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
+	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
+	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4: the resting edge, a bend */
+	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
+	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
+	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
+	/*
+	 * Text takes Radix's two text steps only (decided 2026-11-02): slate 12 for titles and main
+	 * lines, slate a11 for everything quieter. Rank comes from weight and size, not a third gray, so
+	 * secondary, muted and faint are one step under three names. Slate 11 is not used: in light it
+	 * reads 4.42 on a selected row.
+	 */
+	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
+	--text-muted: var(--text-faint);
+	--text-secondary: var(--text-faint);
+	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
+	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9: a8 is under 3:1 on the desk */
+	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
+	--turn: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11 */
+	--turn-fill: #3e63dd; /* indigo 9 */
+	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
+	--turn-fg: #ffffff; /* Radix's rule for text on step 9 */
+	--done: light-dark(#203c25, #71d083); /* grass 12; grass 11 */
+	--running: light-dark(#4f3422, #ffca16); /* amber 12; amber 11 */
+	--stuck: light-dark(#641723, #ff9592); /* red 12; red 11 */
+	--person-bg: light-dark(#e0e1e6, #2e3135); /* slate 5 */
+	--agent-bg: light-dark(#f0f0f3, #212225); /* slate 3 */
 	--ty-fact: oklch(0.76 0.075 205);
 	--ty-turn: oklch(0.76 0.085 345);
 	--ty-step: oklch(0.8 0.085 120);
@@ -117,7 +114,6 @@
 
 	/* The names the counter's and the tracker's windows were written with, on the same palette. */
 	--ground: var(--surface);
-	--ink: var(--text-secondary);
 	--faint: var(--text-faint);
 	--line: var(--border);
 	--key: var(--turn-fill);
@@ -126,7 +122,7 @@
 	--hover: var(--surface-hover);
 	--pick: var(--surface-selected);
 	--open: var(--done);
-	--closed: oklch(0.72 0.12 300);
+	--closed: var(--text-faint); /* no hue: the word says closed */
 	--alert: var(--stuck);
 	--sans: var(--font);
 	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale above
@@ -332,7 +328,7 @@ body,
 }
 
 .tile.focused .titlebar {
-	color: var(--text-secondary);
+	color: var(--text-primary);
 }
 
 /*
@@ -363,10 +359,20 @@ body,
 	--tint: var(--line-5);
 }
 
+/* The mix starts from the page's own ground and edge, written out (slate 1, slate a4): this rule
+   sets --surface and --border-faint, so it cannot read them. */
 .tile[data-tint] {
-	--surface: color-mix(in oklch, var(--tint) calc(var(--line-strength) / 6), var(--n-2));
+	--surface: color-mix(
+		in oklch,
+		var(--tint) calc(var(--line-strength) / 6),
+		light-dark(#fcfcfd, #111113)
+	);
 	--ground: var(--surface);
-	--border-faint: color-mix(in oklch, var(--tint) var(--line-strength), var(--n-5));
+	--border-faint: color-mix(
+		in oklch,
+		var(--tint) var(--line-strength),
+		light-dark(#00002d17, #d3edf81d)
+	);
 	background: var(--surface);
 	box-shadow: inset 0 0 0 1px var(--border-faint);
 }
@@ -485,7 +491,7 @@ main.program > [role="alert"] {
 .titlebar .asking::before {
 	content: "·";
 	padding: 0 6px;
-	color: var(--border-strong);
+	color: var(--text-faint);
 }
 
 .starting {
@@ -592,11 +598,11 @@ main.program > [role="alert"] {
 
 .sep {
 	padding: 0 6px;
-	color: var(--border-strong);
+	color: var(--text-faint);
 }
 
 .quiet {
-	color: var(--wire);
+	color: var(--text-faint);
 }
 
 .topbar .workspaces {
@@ -606,7 +612,7 @@ main.program > [role="alert"] {
 }
 
 .topbar .num {
-	color: var(--wire);
+	color: var(--text-faint);
 }
 
 .topbar .fb[aria-current="true"] {
@@ -631,7 +637,7 @@ main.program > [role="alert"] {
 
 .topbar .seg.plain,
 .topbar .pipe {
-	color: var(--wire);
+	color: var(--text-faint);
 }
 
 .topbar .pipe {
@@ -769,7 +775,7 @@ main.program > [role="alert"] {
 }
 
 .bottomline .job .took {
-	color: var(--wire);
+	color: var(--text-faint);
 }
 
 /*
@@ -1199,7 +1205,7 @@ main.program > [role="alert"] {
 	height: var(--row-2h);
 	padding: 0 10px;
 	border-radius: var(--r);
-	color: var(--text-secondary);
+	color: var(--text-primary);
 	cursor: default;
 }
 
@@ -1294,7 +1300,7 @@ main.program > [role="alert"] {
 
 button {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-secondary);
 	background: var(--line);
 	border: 1px solid transparent;
 	border-radius: 6px;
@@ -1388,7 +1394,7 @@ button:focus-visible {
 	display: flex;
 	flex-direction: column;
 	background: var(--ground);
-	color: var(--ink);
+	color: var(--text-primary);
 	font: 400 var(--fs-prose) / 1.65 var(--font);
 	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;
@@ -1604,7 +1610,7 @@ button:focus-visible {
 	display: flex;
 	flex-direction: column;
 	background: var(--ground);
-	color: var(--ink);
+	color: var(--text-secondary);
 	font-family: var(--sans);
 	font-size: 13px;
 	line-height: 1.45;
@@ -1677,7 +1683,7 @@ button:focus-visible {
 }
 
 .tracker button.tracker-primary {
-	color: var(--ink);
+	color: var(--turn-fg);
 	background: var(--key);
 	border-color: transparent;
 	font-weight: 500;
@@ -1716,7 +1722,7 @@ button:focus-visible {
 
 .tracker .tracker-shows button[aria-pressed="true"] {
 	background: var(--raised);
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 500;
 	box-shadow: 0 0 0 1px var(--line);
 }
@@ -1754,7 +1760,7 @@ button:focus-visible {
 	padding: 5px 0;
 	border: none;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-primary);
 	font: inherit;
 	outline: none;
 }
@@ -1773,7 +1779,7 @@ button:focus-visible {
 .tracker .tracker-composer input,
 .tracker .tracker-composer textarea {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-primary);
 	background: var(--raised);
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -1842,7 +1848,7 @@ button:focus-visible {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-secondary);
 	text-align: left;
 	text-decoration: none;
 }
@@ -1871,6 +1877,7 @@ button:focus-visible {
 
 .tracker-title {
 	overflow: hidden;
+	color: var(--text-primary);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 14px;
@@ -1996,6 +2003,7 @@ button:focus-visible {
 }
 
 .tracker h2 {
+	color: var(--text-primary);
 	font-size: 20px;
 	font-weight: 600;
 	line-height: 1.3;
@@ -2051,7 +2059,7 @@ button:focus-visible {
 }
 
 .tracker-who {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -2067,7 +2075,7 @@ button:focus-visible {
 .tracker-body {
 	max-width: 68ch;
 	margin-top: 4px;
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
 	line-height: 1.55;
 	white-space: pre-wrap;
@@ -2075,14 +2083,15 @@ button:focus-visible {
 
 /* A URL in a body: underlined, and a long one wraps rather than widen the tile. */
 .tracker-body a {
-	color: var(--key);
+	color: var(--turn);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 	overflow-wrap: anywhere;
 }
 
-.tracker-pending {
-	opacity: 0.6;
+/* A comment still saving: its body at the low step, and "saving…" above it says so. */
+.tracker-pending .tracker-body {
+	color: var(--text-secondary);
 }
 
 .tracker-reply {
@@ -2097,7 +2106,7 @@ button:focus-visible {
 }
 
 .tracker-head-line[data-waits] {
-	color: var(--key);
+	color: var(--turn);
 	font-weight: 600;
 }
 
@@ -2118,12 +2127,12 @@ button:focus-visible {
 }
 
 .tracker-ask-what {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
 	font-weight: 600;
 }
 
-/* A duplicate hint: advice, so quieter than an ask. Dismissed, it fades. */
+/* A duplicate hint: advice, so quieter than an ask: a dashed edge, not a solid one. */
 .tracker-hint {
 	display: flex;
 	flex-direction: column;
@@ -2133,19 +2142,20 @@ button:focus-visible {
 	border-radius: 8px;
 }
 
-.tracker-hint[data-says="dismiss"] {
-	opacity: 0.6;
+.tracker-hint-what {
+	color: var(--text-primary);
 }
 
-.tracker-hint-what {
-	color: var(--ink);
+/* Dismissed, its words drop to the low step; the pressed Dismiss button says it in words. */
+.tracker-hint[data-says="dismiss"] .tracker-hint-what {
+	color: var(--text-secondary);
 }
 
 .tracker .tracker-hint-link {
 	padding: 0;
 	border: 0;
 	background: none;
-	color: var(--ink);
+	color: inherit;
 	font: inherit;
 	font-weight: 600;
 	text-decoration: underline;
@@ -2154,7 +2164,7 @@ button:focus-visible {
 
 .tracker .tracker-hint button[aria-pressed="true"] {
 	border-color: var(--key);
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -2921,7 +2931,7 @@ main.program:has(> .view) {
 	inline-size: 12px;
 	block-size: 10px;
 	border-radius: 3px;
-	outline: 1px dashed var(--n-8);
+	outline: 1px dashed var(--wire);
 	outline-offset: -1px;
 }
 
@@ -3209,13 +3219,14 @@ main.program:has(> .view) {
 
 .map-view .spot.nb {
 	box-shadow: none;
-	outline: 1px dashed var(--n-8);
+	outline: 1px dashed var(--wire);
 	outline-offset: -1px;
 }
 
+/* A step not built yet: no fill, a dashed edge (.nb) and its "not built" words; its name drops to
+   the low step below. */
 .map-view .spot.nob {
 	background: none;
-	opacity: 0.75;
 }
 
 .map-view .nob .n,
@@ -3652,7 +3663,7 @@ main.program:has(> .view) {
 .trace-view .wf-name {
 	overflow: hidden;
 	white-space: nowrap;
-	color: var(--text-secondary);
+	color: var(--text-primary);
 }
 
 .trace-view .wf-in {
