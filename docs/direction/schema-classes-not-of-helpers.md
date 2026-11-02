@@ -82,7 +82,7 @@ save, and the types do not warn.
   with its tests, apart from plain renames. Example: a window given a `NaN`
   time draws slightly off today; after the swap it throws.
 - 18 pull requests, package by package: 13 plain renames and 5 swaps to `make`.
-  `OpenTicket` goes first among the swaps, after `runs` becomes `timeline`.
+  `OpenTicket` goes first among the swaps, after `runs` is removed and `trace` becomes the ticket's view (tracker ticket 141, which holds ticket 86).
 - About 68 names belong to a plain interface today (`Grid`, `Desk`). Making
   each one a schema is more than a rename.
 

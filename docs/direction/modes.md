@@ -11,9 +11,8 @@ new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
 Built from [experiment 184](../../experiments/184-modes.md), which read how about fifteen makers
 and tools do modes and checked today's info mode against them, and a private page, "Mode
-guidelines", with a mode you can enter and leave. Neither is a measurement. It builds on the
-note "Keybindings are configurable", on its own branch in
-[PR 282](https://github.com/usirin/tea-fabrika/pull/282).
+guidelines", with a mode you can enter and leave. Neither is a measurement. It builds on
+[keybindings are configurable](./keybindings-are-configurable.md), decided the same day.
 
 ```ts
 // A sketch, next/, Tier 2. Today's info mode (C-b i), written with the two new fields.
@@ -215,7 +214,7 @@ editing     EDITING · t3 notes                                       mod+enter 
   menus stack and needs `C-q` to leave them all; we do not want a second key for that.
 - **A popover is not a mode.** It has its own edge, focus moves into it, and Escape and a click
   outside close it, one at a time ([popovers](./popovers.md)). Keys go where focus is. This answers
-  the question PR 282 left open, as a lean.
+  the question the keybindings note left open.
 
 ### M6: a mode stays where it lives
 
@@ -234,8 +233,8 @@ app restart        gone: window state is not kept           gone
   PR 282's page leaves copy mode on a tile move; this differs.
 - **Hot reload.** The window's machine keeps its model, and `mode()` reads it again. If the new
   code cannot read the old model, the tile starts fresh, its mode is null, and the status region
-  says "Left copy mode: the program changed." 65%. The hot reload guidelines, being written now,
-  may settle it.
+  says "Left copy mode: the program changed." 65%. The hot reload note, still proposed on
+  [PR 286](https://github.com/usirin/tea-fabrika/pull/286), may settle it.
 - **Today's info mode passes all of this:** per window, kept across focus, gone on reload.
 
 ## How a press finds its command
@@ -259,8 +258,9 @@ app restart        gone: window state is not kept           gone
 
 ## The person's file
 
-The section is decided (K7, K8 in PR 282). Open: with command names unique per program, should a
-mode's command also be writable as a flat row?
+The section is decided (K7, K8 in [keybindings](./keybindings-are-configurable.md)). The question
+was: with command names unique per program, should a mode's command also be writable as a flat row?
+The owner approved A, the lean, on 2026-11-01.
 
 ```toml
 # A: a mode's command is written only in its section. Lean, 70%.

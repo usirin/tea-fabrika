@@ -68,7 +68,7 @@ desk.detach  = []                              # unbound: the key goes on to the
 ### K3: a program for keys
 
 fabrika ships a built-in program to search the bindings, press a key to rebind one, see clashes,
-and write `keybindings.toml`. **Its name is proposed: `keys`.** Today's `C-b ?` already opens a
+and write `keybindings.toml`. **Its name is `keys`, decided 2026-11-01.** Today's `C-b ?` already opens a
 panel called keys, so the word is one people have met.
 
 ```text
@@ -190,6 +190,9 @@ exit   = ["q", "escape"]
 
 - It is valid TOML: smol-toml 1.9.1 reads it as `mode.terminal.copy.enter` and
   `mode.terminal.copy.keys`.
+- **[Modes](./modes.md#the-persons-file) later moved `enter` out of the section.** Entering is a
+  command like any other, so it is a flat row, `terminal.copy = "<prefix>["`, and the section holds
+  only `keys`.
 - **The program that owns a mode defines what it does.** Copy mode belongs to the terminal. The
   person's file sets only how you get in and the mode's keys. Inside a mode's keys, a command is
   the mode's own word, `yank`, since the section already names the program.
@@ -294,8 +297,8 @@ type Mode = {
 };
 type Keys = {
 	prefix: string; // "ctrl+a": a setting, never a binding
-	global: Binding[]; // work anywhere: desk.split, palette.open (proposed, below)
-	tiles: Record<Program, Binding[]>; // only while that program's tile has focus (proposed, below)
+	global: Binding[]; // work anywhere: desk.split, palette.open (decided, below)
+	tiles: Record<Program, Binding[]>; // only while that program's tile has focus (decided, below)
 	modes: Record<Program, Record<string, Mode>>; // [mode.terminal.copy]; what a mode does is its program's
 };
 type Via = {_tag: "key"; keys: string} | {_tag: "palette"} | {_tag: "word"} | {_tag: "click"};
@@ -354,6 +357,10 @@ two packs, one    global key: both lose it, and the keys program says so
   holds only that key. And after a clash, a pack's key sits unbound until the person picks one.
 
 ### What a program bringing a mode looks like
+
+**[Modes](./modes.md#the-shape) replaced this shape.** A program gets one `commands` field and a
+`mode(state)` that returns `null` for no mode, so the separate `keys`, `global` and `modes` fields,
+`{_tag: "normal"}` and `enter` below are gone. The sketch is kept as the earlier step.
 
 A sketch. **Made up:** the `notes` program, `Note`, `NoteId`, `NotesMode`, `tableFor`, the note
 id `n12`, the words `open`, `next`, `select`, `toggle` and `archive`, and the `keys`, `global` and
@@ -433,8 +440,8 @@ The table itself loses nothing: it rebuilds from the file or the person's object
 
 ## A browser tab has no files
 
-`~/.fabrika/keybindings.toml` is on the Mac. A tab cannot read it. Proposed, the same path as
-themes in experiment 177 (on its own branch):
+`~/.fabrika/keybindings.toml` is on the Mac. A tab cannot read it. The same path as
+[themes](./themes.md#2-live-switching-proposed), from experiment 177:
 
 ```text
 the hands      read the file, decode it, post the value to the person's object on the ledger
@@ -465,9 +472,11 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 - **Screen reader keys** (Control-Option for VoiceOver, Insert or Caps Lock for NVDA) get a
   warning, not a refusal: a person without a screen reader may want them.
 
-## What is proposed
+## Decided from leans
 
-| Question | Lean | How sure |
+The owner approved each lean below on 2026-11-01. The numbers stay as written.
+
+| Question | Decided | How sure |
 |---|---|---|
 | What else a mode section holds | only `enter` and `keys` for now; later, what the bottom line shows while you are in it | 60% |
 | Key spelling | `ctrl+a`, `mod+k`, `shift+f6`, as VS Code, Zed, Ghostty, kitty and Windows Terminal write it, not Vim's `<C-a>` | 70% |
@@ -485,7 +494,7 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
   bottom line while in a mode is the next thing a person may want to change, since today's
   bottom line after `C-b` already lists keys. The doubt: whether that text belongs to the
   person's file or to the program that owns the mode. Whether popovers (arrows, `J`, `K`, Esc)
-  are modes too is open; building the asks popover settles it.
+  are modes too: [modes](./modes.md#m5-one-mode-per-program-never-a-stack) M5 says no.
 - **Spelling, why and cost.** Most tools write `ctrl+a`, and a person who does not use Vim reads
   it. Vim writes `<C-a>`, and our prose and tmux say `C-a`, so there are two spellings for one
   key. The doubt: `<prefix>` is already Vim's angle-bracket style, so `"<prefix>ctrl+x"` mixes
@@ -515,8 +524,8 @@ Each limit is a platform's or a law's. The keys program shows them in a "not our
 ## Where this differs from settled notes
 
 - **W5 says a binding on a key the backend cannot have fails at load.** With one file for the app
-  and a tab, a whole-file failure would be wrong in one of them. Proposed: that binding is off in
-  that window only, and said. The owner to pick, 80% (was 65%): no app read refuses a file, and
+  and a tab, a whole-file failure would be wrong in one of them. Decided 2026-11-01: that binding is off in
+  that window only, and said. 80% (was 65%): no app read refuses a file, and
   VS Code's source turns such keys off per window
   ([experiment 182](../../experiments/182-keybindings.md#apps-with-a-desktop-and-a-web-version)).
 - **[The GUI is an Electron app first](./the-gui-is-electron-first.md) lists "keys a project
