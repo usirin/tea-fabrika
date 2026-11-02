@@ -356,30 +356,11 @@ describe("a lane's facts", () => {
 			["a time below zero", {command: VITEST, code: 0, ms: -1}],
 			["a time that is not a whole number", {command: VITEST, code: 0, ms: 2.5}],
 			["no command", {code: 0, ms: 3}],
+			// No row was saved with the shape before codes and times, so it reads as nothing.
+			["the command alone, as words", VITEST],
 		])("a command written today with %s is broken", (_, command) => {
 			const fact = {...checked("green"), commands: [command]};
 			expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
-		});
-
-		it("a fact saved before codes and times were kept still reads: each command, and nothing made up", () => {
-			const before = {...checked("red", [name(1)]), commands: [VITEST, "pnpm lint"]};
-			const read = readRow(
-				row({data: JSON.stringify(before), kind: "checked", writer: "agent:lane"}),
-			);
-			if (read.kind !== "entry" || read.entry.fact.type !== "checked")
-				throw new Error(`the old fact did not read: ${JSON.stringify(read)}`);
-			// No code and no time: null would say the command could not start, and nobody knows that.
-			expect(read.entry.fact.commands).toStrictEqual([{command: VITEST}, {command: "pnpm lint"}]);
-			expect(read.entry.fact).toMatchObject({head, result: "red", failed: [name(1)]});
-		});
-
-		it("a mutation step's end saved before codes and times were kept still reads its trusted checks", () => {
-			const {type: _, ...trusted} = {...checked("green"), commands: [VITEST]};
-			const fact = {...mutationEnd, trusted};
-			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
-			if (read.kind !== "entry" || read.entry.fact.type !== "ended")
-				throw new Error(`the old end did not read: ${JSON.stringify(read)}`);
-			expect(read.entry.fact.trusted?.commands).toStrictEqual([{command: VITEST}]);
 		});
 
 		it("are code's to write: the lane may write one", () => {
