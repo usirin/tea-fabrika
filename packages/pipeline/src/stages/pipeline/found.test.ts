@@ -237,8 +237,8 @@ describe("a red head, in words", () => {
 		expect(redWords([ONE, TWO, THREE], WHY, 2)).toBe(
 			[
 				"The repository's own tests fail at this head:",
-				`- ${ONE}`,
-				`- ${TWO}`,
+				`- \`${ONE}\``,
+				`- \`${TWO}\``,
 				"And 1 more.",
 				"",
 				"The first lines of why:",
@@ -251,7 +251,7 @@ describe("a red head, in words", () => {
 
 	it("redWords: all of them when they fit, and no why when there is none", () => {
 		expect(redWords([ONE, TWO], "", 2)).toBe(
-			["The repository's own tests fail at this head:", `- ${ONE}`, `- ${TWO}`].join("\n"),
+			["The repository's own tests fail at this head:", `- \`${ONE}\``, `- \`${TWO}\``].join("\n"),
 		);
 		expect(redWords([], "", 2)).toBe(
 			["The repository's own tests fail at this head:", "No test was named."].join("\n"),
@@ -260,6 +260,17 @@ describe("a red head, in words", () => {
 
 	it("redWords: a name that reads as a reference is made inert", () => {
 		expect(redWords(["src/a.test.ts > reads #12"], "", 5)).toContain(`#${BREAK}12`);
+	});
+
+	it("redWords: a name with markdown in it stays one code span, so it shapes nothing", () => {
+		// A backtick inside, at the end too, a link and an open comment: a fence one longer, padded.
+		const name = "src/a.test.ts > keeps [link](url) and <!-- as `text`";
+		expect(redWords([name], "", 5)).toBe(
+			[
+				"The repository's own tests fail at this head:",
+				"- `` src/a.test.ts > keeps [link](url) and <!-- as `text` ``",
+			].join("\n"),
+		);
 	});
 });
 
