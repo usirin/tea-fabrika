@@ -1,12 +1,13 @@
 # Modes
 
-**Proposed 2026-11-01.** Parts are decided by the owner: a mode's keys get their own section in
+**Decided 2026-11-01.** The owner approved the six principles, the shape and the smaller
+calls below with their leans, after a walk of each part. The leans' confidence numbers stay as
+written, so a later run can test the least sure ones. Decided before that walk: a mode's keys get their own section in
 the person's key file, named by its program, `[mode.terminal.copy]`, with its keys in
 `[mode.terminal.copy.keys]`; every command carries its program's name, `desk.split`; the load
 refuses a mode with no way out (WCAG 2.1.2); and a command's field is called `mode`, the same word
-as the program's `mode`. **The shape below was shaped by the owner, not yet a formal yes:** a
-program gets one new field, `commands`, and one `mode` read from state. **Everything else is a
-lean,** each with how sure.
+as the program's `mode`. The shape, which the owner shaped and now approved: a program gets one
+new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
 Built from [experiment 184](../../experiments/184-modes.md), which read how about fifteen makers
 and tools do modes and checked today's info mode against them, and a private page, "Mode
