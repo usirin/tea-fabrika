@@ -454,6 +454,9 @@ const view = {
   Elixir's LiveView does.
 - Every Msg from a window carries `saw: <rev>`, and each program decides what
   a stale Msg means.
+  - *Changed 2026-11-01:* `saw` becomes `seen`, the log's rev, on the entry
+    wrapper, and the Msg loses it ([saved state](./saved-state.md#the-smaller-calls),
+    smaller call 1).
 - Screen state (scroll, hover, the picked row) lives in the window's own tea
   machine, read through the same hook.
 - **Three homes for state (decided 2026-10-31).** Who needs it picks the home.

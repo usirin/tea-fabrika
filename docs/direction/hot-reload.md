@@ -89,6 +89,10 @@ const swap = (to: Hash) =>
 
 ### H3: a new shape migrates, or that one process is refused
 
+*Replaced 2026-11-01:* the shape-guess upcast in the sketch below gives way to a version number and
+a chain of named upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
+The sketch stays as it was written.
+
 ```ts
 // A sketch, in the program: a version may carry an upcast from the shape before it.
 export const state = Schema.Struct({count: Schema.Number});

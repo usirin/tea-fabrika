@@ -44,6 +44,10 @@ migrate: (raw) => {
 - **No version number on each machine.** The schema is the check. A version
   only matters if old state must be carried forward, and tea's `upcast` is the
   place for that, when it comes.
+  - *Walked back 2026-11-01 for state carried forward:* this no longer holds
+    there. A saved model carries its shape's number and a chain of named
+    upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
+    The schema is still the last check.
 - **This is Elm's answer.** Elm reads saved data through a `Decoder`, and a
   failed decode is an error to handle, never a guess
   ([Json.Decode](https://package.elm-lang.org/packages/elm/json/latest/Json-Decode)).
