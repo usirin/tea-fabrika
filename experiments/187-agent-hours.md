@@ -20,12 +20,12 @@ demlik, every leaf run    48       20.1       1,364     527-3,898    1,728
 our past guesses          19          -          88      64-110        -
 ```
 
-The proposed note that builds on this: [agent hours](../docs/direction/agent-hours.md).
+The note that builds on this, decided 2026-11-01: [agent hours](../docs/direction/agent-hours.md).
 
 ## Which version
 
 - **Both.** The runs are today's: hand subagents on this repo, and today's fabrika's lanes on
-  kamp-us/demlik. No `next/` code ran. What the note proposes lands on today's tracker first,
+  kamp-us/demlik. No `next/` code ran. What the note decides lands on today's tracker first,
   where tickets and their run facts live now, and `next/`'s tracker takes the same shape.
 - **Nothing was changed** in the tracker or in product code. No ticket was filed.
 
@@ -59,7 +59,7 @@ really happened.
 ```text
 way                      counts                                    misses                         measurable now
 A wall clock, summed     every run's start to end, all agents,     waits are inside it (CI,       yes: `minutes` on every row,
-  (the lean, 75%)        failed and stopped runs too               merge queue, a slow test)      `minutes` on every `ended` fact
+  (decided, 75%)         failed and stopped runs too               merge queue, a slow test)      `minutes` on every `ended` fact
 B active time only       time a model or tool is working           the cost of a wait             no: needs per-turn times
 C tokens                 billed input and output                   time; differs by model         on lane steps only, not hand rows
 D dollars at list price  what it would cost on the API             time; prices move               on Claude runs only
@@ -160,7 +160,9 @@ not counted.
   1,560, the same as this repo's hand subagents, which were mostly builders.
 - **PR 267 agrees.** Every step was logged: five test writer runs (128 minutes), four builder
   rounds (153), two reviews (21), the mutation step (84), three gap tests and the write-up (83),
-  and a rehearsal driver (54). 6,172 written lines in 524 minutes is 707 an hour.
+  and a rehearsal driver (54). Those are rounded to the minute, so they add to 523; unrounded
+  they are 128.19, 152.89, 20.87, 84.30, 83.40 and 54.46 (the 14 rows in `field/runs.jsonl`),
+  which add to the unit's 524.1 in `results/187-agent-hours-with-285.json`. 6,172 written lines in 524 minutes is 707 an hour.
 - **The spread is wide,** a factor of two to three inside the middle half. A small fix can take
   22 to 25 minutes for 2 to 5 lines (demlik PRs 826 and 833). A rate is a planning aid, not a
   promise.
