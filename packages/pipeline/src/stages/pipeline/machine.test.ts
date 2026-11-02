@@ -320,6 +320,16 @@ describe("a review that could not see", () => {
 		});
 		expect(asking(writer).question.picks).toEqual(["again", "go_on", "stop"]);
 	});
+
+	it("its `stop` is the person's no, and never the rounds' stuck", () => {
+		const [next] = ended(atReview(), {outcome: UNSEEN, carry: {}});
+		const [over] = lane.update.lane_answered(asking(next), {
+			type: "lane_answered",
+			ask: unseenAsked().question.ask,
+			pick: "stop",
+		});
+		expect(over.phase === "releasing" && nameOf(over.outcome)).toBe("skip:owner_no");
+	});
 });
 
 // Self-fix PR 3: a head whose own tests fail goes back to the builder with the failing tests' names,
@@ -355,6 +365,31 @@ describe("a head whose tests fail goes back to the builder", () => {
 		}
 		return {s, cmds};
 	};
+
+	/** From the first review: it sends the work back each round, and every step between ends well. */
+	const reviewRounds = () => {
+		let [s, cmds] = ended(atReview(), {outcome: REVIEW_BACK, carry: {}});
+		// Bounded, so a lane that never asks fails the test and does not hang it.
+		for (let i = 0; i < 4 * MAX_ROUNDS && s.phase === "running"; i++)
+			[s, cmds] = ended(s, s.step === "review" ? {outcome: REVIEW_BACK, carry: {}} : DONE);
+		return {s, cmds};
+	};
+
+	/** The `what` of the one question in `cmds`. */
+	const whatIn = (cmds: readonly LaneCmd[]) => {
+		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
+		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+		return asked.what;
+	};
+
+	it("start reads the ticket first, and keeps `send_back` as it was given", () => {
+		const [s, cmds] = lane.update.start(
+			{phase: "idle"},
+			{type: "start", number: 7, lane: ID, sendBack: false},
+		);
+		expect(cmds).toEqual([READ]);
+		expect(s).toEqual({phase: "reading", number: 7, lane: ID, sendBack: false, asked: READ});
+	});
 
 	it("after: build, a round up, until the rounds are spent, then a question", () => {
 		expect(after("mutation", RED, 1)).toEqual({to: "build", round: 2});
@@ -447,5 +482,30 @@ describe("a head whose tests fail goes back to the builder", () => {
 		const [mutation] = ended(s, DONE);
 		const [review] = ended(mutation, DONE);
 		expect(running(review).step).toBe("review");
+	});
+
+	it("`again` after a review's spent rounds runs the test writer, as the review sent the work there", () => {
+		const {s} = reviewRounds();
+		expect(asking(s).question.for).toBe("rounds_spent");
+		const [next, cmds] = lane.update.lane_answered(asking(s), {
+			type: "lane_answered",
+			ask: asking(s).question.ask,
+			pick: "again",
+		});
+		expect(running(next).step).toBe("test_writer");
+		expect(running(next).round).toBe(MAX_ROUNDS + 1);
+		expect(stepsIn(cmds).map((c) => c.step)).toEqual(["test_writer"]);
+	});
+
+	it("the question says why the rounds ran out: the review, red tests, or `send_back` off", () => {
+		const review = whatIn(reviewRounds().cmds);
+		expect(review).toContain(`Round ${MAX_ROUNDS} of ${MAX_ROUNDS} is spent`);
+		expect(review).toContain("the review still sends the work back");
+		const red = whatIn(redRounds(MAX_ROUNDS).cmds);
+		expect(red).toContain(`Round ${MAX_ROUNDS} of ${MAX_ROUNDS} is spent`);
+		expect(red).toContain("tests still fail");
+		const off = whatIn(redRounds(1, {sendBack: false}).cmds);
+		expect(off).toContain("send_back is false");
+		expect(off).toContain("tests still fail");
 	});
 });

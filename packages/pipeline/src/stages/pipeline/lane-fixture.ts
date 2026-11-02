@@ -57,6 +57,7 @@ export function makeLaneHome({
 	github,
 	mainFiles = [],
 	alsoCheck,
+	sendBack,
 }: {
 	readonly dir: string;
 	readonly nodeModules: string;
@@ -71,6 +72,8 @@ export function makeLaneHome({
 	readonly mainFiles?: readonly {readonly path: string; readonly text: string}[];
 	/** One more `[[checks.run]]`: `sh -c <this>`. */
 	readonly alsoCheck?: string;
+	/** `[build] send_back`. Left out: the file does not say. */
+	readonly sendBack?: boolean;
 }) {
 	const git = (cwd: string, ...args: readonly string[]) =>
 		execFileSync("git", args, {cwd, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
@@ -143,6 +146,7 @@ export function makeLaneHome({
 			"[build]",
 			`install = ["ln", "-s", ${JSON.stringify(nodeModules)}, "node_modules"]`,
 			'checks = [["node_modules/.bin/vitest", "run"]]',
+			...(sendBack === undefined ? [] : [`send_back = ${sendBack}`]),
 			"",
 			"[test_writer]",
 			'includes = ["**/*.test.ts"]',

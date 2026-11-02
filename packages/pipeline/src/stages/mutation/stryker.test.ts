@@ -114,7 +114,10 @@ describe("StrykerJS behind MutationRunner, on the fixture", () => {
 		});
 		expect(tested.result).toBe("red");
 		expect(tested.failed).toEqual(["red.test.ts > a planted red > keeps a number above the high"]);
-		expect(tested.tail).toBeTypeOf("string");
+		// The tail: each name with the first line of its error, not the run's raw output.
+		expect(tested.tail).toMatch(
+			/^red\.test\.ts > a planted red > keeps a number above the high: .*expected 10 to be 11/,
+		);
 	}, 120_000);
 
 	it("answers green, with no name, when every test passes and the report is written", async () => {

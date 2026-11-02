@@ -297,6 +297,35 @@ const lane = ({
 	);
 };
 
+/**
+ * A lane on a repository whose `[build] send_back` is `sendBack`, stopped at its first line, and the
+ * lane as it was kept then. No agent runs past the triage.
+ */
+const keptAtStart = (sendBack: boolean): Promise<Lane> => {
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
+	made.push(dir);
+	const {home, seed} = makeLaneHome({dir, nodeModules: MODULES, sendBack});
+	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+	const lines: string[] = [];
+	return Effect.runPromise(
+		Effect.gen(function* () {
+			yield* file("Read names in one form", "Lower case, no spaces around.", OWNER);
+			const running = yield* Effect.forkScoped(
+				runLane(NUMBER, (said) => Effect.sync(() => void lines.push(said))).pipe(
+					Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+				),
+			);
+			while (lines.length === 0) yield* Effect.sleep("20 millis");
+			yield* Fiber.interrupt(running);
+			const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+			const store = handle.store("lane", `lane/${NUMBER}`, Lane);
+			const saved = store.migrate(yield* Effect.promise(() => store.load()));
+			if (!Schema.is(Lane)(saved)) return yield* Effect.die(new Error(lines.join("\n")));
+			return saved;
+		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+	);
+};
+
 const onMain = (remote: string, path: string): string | null => {
 	try {
 		return execFileSync("git", ["--git-dir", remote, "show", `main:${path}`], {
@@ -479,6 +508,10 @@ describe("a lane, whole", () => {
 			expect(builds).toHaveLength(3);
 			expect(builds[0]?.prompt).not.toContain(NAME);
 			expect(builds[1]?.prompt).toContain(NAME);
+			// The tests command as an agent runs it by hand: no JSON report, which only code reads.
+			expect(builds[0]?.prompt).toContain("`- node_modules/.bin/vitest run`");
+			expect(builds[0]?.prompt).not.toContain("{out}");
+			expect(builds[0]?.prompt).not.toContain("--reporter=json");
 
 			// The question: asked once, with what is still red and what the rounds cost, then a stop. The
 			// fake's model has no known rate, and an unknown price never reads as free.
@@ -489,6 +522,16 @@ describe("a lane, whole", () => {
 			const cost = /\$\d|price unknown/;
 			expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
 			expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
+		},
+	);
+
+	// Self-fix PR 3: read once, as the lane starts, so a later edit cannot change a run.
+	it(
+		"keeps the repository's `[build] send_back` in the lane as it starts",
+		{timeout: 60_000},
+		async () => {
+			expect(await keptAtStart(false)).toMatchObject({sendBack: false});
+			expect(await keptAtStart(true)).toMatchObject({sendBack: true});
 		},
 	);
 
