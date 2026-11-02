@@ -293,6 +293,104 @@ describe("a lane's facts", () => {
 			expect(readRow(row({data: JSON.stringify(before), kind: "ended"})).kind).toBe("entry");
 		});
 	});
+
+	// Self-fix PR 4: code runs `[build] checks` at the head after every build, and the ticket keeps
+	// what it found. The mutation step that skips its own suite run on a green one says so on its end.
+	describe("code's checks at a head", () => {
+		const lane = {kind: "agent", id: "lane", for: "owner"} as const;
+		const head = "c".repeat(40);
+		const name = (n: number) => `src/clamp.test.ts > clamp > case ${n}`;
+		const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
+		const checked = (result: string, failed: readonly string[] = []) => ({
+			type: "checked",
+			head,
+			commands: [{command: VITEST, code: result === "green" ? 0 : 1, ms: 41_250}],
+			result,
+			failed,
+		});
+
+		it("read as a `checked` fact, green, red with its names, or not_run, and nothing else", () => {
+			for (const fact of [
+				checked("green"),
+				checked("red", [name(1), name(2)]),
+				checked("not_run"),
+			]) {
+				const read = readRow(
+					row({data: JSON.stringify(fact), kind: "checked", writer: "agent:lane"}),
+				);
+				expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+			}
+			// Broken: a result that is not one of the three, a head that is not a sha, or 51 names.
+			const wrong = [
+				checked("skipped"),
+				{...checked("green"), head: "main"},
+				checked(
+					"red",
+					Array.from({length: 51}, (_, i) => name(i)),
+				),
+			];
+			for (const fact of wrong)
+				expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+		});
+
+		// The PR 4 review, record wide: each command's exit code and how long it took, which exist
+		// only as it runs. `code: null`: it could not start, or ran past its time.
+		it("keep each command's exit code and how long it took", () => {
+			const fact = {
+				...checked("not_run"),
+				commands: [
+					{command: "pnpm typecheck", code: 0, ms: 61_032},
+					{command: VITEST, code: 1, ms: 1_204_118},
+					{command: "pnpm lint", code: null, ms: 7},
+				],
+			};
+			const read = readRow(
+				row({data: JSON.stringify(fact), kind: "checked", writer: "agent:lane"}),
+			);
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it.each([
+			["a command with no exit code or time", {command: VITEST}],
+			["an exit code that is not a whole number", {command: VITEST, code: 1.5, ms: 3}],
+			["a time below zero", {command: VITEST, code: 0, ms: -1}],
+			["a time that is not a whole number", {command: VITEST, code: 0, ms: 2.5}],
+			["no command", {code: 0, ms: 3}],
+			// No row was saved with the shape before codes and times, so it reads as nothing.
+			["the command alone, as words", VITEST],
+		])("a command written today with %s is broken", (_, command) => {
+			const fact = {...checked("green"), commands: [command]};
+			expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+		});
+
+		it("are code's to write: the lane may write one", () => {
+			expect(mayWrite(lane, "checked" as Fact["type"])).toBe(true);
+		});
+
+		const mutationEnd = {
+			type: "ended",
+			run: "r-mutation-4",
+			stage: "mutation",
+			outcome: {kind: "done", part: false},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+		};
+
+		it("a mutation step's end names the green checks it trusted in place of its own suite run", () => {
+			const {type: _, ...trusted} = checked("green");
+			const fact = {...mutationEnd, trusted};
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it("an end that trusted checks that were not green is broken: a skip is never on a red", () => {
+			const {type: _, ...trusted} = checked("red", [name(1)]);
+			const fact = {...mutationEnd, trusted};
+			expect(readRow(row({data: JSON.stringify(fact), kind: "ended"})).kind).toBe("broken");
+		});
+	});
 });
 
 // Record wide (docs/plan/pipeline-self-fix.md, PR 7): what exists only while a run happens. A run's

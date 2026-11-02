@@ -2,7 +2,7 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema, Struct} from "effect";
 import {LaneId} from "../../ids.ts";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
-import {Outcome, titleOf} from "../../tickets/ticket.ts";
+import {Checked, Outcome, titleOf} from "../../tickets/ticket.ts";
 import {Item} from "../build/ticket.ts";
 import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
@@ -30,8 +30,14 @@ import {LaneOutcome} from "./outcome.ts";
 // `after` is the whole order, as data the laws read. A step's own `skip` moves on where the lane
 // can go on without it, and the fact that says so is written by the Act all the same.
 //
-// A head whose own tests fail goes back to the build, a round up, with each failing test open. A
-// review's finding goes to the test writer, a round up. Both count in the same rounds, and once
+// After every build, code runs `[build] checks` at its head (./checks.ts), and the builder's word
+// decides nothing. Red goes back to the build, a round up, with each failing test open: so does a
+// head the mutation step finds red. Checks that could not run end the lane `stuck:checks_not_run`.
+// No step after build runs on a head without green checks code ran at that very head: the carry's
+// `checked` says which head they were at, and `running` is the one place a step starts. Red there,
+// as at the mutants job's commit, ends the lane `stuck:checks_red`; none, or not run, `checks_not_run`.
+//
+// A review's finding goes to the test writer, a round up. Both count in the same rounds, and once
 // `MAX_ROUNDS` are spent a person is asked `rounds_spent`: `again` runs one more round, `stop` ends
 // the lane `stuck:rounds_spent`. With `[build] send_back = false` the first red asks at once.
 
@@ -53,6 +59,9 @@ export const STEPS = [
 ] as const;
 export const LaneStep = Schema.Literals(STEPS);
 export type LaneStep = typeof LaneStep.Type;
+
+/** The steps after build: each runs only on a head with green checks code ran there. */
+const AFTER_BUILD: ReadonlySet<LaneStep> = new Set(STEPS.slice(STEPS.indexOf("build") + 1));
 
 /**
  * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
@@ -112,6 +121,11 @@ const carried = {
 	base: Schema.NullOr(Schema.String),
 	/** The commit the build stands on: the test writer's, then each build's. */
 	head: Schema.NullOr(Schema.String),
+	/**
+	 * Code's own checks at the last head a build or the mutants job left: a step after build runs only
+	 * when they are green at `head`. Optional: a lane saved before this key still reads.
+	 */
+	checked: Schema.optionalKey(Checked),
 	/** What the last review left open. */
 	open: Schema.Array(Item),
 	/** What the builder declared it did other than asked. */
@@ -355,6 +369,8 @@ export const after = (
 		case "stuck":
 			// A builder that changed nothing in a round at the cap: the same question as any spent round.
 			if (step === "build" && outcome.why === "rounds_spent") return {ask: "rounds_spent"};
+			// Code's checks after the build could not run, after one more try: never guessed green.
+			if (step === "build" && outcome.why === "checks_not_run") return stuck("checks_not_run");
 			return stuck("step_stuck");
 		case "ask":
 			// A plan with open questions goes to the same yes: the person reads them there.
@@ -373,8 +389,9 @@ export const after = (
 			if (step === "triage")
 				return outcome.to === "research" ? {end: {kind: "skip", why: "research"}} : NEXT.triage;
 			if (step === "mutation" && outcome.to === "test_writer") return {to: "mutants"};
-			// The head's own tests fail: the builder gets them by name, unless the repository says ask.
-			if (step === "mutation" && outcome.to === "builder")
+			// The head's own tests fail, by code's checks after the build or by the mutation step's run:
+			// the builder gets them by name, unless the repository says ask.
+			if ((step === "build" || step === "mutation") && outcome.to === "builder")
 				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round);
 			// A finding needs a test, and the builder cannot add one: the writer goes first.
 			if (step === "review" && outcome.to === "builder") return back("test_writer", round);
@@ -565,7 +582,34 @@ const asking = (s: Held, question: Question): Step_ => {
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
 };
 
+/**
+ * Why a step after build may not run on the carry's head. `null`: code's checks there are green, what
+ * every step after build needs. Red ones there are red; any other, or none, did not run. Pure.
+ */
+const uncheckedAt = ({head, checked}: Carry): "checks_red" | "checks_not_run" | null => {
+	if (checked === undefined || checked.head !== head) return "checks_not_run";
+	if (checked.result === "green") return null;
+	return checked.result === "red" ? "checks_red" : "checks_not_run";
+};
+
+/** Why a step after build does not run, in words. Pure. */
+const uncheckedWords = (step: LaneStep, {head, checked}: Carry): string => {
+	const at = head ?? "no head";
+	const why =
+		checked === undefined || checked.head !== head
+			? `no checks code ran at ${at}`
+			: `the checks code ran at ${at} are ${checked.result === "red" ? "red" : "not run"}`;
+	return `${why}, so the ${STEP_WORDS[step]} step does not run`;
+};
+
+/** The one place a step starts: one after build only on a head with green checks there. */
 const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
+	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
+	if (unchecked !== null)
+		return releasing(s, {
+			outcome: {kind: "stuck", why: unchecked},
+			said: uncheckedWords(step, s.carry),
+		});
 	const at: Held = {...s, count: s.count + 1, round};
 	const cmd = runStep({
 		number: s.number,

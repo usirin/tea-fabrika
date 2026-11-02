@@ -78,6 +78,16 @@ describe("the question a lane asks", () => {
 });
 
 const DONE: StepEnd = {outcome: {kind: "done", part: false}, carry: {}};
+/** The build's head, and the checks code ran there after it (self-fix PR 4). */
+const HEAD = "4".repeat(40);
+const OTHER_HEAD = "5".repeat(40);
+const CHECKS = [{command: "node_modules/.bin/vitest run", code: 0, ms: 4_210}];
+const GREEN_AT = (head: string) => ({head, commands: CHECKS, result: "green", failed: []}) as const;
+/** A build that ended well, with code's checks green at its own head: the only build a later step runs on. */
+const BUILT: StepEnd = {
+	outcome: {kind: "done", part: false},
+	carry: {head: HEAD, checked: GREEN_AT(HEAD)},
+};
 const UNSEEN = {kind: "ask", who: "owner", for: "unseen"} as const;
 const MARKED = {kind: "ask", who: "owner", for: "decision"} as const;
 const ended = (s: Lane, end: StepEnd) => lane.update.lane_step_ok(s, runStep.ok(RUN, end, 0));
@@ -112,7 +122,7 @@ const atWriter = (more: {readonly sendBack?: boolean} = {}) => {
 /** The lane as it runs its review. */
 const atReview = () => {
 	const [build] = ended(atWriter(), DONE);
-	const [mutation] = ended(build, DONE);
+	const [mutation] = ended(build, BUILT);
 	const [review] = ended(mutation, DONE);
 	return review;
 };
@@ -136,13 +146,19 @@ const markedBesideUnseen = () => {
 const read = Schema.decodeUnknownSync(Lane);
 const WHAT = "The review says a decision you made on the plan is wrong. Does your decision stand?";
 
-/** A lane as code from before this change saved it, asking about a marked finding: every key as it was. */
-const savedAsking = (question: {
-	readonly ask: string;
-	readonly picks: readonly string[];
-	readonly step: string;
-	readonly call?: unknown;
-}) =>
+/**
+ * A lane as code from before this change saved it, asking about a marked finding: every key as it was.
+ * `carry`: what it held then; left out, nothing.
+ */
+const savedAsking = (
+	question: {
+		readonly ask: string;
+		readonly picks: readonly string[];
+		readonly step: string;
+		readonly call?: unknown;
+	},
+	carry: object = EMPTY,
+) =>
 	asking(
 		read({
 			phase: "asking",
@@ -150,7 +166,7 @@ const savedAsking = (question: {
 			lane: ID,
 			count: 5,
 			round: 1,
-			carry: EMPTY,
+			carry,
 			// A question of the same run, answered before this one.
 			trail: [{step: "a-step-1", said: "again"}],
 			question: {what: WHAT, for: "step", ...question},
@@ -252,12 +268,21 @@ describe("a lane saved while asking", () => {
 		expect(s.trail.map((row) => row.step)).not.toContain(ask);
 	});
 
+	/** Code's checks green at the head the lane holds (self-fix PR 4): what a step after build needs. */
+	const CHECKED = {...EMPTY, head: HEAD, checked: GREEN_AT(HEAD)};
+	const UNSEEN_REVIEW = {ask: "a-step-5", picks: ["again", "go_on", "stop"], step: "review"};
+	const NO_CHANGE = {
+		ask: "a-step-5",
+		picks: ["go_on", "stop"],
+		step: "build",
+		call: {about: "no_change", after: {kind: "done", part: false}},
+	};
+	const goOn = (s: Lane) =>
+		lane.update.lane_answered(s, {type: "lane_answered", ask: "a-step-5", pick: "go_on"});
+
 	// P27: the pick is gone from a new question, and a lane already holding it ends the way it did.
 	it("offering go_on on an unseen review goes to the push with no verdict to post, as it did", () => {
-		const [next] = lane.update.lane_answered(
-			savedAsking({ask: "a-step-5", picks: ["again", "go_on", "stop"], step: "review"}),
-			{type: "lane_answered", ask: "a-step-5", pick: "go_on"},
-		);
+		const [next] = goOn(savedAsking(UNSEEN_REVIEW, CHECKED));
 		if (next.phase !== "running") throw new Error(next.phase);
 		expect(next.step).toBe("push");
 		expect(next.carry.posts).toEqual([]);
@@ -265,18 +290,25 @@ describe("a lane saved while asking", () => {
 
 	// P28: the same, for a builder that changed nothing.
 	it("offering go_on after a builder that changed nothing goes on to the mutation step, as it did", () => {
-		const [next] = lane.update.lane_answered(
-			savedAsking({
-				ask: "a-step-5",
-				picks: ["go_on", "stop"],
-				step: "build",
-				call: {about: "no_change", after: {kind: "done", part: false}},
-			}),
-			{type: "lane_answered", ask: "a-step-5", pick: "go_on"},
-		);
+		const [next] = goOn(savedAsking(NO_CHANGE, CHECKED));
 		if (next.phase !== "running") throw new Error(next.phase);
 		expect(next.step).toBe("mutation");
 	});
+
+	// Self-fix PR 4: the same offers, on a lane saved with no checks at its head. No step after build
+	// runs, and the lane ends `stuck:checks_not_run`, never done.
+	it.each([
+		["an unseen review", UNSEEN_REVIEW],
+		["a builder that changed nothing", NO_CHANGE],
+	])(
+		"offering go_on after %s, with no checks at the head, runs nothing and ends stuck:checks_not_run",
+		(_, question) => {
+			const [next, cmds] = goOn(savedAsking(question));
+			expect(cmds.filter((c: LaneCmd) => c.type === "lane_step")).toEqual([]);
+			if (next.phase !== "releasing") throw new Error(next.phase);
+			expect(nameOf(next.outcome)).toBe("stuck:checks_not_run");
+		},
+	);
 });
 
 describe("a review that could not see", () => {
@@ -358,10 +390,10 @@ describe("a head whose tests fail goes back to the builder", () => {
 	/** From the first mutation step: the head is red `times` times, and each build between ends well. */
 	const redRounds = (times: number, more: {readonly sendBack?: boolean} = {}) => {
 		const [build] = ended(atWriter(more), DONE);
-		let [s, cmds] = ended(build, DONE);
+		let [s, cmds] = ended(build, BUILT);
 		for (let i = 1; i <= times; i++) {
 			[s, cmds] = ended(s, RED_END);
-			if (i < times && s.phase === "running" && s.step === "build") [s, cmds] = ended(s, DONE);
+			if (i < times && s.phase === "running" && s.step === "build") [s, cmds] = ended(s, BUILT);
 		}
 		return {s, cmds};
 	};
@@ -371,7 +403,10 @@ describe("a head whose tests fail goes back to the builder", () => {
 		let [s, cmds] = ended(atReview(), {outcome: REVIEW_BACK, carry: {}});
 		// Bounded, so a lane that never asks fails the test and does not hang it.
 		for (let i = 0; i < 4 * MAX_ROUNDS && s.phase === "running"; i++)
-			[s, cmds] = ended(s, s.step === "review" ? {outcome: REVIEW_BACK, carry: {}} : DONE);
+			[s, cmds] = ended(
+				s,
+				s.step === "review" ? {outcome: REVIEW_BACK, carry: {}} : s.step === "build" ? BUILT : DONE,
+			);
 		return {s, cmds};
 	};
 
@@ -452,7 +487,7 @@ describe("a head whose tests fail goes back to the builder", () => {
 			ask: asking(s).question.ask,
 			pick: "again",
 		});
-		const [mutation] = ended(build, DONE);
+		const [mutation] = ended(build, BUILT);
 		const [again] = ended(mutation, RED_END);
 		expect(asking(again).question.for).toBe("rounds_spent");
 	});
@@ -479,7 +514,7 @@ describe("a head whose tests fail goes back to the builder", () => {
 
 	it("a green mutation step after a red round goes on to review", () => {
 		const {s} = redRounds(1);
-		const [mutation] = ended(s, DONE);
+		const [mutation] = ended(s, BUILT);
 		const [review] = ended(mutation, DONE);
 		expect(running(review).step).toBe("review");
 	});
@@ -507,5 +542,176 @@ describe("a head whose tests fail goes back to the builder", () => {
 		const off = whatIn(redRounds(1, {sendBack: false}).cmds);
 		expect(off).toContain("send_back is false");
 		expect(off).toContain("tests still fail");
+	});
+});
+
+// Self-fix PR 4: code runs the checks after every build, so the builder's word decides nothing. Red
+// goes back to the builder, a round up. Checks that could not run stop the lane, never `done`. A step
+// after build runs only on a head that holds green checks for that very head.
+describe("code's checks after the build", () => {
+	const CHECKS_RED = {kind: "send", to: "builder", why: "checks_red"} as const;
+	const NOT_RUN = {kind: "stuck", why: "checks_not_run"} as const;
+	const NAME = "src/red.test.ts > a planted red > stays red";
+	const FAILED: Item = {
+		criterion: null,
+		text: NAME,
+		says: "This test fails at the build's head.",
+		where: ["src/red.test.ts"],
+		wants: [],
+	};
+	const RED_AT = (head: string) =>
+		({head, commands: CHECKS, result: "red", failed: [NAME]}) as const;
+	const NOT_RUN_AT = (head: string) =>
+		({head, commands: CHECKS, result: "not_run", failed: []}) as const;
+	/** Red checks at the build's head, as the build step ends on them. */
+	const RED_BUILD: StepEnd = {
+		outcome: CHECKS_RED,
+		carry: {head: HEAD, checked: RED_AT(HEAD), open: [FAILED]},
+	};
+	/** The steps that come after build in the order: each runs only on a head with green checks. */
+	const AFTER_BUILD: readonly string[] = ["mutation", "mutants", "review", "push", "merge"];
+
+	const running = (s: Lane) => {
+		if (s.phase !== "running") throw new Error(`the lane is ${s.phase}, and runs nothing`);
+		return s;
+	};
+	const stepsIn = (cmds: readonly LaneCmd[]) =>
+		cmds.flatMap((c) => (c.type === "lane_step" ? [c] : []));
+	const afterBuildIn = (cmds: readonly LaneCmd[]) =>
+		stepsIn(cmds).filter((c) => AFTER_BUILD.includes(c.step));
+	/** The lane as its first build ends on `end`. */
+	const firstBuildEnds = (end: StepEnd, more: {readonly sendBack?: boolean} = {}) => {
+		const [build] = ended(atWriter(more), DONE);
+		if (running(build).step !== "build") throw new Error("the build did not run");
+		return ended(build, end);
+	};
+
+	it("after: red checks at the build go back to it, a round up, until the rounds are spent", () => {
+		expect(after("build", CHECKS_RED, 1)).toEqual({to: "build", round: 2});
+		expect(after("build", CHECKS_RED, MAX_ROUNDS - 1)).toEqual({to: "build", round: MAX_ROUNDS});
+		expect(after("build", CHECKS_RED, MAX_ROUNDS)).toEqual({ask: "rounds_spent"});
+	});
+
+	it("after: with `[build] send_back = false`, red checks ask at once; left out, they go back", () => {
+		expect(after("build", CHECKS_RED, 1, {sendBack: false})).toEqual({ask: "rounds_spent"});
+		expect(after("build", CHECKS_RED, 1)).toEqual({to: "build", round: 2});
+	});
+
+	it("after: checks that could not run end the lane `stuck:checks_not_run`, by that name", () => {
+		expect(after("build", NOT_RUN, 1)).toEqual({end: NOT_RUN});
+	});
+
+	it("after: that name is the build's own; any other stuck, or the same words from another step, is step_stuck", () => {
+		const STEP_STUCK = {end: {kind: "stuck", why: "step_stuck"}};
+		expect(after("build", {kind: "stuck", why: "read_failed"}, 1)).toEqual(STEP_STUCK);
+		expect(after("mutation", NOT_RUN, 1)).toEqual(STEP_STUCK);
+	});
+
+	it("red checks run the build next, as round 2, with each failing test open", () => {
+		const [s, cmds] = firstBuildEnds(RED_BUILD);
+		expect(running(s).step).toBe("build");
+		expect(running(s).round).toBe(2);
+		const [step] = stepsIn(cmds);
+		expect(step?.step).toBe("build");
+		expect(step?.round).toBe(2);
+		expect(step?.carry.open).toEqual([FAILED]);
+		expect(running(s).trail.at(-1)).toEqual({step: "build", said: "send:builder:checks_red"});
+	});
+
+	it("red checks every round: a person is asked `rounds_spent`, and the question names what is red", () => {
+		let [s, cmds] = firstBuildEnds(RED_BUILD);
+		// Bounded, so a lane that never asks fails the test and does not hang it.
+		for (let i = 0; i < 2 * MAX_ROUNDS && s.phase === "running"; i++)
+			[s, cmds] = ended(s, RED_BUILD);
+		expect(asking(s).question.for).toBe("rounds_spent");
+		expect(asking(s).round).toBe(MAX_ROUNDS);
+		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
+		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+		expect([asked.what, ...(asked.also ?? [])].join("\n")).toContain(NAME);
+	});
+
+	it("checks that could not run end the lane `stuck:checks_not_run`, and nothing after build runs", () => {
+		const [s, cmds] = firstBuildEnds({
+			outcome: NOT_RUN,
+			carry: {head: HEAD, checked: NOT_RUN_AT(HEAD)},
+		});
+		expect(afterBuildIn(cmds)).toEqual([]);
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_not_run");
+	});
+
+	it("green checks at the build's own head: the mutation step runs, and is handed them", () => {
+		const [s, cmds] = firstBuildEnds(BUILT);
+		expect(running(s).step).toBe("mutation");
+		expect(stepsIn(cmds)[0]?.carry.checked).toEqual(GREEN_AT(HEAD));
+	});
+
+	it("a build that says done with no checks code ran: nothing after build runs, and the lane ends `stuck:checks_not_run`", () => {
+		const [s, cmds] = firstBuildEnds({outcome: {kind: "done", part: false}, carry: {head: HEAD}});
+		expect(afterBuildIn(cmds)).toEqual([]);
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_not_run");
+	});
+
+	it.each([
+		["green at another head", {head: HEAD, checked: GREEN_AT(OTHER_HEAD)}],
+		["red at its head", {head: HEAD, checked: RED_AT(HEAD)}],
+		["not run at its head", {head: HEAD, checked: NOT_RUN_AT(HEAD)}],
+	])(
+		"a build that says done with checks %s: nothing after build runs, and the lane is never done",
+		(_, carry) => {
+			const [s, cmds] = firstBuildEnds({outcome: {kind: "done", part: false}, carry});
+			expect(afterBuildIn(cmds)).toEqual([]);
+			expect(s.phase === "releasing" && s.outcome.kind).not.toBe("done");
+		},
+	);
+
+	it("a later commit with no checks of its own: review does not run on it; with green checks there, it does", () => {
+		const [mutation] = firstBuildEnds(BUILT);
+		const [mutants] = ended(mutation, {
+			outcome: {kind: "send", to: "test_writer", why: "mutant_survived"},
+			carry: {},
+		});
+		expect(running(mutants).step).toBe("mutants");
+		// The mutants job committed its tests: a new head, and the build's green checks are not for it.
+		const [, unchecked] = ended(mutants, {outcome: DONE.outcome, carry: {head: OTHER_HEAD}});
+		expect(afterBuildIn(unchecked)).toEqual([]);
+		const [checked, cmds] = ended(mutants, {
+			outcome: DONE.outcome,
+			carry: {head: OTHER_HEAD, checked: GREEN_AT(OTHER_HEAD)},
+		});
+		expect(running(checked).step).toBe("review");
+		expect(stepsIn(cmds)[0]?.carry.checked).toEqual(GREEN_AT(OTHER_HEAD));
+	});
+
+	// The PR 4 review: red checks are no checks that could not run. A lane that stops on them says
+	// red, so the record holds what code found.
+	it("red checks on the mutants job's commit end the lane `stuck:checks_red`, and the review does not run", () => {
+		const [mutation] = firstBuildEnds(BUILT);
+		const [mutants] = ended(mutation, {
+			outcome: {kind: "send", to: "test_writer", why: "mutant_survived"},
+			carry: {},
+		});
+		const [s, cmds] = ended(mutants, {
+			outcome: DONE.outcome,
+			carry: {head: OTHER_HEAD, checked: RED_AT(OTHER_HEAD)},
+		});
+		expect(afterBuildIn(cmds)).toEqual([]);
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_red");
+	});
+
+	it.each([
+		["red at its head", {head: HEAD, checked: RED_AT(HEAD)}, "stuck:checks_red"],
+		["not run at its head", {head: HEAD, checked: NOT_RUN_AT(HEAD)}, "stuck:checks_not_run"],
+		["green at another head", {head: HEAD, checked: GREEN_AT(OTHER_HEAD)}, "stuck:checks_not_run"],
+		["red at another head", {head: HEAD, checked: RED_AT(OTHER_HEAD)}, "stuck:checks_not_run"],
+		["none", {head: HEAD}, "stuck:checks_not_run"],
+	])("a build that says done with checks %s ends the lane %s", (_, carry, name) => {
+		const [s] = firstBuildEnds({outcome: {kind: "done", part: false}, carry});
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe(name);
+	});
+
+	it("a lane that holds its checks saves and reads back as it was", () => {
+		const [s] = firstBuildEnds(BUILT);
+		expect(running(s).carry.checked).toEqual(GREEN_AT(HEAD));
+		expect(read(Schema.encodeSync(Lane)(s))).toEqual(s);
 	});
 });

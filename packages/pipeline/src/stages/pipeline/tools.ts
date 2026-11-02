@@ -3,9 +3,10 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Sandbox} from "@kampus/fabrika-old";
 import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {layerOs} from "@kampus/fabrika-old/sandbox/os";
-import {Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
+import {Duration, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId} from "../../ids.ts";
+import {CHECKS_WITHIN} from "../../settings.ts";
 import {saidOf} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {examTouched} from "../build/check.ts";
@@ -24,6 +25,7 @@ import {TestsAgents, TestsWork} from "../test-writer/program.ts";
 import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
+import {type CheckRun, CheckRunner, checkRunner, publicText} from "./checks.ts";
 import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
 import {LaneHome, LaneWork} from "./work.ts";
@@ -405,6 +407,55 @@ export const laneMutationScope = Layer.effect(
 						{concurrency: 1},
 					);
 					return {diff: {files, added}, kept: spans.flat(), exam: checksums};
+				}),
+		};
+	}),
+);
+
+/**
+ * Code's own `[build] checks`, as the repo's settings name them at each run, in the head's installed
+ * copy: the one the mutation step's tests run in. What could not be set up is `not_run`, never green.
+ */
+export const laneCheckRunner = Layer.effect(
+	CheckRunner,
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		return {
+			run: (head) =>
+				Effect.gen(function* () {
+					// What git or an install said goes on a public ticket: no home path, no key.
+					const notRun = (commands: readonly string[], tail: string): CheckRun => ({
+						head,
+						commands: commands.map((command) => ({command, code: null, ms: 0})),
+						result: "not_run",
+						failed: [],
+						tail: publicText(tail),
+					});
+					const settings = yield* Effect.result(work.settings);
+					if (settings._tag === "Failure")
+						return notRun(
+							[],
+							`The repository's settings could not be read, so no check ran at ${head}. ${settings.failure.says ?? ""}`.trim(),
+						);
+					const build = settings.success.build;
+					const commands = build?.checks ?? [];
+					const copy = yield* Effect.result(work.copy(head));
+					if (copy._tag === "Failure")
+						return notRun(
+							commands.map((command) => command.join(" ")),
+							`The copy of ${head} could not be made, so no check ran there. ${copy.failure.says ?? ""}`.trim(),
+						);
+					const folder = copy.success;
+					return yield* Effect.provide(
+						Effect.gen(function* () {
+							return yield* (yield* CheckRunner).run(head);
+						}),
+						checkRunner({
+							folder: () => folder,
+							commands,
+							within: Duration.seconds(build?.checks_within ?? CHECKS_WITHIN),
+						}),
+					);
 				}),
 		};
 	}),

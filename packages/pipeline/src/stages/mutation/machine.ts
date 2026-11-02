@@ -1,6 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
 import {checkRun, gather, keptCmd} from "../../primitives.ts";
+import {Checked} from "../../tickets/ticket.ts";
 import {MutationOutcome} from "./outcome.ts";
 import {Change, CodeRef, changesOf, Scope, Span, spansOf, unapproved} from "./scope.ts";
 import {Ran, RunAsk, Tested} from "./services.ts";
@@ -15,7 +16,9 @@ import {Ran, RunAsk, Tested} from "./services.ts";
 //              the owner, and no line to mutate is a skip
 //   testing    the repo's own tests at the head, first: a mutant is graded on
 //              what they miss, so they must pass. A red head goes back to the
-//              builder, each failing test by name. A Check that runs code
+//              builder, each failing test by name. A Check that runs code.
+//              Skipped when code's own checks were green at this very head
+//              just before (`checked`): the report then names them as trusted
 //   mutating   StrykerJS over those lines, a fixed-seed sample of at most
 //              `most`, the ignorer's mutants left out, each mutant that
 //              survives typechecked and counted only if the typecheck takes
@@ -40,6 +43,8 @@ export const MutationAsk = Schema.Struct({
 	allowed: Schema.Array(Change),
 	seed: Schema.Int,
 	most: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+	/** Code's own checks at the head, as the lane ran them after the build. Left out: none ran. */
+	checked: Schema.optionalKey(Checked),
 });
 export type MutationAsk = typeof MutationAsk.Type;
 
@@ -78,6 +83,11 @@ export const MutationReport = Schema.Struct({
 	failed: Schema.optionalKey(Schema.Array(Schema.String)),
 	/** On a red head: the first lines of why, for the ticket. The error text exists only now. */
 	tail: Schema.optionalKey(Schema.String),
+	/**
+	 * The green checks at the head it trusted in place of its own run of the repo's tests, so a skip
+	 * never reads as a clean run. Left out: it ran them, or Stryker never ran.
+	 */
+	trusted: Schema.optionalKey(Checked),
 });
 export type MutationReport = typeof MutationReport.Type;
 
@@ -128,6 +138,18 @@ const end = (s: Held, outcome: MutationOutcome, report: Partial<MutationReport> 
 	[],
 ];
 
+/** Code's checks at the ask's own head, when they were green: the one case the tests are skipped on. Pure. */
+const greenAt = (ask: MutationAsk): Checked | null =>
+	ask.checked !== undefined && ask.checked.result === "green" && ask.checked.head === ask.head
+		? ask.checked
+		: null;
+
+/** What a report says of a skipped run of the tests: the checks it trusted. Pure. */
+const trusting = (ask: MutationAsk): Partial<MutationReport> => {
+	const trusted = greenAt(ask);
+	return trusted === null ? {} : {trusted};
+};
+
 /** The outcome of a run that came back: every mutant killed, or each one that survived goes to the writer. */
 export const outcomeOf = (ran: Ran): MutationOutcome =>
 	ran.survived.length === 0
@@ -161,6 +183,11 @@ export const mutation = defineMachine({
 			if (changes.length > 0)
 				return end(s, {kind: "ask", who: "owner", for: "check_change"}, {changes, spans});
 			if (spans.length === 0) return end(s, {kind: "skip", why: "no_lines"});
+			if (greenAt(s.ask) !== null) {
+				const {head, seed, most} = s.ask;
+				const asked = runMutants({head, spans, seed, most});
+				return [{ask: s.ask, spans, phase: "mutating", asked}, [asked]];
+			}
 			const asked = runTests({head: s.ask.head});
 			return [{ask: s.ask, spans, phase: "testing", asked}, [asked]];
 		},
@@ -186,10 +213,12 @@ export const mutation = defineMachine({
 				: stay(s),
 
 		mutation_run_ok: (s, m): Step =>
-			s.phase === "mutating" ? end(s, outcomeOf(m.value), {spans: s.spans, ran: m.value}) : stay(s),
+			s.phase === "mutating"
+				? end(s, outcomeOf(m.value), {spans: s.spans, ran: m.value, ...trusting(s.ask)})
+				: stay(s),
 		mutation_run_err: (s): Step =>
 			s.phase === "mutating"
-				? end(s, {kind: "stuck", why: "run_failed"}, {spans: s.spans})
+				? end(s, {kind: "stuck", why: "run_failed"}, {spans: s.spans, ...trusting(s.ask)})
 				: stay(s),
 	},
 });

@@ -15,6 +15,7 @@ import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
 import {
+	type Checked,
 	type CodeFact,
 	FAILED_MOST,
 	factsOf,
@@ -29,7 +30,6 @@ import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
-import {MutationRunner} from "../mutation/services.ts";
 import {postsOf} from "../operate/machine.ts";
 import {openItems} from "../operate/stop.ts";
 import {nameOf} from "../outcome.ts";
@@ -50,6 +50,7 @@ import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
+import {CheckRunner} from "./checks.ts";
 import {formatExam} from "./format.ts";
 import {
 	againstWords,
@@ -246,6 +247,8 @@ const need = <A>(value: A | null | undefined, says: string): Effect.Effect<A, Br
 type BodyEnd = StepEnd & {
 	readonly problems: readonly string[];
 	readonly failed?: readonly string[];
+	/** The green checks the step trusted in place of a run of its own: the mutation step's skip. */
+	readonly trusted?: Checked;
 };
 
 const ended = (
@@ -302,27 +305,92 @@ const propertiesOf = (carry: Carry, round: number) => {
 };
 
 /**
- * A later round whose builder changed nothing, by what the head's own checks say when code runs them.
+ * Code's own `[build] checks` at `head`, after a build (self-fix PR 4), and what the ticket keeps of
+ * them: the `checked` fact, and on red, a comment with each failing test by name and the first lines
+ * of why. Both exist only now. The carry gets `checked`; the run's own words come back beside it.
+ */
+const recordChecks = (at: At, head: string) =>
+	Effect.gen(function* () {
+		const tickets = yield* Tickets;
+		const ran = yield* (yield* CheckRunner).run(head);
+		const checked: Checked = {
+			head: ran.head,
+			commands: ran.commands,
+			result: ran.result,
+			failed: ran.failed.slice(0, FAILED_MOST),
+		};
+		yield* tickets.write(at.cmd.number, `${at.run}/checked`, {type: "checked", ...checked});
+		if (ran.result === "red")
+			yield* tickets
+				.talk(at.cmd.number, `${at.run}/red`, {
+					type: "commented",
+					body: saidOf(redWords(ran.failed, ran.tail, FAILED_MOST)),
+				})
+				.pipe(Effect.ignore);
+		return {checked, ran};
+	});
+
+/** Why the checks could not run at a head, in words for the ticket. Pure. */
+const notRunWords = (head: string, tail: string) =>
+	`The checks could not run at ${head}, so nothing says whether this work holds.${tail === "" ? "" : ` ${inert(tail)}`}`;
+
+/**
+ * A later round whose builder changed nothing, by what code's checks say at the head.
  *
  *   green         go_on or stop: the work stands, and the mutation step still has to pass
  *   red           again or stop, or the lane ends once its rounds are spent: a go_on could not land
  *   could not run the lane ends stuck: it never guesses green
  */
-const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
+const nothingChanged = (at: At, kept: StepEnd["carry"], says: string) =>
 	Effect.gen(function* () {
+		const {round} = at.cmd;
 		const head = yield* need(kept.head, "no head to run the checks at");
-		const checks = yield* Effect.result((yield* MutationRunner).tests(head));
-		if (checks._tag === "Failure")
-			return ended({kind: "stuck", why: "checks_not_run"}, kept, [
-				`The builder changed nothing, and the checks could not run at ${head}, so nothing says whether this work holds. ${says}`,
+		const {checked, ran} = yield* recordChecks(at, head);
+		const carry = {...kept, checked};
+		if (checked.result === "not_run")
+			return ended({kind: "stuck", why: "checks_not_run"}, carry, [
+				`The builder changed nothing. ${notRunWords(head, ran.tail)} ${says}`,
 			]);
-		if (checks.success.result === "green")
-			return asksFirst("no_change", ended({kind: "done", part: false}, kept), [says]);
+		if (checked.result === "green")
+			return asksFirst("no_change", ended({kind: "done", part: false}, carry), [says]);
 		if (round >= MAX_ROUNDS)
-			return ended({kind: "stuck", why: "rounds_spent"}, kept, [
+			return ended({kind: "stuck", why: "rounds_spent"}, carry, [
 				`The builder changed nothing in round ${round} of ${MAX_ROUNDS}, and the new test is still failing. ${says}`,
 			]);
-		return ended({kind: "ask", who: "owner", for: "still_red"}, kept, [says]);
+		return ended({kind: "ask", who: "owner", for: "still_red"}, carry, [says]);
+	});
+
+/**
+ * A build that ended well, by what code's checks say at its head: the builder's own form decides
+ * nothing (docs/direction/nobody-grades-their-own-work.md).
+ *
+ *   green         done, and the head's checks go with it to every step after
+ *   red           back to the builder, a round up, with each failing test open
+ *   could not run the lane stops: never done
+ */
+const builtAndChecked = (at: At, built: BodyEnd) =>
+	Effect.gen(function* () {
+		const head = yield* need(built.carry.head, "no head to run the checks at");
+		const {checked, ran} = yield* recordChecks(at, head);
+		const carry = {...built.carry, checked};
+		switch (checked.result) {
+			case "green":
+				return {...built, carry};
+			case "red":
+				return {
+					...ended(
+						{kind: "send", to: "builder", why: "checks_red"},
+						{...carry, open: withRed(at.cmd.carry.open, ran.failed, ran.tail)},
+						built.problems,
+					),
+					failed: checked.failed,
+				};
+			case "not_run":
+				return ended({kind: "stuck", why: "checks_not_run"}, carry, [
+					...built.problems,
+					notRunWords(head, ran.tail),
+				]);
+		}
 	});
 
 /**
@@ -527,7 +595,7 @@ const bodies = {
 					carry.plan?.interface === undefined ? "None." : fenced(carry.plan.interface, "ts"),
 				pointers: listed(pointers.map((p) => `${p.at}: ${p.why}`)),
 				exam: listed(carry.exam),
-				checks: listed((settings.build?.checks ?? []).map((c) => c.join(" "))),
+				checks: listed((settings.build?.checks ?? []).map((c) => byHand(c).join(" "))),
 				quick: listed(
 					(settings.mutation?.tests ?? []).length === 0
 						? []
@@ -556,11 +624,12 @@ const bodies = {
 			// and what can be asked about it depends on what the head's checks say now.
 			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change")
 				return yield* nothingChanged(
-					round,
+					at,
 					kept,
 					`The builder says: ${inert(end.report.built?.summary ?? "nothing")}`,
 				);
-			return ended(end.outcome, kept, end.report.problems);
+			const built = ended(end.outcome, kept, end.report.problems);
+			return end.outcome.kind === "done" ? yield* builtAndChecked(at, built) : built;
 		}),
 
 	mutation: (at: At) =>
@@ -579,10 +648,13 @@ const bodies = {
 				allowed: [],
 				seed: at.cmd.count,
 				most: MAX_MUTANTS,
+				// Green at this head, it runs no suite of its own, and its end names them as trusted.
+				...(carry.checked === undefined ? {} : {checked: carry.checked}),
 			});
 			const survived = end.report.ran?.survived ?? [];
+			const {trusted} = end.report;
 			if (end.outcome.kind !== "send" || end.outcome.to !== "builder")
-				return ended(end.outcome, {survived});
+				return {...ended(end.outcome, {survived}), ...(trusted === undefined ? {} : {trusted})};
 			// A red head: the names and the first lines of why exist only now, so the ticket keeps them.
 			const {failed = [], tail = ""} = end.report;
 			yield* (yield* Tickets)
@@ -633,11 +705,15 @@ const bodies = {
 			// The review comes next, with no build round before it to format these.
 			const formatted =
 				files.length === 0 ? null : yield* formatExam(at.cmd.number, tree.tree, files);
+			const next = formatted ?? commit ?? head;
+			// A new head needs green checks of its own before the review reads it: the build's were not at it.
+			const checked = next === head ? {} : {checked: (yield* recordChecks(at, next)).checked};
 			const answers = end.report.answered?.answers ?? [];
 			return ended(
 				end.outcome,
 				{
-					head: formatted ?? commit ?? head,
+					...checked,
+					head: next,
 					exam: [...carry.exam, ...files],
 					waiting: {
 						findings: [],
@@ -955,7 +1031,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const picked = yield* Ref.get(seen);
 			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
-			const write = (outcome: Outcome, failed?: readonly string[]) =>
+			const write = (outcome: Outcome, more: Pick<BodyEnd, "failed" | "trusted"> = {}) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -973,12 +1049,13 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(picked === null
 						? {}
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
-					...(failed === undefined ? {} : {failed}),
+					...(more.failed === undefined ? {} : {failed: more.failed}),
+					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems, after: past, failed} = exit.value;
+				const {outcome, carry, problems, after: past} = exit.value;
 				yield* sessionLeft.pipe(Effect.ignore);
-				yield* write(outcome, failed);
+				yield* write(outcome, exit.value);
 				yield* said(
 					[
 						nameOf(outcome),

@@ -187,8 +187,24 @@ const REPORT = ".tests-report.json";
 const ERRORS_SHOWN = 5;
 
 /** The last lines of a command's output: what tells why when no report names a test. Pure. */
-const lastLines = (text: string, most = 20): string =>
+const lastLines = (text: string, most: number): string =>
 	text.trimEnd().split("\n").slice(-most).join("\n");
+
+/**
+ * What a person reads of why a run was red: the first line of up to five errors, each by its test's
+ * name, or with no test named, the output's last `most` lines. Pure.
+ */
+export const whyRed = (
+	failures: readonly {readonly name: string; readonly error: string}[],
+	output: string,
+	most: number,
+): string =>
+	failures.length === 0
+		? lastLines(output, most)
+		: failures
+				.slice(0, ERRORS_SHOWN)
+				.map(({name, error}) => `${name}: ${error}`)
+				.join("\n");
 
 /**
  * `text` with the copy's folder said as `.` and the home folder as `~`: the last lines go on a
@@ -225,7 +241,7 @@ const couldNotRun = Effect.fail(notRun);
  * be made (../../child.ts); 126 and 127, `nice` found no program to run or
  * could not run it (POSIX `nice`). Such a run tells nothing about the code.
  */
-const NOT_STARTED = new Set([-1, 126, 127]);
+export const NOT_STARTED: ReadonlySet<number> = new Set([-1, 126, 127]);
 
 /** A command that ran. One that never started fails instead, so no caller can read it as an answer. */
 const started = (r: Exited): Effect.Effect<Exited, CouldNotRun> =>
@@ -423,13 +439,7 @@ const services = (setup: StrykerSetup) =>
 					Effect.map((report) => failuresOf(report, folder)),
 					Effect.orElseSucceed(() => []),
 				);
-				const said =
-					failures.length === 0
-						? lastLines(`${ran.out}${ran.err}`)
-						: failures
-								.slice(0, ERRORS_SHOWN)
-								.map(({name, error}) => `${name}: ${error}`)
-								.join("\n");
+				const said = whyRed(failures, `${ran.out}${ran.err}`, 20);
 				// The real folder and the one asked for: a temp folder is a link on macOS.
 				const tail = tidyPaths(tidyPaths(said, folder, ""), setup.folder(head), homedir());
 				return {result: "red", failed: failures.map((f) => f.name), tail} satisfies Tested;
