@@ -20,8 +20,9 @@ import {
 	runMutants,
 	runTests,
 } from "./machine.ts";
+import type {MutationOutcome} from "./outcome.ts";
 import {changesOf, unapproved} from "./scope.ts";
-import {ASK, HEAD, SCOPE, SURVIVED} from "./scripted.ts";
+import {ASK, GREEN, HEAD, RED, SCOPE, SURVIVED} from "./scripted.ts";
 import type {Ran} from "./services.ts";
 
 // The mutation step's laws, on tea's own property tests (`@demlik/tea/pbt`).
@@ -78,9 +79,7 @@ const table: MsgArbitraryTable<Msg> = {
 	resume: arbConstantMsg("resume"),
 	mutation_scope_ok: scopes.map((s) => readScope.ok(SCOPE_CMD, s, 0)),
 	mutation_scope_err: fc.constant(readScope.err(SCOPE_CMD, {_tag: "unknown"}, 0)),
-	mutation_tests_ok: fc
-		.constantFrom("green" as const, "red" as const)
-		.map((r) => runTests.ok(TESTS_CMD, r, 0)),
+	mutation_tests_ok: fc.constantFrom(GREEN, RED).map((r) => runTests.ok(TESTS_CMD, r, 0)),
 	mutation_tests_err: fc.constant(runTests.err(TESTS_CMD, NOT_RUN, 0)),
 	mutation_run_ok: ran.map((r) => runMutants.ok(RUN_CMD, r, 0)),
 	mutation_run_err: fc.constant(runMutants.err(RUN_CMD, NOT_RUN, 0)),
@@ -118,14 +117,36 @@ const nothingSurvivesQuietly: Law = ({prev, next}) => {
 	if (outcome.kind === "done" && (report.ran === null || survived > 0))
 		return "done without a clean run";
 	if (survived > 0 && outcome.kind !== "send") return "a mutant survived and was not sent on";
-	if (outcome.kind === "send" && survived === 0) return "sent with no mutant";
+	if (outcome.kind === "send" && outcome.to === "test_writer" && survived === 0)
+		return "sent to the writer with no mutant";
 	return null;
+};
+
+/**
+ * A red run of the repo's own tests goes back to the builder, never to the end: with every failing
+ * test it named, and only on a red run.
+ */
+const redGoesBack: Law = ({prev, msg, next}) => {
+	if (msg.type === "mutation_tests_ok" && prev.phase === "testing" && msg.value.result === "red") {
+		if (next.phase !== "over") return `a red run went on to ${next.phase}`;
+		if (next.outcome.kind !== "send" || next.outcome.to !== "builder")
+			return `a red run ended ${next.outcome.kind}`;
+		if (JSON.stringify(next.report.failed) !== JSON.stringify(msg.value.failed))
+			return "a red run lost the names of its failing tests";
+		return null;
+	}
+	const sentBack =
+		prev.phase !== "over" &&
+		next.phase === "over" &&
+		next.outcome.kind === "send" &&
+		next.outcome.to === "builder";
+	return sentBack ? `sent to the builder on ${msg.type}` : null;
 };
 
 /** Stryker runs only on green from the repo's own tests, or again after a restart that found it in flight. */
 const testsFirst: Law = ({prev, msg, cmds}) => {
 	if (!cmds.some((c) => c.type === "mutation_run")) return null;
-	if (msg.type === "mutation_tests_ok" && msg.value === "green") return null;
+	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") return null;
 	if (msg.type === "resume" && prev.phase === "mutating") return null;
 	return `Stryker started on ${msg.type}`;
 };
@@ -159,6 +180,10 @@ describe("the mutation step's laws", () => {
 			checkEach(mutation, law);
 		checkWhole(mutation, examIsTheOwners);
 	});
+
+	it("a red run goes back to the builder with its failing tests' names", () => {
+		checkEach(mutation, redGoesBack);
+	});
 });
 
 describe("each law is seen to fail on a planted mistake", () => {
@@ -186,7 +211,7 @@ describe("each law is seen to fail on a planted mistake", () => {
 								ask: s.ask,
 								phase: "over",
 								outcome: {kind: "done", part: false},
-								report: {changes: [], spans: s.spans, ran: m.value},
+								report: {changes: [], spans: s.spans, ran: m.value, failed: []},
 							},
 							[],
 						]
@@ -208,10 +233,37 @@ describe("each law is seen to fail on a planted mistake", () => {
 		const onRed = plant({
 			mutation_tests_ok: (s, m) =>
 				s.phase === "testing"
-					? mutation.update.mutation_tests_ok(s, {...m, value: "green"})
+					? mutation.update.mutation_tests_ok(s, {...m, value: GREEN})
 					: [s, []],
 		});
 		expect(() => checkEach(onRed, testsFirst)).toThrow();
+	});
+
+	/** The machine as it would be if a red run ended `report`'s way, for this outcome. */
+	const redEnds = (outcome: MutationOutcome, failed: readonly string[]) =>
+		plant({
+			mutation_tests_ok: (s, m) =>
+				s.phase === "testing" && m.value.result === "red"
+					? [
+							{
+								ask: s.ask,
+								phase: "over",
+								outcome,
+								report: {changes: [], spans: s.spans, ran: null, failed},
+							},
+							[],
+						]
+					: mutation.update.mutation_tests_ok(s, m),
+		});
+
+	it("a red run taken as the end of the step", () => {
+		const stops = redEnds({kind: "stuck", why: "run_failed"}, RED.failed);
+		expect(() => checkEach(stops, redGoesBack)).toThrow();
+	});
+
+	it("a red run sent back with no names", () => {
+		const nameless = redEnds({kind: "send", to: "builder", why: "tests_red"}, []);
+		expect(() => checkEach(nameless, redGoesBack)).toThrow();
 	});
 
 	it("a disable comment the owner did not allow, run anyway", () => {

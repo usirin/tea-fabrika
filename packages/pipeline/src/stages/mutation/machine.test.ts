@@ -2,7 +2,17 @@ import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
 import {readScope, runMutants, runTests} from "./machine.ts";
 import {changesOf, hashOf, type Scope} from "./scope.ts";
-import {ASK, drive, HEAD, KILLED_ALL, ONE_SURVIVED, SCOPE, SURVIVED} from "./scripted.ts";
+import {
+	ASK,
+	drive,
+	FAILING,
+	HEAD,
+	KILLED_ALL,
+	ONE_SURVIVED,
+	RED,
+	SCOPE,
+	SURVIVED,
+} from "./scripted.ts";
 
 // The mutation step on fakes of its services: every branch, the Cmds it
 // sends, and the report the lane reads.
@@ -120,13 +130,25 @@ describe("the mutation step", () => {
 		expect(cmds).toHaveLength(1);
 	});
 
-	it("is stuck, never guessing, when the diff cannot be read, the tests are red, or a run fails", () => {
+	it("sends a head whose own tests fail back to the builder, with each failing test by name, before Stryker runs", () => {
+		const {over, cmds} = drive({tests: RED});
+		if (over.phase !== "over") throw new Error("over");
+		expect(nameOf(over.outcome)).toBe("send:builder:tests_red");
+		expect(over.report.failed).toEqual([FAILING]);
+		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_tests"]);
+	});
+
+	it("names no failing test after a green run", () => {
+		const {over} = drive({});
+		expect(over.phase === "over" && over.report.failed).toEqual([]);
+	});
+
+	it("is stuck, never guessing, when the diff cannot be read or a run fails", () => {
 		const name = (script: Parameters<typeof drive>[0]) => {
 			const {over} = drive(script);
 			return over.phase === "over" ? nameOf(over.outcome) : over.phase;
 		};
 		expect(name({scope: "fail"})).toBe("stuck:read_failed");
-		expect(name({tests: "red"})).toBe("stuck:tests_red");
 		expect(name({tests: "fail"})).toBe("stuck:run_failed");
 		expect(name({run: "fail"})).toBe("stuck:run_failed");
 	});

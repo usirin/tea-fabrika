@@ -430,6 +430,68 @@ describe("a lane, whole", () => {
 		},
 	);
 
+	// Self-fix PR 3, the one whole-lane case: each build leaves a test that fails, so the mutation step
+	// finds the head red three times. No Stryker run, no review: it stops at the rounds' question.
+	it(
+		"sends a red head back to the builder with the failing test's name, and asks once the rounds are spent",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/red.test.ts > a planted red > stays red";
+			/** A build's own test that fails, a little different each round so each build changes something. */
+			const red = (n: number) => [
+				{
+					path: "src/red.test.ts",
+					text: `import {describe, expect, it} from "vitest";\n\ndescribe("a planted red", () => {\n\tit("stays red", () => {\n\t\texpect(1).toBe(${n});\n\t});\n});\n`,
+				},
+			];
+			const ran = await lane({
+				within: 200,
+				picks: {rounds_spent: "stop"},
+				fake: {writesAt: {build: {0: red(2), 1: red(3), 2: red(4)}}},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.stages, said).toEqual([
+				"triage",
+				"plan",
+				"exam",
+				"test_writer",
+				"build",
+				"mutation",
+				"build",
+				"mutation",
+				"build",
+				"mutation",
+			]);
+
+			// The ticket keeps the name each time the head was red.
+			const reds = ran.facts.filter((f) => f.type === "ended" && f.stage === "mutation");
+			for (const end of reds) {
+				expect(end.outcome).toEqual({kind: "send", to: "builder", why: "tests_red"});
+				expect(end.failed).toEqual([NAME]);
+			}
+			// A comment lists it, with the first line of its error.
+			const comments = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+			expect(comments.some((c) => c.includes(NAME) && c.includes("expected 1 to be 2"))).toBe(true);
+
+			// Round 2's builder is told it; round 1's had nothing to be told.
+			const builds = codexRuns(ran.dir).filter((r) => r.step === "build");
+			expect(builds).toHaveLength(3);
+			expect(builds[0]?.prompt).not.toContain(NAME);
+			expect(builds[1]?.prompt).toContain(NAME);
+
+			// The question: asked once, with what is still red and what the rounds cost, then a stop. The
+			// fake's model has no known rate, and an unknown price never reads as free.
+			const asked = ran.facts.filter((f) => f.type === "asked");
+			const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
+			expect(spent).toHaveLength(1);
+			expect(spent[0]?.picks).toEqual(["again", "stop"]);
+			const cost = /\$\d|price unknown/;
+			expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
+			expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
+		},
+	);
+
 	it("does not merge when the person says no", {timeout: 300_000}, async () => {
 		const ran = await lane({picks: {merge: "no"}});
 		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();

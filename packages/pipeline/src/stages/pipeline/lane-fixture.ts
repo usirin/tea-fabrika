@@ -152,7 +152,8 @@ export function makeLaneHome({
 			`reads = ${JSON.stringify([nodeModules, ...reads])}`,
 			"",
 			"[mutation]",
-			'tests = ["node_modules/.bin/vitest", "run"]',
+			// The JSON report names each failing test, so a red head goes back to the builder with them.
+			'tests = ["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]',
 			'typecheck = ["node_modules/.bin/tsc", "--noEmit"]',
 			"",
 			...(rubrics === null ? [] : ["[review]", `rubrics = ${JSON.stringify(rubrics)}`, ""]),

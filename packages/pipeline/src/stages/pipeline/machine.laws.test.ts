@@ -23,6 +23,7 @@ import {
 	Lane,
 	type LaneCmd,
 	lane,
+	MAX_ROUNDS,
 	readFiled,
 	releaseLane,
 	runStep,
@@ -60,6 +61,7 @@ const OUTCOMES: readonly Outcome[] = [
 	{kind: "ask", who: "owner", for: "check_change"},
 	{kind: "send", to: "plan", why: "yes"},
 	{kind: "send", to: "builder", why: "review_failed"},
+	{kind: "send", to: "builder", why: "tests_red"},
 	{kind: "send", to: "test_writer", why: "mutant_survived"},
 	{kind: "stuck", why: "push_failed"},
 ];
@@ -385,8 +387,11 @@ describe("the whole lane, step by step", () => {
 	const IDLE: Lane = {phase: "idle"};
 	const stepped = (s: Lane, m: Msg): Lane =>
 		(lane.update[m.type] as (s: Lane, m: Msg) => readonly [Lane, unknown])(s, m)[0];
-	/** Walk the machine, answering each step with `answers[step]`, and each question with its first pick. */
-	const walk = (answers: Partial<Record<(typeof STEPS)[number], Outcome>> = {}) => {
+	/** Walk the machine, answering each step with `answers[step]`, and each question with `picks[for]` or its first pick. */
+	const walk = (
+		answers: Partial<Record<(typeof STEPS)[number], Outcome>> = {},
+		picks: Readonly<Record<string, string>> = {},
+	) => {
 		let s: Lane = stepped(IDLE, {type: "start", number: 7, lane: ID});
 		const seen: string[] = [];
 		const go = (m: Msg) => {
@@ -400,7 +405,11 @@ describe("the whole lane, step by step", () => {
 				go(runStep.ok(STEP, {outcome: answers[s.step] ?? DONE, carry: {}}, 0));
 			} else if (s.phase === "asking") {
 				seen.push(s.question.for);
-				go({type: "lane_answered", ask: s.question.ask, pick: s.question.picks[0] ?? ""});
+				go({
+					type: "lane_answered",
+					ask: s.question.ask,
+					pick: picks[s.question.for] ?? s.question.picks[0] ?? "",
+				});
 			} else if (s.phase === "releasing") go(releaseLane.ok(RELEASE, "released", 0));
 		}
 		return {s, seen};
@@ -450,12 +459,37 @@ describe("the whole lane, step by step", () => {
 		expect(seen.indexOf("review")).toBe(seen.indexOf("mutants") + 1);
 	});
 
-	it("a review's finding goes to the writer first, then the build, and rounds run out", () => {
-		const {s, seen} = walk({
-			triage: {kind: "send", to: "plan", why: "yes"},
-			review: {kind: "send", to: "builder", why: "review_failed"},
-		});
+	it("a review's finding goes to the writer first, then the build, and once rounds run out a person is asked", () => {
+		const {s, seen} = walk(
+			{
+				triage: {kind: "send", to: "plan", why: "yes"},
+				review: {kind: "send", to: "builder", why: "review_failed"},
+			},
+			{rounds_spent: "stop"},
+		);
 		expect(seen.filter((x) => x === "test_writer")).toHaveLength(3);
+		expect(seen.at(-1)).toBe("rounds_spent");
+		expect(s.phase === "over" && nameOf(s.outcome)).toBe("stuck:rounds_spent");
+	});
+
+	it("a head whose tests fail goes back to the build each round, and once rounds run out a person is asked", () => {
+		const {s, seen} = walk(
+			{
+				triage: {kind: "send", to: "plan", why: "yes"},
+				exam: {kind: "skip", why: "no_rules_change"},
+				mutation: {kind: "send", to: "builder", why: "tests_red"},
+			},
+			{rounds_spent: "stop"},
+		);
+		expect(seen.slice(seen.indexOf("build"))).toEqual([
+			"build",
+			"mutation",
+			"build",
+			"mutation",
+			"build",
+			"mutation",
+			"rounds_spent",
+		]);
 		expect(s.phase === "over" && nameOf(s.outcome)).toBe("stuck:rounds_spent");
 	});
 
@@ -470,5 +504,129 @@ describe("the whole lane, step by step", () => {
 		if (asked.phase !== "asking") throw new Error(asked.phase);
 		const end = stepped(asked, {type: "lane_answered", ask: asked.question.ask, pick: "no"});
 		expect(end.phase === "releasing" && nameOf(end.outcome)).toBe("skip:owner_no");
+	});
+});
+
+// Self-fix PR 3's law, over a whole run: a red head goes back to the builder a round at a time, the
+// builds never pass the cap but on a person's `again`, and a green head always moves on.
+describe("red and green heads, over any run", () => {
+	const RED: Outcome = {kind: "send", to: "builder", why: "tests_red"};
+	const REVIEW_BACK: Outcome = {kind: "send", to: "builder", why: "review_failed"};
+	const DONE: Outcome = {kind: "done", part: false};
+	const runs = fc.record({
+		/** Each mutation step's head, in turn: `true` is red. Past the last, green. */
+		heads: fc.array(fc.boolean(), {maxLength: 30}),
+		/** Each review, in turn: `true` sends it back. Past the last, it passes. */
+		reviews: fc.array(fc.boolean(), {maxLength: 10}),
+		/** Each answer to `rounds_spent`, in turn. Past the last, `stop`. */
+		answers: fc.array(fc.constantFrom("again", "stop"), {maxLength: 10}),
+	});
+	type Run = typeof runs extends fc.Arbitrary<infer R> ? R : never;
+
+	const where = (s: Lane): string =>
+		s.phase === "running"
+			? `${s.step} round ${s.round}`
+			: s.phase === "asking"
+				? `asking ${s.question.for}`
+				: s.phase;
+
+	/** Walk `machine` from its start on one run. What broke the law, a line each: none, it holds. */
+	const broken = (machine: Machine, run: Run): readonly string[] => {
+		const heads = [...run.heads];
+		const reviews = [...run.reviews];
+		const answers = [...run.answers];
+		const problems: string[] = [];
+		let builds = 0;
+		let agains = 0;
+		const stepped = (s: Lane, m: Msg): Lane =>
+			(machine.update[m.type] as (s: Lane, m: Msg) => readonly [Lane, unknown])(s, m)[0];
+		const answerTo = (s: Extract<Lane, {phase: "running"}>): Outcome => {
+			switch (s.step) {
+				case "triage":
+					return {kind: "send", to: "plan", why: "yes"};
+				case "exam":
+					return {kind: "skip", why: "no_rules_change"};
+				case "mutation":
+					return heads.shift() === true ? RED : DONE;
+				case "review":
+					return reviews.shift() === true ? REVIEW_BACK : DONE;
+				default:
+					return DONE;
+			}
+		};
+		const msgFor = (s: Lane): Msg | null => {
+			switch (s.phase) {
+				case "idle":
+					return {type: "start", number: 7, lane: ID};
+				case "reading":
+					return readFiled.ok(READ, {state: "open", mine: true}, 0);
+				case "claiming":
+					return claimLane.ok(CLAIM, ID, 0);
+				case "running":
+					if (s.step === "build") builds++;
+					return runStep.ok(STEP, {outcome: answerTo(s), carry: {}}, 0);
+				case "asking": {
+					const spent = s.question.for === "rounds_spent";
+					const pick = spent ? (answers.shift() ?? "stop") : (s.question.picks[0] ?? "");
+					if (spent && pick === "again") agains++;
+					return {type: "lane_answered", ask: s.question.ask, pick};
+				}
+				case "releasing":
+					return releaseLane.ok(RELEASE, "released", 0);
+				case "over":
+					return null;
+			}
+		};
+		let s: Lane = {phase: "idle"};
+		for (let i = 0; i < 400; i++) {
+			const msg = msgFor(s);
+			if (msg === null) break;
+			const next = stepped(s, msg);
+			if (s.phase === "running" && s.step === "mutation" && msg.type === "lane_step_ok") {
+				const red = msg.value.outcome.kind === "send";
+				const toBuild = next.phase === "running" && next.step === "build";
+				if (!red && !(next.phase === "running" && next.step === "review"))
+					problems.push(`a green head went to ${where(next)}`);
+				if (red && s.round < MAX_ROUNDS && !(toBuild && next.round === s.round + 1))
+					problems.push(`a red head in round ${s.round} went to ${where(next)}`);
+				if (
+					red &&
+					s.round >= MAX_ROUNDS &&
+					!(next.phase === "asking" && next.question.for === "rounds_spent")
+				)
+					problems.push(`a red head with the rounds spent went to ${where(next)}`);
+			}
+			if (next.phase === "running" && next.step === "build" && next.round > MAX_ROUNDS + agains)
+				problems.push(`build round ${next.round} on ${agains} agains`);
+			const name = next.phase === "releasing" ? nameOf(next.outcome) : "";
+			if (name.startsWith("stuck:") && name !== "stuck:rounds_spent")
+				problems.push(`ended ${name}`);
+			s = next;
+		}
+		if (builds > MAX_ROUNDS + agains) problems.push(`${builds} builds on ${agains} agains`);
+		return problems;
+	};
+
+	const holds = (machine: Machine) =>
+		fc.assert(
+			fc.property(runs, (run) => {
+				expect(broken(machine, run)).toEqual([]);
+			}),
+			{numRuns: 300, seed: 119120},
+		);
+
+	it("builds run at most MAX_ROUNDS times plus one per `again`, red goes back, and green moves on", () => {
+		holds(lane);
+	});
+
+	it("that law catches its plant: a lane that forgets its rounds on a red head", () => {
+		const uncapped = plant({
+			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) =>
+				lane.update.lane_step_ok(
+					s.phase === "running" && s.step === "mutation" ? {...s, round: 1} : s,
+					m,
+				),
+		});
+		expect(() => holds(uncapped)).toThrow();
 	});
 });
