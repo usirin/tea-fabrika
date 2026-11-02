@@ -240,8 +240,32 @@ const valueIn = (value: string, look: Look, seen: readonly string[] = []): strin
 		const [light = "", dark = ""] = argsOf(pair[1]);
 		return valueIn(look === "light" ? light : dark, look, seen);
 	}
+	const mix = /^color-mix\(\s*in oklab\s*,(.*)\)$/.exec(v);
+	if (mix?.[1] !== undefined) return mixIn(v, mix[1], look, seen);
 	if (/^#[0-9a-f]{3,8}$/i.test(v)) return hexOf(v);
 	return v;
+};
+
+/**
+ * `color-mix(in oklab, a p%, b)` as CSS Color 5 mixes two solid colors: the percents filled in
+ * and scaled to 100, then a straight mix in OKLab. A mix with alpha (such as `transparent`) is
+ * premultiplied in CSS and not read here: it comes back as written, so a test that needs it fails.
+ */
+const mixIn = (v: string, inner: string, look: Look, seen: readonly string[]): string => {
+	const parts = argsOf(inner).map((part) => {
+		const m = /^(.*?)(?:\s+([\d.]+)%)?$/.exec(part);
+		const color = valueIn(m?.[1] ?? "", look, seen);
+		const solid = /^#[0-9a-f]{6}$|^oklch\(/.test(color);
+		return {lab: solid ? toOklab(rgbaOf(color)) : undefined, at: m?.[2]};
+	});
+	const [a, b] = parts;
+	if (parts.length !== 2 || a?.lab === undefined || b?.lab === undefined) return v;
+	const pa = a.at === undefined ? (b.at === undefined ? 50 : 100 - Number(b.at)) : Number(a.at);
+	const pb = b.at === undefined ? 100 - pa : Number(b.at);
+	const t = pa / (pa + pb);
+	const [al, aa, ab] = a.lab;
+	const [bl, ba, bb] = b.lab;
+	return hexFrom(fromOklab(al * t + bl * (1 - t), aa * t + ba * (1 - t), ab * t + bb * (1 - t)));
 };
 
 const tokenIn = (name: string, look: Look, seen: readonly string[] = []): string => {
@@ -259,11 +283,13 @@ type Rgba = readonly [number, number, number, number];
 const fromOklch = (value: string): Rgba | undefined => {
 	const m = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(value);
 	if (m === null) return undefined;
-	const L = Number(m[1]) / (m[2] === "%" ? 100 : 1);
 	const C = Number(m[3]);
 	const H = (Number(m[4]) * Math.PI) / 180;
-	const a = C * Math.cos(H);
-	const b = C * Math.sin(H);
+	return fromOklab(Number(m[1]) / (m[2] === "%" ? 100 : 1), C * Math.cos(H), C * Math.sin(H));
+};
+
+/** An OKLab color in sRGB, clamped to the gamut. */
+const fromOklab = (L: number, a: number, b: number): Rgba => {
 	const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
 	const mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
 	const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
@@ -297,9 +323,22 @@ const over = (top: string, bottom: string): Rgba => {
 	return [mix(r, R), mix(g, G), mix(b, B), 1];
 };
 
-const luminance = ([r, g, b]: Rgba) => {
-	const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-	return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+/** An sRGB channel, gamma taken off. */
+const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+const luminance = ([r, g, b]: Rgba) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+
+/** An sRGB color in OKLab, the inverse of fromOklab (Björn Ottosson's matrices). */
+const toOklab = ([r, g, b]: Rgba): readonly [number, number, number] => {
+	const [R, G, B] = [lin(r), lin(g), lin(b)];
+	const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+	const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+	const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+	return [
+		0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+		1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+		0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+	];
 };
 
 const hexFrom = ([r, g, b]: Rgba) =>
@@ -473,9 +512,33 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		return fg === undefined || bg === undefined ? [] : [{selector: r.selector, fg, bg}];
 	});
 	const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|oklch\([^()]*\))$/;
+	// A background that draws no fill: the text sits on whatever is under it, which the page and row
+	// checks above hold it to.
+	const NO_FILL = new Set(["transparent", "none"]);
 
 	it("finds the rules that set their own text and background, the turn fill's button among them", () => {
 		expect(PAINTS.map((p) => p.selector)).toContain(".tracker button.tracker-primary");
+	});
+
+	it("reads color-mix in oklab as CSS does: white and black half and half is OKLab's middle gray", () => {
+		expect(valueIn("color-mix(in oklab, #ffffff 50%, #000000)", "dark")).toBe("#636363");
+		expect(valueIn("color-mix(in oklab, #000000, #ffffff 50%)", "dark")).toBe("#636363");
+	});
+
+	// A color this test cannot read would be skipped by the check below, so it fails here instead:
+	// each one gets a reader, or the rule changes to a color the test can read. A rule with no fill
+	// makes no pair, so its text (`inherit` included) is not read here.
+	it.each(LOOKS)("every rule's own text and background are colors this test reads, %s", (look) => {
+		const unread = PAINTS.flatMap(({selector, fg, bg}) => {
+			const ink = valueIn(fg, look);
+			const fill = valueIn(bg, look);
+			if (NO_FILL.has(fill)) return [];
+			return [
+				...(COLOR.test(ink) ? [] : [`${selector}: color ${fg} reads as ${ink}`]),
+				...(COLOR.test(fill) ? [] : [`${selector}: background ${bg} reads as ${fill}`]),
+			];
+		});
+		expect(unread).toEqual([]);
 	});
 
 	it.each(LOOKS)("a rule's text reads 4.5:1 on the background it sets, %s", (look) => {
@@ -773,6 +836,70 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 			expect(beaten).toEqual([]);
 		},
 	);
+});
+
+// Color principles rule 2: a color means one thing, and the accent says your turn. The accent is
+// the turn fill (indigo 9), its hover (indigo 10), and every token that is only another name for
+// one of them, such as --key. Each rule that draws with one is listed here with the turn it marks;
+// a focus ring, a hover, a pressed control or a plain primary button takes a gray instead.
+describe("the accent fill says your turn and nothing else", () => {
+	const RULES = [...rulesOf(CSS), ...rulesOf(THEME)];
+
+	/** The turn fill, its hover, and every :root name that points at one of them, however far. */
+	const ACCENT = (() => {
+		const names = new Set(["--turn-fill", "--turn-fill-hover"]);
+		let grew = true;
+		while (grew) {
+			grew = false;
+			for (const [name, value] of ROOT) {
+				const to = /^var\((--[\w-]+)\)$/.exec(value.trim())?.[1];
+				if (to !== undefined && names.has(to) && !names.has(name)) {
+					names.add(name);
+					grew = true;
+				}
+			}
+		}
+		return names;
+	})();
+
+	const TURNS: Record<string, string> = {
+		".tracker-fact-asked": "an ask put to the owner, in a ticket's history",
+		".tracker-fact-answered": "the owner's answer to that ask: the turn, taken",
+		".tracker-ask": "an open ask's box: it waits on the owner",
+		".view .btn.turn": "the button that takes your turn",
+		".view .btn.turn:hover": "the same button, hovered",
+		".view .m.p.you": "your turn on a person's mark",
+		".ticket-view .turnc.you": "the turn card when the turn is yours",
+		".ticket-view .meter i.you": "your share of the turn meter",
+		".map-view .spot.you": "the map's spot that waits on you",
+		".runs-view .ruler .mk": "a person's answer on the runs ruler: a turn taken",
+		".runs-view .wait": "a bar that waits on you",
+	};
+
+	it("finds the accent's names, --key among them", () => {
+		expect([...ACCENT].sort()).toEqual(
+			expect.arrayContaining(["--key", "--manti-accent-fill", "--turn-fill", "--turn-fill-hover"]),
+		);
+	});
+
+	it("only the rules that mark your turn draw with the accent fill", () => {
+		const uses = (value: string) =>
+			[...value.matchAll(/var\((--[\w-]+)\)/g)].some(([, name = ""]) => ACCENT.has(name));
+		const off = RULES.filter((r) => r.selector !== ":root")
+			.flatMap((r) =>
+				[...r.says]
+					.filter(([, value]) => uses(value))
+					.flatMap(([property]) =>
+						r.selector
+							.split(",")
+							.map((s) => s.trim())
+							.filter((s) => !Object.hasOwn(TURNS, s))
+							.map((s) => `${s} { ${property} }`),
+					),
+			)
+			.sort();
+		expect(off).toEqual([]);
+	});
 });
 
 // ---- one set of values for the window, the terminal and the window's frame ---------------------
