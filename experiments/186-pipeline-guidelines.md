@@ -17,6 +17,9 @@ the owner decided on 2026-11-01, and a private page, "Pipeline guidelines".
   systems à la carte*.
 - **Retry at one level only, with a number.** AWS, Buildkite, Argo.
 - **Ask a person only what needs a person.** Google SRE.
+- **A person stays responsible, and an answer goes on in the same session.** Linear, which ships
+  this product: agree with nine of the twelve principles, differ on three defaults, and three
+  decided points clash ([How Linear would do it](#how-linear-would-do-it), added the same day).
 
 Today's lane (main, today's version) follows about half of this. PR 289 fixes most of the rest.
 Checked against the twelve principles, **35 places in PR 289 break one, in 17 groups.** The worst
@@ -191,6 +194,117 @@ Most of PR 289 is the known way, and these parts are the principles at work:
 - **PR 1** formats in code, a guard and not a send-back (P3).
 - **The two decided rules** in "Jidoka and andon" are P1 and P4.
 
+## How Linear would do it
+
+Added 2026-11-01, after the first draft skipped it. AGENTS.md asks how Linear would build a thing
+as its new product. Here Linear has built it: Linear Agent writes code in "coding sessions" (since
+2026-06-11 [l7]), Loops start agent work on a trigger (July 2026, from a search summary of the
+changelog), and Reviews is its diff view [l11]. Third-party agents use the same session model
+[l2]. Only Linear's own pages were read, from their Markdown copies; a page with no date says so.
+
+### What was read
+
+- **Agent sessions** [l2, l3]. Six states: `pending`, `active`, `error`, `awaitingInput`,
+  `complete`, `stale`, "visible to users". Linear sets them "based on the last emitted activity".
+  The first activity must come "within 10 seconds", or the session shows as unresponsive.
+  After that, activity "for up to 30 minutes before the session is considered stale", and "this
+  stale state is recoverable by sending another agent activity".
+- **Activities** [l2]. An agent emits five kinds: `thought`, `action`, `elicitation`, `response`,
+  `error`. A person's message is a `prompt`, and "An agent cannot generate a `prompt` type
+  activity". An agent rebuilds context from activities, "frozen-in-time snapshots of user input",
+  because comments "may not be reliable" [l3]. A session may carry a plan, a checklist whose
+  steps are `pending`, `inProgress`, `completed` or `canceled`, replaced whole on each update.
+- **Asking a person** [l3, l4]. "If you require additional actions from the user, emit an
+  `AgentActivity` with type `elicitation` or `error`." The `select` signal lists options with a
+  `label` and a `value`; a person may pick one or reply in free text, and "the agent should always
+  use an LLM to interpret the response". The `stop` signal: the agent halts at once, takes no
+  further action, then emits a final `response` or `error` to confirm its state.
+- **Who is responsible** [l1, l5, l6]. "An agent cannot be held accountable": "the final
+  responsibility should always remain with a human." Delegating keeps the person as assignee:
+  "The assignee remains responsible for the work, while the agent contributes on their behalf."
+  If an automation delegated the issue, the agent should "keep it in triage state and leave
+  assignment up to a human actor".
+- **Coding sessions** [l7]. A person may follow and steer, or let it run on its own: "you'll be
+  notified when your input is needed". "Existing GitHub permissions and review
+  requirements still determine what ships." Asks to investigate or plan are "scoping the problem,
+  not implementing it". Feedback is addressed "with further iterations in the same thread". A
+  person can restart a session on a stronger model "while keeping the original pull request for
+  reference" (2026-09-24). Linear says this first pass resolves "roughly 30% of incoming bug
+  reports" for its own team (2026-06-11).
+- **When work fails or stops** [l8, l9]. A failed loop run sends "a loop run failed notification";
+  a person reads the run history and may pick **Run now**. Work blocked by a spend limit "does not
+  resume automatically when access is restored. To continue, reply in the existing coding
+  session." A webhook retry reuses its `Webhook-Id` "to avoid duplicate runs", and `202 Accepted`
+  "confirms receipt, not completion". A loop "can change only the entity that triggered the run"
+  unless a person allows more. Every published version of a loop is kept and can be restored.
+- **Money** [l9]. Spend is counted per session, per person, per loop and per team. Limits apply to
+  the workspace, each person and each loop, and reset daily, weekly or monthly. They are
+  "approximate safeguards, not exact caps"; running work "is instructed to wind down".
+- **Notifications and the Inbox** [l10, l11]. The Inbox always gets them; you are subscribed to an
+  issue you create, are assigned or are mentioned on. A Priority tab "separates notifications that
+  need your attention from other updates". Email digests are timed "based on urgency" and "only
+  sent if you haven't already read" the Inbox. Status changes notify only on completion,
+  cancelation, urgent priority and blocking. Reviews lets you leave out bot activity, and sends
+  team review requests only for GitHub teams of 10 or fewer.
+- **Triage** [l12]. Triage is "a special inbox"; a person accepts, declines, merges a duplicate or
+  snoozes. Rules can set team, status, assignee, label, project and priority, and can delegate to
+  an agent. Triage Intelligence suggests properties and duplicates; each property is set to show,
+  auto-apply or hide, and a person can read why a suggestion was made.
+- **Time** [l13, l14]. An SLA is a target by priority (24 hours for urgent, a week for high, by
+  default). Subscribers are told when it is at risk and when it breaches; at risk is 24 hours
+  out. It only tells; nothing in what was read says it reassigns or moves anything. The SLA docs
+  page did not load, so these numbers are from a search summary of it, plus the 2023 changelog. A missed project update gets a reminder to the lead,
+  then nudges "1 working day later, and 2 working days after this", then "Update Missing" shows
+  on the project instead. Pulse sends a daily or weekly digest of updates around 6:00 local time.
+- **GitHub** [l15]. A pull request moves its issue on draft, open, review asked, ready for merge
+  and merged. "Ready for merge" does not fire if any check fails, and needs "either review or
+  checks". An issue with two pull requests moves when the last one does. Canceling an issue
+  closes its open pull requests. A failing check moves no issue back on its own.
+- **The Linear Method** [l16]. "Say no to busy work": "Remove or automate 'work around work'".
+  "Decide and move on." Each issue has one owner: "the responsibility should lie with a single
+  person." Unfinished work moves to the next cycle on its own.
+
+### Each principle, against Linear
+
+| Principle | What Linear does | We |
+|---|---|---|
+| P1 a person only to judge | A person stays assignee; a session runs alone and notifies when input is needed | agree |
+| P2 red goes back | A person delegates "fix lint issues", or sets up a loop on "checks failed" | differ on the default: ours is automatic |
+| P3 prevent first | "Ready for merge" will not fire on a failed check; auto-apply is opt-in per property | agree |
+| P4 resume, never redo | A reply goes on in the same session; stale is recoverable; `stop` is a pause | agree; clash on a person's stop |
+| P5 go on after a judgment | The answer is a `prompt` in the same session; a redo keeps the old pull request | agree |
+| P6 a stop saves a resume | Activities are frozen snapshots; `error` says why; loops keep a run history | agree; we add a stale view |
+| P7 keyed by inputs | A key by event (`Webhook-Id`); no skip by inputs | agree on idempotent; keying by inputs is ours |
+| P8 bounded retries | Retries at the edge by event id; a failed agent run waits for a person | differ on "once more" for a step that could not run |
+| P9 a skip never looks clean | No checks and no review means not ready; two pull requests move on the last | agree |
+| P10 picks and where they resume | `select` options, or free text read by an LLM | differ: free text is a note, never a route |
+| P11 cost and attention counted | Dollars counted and capped; attention shaped, not counted; bounded nudges | agree; one new lean |
+| P12 nobody writes their own exam | GitHub's rules decide what ships; a loop touches only what started it | agree, by a different guard |
+
+### What we take, and what changed
+
+- **A lean changed: P11 gains nudges.** An unanswered ask gets at most two nudges, then shows as
+  waiting in the window, with no more pings. From Linear's project update reminders. 60%: the
+  gaps are Linear's, and one owner may want none.
+- **A view, not a state: time since a step's last fact.** Linear's `stale` is a liveness signal
+  that clears itself. We show the age and set no threshold, since an agent turn can be long and
+  quiet. No ping.
+- **Kept as they were, with Linear named.** P7's 75% (Linear is not a source either way), P8's 65%
+  (Linear's no-retry is the fallback if one try wastes money), P10's 85% (code routes on a pick).
+
+### Clashes for the owner
+
+Each is with a decided principle, so the note keeps the principle until the owner picks.
+
+1. **A person's `stop` (P4).** Ours ends the lane for good. Linear's halts and waits for "a clear
+   signal" to come back, in the same session. Pick: keep, or make it a saved pause like P10's
+   `stop` pick.
+2. **A person who speaks unasked (P1, P5).** Linear lets anyone with access "steer the approach"
+   of a running session. Our principles cover only answers to an ask. Pick: a note to a running
+   step goes to its next round, or it is not allowed.
+3. **Red goes back on its own (P2).** Linear leaves it to a person or a loop each team sets up.
+   Pick: keep it on by default, or make it a setting.
+
 ## What this tells us for fabrika
 
 - **The factory words are the plain ones, and they fit.** Jidoka is the lane stopping itself; andon
@@ -214,6 +328,8 @@ Most of PR 289 is the known way, and these parts are the principles at work:
 - Whether 3 rounds is right. No source names a number for an agent's repair loop.
 - Whether every row of the check sits in the right group. Each was read, not run.
 - Shingo's book and the *à la carte* paper were not reread for this study, as marked.
+- How Linear's agent sessions behave past their docs. No Linear session was run, and most of its
+  docs pages carry no date. Parts can still change: the Agent Plan API is "a technology preview".
 - What this study cost. It made no paid call of its own; the agent session that wrote it was not
   measured here.
 
@@ -237,3 +353,22 @@ Most of PR 289 is the known way, and these parts are the principles at work:
 - [p2] [Google SRE book, Eliminating Toil](https://sre.google/sre-book/eliminating-toil/), read 2026-11-01
 - [p3] [AWS Builders' Library, Timeouts, retries, and backoff with jitter](https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter), read 2026-11-01
 - [p4] [AWS Builders' Library, Making retries safe with idempotent APIs](https://builder.aws.com/content/3Ev0BENTyBr0XxzRk5FDZzgNYos/making-retries-safe-with-idempotent-apis), read 2026-11-01
+
+Linear's pages, all read 2026-11-01. A docs page with no date shown is marked "no date".
+
+- [l1] [Linear, Agent Interaction Guidelines](https://linear.app/developers/aig), no date; launched with [l6]
+- [l2] [Linear, Developing the Agent Interaction](https://linear.app/developers/agent-interaction), no date
+- [l3] [Linear, Interaction Best Practices](https://linear.app/developers/agent-best-practices), no date
+- [l4] [Linear, Signals](https://linear.app/developers/agent-signals), no date
+- [l5] [Linear Docs, Assign and delegate issues](https://linear.app/docs/assigning-issues), no date
+- [l6] [Linear changelog, Agent Interaction Guidelines and SDK](https://linear.app/changelog/2025-07-30-agent-interaction-guidelines-and-sdk), 2025-07-30
+- [l7] [Linear Docs, Coding sessions](https://linear.app/docs/coding-sessions), no date; changelog [Coding sessions in Linear](https://linear.app/changelog/2026-06-11-coding-sessions), 2026-06-11, and [New controls for Linear coding agent](https://linear.app/changelog/2026-09-24-new-controls-for-linear-coding-agent), 2026-09-24
+- [l8] [Linear Docs, Loops](https://linear.app/docs/loops), no date
+- [l9] [Linear Docs, Usage & limits](https://linear.app/docs/usage-and-limits), no date
+- [l10] [Linear Docs, Inbox](https://linear.app/docs/inbox) and [Notifications](https://linear.app/docs/notifications), no date
+- [l11] [Linear Docs, Reviews](https://linear.app/docs/diffs), no date
+- [l12] [Linear Docs, Triage](https://linear.app/docs/triage) and [Triage Intelligence](https://linear.app/docs/triage-intelligence), no date
+- [l13] [Linear changelog, SLAs](https://linear.app/changelog/2023-03-16-slas), 2023-03-16; the [SLA docs page](https://linear.app/docs/sla) did not load, read through a search summary
+- [l14] [Linear Docs, Initiative and project updates](https://linear.app/docs/initiative-and-project-updates) and [Pulse](https://linear.app/docs/pulse), no date
+- [l15] [Linear Docs, GitHub](https://linear.app/docs/github), no date
+- [l16] [Linear Method, Principles & Practices](https://linear.app/method/introduction), no date
