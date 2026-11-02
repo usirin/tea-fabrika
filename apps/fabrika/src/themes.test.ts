@@ -390,14 +390,82 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		},
 	);
 
-	it.each(LOOKS)("on-turn reads 4.5:1 on the turn fill, at rest and hovered, %s", (look) => {
-		const fg = tokenIn("--turn-fg", look);
+	// The note checks text on three backgrounds. The window draws more than that: rows hover and
+	// are selected, in a tile (the ground) and in what opens over the desk (raised), and some lines'
+	// tokens (--wire, --border-strong) and the turn fill (--key) are used as text. So every token a
+	// stylesheet sets as `color:` is held to 4.5:1 on each of those. --turn-fg sits only on the turn
+	// fill, so it has its own test below.
+	const USED_AS_TEXT = [
+		...new Set(
+			[...uncommented(CSS + THEME).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)].map(
+				([, name = ""]) => name,
+			),
+		),
+	]
+		.filter((name) => name !== "--turn-fg")
+		.sort();
+
+	it("finds the tokens the window uses as text, lines and the turn fill among them", () => {
+		expect(USED_AS_TEXT).toEqual(expect.arrayContaining(["--wire", "--border-strong", "--key"]));
+	});
+
+	it.each(LOOKS)(
+		"every token used as text reads 4.5:1 on the desk, ground and raised, %s",
+		(look) => {
+			const pairs = USED_AS_TEXT.flatMap((fg) =>
+				PAGES.map((bg) => [`${fg} on ${bg}`, tokenIn(fg, look), tokenIn(bg, look), 4.5] as const),
+			);
+			expect(under(pairs)).toEqual([]);
+		},
+	);
+
+	it.each(LOOKS)(
+		"every token used as text reads 4.5:1 on hovered and selected rows, %s",
+		(look) => {
+			const rows = ["--surface-hover", "--surface-selected"].flatMap((row) =>
+				["--surface", "--surface-raised"].map(
+					(page) =>
+						[
+							`${row} over ${page}`,
+							hexFrom(over(tokenIn(row, look), tokenIn(page, look))),
+						] as const,
+				),
+			);
+			const pairs = USED_AS_TEXT.flatMap((fg) =>
+				rows.map(([where, bg]) => [`${fg} on ${where}`, tokenIn(fg, look), bg, 4.5] as const),
+			);
+			expect(under(pairs)).toEqual([]);
+		},
+	);
+
+	it("on-turn reads 4.5:1 on the turn fill, at rest in both looks and hovered in light", () => {
 		expect(
 			under([
-				["--turn-fg on --turn-fill", fg, tokenIn("--turn-fill", look), 4.5],
-				["--turn-fg on --turn-fill-hover", fg, tokenIn("--turn-fill-hover", look), 4.5],
+				...LOOKS.map(
+					(look) =>
+						[
+							`--turn-fg on --turn-fill, ${look}`,
+							tokenIn("--turn-fg", look),
+							tokenIn("--turn-fill", look),
+							4.5,
+						] as const,
+				),
+				[
+					"--turn-fg on --turn-fill-hover, light",
+					tokenIn("--turn-fg", "light"),
+					tokenIn("--turn-fill-hover", "light"),
+					4.5,
+				],
 			]),
 		).toEqual([]);
+	});
+
+	// Known exception, decided 2026-11-01: the hovered fill keeps Radix's indigo 10, and white on
+	// it reads 4.28 in dark, under 4.5:1 (tracker ticket 153). Any change to the pair shows here.
+	it("on-turn on the hovered turn fill, dark, is indigo 10 at exactly 4.28:1", () => {
+		const fill = tokenIn("--turn-fill-hover", "dark");
+		expect(fill).toBe("#5472e4");
+		expect(ratio(tokenIn("--turn-fg", "dark"), fill).toFixed(2)).toBe("4.28");
 	});
 
 	it.each(LOOKS)("the focus lines and the turn fill read 3:1, %s", (look) => {
@@ -412,6 +480,12 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 				...PAGES.map((bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const),
 				["--focus on a hovered row", ring, hovered("--surface"), 3],
 				["--focus on a hovered row on the desk", ring, hovered("--surface-sunken"), 3],
+				[
+					"--focus on a selected row",
+					ring,
+					hexFrom(over(tokenIn("--surface-selected", look), ground)),
+					3,
+				],
 			]),
 		).toEqual([]);
 	});
