@@ -486,7 +486,9 @@ const infoMode = async (page: Page) => {
  * never shrinks and keeps its items. While the mode is on, the bottom line keeps one height, so the
  * desk is the same height for a short explanation and a long one, and no terminal refits as the
  * pointer or focus moves. The way out goes first on the right, so the info item is where it was
- * before the mode came on, and a second click there turns it off. No width or height is guessed:
+ * before the mode came on, and a second click there turns it off. The bottom line's items show
+ * their whole focus ring inside the window, the mode off and on, and with the mode on the bottom
+ * line starts on a whole pixel, so the tiles above it end on one. No width or height is guessed:
  * each box is checked against the one it sits in, or against itself at another moment. The window
  * goes back to its size after.
  */
@@ -511,18 +513,90 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 	/** How tall the desk's workspace is now: it gives the bottom line whatever room it takes. */
 	const deskHeight = () =>
 		page.locator(".workspace").evaluate((el) => el.getBoundingClientRect().height);
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	/**
+	 * The focus ring of what has focus: its box grown by its outline's width and offset, whether
+	 * that box is inside the window, and whether a ring is drawn at all.
+	 */
+	const ring = () =>
+		page.evaluate(() => {
+			const el = document.activeElement;
+			if (el === null) return {drawn: false, inside: false, box: null, focused: null};
+			const style = getComputedStyle(el);
+			const out = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+			const r = el.getBoundingClientRect();
+			const box = {
+				left: r.left - out,
+				top: r.top - out,
+				right: r.right + out,
+				bottom: r.bottom + out,
+			};
+			return {
+				drawn: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+				inside:
+					box.left >= 0 &&
+					box.top >= 0 &&
+					box.right <= window.innerWidth &&
+					box.bottom <= window.innerHeight,
+				box,
+				focused: el.getAttribute("data-info"),
+			};
+		});
+	/**
+	 * Tab to the keys item and Shift+Tab back to the info item, by the keyboard, so each draws its
+	 * focus ring (`:focus-visible`): the whole ring is inside the window (WCAG 2.4.7, 2.4.11).
+	 */
+	const ringsInside = async (when: string) => {
+		const infoWords = await infoItem(page).getAttribute("data-info");
+		const keysWords = await keys.getAttribute("data-info");
+		await infoItem(page).focus();
+		const walk: ReadonlyArray<readonly [string, string | null, string]> = [
+			["Tab", keysWords, "keys"],
+			["Shift+Tab", infoWords, "info"],
+		];
+		for (const [press, words, name] of walk) {
+			await page.keyboard.press(press);
+			const seen = await until(`focus on the ${name} item`, ring, (r) => r.focused === words);
+			check(
+				`at 1024 by 700, ${when}, the ${name} item's focus ring is whole inside the window`,
+				seen.drawn && seen.inside,
+				seen,
+			);
+		}
+	};
+	/**
+	 * Where the bottom line starts and the desk ends, in px. On a fraction of a pixel, the tiles
+	 * above end there too: a tile's 1px edge smears over two rows at half strength, and its
+	 * terminal, which covers whole cells, paints over the upper row, so a focused tile's bottom edge
+	 * goes faint but for a short bright stub past the last column (round 3's shots 3b and 6a).
+	 */
+	const lineEdges = () =>
+		page.evaluate(() => {
+			const line = document.querySelector("footer.bottomline")?.getBoundingClientRect();
+			const desk = document.querySelector(".workspace")?.getBoundingClientRect();
+			return {line: line?.top ?? null, height: line?.height ?? null, desk: desk?.bottom ?? null};
+		});
+	await ringsInside("info mode off");
+	await backInT3(page);
 	const off = await itemAt();
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
 	await explained(page, "point at anything");
 	const on = await itemAt();
 	const hint = await deskHeight();
+	const edges = await lineEdges();
+	check(
+		"at 1024 by 700 with info mode on, the bottom line and the desk's end fall on whole pixels",
+		[edges.line, edges.height, edges.desk].every((v) => v !== null && Number.isInteger(v)),
+		edges,
+	);
+	await ringsInside("info mode on");
+	await backInT3(page);
 	check(
 		"at 1024 by 700, the info item is where it was before the mode came on",
 		off !== null && on !== null && off.x === on.x && off.y === on.y,
 		{off, on},
 	);
-	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
 	await keys.focus();
 	await explained(page, (await keys.getAttribute("data-info")) ?? "keys:");
 	const short = await deskHeight();
