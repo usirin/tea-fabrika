@@ -56,8 +56,13 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
   named exception. Reading theme files and the `themes` program are both in Tier 2, beside the other
   first programs. The approved Tier 1 does not grow.
 - **Which version.** `next/` builds it. In today's version, the study's tryout (its spike, kept as
-  `experiments/177-themes/spike.patch`) lands only if the owner picks it. Nothing else is built or
-  filed for today's version.
+  `experiments/177-themes/spike.patch`) lands only if the owner picks it.
+- **Today's app moves to the built-ins (decided 2026-11-01 by the owner).** Radix's colors are
+  trusted over our hand-made ones, so today's app drops its oklch grays in
+  `apps/fabrika/src/window/window.css` and takes the `fabrika` and `fabrika-light` values below.
+  Tracker ticket 144 holds the token-by-token mapping. The guidelines pages use the same values
+  ([PR 291](https://github.com/usirin/tea-fabrika/pull/291)). This moves values only: theme files
+  and the `themes` program stay in `next/`.
 
 ## The same rule as keybindings
 
