@@ -86,6 +86,7 @@ import {answerHeard, ticketUrlOf} from "./hosts.ts";
 import {keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
+	askedFor,
 	type askPerson,
 	type Carry,
 	type claimLane,
@@ -222,6 +223,19 @@ const headOf = (timeline: readonly Entry[], stage: string): string | null => {
 	return null;
 };
 const ExamHead = Schema.Struct({head: Schema.String});
+
+/**
+ * Whether a person answered which side was wrong about the test writer's files since the build last
+ * ended: code put those files back, or the test writer wrote them again, under the builder. Pure.
+ */
+const examPickedSinceBuild = (timeline: readonly Entry[]): boolean => {
+	const built = timeline.findLastIndex(({fact}) => fact.type === "ended" && fact.stage === "build");
+	return timeline.slice(built + 1).some(({fact}) => {
+		if (fact.type !== "answered") return false;
+		const kind = askedFor(String(fact.ask));
+		return kind === "exam_touched" || kind === "exam_conflict";
+	});
+};
 
 /** The head of the test writer's last commit. Pure. */
 const examHeadOf = (timeline: readonly Entry[]): string | null => headOf(timeline, "test_writer");
@@ -584,8 +598,9 @@ const notRunWords = (head: string, tail: string) =>
  *   could not run the lane ends stuck: it never guesses green
  */
 /**
- * A later round the builder changed nothing in, by code's checks at its head. `moved`: the head is
- * not the one the builder left, so a green one is the work done, with nothing to ask.
+ * A later round the builder changed nothing in, by code's checks at its head. `moved`: code changed
+ * the test writer's files under the builder since its last round, so a green head is the work done,
+ * with nothing to ask.
  */
 const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boolean) =>
 	Effect.gen(function* () {
@@ -930,14 +945,14 @@ const bodies = {
 			// A first round with no change has no work to go on with. A later one has the last round's,
 			// and what can be asked about it depends on what the head's checks say now.
 			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change") {
-				// Code put commits on the builder's last head since its last round, such as the test writer's
-				// files put back or written again: the builder judged a head new to it.
-				const last = headOf((yield* (yield* Tickets).read(at.cmd.number)).timeline, "build");
+				// A person's exam pick since the builder's last round changed the test writer's files under
+				// it: the builder judged a head new to it.
+				const {timeline} = yield* (yield* Tickets).read(at.cmd.number);
 				return yield* nothingChanged(
 					at,
 					kept,
 					`The builder says: ${inert(end.report.built?.summary ?? "nothing")}`,
-					last !== null && last !== before,
+					examPickedSinceBuild(timeline),
 				);
 			}
 			const built = ended(end.outcome, kept, end.report.problems);
