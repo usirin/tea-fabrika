@@ -278,13 +278,20 @@ export const CodeFact = Schema.Union([
 	 * A stopped lane started again (self-fix PR 5): who is the entry's writer, and when its time.
 	 * `from`: the step it went on from. `base`: the commit the lane stood on when it stopped, `null` if
 	 * it had none. `onto`: main as read fresh, which the lane's branch stands on now: the same commit
-	 * when main had not moved. Only known at the restart.
+	 * when main had not moved. `head` and `to`: the lane's head before and after, `null` if it had
+	 * none. `conflicts`: the files where main's side won. `kept`: the ref the old head stays under,
+	 * when the branch started again from main. Only known at the restart. The four are left out on a
+	 * restart written before them.
 	 */
 	Schema.Struct({
 		type: Schema.Literal("restarted"),
 		from: Stage,
 		base: Schema.NullOr(Sha),
 		onto: Sha,
+		head: Schema.optionalKey(Schema.NullOr(Sha)),
+		to: Schema.optionalKey(Schema.NullOr(Sha)),
+		conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
+		kept: Schema.optionalKey(Schema.String),
 	}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({

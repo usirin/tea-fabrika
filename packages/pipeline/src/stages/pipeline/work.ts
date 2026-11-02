@@ -273,6 +273,8 @@ export class LaneWork extends Context.Service<
 		) => Effect.Effect<OnMain, Failed>;
 		/** Ticket `n`'s branch moved to `commit`, its working copy with it: nothing it held besides is kept. */
 		readonly reset: (n: number, commit: string) => Effect.Effect<void, Failed>;
+		/** `commit` kept under `ref` in the clone, so it stays reachable after its branch moves on. */
+		readonly keep: (commit: string, ref: string) => Effect.Effect<void, Failed>;
 		/**
 		 * On ticket `n`'s branch as it is, `files` as `from` has them, or gone where `from` has none,
 		 * committed with `message`. Answers the head; nothing changed, the head as it was.
@@ -829,6 +831,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					yield* git(tree, ["reset", "--quiet", "--hard", sha]);
 					yield* git(tree, ["clean", "--quiet", "-fd"]);
 				}),
+			keep: (sha, ref) => git(clone, ["update-ref", ref, sha]).pipe(Effect.asVoid),
 			putBack: (n, from, files, message) =>
 				Effect.gen(function* () {
 					const {tree} = yield* made(String(n), `lane/${n}`);

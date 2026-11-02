@@ -1,6 +1,6 @@
 import {Effect, Option, Schema} from "effect";
 import {type Checked, Entry, type FactOf} from "../../tickets/ticket.ts";
-import {Tickets} from "../../tickets/tickets.ts";
+import {Tickets, type TicketsFailed} from "../../tickets/tickets.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft} from "../plan/plan.ts";
 import {
@@ -240,9 +240,13 @@ export const fold = (seen: Seen): Folded => {
 				break;
 			}
 			case "restarted":
-				// Main moved under a working copy: the lane's commits now stand on it.
-				if (fact.base !== null && fact.base !== fact.onto) {
-					const head = seen.commits.at(-1)?.sha ?? carry.head;
+				// The branch started again from main: nothing built before stands on it.
+				if (fact.kept !== undefined)
+					carry = {...carry, base: fact.onto, head: fact.to ?? fact.onto, exam: []};
+				// Main moved under a working copy: the lane's commits now stand on it, at the head the restart
+				// kept, or else the branch's last.
+				else if (fact.base !== null && fact.base !== fact.onto) {
+					const head = fact.to ?? seen.commits.at(-1)?.sha ?? carry.head;
 					carry = {...carry, base: fact.onto, head};
 				}
 				break;
@@ -270,15 +274,14 @@ const byTitle = (title: string, built: boolean): Made["by"] => {
 /**
  * What the fold of ticket `number`'s lane reads, read now. The plan is `null`: the ledger keeps the
  * plan's revision, not the draft the lane held, so a lane whose ends kept no carry writes its plan again.
+ * A ticket that cannot be read fails it: a fold of no facts would run the lane again from triage. The
+ * branch's commits may be missing: a lane that never built has none.
  */
-export const seenOf = (number: number): Effect.Effect<Seen, never, Tickets | LaneWork> =>
+export const seenOf = (number: number): Effect.Effect<Seen, TicketsFailed, Tickets | LaneWork> =>
 	Effect.gen(function* () {
 		const tickets = yield* Tickets;
 		const work = yield* LaneWork;
-		const timeline = yield* tickets.read(number).pipe(
-			Effect.map((ticket) => ticket.timeline),
-			Effect.orElseSucceed((): readonly Entry[] => []),
-		);
+		const {timeline} = yield* tickets.read(number);
 		const branch = `lane/${number}`;
 		const base = yield* work
 			.mergeBase("origin/main", branch)

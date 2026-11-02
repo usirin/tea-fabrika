@@ -86,6 +86,7 @@ import {answerHeard, ticketUrlOf} from "./hosts.ts";
 import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
+	afterBuild,
 	askedFor,
 	type askPerson,
 	type Carry,
@@ -97,7 +98,9 @@ import {
 	MAX_ROUNDS,
 	type readFiled,
 	type releaseLane,
+	type Resume,
 	type runStep,
+	STEPS,
 	type StepEnd,
 } from "./machine.ts";
 import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
@@ -251,7 +254,40 @@ const conflictItem = (file: string, base: string | null, onto: string): Item => 
 
 /** What a fresh read found, with what it changed: every kind but a closed ticket's and another's. */
 type Found = Exclude<Fresh, {readonly _tag: "closed" | "not_yours"}>;
-const found = (f: Found): Found => f;
+
+/**
+ * The lane's branch on main as read fresh: what was found, the files where main's side won, and the
+ * ref the old head stays under when the branch started again from main.
+ */
+interface Put {
+	readonly found: Found;
+	readonly conflicts: readonly string[];
+	readonly kept?: string;
+}
+
+/**
+ * The lane goes on at a step before the test writer, such as an old save whose fold names `plan`
+ * (self-fix PR 5): nothing on its branch stands, so the branch starts again from `onto`, and the old
+ * head stays under a ref the restart names. Nothing built: the branch moves to `onto` as it is.
+ */
+const startOver = (cmd: ReturnType<typeof freshMain>, onto: string) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const {head} = cmd.carry;
+		const kept = head === null || head === onto ? undefined : `refs/kept/${cmd.intent}`;
+		if (head !== null && kept !== undefined) yield* work.keep(head, kept);
+		yield* work.reset(cmd.number, onto);
+		const put: Put = {
+			found: {_tag: "fresh", carry: {base: onto, head: onto, exam: []}},
+			conflicts: [],
+			...(kept === undefined ? {} : {kept}),
+		};
+		return put;
+	});
+
+/** Whether a restart that goes on from `from` starts the branch again from main: before the test writer. Pure. */
+const startsOver = (from: Resume): boolean =>
+	STEPS.indexOf(from.step) < STEPS.indexOf("test_writer");
 
 /**
  * The lane's branch put on `onto` (self-fix PR 5). Never pushed: the test writer's own commit is
@@ -265,7 +301,8 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 		const tickets = yield* Tickets;
 		const {number, carry} = cmd;
 		const {base, head, pr, exam, open, written} = carry;
-		if (base === null || head === null || base === onto) return found({_tag: "fresh", carry: {}});
+		const answer = (f: Found, conflicts: readonly string[] = []): Put => ({found: f, conflicts});
+		if (base === null || head === null || base === onto) return answer({_tag: "fresh", carry: {}});
 		const pushed = pr !== null;
 		const first =
 			pushed || written === undefined
@@ -298,16 +335,22 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 		// The test writer's files: it writes them again on main, and the build goes on from its own work.
 		const tests = conflicts.filter((file) => exam.includes(file));
 		if (tests.length > 0)
-			return found({_tag: "exam_conflict", files: tests, carry: {...moved, touched: tests}});
+			return answer(
+				{_tag: "exam_conflict", files: tests, carry: {...moved, touched: tests}},
+				conflicts,
+			);
 		if (conflicts.length > 0)
-			return found({
-				_tag: "conflicts",
-				files: conflicts,
-				carry: {
-					...moved,
-					open: [...open, ...conflicts.map((file) => conflictItem(file, base, onto))],
+			return answer(
+				{
+					_tag: "conflicts",
+					files: conflicts,
+					carry: {
+						...moved,
+						open: [...open, ...conflicts.map((file) => conflictItem(file, base, onto))],
+					},
 				},
-			});
+				conflicts,
+			);
 		// The test writer's check again, on its commit put on main: each new test still fails there, each
 		// existing one still passes. A file whose test does not is the test writer's to write again.
 		const off =
@@ -324,9 +367,9 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 					),
 				})
 				.pipe(Effect.ignore);
-			return found({_tag: "exam_conflict", files: off, carry: {...moved, touched: off}});
+			return answer({_tag: "exam_conflict", files: off, carry: {...moved, touched: off}});
 		}
-		return found({_tag: pushed ? "merged" : "fresh", carry: moved});
+		return answer({_tag: pushed ? "merged" : "fresh", carry: moved});
 	});
 
 /**
@@ -1305,19 +1348,32 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			if (ticket.state === "closed") return {_tag: "closed"} as const;
 			if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
 			const onto = yield* work.main;
-			const found = yield* putOnMain(cmd, onto);
+			const put = startsOver(cmd.from) ? yield* startOver(cmd, onto) : yield* putOnMain(cmd, onto);
+			const {found} = put;
+			const head = cmd.carry.head;
+			const to = found.carry?.head ?? head;
 			yield* tickets.write(cmd.number, cmd.intent, {
 				type: "restarted",
 				from: cmd.from.step,
 				base: cmd.carry.base,
 				onto,
+				head,
+				to,
+				conflicts: put.conflicts,
+				...(put.kept === undefined ? {} : {kept: put.kept}),
 			});
-			// A new head gets code's checks there, before any step after the build runs on it.
 			if (found._tag === "conflicts" || found._tag === "exam_conflict") return found;
-			const {head} = found.carry;
-			if (cmd.carry.checked === undefined || head === undefined || head === null) return found;
-			const {checked} = yield* recordChecks({run: cmd.intent, cmd}, head);
-			return {...found, carry: {...found.carry, checked}};
+			// A step after the build runs only on green checks at its head: code runs them now, if the head
+			// has none, so a red one goes back to the builder and one that could not run stops the lane.
+			const checked = found.carry.checked ?? cmd.carry.checked;
+			const green = checked !== undefined && checked.head === to && checked.result === "green";
+			if (!afterBuild(cmd.from.step) || to === null || green) return found;
+			const ran = yield* recordChecks({run: cmd.intent, cmd}, to);
+			const red =
+				ran.checked.result === "red"
+					? {open: withRed(found.carry.open ?? cmd.carry.open, ran.ran.failed, ran.ran.tail)}
+					: {};
+			return {...found, carry: {...found.carry, checked: ran.checked, ...red}};
 		}).pipe(Effect.mapError(() => unknown)),
 
 	lane_step: (cmd: Carried) =>
@@ -1566,7 +1622,17 @@ export const laneProgram = defineProgram({
 			// no first Msg, so the restart goes to it here. A stop saved before it kept a `Held` goes on from
 			// the fold of the ticket's facts, under the lane this line named.
 			if (kept?.phase === "over" && !isEnd(kept.outcome)) {
-				const folded = "held" in kept ? null : fold(yield* seenOf(n));
+				// A save with no `Held` goes on from its ticket's facts: one that cannot be read stops the lane,
+				// never folds from nothing.
+				const seen = "held" in kept ? null : yield* Effect.result(seenOf(n));
+				if (seen?._tag === "Failure") {
+					yield* send("ended", {
+						name: "stuck:step_failed",
+						said: `the ticket could not be read to go on: ${seen.failure.says}`,
+					});
+					return;
+				}
+				const folded = seen === null ? null : fold(seen.success);
 				const at = "at" in kept ? kept.at : folded?.at;
 				const from =
 					at === undefined ? "" : at._tag === "run" ? at.step : `${at.step}, asking ${at.for}`;
