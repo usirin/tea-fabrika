@@ -81,6 +81,7 @@ import {
 } from "./machine.ts";
 import {LANE_NAMES} from "./outcome.ts";
 import {LaneWatch} from "./pulls.ts";
+import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
 // The lane as a program: one tracker ticket through every step, each step's own machine, each step's
@@ -1010,22 +1011,15 @@ const laneInterpret = ({send, machines}: Stages) => ({
 							: [`${picked.model}, ${spent.input + spent.output} tokens, ${money(listUsd)}`]),
 					].join("  "),
 				);
-				if (outcome.kind === "stuck" && problems.length > 0) {
-					const why = problems.join(" ").slice(0, 2_000);
-					yield* said(`why: ${why}`);
+				// A stuck the lane ends on says so. What comes before a question says what the step found,
+				// where the question can point at it.
+				const talk = endTalk(cmd.step, outcome, cmd.round, problems);
+				if (talk?.kind === "stuck") yield* said(`why: ${problems.join(" ").slice(0, 2_000)}`);
+				if (talk !== null)
 					yield* tickets
-						.talk(cmd.number, `${run}/why`, {
+						.talk(cmd.number, `${run}/${talk.kind === "stuck" ? "why" : "found"}`, {
 							type: "commented",
-							body: `${cmd.step} is stuck. ${why}`,
-						})
-						.pipe(Effect.ignore);
-				}
-				// What the step found, where the question it comes before can point at it.
-				if (outcome.kind === "ask" && problems.length > 0)
-					yield* tickets
-						.talk(cmd.number, `${run}/found`, {
-							type: "commented",
-							body: saidOf(problems.join("\n")),
+							body: saidOf(talk.body),
 						})
 						.pipe(Effect.ignore);
 				return {outcome, carry, ...(past === undefined ? {} : {after: past})};
