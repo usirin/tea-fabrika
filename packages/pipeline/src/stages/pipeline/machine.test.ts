@@ -146,13 +146,19 @@ const markedBesideUnseen = () => {
 const read = Schema.decodeUnknownSync(Lane);
 const WHAT = "The review says a decision you made on the plan is wrong. Does your decision stand?";
 
-/** A lane as code from before this change saved it, asking about a marked finding: every key as it was. */
-const savedAsking = (question: {
-	readonly ask: string;
-	readonly picks: readonly string[];
-	readonly step: string;
-	readonly call?: unknown;
-}) =>
+/**
+ * A lane as code from before this change saved it, asking about a marked finding: every key as it was.
+ * `carry`: what it held then; left out, nothing.
+ */
+const savedAsking = (
+	question: {
+		readonly ask: string;
+		readonly picks: readonly string[];
+		readonly step: string;
+		readonly call?: unknown;
+	},
+	carry: object = EMPTY,
+) =>
 	asking(
 		read({
 			phase: "asking",
@@ -160,7 +166,7 @@ const savedAsking = (question: {
 			lane: ID,
 			count: 5,
 			round: 1,
-			carry: EMPTY,
+			carry,
 			// A question of the same run, answered before this one.
 			trail: [{step: "a-step-1", said: "again"}],
 			question: {what: WHAT, for: "step", ...question},
@@ -262,12 +268,21 @@ describe("a lane saved while asking", () => {
 		expect(s.trail.map((row) => row.step)).not.toContain(ask);
 	});
 
+	/** Code's checks green at the head the lane holds (self-fix PR 4): what a step after build needs. */
+	const CHECKED = {...EMPTY, head: HEAD, checked: GREEN_AT(HEAD)};
+	const UNSEEN_REVIEW = {ask: "a-step-5", picks: ["again", "go_on", "stop"], step: "review"};
+	const NO_CHANGE = {
+		ask: "a-step-5",
+		picks: ["go_on", "stop"],
+		step: "build",
+		call: {about: "no_change", after: {kind: "done", part: false}},
+	};
+	const goOn = (s: Lane) =>
+		lane.update.lane_answered(s, {type: "lane_answered", ask: "a-step-5", pick: "go_on"});
+
 	// P27: the pick is gone from a new question, and a lane already holding it ends the way it did.
 	it("offering go_on on an unseen review goes to the push with no verdict to post, as it did", () => {
-		const [next] = lane.update.lane_answered(
-			savedAsking({ask: "a-step-5", picks: ["again", "go_on", "stop"], step: "review"}),
-			{type: "lane_answered", ask: "a-step-5", pick: "go_on"},
-		);
+		const [next] = goOn(savedAsking(UNSEEN_REVIEW, CHECKED));
 		if (next.phase !== "running") throw new Error(next.phase);
 		expect(next.step).toBe("push");
 		expect(next.carry.posts).toEqual([]);
@@ -275,18 +290,25 @@ describe("a lane saved while asking", () => {
 
 	// P28: the same, for a builder that changed nothing.
 	it("offering go_on after a builder that changed nothing goes on to the mutation step, as it did", () => {
-		const [next] = lane.update.lane_answered(
-			savedAsking({
-				ask: "a-step-5",
-				picks: ["go_on", "stop"],
-				step: "build",
-				call: {about: "no_change", after: {kind: "done", part: false}},
-			}),
-			{type: "lane_answered", ask: "a-step-5", pick: "go_on"},
-		);
+		const [next] = goOn(savedAsking(NO_CHANGE, CHECKED));
 		if (next.phase !== "running") throw new Error(next.phase);
 		expect(next.step).toBe("mutation");
 	});
+
+	// Self-fix PR 4: the same offers, on a lane saved with no checks at its head. No step after build
+	// runs, and the lane ends `stuck:checks_not_run`, never done.
+	it.each([
+		["an unseen review", UNSEEN_REVIEW],
+		["a builder that changed nothing", NO_CHANGE],
+	])(
+		"offering go_on after %s, with no checks at the head, runs nothing and ends stuck:checks_not_run",
+		(_, question) => {
+			const [next, cmds] = goOn(savedAsking(question));
+			expect(cmds.filter((c: LaneCmd) => c.type === "lane_step")).toEqual([]);
+			if (next.phase !== "releasing") throw new Error(next.phase);
+			expect(nameOf(next.outcome)).toBe("stuck:checks_not_run");
+		},
+	);
 });
 
 describe("a review that could not see", () => {

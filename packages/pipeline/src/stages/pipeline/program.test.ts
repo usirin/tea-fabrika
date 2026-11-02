@@ -585,6 +585,7 @@ describe("a lane, whole", () => {
 			];
 			const ran = await lane({
 				within: 200,
+				picks: YES,
 				fake: {
 					writesAt: {build: {0: planted(2), 1: planted(1)}},
 					answers: {build: [null, {with: {ran: [{command: "pnpm test", passed: false}]}}]},
