@@ -588,6 +588,12 @@ main.program > [role="alert"] {
 	outline-offset: 2px;
 }
 
+/* The bottom line ends at the window's edge, so its items take 3px above and below and not 5px:
+   their focus ring, the same as the top bar's, is then whole inside the window (WCAG 2.4.7). */
+.bottomline .fb {
+	padding-block: 3px;
+}
+
 .fb.accent {
 	color: var(--turn);
 }
@@ -750,12 +756,13 @@ main.program > [role="alert"] {
  * Info mode's explanation is never cut off: what does not fit wraps onto a second line. The right
  * side never shrinks and keeps its items, so the left gives way. Two lines tall the whole time the
  * mode is on, short explanation or long, so the desk is resized only as the mode comes on and goes
- * off, never as the pointer or focus moves.
+ * off, never as the pointer or focus moves. Its line height is whole pixels, so the line is 40px
+ * and the tiles above it end on a whole pixel: on a fraction, a tile's 1px edge smears over two rows.
  */
 .bottomline .left:has(> .info) {
 	height: 2lh;
 	padding: 4px 0;
-	line-height: 1.4;
+	line-height: 16px;
 	white-space: normal;
 }
 
