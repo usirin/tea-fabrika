@@ -99,4 +99,27 @@ describe("a job's record keeps an agent run's content", () => {
 		});
 		expect(JSON.stringify(read)).not.toContain(".env.example");
 	});
+
+	it("keeps a span that carried only its input as that input and no output", () => {
+		const {db, close, call} = record();
+		const {[OUTPUT]: _, ...inputOnly} = tool.tags;
+		keepSpans(db, [{...tool, tags: inputOnly}], "agent:otel");
+		const read = call({op: "read"});
+		close();
+		expect(read.content).toEqual([
+			{span: TOOL, input: '{"file_path":".env.example"}', output: null},
+		]);
+	});
+
+	it("refuses an agent that asks to delete content, and keeps it", () => {
+		const {db, close, call} = record();
+		keepSpans(db, [tool], "agent:otel");
+		const refused = call({op: "deleteContent", span: TOOL, why: "a key was read"}, "agent:build");
+		const read = call({op: "read"});
+		close();
+		expect(refused).toEqual({error: "only a person deletes content, and agent:build is not one"});
+		expect(read.content).toEqual([
+			{span: TOOL, input: '{"file_path":".env.example"}', output: '"A=1\\nB=2"'},
+		]);
+	});
 });

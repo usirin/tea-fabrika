@@ -46,8 +46,12 @@ const named = (spans: readonly ReadableSpan[], name: string) => {
 	return found;
 };
 
-/** One agent run with a turn and a tool call, under `parent`. */
-const agentRun = (tracer: Tracer, parent: Span, failed = false) => {
+/**
+ * One agent run with a turn and a tool call, under `parent`. `kept`: its turn and tool call keep
+ * their content, as a lane's do (`tea.agent.content: kept`).
+ */
+const agentRun = (tracer: Tracer, parent: Span, failed = false, kept = false) => {
+	const content = kept ? {"tea.agent.content": "kept"} : {};
 	const agent = tracer.startSpan(
 		"invoke_agent builder",
 		{
@@ -67,6 +71,7 @@ const agentRun = (tracer: Tracer, parent: Span, failed = false) => {
 				"gen_ai.request.model": "claude-opus",
 				"tea.agent.turn": 0,
 				"langfuse.observation.input": KEPT_OUT,
+				...content,
 			},
 		},
 		under(agent),
@@ -75,7 +80,7 @@ const agentRun = (tracer: Tracer, parent: Span, failed = false) => {
 	turn.end();
 	const tool = tracer.startSpan(
 		"execute_tool Bash",
-		{attributes: {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "Bash"}},
+		{attributes: {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "Bash", ...content}},
 		under(agent),
 	);
 	tool.end();
@@ -184,11 +189,14 @@ describe("the view", () => {
 		const {spans, tracer, shutdown} = viewed();
 		const sub = tracer.startSpan("reviewer");
 		sub.end();
-		agentRun(tracer, sub);
+		agentRun(tracer, sub, false, true);
 		expect(spans.map((s) => s.name)).toEqual(["reviewer"]);
 		await shutdown();
 		const alone = named(spans, "invoke_agent builder · 1 turn");
 		expect(alone.parentSpanContext?.spanId).toBe(sub.spanContext().spanId);
 		expect(alone.attributes["langfuse.observation.output"]).toBeUndefined();
+		// Its turn and tool call kept their content, so they are sent too, under the run shown alone.
+		for (const part of ["chat claude-opus", "execute_tool Bash"])
+			expect(named(spans, part).parentSpanContext?.spanId).toBe(alone.spanContext().spanId);
 	});
 });
