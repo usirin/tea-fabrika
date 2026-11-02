@@ -205,17 +205,18 @@ describe("Tickets", () => {
 	});
 
 	// Record wide (docs/plan/pipeline-self-fix.md, PR 7).
-	it("keeps a run's harness session id on its start, on both Layers", async () => {
+	it("keeps a run's harness session id as a fact of its own, on both Layers", async () => {
+		const session: CodeFact = {type: "session", run: "r-1", id: "fake-triage"};
 		const seen = await onBoth(
 			Effect.gen(function* () {
 				const tickets = yield* Tickets;
-				yield* tickets.write(1, "r-1/started", {...started, session: "fake-triage"});
-				return (yield* tickets.read(1)).timeline.flatMap((e) =>
-					e.fact.type === "started" ? [e.fact.session] : [],
-				);
+				yield* tickets.write(1, "r-1/started", started);
+				yield* tickets.write(1, "r-1/session", session);
+				return (yield* tickets.read(1)).timeline.map((e) => e.fact);
 			}),
 		);
-		expect(seen).toEqual({ledger: ["fake-triage"], memory: ["fake-triage"]});
+		const expected = [filed.fact, started, session];
+		expect(seen).toEqual({ledger: expected, memory: expected});
 	});
 
 	it("fills in `during` on a lane's comment: the run live when it was written, and none after its end", async () => {

@@ -58,14 +58,15 @@ export const saidOf = (text: string): string =>
 
 // ---------------------------------------------------------------- what a lane writes
 //
-// Nine more kinds, the facts a lane works with
+// More kinds, the facts a lane works with
 // (docs/direction/what-a-ticket-shows.md, section 2). Each is a tagged struct under `type`, the
 // key the tracker's first four already use on the ledger, so the rows written before still read.
-// The fields added since (`asks` and `during` on a comment, `text` on an answer, `trace` and
-// `session` on a start) are optional for that reason.
+// The fields added since (`asks` and `during` on a comment, `text` on an answer, `trace` on a
+// start) are optional for that reason.
 //
 //   {type: "started", run: "r-7", stage: "build", task: "t-2", log: null,
 //    trace: "9c41…e07a"}                                                             code
+//   {type: "session", run: "r-7", id: "019a2f…"}                                      code, once
 //   {type: "ended", run: "r-7", stage: "build", outcome: {kind: "send", to: "review", why: "built"},
 //    usd: 0.41, input: 12000, output: 3000, turns: 14}                               code
 //   {type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve", "no"]}   the stage that asks
@@ -164,12 +165,6 @@ export const CodeFact = Schema.Union([
 		task: Schema.NullOr(Id),
 		log: Schema.NullOr(Schema.String),
 		trace: Schema.optionalKey(TraceId),
-		/**
-		 * The harness's own id for the run's conversation: the Codex thread, the ACP session, the
-		 * Agent SDK session. Only known now, and a later restart loads the session by it. Missing on
-		 * a start written before the key, and on a harness that names none.
-		 */
-		session: Schema.optionalKey(Id),
 		/** The brief this run was given: its file's name and the hash of the file. Only known now. */
 		brief: Schema.optionalKey(Schema.String),
 		hash: Schema.optionalKey(Schema.String),
@@ -203,6 +198,13 @@ export const CodeFact = Schema.Union([
 		listUsd: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
 		minutes: Schema.optionalKey(Schema.Finite),
 	}),
+	/**
+	 * A run's agent opened its session, once, after the run's `started`. `id`: the harness's own id
+	 * for the conversation: the Codex thread, the ACP session, the Agent SDK session. Only known
+	 * then, and a later restart loads the session by it. No fact: the agent never opened one, or
+	 * its harness names none.
+	 */
+	Schema.Struct({type: Schema.Literal("session"), run: Id, id: Id}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({
 		type: Schema.Literal("planned"),
@@ -319,6 +321,7 @@ export const WRITTEN_BY = {
 	closed: "anyone",
 	reopened: "anyone",
 	started: "anyone",
+	session: "anyone",
 	ended: "anyone",
 	planned: "anyone",
 	pushed: "anyone",
@@ -449,6 +452,12 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 		case "started":
 			return factsOf(timeline, "started").some((s) => s.run === fact.run)
 				? `run ${fact.run} started a second time`
+				: null;
+		case "session":
+			if (!factsOf(timeline, "started").some((s) => s.run === fact.run))
+				return `run ${fact.run} opened a session, but it never started`;
+			return factsOf(timeline, "session").some((s) => s.run === fact.run)
+				? `run ${fact.run} opened a session a second time`
 				: null;
 		case "ended": {
 			const started = factsOf(timeline, "started").find((s) => s.run === fact.run);

@@ -286,22 +286,37 @@ describe("what a lane records wide", () => {
 		});
 	const said = (pos: number): Entry => entry(pos, 1, {type: "commented", body: "Skip part 2."});
 
-	it("reads a start with the harness's own session id, and a start from before it", () => {
-		const facts = [
-			{
-				type: "started",
-				run: "r-build-1",
-				stage: "build",
-				task: null,
-				log: null,
-				session: "fake-build",
-			},
-			{type: "started", run: "r-build-1", stage: "build", task: null, log: null},
-		];
-		for (const fact of facts) {
-			const read = readRow(row({data: JSON.stringify(fact), kind: "started"}));
-			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
-		}
+	it("reads a run's session as a fact of its own, and keeps it off the start", () => {
+		const fact = {type: "session", run: "r-build-1", id: "fake-build"};
+		const read = readRow(row({data: JSON.stringify(fact), kind: "session"}));
+		expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		const onStart = {
+			type: "started",
+			run: "r-build-1",
+			stage: "build",
+			task: null,
+			log: null,
+			session: "fake-build",
+		};
+		const started = readRow(row({data: JSON.stringify(onStart), kind: "started"}));
+		expect(started.kind === "entry" && "session" in started.entry.fact).toBe(false);
+	});
+
+	it("takes a run's session once, after its start", () => {
+		const session = (pos: number, run: string): Entry =>
+			by(pos, lane, {type: "session", run, id: `fake-${run}`});
+		expect(fold([], [filed, start(2, "r-build-1"), session(3, "r-build-1")]).problems).toEqual([]);
+		expect(fold([], [filed, session(2, "r-build-1")]).problems).toEqual([
+			"row 2 on #1: run r-build-1 opened a session, but it never started",
+		]);
+		expect(
+			fold([], [filed, start(2, "r-build-1"), session(3, "r-build-1"), session(4, "r-build-1")])
+				.problems,
+		).toEqual(["row 4 on #1: run r-build-1 opened a session a second time"]);
+	});
+
+	it("names the live run from its start alone, before its session opens", () => {
+		expect(liveRun([filed, start(2, "r-build-1")])).toBe("r-build-1");
 	});
 
 	it("reads a comment with the run it was written during, and a comment from before it", () => {

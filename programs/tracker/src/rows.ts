@@ -71,6 +71,8 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 			return said(
 				fact.task === null ? `${fact.stage} started` : `${fact.stage} started, task ${fact.task}`,
 			);
+		case "session":
+			return said("its agent opened a session", fact.id);
 		case "ended":
 			return said(
 				`${fact.stage}: ${endedAs(fact.outcome, "done")}`,

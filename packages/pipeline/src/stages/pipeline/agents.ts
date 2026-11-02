@@ -7,7 +7,8 @@ import {heardTrace} from "@kampus/fabrika-old/agents/trace";
 import {Context, Effect, FileSystem, Layer, Option, Result, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import type {AgentStep, Settings} from "../../settings.ts";
-import type {TicketsFailed} from "../../tickets/tickets.ts";
+import type {FactOf} from "../../tickets/ticket.ts";
+import {Tickets, type TicketsFailed} from "../../tickets/tickets.ts";
 import {type BuildDrafted, Builder, type BuildBrief} from "../build/form.ts";
 import {Built} from "../build/form.ts";
 import {PlanDraft} from "../plan/plan.ts";
@@ -131,30 +132,67 @@ export class LaneNow extends Context.Service<
 			readonly get: Effect.Effect<readonly string[]>;
 		};
 		/**
-		 * The step's `started`, written once: when its agent's session opens, with the harness's own
-		 * id for it, before the agent is prompted; or with none, by the step, when no agent opened.
+		 * The step's `session` fact, written once: when its agent's session opens, with the harness's
+		 * own id for it, before the agent is prompted.
 		 */
-		readonly start: {
-			/** What writes it, for the step on now. Its first `write` that lands is the only one. */
-			readonly set: (write: StartWrite) => Effect.Effect<void>;
+		readonly session: {
+			/** What writes it, for the step on now. Its first write that lands is the only one. */
+			readonly set: (write: SessionWrite) => Effect.Effect<void>;
 			/**
-			 * Write it now, with `session`, unless it is written. A session a write that failed was
-			 * given is kept: a later write with none, the step's at its end, writes that one.
+			 * The session opened: write it now, with the harness's `id`, unless it is written. `null`:
+			 * the harness names none, so nothing is written. The id of a write that failed is kept.
 			 */
-			readonly write: (session: string | null) => Effect.Effect<void, TicketsFailed>;
+			readonly opened: (id: string | null) => Effect.Effect<void, TicketsFailed>;
+			/** The step's end: write the id a failed write kept, so it is never lost. Else nothing. */
+			readonly left: Effect.Effect<void, TicketsFailed>;
 		};
 	}
 >()("LaneNow") {}
 
-/** What writes a step's `started`, with the harness's own id for its session, or none. */
-type StartWrite = (session: string | null) => Effect.Effect<void, TicketsFailed>;
+/** What writes a step's `session` fact, with the harness's own id for its session. */
+type SessionWrite = (id: string) => Effect.Effect<void, TicketsFailed>;
+
+/**
+ * A step's start on ticket `n`: its `started`, written now, before any setup, so the ticket shows
+ * the step running and a crash in setup leaves it behind. Its `session` fact is written once its
+ * agent's session opens (`LaneNow.session`).
+ *
+ *   yield* stepStarted(7, {type: "started", run: "r-build-1", stage: "build", task: null, log: null});
+ *   // tracker/ticket/7  started r-build-1   at once
+ *   //                   session r-build-1   when the agent's session opens: {id: "019a2f…"}
+ */
+export const stepStarted = (n: number, started: FactOf<"started">) =>
+	Effect.gen(function* () {
+		const tickets = yield* Tickets;
+		const now = yield* LaneNow;
+		const {run} = started;
+		yield* tickets.write(n, `${run}/started`, started);
+		yield* now.session.set((id) => tickets.write(n, `${run}/session`, {type: "session", run, id}));
+	});
 
 export const laneNow = Layer.sync(LaneNow, () => {
 	let now: StepNow | null = null;
 	let spent = NOTHING;
 	let exam: readonly string[] = [];
 	/** The step's `started` not written yet: what writes it, and the session it was last given. */
-	let start: {readonly write: StartWrite; readonly session: string | null} | null = null;
+	/** The step's `session` not written yet: what writes it, and the id it was last given. */
+	let session: {readonly write: SessionWrite; readonly id: string | null} | null = null;
+	/** Write it with `given`, or the id kept from a write that failed. No id, or written: nothing. */
+	const writeSession = (given: string | null) =>
+		Effect.suspend(() => {
+			const held = session;
+			const id = given ?? held?.id ?? null;
+			if (held === null || id === null) return Effect.void;
+			const trying = {write: held.write, id};
+			session = trying;
+			return held.write(id).pipe(
+				Effect.tap(() =>
+					Effect.sync(() => {
+						if (session === trying) session = null;
+					}),
+				),
+			);
+		});
 	return {
 		set: (next) =>
 			Effect.sync(() => {
@@ -189,26 +227,13 @@ export const laneNow = Layer.sync(LaneNow, () => {
 				}),
 			get: Effect.sync(() => exam),
 		},
-		start: {
+		session: {
 			set: (write) =>
 				Effect.sync(() => {
-					start = {write, session: null};
+					session = {write, id: null};
 				}),
-			write: (given) =>
-				Effect.suspend(() => {
-					const held = start;
-					if (held === null) return Effect.void;
-					const session = given ?? held.session;
-					const now = {write: held.write, session};
-					start = now;
-					return held.write(session).pipe(
-						Effect.tap(() =>
-							Effect.sync(() => {
-								if (start === now) start = null;
-							}),
-						),
-					);
-				}),
+			opened: (id) => writeSession(id),
+			left: writeSession(null),
 		},
 	};
 });
@@ -335,7 +360,7 @@ const misfitPrompt = (said: string): string =>
 /**
  * One turn on the agents, as the lane runs every one: drawn as the agent's spans under the step's,
  * with its content kept for the job's record (docs/direction/an-agent-run-keeps-its-content.md), and
- * the step's `started` written when its session opens, with the harness's own id for it.
+ * the step's `session` fact written when its session opens, with the harness's own id for it.
  */
 const opened = <A>(
 	name: string,
@@ -346,8 +371,8 @@ const opened = <A>(
 	heardTrace(name, turn, agents.run(turn), "kept").pipe(
 		Stream.tap((heard) =>
 			heard._tag === "started"
-				? // A start that cannot be written now is written by the step at its end, with this session.
-					Effect.flatMap(agents.own(heard.session), lane.start.write).pipe(Effect.ignore)
+				? // A session that cannot be written now is written by the step at its end, with this id.
+					Effect.flatMap(agents.own(heard.session), lane.session.opened).pipe(Effect.ignore)
 				: Effect.void,
 		),
 	);

@@ -1,10 +1,11 @@
-import type {Agent} from "@kampus/fabrika-old";
+import type {Agent, Writer} from "@kampus/fabrika-old";
 import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {strictOk} from "@kampus/fabrika-old/agents/codex";
 import {Deferred, Effect, Fiber, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {criterionId} from "../../ids.ts";
-import {TicketsFailed} from "../../tickets/tickets.ts";
+import type {FactOf} from "../../tickets/ticket.ts";
+import {memoryTickets, Tickets, TicketsFailed, ticketsInMemory} from "../../tickets/tickets.ts";
 import {Builder, Built} from "../build/form.ts";
 import {ExamWritten} from "../exam/machine.ts";
 import {PlanDraft} from "../plan/plan.ts";
@@ -12,7 +13,7 @@ import {Form} from "../review/sheet.ts";
 import {SortReply} from "../sort/answer.ts";
 import {Answered} from "../test-writer/mutants.ts";
 import {Written} from "../test-writer/written.ts";
-import {type Held, LaneAgents, laneBuilder, laneNow, LaneNow} from "./agents.ts";
+import {type Held, LaneAgents, laneBuilder, laneNow, LaneNow, stepStarted} from "./agents.ts";
 
 // Today's version. A schema that strict mode would refuse is not handed to Codex at all, and the agent
 // is only asked in words. So each answer a lane's agent gives has to pass, or its step gets no
@@ -35,8 +36,10 @@ describe("the answer schema of every step that runs an agent", () => {
 	});
 });
 
-// A step's `started` is written once, when its agent's session opens. A last message that does not
-// fit gets one more try on the same session, and that try opens it again: still one `started`.
+// A step's `started` is written at once, before its setup, so the ticket shows it running and a
+// crash in setup leaves it behind. The agent's session id is a fact of its own, `session`, written
+// once when the session opens. A last message that does not fit gets one more try on the same
+// session, and that try opens it again: still one `session`.
 
 /** The builder's answer, as JSON says it: what the turn's schema reads. */
 const BUILT = {
@@ -70,103 +73,167 @@ const misfitThenAnswer = () => {
 	};
 };
 
-describe("a step's started", () => {
-	it("is written once when a misfit's second try opens the session again", async () => {
-		const starts: (string | null)[] = [];
-		const held: Held = {
-			run: misfitThenAnswer(),
-			knows: () => Effect.succeed(null),
-			own: (session) => Effect.succeed(`thread-of-${session}`),
-		};
-		const agents = Layer.succeed(LaneAgents, {agents: Effect.succeed(held)});
-		const drafted = await Effect.runPromise(
+const owner: Writer = {kind: "user", id: "owner"};
+const lane: Writer = {kind: "agent", id: "lane", for: "owner"};
+
+/** Ticket 1, filed by its owner, in memory: where a step writes its facts. */
+const ticketOne = ticketsInMemory(lane).pipe(
+	Layer.provide(
+		memoryTickets([{ticket: 1, by: owner, fact: {type: "filed", title: "Read names", body: ""}}]),
+	),
+);
+
+const STARTED: FactOf<"started"> = {
+	type: "started",
+	run: "r-build-1",
+	stage: "build",
+	task: null,
+	log: null,
+};
+
+/** A step, on a builder whose agent runs `run`, and ticket 1: what it wrote, in order. */
+const stepOn = async (
+	run: Held["run"],
+	step: Effect.Effect<void, unknown, LaneNow | Builder | Tickets>,
+) => {
+	const held: Held = {
+		run,
+		knows: () => Effect.succeed(null),
+		own: (session) => Effect.succeed(`thread-of-${session}`),
+	};
+	const agents = Layer.succeed(LaneAgents, {agents: Effect.succeed(held)});
+	return Effect.runPromise(
+		Effect.gen(function* () {
+			yield* Effect.ignore(step);
+			// The step's own end: the session a failed write kept, if any.
+			yield* (yield* LaneNow).session.left;
+			return (yield* (yield* Tickets).read(1)).timeline.map((e) => e.fact);
+		}).pipe(
+			Effect.provide(
+				laneBuilder.pipe(
+					Layer.provideMerge(laneNow),
+					Layer.provide(agents),
+					Layer.provideMerge(ticketOne),
+				),
+			),
+		),
+	);
+};
+
+/** The builder's turn on ticket 1. */
+const build = Effect.gen(function* () {
+	const now = yield* LaneNow;
+	yield* now.set({
+		picked: {harness: "codex", model: "gpt-5.5", effort: "low", usd: 0},
+		brief: {name: "build", hash: "0", slots: [], body: "Build it."},
+		slots: {},
+		folder: "/nowhere",
+		access: "write",
+	});
+	const builder = yield* Builder;
+	return yield* builder.build(
+		{
+			ticket: "t-1",
+			number: 1,
+			title: "Read names in one form",
+			body: "",
+			criteria: [
+				{id: criterionId("c1"), version: 1, text: "Lower case.", checked: false, evidence: null},
+			],
+			round: 1,
+			open: [],
+			rules: [],
+			tree: "/nowhere",
+			branch: "fabrika/1",
+			session: "s-build-1",
+		},
+		{model: "gpt-5.5", effort: "low", budget: 0},
+	);
+});
+
+describe("a step's started and its session", () => {
+	it("writes started before the session opens, then the session once, with the harness's id, across a misfit's second try", async () => {
+		const before: string[] = [];
+		const facts = await stepOn(
+			misfitThenAnswer(),
 			Effect.gen(function* () {
-				const now = yield* LaneNow;
-				yield* now.set({
-					picked: {harness: "codex", model: "gpt-5.5", effort: "low", usd: 0},
-					brief: {name: "build", hash: "0", slots: [], body: "Build it."},
-					slots: {},
-					folder: "/nowhere",
-					access: "write",
-				});
-				yield* now.start.set((session) => Effect.sync(() => void starts.push(session)));
-				const builder = yield* Builder;
-				const built = yield* builder.build(
-					{
-						ticket: "t-1",
-						number: 1,
-						title: "Read names in one form",
-						body: "",
-						criteria: [
-							{
-								id: criterionId("c1"),
-								version: 1,
-								text: "Lower case.",
-								checked: false,
-								evidence: null,
-							},
-						],
-						round: 1,
-						open: [],
-						rules: [],
-						tree: "/nowhere",
-						branch: "fabrika/1",
-						session: "s-build-1",
-					},
-					{model: "gpt-5.5", effort: "low", budget: 0},
-				);
-				// The step's own write at its end finds it written, and writes nothing.
-				yield* now.start.write(null);
-				return built;
-			}).pipe(Effect.provide(laneBuilder.pipe(Layer.provideMerge(laneNow), Layer.provide(agents)))),
+				yield* stepStarted(1, STARTED);
+				// Setup has not run, and no agent has: the ticket already shows the step.
+				before.push(...(yield* (yield* Tickets).read(1)).timeline.map((e) => e.fact.type));
+				const built = yield* build;
+				expect(built.answer).toBe("built");
+			}),
 		);
-		expect(drafted.answer).toBe("built");
-		expect(starts).toEqual(["thread-of-s-build-1"]);
+		expect(before).toEqual(["filed", "started"]);
+		expect(facts.map((f) => f.type)).toEqual(["filed", "started", "session"]);
+		expect(facts[2]).toEqual({type: "session", run: "r-build-1", id: "thread-of-s-build-1"});
 	});
 
-	it("leaves the next step's writer in place when the last step's write lands after it was set", async () => {
-		const starts: string[] = [];
-		await Effect.runPromise(
+	it("leaves started and no session when the step crashes in setup", async () => {
+		const facts = await stepOn(
+			misfitThenAnswer(),
 			Effect.gen(function* () {
-				const now = yield* LaneNow;
-				const landing = yield* Deferred.make<void>();
-				yield* now.start.set(() =>
-					Deferred.await(landing).pipe(
-						Effect.andThen(Effect.sync(() => void starts.push("first"))),
-					),
-				);
-				const late = yield* Effect.forkChild(now.start.write("s-1"));
-				yield* Effect.yieldNow;
-				yield* now.start.set(() => Effect.sync(() => void starts.push("next")));
-				yield* Deferred.succeed(landing, undefined);
-				yield* Fiber.join(late);
-				yield* now.start.write("s-2");
-			}).pipe(Effect.provide(laneNow)),
+				yield* stepStarted(1, STARTED);
+				return yield* Effect.fail("the worktree could not be made");
+			}),
 		);
-		expect(starts).toEqual(["first", "next"]);
+		expect(facts.map((f) => f.type)).toEqual(["filed", "started"]);
 	});
 
-	it("keeps the session of a write that failed, for the step's own write at its end", async () => {
-		const starts: (string | null)[] = [];
+	it("keeps the id of a session write that failed, for the step's own write at its end", async () => {
+		const ids: string[] = [];
 		const tries = await Effect.runPromise(
 			Effect.gen(function* () {
 				const now = yield* LaneNow;
 				let calls = 0;
-				yield* now.start.set((session) =>
+				yield* now.session.set((id) =>
 					Effect.suspend(() => {
 						calls += 1;
 						return calls === 1
 							? Effect.fail(new TicketsFailed({ticket: 1, why: "unreachable", says: "down"}))
-							: Effect.sync(() => void starts.push(session));
+							: Effect.sync(() => void ids.push(id));
 					}),
 				);
-				// The write when the session opens does not land; the step's, with no session, does.
-				const first = yield* Effect.result(now.start.write("thread-1"));
-				yield* now.start.write(null);
+				const first = yield* Effect.result(now.session.opened("thread-1"));
+				yield* now.session.left;
+				yield* now.session.left;
 				return first._tag;
 			}).pipe(Effect.provide(laneNow)),
 		);
 		expect(tries).toBe("Failure");
-		expect(starts).toEqual(["thread-1"]);
+		expect(ids).toEqual(["thread-1"]);
+	});
+
+	it("writes no session at the end when none opened", async () => {
+		const ids: string[] = [];
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const now = yield* LaneNow;
+				yield* now.session.set((id) => Effect.sync(() => void ids.push(id)));
+				yield* now.session.opened(null);
+				yield* now.session.left;
+			}).pipe(Effect.provide(laneNow)),
+		);
+		expect(ids).toEqual([]);
+	});
+
+	it("leaves the next step's writer in place when the last step's write lands after it was set", async () => {
+		const ids: string[] = [];
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const now = yield* LaneNow;
+				const landing = yield* Deferred.make<void>();
+				yield* now.session.set(() =>
+					Deferred.await(landing).pipe(Effect.andThen(Effect.sync(() => void ids.push("first")))),
+				);
+				const late = yield* Effect.forkChild(now.session.opened("s-1"));
+				yield* Effect.yieldNow;
+				yield* now.session.set(() => Effect.sync(() => void ids.push("next")));
+				yield* Deferred.succeed(landing, undefined);
+				yield* Fiber.join(late);
+				yield* now.session.opened("s-2");
+			}).pipe(Effect.provide(laneNow)),
+		);
+		expect(ids).toEqual(["first", "next"]);
 	});
 });

@@ -1045,17 +1045,29 @@ describe("a lane, on what a real agent might answer", () => {
 	});
 
 	// Record wide (docs/plan/pipeline-self-fix.md, PR 7): the harness's own id for each run's
-	// conversation, on its start, so a later restart can load that session. The fake Codex opens
-	// thread `fake-<step>` (fixtures/pipeline-lane/codex.mjs), as the real one names its own.
+	// conversation, as a `session` fact after its start, so a later restart can load that session.
+	// The fake Codex opens thread `fake-<step>` (fixtures/pipeline-lane/codex.mjs), as the real one
+	// names its own.
 	it(
-		"puts each agent run's harness session id on its start: the thread the agent opened",
+		"writes each agent run's harness session id once, after its start: the thread the agent opened",
 		{timeout: 60_000},
 		async () => {
 			const ran = await lane({within: 50, picks: THE_PLANS_NO});
-			const started = ran.facts.filter((f) => f.type === "started");
-			expect(started.map((f) => [f.stage, f.session])).toEqual([
-				["triage", "fake-triage"],
-				["plan", "fake-plan"],
+			let run = "";
+			const runs = ran.facts.flatMap((f) => {
+				if (f.type === "started") {
+					run = String(f.run);
+					return [`started ${String(f.stage)}`];
+				}
+				return f.type === "session"
+					? [`session ${String(f.id)}${f.run === run ? "" : " of another run"}`]
+					: [];
+			});
+			expect(runs).toEqual([
+				"started triage",
+				"session fake-triage",
+				"started plan",
+				"session fake-plan",
 			]);
 		},
 	);

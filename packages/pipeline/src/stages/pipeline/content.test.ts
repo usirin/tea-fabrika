@@ -17,7 +17,7 @@ import {type Held, LaneAgents, laneBuilder, laneNow, LaneNow} from "./agents.ts"
 // Record wide (docs/plan/pipeline-self-fix.md, PR 7), end to end inside one lane step: the builder's
 // run goes through the lane's own path to its agents, under a step span traced into a job's record
 // on SQLite. What the agent read and wrote lands in that record's `content`, by span, with any
-// key-shaped string cut first; and the step's `started` is written when the session opens, with the
+// key-shaped string cut first; and the step's `session` fact is written when the session opens, with the
 // harness's own id for it. The agent is a stand-in that says what a Codex run says. Today's version.
 
 const dir = mkdtempSync(join(tmpdir(), "content-"));
@@ -69,8 +69,8 @@ const held: Held = {
 const agents = Layer.succeed(LaneAgents, {agents: Effect.succeed(held)});
 
 describe("a lane step's agent run, traced into its job's record", () => {
-	it("keeps what the agent read and wrote in `content`, its key cut, and starts with the thread", async () => {
-		const starts: (string | null)[] = [];
+	it("keeps what the agent read and wrote in `content`, its key cut, and writes the thread as its session", async () => {
+		const sessions: string[] = [];
 		const read = await Effect.runPromise(
 			Effect.gen(function* () {
 				const records = yield* sqliteRecords({dir, by: "user:owner"});
@@ -91,7 +91,7 @@ describe("a lane step's agent run, traced into its job's record", () => {
 						folder: dir,
 						access: "write",
 					});
-					yield* now.start.set((session) => Effect.sync(() => void starts.push(session)));
+					yield* now.session.set((id) => Effect.sync(() => void sessions.push(id)));
 					const builder = yield* Builder;
 					const drafted = yield* builder.build(
 						{
@@ -132,7 +132,7 @@ describe("a lane step's agent run, traced into its job's record", () => {
 			}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(nodeFileSystem, nodePath))),
 		);
 
-		expect(starts).toEqual(["thread-of-s-build-1"]);
+		expect(sessions).toEqual(["thread-of-s-build-1"]);
 		const content = JSON.stringify(read.content);
 		// The tool's result, the agent's message and its prompt are there, with only the key cut.
 		expect(content).toContain("TOKEN=[key cut]");
