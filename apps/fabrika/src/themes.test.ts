@@ -43,7 +43,11 @@ const DARK = {
 	closed: "#f1f7feb5", // slate a11: no hue, the word says closed
 };
 
-/** `fabrika-light`: the same pick, look light, with amber 12 for running and slate a9 for focus. */
+/**
+ * `fabrika-light`: the same pick, look light, with amber 12 for running and slate a9 for focus.
+ * The owner approved three more on 2026-11-01 (the design review), so each state word reads 4.5:1
+ * on a hovered and a selected row too: grass 12, red 12 and indigo a11.
+ */
 const LIGHT = {
 	desk: "#f9f9fb", // slate 2
 	ground: "#fcfcfd", // slate 1
@@ -55,10 +59,10 @@ const LIGHT = {
 	faint: "#0007149f", // slate a11
 	turn: "#3e63dd", // indigo 9
 	"on-turn": "#ffffff",
-	"turn-text": "#3a5bc7", // indigo 11
-	done: "#2a7e3b", // grass 11
+	"turn-text": "#002bb7c5", // indigo a11: indigo 11 reads 4.47 on a selected row
+	done: "#203c25", // grass 12: grass 11 reads 4.34 on a hovered row
 	running: "#4f3422", // amber 12: amber 11 reads 4.38
-	stuck: "#ce2c31", // red 11
+	stuck: "#641723", // red 12: red 11 reads 4.46 on a hovered row
 	closed: "#0007149f", // slate a11
 };
 
@@ -391,8 +395,7 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 	);
 
 	// The note checks text on three backgrounds. The window draws more than that: rows hover and
-	// are selected, in a tile (the ground) and in what opens over the desk (raised), and some lines'
-	// tokens (--wire, --border-strong) and the turn fill (--key) are used as text. So every token a
+	// are selected, in a tile (the ground) and in what opens over the desk (raised). So every token a
 	// stylesheet sets as `color:` is held to 4.5:1 on each of those. --turn-fg sits only on the turn
 	// fill, so it has its own test below.
 	const USED_AS_TEXT = [
@@ -405,8 +408,28 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		.filter((name) => name !== "--turn-fg")
 		.sort();
 
-	it("finds the tokens the window uses as text, lines and the turn fill among them", () => {
-		expect(USED_AS_TEXT).toEqual(expect.arrayContaining(["--wire", "--border-strong", "--key"]));
+	// Color principles rule 5: each value is a Radix step, used for that step's job. A line's step
+	// (a4 to a8) and the turn fill (9, 10) are not text steps, so no line or fill is a `color:`.
+	// Approved 2026-11-01: wire and border-strong text takes --text-faint (slate a11), key text --turn.
+	const LINES_AND_FILLS = [
+		"--border-faint",
+		"--border",
+		"--border-strong",
+		"--wire",
+		"--line",
+		"--pop-edge",
+		"--tile-focus",
+		"--focus",
+		"--turn-fill",
+		"--turn-fill-hover",
+		"--key",
+	];
+
+	it("finds the tokens the window uses as text, and no line or fill token among them", () => {
+		expect(USED_AS_TEXT).toEqual(
+			expect.arrayContaining(["--text-primary", "--text-faint", "--turn"]),
+		);
+		expect(USED_AS_TEXT.filter((name) => LINES_AND_FILLS.includes(name))).toEqual([]);
 	});
 
 	it.each(LOOKS)(
