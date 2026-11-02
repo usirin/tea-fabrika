@@ -28,8 +28,7 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
    After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
    get built through the pipeline, with one tracker ticket per pull request.
 
-Also right after ticket 117, on today's version and beside Tier 1: rename `runs` to
-`timeline` (ticket 86), then the performance program (ticket 114). They and Tier 1 do not
+Also right after ticket 117, on today's version and beside Tier 1: remove `runs`, so `trace` becomes the ticket's view (ticket 141, which now holds 86), then the performance program (ticket 114). They and Tier 1 do not
 wait for each other. Past Tier 1, [seven tiers](./tiers.md) in all, the rest proposed.
 
 Ticket numbers are this project's own tracker, not GitHub issues.
