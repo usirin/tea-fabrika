@@ -70,6 +70,13 @@ const scratchFolder = () => realpathSync(mkdtempSync(join(tmpdir(), "a-scratch-f
  */
 const oneHome: Disk = {...localDisk, account: null};
 
+/** What the fence sets for a command, as the Claude row's (`fencedEnv`): no user config for git or npm. */
+const FENCED = {
+	GIT_CONFIG_GLOBAL: "/dev/null",
+	NPM_CONFIG_USERCONFIG: "/dev/null",
+	XDG_CONFIG_HOME: "/var/empty",
+};
+
 describe("the codex row", () => {
 	it("hands the adapter a keep-list: its own home, workspace-write, no key", () => {
 		const home = fakeHome();
@@ -121,7 +128,10 @@ describe("the codex row", () => {
 		const fs = config.permissions.fenced.filesystem as Record<string, string>;
 		expect(fs[home]).toBe("deny");
 		expect(fs[folder]).toBe("write");
-		expect(config.shell_environment_policy).toEqual({inherit: "core"});
+		expect(config.shell_environment_policy).toEqual({
+			inherit: "core",
+			set: {PATH: "/usr/bin:/bin", ...FENCED},
+		});
 		expect(config.allow_login_shell).toBe(false);
 		expect(config.web_search).toBe("disabled");
 		for (const feature of ["apps", "plugins", "browser_use", "computer_use", "multi_agent"])
@@ -136,7 +146,7 @@ describe("the codex row", () => {
 		);
 		expect(config.shell_environment_policy).toEqual({
 			inherit: "core",
-			set: {VOLTA_HOME: `${home}/.volta`},
+			set: {VOLTA_HOME: `${home}/.volta`, PATH: "/usr/bin:/bin", ...FENCED},
 		});
 	});
 
@@ -150,6 +160,8 @@ describe("the codex row", () => {
 		expect(row.env.VOLTA_HOME).toBe(`${home}/.volta`);
 		expect(JSON.parse(row.env.CODEX_CONFIG ?? "").shell_environment_policy.set).toEqual({
 			VOLTA_HOME: `${home}/.volta`,
+			PATH: `${home}/.volta/bin:/usr/bin:/bin`,
+			...FENCED,
 		});
 	});
 
