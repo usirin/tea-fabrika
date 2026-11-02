@@ -1,13 +1,26 @@
+import {Schema} from "effect";
 import {type Name, outcomesOf} from "../outcome.ts";
 
 // What a whole lane hands back, in the shape every stage uses (`../outcome.ts`). The step that
 // ended it is in `said`, by its outcome's name, beside this.
+//
+// Self-fix PR 5: a lane either ends or stops. An end is `done`, a `skip`, or a stuck reason in
+// `FINAL`: nobody goes on from it. Every other stuck reason, and `ask:owner:paused`, is a stop the
+// same line goes on from:
+//
+//   isEnd({kind: "skip", why: "closed"})          // true: the line says so again, and runs nothing
+//   isEnd({kind: "stuck", why: "step_stuck"})     // false: the line goes on at the step that stopped
+//   isEnd({kind: "ask", who: "owner", for: "paused"})  // false: a person's `no` or `stop`
 
 const lane = outcomesOf({
 	/** The change is merged, or triage closed the ticket as a no or a duplicate. */
 	done: {},
 	send: {},
-	ask: {},
+	/**
+	 * A person is next. `paused`: they picked `no` or `stop` on a question, and the lane is saved
+	 * where that pick goes on: they type the same line again, or close the ticket.
+	 */
+	ask: {owner: ["paused"]},
 	/**
 	 * Nothing more to do, on someone's decision. `closed`: the ticket is closed. `owner_no`: the
 	 * person answered no. `research`: triage says this ends in a finding, not a change.
@@ -39,3 +52,33 @@ export const LaneOutcome = lane.schema;
 export type LaneOutcome = typeof LaneOutcome.Type;
 export type LaneName = Name<LaneOutcome>;
 export const LANE_NAMES = lane.names;
+
+type Stuck = Extract<LaneOutcome, {readonly kind: "stuck"}>;
+export type StuckWhy = Stuck["why"];
+
+/**
+ * The stuck reasons that are a person's call, never the lane's: the same line says why and runs
+ * nothing. `not_yours`: no agent reads a ticket on a login it was not filed under. The plan names
+ * `merged_elsewhere` too: no lane stops on it yet, so it is not a reason here.
+ */
+const FINAL_WHYS = ["not_yours"] as const satisfies readonly StuckWhy[];
+export const FINAL: ReadonlySet<StuckWhy> = new Set<StuckWhy>(FINAL_WHYS);
+
+/** How a lane ends: nobody goes on from it. */
+export type EndOutcome =
+	| Exclude<LaneOutcome, {readonly kind: "stuck" | "ask"}>
+	| (Stuck & {readonly why: (typeof FINAL_WHYS)[number]});
+/** How a lane stops: the same line goes on from it. A stuck reason in `FINAL` read back from a save is one too, and a restart refuses it. */
+export type StopOutcome = Stuck | Extract<LaneOutcome, {readonly kind: "ask"}>;
+
+/** Whether nobody goes on from `outcome`. Pure. */
+export const isEnd = (outcome: LaneOutcome): outcome is EndOutcome =>
+	outcome.kind === "done" ||
+	outcome.kind === "skip" ||
+	(outcome.kind === "stuck" && FINAL.has(outcome.why));
+
+const isStop = (outcome: LaneOutcome): outcome is StopOutcome =>
+	outcome.kind === "stuck" || outcome.kind === "ask";
+
+export const EndOutcome = LaneOutcome.pipe(Schema.refine(isEnd));
+export const StopOutcome = LaneOutcome.pipe(Schema.refine(isStop));
