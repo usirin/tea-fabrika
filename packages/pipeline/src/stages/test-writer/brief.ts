@@ -53,6 +53,11 @@ export const writer = defineBrief({
 		includes: Schema.Array(Schema.String),
 		/** Files at the base that `includes` covers. They exist, so they are never written. */
 		taken: Schema.Array(Schema.String),
+		/**
+		 * A redo (self-fix PR 5): the test writer's own files a person sent back, which it may write again.
+		 * No other file that exists. Left out: a first writing, of new files only.
+		 */
+		rewrite: Schema.optionalKey(Schema.Array(Schema.String)),
 	}),
 	render: (b) =>
 		[
@@ -78,9 +83,18 @@ export const writer = defineBrief({
 				: b.pointers.map((p) => `- \`${p.at}\`: ${p.why}`)),
 			"",
 			"## What you may write",
-			"Only new files, and only where one of these patterns matches:",
-			...b.includes.map((i) => `- \`${i}\``),
-			"Never change a file that exists, product code or test.",
+			...(b.rewrite === undefined
+				? [
+						"Only new files, and only where one of these patterns matches:",
+						...b.includes.map((i) => `- \`${i}\``),
+						"Never change a file that exists, product code or test.",
+					]
+				: [
+						"Write these files again, each whole:",
+						...b.rewrite.map((r) => `- \`${r}\``),
+						"Any other file you write is new, and only where one of these patterns matches:",
+						...b.includes.map((i) => `- \`${i}\``),
+					]),
 			...(b.taken.length === 0
 				? []
 				: ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),

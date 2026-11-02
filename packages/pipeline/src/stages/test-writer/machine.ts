@@ -54,6 +54,8 @@ export const TestsAsk = Schema.Struct({
 	pointers: Schema.Array(Pointer),
 	includes: Schema.Array(Schema.String),
 	tries: Schema.Finite,
+	/** A redo: the existing files the writer may write again (`writer`'s `rewrite`). Left out: new files only. */
+	rewrite: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type TestsAsk = typeof TestsAsk.Type;
 
@@ -291,7 +293,7 @@ export const testWriter = defineMachine({
 
 		tests_taken_ok: (s, m): Step => {
 			if (s.phase !== "reading") return stay(s);
-			const {ticket, plan, base, properties, pointers, includes} = s.ask;
+			const {ticket, plan, base, properties, pointers, includes, rewrite} = s.ask;
 			const brief = writer.fill({
 				ticket,
 				plan,
@@ -300,6 +302,7 @@ export const testWriter = defineMachine({
 				pointers,
 				includes,
 				taken: m.value,
+				...(rewrite === undefined ? {} : {rewrite}),
 			});
 			return writing(s, brief);
 		},
