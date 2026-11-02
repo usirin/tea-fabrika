@@ -22,6 +22,7 @@ import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
+import {TestsWork} from "../test-writer/program.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
@@ -128,6 +129,15 @@ interface Ran {
 	readonly remote: string;
 	/** The stand-in `gh`, when the script played one. */
 	readonly gh: ReturnType<typeof makeFakeGh> | null;
+	/**
+	 * Each run of the test writer's check, in turn: the commit its tests ran on, their files, and the
+	 * line it ran in, the first being 0.
+	 */
+	readonly onBase: readonly {
+		readonly line: number;
+		readonly commit: string;
+		readonly files: readonly string[];
+	}[];
 }
 
 interface Script {
@@ -209,6 +219,8 @@ interface FakeScript {
 	readonly unseen?: string;
 	/** Every surviving mutant is answered `cannot`, for this reason. `{mutant}` in it is that mutant's id. */
 	readonly cannot?: string;
+	/** Each run's log keeps what its folder holds at these paths as it starts: `seen` in `codexRuns`. */
+	readonly see?: readonly string[];
 }
 
 const TIMED_OUT = "-- timed out --";
@@ -364,6 +376,7 @@ const lane = ({
 	const lines: string[] = [];
 	const stops: (Lane | null)[] = [];
 	const folds: (Folded | string)[] = [];
+	const onBase: Ran["onBase"][number][] = [];
 	/** What a line left: the lane as saved, and with `fold`, the fold of its facts. */
 	const kept = () =>
 		Effect.gen(function* () {
@@ -414,6 +427,15 @@ const lane = ({
 									tail: "spawn ENOSPC",
 								})
 							: checks.run(head);
+					}),
+			})),
+			// Each run of the test writer's check, kept for the test to read.
+			Effect.updateService(TestsWork, (work) => ({
+				...work,
+				onBase: (commit, tests) =>
+					Effect.suspend(() => {
+						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
+						return work.onBase(commit, tests);
 					}),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
@@ -468,6 +490,7 @@ const lane = ({
 				lines,
 				stops,
 				folds,
+				onBase,
 				facts,
 				dir,
 				remote,
@@ -538,6 +561,7 @@ const codexRuns = (dir: string) =>
 							readonly diff: string | null;
 							readonly taken: readonly string[] | null;
 							readonly loaded: Readonly<Record<string, string | null>>;
+							readonly seen: Readonly<Record<string, string | null>>;
 						},
 				)
 		: [];
@@ -1381,6 +1405,228 @@ describe("a stopped lane, typed again", () => {
 			expect(codexRuns(ran.dir).map((r) => r.step)).toEqual(["triage", "plan"]);
 			expect(askedFor(ran, "approve")).toHaveLength(1);
 			expect(ran.lines.at(-1)).toContain("skip:closed");
+		},
+	);
+
+	// Round 2 of the tests for self-fix PR 5: what the plan says of the fresh read and of the exam's
+	// two questions, which the first round left unpinned.
+
+	/** A git command in the lane's own clone, where every commit it made is kept. */
+	const inClone = (ran: Ran, ...args: readonly string[]) =>
+		execFileSync("git", ["-C", join(ran.dir, "home", "work", "clone"), ...args], {
+			encoding: "utf8",
+			stdio: "pipe",
+		}).trim();
+	/** Whether `commit`'s tree holds `path`. */
+	const holds = (ran: Ran, commit: string, path: string) => {
+		try {
+			inClone(ran, "cat-file", "-e", `${commit}:${path}`);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	/** The files `commit` changed from its first parent. */
+	const changedBy = (ran: Ran, commit: string) =>
+		inClone(ran, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).split("\n");
+	/** The round each run of `stage` started in. */
+	const roundsOf = (ran: Ran, stage: string) =>
+		ran.facts
+			.filter((f) => f.type === "started" && f.stage === stage)
+			.map((f) => Number(f.round ?? 1));
+	const moveMain = (where: Where) =>
+		Effect.sync(() =>
+			pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]),
+		);
+	/** The test writer's test, as the plain fake writes it. */
+	const WRITTEN = 'expect(lower("AB"))';
+	/** What a builder leaves in the test writer's file, in its first build only. */
+	const TOUCHED = 'import {it} from "vitest";\n\nit("lowers capitals", () => {});\n';
+	/** The test writer's file written again: red without `lower`, green with the builder's. */
+	const REDONE =
+		'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n\texpect(lower("Ab")).toBe("ab");\n});\n';
+	const REDONE_MARK = 'lower("Ab")';
+	/** The second test writer's run writes `REDONE`, and nothing else. */
+	const REDO = {
+		tests: [
+			null,
+			{
+				with: {
+					files: [{path: "src/lower.test.ts", text: REDONE}],
+					answers: [
+						{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"},
+					],
+				},
+			},
+		],
+	};
+	const SEE = ["src/lower.ts", "src/lower.test.ts"];
+
+	it(
+		"after a rebase onto a moved main, code runs the test writer's check again, on the test writer's commit put on main",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				again: [{between: moveMain}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const writers = (line: number) =>
+				ran.onBase.filter((c) => c.line === line && c.files.includes("src/lower.test.ts"));
+			expect(writers(0), said).toHaveLength(1);
+			const [again] = writers(1);
+			expect(again, said).toBeDefined();
+			const commit = again?.commit ?? "";
+			expect(again?.files).toEqual(writers(0)[0]?.files);
+			expect(commit).not.toBe(writers(0)[0]?.commit);
+			// Main's new commit is under it, and the builder's work is not: the test writer's own commit, on main.
+			expect(holds(ran, commit, "docs/elsewhere.md")).toBe(true);
+			expect(holds(ran, commit, "src/lower.test.ts")).toBe(true);
+			expect(holds(ran, commit, "src/lower.ts")).toBe(false);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"exam_touched, `builder_wrong`: the touched file goes back to the test writer's, on top of the builder's head, and build runs there as the next round",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				// Answered once: a second exam_touched fails the test at once, out loud.
+				picks: YES,
+				queues: {exam_touched: ["builder_wrong"]},
+				fake: {writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}}, see: SEE},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(askedFor(ran, "exam_touched"), said).toHaveLength(1);
+			const runs = codexRuns(ran.dir);
+			const builds = runs.filter((r) => r.step === "build");
+			expect(builds, said).toHaveLength(2);
+			// The builder's own work stands, and the test it touched is the test writer's again.
+			expect(builds[1]?.seen["src/lower.ts"]).toContain("toLowerCase");
+			expect(builds[1]?.seen["src/lower.test.ts"]).toContain(WRITTEN);
+			expect(runs.filter((r) => r.step === "tests")).toHaveLength(1);
+			expect(roundsOf(ran, "build")).toEqual([1, 2]);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+			expect(onMain(ran.remote, "src/lower.test.ts")).toContain(WRITTEN);
+		},
+	);
+
+	it(
+		"exam_touched, `test_wrong`: the test writer redoes the touched file alone, told the note, its check runs, and build goes on from the builder's head as the next round",
+		{timeout: 300_000},
+		async () => {
+			const NOTE = "Keep the capitals test, and add one with mixed case.";
+			const ran = await lane({
+				within: 140,
+				// Answered once: a second exam_touched fails the test at once, out loud.
+				picks: YES,
+				queues: {exam_touched: ["test_wrong"]},
+				notes: {exam_touched: NOTE},
+				fake: {
+					writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
+					answers: REDO,
+					see: SEE,
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(askedFor(ran, "exam_touched"), said).toHaveLength(1);
+			const runs = codexRuns(ran.dir);
+			const writers = runs.filter((r) => r.step === "tests");
+			expect(writers, said).toHaveLength(2);
+			expect(writers[1]?.prompt).toContain(NOTE);
+			expect(writers[1]?.prompt).toContain("src/lower.test.ts");
+			// Its check ran on the redo, and the redo's commit changes the touched file and nothing else.
+			const checks = ran.onBase.filter((c) => c.files.includes("src/lower.test.ts"));
+			expect(checks, said).toHaveLength(2);
+			expect(changedBy(ran, checks[1]?.commit ?? "")).toEqual(["src/lower.test.ts"]);
+			expect(holds(ran, checks[1]?.commit ?? "", "src/lower.ts")).toBe(false);
+			// The build goes on from the builder's head, with the redone test in it.
+			const builds = runs.filter((r) => r.step === "build");
+			expect(builds, said).toHaveLength(2);
+			expect(builds[1]?.seen["src/lower.ts"]).toContain("toLowerCase");
+			expect(builds[1]?.seen["src/lower.test.ts"]).toContain(REDONE_MARK);
+			expect(roundsOf(ran, "build")).toEqual([1, 2]);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+			expect(onMain(ran.remote, "src/lower.test.ts")).toContain(REDONE_MARK);
+		},
+	);
+
+	it(
+		"exam_conflict, `again`: the test writer redoes the conflicted file alone, on main, its check runs, and build goes on from the builder's rebased head",
+		{timeout: 300_000},
+		async () => {
+			const ON_MAIN =
+				'import {expect, it} from "vitest";\n\nit("lowers on main", () => {\n\texpect("AB".toLowerCase()).toBe("ab");\n});\n';
+			const ran = await lane({
+				within: 140,
+				picks: {...YES, exam_conflict: "again"},
+				failMutation: true,
+				fake: {answers: REDO, see: SEE},
+				again: [
+					{
+						between: (where) =>
+							Effect.sync(() => pushToMain(where, [{path: "src/lower.test.ts", text: ON_MAIN}])),
+					},
+				],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(askedFor(ran, "exam_conflict"), said).toHaveLength(1);
+			// The redo is the test writer's check's second run: on main, changing the conflicted file alone.
+			// The file exists on main, so the test writer must be let write it again: not a new file beside it.
+			const checks = ran.onBase.filter((c) => c.line === 1);
+			expect(checks[0]?.files, said).toEqual(["src/lower.test.ts"]);
+			const redo = checks[0]?.commit ?? "";
+			expect(changedBy(ran, redo)).toEqual(["src/lower.test.ts"]);
+			expect(holds(ran, redo, "src/lower.ts")).toBe(false);
+			// The build goes on from the builder's head, rebased: its work stands, with the redone test.
+			const builds = codexRuns(ran.dir).filter((r) => r.step === "build");
+			expect(builds, said).toHaveLength(2);
+			expect(builds[1]?.seen["src/lower.ts"]).toContain("toLowerCase");
+			expect(builds[1]?.seen["src/lower.test.ts"]).toContain(REDONE_MARK);
+			expect(roundsOf(ran, "build")).toEqual([1, 2]);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a lane branch already pushed takes main in by a merge, never a rebase: the head it pushed stays under main",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				queues: {merge: ["no", "merge"]},
+				again: [{between: moveMain}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			// The `no` on the merge paused it after the push, to ask the merge again.
+			expect(heldAt(ran, 0)?.at, said).toMatchObject({_tag: "ask", for: "merge"});
+			const pushed = ran.facts.find((f) => f.type === "pushed");
+			expect(pushed, said).toBeDefined();
+			const head = String(pushed?.head);
+			expect(ran.facts.filter((f) => f.type === "restarted")).toHaveLength(1);
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			expect(onMain(ran.remote, "docs/elsewhere.md")).toContain("Written elsewhere.");
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+			// A rebase would rewrite the pushed head, and it would never reach main.
+			const under = (() => {
+				try {
+					remoteGit(ran.remote, "merge-base", "--is-ancestor", head, "main");
+					return true;
+				} catch {
+					return false;
+				}
+			})();
+			expect(under, `${head} is not under main`).toBe(true);
 		},
 	);
 });

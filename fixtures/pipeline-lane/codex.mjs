@@ -30,6 +30,8 @@
 //   unseen    text             every review row is `unseen`, for this reason
 //   cannot    text             every surviving mutant is answered `cannot`, for this reason. `{mutant}`
 //                              in it is that mutant's id, so each can have a reason of its own
+//   see       [path]           each run's log line keeps what its folder holds at these paths as it
+//                              starts, under `seen`: `null` where there is no such file
 //
 // A later try that resumes a thread names the step by its thread. One that does not, whose prompt is
 // only what the last try got wrong, is the step that ran last.
@@ -104,6 +106,12 @@ if (LOG !== undefined)
 			taken: takenIn(prompt),
 			loaded: Object.fromEntries(
 				SELF_LOADED.map((path) => {
+					const at = join(folder, path);
+					return [path, existsSync(at) ? readFileSync(at, "utf8") : null];
+				}),
+			),
+			seen: Object.fromEntries(
+				(script.see ?? []).map((path) => {
 					const at = join(folder, path);
 					return [path, existsSync(at) ? readFileSync(at, "utf8") : null];
 				}),

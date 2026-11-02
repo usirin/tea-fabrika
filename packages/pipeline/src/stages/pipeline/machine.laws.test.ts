@@ -1420,6 +1420,34 @@ describe("a stopped lane goes on, case by case", () => {
 		]);
 	});
 
+	// Self-fix PR 5: "Either pick adds one round to the bound, like `again`." A touched exam in round 1
+	// and red heads after it: the builder still gets its MAX_ROUNDS tries past the round the pick
+	// started, so the rounds' question comes one round later than with no touch.
+	it("either exam_touched pick adds one round to the bound, like a spent round's `again`", () => {
+		const RED: StepEnd = {outcome: {kind: "send", to: "builder", why: "checks_red"}, carry: {}};
+		const {s} = drive(
+			IDLE,
+			START,
+			stoppingAt("build", {outcome: {kind: "stuck", why: "exam_touched"}, carry: {}}),
+			(at) => at.phase === "asking" && at.question.for === "exam_touched",
+		);
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		expect(s.round).toBe(1);
+		for (const pick of PICKS.exam_touched) {
+			const {s: spent, moves} = drive(
+				s,
+				answer(s, pick),
+				stoppingAt("build", RED),
+				(at) => at.phase === "asking" && at.question.for === "rounds_spent",
+			);
+			const rounds = stepsIn(cmdsOf(moves))
+				.filter((c) => c.step === "build")
+				.map((c) => c.round);
+			expect(rounds, pick).toEqual(Array.from({length: MAX_ROUNDS}, (_, i) => i + 2));
+			expect(spent.phase === "asking" && spent.round, pick).toBe(MAX_ROUNDS + 1);
+		}
+	});
+
 	it("main changed an exam file: the restart asks, with the files; `again` reruns the test writer, then build", () => {
 		const {over} = stoppedAt("mutation", STUCK_END);
 		const conflict: World = {

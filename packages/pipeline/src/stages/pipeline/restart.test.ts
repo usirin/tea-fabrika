@@ -132,7 +132,8 @@ describe("a lane saved before its stop kept a Held, sent `restart` with its fold
 
 	/** Walk the restart, the ticket open and main as it was, up to the first step it runs or question it asks. */
 	const goesOn = (folded: Folded) => {
-		const queue: Msg[] = [{type: "restart", folded}];
+		// An old save holds no lane id, and only the ledger mints one: the line names it.
+		const queue: Msg[] = [{type: "restart", folded, lane: ID}];
 		const sent: LaneCmd[] = [];
 		let s: Lane = LEGACY;
 		for (let i = 0; i < 20; i++) {
@@ -169,5 +170,17 @@ describe("a lane saved before its stop kept a Held, sent `restart` with its fold
 		});
 		expect(first?.type === "lane_step" && first.step).toBe("test_writer");
 		expect(first?.type === "lane_step" && first.carry).toMatchObject({version: 1, base: BASE});
+	});
+
+	// The ledger keeps the plan's revision, not the draft the lane held: a revision has no properties,
+	// interface or rule changes, which the steps after the plan read. A lane whose ends kept no carry
+	// (written before this change) has no fact that proves its plan, so P4 holds: the fold names `plan`,
+	// and the lane goes on at the step that writes it. Triage stays done.
+	it("with no plan the facts prove, as the ledger has none for a lane from before this change, it names `plan` and runs the plan first: no triage", () => {
+		const folded = fold({...SEEN, plan: null});
+		expect(folded.missing).toContain("plan");
+		expect(folded.at).toEqual({_tag: "run", step: "plan"});
+		const {first} = goesOn(folded);
+		expect(first?.type === "lane_step" && first.step).toBe("plan");
 	});
 });
