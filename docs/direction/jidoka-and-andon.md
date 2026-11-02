@@ -1,7 +1,7 @@
 # Jidoka and andon: the lane fixes what code can, and asks a person only to judge
 
 **Decided 2026-11-01**, the rules in [what was decided](#what-was-decided). The details
-under them are leans, each marked with how sure. Today's version (`packages/pipeline`,
+under them are leans, each marked with how sure, and the owner approved them with the plan on 2026-11-01. Today's version (`packages/pipeline`,
 `programs/pipeline`). The plan that builds it is [pipeline-self-fix](../plan/pipeline-self-fix.md).
 Revised 2026-11-01 against the twelve principles of
 [the pipeline guidelines](./pipeline-guidelines.md), from experiment 186, merged in

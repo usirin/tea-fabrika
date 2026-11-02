@@ -1,6 +1,6 @@
 # Plan: the lane fixes itself, and a stuck lane restarts
 
-**Proposed 2026-11-01. Waits on the owner's yes.** Today's version: `packages/pipeline`,
+**Approved by the owner 2026-11-01, with all its leans, including the seven in [unresolved questions](#unresolved-questions).** Today's version: `packages/pipeline`,
 `programs/pipeline`, and one change in `packages/fabrika`. It builds
 [jidoka and andon](../direction/jidoka-and-andon.md) for what ticket 117's first run hit.
 A fix to the lane's own steps goes by hand for its pull request, and is logged in `field/`.
@@ -459,6 +459,8 @@ touching them, the mutation step runs on a fixed-seed sample of about 150 (seed 
 `nice -n 15`), and one fresh review reads the whole diff. Each run is logged in `field/` the
 same day, with what ran it. The owner's yes and green CI, then an agent merges after a leak
 grep.
+
+The agent-hour numbers below are the old guesses. The measured lane rate in experiment 187 (about 600 lines an agent hour on demlik's full lanes) gives about 5 to 7 agent hours for the whole plan. That study is not walked yet, so the table stays until it is.
 
 Total: about 74 file changes (some files change in more than one pull request), 2,880 to
 4,130 lines, 29 to 41.5 agent hours. Before ticket 117 restarts (PRs 1, 2, 3, 4, 5 and 7):
