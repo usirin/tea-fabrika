@@ -76,7 +76,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     written.
   - An exam file that fails the check before round 2 gets a code commit, and the builder's
     head is on it. The builder's diff does not count it as `exam_touched`.
-- **Size.** 6 files, 150 to 200 lines, 1.5 to 2 agent hours.
+- **Size.** 6 files, 150 to 200 lines, a `0.5` (0.25 to 0.33 agent hours at 600 an hour; a
+  `0.25` at 1,660). *Old guess, wrong: 1.5 to 2 agent hours.*
 - **How sure: 85%.** The doubt: the formatter runs as the person, from the repository's own
   script. That is no new exposure: the install and the mutation step's tests already run that
   way on this repository.
@@ -109,7 +110,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   - `node -e` that runs `execFileSync("git", ["status"])` in a worktree copy exits 0.
   - **Stop rule:** if both pass today, the cause is elsewhere. The PR stops and reports what
     the builder's run log says, before any change.
-- **Size.** 2 to 3 files, 60 to 120 lines, 1 to 2 agent hours.
+- **Size.** 2 to 3 files, 60 to 120 lines, a `0.25` (0.1 to 0.2 agent hours at 600 an hour; a
+  `0.25` at 1,660). *Old guess, wrong: 1 to 2 agent hours.*
 
 ## PR 3: failing test names are kept, and red goes back to the builder
 
@@ -154,7 +156,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     person's `again`.
   - With `send_back = false`, the first red is `{ask: "rounds_spent"}`. With the key left
     out, it is build round 2.
-- **Size.** 12 files, 250 to 380 lines, 2.5 to 3.5 agent hours.
+- **Size.** 12 files, 250 to 380 lines, a `1` (0.4 to 0.6 agent hours at 600 an hour; a `0.25`
+  at 1,660). *Old guess, wrong: 2.5 to 3.5 agent hours.*
 - **The bound.** 3 is today's constant and a guess (P8); see
   [bounds](../direction/jidoka-and-andon.md#bounds).
 
@@ -197,7 +200,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   - Law: no step after build runs on a head without a green `checked` for that head.
   - A mutation run on a head with a green `checked` writes a skip naming that fact. Today it
     writes nothing.
-- **Size.** 10 files, 460 to 620 lines, 4 to 6 agent hours.
+- **Size.** 10 files, 460 to 620 lines, a `1` (0.8 to 1 agent hour at 600 an hour; a `0.5` at
+  1,660). *Old guess, wrong: 4 to 6 agent hours.*
 - **How sure: 85%.** The doubt: the time. The full checks take a few minutes a round. The
   mutation step skipping its own run pays most of that back.
 
@@ -303,7 +307,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     step.
   - Property test: changing any one input field changes the key, and the same inputs give the
     same key. Every `done` the lane fixture writes has a key.
-- **Size.** 13 files, 960 to 1,360 lines, 10 to 13.5 agent hours. The biggest piece: the
+- **Size.** 13 files, 960 to 1,360 lines, a `2` (1.6 to 2.3 agent hours at 600 an hour; a `1` at
+  1,660). *Old guess, wrong: 10 to 13.5 agent hours.* The biggest piece: the
   pause adds about 60 to 100 lines, the key about 100 to 160.
 
 ## Ticket 117 restarts
@@ -353,7 +358,8 @@ whose inputs can be proved runs again.
   `programs/pipeline/briefs/test-writer.md` and `build.md`, `.fabrika/fabrika.toml`.
 - **Test, red first.** On the lane fixture, a plan points at `src/a.ts`, and `old.test.ts`
   imports it. The plan's pointers on the ticket include `old.test.ts`. Today they do not.
-- **Size.** 7 files, 200 to 300 lines, 2 to 3 agent hours.
+- **Size.** 7 files, 200 to 300 lines, a `0.5` (0.33 to 0.5 agent hours at 600 an hour; a `0.25`
+  at 1,660). *Old guess, wrong: 2 to 3 agent hours.*
 
 ## PR 7: the lane records wide
 
@@ -392,7 +398,8 @@ happens. Nothing reads them yet.
   - A lane run's job record holds the reply text of each turn. Today it holds `[kept out]`.
   - A tool result holding a key-shaped string is cut before it is written.
   - Deleting one span's content leaves the span and a row that says who deleted it and why.
-- **Size.** 10 files, 350 to 500 lines, 3.5 to 5 agent hours.
+- **Size.** 10 files, 350 to 500 lines, a `1` (0.6 to 0.8 agent hours at 600 an hour; a `0.5` at
+  1,660). *Old guess, wrong: 3.5 to 5 agent hours.*
 - **How sure: 75%.** The doubt: "an agent run keeps its content" is still **proposed**. This
   PR builds only its recording half, as record wide asks, and leaves its view open.
 
@@ -423,7 +430,8 @@ Decided 2026-11-01 (the guidelines' clash 2). The ticket comment is the one way 
     the comment. Today it does not.
   - A comment written between two steps: the next step's brief holds it, once.
   - A comment written while the lane asks: the ask stays open.
-- **Size.** 7 files, 200 to 300 lines, 2 to 3 agent hours. **How sure: 75%.** The doubt: a
+- **Size.** 7 files, 200 to 300 lines, a `0.5` (0.33 to 0.5 agent hours at 600 an hour; a `0.25`
+  at 1,660). *Old guess, wrong: 2 to 3 agent hours.* **How sure: 75%.** The doubt: a
   builder turn of ten minutes or more holds a comment that long.
 
 ## PR 9: attention is counted, with two nudges
@@ -447,7 +455,8 @@ P11, decided 2026-11-01: count now, no cap, at most two nudges.
   - An answer after the first nudge: no second nudge.
   - Law: an ask is never nudged more than twice.
   - The ticket's count on the lane fixture: asks and minutes match its `asked` and `answered`.
-- **Size.** 6 files, 250 to 350 lines, 2.5 to 3.5 agent hours. **How sure: 60%,** the
+- **Size.** 6 files, 250 to 350 lines, a `0.5` (0.4 to 0.6 agent hours at 600 an hour; a `0.25`
+  at 1,660). *Old guess, wrong: 2.5 to 3.5 agent hours.* **How sure: 60%,** the
   guidelines' number for two nudges.
 
 ## How each pull request goes
@@ -460,25 +469,36 @@ touching them, the mutation step runs on a fixed-seed sample of about 150 (seed 
 same day, with what ran it. The owner's yes and green CI, then an agent merges after a leak
 grep.
 
-The agent-hour numbers below are the old guesses. The measured lane rate in experiment 187 (about 600 lines an agent hour on demlik's full lanes) gives about 5 to 7 agent hours for the whole plan. That study is not walked yet, so the table stays until it is.
+The agent hours are restated 2026-11-01 at the measured rate, as
+[agent hours](../direction/agent-hours.md) decided, from
+[experiment 187](../../experiments/187-agent-hours.md). The rate that leads is 600 lines an agent
+hour, demlik's full lanes, since a lane here runs every step. This repo's median of about 1,660
+is beside it; it was mostly builders working alone. Each PR's step is the one on the doubling
+scale (0.25 to 8) that holds the middle of its range at that rate. The old hours stay, struck,
+as an old guess that turned out wrong: they implied about 100 lines an hour, with no source.
 
 Total: about 74 file changes (some files change in more than one pull request), 2,880 to
-4,130 lines, 29 to 41.5 agent hours. Before ticket 117 restarts (PRs 1, 2, 3, 4, 5 and 7):
-2,230 to 3,180 lines, 22.5 to 32 agent hours. The first revision against the guidelines added
-about 230 to 350 lines, most of it in PR 5. The owner's decisions added about 990 to 1,460:
-PRs 7, 8 and 9, the pause and the key in PR 5, and the setting in PR 3.
+4,130 lines, **about 5 to 7 agent hours** at 600 an hour (2 to 2.5 at 1,660). Before ticket 117
+restarts (PRs 1, 2, 3, 4, 5 and 7): 2,230 to 3,180 lines, **about 4 to 5.5 agent hours** (1.3 to
+2 at 1,660). The steps add up to 7.25, more than the range, since each rounds up to a step.
+*Old guess, wrong: 29 to 41.5 agent hours in all, 22.5 to 32 before the restart.* The first
+revision against the guidelines added about 230 to 350 lines, most of it in PR 5. The owner's
+decisions added about 990 to 1,460: PRs 7, 8 and 9, the pause and the key in PR 5, and the
+setting in PR 3. Sure of the hours: 60%. The doubt: 600 comes from demlik lanes with no test
+writer or mutation step. Each PR's own `spent` settles it.
 
-| PR | Files | Lines | Agent hours |
-|---|---|---|---|
-| 1 | 6 | 150 to 200 | 1.5 to 2 |
-| 2 | 2 to 3 | 60 to 120 | 1 to 2 |
-| 3 | 12 | 250 to 380 | 2.5 to 3.5 |
-| 4 | 10 | 460 to 620 | 4 to 6 |
-| 5 | 13 | 960 to 1,360 | 10 to 13.5 |
-| 6 | 7 | 200 to 300 | 2 to 3 |
-| 7 | 10 | 350 to 500 | 3.5 to 5 |
-| 8 | 7 | 200 to 300 | 2 to 3 |
-| 9 | 6 | 250 to 350 | 2.5 to 3.5 |
+| PR | Files | Lines | Old guess, wrong | At 600 an hour | Step | At 1,660 an hour | Step |
+|---|---|---|---|---|---|---|---|
+| 1 | 6 | 150 to 200 | ~~1.5 to 2~~ | 0.25 to 0.33 | 0.5 | 0.1 | 0.25 |
+| 2 | 2 to 3 | 60 to 120 | ~~1 to 2~~ | 0.1 to 0.2 | 0.25 | under 0.1 | 0.25 |
+| 3 | 12 | 250 to 380 | ~~2.5 to 3.5~~ | 0.4 to 0.6 | 1 | 0.15 to 0.25 | 0.25 |
+| 4 | 10 | 460 to 620 | ~~4 to 6~~ | 0.8 to 1 | 1 | 0.3 to 0.4 | 0.5 |
+| 5 | 13 | 960 to 1,360 | ~~10 to 13.5~~ | 1.6 to 2.3 | 2 | 0.6 to 0.8 | 1 |
+| 6 | 7 | 200 to 300 | ~~2 to 3~~ | 0.33 to 0.5 | 0.5 | 0.1 to 0.2 | 0.25 |
+| 7 | 10 | 350 to 500 | ~~3.5 to 5~~ | 0.6 to 0.8 | 1 | 0.2 to 0.3 | 0.5 |
+| 8 | 7 | 200 to 300 | ~~2 to 3~~ | 0.33 to 0.5 | 0.5 | 0.1 to 0.2 | 0.25 |
+| 9 | 6 | 250 to 350 | ~~2.5 to 3.5~~ | 0.4 to 0.6 | 0.5 | 0.15 to 0.2 | 0.25 |
+| **All** | **about 74** | **2,880 to 4,130** | ~~**29 to 41.5**~~ | **4.8 to 6.9** | 7.25 summed | **1.7 to 2.5** | 3.5 summed |
 
 ## What this plan does not do
 

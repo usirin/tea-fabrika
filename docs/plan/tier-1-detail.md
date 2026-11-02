@@ -8,24 +8,26 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 
 ## Size
 
-**A guess, all 50% sure unless it says so.**
+**The lines are a guess, all 50% sure unless it says so. The hours are restated 2026-11-01 at the measured rate** ([agent hours](../direction/agent-hours.md), decided; [experiment 187](../../experiments/187-agent-hours.md)). The old hours stay, struck, as an old guess that turned out wrong.
 
-| Part | Product lines | Test lines | Agent hours |
-|---|---|---|---|
-| Door, app, cloud and chaos | 3,300 to 4,500 | 3,350 to 4,800 | 44 to 62 |
-| Notes | 350 to 550 | 370 to 590 | about 5 to 8 |
-| Remove | 60 to 100 | 65 to 110 | about 1 |
-| Drawing a note, mostly copied | 800 to 950 | 450 to 550 | 3 to 6 |
-| Agents through MCP, part copied | 310 to 470 | 350 to 500 | 4 to 6 |
-| Packages: moving the slice, six `package.json` and `tsconfig.json`, public names, config | 250 to 350 | 60 to 120 | 2 to 3 |
-| Host and capabilities | 60 to 100 | 65 to 110 | about 1 |
-| Tags: `no-hand-tag`, and the slice's `kind` and `is` moved to schemas | 80 to 120 | 70 to 100 | about 1 |
-| Backup sheet and recovery, added after the owner moved them up. A guess, with no design yet | 150 to 300 | 160 to 320 | 2 to 4 |
-| **Total** | **5,360 to 7,440** | **4,940 to 7,200** | **63 to 92** |
+| Part | Product lines | Test lines | Old guess, wrong | At 600 an hour | Step | At 1,660 an hour | Step |
+|---|---|---|---|---|---|---|---|
+| Door, app, cloud and chaos | 3,300 to 4,500 | 3,350 to 4,800 | ~~44 to 62~~ | 11 to 15.5 | over 8, split | 4 to 5.6 | 8 |
+| Notes | 350 to 550 | 370 to 590 | ~~about 5 to 8~~ | 1.2 to 1.9 | 2 | 0.4 to 0.7 | 1 |
+| Remove | 60 to 100 | 65 to 110 | ~~about 1~~ | 0.2 to 0.35 | 0.5 | 0.1 | 0.25 |
+| Drawing a note, mostly copied | 800 to 950 | 450 to 550 | ~~3 to 6~~ | 2.1 to 2.5 | 4 | 0.75 to 0.9 | 1 |
+| Agents through MCP, part copied | 310 to 470 | 350 to 500 | ~~4 to 6~~ | 1.1 to 1.6 | 2 | 0.4 to 0.6 | 0.5 |
+| Packages: moving the slice, six `package.json` and `tsconfig.json`, public names, config | 250 to 350 | 60 to 120 | ~~2 to 3~~ | 0.5 to 0.8 | 1 | 0.2 to 0.3 | 0.25 |
+| Host and capabilities | 60 to 100 | 65 to 110 | ~~about 1~~ | 0.2 to 0.35 | 0.5 | 0.1 | 0.25 |
+| Tags: `no-hand-tag`, and the slice's `kind` and `is` moved to schemas | 80 to 120 | 70 to 100 | ~~about 1~~ | 0.25 to 0.4 | 0.5 | 0.1 | 0.25 |
+| Backup sheet and recovery, added after the owner moved them up. A guess, with no design yet | 150 to 300 | 160 to 320 | ~~2 to 4~~ | 0.5 to 1 | 1 | 0.2 to 0.4 | 0.5 |
+| **Total** | **5,360 to 7,440** | **4,940 to 7,200** | ~~**63 to 92**~~ | **17 to 24** | many tickets | **6 to 9** | many tickets |
 
-- **Total agent hours: 63 to 92,** builder and test writer. *Wrong, kept as wrong: this said 44 to 70, with the first row at 25 to 40. At this file's own rate, that row's 6,650 to 9,300 lines take 44 to 62 hours.* It also left out the planner gap and ticket 122, which are today's version.
+- **Total agent hours: about 17 to 24 at the full-lane rate of 600 lines an agent hour, every step of the lane included.** At this repo's median of about 1,660, which was mostly builders working alone, it is 6 to 9. The lane runs every step, so 600 leads. *Old guess, wrong: 63 to 92, for the builder and test writer only, at "about 150 lines an hour". Before that, also wrong: 44 to 70, with the first row at 25 to 40.* Neither counts the planner gap or ticket 122, which are today's version.
+- **The step** is the one on the [doubling scale](../direction/agent-hours.md#h4-an-estimate-is-a-step-on-a-doubling-scale-and-too-big-means-split) (0.25, 0.5, 1, 2, 4, 8) that holds the middle of the row's range. Over 8 says split. The first row is already four PRs (A, B, C and E), so it splits as planned, and each PR gets its own estimate when its ticket is planned. A tier total is many tickets, so it gets no step. The middle-of-range rule is a choice made in this restatement, 70% sure: the upper end would push rows like backup (1.03) up a whole step.
 - **The steps stay, and nothing is cut to fit a date:** plan, test writer, build, mutation and one review, for each PR. [The mutation step](#the-mutation-step) changes under new direction.
-- **How the size is worked out.** Written lines use the plan's own rate, about 150 lines an hour. Tests on written code keep its ratio of about 1.06 to 1. A copied line is guessed at a third of a written line's time, about 450 an hour, since it needs reading and fitting, not thinking up. How sure of that third: 40%. The doubt is what a copy carries over. If copied lines cost the same as written ones, the total rises by about 6 hours. The bigger doubt is still the menu bar and launchd, which nobody has built here, and how many laws break on the new stage. PR B's real numbers settle those, and PR D's the rest.
+- **How the size is worked out now.** Product and test lines together, divided by the rate. Every line counts the same, copied ones too, so the rows marked copied are an upper bound. *Old way, wrong: written lines at "the plan's own rate, about 150 lines an hour", which had no source, and a copied line at a third of that time, about 450 an hour.* Tests on written code keep the ratio of about 1.06 to 1, which experiment 187 matched (1.10 on this repo).
+- **The doubt.** 600 comes from 11 whole lanes on demlik, with no test writer or mutation step, plus PR 267 here at 707. Across the rate's middle half (279 to 740 lines an hour) Tier 1 is 14 to 52 agent hours. The menu bar and launchd, which nobody has built here, and how many laws break on the new stage, are still the biggest unknowns. PR B's real `spent` settles the rate, and PR D's the rest. Sure of 17 to 24: 55%.
 
 ## The biggest calls
 
@@ -500,7 +502,7 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 
 **One headless client, shared with the drill.** `mcp/client.ts`, on `@kampus/libfabrika/client`: key file, signed hello, knock, wait for a grant, send, read. It sits in the library, not in `@kampus/tuval/headless`, since the bridge needs it and tuval imports the library, not the other way. It lands in PR D, and PR E's drill uses it instead of its own, which saves 40 to 60 product lines there. A `tuval/headless` memory key stays for tests.
 
-**The size, my own.** 370 to 510 product lines before that saving, 310 to 470 after it, about 120 of them copied. Tests 350 to 500. 4 to 6 agent hours. Why more than a thin command: one input declaration grows, the door learns `as`, and MCP brings its own edges. Sure: 50%.
+**The size, my own.** 370 to 510 product lines before that saving, 310 to 470 after it, about 120 of them copied. Tests 350 to 500. About 1.1 to 1.6 agent hours at 600 an hour, a `2` on the scale (0.4 to 0.6 at 1,660, a `0.5`); *old guess, wrong: 4 to 6 agent hours.* Why more than a thin command: one input declaration grows, the door learns `as`, and MCP brings its own edges. Sure: 50%.
 
 **Moved up from Tier 5, and what stays.**
 

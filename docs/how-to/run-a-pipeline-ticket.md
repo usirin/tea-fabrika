@@ -152,9 +152,12 @@ names and account names. Do not give the merge yes until that is clean.
 
 The same day, in [`field/`](../../field/README.md):
 
-- **`runs.jsonl`, one `pipeline` row:** the lane as a whole, with `lane` as `<owner>/<repo>#117`.
-- **`runs.jsonl`, one `step` row per agent run.** Its `why` starts `pipeline, tracker ticket 117, <step>:`,
-  so it cannot be taken for an older row with the same number.
+- **`runs.jsonl`, one `pipeline` row:** the lane as a whole, with `ticket` as `<owner>/<repo>#117`,
+  `pr` as the PR it opened (or `null`), and `started` and `ended`. New rows write `ticket` and `pr`,
+  not `lane`.
+- **`runs.jsonl`, one `step` row per agent run.** Its `parent` is the `pipeline` row's `run`, and its
+  `why` starts `pipeline, tracker ticket 117, <step>:`, so it cannot be taken for an older row with
+  the same number.
 - **The numbers:** the lane prints them for each step and keeps them on the ticket. `field/README.md`
   says which goes where.
 - **Dollars:** `gpt-6-astra` has no known price, so the app's cost reads zero for it. Write `costUsd`
