@@ -33,8 +33,10 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; what opens over the
 // desk (the asks list, the palette) takes focus and every key it reads, so no arrow reaches the tile
 // under it, and Escape or a press outside gives focus back, one open at a time; info mode (Ctrl-B i)
-// is said on and off in the window's status region, explains what keyboard focus moves to, and
-// Escape leaves it, and with the bars hidden it is still seen, and still heard going off; Ctrl-C
+// is said on and off in the window's status region and by its item's aria-pressed, explains what
+// keyboard focus is on when it comes on and what focus moves to, and Escape leaves it, and with the
+// bars hidden it is still seen, and still heard going off, and at 1024 by 700 an explanation is not
+// cut off; Ctrl-C
 // over counter is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is
 // in another's Up; the page has the bridge's three names and no Node; a message on the wrong port
 // is refused; window.open hands http and https to the browser and refuses file:, javascript: and
@@ -337,22 +339,64 @@ const explained = (page: Page, want: string) =>
 		(said) => said.some((text) => text.includes(want)),
 	);
 
+/** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
+const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
+/** What info mode would say of what has focus now: its part's words, or none. */
+const focusWords = (page: Page) =>
+	page.evaluate(
+		() => document.activeElement?.closest("[data-info]")?.getAttribute("data-info") ?? null,
+	);
+/** Click t3, and wait until focus is back in it. */
+const backInT3 = async (page: Page) => {
+	await tile(page, "t3").click();
+	await until(
+		"focus back in t3",
+		() => focusedIn(page),
+		(at) => at === "t3",
+	);
+};
+
 /**
  * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
- * on in the window's status region; keyboard focus moving, with no pointer, is explained on the
- * bottom line; Escape leaves it and says so. With the bars hidden, Ctrl-B i keeps the bottom line
- * up, and Ctrl-B i again still says it is off: the region is drawn whatever the bars, never inside
- * the bottom line.
+ * on in the window's status region, and its item says it is pressed, under the same name; keyboard
+ * focus moving, with no pointer, is explained on the bottom line; while something is explained, the
+ * bottom line's right side holds only the way out; Escape leaves it and says so. Turned on while
+ * focus is on one of the frame's parts, it explains that part at once. With the bars hidden, Ctrl-B
+ * i keeps the bottom line up, and Ctrl-B i again still says it is off: the region is drawn whatever
+ * the bars, never inside the bottom line.
  */
 const infoMode = async (page: Page) => {
+	check(
+		"its item is not pressed while info mode is off",
+		(await infoItem(page).getAttribute("aria-pressed")) === "false",
+	);
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
-	await explained(page, "point at anything, or tab to it");
+	await explained(page, "point at anything");
+	check(
+		"the hint promises no Tab",
+		!(await textsOf(bottomLine(page).locator(".info"))).some((t) => t.includes("tab")),
+	);
 	check("Ctrl-B i turns info mode on, and the status region says so", true);
-	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
-	await explained(page, "keys: press Ctrl-B");
-	await page.keyboard.press("Shift+Tab");
-	await explained(page, "info: explains whatever");
+	check(
+		"its item keeps its name and says it is pressed",
+		(await infoItem(page).getAttribute("aria-pressed")) === "true",
+	);
+	const workspace = page.locator(".topbar .workspaces button").first();
+	await workspace.focus();
+	await explained(page, (await workspace.getAttribute("data-info")) ?? "a workspace");
+	check(
+		"while something is explained, the right side holds only the way out",
+		(await textsOf(bottomLine(page).locator(".right"))).join() === "esc leaves",
+	);
+	const from = await page.evaluateHandle(() => document.activeElement);
+	await page.keyboard.press("Tab");
+	await until(
+		"focus to move on with Tab",
+		() => page.evaluate((was) => document.activeElement !== was, from),
+		(moved) => moved,
+	);
+	await explained(page, (await focusWords(page)) ?? "point at anything");
 	check("keyboard focus moving, by Tab too, is explained on the bottom line", true);
 	await modeSaid(page, "Info mode on. Escape leaves.");
 	check("the status region says nothing of each part explained", true);
@@ -362,12 +406,18 @@ const infoMode = async (page: Page) => {
 		"Escape leaves info mode, and the status region says so",
 		(await bottomLine(page).locator(".info").count()) === 0,
 	);
-	await tile(page, "t3").click();
-	await until(
-		"focus back in t3",
-		() => focusedIn(page),
-		(at) => at === "t3",
-	);
+	await backInT3(page);
+
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	const keysWords = (await keys.getAttribute("data-info")) ?? "keys:";
+	await keys.focus();
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, keysWords);
+	check("turned on with focus on the keys item, info mode explains it at once", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await backInT3(page);
 
 	await prefixed(page, "B");
 	await until(
@@ -377,7 +427,7 @@ const infoMode = async (page: Page) => {
 	);
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
-	await explained(page, "point at anything, or tab to it");
+	await explained(page, "point at anything");
 	check("with the bars hidden, info mode keeps the bottom line up", true);
 	check(
 		"the status region is not inside the bottom line",
@@ -394,6 +444,49 @@ const infoMode = async (page: Page) => {
 	await prefixed(page, "B");
 	await bottomLine(page).waitFor();
 	check("Ctrl-B B shows both bars again, focus still in t3", (await focusedIn(page)) === "t3");
+	await prompted(page, "t3");
+};
+
+/**
+ * Info mode in a small window, 1024 by 700: explaining its own item, the longest part's words, the
+ * bottom line's left side is not cut off. The right side never shrinks, so while something is
+ * explained it holds only the way out, and the item's words are short enough for the rest. The
+ * window goes back to its size after.
+ */
+const infoModeSmall = async (app: ElectronApplication, page: Page) => {
+	const was = await app.evaluate(({BrowserWindow}) => {
+		const [width = 1200, height = 760] = BrowserWindow.getAllWindows()[0]?.getSize() ?? [];
+		return {width, height};
+	});
+	await app.evaluate(({BrowserWindow}) =>
+		BrowserWindow.getAllWindows()[0]?.setContentSize(1024, 700),
+	);
+	await until(
+		"the window at 1024 by 700",
+		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+		(size) => size === "1024x700",
+	);
+	const item = infoItem(page);
+	const words = (await item.getAttribute("data-info")) ?? "info:";
+	await item.focus();
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, words);
+	const left = await bottomLine(page)
+		.locator(".left")
+		.evaluate((el) => ({scroll: el.scrollWidth, client: el.clientWidth}));
+	check(
+		"at 1024 by 700, info mode's own item is explained in full: the left side is not cut off",
+		left.scroll <= left.client,
+		left,
+	);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await app.evaluate(
+		({BrowserWindow}, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+		was,
+	);
+	await backInT3(page);
 	await prompted(page, "t3");
 };
 
@@ -618,6 +711,7 @@ const flow = async (app: ElectronApplication) => {
 	check("a click focuses a tile", true);
 	await popovers(page);
 	await infoMode(page);
+	await infoModeSmall(app, page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
