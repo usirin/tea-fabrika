@@ -796,12 +796,14 @@ describe("info mode", () => {
 	});
 
 	// At 1024 wide the explanation was cut off: the right side never shrinks (`flex: none`), so the
-	// left gave way. While something is explained, the right side keeps only the way out.
-	it("keeps only the way out on the right while something is explained", () => {
-		expect(side(explaining(INFO.info), "right")).toBe("esc leaves");
-		expect(side(explaining(INFO.here), "right")).toBe("esc leaves");
-		// Nothing explained yet: the info and keys items are there to point at.
-		expect(side(on, "right")).toMatch(/ info · .* keys · esc leaves$/);
+	// left gave way. The left wraps instead (window.css, checked at 1024 by 700 in e2e.ts), and the
+	// right side keeps its items: hiding one under the pointer would explain it away, and a focused
+	// one would drop focus.
+	it("keeps the right side's items while something is explained", () => {
+		const right = side(on, "right");
+		expect(right).toMatch(/ info · .* keys · esc leaves$/);
+		expect(side(explaining(INFO.info), "right")).toBe(right);
+		expect(side(explaining(INFO.keys), "right")).toBe(right);
 		expect(side(FRAME, "right")).not.toContain("esc leaves");
 		expect(side(off, "right")).not.toContain("esc leaves");
 	});

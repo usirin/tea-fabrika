@@ -341,11 +341,6 @@ const explained = (page: Page, want: string) =>
 
 /** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
 const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
-/** What info mode would say of what has focus now: its part's words, or none. */
-const focusWords = (page: Page) =>
-	page.evaluate(
-		() => document.activeElement?.closest("[data-info]")?.getAttribute("data-info") ?? null,
-	);
 /** Click t3, and wait until focus is back in it. */
 const backInT3 = async (page: Page) => {
 	await tile(page, "t3").click();
@@ -360,7 +355,7 @@ const backInT3 = async (page: Page) => {
  * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
  * on in the window's status region, and its item says it is pressed, under the same name; keyboard
  * focus moving, with no pointer, is explained on the bottom line; while something is explained, the
- * bottom line's right side holds only the way out; Escape leaves it and says so. Turned on while
+ * bottom line's right side keeps its items; Escape leaves it and says so. Turned on while
  * focus is on one of the frame's parts, it explains that part at once. With the bars hidden, Ctrl-B
  * i keeps the bottom line up, and Ctrl-B i again still says it is off: the region is drawn whatever
  * the bars, never inside the bottom line.
@@ -382,21 +377,16 @@ const infoMode = async (page: Page) => {
 		"its item keeps its name and says it is pressed",
 		(await infoItem(page).getAttribute("aria-pressed")) === "true",
 	);
-	const workspace = page.locator(".topbar .workspaces button").first();
-	await workspace.focus();
-	await explained(page, (await workspace.getAttribute("data-info")) ?? "a workspace");
+	const right = await textsOf(bottomLine(page).locator(".right"));
+	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
+	await explained(page, "keys: press Ctrl-B");
 	check(
-		"while something is explained, the right side holds only the way out",
-		(await textsOf(bottomLine(page).locator(".right"))).join() === "esc leaves",
+		"while something is explained, the right side keeps its items",
+		(await textsOf(bottomLine(page).locator(".right"))).join() === right.join(),
+		right,
 	);
-	const from = await page.evaluateHandle(() => document.activeElement);
-	await page.keyboard.press("Tab");
-	await until(
-		"focus to move on with Tab",
-		() => page.evaluate((was) => document.activeElement !== was, from),
-		(moved) => moved,
-	);
-	await explained(page, (await focusWords(page)) ?? "point at anything");
+	await page.keyboard.press("Shift+Tab");
+	await explained(page, (await infoItem(page).getAttribute("data-info")) ?? "info:");
 	check("keyboard focus moving, by Tab too, is explained on the bottom line", true);
 	await modeSaid(page, "Info mode on. Escape leaves.");
 	check("the status region says nothing of each part explained", true);
@@ -449,9 +439,10 @@ const infoMode = async (page: Page) => {
 
 /**
  * Info mode in a small window, 1024 by 700: explaining its own item, the longest part's words, the
- * bottom line's left side is not cut off. The right side never shrinks, so while something is
- * explained it holds only the way out, and the item's words are short enough for the rest. The
- * window goes back to its size after.
+ * bottom line's left side is not cut off. The right side never shrinks and keeps its items, so an
+ * explanation that does not fit wraps onto a second line, and the bottom line grows to hold it. No
+ * width or height is guessed: each box is checked against the one it sits in. The window goes back
+ * to its size after.
  */
 const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 	const was = await app.evaluate(({BrowserWindow}) => {
@@ -472,13 +463,48 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
 	await explained(page, words);
-	const left = await bottomLine(page)
-		.locator(".left")
-		.evaluate((el) => ({scroll: el.scrollWidth, client: el.clientWidth}));
+	const seen = await bottomLine(page).evaluate((line, said) => {
+		/** Every rect of `el` lies inside `box`. */
+		const inside = (el: Element, box: DOMRect) =>
+			[...el.getClientRects()].every(
+				(r) =>
+					r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+			);
+		const view = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+		const left = line.querySelector(".left");
+		const info = line.querySelector(".info");
+		const out = [...line.querySelectorAll(".right *")].find(
+			(el) => el.children.length === 0 && el.textContent === "esc leaves",
+		);
+		if (left === null || info === null || out === undefined)
+			return {
+				found: false,
+				full: false,
+				wide: false,
+				tall: false,
+				infoIn: false,
+				lineIn: false,
+				outIn: false,
+			};
+		return {
+			found: true,
+			full: (info.textContent ?? "").includes(said),
+			wide: left.scrollWidth <= left.clientWidth,
+			tall: left.scrollHeight <= left.clientHeight,
+			infoIn: inside(info, left.getBoundingClientRect()),
+			lineIn: inside(line, view),
+			outIn: inside(out, line.getBoundingClientRect()),
+		};
+	}, words);
 	check(
 		"at 1024 by 700, info mode's own item is explained in full: the left side is not cut off",
-		left.scroll <= left.client,
-		left,
+		seen.found && seen.full && seen.wide && seen.tall && seen.infoIn,
+		seen,
+	);
+	check(
+		"at 1024 by 700, the way out is there in full, inside the bottom line, inside the window",
+		seen.lineIn && seen.outIn,
+		seen,
 	);
 	await page.keyboard.press("Escape");
 	await modeSaid(page, "Info mode off.");
