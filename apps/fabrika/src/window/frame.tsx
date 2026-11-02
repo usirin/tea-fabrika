@@ -105,7 +105,7 @@ const wordFor = (props: FrameProps, name: string): string | null =>
 	props.table.find((b) => b.name === name)?.tsh ?? null;
 
 /** No tooltip shows while something lies over the desk, or while info mode explains the item. */
-const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info;
+const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info.kind === "on";
 
 /** What a frame item opens, if anything: a menu or a dialog, by its element's id. */
 interface Opens {
@@ -128,6 +128,8 @@ function Item(props: {
 	readonly label?: string;
 	readonly className?: string | undefined;
 	readonly current?: boolean;
+	/** A toggle button's state, as `aria-pressed`: its name stays, and this says on or off. */
+	readonly pressed?: boolean;
 	readonly opens?: Opens;
 	readonly onClick: () => void;
 	readonly children: ReactNode;
@@ -149,6 +151,7 @@ function Item(props: {
 				data-info={props.info}
 				aria-label={props.label}
 				aria-current={props.current}
+				aria-pressed={props.pressed}
 				aria-haspopup={props.opens?.popup}
 				aria-expanded={props.opens?.open}
 				aria-controls={props.opens?.id}
@@ -806,12 +809,12 @@ export function BottomLine(props: FrameProps): ReactNode {
 					))}
 				</span>
 			);
-		if (frame.info)
+		if (frame.info.kind === "on")
 			return (
 				<span className="info">
 					<b>INFO</b>
 					<Sep />
-					{frame.explained ?? "point at anything, or tab to it"}
+					{frame.info.explained ?? "point at anything"}
 				</span>
 			);
 		if (desk === null) return null;
@@ -836,17 +839,21 @@ export function BottomLine(props: FrameProps): ReactNode {
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
+		const on = frame.info.kind === "on";
 		return (
 			<>
+				{/* A toggle button by the ARIA APG: its name stays "info", and aria-pressed says on or
+				    off. Clicked or pressed, the pointer or focus is on it, so it is what is explained first. */}
 				<Item
 					name="info"
 					caps={capsFor(props, "info")}
 					word={wordFor(props, "info")}
 					quiet={quiet}
 					info={INFO.info}
-					onClick={() => props.step({type: "show", what: "info"})}
+					pressed={on}
+					onClick={() => props.step({type: "info", focus: INFO.info})}
 				>
-					{frame.info ? `${info ?? ""} info off` : `${info ?? ""} info`}
+					{info ?? ""} info
 				</Item>
 				<Sep />
 				<Item
@@ -866,7 +873,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 				</Item>
 				{/* The way out, named last, as `esc cancels` is for the prefix. The item stays put, so a
 				    click where it turned on turns it off. */}
-				{frame.info && (
+				{on && (
 					<>
 						<Sep />
 						<span className="quiet">esc leaves</span>

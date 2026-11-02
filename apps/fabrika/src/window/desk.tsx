@@ -336,6 +336,37 @@ const frameStep = (m: FrameMsg): boolean => {
 	return true;
 };
 
+/** What info mode says of a part of the page: the words of the nearest `data-info`, or `null`. */
+const wordsAt = (at: EventTarget | null): string | null =>
+	at instanceof Element ? (at.closest<HTMLElement>("[data-info]")?.dataset.info ?? null) : null;
+
+/**
+ * The words of the bottom line's item keyboard focus was on when Ctrl-B was pressed, or `null`.
+ * While the desk is mid-key, the line's right side says `esc cancels` in place of its items, so
+ * focus on one falls to the page. It goes back to that item once the key is done (`focusBack`),
+ * and info mode, turned on in between, explains that item.
+ */
+let keyedFrom: string | null = null;
+
+/** What keyboard focus is on, in info mode's words: through the desk's key, the item it was on. */
+const focusWords = (): string | null =>
+	document.activeElement === document.body ? keyedFrom : wordsAt(document.activeElement);
+
+/** Ctrl-B pressed: note the bottom line's item focus is on, if any, before the key takes it away. */
+const noteKeyedFrom = (at: EventTarget | null) => {
+	if (at === document.body) return;
+	keyedFrom = at instanceof Element && at.closest(".bottomline") !== null ? wordsAt(at) : null;
+};
+
+/** Focus goes back to the bottom line's item it fell from while the desk was mid-key. */
+const focusBack = () => {
+	const words = keyedFrom;
+	keyedFrom = null;
+	if (words === null || document.activeElement !== document.body) return;
+	const items = document.querySelectorAll<HTMLElement>(".bottomline [data-info]");
+	[...items].find((el) => el.dataset.info === words)?.focus();
+};
+
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
@@ -356,7 +387,9 @@ const heard = (raw: unknown) => {
 			store.host = m.now;
 			return changed();
 		case "show":
-			return frameStep({type: "show", what: m.what});
+			return m.what === "info"
+				? frameStep({type: "info", focus: focusWords()})
+				: frameStep({type: "show", what: m.what});
 		case "desk":
 			store.desk = m.desk;
 			store.attachedOnce = true;
@@ -439,6 +472,7 @@ const onKey = (e: KeyboardEvent) => {
 		meta: e.metaKey,
 		shift: e.shiftKey,
 	};
+	if (name === store.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
 	swallow(e);
 };
@@ -448,9 +482,8 @@ const onKey = (e: KeyboardEvent) => {
  * (WCAG 2.1.1: what a pointer can learn, a keyboard can too).
  */
 const explainAt = (e: Event) => {
-	if (!store.frame.info) return;
-	const at = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-info]") : null;
-	frameStep({type: "explain", text: at?.dataset.info ?? null});
+	if (store.frame.info.kind !== "on") return;
+	frameStep({type: "explain", text: wordsAt(e.target)});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
@@ -780,6 +813,11 @@ function App(): ReactNode {
 	useLayoutEffect(() => {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
+	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
+	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	useLayoutEffect(() => {
+		if (!mid) focusBack();
+	}, [mid]);
 	const props: FrameProps = {
 		desk: open,
 		frame: store.frame,

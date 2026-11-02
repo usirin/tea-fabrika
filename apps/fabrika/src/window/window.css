@@ -605,6 +605,12 @@ main.program > [role="alert"] {
 	color: var(--text-faint);
 }
 
+/* The bottom line's way out (`esc leaves`, `esc cancels`, `y closes · n keeps it`) is a needed fact,
+   so it takes the faint text step, 5.51:1 on the ground, and not the wire's (WCAG 1.4.3). */
+.bottomline .quiet {
+	color: var(--text-faint);
+}
+
 .topbar .workspaces {
 	display: flex;
 	flex: none;
@@ -725,10 +731,11 @@ main.program > [role="alert"] {
 	background: var(--turn);
 }
 
+/* At least 26px: taller only while info mode's explanation wraps (below). */
 .bottomline {
 	justify-content: space-between;
 	gap: var(--s-4);
-	height: 26px;
+	min-height: 26px;
 	color: var(--text-muted);
 }
 
@@ -737,6 +744,14 @@ main.program > [role="alert"] {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* Info mode's explanation is never cut off: what does not fit wraps onto a second line, and the
+   line grows to hold it. The right side never shrinks and keeps its items, so the left gives way. */
+.bottomline .left:has(> .info) {
+	padding: 4px 0;
+	line-height: 1.4;
+	white-space: normal;
 }
 
 .bottomline .right {
