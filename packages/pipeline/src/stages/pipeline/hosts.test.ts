@@ -1,5 +1,7 @@
 import {Ledger, streams} from "@kampus/fabrika-old";
-import {Effect, Layer, Option, Stream} from "effect";
+import {memoryService} from "@kampus/fabrika-old/memory";
+import {Clock, Effect, Fiber, Layer, Option, Stream} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
@@ -107,6 +109,99 @@ describe("a person's answer, as the lane hears it", () => {
 				}),
 			);
 			expect(got).toBeNull();
+		},
+	);
+});
+
+// The wait, on a clock the test owns: a ledger that can watch rings the lane awake when the answer
+// lands, with no second passing; one that cannot is still looked at again a second on.
+
+/** The ledger as memory keeps it, with its own doorbell. */
+const watching = Layer.effect(
+	Ledger,
+	Effect.sync(() => memoryService()),
+);
+
+/**
+ * The same ledger, with a doorbell that never rings or that ends at once: nothing to wake on. `reads`
+ * counts every stream read, so a wait that spins on a doorbell that ended shows.
+ */
+const deaf = (watch: () => Stream.Stream<void>) => {
+	const reads = {count: 0};
+	const layer = Layer.effect(
+		Ledger,
+		Effect.sync(() => {
+			const ledger = memoryService();
+			return {
+				...ledger,
+				watch,
+				readStream: (stream: string, fromRev?: number, limit?: number) =>
+					Effect.andThen(
+						Effect.sync(() => void reads.count++),
+						ledger.readStream(stream, fromRev, limit),
+					),
+			};
+		}),
+	);
+	return {layer, reads};
+};
+
+const onClock = <A, E>(
+	ledger: Layer.Layer<Ledger>,
+	effect: Effect.Effect<A, E, Tickets | Ledger>,
+) =>
+	Effect.runPromise(
+		effect.pipe(
+			Effect.provide(ticketsOnLedger({kind: "agent", id: "lane", for: "owner"})),
+			Effect.provide(ledger),
+			Effect.provide(TestClock.layer({warningDelay: "1 minute"})),
+		),
+	);
+
+/**
+ * The lane listens from before the answer: its first look finds nothing. The answer lands, `moved`
+ * runs on the test's clock, and the lane gets a short real time to hear it. `null`: it did not.
+ */
+const heardAfter = (moved: Effect.Effect<void>) =>
+	Effect.gen(function* () {
+		yield* filed;
+		yield* asked;
+		const listening = yield* answerHeard(NUMBER, ASK, ["again", "stop"]).pipe(
+			Stream.runHead,
+			Effect.forkChild,
+		);
+		yield* TestClock.withLive(Effect.sleep("50 millis"));
+		expect(listening.pollUnsafe()).toBeUndefined();
+		yield* answered(OWNER);
+		yield* moved;
+		const got = yield* Fiber.join(listening).pipe(
+			Effect.timeoutOption("2 seconds"),
+			TestClock.withLive,
+			Effect.map(Option.flatten),
+			Effect.map(Option.getOrNull),
+		);
+		return {got, at: yield* Clock.currentTimeMillis};
+	});
+
+describe("the wait for a person's answer, on a clock the test owns", () => {
+	it("a ledger that can watch wakes the lane when the answer lands, with no second passing", async () => {
+		const {got, at} = await onClock(watching, heardAfter(Effect.void));
+		expect(got).toEqual({ask: ASK, pick: "stop", note: ""});
+		expect(at).toBe(0);
+	});
+
+	it.each([
+		["never rings", () => Stream.never],
+		["ends at once", () => Stream.empty],
+	])(
+		"a ledger whose doorbell %s still hears the answer on the look a second on",
+		async (_name, watch) => {
+			const ledger = deaf(watch);
+			const {got, at} = await onClock(ledger.layer, heardAfter(TestClock.adjust("1 second")));
+			expect(got).toEqual({ask: ASK, pick: "stop", note: ""});
+			expect(at).toBe(1_000);
+			// Two looks and the answer's own read of the ticket, give or take: not a loop with no pause.
+			expect(ledger.reads.count).toBeLessThan(10);
 		},
 	);
 });

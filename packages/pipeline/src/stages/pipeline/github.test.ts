@@ -747,6 +747,28 @@ describe("the GitHub host, over a stand-in gh", () => {
 				}),
 			);
 
+		it("the lane's `pollMs` reaches GitHub's checks wait: a check still running is asked again soon", async () => {
+			const {home, fake} = scene({story: {...RUNNING_THEN("SUCCESS"), settleAfter: 2}});
+			const ended = await Effect.runPromise(
+				Effect.gen(function* () {
+					const {pr, head} = yield* opened(A_FILE);
+					// Left out, the wait asks again in 30 seconds, and this one gives up long before.
+					const waited = yield* (yield* CodeHost)
+						.checksSettled(pr, head, [])
+						.pipe(Stream.take(1), Stream.runDrain, Effect.timeoutOption("5 seconds"));
+					return Option.isSome(waited);
+				}).pipe(
+					Effect.provide(
+						laneLayer({home, checkout: checkoutFor(home), briefs: "", person: "owner", pollMs: 1}),
+					),
+					Effect.provide(Layer.fresh(memoryLedger().layer)),
+				),
+			);
+			expect(ended).toBe(true);
+			const asked = fake.calls().filter((c) => c.kind === "checks_now");
+			expect(asked.map((c) => c.rollup)).toEqual(["PENDING", "SUCCESS"]);
+		});
+
 		it("none: GitHub's red does not count, and the head's own checks decide", async () => {
 			const {home, fake} = scene({github: "none", story: RUNNING_THEN("FAILURE")});
 			expect(await settledThenFacts(home, A_FILE)).toBe("green");
