@@ -271,8 +271,7 @@ const File = Schema.Struct({
 			review: Schema.optionalKey(Agent),
 		}),
 	),
-	// `undefined` reads as left out: a reader that rebuilds the table may hand it on as it found it.
-	build: Schema.optional(Build),
+	build: Schema.optionalKey(Build),
 	test_writer: Schema.optionalKey(TestWriterTable),
 	mutation: Schema.optionalKey(MutationTable),
 	format: Schema.optionalKey(FormatTable),
