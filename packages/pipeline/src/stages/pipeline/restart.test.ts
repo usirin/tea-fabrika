@@ -78,12 +78,16 @@ const SEEN = Schema.decodeUnknownSync(Seen)({
 });
 
 describe("what may restart", () => {
-	it("FINAL is the closed list: not_yours, and nothing else this lane can stop on today", () => {
-		// The plan names `merged_elsewhere` too: no lane stops on it yet, so it is not a reason here.
+	// Round 4: the merge step ends `stuck:merged_elsewhere` when someone else merged the pull request,
+	// so the lane stops on it now, and it is the plan's second final reason.
+	it("FINAL is the closed list: merged_elsewhere and not_yours, each a reason this lane stops on", () => {
 		const stuck: readonly string[] = LANE_NAMES.filter((name) => name.startsWith("stuck:"));
-		expect([...FINAL].map((why) => `stuck:${why}`).filter((name) => stuck.includes(name))).toEqual([
+		const named = [...FINAL].map((why) => `stuck:${why}`);
+		expect(named.filter((name) => stuck.includes(name)).sort()).toEqual([
+			"stuck:merged_elsewhere",
 			"stuck:not_yours",
 		]);
+		expect(named.length).toBe(2);
 	});
 });
 

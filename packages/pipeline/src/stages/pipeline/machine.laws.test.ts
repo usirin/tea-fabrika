@@ -22,7 +22,7 @@ import {
 	claimLane,
 	EMPTY,
 	type Filed,
-	type Fresh,
+	Fresh,
 	freshMain,
 	Held,
 	Lane,
@@ -1198,31 +1198,66 @@ describe("every stop, at every step, for every reason", () => {
 		trail: [{step: "triage", said: "send:plan:yes"}],
 	};
 	/** A stop as a lane saved it: its reason, its `Held`, and the step it goes on at. */
-	const stop = (outcome: unknown, step: StepName) =>
+	const stop = (
+		outcome: unknown,
+		step: StepName,
+		held: {readonly trail: typeof HELD.trail} = HELD,
+	) =>
 		decodeLane({
 			phase: "over",
 			number: 7,
-			trail: HELD.trail,
+			trail: held.trail,
 			outcome,
 			said: "stopped",
-			held: HELD,
+			held,
 			at: {_tag: "run", step},
 		});
 	const STUCK = LANE_NAMES.flatMap((name) =>
 		name.startsWith("stuck:") ? [name.slice("stuck:".length)] : [],
 	);
 
+	/** Code's checks at the built head, as `result` says. */
+	const checkedAs = (result: "red" | "not_run") => ({...GREEN_CARRY.checked, result});
+	/** The reasons a lane stops for when its head has no green checks: only after the build. */
+	const CHECKS: ReadonlySet<string> = new Set(["checks_not_run", "checks_red"]);
+	/**
+	 * What a lane holds as it stops for `why`, in round `round`: a checks reason holds checks at its head
+	 * that are not green, as a real lane does. Pure.
+	 */
+	const heldFor = (why: string, round = HELD.round) => ({
+		...HELD,
+		round,
+		carry:
+			why === "checks_not_run"
+				? {...HELD.carry, checked: checkedAs("not_run")}
+				: why === "checks_red"
+					? {...HELD.carry, checked: checkedAs("red")}
+					: HELD.carry,
+	});
+	/** Whether a lane stops at `step` for `why`: a checks reason only at a step after the build. */
+	const stopsAt = (why: string, step: StepName) =>
+		!CHECKS.has(why) || STEPS.indexOf(step) > STEPS.indexOf("build");
+	/** The restart's fresh read as code makes it: main where it was, and code's checks at the head, as `checked`. */
+	const freshChecks = (checked: unknown): World => ({
+		...ROUTED,
+		fresh: Schema.decodeUnknownSync(Fresh)({_tag: "fresh", carry: {checked}}),
+	});
+
 	it("FINAL is the closed list: not_yours, and no reason that is not a lane's", () => {
 		expect(FINAL.has("not_yours")).toBe(true);
 		for (const why of FINAL) expect(STUCK).toContain(why);
 	});
 
-	it("a reason in FINAL never restarts; every other one runs the step it stopped at, with the carry it held", () => {
+	// Round 4 of the tests for self-fix PR 5: this law held every reason on a carry with green checks,
+	// which no lane stopped for its checks holds. Now each reason stops where and as a real lane does, and
+	// the fresh read gives the checks code ran at the head, green: the step runs on them.
+	it("a reason in FINAL never restarts; every other one runs the step it stopped at, with the carry it held and the checks the fresh read ran", () => {
+		const world = freshChecks(GREEN_CARRY.checked);
 		for (const step of STEPS)
-			for (const why of STUCK) {
-				const over = stop({kind: "stuck", why}, step);
+			for (const why of STUCK.filter((reason) => stopsAt(reason, step))) {
+				const over = stop({kind: "stuck", why}, step, heldFor(why));
 				if (over.phase !== "over" || !("held" in over)) throw new Error("a stop did not read back");
-				const {moves} = drive(over, RESTART, ROUTED);
+				const {moves} = drive(over, RESTART, world);
 				if (ends(over.outcome)) {
 					expect(moves[0]?.cmds, `${why} restarted`).toEqual([]);
 					expect(moves[0]?.next).toEqual(over);
@@ -1231,7 +1266,10 @@ describe("every stop, at every step, for every reason", () => {
 				const cmds = cmdsOf(moves);
 				const started = stepsIn(cmds)[0];
 				expect(started?.step, `${why} at ${step}`).toBe(step);
-				expect(started?.carry, `${why} at ${step}`).toEqual(over.held.carry);
+				expect(started?.carry, `${why} at ${step}`).toEqual({
+					...over.held.carry,
+					checked: GREEN_CARRY.checked,
+				});
 				const at = started === undefined ? -1 : cmds.indexOf(started);
 				expect(cmds.slice(0, at).some(isFresh), `${why} at ${step}: main read first`).toBe(true);
 				if (STEPS.indexOf(step) > STEPS.indexOf("plan")) expect(approveAsks(moves)).toEqual([]);
@@ -1248,6 +1286,70 @@ describe("every stop, at every step, for every reason", () => {
 			expect(moves[0]?.cmds).toEqual([]);
 			expect(moves[0]?.next).toEqual(over);
 		}
+	});
+
+	// Round 4 of the tests for self-fix PR 5, from the review.
+
+	it("a stop for its checks whose fresh read finds them red goes back to the build as the next round, and past the bound asks", () => {
+		const world = freshChecks(checkedAs("red"));
+		for (const step of STEPS)
+			for (const why of [...CHECKS].filter((reason) => stopsAt(reason, step))) {
+				const under = stop({kind: "stuck", why}, step, heldFor(why, MAX_ROUNDS - 1));
+				const ran = stepsIn(cmdsOf(drive(under, RESTART, world).moves));
+				expect(ran[0], `${why} at ${step}`).toMatchObject({step: "build", round: MAX_ROUNDS});
+				const spent = stop({kind: "stuck", why}, step, heldFor(why, MAX_ROUNDS));
+				const asked = drive(spent, RESTART, world, (at) => at.phase === "asking").s;
+				expect(asked.phase === "asking" && asked.question.for, `${why} at ${step}, spent`).toBe(
+					"rounds_spent",
+				);
+			}
+	});
+
+	it("a build whose checks could not run goes on at the checks, never the builder again", () => {
+		const {over} = stoppedAt("build", {
+			outcome: {kind: "stuck", why: "checks_not_run"},
+			carry: {head: BUILT_HEAD, checked: checkedAs("not_run")},
+		});
+		// The fresh read ran them, green: the step after the build runs.
+		const green = stepsIn(cmdsOf(drive(over, RESTART, freshChecks(GREEN_CARRY.checked)).moves));
+		expect(green.map((c) => c.step).slice(0, 1)).toEqual(["mutation"]);
+		// They could not run again: the lane stops as it was, and no builder ran.
+		const again = drive(over, RESTART, ROUTED);
+		expect(stepsIn(cmdsOf(again.moves))).toEqual([]);
+		expect(again.s.phase === "over" && nameOf(again.s.outcome)).toBe("stuck:checks_not_run");
+	});
+
+	it("a pull request merged by someone else ends the lane `stuck:merged_elsewhere`, which never restarts", () => {
+		const walked = drive(
+			IDLE,
+			START,
+			stoppingAt("merge", {outcome: {kind: "stuck", why: "merged_elsewhere"}, carry: {}}),
+		);
+		expect(walked.s.phase === "over" && nameOf(walked.s.outcome)).toBe("stuck:merged_elsewhere");
+		expect([...FINAL].map(String)).toContain("merged_elsewhere");
+		const {moves} = drive(walked.s, RESTART, ROUTED);
+		expect(moves[0]?.cmds).toEqual([]);
+	});
+
+	it("two restarts that each stop before any step runs claim and read main under new names", () => {
+		const FRESH_CMD = freshMain({
+			number: 7,
+			from: {_tag: "run", step: "mutation"},
+			carry: EMPTY,
+			intent: "f",
+		});
+		let s: Lane = stoppedAt("mutation", STUCK_END).over;
+		const names: string[] = [];
+		for (let i = 0; i < 2; i++) {
+			const {s: reading, moves} = drive(s, RESTART, ROUTED, (at) => at.phase === "refreshing");
+			for (const cmd of cmdsOf(moves))
+				if (cmd.type === "lane_claim" || cmd.type === "lane_fresh") names.push(cmd.intent);
+			// Main could not be read: the lane stops before any step, and lets the ticket go.
+			s = drive(reading, freshMain.err(FRESH_CMD, {_tag: "unknown"}, 0), ROUTED).s;
+			expect(s.phase, `restart ${i + 1}`).toBe("over");
+		}
+		expect(names).toHaveLength(4);
+		expect(names.filter((name, at) => names.indexOf(name) !== at)).toEqual([]);
 	});
 });
 

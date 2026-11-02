@@ -18,8 +18,8 @@ import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
-import {nameOf} from "../../tickets/ticket.ts";
-import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
+import {type Entry, nameOf} from "../../tickets/ticket.ts";
+import {Tickets, TicketsFailed, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
 import {TestsWork} from "../test-writer/program.ts";
@@ -195,6 +195,10 @@ interface Script {
 	 * they run for real.
 	 */
 	readonly checksSay?: (head: string, nth: number) => CheckRun | null;
+	/** On the line typed again this many times, the first read of the ticket off the ledger fails. */
+	readonly readFailsAt?: number;
+	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
+	readonly beforeChecks?: boolean;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -252,6 +256,16 @@ const LegacyOver = Schema.Struct({
 	outcome: Schema.Unknown,
 	said: Schema.String,
 });
+
+/** A ticket's fact as a lane from before self-fix PR 4 wrote it: no `checked` fact, and no checks in an end's carry. */
+const withoutChecks = (entry: Entry): readonly Entry[] => {
+	const {fact} = entry;
+	if (fact.type === "checked") return [];
+	if (fact.type !== "ended" || typeof fact.carry !== "object" || fact.carry === null)
+		return [entry];
+	const carry = Object.fromEntries(Object.entries(fact.carry).filter(([key]) => key !== "checked"));
+	return [{...entry, fact: {...fact, carry}}];
+};
 
 /** The stopped lane, saved again as code from before self-fix PR 5 kept a stop: no `Held`, nowhere to go on. */
 const keptAsLegacy = (home: string) =>
@@ -352,8 +366,12 @@ const lane = ({
 	savedAsking,
 	checksStopRunning,
 	checksSay,
+	readFailsAt,
+	beforeChecks = false,
 }: Script): Promise<Ran> => {
 	let checksRan = 0;
+	/** The line whose first ticket read already failed. */
+	let readFailed = false;
 	/** How many times the line was typed again. */
 	let typed = 0;
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
@@ -437,6 +455,26 @@ const lane = ({
 					Effect.suspend(() => {
 						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
 						return work.onBase(commit, tests);
+					}),
+			})),
+			Effect.updateService(Tickets, (tickets) => ({
+				...tickets,
+				read: (n) =>
+					Effect.suspend(() => {
+						if (typed !== readFailsAt || readFailed)
+							return tickets
+								.read(n)
+								.pipe(
+									Effect.map((ticket) =>
+										beforeChecks && typed > 0
+											? {...ticket, timeline: ticket.timeline.flatMap(withoutChecks)}
+											: ticket,
+									),
+								);
+						readFailed = true;
+						return Effect.fail(
+							new TicketsFailed({ticket: n, why: "unreachable", says: "the ledger did not answer"}),
+						);
 					}),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
@@ -1439,6 +1477,20 @@ describe("a stopped lane, typed again", () => {
 		Effect.sync(() =>
 			pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]),
 		);
+	/** The ticket's first `restarted` fact. */
+	const restartOf = (ran: Ran) => ran.facts.find((f) => f.type === "restarted");
+	/** The head the lane's last end before its restart left: where the branch stood as it stopped. */
+	const headBefore = (ran: Ran) => {
+		const at = ran.facts.findIndex((f) => f.type === "restarted");
+		const heads = ran.facts
+			.slice(0, at)
+			.filter((f) => f.type === "ended")
+			.flatMap((f) => {
+				const kept = Schema.decodeUnknownOption(Schema.Struct({head: Schema.String}))(f.carry);
+				return Option.isSome(kept) ? [kept.value.head] : [];
+			});
+		return heads.at(-1);
+	};
 	/** The test writer's test, as the plain fake writes it. */
 	const WRITTEN = 'expect(lower("AB"))';
 	/** What a builder leaves in the test writer's file, in its first build only. */
@@ -1488,6 +1540,11 @@ describe("a stopped lane, typed again", () => {
 			expect(holds(ran, commit, "src/lower.test.ts")).toBe(true);
 			expect(holds(ran, commit, "src/lower.ts")).toBe(false);
 			expect(ran.lines.at(-1)).toContain("ended: done");
+			// Round 4, record wide: the restart keeps the lane's head before and after, and where main won.
+			const moved = restartOf(ran);
+			expect(moved, said).toMatchObject({head: headBefore(ran), conflicts: []});
+			expect(moved?.to).toMatch(/^[0-9a-f]{40}$/);
+			expect(moved?.to).not.toBe(moved?.head);
 		},
 	);
 
@@ -1723,6 +1780,11 @@ describe("a stopped lane, typed again", () => {
 			expect(builds[1]?.prompt).toContain("src/lower.ts");
 			expect(builds[1]?.seen["src/lower.ts"], said).toContain("Written on main.");
 			expect(ran.lines.at(-1)).toContain("ended: done");
+			// Round 4, record wide: the restart names where main's side won.
+			expect(restartOf(ran), said).toMatchObject({
+				head: headBefore(ran),
+				conflicts: ["src/lower.ts"],
+			});
 		},
 	);
 
@@ -1736,6 +1798,98 @@ describe("a stopped lane, typed again", () => {
 			expect(again).not.toMatch(/restart: #\d+ from/);
 			expect(ran.stages).toEqual([]);
 			expect(ran.lines.at(-1)).toMatch(/not_yours/);
+		},
+	);
+
+	// Round 4 of the tests for self-fix PR 5, from the review.
+
+	it(
+		"a build whose checks could not run, typed again: the restart runs the checks at its head, and the builder does not run again",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				// The first checks after the build could not run; every later run is real.
+				checksSay: (head, nth) =>
+					nth === 0
+						? {
+								head,
+								commands: [{command: "node_modules/.bin/vitest run", code: null, ms: 3}],
+								result: "not_run",
+								failed: [],
+								tail: "spawn ENOSPC",
+							}
+						: null,
+				again: [{}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.lines[ran.lines.indexOf(AGAIN) - 1], said).toContain("stuck:checks_not_run");
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			expect(restarted, said).toBeGreaterThan(-1);
+			const after = ran.facts.slice(restarted);
+			// Code's checks at the head, before any step runs on it.
+			const checked = after.findIndex((f) => f.type === "checked");
+			const started = after.findIndex((f) => f.type === "started");
+			expect(checked, said).toBeGreaterThan(-1);
+			expect(checked).toBeLessThan(started);
+			expect(after[checked]).toMatchObject({result: "green"});
+			expect(after[started]?.stage).toBe("mutation");
+			expect(
+				codexRuns(ran.dir).filter((r) => r.step === "build"),
+				said,
+			).toHaveLength(1);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a lane from before code ran the checks, typed again after main moved: the restart runs the checks at its new head before the step it stopped at",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				// The ends keep their carries, so the fold finds the plan and goes on at mutation; only the
+				// checks are gone, as from a lane code stopped before it ran them.
+				beforeChecks: true,
+				again: [{between: (where) => Effect.andThen(keptAsLegacy(where.home), moveMain(where))}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			expect(restarted, said).toBeGreaterThan(-1);
+			const after = ran.facts.slice(restarted);
+			const checked = after.findIndex((f) => f.type === "checked");
+			const started = after.findIndex((f) => f.type === "started");
+			expect(checked, said).toBeGreaterThan(-1);
+			expect(checked).toBeLessThan(started);
+			// At the head the rebase gave, not the one the lane stopped at.
+			expect(after[checked]).toMatchObject({result: "green"});
+			expect(after[checked]?.head).not.toBe(headBefore(ran));
+			expect(after[started]?.stage).toBe("mutation");
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a save from before the lane kept its `Held`, typed again when the ticket cannot be read: the lane stops `step_failed`, and runs nothing from an empty fold",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				readFailsAt: 1,
+				again: [{between: ({home}) => keptAsLegacy(home)}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.lines.at(-1), said).toContain("ended: stuck:step_failed");
+			expect(ran.facts.filter((f) => f.type === "restarted")).toEqual([]);
+			expect(codexRuns(ran.dir).filter((r) => r.step === "triage")).toHaveLength(1);
 		},
 	);
 });
