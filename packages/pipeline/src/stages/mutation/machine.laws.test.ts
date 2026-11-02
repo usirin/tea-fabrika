@@ -64,13 +64,19 @@ const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 /** Code's checks at a head, as the lane hands them on (self-fix PR 4). */
 interface Checked {
 	readonly head: string;
-	readonly commands: readonly string[];
+	readonly commands: readonly {
+		readonly command: string;
+		readonly code: number | null;
+		readonly ms: number;
+	}[];
 	readonly result: "green" | "red" | "not_run";
 	readonly failed: readonly string[];
 }
 const checkedAt = (head: string, result: Checked["result"]): Checked => ({
 	head,
-	commands: ["node_modules/.bin/vitest run"],
+	commands: [
+		{command: "node_modules/.bin/vitest run", code: result === "green" ? 0 : 1, ms: 4_210},
+	],
 	result,
 	failed: [],
 });

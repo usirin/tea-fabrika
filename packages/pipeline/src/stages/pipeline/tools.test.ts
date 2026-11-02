@@ -1,8 +1,9 @@
 import {mkdtempSync, realpathSync, rmSync} from "node:fs";
-import {tmpdir} from "node:os";
+import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import type {Settings} from "../../settings.ts";
 import {placeIn} from "../mutation/mutant.ts";
 import {spansOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope, type RunAsk} from "../mutation/services.ts";
@@ -133,29 +134,80 @@ describe("code's checks, as the repository's settings name them", () => {
 	});
 	afterEach(() => rmSync(dir, {recursive: true, force: true}));
 
-	it("are not_run when the settings name no `[build] checks`", async () => {
+	/** The fixture's real lane work, with `change` made to it. */
+	const workWith = (change: (work: LaneWork["Service"]) => LaneWork["Service"]) => {
 		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 		const real = laneWork.pipe(
 			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
 		);
-		// The fixture's own settings, with `[build] checks` left out.
-		const noChecks = Layer.effect(
+		return Layer.effect(
 			LaneWork,
 			Effect.gen(function* () {
-				const work = yield* LaneWork;
-				const settings = Effect.map(work.settings, (s) => {
-					const {checks: _, ...build} = s.build ?? {};
-					return {...s, build};
-				});
-				return {...work, settings};
+				return change(yield* LaneWork);
 			}),
 		).pipe(Layer.provide(real));
-		const checked = await Effect.runPromise(
+	};
+	/** Code's checks at ticket 1's base, over `work`. */
+	const checkedOver = (work: Layer.Layer<LaneWork>) =>
+		Effect.runPromise(
 			Effect.gen(function* () {
 				const {base} = yield* (yield* LaneWork).tree(1);
 				return yield* (yield* CheckRunner).run(base);
-			}).pipe(Effect.provide(Layer.provideMerge(laneCheckRunner, noChecks))),
+			}).pipe(Effect.provide(Layer.provideMerge(laneCheckRunner, work))),
 		);
+	/** The settings' `[build]` table, as `change` makes it. */
+	const buildWith =
+		(change: (build: NonNullable<Settings["build"]>) => Settings["build"]) =>
+		(work: LaneWork["Service"]) => ({
+			...work,
+			settings: Effect.map(work.settings, (s) => ({...s, build: change(s.build ?? {})})),
+		});
+
+	it("are not_run when the settings name no `[build] checks`", async () => {
+		// The fixture's own settings, with `[build] checks` left out.
+		const checked = await checkedOver(workWith(buildWith(({checks: _, ...build}) => build)));
 		expect(checked).toMatchObject({commands: [], result: "not_run", failed: []});
+	});
+
+	// The PR 4 review: a hung command ends at `[build] checks_within`, as the settings say it.
+	it(
+		"end a command that runs past `[build] checks_within` as not_run that says it timed out",
+		{timeout: 60_000},
+		async () => {
+			const started = Date.now();
+			const checked = await checkedOver(
+				workWith(buildWith((build) => ({...build, checks: [["sleep", "20"]], checks_within: 1}))),
+			);
+			expect(Date.now() - started).toBeLessThan(15_000);
+			expect(checked).toMatchObject({result: "not_run", failed: []});
+			expect(checked.tail).toMatch(/timed out/);
+		},
+	);
+
+	// The PR 4 review: what git or an install says when a copy or the settings fail goes on a
+	// public ticket. A home path in it shows as `~`, and a key in it is cut.
+	describe("say no home path and no key when", () => {
+		const mine = join(homedir(), "code", "acme");
+		const key = `ghp_${"Ab3".repeat(12)}`;
+		const says = `fatal: could not read ${mine}/.git: the remote said ${key}`;
+		const failed = {_tag: "unknown", says} as const;
+
+		it.each([
+			[
+				"the settings could not be read",
+				(work: LaneWork["Service"]) => ({...work, settings: Effect.fail(failed)}),
+			],
+			[
+				"the copy of the head could not be made",
+				(work: LaneWork["Service"]) => ({...work, copy: () => Effect.fail(failed)}),
+			],
+		])("%s", async (_, change) => {
+			const checked = await checkedOver(workWith(change));
+			expect(checked.result).toBe("not_run");
+			expect(checked.tail).toContain("~/code/acme");
+			expect(checked.tail).not.toContain(homedir());
+			expect(checked.tail).toContain("[key cut]");
+			expect(checked.tail).not.toContain(key);
+		});
 	});
 });

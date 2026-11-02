@@ -300,10 +300,11 @@ describe("a lane's facts", () => {
 		const lane = {kind: "agent", id: "lane", for: "owner"} as const;
 		const head = "c".repeat(40);
 		const name = (n: number) => `src/clamp.test.ts > clamp > case ${n}`;
+		const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
 		const checked = (result: string, failed: readonly string[] = []) => ({
 			type: "checked",
 			head,
-			commands: ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"],
+			commands: [{command: VITEST, code: result === "green" ? 0 : 1, ms: 41_250}],
 			result,
 			failed,
 		});
@@ -330,6 +331,55 @@ describe("a lane's facts", () => {
 			];
 			for (const fact of wrong)
 				expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+		});
+
+		// The PR 4 review, record wide: each command's exit code and how long it took, which exist
+		// only as it runs. `code: null`: it could not start, or ran past its time.
+		it("keep each command's exit code and how long it took", () => {
+			const fact = {
+				...checked("not_run"),
+				commands: [
+					{command: "pnpm typecheck", code: 0, ms: 61_032},
+					{command: VITEST, code: 1, ms: 1_204_118},
+					{command: "pnpm lint", code: null, ms: 7},
+				],
+			};
+			const read = readRow(
+				row({data: JSON.stringify(fact), kind: "checked", writer: "agent:lane"}),
+			);
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it.each([
+			["a command with no exit code or time", {command: VITEST}],
+			["an exit code that is not a whole number", {command: VITEST, code: 1.5, ms: 3}],
+			["a time below zero", {command: VITEST, code: 0, ms: -1}],
+			["a time that is not a whole number", {command: VITEST, code: 0, ms: 2.5}],
+			["no command", {code: 0, ms: 3}],
+		])("a command written today with %s is broken", (_, command) => {
+			const fact = {...checked("green"), commands: [command]};
+			expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+		});
+
+		it("a fact saved before codes and times were kept still reads: each command, and nothing made up", () => {
+			const before = {...checked("red", [name(1)]), commands: [VITEST, "pnpm lint"]};
+			const read = readRow(
+				row({data: JSON.stringify(before), kind: "checked", writer: "agent:lane"}),
+			);
+			if (read.kind !== "entry" || read.entry.fact.type !== "checked")
+				throw new Error(`the old fact did not read: ${JSON.stringify(read)}`);
+			// No code and no time: null would say the command could not start, and nobody knows that.
+			expect(read.entry.fact.commands).toStrictEqual([{command: VITEST}, {command: "pnpm lint"}]);
+			expect(read.entry.fact).toMatchObject({head, result: "red", failed: [name(1)]});
+		});
+
+		it("a mutation step's end saved before codes and times were kept still reads its trusted checks", () => {
+			const {type: _, ...trusted} = {...checked("green"), commands: [VITEST]};
+			const fact = {...mutationEnd, trusted};
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			if (read.kind !== "entry" || read.entry.fact.type !== "ended")
+				throw new Error(`the old end did not read: ${JSON.stringify(read)}`);
+			expect(read.entry.fact.trusted?.commands).toStrictEqual([{command: VITEST}]);
 		});
 
 		it("are code's to write: the lane may write one", () => {

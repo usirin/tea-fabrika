@@ -4,6 +4,7 @@ import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
 import {
 	BUILD_GO_GONE,
+	CHECKS_WITHIN,
 	DEFAULT_SETTINGS,
 	formatCommand,
 	JSONC_MOVED,
@@ -204,6 +205,31 @@ describe("fabrika.toml", () => {
 			expect(got).toContain(says);
 		});
 
+		// The PR 4 review: code's checks get a time limit, in whole seconds. A hung command ends
+		// `not_run`; left out, the limit is CHECKS_WITHIN.
+		it("[build] checks_within is read as whole seconds", async () => {
+			expect(await read("[build]\nchecks_within = 600")).toMatchObject({
+				build: {checks_within: 600},
+			});
+		});
+
+		it.each([
+			["[build]\nchecks_within = 0", "build.checks_within: "],
+			["[build]\nchecks_within = -60", "build.checks_within: "],
+			["[build]\nchecks_within = 1.5", "build.checks_within: "],
+			["[build]\nchecks_within = '40m'", "build.checks_within: "],
+		])("refuses %s, saying %s", async (text, says) => {
+			const got = await read(text);
+			expect(got).toBeTypeOf("string");
+			expect(got).toContain(says);
+		});
+
+		it("left out, [build] checks_within stays out, and the limit is 2400 seconds", async () => {
+			const got = await read("[build]\ninstall = ['npm', 'ci']");
+			expect(typeof got !== "string" && got.build).toEqual({install: ["npm", "ci"]});
+			expect(CHECKS_WITHIN).toBe(2400);
+		});
+
 		it.each([
 			"[build]\ngo = 'label'",
 			"[build]\ngo = 'plan'",
@@ -367,6 +393,10 @@ describe("fabrika.toml", () => {
 			expect(run.slice(0, 2)).toEqual(["node", "oxlint-plugins/format.ts"]);
 			expect(run).toContain("--no-error-on-unmatched-pattern");
 			expect(existsSync(new URL(run[1] ?? "", ROOT))).toBe(true);
+		});
+
+		it("[build] checks_within is 2400 seconds: twice the slowest full test run measured, about 20 minutes", async () => {
+			expect((await loaded()).build?.checks_within).toBe(2400);
 		});
 
 		it("each [[checks.run]] installs before it runs: a fresh copy of a head has no node_modules", async () => {

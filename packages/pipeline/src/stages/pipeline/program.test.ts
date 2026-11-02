@@ -280,7 +280,7 @@ const lane = ({
 						return checksDown()
 							? Effect.succeed({
 									head,
-									commands: ["node_modules/.bin/vitest run"],
+									commands: [{command: "node_modules/.bin/vitest run", code: null, ms: 3}],
 									result: "not_run" as const,
 									failed: [],
 									tail: "spawn ENOSPC",
@@ -635,7 +635,11 @@ describe("a lane, whole", () => {
 			]);
 			expect(checked[0]?.head).not.toBe(checked[1]?.head);
 			expect(checked[1]?.commands).toEqual([
-				"node_modules/.bin/vitest run --reporter=json --outputFile={out}",
+				{
+					command: "node_modules/.bin/vitest run --reporter=json --outputFile={out}",
+					code: 0,
+					ms: expect.any(Number),
+				},
 			]);
 
 			// The mutation step ran no suite of its own, and its end names the green checks it trusted.
@@ -661,7 +665,13 @@ describe("a lane, whole", () => {
 				fake: {writesAt: {build: {0: round(1), 1: round(2), 2: round(3)}}},
 				checksSay: (head) => ({
 					head,
-					commands: ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"],
+					commands: [
+						{
+							command: "node_modules/.bin/vitest run --reporter=json --outputFile={out}",
+							code: 1,
+							ms: 8_120,
+						},
+					],
 					result: "red",
 					failed,
 					tail: `${name(0)}: AssertionError: expected 1 to be 2`,
@@ -699,14 +709,26 @@ describe("a lane, whole", () => {
 		{timeout: 300_000},
 		async () => {
 			const NAME = "src/lower-spaces.test.ts > lower > cuts spaces";
-			const commands = ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"];
+			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
 			const ran = await lane({
 				within: 200,
 				picks: YES,
 				checksSay: (head, nth) =>
 					nth === 0
-						? {head, commands, result: "green", failed: [], tail: ""}
-						: {head, commands, result: "red", failed: [NAME], tail: `${NAME}: boom`},
+						? {
+								head,
+								commands: [{command: VITEST, code: 0, ms: 8_120}],
+								result: "green",
+								failed: [],
+								tail: "",
+							}
+						: {
+								head,
+								commands: [{command: VITEST, code: 1, ms: 8_120}],
+								result: "red",
+								failed: [NAME],
+								tail: `${NAME}: boom`,
+							},
 			});
 			const said = ran.lines.join("\n");
 			expect(ran.lines, said).not.toContain(TIMED_OUT);
@@ -722,7 +744,8 @@ describe("a lane, whole", () => {
 				.filter((body) => body.includes("The repository's own tests fail at this head:"));
 			expect(red).toHaveLength(1);
 			expect(red[0]).toContain(`\`${NAME}\``);
-			expect(ran.lines.at(-1)).toContain("stuck:checks_not_run");
+			// The PR 4 review: red, by that name. Checks that ran and failed are not checks that could not run.
+			expect(ran.lines.at(-1)).toContain("stuck:checks_red");
 			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		},
 	);

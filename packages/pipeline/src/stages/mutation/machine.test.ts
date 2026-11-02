@@ -169,7 +169,13 @@ describe("the mutation step", () => {
 // this very head the step skips its own suite run, and its report names the checks it trusted, so
 // a skip never looks like a clean run. Any other checks, or none, and it runs the tests as before.
 describe("the mutation step after code's checks", () => {
-	const COMMANDS = ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"];
+	const COMMANDS = [
+		{
+			command: "node_modules/.bin/vitest run --reporter=json --outputFile={out}",
+			code: 0,
+			ms: 4_210,
+		},
+	];
 	const checkedAt = (head: string, result: "green" | "red" | "not_run") => ({
 		head,
 		commands: COMMANDS,

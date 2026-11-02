@@ -81,7 +81,7 @@ const DONE: StepEnd = {outcome: {kind: "done", part: false}, carry: {}};
 /** The build's head, and the checks code ran there after it (self-fix PR 4). */
 const HEAD = "4".repeat(40);
 const OTHER_HEAD = "5".repeat(40);
-const CHECKS = ["node_modules/.bin/vitest run"];
+const CHECKS = [{command: "node_modules/.bin/vitest run", code: 0, ms: 4_210}];
 const GREEN_AT = (head: string) => ({head, commands: CHECKS, result: "green", failed: []}) as const;
 /** A build that ended well, with code's checks green at its own head: the only build a later step runs on. */
 const BUILT: StepEnd = {
@@ -680,6 +680,33 @@ describe("code's checks after the build", () => {
 		});
 		expect(running(checked).step).toBe("review");
 		expect(stepsIn(cmds)[0]?.carry.checked).toEqual(GREEN_AT(OTHER_HEAD));
+	});
+
+	// The PR 4 review: red checks are no checks that could not run. A lane that stops on them says
+	// red, so the record holds what code found.
+	it("red checks on the mutants job's commit end the lane `stuck:checks_red`, and the review does not run", () => {
+		const [mutation] = firstBuildEnds(BUILT);
+		const [mutants] = ended(mutation, {
+			outcome: {kind: "send", to: "test_writer", why: "mutant_survived"},
+			carry: {},
+		});
+		const [s, cmds] = ended(mutants, {
+			outcome: DONE.outcome,
+			carry: {head: OTHER_HEAD, checked: RED_AT(OTHER_HEAD)},
+		});
+		expect(afterBuildIn(cmds)).toEqual([]);
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_red");
+	});
+
+	it.each([
+		["red at its head", {head: HEAD, checked: RED_AT(HEAD)}, "stuck:checks_red"],
+		["not run at its head", {head: HEAD, checked: NOT_RUN_AT(HEAD)}, "stuck:checks_not_run"],
+		["green at another head", {head: HEAD, checked: GREEN_AT(OTHER_HEAD)}, "stuck:checks_not_run"],
+		["red at another head", {head: HEAD, checked: RED_AT(OTHER_HEAD)}, "stuck:checks_not_run"],
+		["none", {head: HEAD}, "stuck:checks_not_run"],
+	])("a build that says done with checks %s ends the lane %s", (_, carry, name) => {
+		const [s] = firstBuildEnds({outcome: {kind: "done", part: false}, carry});
+		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe(name);
 	});
 
 	it("a lane that holds its checks saves and reads back as it was", () => {

@@ -69,7 +69,12 @@ const OUTCOMES: readonly Outcome[] = [
 const BUILT_HEAD = "4".repeat(40);
 const GREEN_CARRY = {
 	head: BUILT_HEAD,
-	checked: {head: BUILT_HEAD, commands: ["vitest run"], result: "green", failed: []},
+	checked: {
+		head: BUILT_HEAD,
+		commands: [{command: "vitest run", code: 0, ms: 4_210}],
+		result: "green",
+		failed: [],
+	},
 } as const;
 const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
@@ -670,7 +675,7 @@ describe("code's checks after the build, over any run", () => {
 		"push",
 		"merge",
 	]);
-	const COMMANDS = ["vitest run --reporter=json --outputFile={out}"];
+	const COMMANDS = [{command: "vitest run --reporter=json --outputFile={out}", code: 0, ms: 4_210}];
 	const NAME = "src/red.test.ts > a planted red > stays red";
 	/** Each commit the run makes gets a head of its own. */
 	const headOf = (n: number) => n.toString(16).padStart(40, "a");
