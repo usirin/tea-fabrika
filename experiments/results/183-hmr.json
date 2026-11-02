@@ -1,0 +1,196 @@
+{
+	"when": "2026-11-01",
+	"node": "v26.13.0",
+	"bytes": {
+		"v1": 316233,
+		"v2": 316233,
+		"v3": 316233,
+		"v4": 316233,
+		"v5": 316233,
+		"top-throw": 316299
+	},
+	"syntaxError": "refused by esbuild: line 1: Unexpected \";\"",
+	"swap": {
+		"answers": {
+			"v2": {
+				"swapped": true
+			},
+			"v3": {
+				"swapped": true
+			},
+			"v4": {
+				"swapped": false,
+				"why": "refused"
+			},
+			"topThrow": {
+				"swapped": false,
+				"why": "failed"
+			},
+			"v5": {
+				"swapped": true
+			},
+			"v5step": {
+				"ok": true,
+				"build": "13dcd7f1bf43817897aae78276958dc042151f0953ee7cefbc056e675aeebf93",
+				"rolledBack": true
+			}
+		},
+		"views": {
+			"v1": "3 so far",
+			"v2": "count: 3",
+			"v3": "count: 5"
+		},
+		"end": {
+			"model": {
+				"count": 7
+			},
+			"running": "v3",
+			"view": "count: 7"
+		},
+		"log": [
+			"1 code.loaded {\"hash\":\"v1\",\"was\":null,\"from\":\"boot\"}",
+			"2 stepped {\"id\":\"m0\",\"build\":\"v1\"}",
+			"3 stepped {\"id\":\"m1\",\"build\":\"v1\"}",
+			"4 stepped {\"id\":\"m2\",\"build\":\"v1\"}",
+			"5 code.loaded {\"hash\":\"v2\",\"was\":\"v1\",\"from\":\"watch\"}",
+			"6 stepped {\"id\":\"m3\",\"build\":\"v2\"}",
+			"7 stepped {\"id\":\"m4\",\"build\":\"v2\"}",
+			"8 code.loaded {\"hash\":\"v3\",\"was\":\"v2\",\"from\":\"watch\"}",
+			"9 stepped {\"id\":\"m5\",\"build\":\"v3\"}",
+			"10 code.refused {\"hash\":\"v4\",\"was\":\"v3\",\"why\":\"Missing key at [\\\"total\\\"]\"}",
+			"11 code.failed {\"hash\":\"top-throw\",\"was\":\"v3\",\"why\":\"Error: Failed to start Worker:\\nUncaught Error: a module that throws as it loads\\n  at program.js:30:97854\"}",
+			"12 code.loaded {\"hash\":\"v5\",\"was\":\"v3\",\"from\":\"watch\"}",
+			"13 step.crashed {\"id\":\"m6\",\"build\":\"v5\",\"why\":\"Error: count is not a function\"}",
+			"14 code.rolled_back {\"from\":\"v5\",\"to\":\"v3\"}",
+			"15 stepped {\"id\":\"m6\",\"build\":\"v3\"}"
+		]
+	},
+	"race": {
+		"queue": [
+			{
+				"model": {
+					"count": 200
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 100,
+				"onNew": 100
+			},
+			{
+				"model": {
+					"count": 200
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 100,
+				"onNew": 100
+			},
+			{
+				"model": {
+					"count": 200
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 100,
+				"onNew": 100
+			},
+			{
+				"model": {
+					"count": 200
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 100,
+				"onNew": 100
+			},
+			{
+				"model": {
+					"count": 200
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 100,
+				"onNew": 100
+			}
+		],
+		"around": [
+			{
+				"model": {
+					"count": null
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 98,
+				"onNew": 102
+			},
+			{
+				"model": {
+					"count": null
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 98,
+				"onNew": 102
+			},
+			{
+				"model": {
+					"count": null
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 98,
+				"onNew": 102
+			},
+			{
+				"model": {
+					"count": null
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 98,
+				"onNew": 102
+			},
+			{
+				"model": {
+					"count": null
+				},
+				"stepped": 200,
+				"distinct": 200,
+				"onOld": 98,
+				"onNew": 102
+			}
+		]
+	},
+	"memory": {
+		"gens": 60,
+		"loadMs": {
+			"p50": 22.77,
+			"p95": 26.08
+		},
+		"firstStepMs": {
+			"p50": 2.08,
+			"p95": 2.66
+		},
+		"rssMb": {
+			"before": 171.2,
+			"after 10": 235.1,
+			"after 20": 275.4,
+			"after 30": 308.6,
+			"after 40": 344.9,
+			"after 50": 383.3,
+			"after 60": 421.3,
+			"after 20 s idle": 421
+		},
+		"model": {
+			"n": 60
+		}
+	},
+	"restart": {
+		"firstReadMs": 55.8,
+		"model": {
+			"count": 7
+		},
+		"running": "v3",
+		"view": "count: 7"
+	}
+}
