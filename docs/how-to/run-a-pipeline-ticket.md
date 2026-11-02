@@ -99,7 +99,8 @@ An agent goes through this list and tells the owner what is missing.
 ## The steps
 
 ```text
-triage -> plan -> the person approves -> exam, when rules change -> test writer
+triage -> plan -> the person approves -> exam, when rules change -> the exam's review
+       -> the person's yes on the rule changes -> their merge -> test writer
        -> build -> mutation -> one review -> push -> the person's yes -> merge
 ```
 
@@ -118,7 +119,7 @@ The lane asks a person seven kinds of question (`packages/pipeline/src/stages/pi
 | Ask | What it is about |
 |---|---|
 | `approve` | The plan. Open questions in the plan are read here too. |
-| `exam_merge` | The exam's own pull request is open, and rules are the person's call. |
+| `exam_merge` | The exam's own pull request is open and its review passed, and rules are the person's call. The question says what the review met, and the head the checks passed at. |
 | `merge` | The merge yes, after the push. |
 | `step` | A step ended on `ask`, and it may be run again. |
 | `rounds_spent` | Review sent the build back too many times. `again` runs one more round; `stop` pauses. |

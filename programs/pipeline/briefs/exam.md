@@ -4,6 +4,7 @@ answer: ExamWritten
 slots:
   ticket: the ticket's title and text
   changes: each rule change the approved plan lists, with its path, the change and why
+  sent_back: on a redo, what the pull request was sent back for, a line each; else "None."
   note: on a later try, the Check's problems, sent instead of this brief
 ---
 
@@ -18,6 +19,12 @@ The code is in your working folder. It is a read-only copy: your box refuses a w
 # The rule changes a person approved
 
 {changes}
+
+# What it was sent back for
+
+{sent_back}
+
+On a redo, your folder holds the pull request's head, with your last changes in it. Fix what is listed here in the same files, and hand each listed file back whole again.
 
 # What to hand back
 

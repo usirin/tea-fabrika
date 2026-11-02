@@ -28,7 +28,10 @@ export const NO_FORMATTER = `This repository names no formatter, so code commits
  *   it failed            what it wrote is committed, and the ticket says what it said
  */
 export const formatExam = (number: number, tree: string, exam: readonly string[]) =>
-	formatAt(number, tree, exam, {what: "the tests", message: `format the tests for ticket ${number}`});
+	formatAt(number, tree, exam, {
+		what: "the tests",
+		message: `format the tests for ticket ${number}`,
+	});
 
 /**
  * Files as `tree`'s head holds them, through the repository's formatter, and a code commit of what

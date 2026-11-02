@@ -210,7 +210,8 @@ export class LaneWork extends Context.Service<
 		readonly sideMerge: (
 			name: string,
 		) => Effect.Effect<
-			{readonly _tag: "merged"; readonly head: string} | {readonly _tag: "conflicts"; readonly files: readonly string[]},
+			| {readonly _tag: "merged"; readonly head: string}
+			| {readonly _tag: "conflicts"; readonly files: readonly string[]},
 			Failed
 		>;
 		/** What a yes at `head`, onto branch `onto`, is given on, after a fetch (./carry.ts). */
@@ -412,21 +413,21 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const settingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
 			Effect.gen(function* () {
 				const refused = settingsRefusal(
-				yield* listedAt(inClone, tip, SETTINGS_PATHS).pipe(
-					Effect.mapError((ran) => said("read of the settings", ran)),
-				),
-			);
-			if (refused !== null) return yield* Effect.fail(failed(refused));
-			const file = at("settings", tip, SETTINGS_FILE);
-			const text = yield* show(tip, SETTINGS_FILE);
-			if (text === null) return DEFAULT_SETTINGS;
-			yield* quiet(fs.makeDirectory(path.dirname(file), {recursive: true}));
-			yield* quiet(fs.writeFileString(file, text));
-			return yield* readSettings(file).pipe(
-				Effect.provideService(FileSystem.FileSystem, fs),
-				Effect.mapError((e) => failed(e.why)),
-			);
-		});
+					yield* listedAt(inClone, tip, SETTINGS_PATHS).pipe(
+						Effect.mapError((ran) => said("read of the settings", ran)),
+					),
+				);
+				if (refused !== null) return yield* Effect.fail(failed(refused));
+				const file = at("settings", tip, SETTINGS_FILE);
+				const text = yield* show(tip, SETTINGS_FILE);
+				if (text === null) return DEFAULT_SETTINGS;
+				yield* quiet(fs.makeDirectory(path.dirname(file), {recursive: true}));
+				yield* quiet(fs.writeFileString(file, text));
+				return yield* readSettings(file).pipe(
+					Effect.provideService(FileSystem.FileSystem, fs),
+					Effect.mapError((e) => failed(e.why)),
+				);
+			});
 		const settings = Effect.flatMap(main, settingsAt);
 
 		const made = (name: string, branch: string) =>
@@ -699,10 +700,8 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				return yield* Effect.gen(function* () {
 					yield* git(tree, ["read-tree", "--reset", "-u", replayed]);
 					// Run from the base's copy, on the replayed files beside it: `{files}` are relative paths.
-					const [program, ...args] = formatCommand(
-						run,
-						[first, ...rest].map((file) => path.relative(from, path.join(tree, file))),
-					);
+					const where = (file: string) => path.relative(from, path.join(tree, file));
+					const [program, ...args] = formatCommand(run, [where(first), ...rest.map(where)]);
 					const ran = yield* on(runChild(program, args, {cwd: from, env: runEnv()}));
 					if (ran.code !== 0) return null;
 					yield* git(tree, ["add", "-A"]);
@@ -738,7 +737,14 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 						: yield* formattedTree(
 								base,
 								replayed,
-								yield* names(clone, ["diff", "--no-renames", "--name-only", "--diff-filter=d", base, replayed]),
+								yield* names(clone, [
+									"diff",
+									"--no-renames",
+									"--name-only",
+									"--diff-filter=d",
+									base,
+									replayed,
+								]),
 							);
 				const range = yield* inClone([
 					"range-diff",

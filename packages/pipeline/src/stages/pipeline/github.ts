@@ -7,8 +7,19 @@ import type {LocalCheck} from "../../code-host-local.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {ghOn, reviewWritesOn} from "../operate/writes.ts";
-import type {PrFacts, ReviewKind} from "../ship/facts.ts";
-import {laneLocalHost, LanePulls, mergeAnswered, type Pull, pullFacts, PullWire} from "./pulls.ts";
+import type {PrFacts} from "../ship/facts.ts";
+import {
+	isExamTarget,
+	judgedAt,
+	laneBound,
+	laneLocalHost,
+	LanePulls,
+	type Pull,
+	pullFacts,
+	PullWire,
+	yesAt,
+	yesOf,
+} from "./pulls.ts";
 import {LaneWork} from "./work.ts";
 
 // The lane's code host when the checkout's origin is on GitHub. Today's version. It has run only
@@ -32,23 +43,21 @@ import {LaneWork} from "./work.ts";
 type Failed = {readonly _tag: "unknown"};
 const failed: Failed = {_tag: "unknown"};
 
-/** A verdict is for one head. On a head the lane did not post for, each row is `missing`. Pure. */
-const notJudged = (rows: PrFacts["reviews"]): PrFacts["reviews"] => {
-	if (rows === null) return null;
-	const missing = (row: ReviewKind): ReviewKind => ({...row, verdict: "missing"});
-	const [first, ...rest] = rows;
-	return [missing(first), ...rest.map(missing)];
-};
+/** A review's target the local host reads: a plan's book, or an exam's side tree. Pure. */
+const onThisMachine = (target: string): boolean => target.endsWith("/book") || isExamTarget(target);
 
-/** GitHub's reading, with what only the lane knows put over it. Pure. */
-export const laneFactsOver = (facts: PrFacts, pull: Pull, repo: string, yes: boolean): PrFacts => {
-	const own = pullFacts(pull, repo, yes);
-	return {
-		...facts,
-		...own,
-		reviews: facts.head === pull.head ? own.reviews : notJudged(own.reviews),
-	};
-};
+/**
+ * GitHub's reading, with what only the lane knows put over it. `judged`: what the lane's verdicts
+ * judged stands at GitHub's head (./pulls.ts `judgedAt`). Left out: only at the head the lane posted
+ * for. Pure.
+ */
+export const laneFactsOver = (
+	facts: PrFacts,
+	pull: Pull,
+	repo: string,
+	yes: boolean,
+	judged = facts.head === pull.head,
+): PrFacts => ({...facts, ...pullFacts(pull, repo, yes, judged)});
 
 /** The real arguments of the one `gh` line that opens a pull request. Pure. */
 export const openArgs = (repo: string, pull: {branch: string; title: string; body: string}) => [
@@ -119,6 +128,7 @@ export const laneGitHubHost = (
 			const work = yield* LaneWork;
 			const pulls = yield* LanePulls;
 			const tickets = yield* Tickets;
+			const bound = laneBound(work, tickets);
 			const local = yield* CodeHost;
 			const base = codeHostOn(gh, {own: [], reviewers: []});
 			const writes = codeHostWritesOn(gh);
@@ -134,11 +144,12 @@ export const laneGitHubHost = (
 					: Effect.succeed<PrFacts["checks"]>("pending");
 			const host: CodeHost["Service"] = {
 				...base,
-				// The review comes before the push, so the one change the lane reads is a plan's book.
+				// The review comes before the push, so the changes the lane reads are a plan's book and an
+				// exam's side tree, both on this machine.
 				change: (target, head) =>
-					target.endsWith("/book") ? local.change(target, head) : Effect.fail(failed),
+					onThisMachine(target) ? local.change(target, head) : Effect.fail(failed),
 				checksSettled: (target, head, after) =>
-					target.endsWith("/book")
+					onThisMachine(target)
 						? local.checksSettled(target, head, after)
 						: Stream.unwrap(
 								// A file that does not read waits on GitHub, the safe side: the read after it stops the run.
@@ -159,7 +170,9 @@ export const laneGitHubHost = (
 						// A merged row is not the branch's open pull request, so a new head there is a new one.
 						if (facts.state === "merged" && pull.state === "open") yield* pulls.merged(pr);
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
-						const over = laneFactsOver(facts, pull, repo, mergeAnswered(ticket, pull));
+						const yes = yield* bound(yesAt(pull.ticket, yesOf(ticket, pull), facts.head));
+						const judged = yield* bound(judgedAt(pull, facts.head));
+						const over = laneFactsOver(facts, pull, repo, yes, judged);
 						return (yield* counted) === "none"
 							? {...over, checks: yield* ownChecks(pr, pull, facts.head)}
 							: over;

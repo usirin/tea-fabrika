@@ -22,13 +22,14 @@ export type With = typeof With.Type;
 
 /**
  * Where the lane goes after an outcome. `run`: that step, now. `back`: that step again, with what it
- * must fix, counted against `bound`. `fresh`: take main in, then run `then`. `once`: the same step
- * again as a new run; a second time stops with its why.
+ * must fix, counted against `bound`. `fresh`: take main in, then run `step`. `once`: the same step
+ * again as a new run; a second time stops with its why. (The plan's sketch named `fresh`'s step
+ * `then`; a `then` key makes any value a thenable, so it is `step`, as in `run` and `back`.)
  */
 export const Move = Schema.Union([
 	Schema.TaggedStruct("run", {step: Step}),
 	Schema.TaggedStruct("back", {step: Step, with: With, bound: Schema.Literals(["rounds", "once"])}),
-	Schema.TaggedStruct("fresh", {then: Step}),
+	Schema.TaggedStruct("fresh", {step: Step}),
 	Schema.TaggedStruct("once", {}),
 ]);
 export type Move = typeof Move.Type;
@@ -43,7 +44,7 @@ export const back = (step: Step, why: With): Move => ({
 	with: why,
 	bound: "rounds",
 });
-export const fresh = (then: Step): Move => ({_tag: "fresh", then});
+export const fresh = (step: Step): Move => ({_tag: "fresh", step});
 export const once: Move = {_tag: "once"};
 
 /** Every `send` ship can end with, by its printed name. */

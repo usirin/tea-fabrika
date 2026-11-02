@@ -14,9 +14,16 @@ tsh> ticket --ticket 117              the asks, answered here
 The order, in `packages/pipeline/src/stages/pipeline/machine.ts`:
 
 ```text
-triage -> plan -> the person approves -> exam, when rules change -> test writer
+triage -> plan -> the person approves -> exam, when rules change -> the exam's review
+       -> the person's yes on the rule changes -> their merge -> test writer
        -> build -> mutation -> one review -> push -> the person's yes -> merge
 ```
+
+The exam's review (`exam_review`) is code first, then one agent: it formats the rule files, runs the
+checks, and runs the review step over the exam's own pull request, against one criterion per rule
+change the plan lists. A failed review or red checks go back to the exam writer, at most 3 rounds.
+A yes said at one head counts at a later one only when the diff it judged replays there
+([a yes binds to the diff](../../docs/direction/a-yes-binds-to-the-diff.md)).
 
 ## What it needs
 
