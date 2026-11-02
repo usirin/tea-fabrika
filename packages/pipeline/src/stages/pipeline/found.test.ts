@@ -2,6 +2,7 @@ import {Cause, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {make} from "../../entity.ts";
 import {QuestionId} from "../../ids.ts";
+import type {FactOf} from "../../tickets/ticket.ts";
 import {BREAK} from "../build/body.ts";
 import {planProblems} from "../plan/check.ts";
 import {HeldDraft, PlanDraft, PlanQuestion} from "../plan/plan.ts";
@@ -14,7 +15,10 @@ import {
 	foundWords,
 	jobsList,
 	mutantWords,
+	redItems,
+	redWords,
 	ruleChangeLines,
+	spentWords,
 	untestedWords,
 } from "./found.ts";
 import {Carry, EMPTY} from "./machine.ts";
@@ -197,5 +201,128 @@ describe("agent words a person or a pull request reads", () => {
 			expect(line).toContain("`.oxlintrc.json`");
 			expect(refused(".oxlintrc.json")).toEqual([]);
 		});
+	});
+});
+
+// Self-fix PR 3: what the builder and the ticket are told of a red head.
+describe("a red head, in words", () => {
+	const ONE = "src/a.test.ts > lower > one";
+	const TWO = "src/a.test.ts > lower > two";
+	const THREE = "src/b.test.ts > three";
+	const WHY = `${ONE}: AssertionError: expected 1 to be 2`;
+
+	it("redItems: one open item per failing test, at its file, and none dropped", () => {
+		const says = "This test fails at the build's head.";
+		expect(redItems([ONE, THREE], WHY)).toEqual([
+			{criterion: null, text: ONE, says, where: ["src/a.test.ts"], wants: []},
+			{criterion: null, text: THREE, says, where: ["src/b.test.ts"], wants: []},
+		]);
+	});
+
+	it("redItems: with no name, the head as a whole, with the tail as why, or that no test was named", () => {
+		const whole = (says: string) => [
+			{
+				criterion: null,
+				text: "The repository's own tests fail at the build's head.",
+				says,
+				where: [],
+				wants: [],
+			},
+		];
+		expect(redItems([], "Error: no tests ran")).toEqual(whole("Error: no tests ran"));
+		expect(redItems([], "")).toEqual(whole("No test was named."));
+	});
+
+	it("redWords: each name up to `most`, how many more, then the first lines of why", () => {
+		expect(redWords([ONE, TWO, THREE], WHY, 2)).toBe(
+			[
+				"The repository's own tests fail at this head:",
+				`- \`${ONE}\``,
+				`- \`${TWO}\``,
+				"And 1 more.",
+				"",
+				"The first lines of why:",
+				"```",
+				WHY,
+				"```",
+			].join("\n"),
+		);
+	});
+
+	it("redWords: all of them when they fit, and no why when there is none", () => {
+		expect(redWords([ONE, TWO], "", 2)).toBe(
+			["The repository's own tests fail at this head:", `- \`${ONE}\``, `- \`${TWO}\``].join("\n"),
+		);
+		expect(redWords([], "", 2)).toBe(
+			["The repository's own tests fail at this head:", "No test was named."].join("\n"),
+		);
+	});
+
+	it("redWords: a name that reads as a reference is made inert", () => {
+		expect(redWords(["src/a.test.ts > reads #12"], "", 5)).toContain(`#${BREAK}12`);
+	});
+
+	it("redWords: a name with markdown in it stays one code span, so it shapes nothing", () => {
+		// A backtick inside, at the end too, a link and an open comment: a fence one longer, padded.
+		const name = "src/a.test.ts > keeps [link](url) and <!-- as `text`";
+		expect(redWords([name], "", 5)).toBe(
+			[
+				"The repository's own tests fail at this head:",
+				"- `` src/a.test.ts > keeps [link](url) and <!-- as `text` ``",
+			].join("\n"),
+		);
+	});
+});
+
+// Self-fix PR 3: what the runs on a ticket cost, on the rounds' question. An unknown price never
+// reads as free.
+describe("what the runs on a ticket cost", () => {
+	const run = (price: Partial<Pick<FactOf<"ended">, "usd" | "listUsd" | "billed">>) =>
+		({
+			type: "ended",
+			run: "r1",
+			stage: "build",
+			outcome: {kind: "done", part: false},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+			...price,
+		}) satisfies FactOf<"ended">;
+
+	it("sums the list prices when each is known", () => {
+		expect(spentWords([run({listUsd: 1.25}), run({listUsd: 0.5})])).toBe(
+			"The runs on this ticket have cost $1.75 so far.",
+		);
+	});
+
+	it("reads a run from before the list price was kept by its `usd`", () => {
+		expect(spentWords([run({usd: 0.3})])).toBe("The runs on this ticket have cost $0.30 so far.");
+	});
+
+	it("takes what was billed when the list price is unknown", () => {
+		expect(spentWords([run({listUsd: null, billed: 0.2})])).toBe(
+			"The runs on this ticket have cost $0.20 so far.",
+		);
+	});
+
+	it("counts a run with no price as unknown, and never as free", () => {
+		const words = spentWords([run({listUsd: null}), run({listUsd: null, billed: null})]);
+		expect(words).toBe(
+			"What the runs on this ticket have cost so far: price unknown for 2 of them.",
+		);
+		expect(words).not.toContain("$0");
+	});
+
+	it("with some known and some not, names both", () => {
+		expect(spentWords([run({listUsd: null}), run({listUsd: 0.5})])).toBe(
+			"What the runs on this ticket have cost so far: price unknown for 1 of them, and $0.50 for the rest.",
+		);
+	});
+
+	it("says nothing of the rest when the known part costs nothing", () => {
+		expect(spentWords([run({listUsd: null}), run({listUsd: 0})])).toBe(
+			"What the runs on this ticket have cost so far: price unknown for 1 of them.",
+		);
 	});
 });

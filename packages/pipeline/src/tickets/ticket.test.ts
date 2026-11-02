@@ -259,6 +259,40 @@ describe("a lane's facts", () => {
 		for (const fact of wrong)
 			expect(readRow(row({data: JSON.stringify(fact), kind: fact.type})).kind).toBe("broken");
 	});
+
+	// Self-fix PR 3: the error text exists only while the tests run, so the step's end keeps the names.
+	describe("a step's end that names its failing tests", () => {
+		const ended = (failed: readonly string[]) => ({
+			type: "ended",
+			run: "r-mutation-6",
+			stage: "mutation",
+			outcome: {kind: "send", to: "builder", why: "tests_red"},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+			failed,
+		});
+		const name = (n: number) => `src/lower.test.ts > lower > case ${n}`;
+
+		it("reads with each name, as written", () => {
+			const fact = ended([name(1), name(2)]);
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it("holds 50 names at most", () => {
+			const fifty = ended(Array.from({length: 50}, (_, i) => name(i)));
+			expect(readRow(row({data: JSON.stringify(fifty), kind: "ended"})).kind).toBe("entry");
+			const more = ended(Array.from({length: 51}, (_, i) => name(i)));
+			expect(readRow(row({data: JSON.stringify(more), kind: "ended"})).kind).toBe("broken");
+		});
+
+		it("an end from before the key still reads", () => {
+			const {failed: _, ...before} = ended([]);
+			expect(readRow(row({data: JSON.stringify(before), kind: "ended"})).kind).toBe("entry");
+		});
+	});
 });
 
 // Record wide (docs/plan/pipeline-self-fix.md, PR 7): what exists only while a run happens. A run's

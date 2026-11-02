@@ -19,6 +19,7 @@ import {parse, TomlError} from "smol-toml";
 //   [build]
 //   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
 //   checks = [["npm", "test"]]        # the commands the builder is told to run
+//   send_back = true                  # a red head goes back to the builder; false asks a person at once
 //
 //   [test_writer]
 //   includes = ["**/*.test.ts"]       # the patterns a new test file must match
@@ -26,7 +27,8 @@ import {parse, TomlError} from "smol-toml";
 //   reads = []                        # folders outside the copy its box may read
 //
 //   [mutation]
-//   tests = ["npx", "vitest", "run"]  # the repository's own tests, at a head
+//   # the repository's own tests, at a head; with {out}, vitest's report names each test that fails
+//   tests = ["npx", "vitest", "run", "--reporter=json", "--outputFile={out}"]
 //   typecheck = ["npx", "tsc", "--noEmit"]
 //
 //   [format]
@@ -147,6 +149,8 @@ const Build = Schema.Struct({
 	/** `[]`: install nothing. */
 	install: Schema.optionalKey(Schema.Array(Word)),
 	checks: Schema.optionalKey(Schema.Array(Command)),
+	/** A head whose own tests fail goes back to the builder, a round at a time. `false`: a person is asked at once. */
+	send_back: Schema.optionalKey(Schema.Boolean),
 });
 
 const TestWriterTable = Schema.Struct({
@@ -159,7 +163,7 @@ const TestWriterTable = Schema.Struct({
 });
 
 const MutationTable = Schema.Struct({
-	/** The repository's own tests. */
+	/** The repository's own tests. `{out}`: where vitest writes its JSON report, which names each test that fails. */
 	tests: Schema.optionalKey(Command),
 	/** The repository's own typecheck: a mutant it rejects is not counted. */
 	typecheck: Schema.optionalKey(Command),

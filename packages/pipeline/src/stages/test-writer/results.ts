@@ -14,9 +14,12 @@ import type {Result} from "../../controls.ts";
 // add cannot load before the build, and that is the red the plan asked for.
 
 const Assertion = Schema.Struct({
+	/** Each `describe` the test is in, outermost first. The mutation step names a failing test by them. */
+	ancestorTitles: Schema.optionalKey(Schema.Array(Schema.String)),
 	title: Schema.String,
 	fullName: Schema.optionalKey(Schema.String),
 	status: Schema.String,
+	failureMessages: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
 });
 
 export const Report = Schema.Struct({
@@ -59,4 +62,48 @@ export const resultsOf = (
 		return file.assertionResults.length === 0 && WAITS_ON_CODE.test(file.message ?? "")
 			? [{property: test.property, result: "red"}]
 			: [];
+	});
+
+/**
+ * The longest name or error line kept, in characters. Ours, with no source: long enough for a
+ * file, a few describes and a title, short enough that one name cannot fill a comment.
+ */
+export const NAME_MOST = 200;
+
+const CUT = "...";
+
+/** Text as one line of at most `NAME_MOST`: any run of spaces, tabs or newlines is one space. Pure. */
+const oneLine = (text: string): string => {
+	const line = text.replace(/\s+/g, " ").trim();
+	return line.length <= NAME_MOST ? line : `${line.slice(0, NAME_MOST - CUT.length)}${CUT}`;
+};
+
+/** The first line of an error that says something: vitest's own leads with the error's name. */
+const firstLine = (text: string | null | undefined): string =>
+	oneLine(
+		(text ?? "")
+			.split("\n")
+			.map((line) => line.trim())
+			.find((line) => line !== "") ?? "",
+	);
+
+/**
+ * Each test that failed in a report, by name: its file from `root`, each `describe`, then its own
+ * title, joined with ` > `. A file that did not load fails as a whole, by its path. `error`: the
+ * first line of why. A name is the repository's own text, bound for a public ticket and an agent's
+ * brief, so each is one line of at most `NAME_MOST`, here, before anything reads it. Pure.
+ */
+export const failuresOf = (
+	report: Report,
+	root: string,
+): readonly {readonly name: string; readonly error: string}[] =>
+	report.testResults.flatMap((file) => {
+		const path = file.name.startsWith(`${root}/`) ? file.name.slice(root.length + 1) : file.name;
+		const failed = file.assertionResults.filter((a) => a.status === "failed");
+		if (failed.length > 0)
+			return failed.map((a) => ({
+				name: oneLine([path, ...(a.ancestorTitles ?? []), a.title].join(" > ")),
+				error: firstLine(a.failureMessages?.[0]),
+			}));
+		return file.status === "failed" ? [{name: oneLine(path), error: firstLine(file.message)}] : [];
 	});

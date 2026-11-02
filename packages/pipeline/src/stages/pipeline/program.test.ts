@@ -53,7 +53,13 @@ const readNumbered = (number: number) =>
 
 const read = readNumbered(NUMBER);
 
-/** Answers every ask as a person, with `picks[kind]` or its first pick, until the fiber is stopped. */
+/** A person's yes at the plan and at each merge, the rule change's too. A step's question has none. */
+const YES = {approve: "approve", exam_merge: "merge", merge: "merge"};
+
+/**
+ * Answers every ask as a person, with `picks[kind]`, until the fiber is stopped. A question it has no
+ * pick for fails it, out loud: a silent first pick could say `again` for ever.
+ */
 const answering = (
 	picks: Readonly<Record<string, string>>,
 	{
@@ -77,13 +83,20 @@ const answering = (
 				const kind = fact.ask.split("-")[1] ?? "";
 				if (kind === "step" && onlyStep !== undefined && fact.ask !== onlyStep) continue;
 				done.add(fact.ask);
+				const pick = (kind === "step" ? queue.shift() : undefined) ?? picks[kind];
+				if (pick === undefined)
+					return yield* Effect.die(
+						new Error(
+							`The test's person has no pick for ${fact.ask}, "${fact.what}" (${fact.picks.join(" or ")}). Give the test one.`,
+						),
+					);
 				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
 					kind: "answered",
 					writer: OWNER,
 					data: {
 						type: "answered",
 						ask: fact.ask,
-						pick: (kind === "step" ? queue.shift() : undefined) ?? picks[kind] ?? fact.picks[0],
+						pick,
 						note: notes[kind] ?? "",
 						text: yield* hashOf(textOf(ticket)),
 					},
@@ -107,6 +120,7 @@ interface Ran {
 interface Script {
 	readonly title?: string;
 	readonly writer?: string;
+	/** The person's pick, by the kind of question. A question with none fails the test. */
 	readonly picks?: Readonly<Record<string, string>>;
 	/** A step's questions, answered in turn. Past the last, `picks` answers. */
 	readonly steps?: readonly string[];
@@ -257,28 +271,32 @@ const lane = ({
 	return Effect.runPromise(
 		Effect.gen(function* () {
 			yield* file(title, "Lower case, no spaces around.", writer);
-			yield* Effect.forkScoped(
+			const person = yield* Effect.forkScoped(
 				answering(picks, {
 					...(steps === undefined ? {} : {steps}),
 					...(notes === undefined ? {} : {notes}),
 					...(savedAsking === undefined ? {} : {onlyStep: SAVED_ASK}),
 				}),
 			);
-			if (savedAsking !== undefined) {
-				const first = yield* Effect.forkScoped(line());
-				while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
-				yield* Fiber.interrupt(first);
-				lines.push(KILLED);
-				yield* keptAsAsking(home, savedAsking.offers);
-			}
-			if (killAt !== undefined) {
-				const first = yield* Effect.forkScoped(line());
-				while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
-				yield* Fiber.interrupt(first);
-				lines.push(KILLED);
-				if (redAfterKill) writeFileSync(red, "");
-			}
-			yield* line();
+			const run = Effect.gen(function* () {
+				if (savedAsking !== undefined) {
+					const first = yield* Effect.forkScoped(line());
+					while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
+					yield* Fiber.interrupt(first);
+					lines.push(KILLED);
+					yield* keptAsAsking(home, savedAsking.offers);
+				}
+				if (killAt !== undefined) {
+					const first = yield* Effect.forkScoped(line());
+					while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
+					yield* Fiber.interrupt(first);
+					lines.push(KILLED);
+					if (redAfterKill) writeFileSync(red, "");
+				}
+				yield* line();
+			});
+			// The person's fiber ends only when it fails: then the test fails with it, now.
+			yield* Effect.raceFirst(run, Fiber.join(person));
 			const ticket = yield* read;
 			const facts = ticket.timeline.map((e) => e.fact as Ran["facts"][number]);
 			const ends = facts.filter((f) => f.type === "ended");
@@ -293,6 +311,35 @@ const lane = ({
 					ends.map((f) => [String(f.stage), JSON.stringify(f.outcome)] as const),
 				),
 			} satisfies Ran;
+		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+	);
+};
+
+/**
+ * A lane on a repository whose `[build] send_back` is `sendBack`, stopped at its first line, and the
+ * lane as it was kept then. No agent runs past the triage.
+ */
+const keptAtStart = (sendBack: boolean): Promise<Lane> => {
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
+	made.push(dir);
+	const {home, seed} = makeLaneHome({dir, nodeModules: MODULES, sendBack});
+	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+	const lines: string[] = [];
+	return Effect.runPromise(
+		Effect.gen(function* () {
+			yield* file("Read names in one form", "Lower case, no spaces around.", OWNER);
+			const running = yield* Effect.forkScoped(
+				runLane(NUMBER, (said) => Effect.sync(() => void lines.push(said))).pipe(
+					Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+				),
+			);
+			while (lines.length === 0) yield* Effect.sleep("20 millis");
+			yield* Fiber.interrupt(running);
+			const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+			const store = handle.store("lane", `lane/${NUMBER}`, Lane);
+			const saved = store.migrate(yield* Effect.promise(() => store.load()));
+			if (!Schema.is(Lane)(saved)) return yield* Effect.die(new Error(lines.join("\n")));
+			return saved;
 		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
 	);
 };
@@ -356,7 +403,7 @@ describe("a lane, whole", () => {
 		"runs every step in order and ends on a merge, on a person's yes",
 		{timeout: 300_000},
 		async () => {
-			const ran = await lane({});
+			const ran = await lane({picks: YES});
 			expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
@@ -396,7 +443,7 @@ describe("a lane, whole", () => {
 		"lands rule changes in their own pull request before the test writer starts",
 		{timeout: 300_000},
 		async () => {
-			const ran = await lane({title: "[rules] Read names in one form"});
+			const ran = await lane({title: "[rules] Read names in one form", picks: YES});
 			expect(ran.stages).toEqual([
 				"triage",
 				"plan",
@@ -420,7 +467,10 @@ describe("a lane, whole", () => {
 		"keeps nothing of a build that changes a test the writer wrote",
 		{timeout: 300_000},
 		async () => {
-			const ran = await lane({title: "[touch-exam] Read names in one form"});
+			const ran = await lane({
+				title: "[touch-exam] Read names in one form",
+				picks: {approve: "approve"},
+			});
 			expect(ran.stages).toEqual(["triage", "plan", "exam", "test_writer", "build"]);
 			expect(ran.names.build).toContain("exam_touched");
 			expect(ran.lines.at(-1)).toContain("exam_touched");
@@ -430,8 +480,84 @@ describe("a lane, whole", () => {
 		},
 	);
 
+	// Self-fix PR 3, the one whole-lane case: each build leaves a test that fails, so the mutation step
+	// finds the head red three times. No Stryker run, no review: it stops at the rounds' question.
+	it(
+		"sends a red head back to the builder with the failing test's name, and asks once the rounds are spent",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/red.test.ts > a planted red > stays red";
+			/** A build's own test that fails, a little different each round so each build changes something. */
+			const red = (n: number) => [
+				{
+					path: "src/red.test.ts",
+					text: `import {describe, expect, it} from "vitest";\n\ndescribe("a planted red", () => {\n\tit("stays red", () => {\n\t\texpect(1).toBe(${n});\n\t});\n});\n`,
+				},
+			];
+			const ran = await lane({
+				within: 200,
+				picks: {approve: "approve", rounds_spent: "stop"},
+				fake: {writesAt: {build: {0: red(2), 1: red(3), 2: red(4)}}},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.stages, said).toEqual([
+				"triage",
+				"plan",
+				"exam",
+				"test_writer",
+				"build",
+				"mutation",
+				"build",
+				"mutation",
+				"build",
+				"mutation",
+			]);
+
+			// The ticket keeps the name each time the head was red.
+			const reds = ran.facts.filter((f) => f.type === "ended" && f.stage === "mutation");
+			for (const end of reds) {
+				expect(end.outcome).toEqual({kind: "send", to: "builder", why: "tests_red"});
+				expect(end.failed).toEqual([NAME]);
+			}
+			// A comment lists it, with the first line of its error.
+			const comments = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
+			expect(comments.some((c) => c.includes(NAME) && c.includes("expected 1 to be 2"))).toBe(true);
+
+			// Round 2's builder is told it; round 1's had nothing to be told.
+			const builds = codexRuns(ran.dir).filter((r) => r.step === "build");
+			expect(builds).toHaveLength(3);
+			expect(builds[0]?.prompt).not.toContain(NAME);
+			expect(builds[1]?.prompt).toContain(NAME);
+			// The tests command as an agent runs it by hand: no JSON report, which only code reads.
+			expect(builds[0]?.prompt).toContain("`- node_modules/.bin/vitest run`");
+			expect(builds[0]?.prompt).not.toContain("{out}");
+			expect(builds[0]?.prompt).not.toContain("--reporter=json");
+
+			// The question: asked once, with what is still red and what the rounds cost, then a stop. The
+			// fake's model has no known rate, and an unknown price never reads as free.
+			const asked = ran.facts.filter((f) => f.type === "asked");
+			const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
+			expect(spent).toHaveLength(1);
+			expect(spent[0]?.picks).toEqual(["again", "stop"]);
+			const cost = /\$\d|price unknown/;
+			expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
+			expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
+		},
+	);
+
+	// Self-fix PR 3: read once, as the lane starts, so a later edit cannot change a run.
+	it(
+		"keeps the repository's `[build] send_back` in the lane as it starts",
+		{timeout: 60_000},
+		async () => {
+			expect(await keptAtStart(false)).toMatchObject({sendBack: false});
+			expect(await keptAtStart(true)).toMatchObject({sendBack: true});
+		},
+	);
+
 	it("does not merge when the person says no", {timeout: 300_000}, async () => {
-		const ran = await lane({picks: {merge: "no"}});
+		const ran = await lane({picks: {approve: "approve", merge: "no"}});
 		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		expect(ran.stages).not.toContain("merge");
 		expect(ran.lines.at(-1)).not.toContain("ended: done");
@@ -462,6 +588,7 @@ describe("a lane, whole", () => {
 			const ran = await lane({
 				title: "[slow-build] Read names in one form",
 				killAt: "test_writer: done",
+				picks: YES,
 			});
 			expect(ran.lines).toContain(KILLED);
 			expect(ran.stages).toEqual(WHOLE);
@@ -476,7 +603,7 @@ describe("a lane, whole", () => {
 	);
 
 	it("resumes after a kill and does no step twice", {timeout: 300_000}, async () => {
-		const ran = await lane({killAt: "build: done"});
+		const ran = await lane({killAt: "build: done", picks: YES});
 		expect(ran.lines).toContain(KILLED);
 		expect(ran.stages).toEqual(WHOLE);
 		expect(ran.lines.at(-1)).toContain("ended: done");
@@ -517,7 +644,11 @@ describe("which rubrics judge a change, on the local host", () => {
 		"reads the folder the file names from main, so a head cannot rewrite its judge",
 		{timeout: 60_000},
 		async () => {
-			const ran = await lane({title: "[touch-rubric] Read names in one form", within: 50});
+			const ran = await lane({
+				title: "[touch-rubric] Read names in one form",
+				within: 50,
+				picks: YES,
+			});
 			expect(ran.stages).toContain("review");
 			// The builder really did rewrite it, in the head the review read: else this proves nothing.
 			expect(remoteGit(ran.remote, "show", `${pushedHead(ran)}:docs/rubrics/code.md`)).toContain(
@@ -542,6 +673,7 @@ describe("which rubrics judge a change, on the local host", () => {
 				mainFiles: [{path: "AGENTS.md", text: MAIN_RULES}],
 				rubrics: null,
 				within: 50,
+				picks: YES,
 			});
 			expect(ran.stages).toContain("review");
 			expect(ran.lines.at(-1)).toContain("ended: done");
@@ -586,7 +718,7 @@ describe("which rubrics judge a change, on the local host", () => {
 				rubrics: null,
 				within: 100,
 				// The second round's writer is all this needs: the fake's second test passes at once, and it asks.
-				picks: {step: "stop"},
+				picks: {approve: "approve", step: "stop"},
 			});
 			const writers = codexRuns(ran.dir).filter((r) => r.step === "tests");
 			// Two rounds really ran, and the head holds what the second must not read or be told of.
@@ -612,7 +744,7 @@ describe("which rubrics judge a change, on the local host", () => {
 	);
 
 	it("uses the rubrics fabrika ships when the file names none", {timeout: 60_000}, async () => {
-		const ran = await lane({rubrics: null, within: 50});
+		const ran = await lane({rubrics: null, within: 50, picks: YES});
 		expect(ran.stages).toContain("review");
 		expect(reviewRubrics(ran.dir)).toContain(SHIPPED_RUBRIC);
 		expect(reviewRubrics(ran.dir)).not.toContain(TOY_RUBRIC);
@@ -674,6 +806,7 @@ describe("a lane, whole, on GitHub", () => {
 				story: {...PASSED_CI, settleAfter: 2},
 				rubrics: null,
 				within: 100,
+				picks: YES,
 			});
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(ran.stages).toEqual(WHOLE);
@@ -722,7 +855,7 @@ describe("a lane, whole, on GitHub", () => {
 	);
 
 	it("does not merge when the person says no", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({picks: {merge: "no"}});
+		const ran = await onGitHub({picks: {approve: "approve", merge: "no"}});
 		// It asked: a lane that stopped before the question would pass this for the wrong reason.
 		expect(
 			ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-merge-")),
@@ -736,6 +869,7 @@ describe("a lane, whole, on GitHub", () => {
 	it("does not merge after a check fails", {timeout: 60_000}, async () => {
 		const ran = await onGitHub({
 			story: {checks: [{name: "ci", ends: "FAILURE"}], settleAfter: 1},
+			picks: YES,
 		});
 		// It asked GitHub, and only one run again before it sends the work back.
 		expect(ran.kinds.filter((kind) => kind === "rerun")).toHaveLength(1);
@@ -747,7 +881,7 @@ describe("a lane, whole, on GitHub", () => {
 	});
 
 	it("stops and says so when a branch rule refuses the merge", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({story: {...PASSED_CI, rule: "refuses"}});
+		const ran = await onGitHub({story: {...PASSED_CI, rule: "refuses"}, picks: YES});
 		const head = remoteGit(ran.remote, "rev-parse", "refs/heads/lane/1");
 		const refused = ran.calls.filter((call) => call.kind === "merge_write");
 		expect(refused).toHaveLength(1);
@@ -766,7 +900,7 @@ describe("a lane, whole, on GitHub", () => {
 		"merges through GitHub's own merge on a ruled branch, bound to the head",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {...PASSED_CI, rule: "allows"}});
+			const ran = await onGitHub({story: {...PASSED_CI, rule: "allows"}, picks: YES});
 			const head = pushedHead(ran);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			const merge = ran.calls.filter((call) => call.kind === "merge_write");
@@ -778,7 +912,7 @@ describe("a lane, whole, on GitHub", () => {
 	);
 
 	it("writes nothing when the head moves just before the merge", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "merge_read"}});
+		const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "merge_read"}, picks: YES});
 		// It got as far as the read that found the move.
 		expect(ran.kinds).toContain("merge_read");
 		expect(ran.wrote).toEqual([]);
@@ -791,7 +925,7 @@ describe("a lane, whole, on GitHub", () => {
 		"lands the exam's pull request on GitHub first, then the lane's",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({title: "[rules] Read names in one form"});
+			const ran = await onGitHub({title: "[rules] Read names in one form", picks: YES});
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(ran.stages).toContain("exam_merge");
 			const branches = ran.calls
@@ -809,7 +943,7 @@ describe("a lane, whole, on GitHub", () => {
 		"with GitHub's checks not counted, lands with none on GitHub and never waits on them",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {}, counted: "none"});
+			const ran = await onGitHub({story: {}, counted: "none", picks: YES});
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(ran.kinds).not.toContain("checks_now");
 			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
@@ -825,6 +959,7 @@ describe("a lane, whole, on GitHub", () => {
 				counted: "none",
 				killAt: "push: done",
 				redAfterKill: true,
+				picks: YES,
 			});
 			// It got to the merge's checks. The run before the kill was green, so this is the second one.
 			expect(ran.stages).toContain("merge");
@@ -842,7 +977,7 @@ describe("a lane, whole, on GitHub", () => {
 		"sends it back when a person moves the head before the facts are read",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "facts"}});
+			const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "facts"}, picks: YES});
 			const pushed = ran.calls.find((call) => call.kind === "facts");
 			// It read the moved head, and the lane's verdict was for the one before it.
 			expect(pushed).toBeDefined();
@@ -858,7 +993,11 @@ describe("a lane, whole, on GitHub", () => {
 		"records the merge it made, when GitHub has not marked it merged by the end of the run",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {...PASSED_CI, marksLate: true}, rubrics: null});
+			const ran = await onGitHub({
+				story: {...PASSED_CI, marksLate: true},
+				rubrics: null,
+				picks: YES,
+			});
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(ran.kinds).toContain("ref_move");
 			// GitHub really has not marked it: what follows came from the lane's own merge.
@@ -887,6 +1026,7 @@ describe("a lane, whole, on GitHub", () => {
 				const ran = await onGitHub({
 					story: {...story, mergedByAPerson: {newHead: true, at}},
 					rubrics: null,
+					picks: YES,
 				});
 				const judged = String(
 					ran.facts.find((f) => f.type === "pushed")?.head ?? "no head was pushed",
@@ -918,6 +1058,7 @@ describe("a lane, whole, on GitHub", () => {
 				const ran = await onGitHub({
 					story: {...RED, mergedByAPerson: {newHead: false, at: "next_read"}},
 					rubrics: null,
+					picks: YES,
 				});
 				const judged = ran.facts.find((f) => f.type === "pushed")?.head;
 				expect(ran.pulls[0]?.mergedHead).toBe(judged);
@@ -939,6 +1080,7 @@ describe("a lane, whole, on GitHub", () => {
 				const ran = await onGitHub({
 					story: {...PASSED_CI, mergedByAPerson: {newHead: false, at: "next_read"}},
 					rubrics: null,
+					picks: YES,
 				});
 				const judged = ran.facts.find((f) => f.type === "pushed")?.head;
 				expect(ran.lines.at(-1)).toContain("ended: done");
@@ -955,7 +1097,11 @@ describe("a lane, whole, on GitHub", () => {
 		"ends on what went wrong when `gh pr create` answers something that is no pull request",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {...PASSED_CI, createSays: "not a url\n"}, rubrics: null});
+			const ran = await onGitHub({
+				story: {...PASSED_CI, createSays: "not a url\n"},
+				rubrics: null,
+				picks: {approve: "approve"},
+			});
 			expect(ran.names.push).toContain("open_failed");
 			expect(ran.lines.at(-1)).toContain("open_failed");
 			expect(ran.wrote).toEqual([]);
@@ -973,6 +1119,7 @@ describe("a lane, whole, on GitHub", () => {
 			const FAILED = "pnpm test:integration";
 			const ran = await onGitHub({
 				rubrics: null,
+				picks: YES,
 				fake: {
 					answers: {
 						build: [
@@ -1035,7 +1182,7 @@ describe("a lane, on what a real agent might answer", () => {
 
 	// P2
 	it("every step's agent runs with --output-schema", {timeout: 100_000}, async () => {
-		const ran = await lane({title: "[rules] Read names in one form", within: 90});
+		const ran = await lane({title: "[rules] Read names in one form", within: 90, picks: YES});
 		expect(ran.lines.at(-1)).toContain("ended: done");
 		const runs = codexRuns(ran.dir);
 		expect(runs.map((r) => r.step)).toEqual(
@@ -1109,7 +1256,7 @@ describe("a lane, on what a real agent might answer", () => {
 			"on build: a second try names it, and the good answer carries on",
 			{timeout: 100_000},
 			async () => {
-				const ran = await lane({within: 90, fake: {answers: {build: [ON_BUILD]}}});
+				const ran = await lane({within: 90, picks: YES, fake: {answers: {build: [ON_BUILD]}}});
 				const runs = runsOf(ran, "build");
 				expect(runs).toHaveLength(2);
 				expect(runs[1]?.prompt).toContain(ON_BUILD);
@@ -1122,7 +1269,11 @@ describe("a lane, on what a real agent might answer", () => {
 			"on build: a second misfit ends draft_failed, with no third try",
 			{timeout: 60_000},
 			async () => {
-				const ran = await lane({within: 50, fake: {answers: {build: [ON_BUILD, ON_BUILD]}}});
+				const ran = await lane({
+					within: 50,
+					picks: {approve: "approve"},
+					fake: {answers: {build: [ON_BUILD, ON_BUILD]}},
+				});
 				expect(runsOf(ran, "build")).toHaveLength(2);
 				expect(ran.names.build).toContain("draft_failed");
 				expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
@@ -1138,6 +1289,7 @@ describe("a lane, on what a real agent might answer", () => {
 				const ran = await lane({
 					title: "[rules] Read names in one form",
 					within: 140,
+					picks: YES,
 					fake: {answers: Object.fromEntries(STEPS.map((step) => [step, [MISFIT]]))},
 				});
 				expect(ran.lines.at(-1)).toContain("ended: done");
@@ -1166,6 +1318,7 @@ describe("a lane, on what a real agent might answer", () => {
 			].join("\n");
 			const ran = await lane({
 				within: 90,
+				picks: YES,
 				fake: {
 					answers: {
 						tests: [
@@ -1199,7 +1352,11 @@ describe("a lane, on what a real agent might answer", () => {
 		{timeout: 60_000},
 		async () => {
 			const REASON = "The fixture run is elsewhere, so nothing here could show it.";
-			const ran = await lane({within: 50, picks: {step: "stop"}, fake: {unseen: REASON}});
+			const ran = await lane({
+				within: 50,
+				picks: {approve: "approve", step: "stop"},
+				fake: {unseen: REASON},
+			});
 			expect(ran.names.review).not.toContain("stuck");
 			expect(ran.names.review).toContain('"ask"');
 			const asked = askedOf(ran).filter((f) => String(f.ask).startsWith("a-step"));
@@ -1218,7 +1375,7 @@ describe("a lane, on what a real agent might answer", () => {
 		async () => {
 			const ran = await lane({
 				within: 90,
-				picks: {step: "go_on"},
+				picks: {...YES, step: "go_on"},
 				fake: {unseen: "The fixture run is elsewhere, so nothing here could show it."},
 				savedAsking: {at: /asks: (?!Do you approve)/, offers: ["again", "go_on", "stop"]},
 			});
@@ -1234,7 +1391,7 @@ describe("a lane, on what a real agent might answer", () => {
 		"a reviewer's folder is told as it is: a box that refuses a write",
 		{timeout: 60_000},
 		async () => {
-			const ran = await lane({within: 50, picks: {merge: "no"}});
+			const ran = await lane({within: 50, picks: {approve: "approve", merge: "no"}});
 			const review = runsOf(ran, "review")[0]?.prompt ?? "";
 			expect(review).toContain("You review one pull request");
 			expect(review).not.toMatch(/thrown away/);
@@ -1249,6 +1406,7 @@ describe("a lane, on what a real agent might answer", () => {
 			const CODE = "export const flip = (on: boolean): boolean => !on;\n";
 			const ran = await lane({
 				within: 140,
+				picks: YES,
 				fake: {
 					writes: {
 						build: [
@@ -1296,6 +1454,7 @@ describe("a lane, on what a real agent might answer", () => {
 			};
 			const ran = await lane({
 				within: 90,
+				picks: YES,
 				fake: {
 					answers: {
 						plan: [
@@ -1471,6 +1630,7 @@ describe("a lane, on what the real agents answered", () => {
 			const ran = await lane({
 				title: TITLE,
 				within: 90,
+				picks: YES,
 				fake: {answers: {plan: [{with: {stories: [REAL_STORY], tasks: [REAL_TASK]}}]}},
 			});
 			const prompt = (step: string) => runsOf(ran, step)[0]?.prompt ?? "";
@@ -1498,7 +1658,7 @@ describe("a lane, on what the real agents answered", () => {
 			const ran = await onGitHub({
 				within: 90,
 				rubrics: null,
-				picks: {step: "go_on"},
+				picks: {...YES, step: "go_on"},
 				fake: {answers: {...TWO_PROPERTIES, ...P1_CANNOT}},
 			});
 			expect(ran.lines.at(-1)).toContain("ended: done");
@@ -1590,7 +1750,7 @@ describe("a lane, on what the real agents answered", () => {
 			"a step's question reads in words, %s, and what each pick does",
 			{timeout: 100_000},
 			async (_name, fake, words) => {
-				const ran = await lane({within: 90, picks: {step: "stop"}, fake});
+				const ran = await lane({within: 90, picks: {approve: "approve", step: "stop"}, fake});
 				reads(ran, "a-step", words);
 			},
 		);
@@ -1703,7 +1863,11 @@ describe("a lane, on what the real agents answered", () => {
 				"its lean reaches each step that judges or writes after it, in both rounds",
 				{timeout: 100_000},
 				async () => {
-					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					const ran = await lane({
+						within: 90,
+						picks: {approve: "approve", step: "stop"},
+						fake: RUN_3,
+					});
 					const steps: readonly (readonly [string, number])[] = [
 						["tests", 0],
 						["build", 0],
@@ -1727,6 +1891,7 @@ describe("a lane, on what the real agents answered", () => {
 					const NOTE = "Yes, but ß gives ss. The rest as you lean.";
 					const ran = await lane({
 						within: 90,
+						picks: YES,
 						notes: {approve: NOTE},
 						fake: {answers: THE_LEAN},
 					});
@@ -1744,7 +1909,7 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {merge: "no"},
+						picks: {approve: "approve", merge: "no"},
 						fake: {answers: THE_LEAN},
 					});
 					const prompt = runsOf(ran, "review")[0]?.prompt ?? "";
@@ -1761,7 +1926,7 @@ describe("a lane, on what the real agents answered", () => {
 					const marked = found(AGAINST_Q1);
 					const ran = await lane({
 						within: 90,
-						picks: {step: "stop"},
+						picks: {approve: "approve", step: "stop"},
 						fake: {answers: {...THE_LEAN, review: [marked, marked, marked]}},
 					});
 					expect(ran.names.review).toContain('"ask"');
@@ -1779,7 +1944,7 @@ describe("a lane, on what the real agents answered", () => {
 					const marked = found(AGAINST_Q1);
 					const ran = await lane({
 						within: 90,
-						picks: {step: "go_on"},
+						picks: {...YES, step: "go_on"},
 						fake: {answers: {...THE_LEAN, review: [marked, marked, marked]}},
 					});
 					expect(answeredWith(ran, "go_on")).not.toEqual([]);
@@ -1798,7 +1963,7 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({
 						within: 90,
 						steps: ["go_on"],
-						picks: {step: "stop"},
+						picks: {approve: "approve", step: "stop"},
 						fake: {answers: {...THE_LEAN, review: [both, both, both]}},
 					});
 					expect(answeredWith(ran, "go_on")).not.toEqual([]);
@@ -1815,7 +1980,7 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {merge: "no"},
+						picks: {approve: "approve", merge: "no"},
 						fake: {
 							answers: {
 								...THE_LEAN,
@@ -1834,7 +1999,11 @@ describe("a lane, on what the real agents answered", () => {
 				"a builder that changes nothing in round 2 asks the person, with its own reason, and does not end stuck",
 				{timeout: 100_000},
 				async () => {
-					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					const ran = await lane({
+						within: 90,
+						picks: {approve: "approve", step: "stop"},
+						fake: RUN_3,
+					});
 					expect(ran.names.build).toContain('"ask"');
 					reads(ran, "a-step", [RUN3_LEFT]);
 					const {what, picks} = readBy(ran, "a-step");
@@ -1850,7 +2019,11 @@ describe("a lane, on what the real agents answered", () => {
 				"that question says the new test is still failing, and that a note beside `again` goes to the builder",
 				{timeout: 100_000},
 				async () => {
-					const ran = await lane({within: 90, picks: {step: "stop"}, fake: RUN_3});
+					const ran = await lane({
+						within: 90,
+						picks: {approve: "approve", step: "stop"},
+						fake: RUN_3,
+					});
 					const {text} = readBy(ran, "a-step");
 					expect(text).toMatch(/still failing/i);
 					expect(text).not.toMatch(/checks pass\b/i);
@@ -1865,7 +2038,7 @@ describe("a lane, on what the real agents answered", () => {
 			// nothing to do, and the checks at the head pass when code runs them.
 			const ALL_GREEN: Script = {
 				within: 90,
-				picks: {step: "go_on", merge: "no"},
+				picks: {approve: "approve", step: "go_on", merge: "no"},
 				fake: {
 					// Each mutant is answered `cannot`, so a second mutation run writes no test twice.
 					cannot: REAL_MUTANT,
@@ -1902,7 +2075,7 @@ describe("a lane, on what the real agents answered", () => {
 				"the checks pass at the head: go_on carries on to the mutation step, and the lane lands",
 				{timeout: 100_000},
 				async () => {
-					const ran = await lane({...ALL_GREEN, picks: {step: "go_on"}});
+					const ran = await lane({...ALL_GREEN, picks: {...YES, step: "go_on"}});
 					expect(runsOf(ran, "build")).toHaveLength(2);
 					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).toContain("mutation");
 					expect(bye(ran)).toContain("ended: done");
@@ -1917,7 +2090,7 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {step: "go_on"},
+						picks: {approve: "approve", step: "go_on"},
 						fake: RUN_3,
 						checksStopRunning: "at_second_writer",
 					});
@@ -1945,6 +2118,7 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({
 						within: 90,
 						steps: ["go_on"],
+						picks: {approve: "approve"},
 						fake: RUN_3,
 						checksStopRunning: "at_restart",
 						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
@@ -1972,7 +2146,7 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 180,
-						picks: {step: "go_on"},
+						picks: {...YES, step: "go_on"},
 						fake: {
 							cannot: REAL_MUTANT,
 							answers: {review: [found(RUN3_FINDING)], tests: [null, RUN3_ROUND_2]},
@@ -2001,7 +2175,8 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({
 						within: 180,
 						steps: ["go_on"],
-						picks: {step: "stop"},
+						// The go_on sends the red head on, and its rounds run out: the person stops there.
+						picks: {approve: "approve", step: "stop", rounds_spent: "stop"},
 						fake: RUN_3,
 						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
 					});
@@ -2022,7 +2197,7 @@ describe("a lane, on what the real agents answered", () => {
 						within: 90,
 						// The first step's question is round 1's surviving mutant, then the builder's no change.
 						steps: ["go_on", "again"],
-						picks: {step: "go_on"},
+						picks: {...YES, step: "go_on"},
 						notes: {step: NOTE},
 						fake: {
 							...RUN_3,
@@ -2048,7 +2223,8 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {step: "again"},
+						// `again` at round 2's question. Once the rounds are spent, the person stops.
+						picks: {approve: "approve", step: "again", rounds_spent: "stop"},
 						fake: {
 							...RUN_3,
 							answers: {
@@ -2058,8 +2234,13 @@ describe("a lane, on what the real agents answered", () => {
 						},
 					});
 					expect(ran.lines).not.toContain(TIMED_OUT);
+					// Round 2's `again` ran round 3, the last, and the lane asked once its rounds were spent.
 					expect(runsOf(ran, "build")).toHaveLength(3);
-					expect(bye(ran)).toContain("stuck");
+					const spent = ran.facts.filter(
+						(f) => f.type === "asked" && String(f.ask).startsWith("a-rounds_spent"),
+					);
+					expect(spent).toHaveLength(1);
+					expect(bye(ran)).toContain("stuck:rounds_spent");
 					const told = [bye(ran), ...commentsOf(ran)];
 					expect(told.filter((said) => /builder/i.test(said) && /round/i.test(said))).not.toEqual(
 						[],
@@ -2075,7 +2256,7 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {step: "go_on"},
+						picks: {approve: "approve", step: "go_on"},
 						// The plain builder writes just this, so round 1's diff is empty.
 						mainFiles: [
 							{
@@ -2099,6 +2280,7 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({
 						within: 90,
 						steps: ["go_on", "stop"],
+						picks: {approve: "approve"},
 						fake: {
 							...THE_LEAN_AND_NOTHING_SEEN,
 							answers: {...THE_LEAN, review: [found(AGAINST_Q1)]},
@@ -2141,7 +2323,7 @@ describe("a lane, on what the real agents answered", () => {
 					async () => {
 						const ran = await lane({
 							within: 90,
-							picks: {step: "stop"},
+							picks: {approve: "approve", step: "stop"},
 							fake: {answers: MARKED_ONCE},
 						});
 						const {text} = readBy(ran, "a-step");
@@ -2166,7 +2348,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await lane({
 							title: `Read names in one form ${"and keep reading them ".repeat(8)}`.trim(),
 							within: 90,
-							picks: {step: "go_on", merge: "no"},
+							picks: {approve: "approve", step: "go_on", merge: "no"},
 							fake: {answers: {...THE_LEAN, review: [found(AGAINST_Q1, OTHER_MARK)]}},
 						});
 						const {what, text} = readBy(ran, "a-merge");
@@ -2187,7 +2369,7 @@ describe("a lane, on what the real agents answered", () => {
 				it("one finding let through is said as one", {timeout: 100_000}, async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {step: "go_on", merge: "no"},
+						picks: {approve: "approve", step: "go_on", merge: "no"},
 						fake: {answers: MARKED_ONCE},
 					});
 					expect(readBy(ran, "a-merge").what).toMatch(/\b1 finding\b.*let through/);
@@ -2201,7 +2383,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await onGitHub({
 							within: 110,
 							rubrics: null,
-							picks: {step: "go_on", merge: "no"},
+							picks: {approve: "approve", step: "go_on", merge: "no"},
 							fake: {
 								cannot: REAL_MUTANT,
 								answers: {
@@ -2227,7 +2409,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await onGitHub({
 							within: 110,
 							rubrics: null,
-							picks: {step: "go_on", merge: "no"},
+							picks: {approve: "approve", step: "go_on", merge: "no"},
 							fake: {
 								cannot: "No test can see the change at {mutant}.",
 								// A file no test reads: every mutant in it survives, so there are several to let live.
@@ -2257,7 +2439,11 @@ describe("a lane, on what the real agents answered", () => {
 					"a pull request with nothing let through says nothing was",
 					{timeout: 100_000},
 					async () => {
-						const ran = await onGitHub({within: 90, rubrics: null, picks: {merge: "no"}});
+						const ran = await onGitHub({
+							within: 90,
+							rubrics: null,
+							picks: {approve: "approve", merge: "no"},
+						});
 						expect(prBody(ran)).toContain("No deviations.");
 						expect(prBody(ran)).not.toMatch(/let through/i);
 					},
@@ -2282,7 +2468,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await lane({
 							within: 180,
 							steps: ["go_on"],
-							picks: {step: "stop"},
+							picks: {approve: "approve", step: "stop"},
 							fake: {answers: {...THE_LEAN, review: [failing, failing, failing]}},
 						});
 						expect(answeredWith(ran, "go_on")).not.toEqual([]);
@@ -2309,7 +2495,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await onGitHub({
 							within: 90,
 							rubrics: null,
-							picks: {merge: "no"},
+							picks: {approve: "approve", merge: "no"},
 							fake: {
 								answers: {
 									plan: [{with: {summary: LOUD}}],
@@ -2331,7 +2517,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await onGitHub({
 							title: "[rules] Read names in one form",
 							rubrics: null,
-							picks: {exam_merge: "no"},
+							picks: {approve: "approve", exam_merge: "no"},
 							fake: {
 								answers: {
 									plan: [
@@ -2359,7 +2545,7 @@ describe("a lane, on what the real agents answered", () => {
 						const ran = await onGitHub({
 							within: 110,
 							rubrics: null,
-							picks: {step: "go_on", merge: "no"},
+							picks: {approve: "approve", step: "go_on", merge: "no"},
 							fake: {
 								answers: {
 									...THE_LEAN,
@@ -2399,7 +2585,7 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await lane({
 						title: "[rules] Read names in one form",
 						within: 50,
-						picks: {exam_merge: "no"},
+						picks: {approve: "approve", exam_merge: "no"},
 					});
 					reads(ran, "a-exam_merge", [
 						".oxlintrc.json",
@@ -2417,7 +2603,7 @@ describe("a lane, on what the real agents answered", () => {
 					const ran = await onGitHub({
 						title: "[rules] Read names in one form",
 						rubrics: null,
-						picks: {exam_merge: "no"},
+						picks: {approve: "approve", exam_merge: "no"},
 					});
 					const args = ran.calls.find((call) => call.kind === "pr_create")?.args ?? [];
 					const body = args[args.indexOf("--body") + 1] ?? "";
@@ -2433,7 +2619,11 @@ describe("a lane, on what the real agents answered", () => {
 				{timeout: 100_000},
 				async () => {
 					const TITLE = "Read names in one form";
-					const ran = await lane({title: TITLE, within: 90, picks: {merge: "no"}});
+					const ran = await lane({
+						title: TITLE,
+						within: 90,
+						picks: {approve: "approve", merge: "no"},
+					});
 					const reviewed = ran.facts.findLast((f) => f.type === "reviewed");
 					const count = `${String(reviewed?.met)} of ${String(reviewed?.of)}`;
 					reads(ran, "a-merge", [TITLE, count, "lands on main"]);
@@ -2469,7 +2659,7 @@ describe("a lane, on what the real agents answered", () => {
 				"the review's brief says the test runner may not start in its copy, and how to run a piece by hand",
 				{timeout: 100_000},
 				async () => {
-					const ran = await lane({within: 90, picks: {merge: "no"}});
+					const ran = await lane({within: 90, picks: {approve: "approve", merge: "no"}});
 					const prompt = runsOf(ran, "review")[0]?.prompt ?? "";
 					expect(prompt).toMatch(/checks below ran/i);
 					expect(prompt).toMatch(/test runner/i);
@@ -2496,7 +2686,7 @@ describe("a lane, on what the real agents answered", () => {
 			"on the local host, a lane that ends done leaves no tree, copy, judge, Codex home or merged branch",
 			{timeout: 100_000},
 			async () => {
-				const ran = await lane({title: "[rules] Read names in one form", within: 90});
+				const ran = await lane({title: "[rules] Read names in one form", within: 90, picks: YES});
 				expect(ran.lines.at(-1)).toContain("ended: done");
 				expect(leftBehind(ran.dir)).toEqual(NOTHING);
 				expect(branches(ran.remote)).toEqual(["refs/heads/main"]);
@@ -2512,7 +2702,7 @@ describe("a lane, on what the real agents answered", () => {
 			"on GitHub, a lane that ends done deletes its merged branch and leaves nothing on disk",
 			{timeout: 100_000},
 			async () => {
-				const ran = await onGitHub({rubrics: null, within: 90});
+				const ran = await onGitHub({rubrics: null, within: 90, picks: YES});
 				expect(ran.lines.at(-1)).toContain("ended: done");
 				expect(ran.kinds).toContain("ref_delete");
 				expect(branches(ran.remote)).toEqual(["refs/heads/main"]);
@@ -2528,6 +2718,7 @@ describe("a lane, on what the real agents answered", () => {
 					rubrics: null,
 					within: 90,
 					story: {...PASSED_CI, refusesBranchDelete: true},
+					picks: YES,
 				});
 				expect(ran.calls.filter((call) => call.kind === "ref_delete")).toMatchObject([
 					{refused: true},
@@ -2541,7 +2732,11 @@ describe("a lane, on what the real agents answered", () => {
 			"a lane that ends stuck keeps its tree for a person to read, and its Codex homes still go",
 			{timeout: 60_000},
 			async () => {
-				const ran = await lane({title: "[touch-exam] Read names in one form", within: 50});
+				const ran = await lane({
+					title: "[touch-exam] Read names in one form",
+					within: 50,
+					picks: {approve: "approve"},
+				});
 				expect(ran.names.build).toContain("exam_touched");
 				const left = leftBehind(ran.dir);
 				expect(left.trees).toContain("1");
@@ -2579,8 +2774,8 @@ describe("a lane, on what the real agents answered", () => {
 							if (other.timeline.some((e) => e.fact.type === "asked")) break;
 							yield* Effect.sleep("50 millis");
 						}
-						yield* Effect.forkScoped(answering({}));
-						yield* line(NUMBER);
+						const person = yield* Effect.forkScoped(answering(YES));
+						yield* Effect.raceFirst(line(NUMBER), Fiber.join(person));
 						return {lines: [...lines], left: leftBehind(dir)};
 					}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
 				);

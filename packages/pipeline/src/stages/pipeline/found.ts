@@ -1,6 +1,8 @@
 import type {Ended} from "@kampus/fabrika-old";
 import {Cause} from "effect";
+import type {FactOf} from "../../tickets/ticket.ts";
 import {inert} from "../build/body.ts";
+import type {Item} from "../build/ticket.ts";
 import type {ExamChange} from "../exam/machine.ts";
 import {textOf} from "../plan/plan.ts";
 import {questionLines} from "../plan/render.ts";
@@ -9,7 +11,7 @@ import type {Found} from "../test-writer/checked.ts";
 import type {MutantAnswer} from "../test-writer/mutants.ts";
 import {Surprise} from "../test-writer/outcome.ts";
 import type {Answer} from "../test-writer/written.ts";
-import {listed} from "./briefs.ts";
+import {fenced, listed} from "./briefs.ts";
 import type {Carry, Through, Untested} from "./machine.ts";
 
 // What a step found, in the words a person or an agent reads it in. Today's version. All pure: the
@@ -100,6 +102,90 @@ export const throughWords = ({findings, mutants}: Through = NOTHING): readonly s
 				listed(mutants.map((row) => inert(`\`${row.mutant}\`: ${row.why}`))),
 			]),
 ];
+
+/**
+ * `text` as one markdown code span, so nothing in it is read as markdown: a fence one backtick longer
+ * than the longest run inside it, and a space each side where it starts or ends with one
+ * (CommonMark 0.31, code spans). Still made inert, so no reference in it reaches a code host. Pure.
+ */
+const codeSpan = (text: string): string => {
+	const line = inert(text.replace(/\s+/g, " "));
+	const fence = "`".repeat(
+		Math.max(0, ...[...line.matchAll(/`+/g)].map((run) => run[0].length)) + 1,
+	);
+	const pad = line.startsWith("`") || line.endsWith("`") ? " " : "";
+	return `${fence}${pad}${line}${pad}${fence}`;
+};
+
+/** An open item as a person reads it: a failing test's name, the repository's text, as code. Pure. */
+const itemWords = (item: Item): string =>
+	item.from === "tests" ? codeSpan(item.text) : inert(item.text);
+
+/** What is still open as the rounds run out, for the person asked whether once more. Nothing open: nothing said. */
+export const openWords = (open: readonly Item[]): readonly string[] =>
+	open.length === 0 ? [] : ["Still open:", listed(open.map(itemWords))];
+
+/** What the builder is told of a red head: each failing test, or with no name, the head as a whole. Pure. */
+export const redItems = (failed: readonly string[], tail: string): readonly Item[] =>
+	failed.length === 0
+		? [
+				{
+					criterion: null,
+					text: "The repository's own tests fail at the build's head.",
+					says: tail === "" ? "No test was named." : tail,
+					where: [],
+					wants: [],
+				},
+			]
+		: failed.map((name) => ({
+				criterion: null,
+				text: name,
+				says: "This test fails at the build's head.",
+				where: [name.split(" > ")[0] ?? name],
+				wants: [],
+			}));
+
+/**
+ * What is open after a red head: what a review left open stays, beside each test that fails now. A
+ * last red's names go: only what fails now is open. Pure.
+ */
+export const withRed = (
+	open: readonly Item[],
+	failed: readonly string[],
+	tail: string,
+): readonly Item[] => [
+	...open.filter((item) => item.from !== "tests"),
+	...redItems(failed, tail).map((item) => ({...item, from: "tests" as const})),
+];
+
+/** The ticket's comment on a red head: each failing test by name, and the first lines of why. Pure. */
+export const redWords = (failed: readonly string[], tail: string, most: number): string =>
+	[
+		"The repository's own tests fail at this head:",
+		listed(failed.slice(0, most).map(codeSpan), "No test was named."),
+		...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
+		...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
+	].join("\n");
+
+/** Dollars as a person reads them. `null`: a price nobody knows, never read as free. */
+export const money = (usd: number | null) =>
+	usd === null ? "price unknown" : `$${usd.toFixed(2)}`;
+
+/**
+ * What the runs on a ticket cost so far, from their `ended` facts, at list price where a rate is
+ * known. A run whose price nobody knows is counted as unknown, so the sum never reads as free. Pure.
+ */
+export const spentWords = (ends: readonly FactOf<"ended">[]): string => {
+	const prices = ends.map((e) =>
+		e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null),
+	);
+	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
+	const total = known.reduce((sum, usd) => sum + usd, 0);
+	const unknown = prices.length - known.length;
+	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
+	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
+	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
+};
 
 /** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
 export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>

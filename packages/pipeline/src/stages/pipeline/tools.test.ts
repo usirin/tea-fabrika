@@ -71,7 +71,7 @@ describe("whether a new test kills its mutant", () => {
 				return ask.spans.some((s) => s.file === file && s.from <= line && line <= s.to);
 			});
 		const runner = Layer.succeed(MutationRunner, {
-			tests: () => Effect.succeed("green"),
+			tests: () => Effect.succeed({result: "green", failed: [], tail: ""} as const),
 			run: (ask) =>
 				Effect.sync(() => {
 					asks.push(ask);

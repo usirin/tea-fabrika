@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {type Report, resultsOf} from "./results.ts";
+import {failuresOf, type Report, resultsOf} from "./results.ts";
 
 const TEST = {property: "p1", file: "a.test.ts", name: "says hi"};
 
@@ -32,5 +32,44 @@ describe("resultsOf", () => {
 		};
 		expect(resultsOf(report(broken), [TEST])).toEqual([]);
 		expect(resultsOf({testResults: []}, [TEST])).toEqual([]);
+	});
+});
+
+describe("failuresOf", () => {
+	it("names a failing test by its file from the root, each describe, then its title", () => {
+		const entry = {
+			name: "/x/src/a.test.ts",
+			status: "failed",
+			assertionResults: [
+				{title: "says hi", fullName: "s says hi", status: "passed"},
+				{
+					title: "says bye",
+					fullName: "s says bye",
+					status: "failed",
+					ancestorTitles: ["s"],
+					failureMessages: ["AssertionError: expected 1 to be 2\n    at a.test.ts:3"],
+				},
+			],
+		};
+		expect(failuresOf(report(entry), "/x")).toEqual([
+			{name: "src/a.test.ts > s > says bye", error: "AssertionError: expected 1 to be 2"},
+		]);
+	});
+
+	it("names a file that failed to load by its path, with the first line of why", () => {
+		const entry = {
+			name: "/x/src/a.test.ts",
+			status: "failed",
+			message: "\n  Error: Cannot find module ./b.ts\n    at a.test.ts:1",
+			assertionResults: [],
+		};
+		expect(failuresOf(report(entry), "/x")).toEqual([
+			{name: "src/a.test.ts", error: "Error: Cannot find module ./b.ts"},
+		]);
+	});
+
+	it("names nothing in a file that passed", () => {
+		const entry = {name: "/x/src/a.test.ts", status: "passed", assertionResults: []};
+		expect(failuresOf(report(entry), "/x")).toEqual([]);
 	});
 });

@@ -70,10 +70,29 @@ export const KILLED_ALL: Ran = {
 };
 export const ONE_SURVIVED: Ran = {...KILLED_ALL, killed: 9, survived: [SURVIVED]};
 
+/** One run of the repo's own tests: green or red, each failing test by name, and the output's last lines. */
+export interface Tested {
+	readonly result: Result;
+	readonly failed: readonly string[];
+	readonly tail: string;
+}
+
+export const GREEN: Tested = {result: "green", failed: [], tail: ""};
+
+/** A failing test's name, as vitest's JSON report spells it: the file, each describe, the test. */
+export const FAILING = "src/clamp.test.ts > clamp > keeps a number above the high";
+
+/** The repo's own tests at the head, one of them failing. */
+export const RED: Tested = {
+	result: "red",
+	failed: [FAILING],
+	tail: "AssertionError: expected 12 to be 10",
+};
+
 /** What each outside thing answers. `undefined` on a slot: the default, which goes well. */
 export interface Script {
 	readonly scope?: Scope | "fail";
-	readonly tests?: Result | "fail";
+	readonly tests?: Tested | "fail";
 	readonly run?: Ran | "fail";
 	/** Restart the process once, at this phase, before answering what is in flight. */
 	readonly restartAt?: Mutation["phase"];
@@ -91,7 +110,7 @@ export const fakes = (script: Script) =>
 					: Effect.succeed(script.scope ?? SCOPE),
 		}),
 		Layer.succeed(MutationRunner, {
-			tests: () => (script.tests === "fail" ? fail : Effect.succeed(script.tests ?? "green")),
+			tests: () => (script.tests === "fail" ? fail : Effect.succeed(script.tests ?? GREEN)),
 			run: () => (script.run === "fail" ? fail : Effect.succeed(script.run ?? KILLED_ALL)),
 		}),
 	);

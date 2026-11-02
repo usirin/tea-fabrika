@@ -17,7 +17,8 @@ includes = ["**/*.test.ts"]
 run = ["node_modules/.bin/vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"]
 
 [mutation]
-tests = ["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"]
+# `{out}`: where vitest writes its JSON report, which names each test that fails, for the builder.
+tests = ["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"]
 typecheck = ["nice", "-n", "15", "pnpm", "typecheck"]
 
 [format]

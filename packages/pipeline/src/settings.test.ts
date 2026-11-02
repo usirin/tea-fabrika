@@ -216,6 +216,25 @@ describe("fabrika.toml", () => {
 		it("GitHub's checks counted for nothing with no check of fabrika's own is refused", async () => {
 			expect(await read("[checks]\ngithub = 'none'")).toContain("would pass a change on no check");
 		});
+
+		// Self-fix PR 3: whether a red head goes back to the builder. Left out, it does.
+		it.each([false, true])("[build] send_back = %s is read as written", async (sendBack) => {
+			expect(await read(`[build]\nsend_back = ${sendBack}`)).toEqual({
+				packs: [],
+				pack: {},
+				build: {send_back: sendBack},
+			});
+		});
+
+		it.each(["'no'", "3"])(
+			"[build] send_back = %s, not true or false, is refused, naming its key",
+			async (value) => {
+				const got = await read(`[build]\nsend_back = ${value}`);
+				expect(got).toBeTypeOf("string");
+				expect(got).toContain("build.send_back: ");
+				expect(got).not.toContain("no such key");
+			},
+		);
 	});
 
 	describe("[format]: the repository's formatter", () => {

@@ -87,6 +87,19 @@ export const listUsdOf = (model: string, t: Tokens): number | null => {
 	);
 };
 
+/**
+ * What a run cost: what the maker billed, and its list price. A run that spent tokens under no
+ * model it can name has no list price, so it is never read as free. Pure.
+ */
+export const priceOf = (
+	picked: Picked | null,
+	spent: Spent,
+): {readonly usd: number; readonly listUsd: number | null} => {
+	const listUsd =
+		picked === null ? (spent.input + spent.output > 0 ? null : 0) : listUsdOf(picked.model, spent);
+	return {usd: picked?.harness === "claude" ? (spent.usd ?? 0) : (listUsd ?? 0), listUsd};
+};
+
 /** What the agents of one step have spent so far. */
 export interface Spent extends Tokens {
 	readonly turns: number;

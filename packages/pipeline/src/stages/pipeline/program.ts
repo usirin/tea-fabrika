@@ -7,14 +7,21 @@ import {
 	type RefsOf,
 	type Send,
 } from "@kampus/fabrika-old";
-import {Clock, Effect, Exit, Schema, Stream} from "effect";
+import {Clock, Effect, Exit, Ref, Schema, Stream} from "effect";
 import {claim, newLane, release} from "../../asks/claims.ts";
 import {readFacts, sendFact} from "../../asks/ledger.ts";
 import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
-import {type CodeFact, type Outcome, saidOf, TicketNumber} from "../../tickets/ticket.ts";
+import {
+	type CodeFact,
+	FAILED_MOST,
+	factsOf,
+	type Outcome,
+	saidOf,
+	TicketNumber,
+} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {inert} from "../build/body.ts";
 import type {Built} from "../build/form.ts";
@@ -41,7 +48,7 @@ import type {PropertyId} from "../test-writer/brief.ts";
 import {answersChild, answersToTheEnd, testsChild, testsToTheEnd} from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
-import {listUsdOf, LaneNow, pickedFor, type Picked, stepStarted} from "./agents.ts";
+import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
 import {formatExam} from "./format.ts";
 import {
@@ -50,10 +57,14 @@ import {
 	foundWords,
 	jobsList,
 	mutantWords,
+	money,
+	redWords,
 	ruleChangeLines,
+	spentWords,
 	throughWords,
 	untestedRows,
 	untestedWords,
+	withRed,
 } from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
 import {leaveBehind} from "./leave.ts";
@@ -71,6 +82,7 @@ import {
 } from "./machine.ts";
 import {LANE_NAMES} from "./outcome.ts";
 import {LaneWatch} from "./pulls.ts";
+import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
 // The lane as a program: one tracker ticket through every step, each step's own machine, each step's
@@ -227,8 +239,14 @@ const need = <A>(value: A | null | undefined, says: string): Effect.Effect<A, Br
 		? Effect.fail({_tag: "unknown", says})
 		: Effect.succeed(value);
 
-/** A step's end, and what its machine said went wrong: the ticket and the tile say it too. */
-type BodyEnd = StepEnd & {readonly problems: readonly string[]};
+/**
+ * A step's end, and what its machine said went wrong: the ticket and the tile say it too. `failed`:
+ * on a red head, each failing test by name, for the step's `ended` fact.
+ */
+type BodyEnd = StepEnd & {
+	readonly problems: readonly string[];
+	readonly failed?: readonly string[];
+};
 
 const ended = (
 	outcome: Parameters<typeof factOutcome>[0],
@@ -298,7 +316,7 @@ const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
 			return ended({kind: "stuck", why: "checks_not_run"}, kept, [
 				`The builder changed nothing, and the checks could not run at ${head}, so nothing says whether this work holds. ${says}`,
 			]);
-		if (checks.success === "green")
+		if (checks.success.result === "green")
 			return asksFirst("no_change", ended({kind: "done", part: false}, kept), [says]);
 		if (round >= MAX_ROUNDS)
 			return ended({kind: "stuck", why: "rounds_spent"}, kept, [
@@ -306,6 +324,13 @@ const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
 			]);
 		return ended({kind: "ask", who: "owner", for: "still_red"}, kept, [says]);
 	});
+
+/**
+ * A tests command as an agent runs it by hand: without the JSON report `{out}` asks for, which only
+ * code reads. With it, the agent would see no output and write a file named `{out}`. Pure.
+ */
+const byHand = (command: readonly string[]) =>
+	command.filter((word) => !word.includes("{out}") && word !== "--reporter=json");
 
 /** Each step: what its agent is told, and its machine, to its end. */
 const bodies = {
@@ -506,7 +531,7 @@ const bodies = {
 				quick: listed(
 					(settings.mutation?.tests ?? []).length === 0
 						? []
-						: [(settings.mutation?.tests ?? []).join(" ")],
+						: [byHand(settings.mutation?.tests ?? []).join(" ")],
 				),
 				decided: decidedWords(carry),
 			});
@@ -555,7 +580,21 @@ const bodies = {
 				seed: at.cmd.count,
 				most: MAX_MUTANTS,
 			});
-			return ended(end.outcome, {survived: end.report.ran?.survived ?? []});
+			const survived = end.report.ran?.survived ?? [];
+			if (end.outcome.kind !== "send" || end.outcome.to !== "builder")
+				return ended(end.outcome, {survived});
+			// A red head: the names and the first lines of why exist only now, so the ticket keeps them.
+			const {failed = [], tail = ""} = end.report;
+			yield* (yield* Tickets)
+				.talk(at.cmd.number, `${at.run}/red`, {
+					type: "commented",
+					body: saidOf(redWords(failed, tail, FAILED_MOST)),
+				})
+				.pipe(Effect.ignore);
+			return {
+				...ended(end.outcome, {survived, open: withRed(at.cmd.carry.open, failed, tail)}),
+				failed: failed.slice(0, FAILED_MOST),
+			};
 		}),
 
 	mutants: (at: At) =>
@@ -785,8 +824,6 @@ const shipped = (at: At, pr: string) =>
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
-const money = (usd: number | null) => (usd === null ? "price unknown" : `$${usd.toFixed(2)}`);
-
 const laneInterpret = ({send, machines}: Stages) => ({
 	lane_read: (cmd: ReturnType<typeof readFiled>) =>
 		Effect.gen(function* () {
@@ -817,13 +854,29 @@ const laneInterpret = ({send, machines}: Stages) => ({
 	lane_ask: (cmd: ReturnType<typeof askPerson>) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
+			const spent =
+				cmd.spent === true
+					? [
+							yield* tickets.read(cmd.number).pipe(
+								Effect.map((ticket) => spentWords(factsOf(ticket.timeline, "ended"))),
+								Effect.orElseSucceed(
+									() => "What the runs on this ticket have cost could not be read: price unknown.",
+								),
+							),
+						]
+					: [];
 			// Before the question, so a person who sees it finds this already there.
 			if ((cmd.does ?? []).length > 0)
 				yield* tickets
 					.talk(cmd.number, `${cmd.ask}/picks`, {
 						type: "commented",
 						body: saidOf(
-							[...(cmd.also ?? []), "What each answer does:", listed(cmd.does ?? [])].join("\n"),
+							[
+								...(cmd.also ?? []),
+								...spent,
+								"What each answer does:",
+								listed(cmd.does ?? []),
+							].join("\n"),
 						),
 					})
 					.pipe(Effect.ignore);
@@ -847,6 +900,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const run = `r-${cmd.step}-${cmd.count}`;
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
+			const seen = yield* Ref.make<Picked | null>(null);
 
 			const body = Effect.gen(function* () {
 				const {repo} = yield* work.origin;
@@ -890,26 +944,18 @@ const laneInterpret = ({send, machines}: Stages) => ({
 							? Effect.void
 							: now.set({picked, brief, slots, folder, access}),
 				};
-				const end: BodyEnd = yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
-				return {end, picked};
+				return yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
 			}).pipe(Effect.scoped);
 
 			const exit = yield* Effect.exit(body);
 			// The session id a write could not land when it opened, written now, so it is never lost.
 			const sessionLeft = now.session.left;
 			const spent = yield* now.take;
-			const picked = Exit.isSuccess(exit) ? exit.value.picked : null;
-			const listUsd =
-				picked === null
-					? 0
-					: listUsdOf(picked.model, {
-							input: spent.input,
-							cached: spent.cached,
-							output: spent.output,
-						});
-			const usd = picked?.harness === "claude" ? (spent.usd ?? 0) : (listUsd ?? 0);
+			// Who ran it, even when the step broke after it was picked: a price is never guessed as free.
+			const picked = yield* Ref.get(seen);
+			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
-			const write = (outcome: Outcome) =>
+			const write = (outcome: Outcome, failed?: readonly string[]) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -927,11 +973,12 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(picked === null
 						? {}
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
+					...(failed === undefined ? {} : {failed}),
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems, after: past} = exit.value.end;
+				const {outcome, carry, problems, after: past, failed} = exit.value;
 				yield* sessionLeft.pipe(Effect.ignore);
-				yield* write(outcome);
+				yield* write(outcome, failed);
 				yield* said(
 					[
 						nameOf(outcome),
@@ -940,22 +987,15 @@ const laneInterpret = ({send, machines}: Stages) => ({
 							: [`${picked.model}, ${spent.input + spent.output} tokens, ${money(listUsd)}`]),
 					].join("  "),
 				);
-				if (outcome.kind === "stuck" && problems.length > 0) {
-					const why = problems.join(" ").slice(0, 2_000);
-					yield* said(`why: ${why}`);
+				// A stuck the lane ends on says so. What comes before a question says what the step found,
+				// where the question can point at it.
+				const talk = endTalk(cmd.step, outcome, cmd.round, problems);
+				if (talk?.kind === "stuck") yield* said(`why: ${problems.join(" ").slice(0, 2_000)}`);
+				if (talk !== null)
 					yield* tickets
-						.talk(cmd.number, `${run}/why`, {
+						.talk(cmd.number, `${run}/${talk.kind === "stuck" ? "why" : "found"}`, {
 							type: "commented",
-							body: `${cmd.step} is stuck. ${why}`,
-						})
-						.pipe(Effect.ignore);
-				}
-				// What the step found, where the question it comes before can point at it.
-				if (outcome.kind === "ask" && problems.length > 0)
-					yield* tickets
-						.talk(cmd.number, `${run}/found`, {
-							type: "commented",
-							body: saidOf(problems.join("\n")),
+							body: saidOf(talk.body),
 						})
 						.pipe(Effect.ignore);
 				return {outcome, carry, ...(past === undefined ? {} : {after: past})};
@@ -1052,8 +1092,12 @@ export const laneProgram = defineProgram({
 			const kept = yield* ref.read;
 			const laneId =
 				kept !== null && kept.phase !== "idle" && "lane" in kept ? kept.lane : yield* newLane(id);
+			// Copied into the lane as it starts: a machine decides with it, so a later edit cannot change a run.
+			const settings = yield* Effect.result((yield* LaneWork).settings);
+			const sendBack =
+				settings._tag === "Success" ? (settings.success.build?.send_back ?? true) : true;
 			const runtime = yield* ref.start(
-				{type: "start", number: n, lane: laneId},
+				{type: "start", number: n, lane: laneId, sendBack},
 				{conflict: "use_existing"},
 			);
 			const end = yield* runtime.done();
