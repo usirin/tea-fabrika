@@ -34,6 +34,7 @@ const lane = outcomesOf({
 	 * `sent_back`: a step sent it somewhere this lane has no way to go. `checks_not_run`: code's checks
 	 * after the build could not run at its head, or a step after build had no green ones there.
 	 * `checks_red`: code's checks failed at a head no builder goes back to, the mutants job's commit.
+	 * `merged_elsewhere`: someone else merged the pull request, at a head this lane did not push.
 	 */
 	stuck: [
 		"not_yours",
@@ -45,6 +46,7 @@ const lane = outcomesOf({
 		"sent_back",
 		"checks_not_run",
 		"checks_red",
+		"merged_elsewhere",
 	],
 });
 
@@ -58,10 +60,10 @@ export type StuckWhy = Stuck["why"];
 
 /**
  * The stuck reasons that are a person's call, never the lane's: the same line says why and runs
- * nothing. `not_yours`: no agent reads a ticket on a login it was not filed under. The plan names
- * `merged_elsewhere` too: no lane stops on it yet, so it is not a reason here.
+ * nothing. `not_yours`: no agent reads a ticket on a login it was not filed under.
+ * `merged_elsewhere`: what landed is someone else's, and running a step again cannot change it.
  */
-const FINAL_WHYS = ["not_yours"] as const satisfies readonly StuckWhy[];
+const FINAL_WHYS = ["not_yours", "merged_elsewhere"] as const satisfies readonly StuckWhy[];
 export const FINAL: ReadonlySet<StuckWhy> = new Set<StuckWhy>(FINAL_WHYS);
 
 /** How a lane ends: nobody goes on from it. */

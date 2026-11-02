@@ -72,6 +72,17 @@ export type LaneStep = typeof LaneStep.Type;
 
 /** The steps after build: each runs only on a head with green checks code ran there. */
 const AFTER_BUILD: ReadonlySet<LaneStep> = new Set(STEPS.slice(STEPS.indexOf("build") + 1));
+/** Whether `step` runs only on a head with green checks: a restart that goes on there runs them first. Pure. */
+export const afterBuild = (step: LaneStep): boolean => AFTER_BUILD.has(step);
+
+/**
+ * Where a stop goes on: the step that stopped. A build whose checks could not run goes on at the
+ * checks: the step after it, which a restart runs them for, and never the builder again. Pure.
+ */
+const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
+	step === "build" && end.kind === "stuck" && end.why === "checks_not_run"
+		? {_tag: "run", step: "mutation"}
+		: {_tag: "run", step};
 
 /**
  * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
@@ -322,6 +333,7 @@ export const Held = Schema.Struct({
 	number: Schema.Finite,
 	lane: LaneId,
 	...SendBack,
+	/** The steps run and the restarts made: each names its intents by it, so none is used twice. */
 	count: Schema.Finite,
 	round: Schema.Finite,
 	carry: Carry,
@@ -530,6 +542,8 @@ export const after = (
 			if (step === "build" && outcome.why === "rounds_spent") return {ask: "rounds_spent"};
 			// Code's checks after the build could not run, after one more try: never guessed green.
 			if (step === "build" && outcome.why === "checks_not_run") return stuck("checks_not_run");
+			// Someone else merged the pull request: what landed is theirs, and the lane ends on it.
+			if (step === "merge" && outcome.why === "merged_elsewhere") return stuck("merged_elsewhere");
 			return stuck("step_stuck");
 		case "ask":
 			// A plan with open questions goes to the same yes: the person reads them there.
@@ -592,7 +606,7 @@ const resumeOfMove = (m: Move, step: LaneStep): Resume => {
 	if ("to" in m)
 		return {_tag: "run", step: m.to, ...(m.round === undefined ? {} : {round: "next"})};
 	if ("ask" in m) return {_tag: "ask", for: m.ask, step};
-	return {_tag: "run", step};
+	return stopsAt(step, m.end);
 };
 
 /**
@@ -947,7 +961,7 @@ const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?
 	// A stop goes on at the step that stopped: the same line runs it again.
 	return isEnd(m.end)
 		? releasing(s, {outcome: m.end, said})
-		: releasing(s, {outcome: m.end, said, at: {_tag: "run", step}});
+		: releasing(s, {outcome: m.end, said, at: stopsAt(step, m.end)});
 };
 
 /** The question a lane that goes on by asking asks again: the one it stopped on. Pure. */
@@ -1128,12 +1142,14 @@ export const lane = defineMachine({
 						: {number: s.number, lane: m.lane, ...m.folded.held};
 			const at = "at" in s ? s.at : m.folded?.at;
 			if (held === null || at === undefined) return [s, []];
+			// Each restart counts, so two that stop before any step runs never share a claim or a read.
+			const count = held.count + 1;
 			const asked = claimLane({
 				number: s.number,
 				lane: held.lane,
-				intent: intentOf("lane", s.number, "claim", held.count, held.trail.length),
+				intent: intentOf("lane", s.number, "claim", count, held.trail.length),
 			});
-			return [{...held, at: goesOnFrom(at, s.outcome), phase: "restarting", asked}, [asked]];
+			return [{...held, count, at: goesOnFrom(at, s.outcome), phase: "restarting", asked}, [asked]];
 		},
 		resume: (s): Step_ => {
 			if (s.phase === "idle" || s.phase === "over") return [s, []];
@@ -1236,15 +1252,26 @@ export const lane = defineMachine({
 					);
 				}
 				case "fresh":
-					return goOn(withFresh(held, found.carry), s.at);
-				// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
-				case "merged":
-					return goOn(
-						withFresh(held, found.carry),
-						STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
+				case "merged": {
+					const on = withFresh(held, found.carry);
+					// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
+					const at: Resume =
+						found._tag === "merged" && STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
 							? {_tag: "run", step: "review"}
-							: s.at,
+							: s.at;
+					// Code's checks at the head a step after the build goes on at are red: the builder gets
+					// them, a round up, as after a build's own red, or a person is asked past the bound.
+					if (!AFTER_BUILD.has(at.step) || uncheckedAt(on.carry) !== "checks_red")
+						return goOn(on, at);
+					const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
+					return move(
+						on,
+						"build",
+						after("build", red, on.round, on),
+						nameOf(red),
+						askWords("build", red),
 					);
+				}
 			}
 		},
 		// Main could not be read: the lane stops where it was to go on, and lets the ticket go.
