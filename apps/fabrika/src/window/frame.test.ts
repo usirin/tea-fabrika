@@ -23,6 +23,7 @@ import {
 	clockWord,
 	commandsOf,
 	ENDED_SHOWN_MS,
+	EXPLAIN_ON,
 	FRAME,
 	type Frame,
 	frameUpdate,
@@ -47,7 +48,7 @@ import {
 	tookWord,
 	workspaceName,
 } from "./frame.ts";
-import {BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
+import {BottomArea, BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
 
 // The frame's words, from a real desk folded by the real machine, and the host's real table.
 
@@ -726,15 +727,74 @@ describe("info mode", () => {
 	});
 
 	it("leaves on Escape, once what lies over the desk has closed, and says so", () => {
-		const left = frameUpdate(on, {type: "escape"});
+		const escape = {type: "escape", desk: quiet} as const;
+		const left = frameUpdate(on, escape);
 		expect(left.info).toBe(false);
 		expect(said(left)).toBe("Info mode off.");
-		const closed = frameUpdate(frameUpdate(on, {type: "show", what: "asks"}), {type: "escape"});
+		const closed = frameUpdate(frameUpdate(on, {type: "show", what: "asks"}), escape);
 		expect(closed.over).toEqual({kind: "none"});
 		expect(closed.info).toBe(true);
-		expect(frameUpdate(closed, {type: "escape"}).info).toBe(false);
+		expect(frameUpdate(closed, escape).info).toBe(false);
 		// No mode and nothing over the desk: Escape is not the frame's, and goes on to the tile.
-		expect(frameUpdate(FRAME, {type: "escape"})).toBe(FRAME);
+		expect(frameUpdate(FRAME, escape)).toBe(FRAME);
 		expect(bottom(on)).toMatch(/esc leaves$/);
+	});
+
+	// Escape is one key with three owners. What lies over the desk closes first; then, while the
+	// desk is mid-key, the desk cancels its prefix or its question; only then does info mode go.
+	// The same frame back means the frame did not take it, and the key goes on.
+	it("lets the desk cancel its prefix or its question with Escape before info mode goes", () => {
+		const asks = frameUpdate(on, {type: "show", what: "asks"});
+		for (const desk of [
+			{armed: true, asking: false},
+			{armed: false, asking: true},
+		]) {
+			expect(frameUpdate(on, {type: "escape", desk})).toBe(on);
+			const closed = frameUpdate(asks, {type: "escape", desk});
+			expect(closed.over).toEqual({kind: "none"});
+			expect(closed.info).toBe(true);
+		}
+	});
+
+	it("explains on keyboard focus wherever it explains on the pointer (WCAG 2.1.1)", () => {
+		expect(EXPLAIN_ON).toEqual(["pointerover", "focusin"]);
+	});
+
+	/** A desk asking its own question: Ctrl-B x on t1. */
+	const asking = fold([
+		{type: "key", key: "<c-b>", at: 0},
+		{type: "key", key: "x", at: 1},
+	]);
+	/**
+	 * The desk's bottom area as drawn: whether its bottom line shows, and what its one status region
+	 * says. The region is checked to be there, and outside the bottom line, in every case.
+	 */
+	const area = (frame: Frame, over: Partial<FrameProps> & {readonly instead?: boolean} = {}) => {
+		const html = renderToStaticMarkup(
+			createElement(BottomArea, {...props(frame), instead: false, ...over}),
+		);
+		const line = /<footer class="bottomline">[\s\S]*<\/footer>/.exec(html)?.[0] ?? null;
+		expect(line ?? "").not.toContain('role="status"');
+		const rest = line === null ? html : html.replace(line, "");
+		const status = [...rest.matchAll(/<(\w+)[^>]*role="status"[^>]*>([\s\S]*?)<\/\1>/g)];
+		expect(status).toHaveLength(1);
+		return {line: line !== null, said: words(status[0]?.[2] ?? "")};
+	};
+
+	it("draws its status region apart from the bottom line, whatever the bars and the link", () => {
+		const bareOn = frameUpdate(bare, {type: "show", what: "info"});
+		expect(area(FRAME)).toEqual({line: true, said: ""});
+		expect(area(on)).toEqual({line: true, said: "Info mode on. Escape leaves."});
+		expect(area(bare)).toEqual({line: false, said: ""});
+		expect(area(bareOn)).toEqual({line: true, said: "Info mode on. Escape leaves."});
+		// The bars hidden and info mode just left: the bottom line goes, and "off" is still heard.
+		expect(area(frameUpdate(bareOn, {type: "show", what: "info"}))).toEqual({
+			line: false,
+			said: "Info mode off.",
+		});
+		expect(area(bare, {armed: true}).line).toBe(true);
+		expect(area(bare, {desk: asking}).line).toBe(true);
+		// A page in place of the desk (another link version): no bottom line, the region still there.
+		expect(area(on, {instead: true})).toEqual({line: false, said: "Info mode on. Escape leaves."});
 	});
 });

@@ -6,7 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
 import type {Shell} from "@kampus/fabrika-old";
-import {_electron, type ElectronApplication, type Page} from "playwright";
+import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -32,11 +32,13 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //
 // Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; what opens over the
 // desk (the asks list, the palette) takes focus and every key it reads, so no arrow reaches the tile
-// under it, and Escape or a press outside gives focus back, one open at a time; Ctrl-C over counter
-// is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
-// Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
-// window.open hands http and https to the browser and refuses file:, javascript: and the app's
-// own; the page cannot navigate away; and a second copy quits and leaves the first.
+// under it, and Escape or a press outside gives focus back, one open at a time; info mode (Ctrl-B i)
+// is said on and off in the window's status region, explains what keyboard focus moves to, and
+// Escape leaves it, and with the bars hidden it is still seen, and still heard going off; Ctrl-C
+// over counter is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is
+// in another's Up; the page has the bridge's three names and no Node; a message on the wrong port
+// is refused; window.open hands http and https to the browser and refuses file:, javascript: and
+// the app's own; the page cannot navigate away; and a second copy quits and leaves the first.
 //
 // No run opens a real browser: every launch swaps main's `shell.openExternal` for a list first,
 // and reads the swap back before anything is clicked.
@@ -314,6 +316,87 @@ const popovers = async (page: Page) => {
 	await prompted(page, "t3");
 };
 
+/** Every text a locator finds now, none when it finds nothing: a look that never waits. */
+const textsOf = (at: Locator) => at.evaluateAll((all) => all.map((el) => el.textContent ?? ""));
+/**
+ * The window's own status region for its mode: not a tile's closing note, and not the top bar's
+ * host item, which are status regions too. Waits until there is one, and it says `want`.
+ */
+const modeSaid = (page: Page, want: string) =>
+	until(
+		`one status region for the mode, saying "${want}"`,
+		() => textsOf(page.locator('[role="status"]:not([data-tile] *):not(.topbar *)')),
+		(said) => said.length === 1 && said[0] === want,
+	);
+const bottomLine = (page: Page) => page.locator("footer.bottomline");
+/** Waits until the bottom line's INFO words hold `want`. */
+const explained = (page: Page, want: string) =>
+	until(
+		`the bottom line to explain ${want}`,
+		() => textsOf(bottomLine(page).locator(".info")),
+		(said) => said.some((text) => text.includes(want)),
+	);
+
+/**
+ * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
+ * on in the window's status region; keyboard focus moving, with no pointer, is explained on the
+ * bottom line; Escape leaves it and says so. With the bars hidden, Ctrl-B i keeps the bottom line
+ * up, and Ctrl-B i again still says it is off: the region is drawn whatever the bars, never inside
+ * the bottom line.
+ */
+const infoMode = async (page: Page) => {
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything, or tab to it");
+	check("Ctrl-B i turns info mode on, and the status region says so", true);
+	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
+	await explained(page, "keys: press Ctrl-B");
+	await page.keyboard.press("Shift+Tab");
+	await explained(page, "info: explains whatever");
+	check("keyboard focus moving, by Tab too, is explained on the bottom line", true);
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	check("the status region says nothing of each part explained", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	check(
+		"Escape leaves info mode, and the status region says so",
+		(await bottomLine(page).locator(".info").count()) === 0,
+	);
+	await tile(page, "t3").click();
+	await until(
+		"focus back in t3",
+		() => focusedIn(page),
+		(at) => at === "t3",
+	);
+
+	await prefixed(page, "B");
+	await until(
+		"both bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything, or tab to it");
+	check("with the bars hidden, info mode keeps the bottom line up", true);
+	check(
+		"the status region is not inside the bottom line",
+		(await bottomLine(page).locator('[role="status"]').count()) === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode off.");
+	await until(
+		"the bottom line to go with the bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	check("with the bars hidden, Ctrl-B i twice still says info mode is off", true);
+	await prefixed(page, "B");
+	await bottomLine(page).waitFor();
+	check("Ctrl-B B shows both bars again, focus still in t3", (await focusedIn(page)) === "t3");
+	await prompted(page, "t3");
+};
+
 /**
  * Press a chord, and wait until it has ended as `want` says: "free" if the page let the key go by
  * untouched, which is what lets Electron offer it to the menu, or "taken" if something on the page
@@ -534,6 +617,7 @@ const flow = async (app: ElectronApplication) => {
 	await focusIs(page, "t3");
 	check("a click focuses a tile", true);
 	await popovers(page);
+	await infoMode(page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
