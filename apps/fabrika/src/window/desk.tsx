@@ -49,16 +49,18 @@ import {
 } from "../messages.ts";
 import {
 	type Bound,
+	EXPLAIN_ON,
 	FRAME,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
 	INFO,
 	keyGoesTo,
+	type MidKey,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
-import {Band, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -251,20 +253,26 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
 };
 
 /**
+ * Is the desk mid-key: Ctrl-B armed, or its own question waiting? A key pressed while one is
+ * still out at the host (Ctrl-B, its answer not in yet) queues behind it in the hold, so it counts
+ * as armed: `C-b J` typed fast still reaches the desk and closes the list.
+ */
+const midKey = (): MidKey => {
+	const open = store.desk?.at === "open" ? store.desk : null;
+	return {
+		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		asking: open?.ask != null,
+	};
+};
+
+/**
  * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
  * over with focus outside it, so the key is dropped, never reaches a tile, and focus has moved in.
  * For a key pressed now and a key held for the host's answer alike: an over opens before that
  * answer is in, so a key can be held while it is already open.
  */
 const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
-	const open = store.desk?.at === "open" ? store.desk : null;
-	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
-	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
-	const desk = {
-		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
-		asking: open?.ask != null,
-	};
-	if (keyGoesTo(store.frame.over, name, store.prefix, desk) !== "over") return "desk";
+	if (keyGoesTo(store.frame.over, name, store.prefix, midKey()) !== "over") return "desk";
 	return focusOver(target);
 };
 
@@ -312,16 +320,63 @@ const holdStep = (msg: HoldMsg): boolean => {
 const NOTE_MS = 4000;
 let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Step the frame's own state (frame.ts), and draw it. A note goes after a while. */
-const frameStep = (m: FrameMsg) => {
+/**
+ * Step the frame's own state (frame.ts), and draw it. A note goes after a while. Answers whether
+ * the frame changed: a key it did not change goes on.
+ */
+const frameStep = (m: FrameMsg): boolean => {
 	const next = frameUpdate(store.frame, m);
-	if (next === store.frame) return;
+	if (next === store.frame) return false;
 	if (next.note !== null && next.note !== store.frame.note) {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
 	store.frame = next;
 	changed();
+	return true;
+};
+
+/** What info mode says of a part of the page: the words of the nearest `data-info`, or `null`. */
+const wordsAt = (at: EventTarget | null): string | null =>
+	at instanceof Element ? (at.closest<HTMLElement>("[data-info]")?.dataset.info ?? null) : null;
+
+/** A bottom-line item keyboard focus was on: its name (`data-item`) and its words in info mode. */
+interface KeyedFrom {
+	readonly item: string;
+	readonly words: string | null;
+}
+
+/**
+ * The bottom line's item keyboard focus was on when Ctrl-B was pressed, or `null`. While the desk
+ * is mid-key, the line's right side says `esc cancels` in place of its items, so focus on one falls
+ * to the page. It goes back to that item once the key is done (`focusBack`), and info mode, turned
+ * on in between, explains that item.
+ */
+let keyedFrom: KeyedFrom | null = null;
+
+/** What keyboard focus is on, in info mode's words: through the desk's key, the item it was on. */
+const focusWords = (): string | null =>
+	document.activeElement === document.body
+		? (keyedFrom?.words ?? null)
+		: wordsAt(document.activeElement);
+
+/** Ctrl-B pressed: note the bottom line's item focus is on, if any, before the key takes it away. */
+const noteKeyedFrom = (at: EventTarget | null) => {
+	if (at === document.body) return;
+	const item =
+		at instanceof Element
+			? at.closest<HTMLElement>(".bottomline [data-item]")?.dataset.item
+			: undefined;
+	keyedFrom = item === undefined ? null : {item, words: wordsAt(at)};
+};
+
+/** Focus goes back to the bottom line's item it fell from while the desk was mid-key. */
+const focusBack = () => {
+	const from = keyedFrom;
+	keyedFrom = null;
+	if (from === null || document.activeElement !== document.body) return;
+	const items = document.querySelectorAll<HTMLElement>(".bottomline [data-item]");
+	[...items].find((el) => el.dataset.item === from.item)?.focus();
 };
 
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
@@ -344,7 +399,9 @@ const heard = (raw: unknown) => {
 			store.host = m.now;
 			return changed();
 		case "show":
-			return frameStep({type: "show", what: m.what});
+			return m.what === "info"
+				? frameStep({type: "info", focus: focusWords()})
+				: frameStep({type: "show", what: m.what});
 		case "desk":
 			store.desk = m.desk;
 			store.attachedOnce = true;
@@ -380,8 +437,10 @@ const swallow = (e: KeyboardEvent) => {
 
 /**
  * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
- * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; Escape closes what lies over
- * the desk. While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
+ * focused tile's. Cmd-K opens the palette, as in Linear and VS Code. Escape closes what lies over
+ * the desk; with nothing over it, it leaves info mode, unless the desk is mid-key, where it cancels
+ * the prefix or the question first; with neither, it goes on to the tile (frame.ts, `escaped`).
+ * While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
  * never to a tile: if focus is not in it, the key is dropped and focus moves in.
  *
  * A key the system or the menu owns goes by all of that. Electron offers a key to the menu only if
@@ -411,11 +470,7 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	const over = store.frame.over;
-	if (over.kind !== "none" && e.key === "Escape") {
-		swallow(e);
-		return frameStep({type: "close"});
-	}
+	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
 	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
@@ -429,15 +484,18 @@ const onKey = (e: KeyboardEvent) => {
 		meta: e.metaKey,
 		shift: e.shiftKey,
 	};
+	if (name === store.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
 	swallow(e);
 };
 
-/** In info mode, what the pointer is over, said on the bottom line. */
-const onPointerOver = (e: PointerEvent) => {
-	if (!store.frame.info) return;
-	const at = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-info]") : null;
-	frameStep({type: "explain", text: at?.dataset.info ?? null});
+/**
+ * In info mode, what the pointer is over or keyboard focus moved to, said on the bottom line
+ * (WCAG 2.1.1: what a pointer can learn, a keyboard can too).
+ */
+const explainAt = (e: Event) => {
+	if (store.frame.info.kind !== "on") return;
+	frameStep({type: "explain", text: wordsAt(e.target)});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
@@ -767,6 +825,11 @@ function App(): ReactNode {
 	useLayoutEffect(() => {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
+	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
+	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	useLayoutEffect(() => {
+		if (!mid) focusBack();
+	}, [mid]);
 	const props: FrameProps = {
 		desk: open,
 		frame: store.frame,
@@ -785,8 +848,6 @@ function App(): ReactNode {
 		step: frameStep,
 	};
 	const bare = store.frame.bare;
-	/** With both bars hidden, the bottom line still shows while you are mid-key. */
-	const keying = props.armed || open?.ask != null || store.frame.note !== null;
 	const zoomed = ws?.layout.zoomed ?? null;
 	return (
 		<div
@@ -812,7 +873,7 @@ function App(): ReactNode {
 					)}
 				</div>
 			)}
-			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}
+			<BottomArea {...props} instead={view.kind === "instead"} />
 			<Over {...props} />
 		</div>
 	);
@@ -832,7 +893,7 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
-	window.addEventListener("pointerover", onPointerOver);
+	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
 	if (root !== null) createRoot(root).render(<App />);

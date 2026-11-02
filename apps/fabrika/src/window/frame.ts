@@ -20,6 +20,7 @@ import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentenc
 //   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
 //   Ctrl-B x close t2? (y/n)                                                 y closes · n keeps it
+//   C-b i    INFO · point at anything                           C-b i info · C-b ? keys · esc leaves
 //
 // The top bar is the whole desk; the bottom line is the tile you are in and the key you just
 // pressed (the frame's research, rule 1). Its job item names the job the tile runs, by the host's
@@ -39,6 +40,12 @@ import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentenc
 // What the page itself keeps (the list open, the palette, the info mode, the bars hidden) is a
 // model and an update with no Cmd, Elm's `Browser.sandbox`: `frameUpdate` below. The desk's own
 // state stays the host's.
+//
+// Info mode follows the modes guidelines (docs/direction/modes.md, M2 to M4): its state is one
+// value (`InfoMode`); it is said in words on the bottom line, which stays with the bars hidden; one
+// status region tells a screen reader it came on or went off, and nothing on each part explained;
+// it explains what keyboard focus is on, from the moment it comes on, as well as what the pointer
+// is over; and Escape leaves it, once what lies over the desk has closed.
 
 /** The room macOS's three window buttons take at the top bar's left, in px. */
 export const LIGHTS = 84;
@@ -638,7 +645,7 @@ export const INFO = {
 	here: "the tile you are in: what it takes in, what it sends out, and its neighbors in its line.",
 	job: "a job in this tile: its number, its line, and how long it has run. +2 is two more. A job that ended says how, for a few seconds. A click lists them, as tsh's jobs does.",
 	keys: "keys: press Ctrl-B, then one key. C-b ? lists them all. Cmd-K finds any command by name.",
-	info: "info: explains whatever the pointer is over, here. C-b i turns it off.",
+	info: "info: explains what the pointer or focus is on. Escape or C-b i leaves.",
 	titlebar:
 		"title bar: a click focuses the tile, a double-click folds it into a strip. C-b f folds too.",
 	strip: "a folded tile: a click opens it again.",
@@ -678,12 +685,21 @@ const NAME_ROOM = 24;
 export const middleFree = (name: Span, items: readonly Span[]): boolean =>
 	items.every((at) => at.right + NAME_ROOM <= name.left || name.right + NAME_ROOM <= at.left);
 
+/**
+ * Info mode, as one value (docs/direction/modes.md, M2). `never`: it has not come on, so the status
+ * region says nothing, since no mode is not news. `on`: the bottom line explains whatever the
+ * pointer is over or keyboard focus is on; `explained` is what it says now, or `null` when nothing
+ * there has words. `off`: it was on and was left, so the region says it is off until it comes on
+ * again.
+ */
+export type InfoMode =
+	| {readonly kind: "never"}
+	| {readonly kind: "on"; readonly explained: string | null}
+	| {readonly kind: "off"};
+
 export interface Frame {
 	readonly over: Over;
-	/** Info mode: the bottom line explains whatever the pointer is over. */
-	readonly info: boolean;
-	/** What info mode says now, or `null`: nothing under the pointer has words. */
-	readonly explained: string | null;
+	readonly info: InfoMode;
 	/** Both bars hidden; a thin band stays for the window's buttons. */
 	readonly bare: boolean;
 	/** A short note at the bottom right, as after the palette ran a command: `next time: C-b z`. */
@@ -692,15 +708,51 @@ export interface Frame {
 
 export const FRAME: Frame = {
 	over: {kind: "none"},
-	info: false,
-	explained: null,
+	info: {kind: "never"},
 	bare: false,
 	note: null,
 };
 
+/** What the window's status region says of the mode: a screen reader reads it as it changes. */
+export const modeWord = (f: Frame): string => {
+	switch (f.info.kind) {
+		case "never":
+			return "";
+		case "on":
+			return "Info mode on. Escape leaves.";
+		case "off":
+			return "Info mode off.";
+	}
+};
+
+/** Is the desk mid-key: Ctrl-B armed, or its own question (`close t2? (y/n)`) waiting. */
+export interface MidKey {
+	readonly armed: boolean;
+	readonly asking: boolean;
+}
+
+/**
+ * The window events info mode explains on: the pointer moving over a part, and keyboard focus
+ * moving to one, so what a pointer can learn, a keyboard can too (WCAG 2.1.1).
+ */
+export const EXPLAIN_ON = ["pointerover", "focusin"] as const;
+
+/**
+ * Whether the bottom line shows. With both bars hidden it still does while you are mid-key (the
+ * prefix armed, or the desk's own question waiting), while a note is up, and in info mode, whose
+ * word is said there: a mode is always seen (docs/direction/modes.md, M3).
+ */
+export const bottomLineShows = (f: Frame, desk: MidKey): boolean =>
+	!f.bare || desk.armed || desk.asking || f.note !== null || f.info.kind === "on";
+
 export type FrameMsg =
-	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`). */
-	| {readonly type: "show"; readonly what: Show}
+	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`), but info mode. */
+	| {readonly type: "show"; readonly what: Exclude<Show, "info">}
+	/**
+	 * C-b i, or a click on the info item: info mode comes on or goes off. Coming on, it explains
+	 * at once what keyboard focus is on: `focus` is those words, or `null` when it has none.
+	 */
+	| {readonly type: "info"; readonly focus: string | null}
 	| {readonly type: "palette"}
 	| {readonly type: "item"; readonly what: Part}
 	| {readonly type: "query"; readonly query: string}
@@ -710,7 +762,9 @@ export type FrameMsg =
 	| {readonly type: "say"; readonly note: string}
 	| {readonly type: "explain"; readonly text: string | null}
 	| {readonly type: "unnote"}
-	| {readonly type: "close"};
+	| {readonly type: "close"}
+	/** Escape, as the page hands it on (desk.tsx, `onKey`), with the desk mid-key or not: see `escaped`. */
+	| {readonly type: "escape"; readonly desk: MidKey};
 
 /** A thing over the desk opens, or closes when it is open already, as a menu does. */
 const toggle = (f: Frame, over: Over): Frame =>
@@ -722,11 +776,36 @@ const itemLines = (f: Frame, what: Part): Frame =>
 		? {...f, over: {kind: "none"}}
 		: {...f, over: {kind: "item", what}};
 
+/** Info mode goes off, and the status region says so. */
+const leaveInfo = (f: Frame): Frame => ({...f, info: {kind: "off"}});
+
+/** Info mode goes off when it is on, and comes on otherwise, explaining what `focus` is on. */
+const toggleInfo = (f: Frame, focus: string | null): Frame =>
+	f.info.kind === "on" ? leaveInfo(f) : {...f, info: {kind: "on", explained: focus}};
+
+/** In info mode, what the pointer is over or focus moved to is explained; out of it, nothing changes. */
+const explain = (f: Frame, text: string | null): Frame =>
+	f.info.kind === "on" && f.info.explained !== text
+		? {...f, info: {kind: "on", explained: text}}
+		: f;
+
 /**
- * What a key after Ctrl-B shows: the asks list, the jobs list, every key, the info mode, no bars,
- * or an item's lines.
+ * What Escape does, one layer at a time, as Apple's HIG has one dismissed before the next: it
+ * closes what lies over the desk; then, while the desk is mid-key, it is the desk's, to cancel its
+ * prefix or its question; only then does it leave info mode. When it is not the frame's, the same
+ * frame comes back, so the key goes on: to the desk, or to the tile.
  */
-const shown = (f: Frame, what: Show): Frame => {
+const escaped = (f: Frame, desk: MidKey): Frame => {
+	if (f.over.kind !== "none") return {...f, over: {kind: "none"}};
+	if (desk.armed || desk.asking) return f;
+	return f.info.kind === "on" ? leaveInfo(f) : f;
+};
+
+/**
+ * What a key after Ctrl-B shows: the asks list, the jobs list, every key, no bars, or an item's
+ * lines. Info mode is a message of its own (`info`), since it needs what focus is on.
+ */
+const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 	switch (what) {
 		case "agents":
 		case "sync":
@@ -738,8 +817,6 @@ const shown = (f: Frame, what: Show): Frame => {
 			return toggle(f, {kind: "jobs"});
 		case "keys":
 			return {...f, over: {kind: "palette", title: "keys", query: "", at: 0}};
-		case "info":
-			return {...f, info: !f.info, explained: null};
 		case "bars":
 			return {...f, bare: !f.bare, over: {kind: "none"}};
 	}
@@ -756,7 +833,7 @@ export const keyGoesTo = (
 	over: Over,
 	key: string,
 	prefix: string,
-	desk: {readonly armed: boolean; readonly asking: boolean},
+	desk: MidKey,
 ): "over" | "desk" => {
 	if (over.kind === "none") return "desk";
 	if (over.kind === "palette") return "over";
@@ -782,11 +859,15 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 			return {...f, over: {kind: "none"}, note: `next time: ${m.key}`};
 		case "say":
 			return {...f, over: {kind: "none"}, note: m.note};
+		case "info":
+			return toggleInfo(f, m.focus);
 		case "explain":
-			return f.info && f.explained !== m.text ? {...f, explained: m.text} : f;
+			return explain(f, m.text);
 		case "unnote":
 			return {...f, note: null};
 		case "close":
 			return {...f, over: {kind: "none"}};
+		case "escape":
+			return escaped(f, m.desk);
 	}
 };

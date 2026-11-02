@@ -588,6 +588,12 @@ main.program > [role="alert"] {
 	outline-offset: 2px;
 }
 
+/* The bottom line ends at the window's edge, so its items take 3px above and below and not 5px:
+   their focus ring, the same as the top bar's, is then whole inside the window (WCAG 2.4.7). */
+.bottomline .fb {
+	padding-block: 3px;
+}
+
 .fb.accent {
 	color: var(--turn);
 }
@@ -602,6 +608,12 @@ main.program > [role="alert"] {
 }
 
 .quiet {
+	color: var(--text-faint);
+}
+
+/* The bottom line's way out (`esc leaves`, `esc cancels`, `y closes · n keeps it`) is a needed fact,
+   so it takes the faint text step, 5.51:1 on the ground, and not the wire's (WCAG 1.4.3). */
+.bottomline .quiet {
 	color: var(--text-faint);
 }
 
@@ -725,10 +737,11 @@ main.program > [role="alert"] {
 	background: var(--turn);
 }
 
+/* 26px, and two lines while info mode is on (below). */
 .bottomline {
 	justify-content: space-between;
 	gap: var(--s-4);
-	height: 26px;
+	min-height: 26px;
 	color: var(--text-muted);
 }
 
@@ -739,10 +752,28 @@ main.program > [role="alert"] {
 	text-overflow: ellipsis;
 }
 
+/*
+ * Info mode's explanation is never cut off: what does not fit wraps onto a second line. The right
+ * side never shrinks and keeps its items, so the left gives way. Two lines tall the whole time the
+ * mode is on, short explanation or long, so the desk is resized only as the mode comes on and goes
+ * off, never as the pointer or focus moves. Its line height is whole pixels, so the line is 40px
+ * and the tiles above it end on a whole pixel: on a fraction, a tile's 1px edge smears over two rows.
+ */
+.bottomline .left:has(> .info) {
+	height: 2lh;
+	padding: 4px 0;
+	line-height: 16px;
+	white-space: normal;
+}
+
+/* Held to the line's bottom 26px, whatever its height, so its items never move as the mode comes
+   on: a second click where it turned on turns it off. */
 .bottomline .right {
 	display: flex;
 	flex: none;
+	align-self: flex-end;
 	align-items: center;
+	height: 26px;
 }
 
 .bottomline b {
@@ -752,6 +783,18 @@ main.program > [role="alert"] {
 
 .bottomline .prompt {
 	color: var(--text-primary);
+}
+
+/* The mode's status region: heard, not seen. The bottom line shows the same words. Clipped, never
+   `display: none`, which would take it from a screen reader too. */
+.mode-status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }
 
 .bottomline .info,

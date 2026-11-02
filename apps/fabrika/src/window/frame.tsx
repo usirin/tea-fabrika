@@ -18,6 +18,7 @@ import {
 	asksWord,
 	type Bound,
 	bindingWord,
+	bottomLineShows,
 	clockWord,
 	commandsOf,
 	type Frame,
@@ -32,6 +33,7 @@ import {
 	lineIn,
 	matching,
 	middleFree,
+	modeWord,
 	nowhereNote,
 	opensOf,
 	type Part,
@@ -103,7 +105,7 @@ const wordFor = (props: FrameProps, name: string): string | null =>
 	props.table.find((b) => b.name === name)?.tsh ?? null;
 
 /** No tooltip shows while something lies over the desk, or while info mode explains the item. */
-const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info;
+const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info.kind === "on";
 
 /** What a frame item opens, if anything: a menu or a dialog, by its element's id. */
 interface Opens {
@@ -126,6 +128,8 @@ function Item(props: {
 	readonly label?: string;
 	readonly className?: string | undefined;
 	readonly current?: boolean;
+	/** A toggle button's state, as `aria-pressed`: its name stays, and this says on or off. */
+	readonly pressed?: boolean;
 	readonly opens?: Opens;
 	readonly onClick: () => void;
 	readonly children: ReactNode;
@@ -145,8 +149,10 @@ function Item(props: {
 				type="button"
 				className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
 				data-info={props.info}
+				data-item={props.name}
 				aria-label={props.label}
 				aria-current={props.current}
+				aria-pressed={props.pressed}
 				aria-haspopup={props.opens?.popup}
 				aria-expanded={props.opens?.open}
 				aria-controls={props.opens?.id}
@@ -804,12 +810,12 @@ export function BottomLine(props: FrameProps): ReactNode {
 					))}
 				</span>
 			);
-		if (frame.info)
+		if (frame.info.kind === "on")
 			return (
 				<span className="info">
 					<b>INFO</b>
 					<Sep />
-					{frame.explained ?? "point at anything to see what it is"}
+					{frame.info.explained ?? "point at anything"}
 				</span>
 			);
 		if (desk === null) return null;
@@ -834,17 +840,30 @@ export function BottomLine(props: FrameProps): ReactNode {
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
+		const on = frame.info.kind === "on";
 		return (
 			<>
+				{/* The way out, named first: the right side is pinned to the window's right edge, so a
+				    word after the items would push them left. First, it leaves them where they were, and
+				    a second click where the mode turned on turns it off. */}
+				{on && (
+					<>
+						<span className="quiet">esc leaves</span>
+						<Sep />
+					</>
+				)}
+				{/* A toggle button by the ARIA APG: its name stays "info", and aria-pressed says on or
+				    off. Clicked or pressed, the pointer or focus is on it, so it is what is explained first. */}
 				<Item
 					name="info"
 					caps={capsFor(props, "info")}
 					word={wordFor(props, "info")}
 					quiet={quiet}
 					info={INFO.info}
-					onClick={() => props.step({type: "show", what: "info"})}
+					pressed={on}
+					onClick={() => props.step({type: "info", focus: INFO.info})}
 				>
-					{frame.info ? `${info ?? ""} info off` : `${info ?? ""} info`}
+					{info ?? ""} info
 				</Item>
 				<Sep />
 				<Item
@@ -870,6 +889,38 @@ export function BottomLine(props: FrameProps): ReactNode {
 			<div className="left">{left()}</div>
 			<div className="right">{right()}</div>
 		</footer>
+	);
+}
+
+/**
+ * The window's one status region for its mode: it says "Info mode on. Escape leaves." when info
+ * mode comes on and "Info mode off." when it goes, and nothing on each part explained (WCAG 4.1.3,
+ * docs/direction/modes.md, M3). `status` is polite and atomic, so it waits for a pause and reads
+ * the whole line. Out of sight: the bottom line says the same where the eye is. It is drawn
+ * whatever the bars, before it has anything to say, so a screen reader is listening when it
+ * changes, and "off" is heard with the bars hidden.
+ */
+export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
+	return (
+		<p className="mode-status" role="status">
+			{modeWord(props.frame)}
+		</p>
+	);
+}
+
+/**
+ * The desk's bottom area: the bottom line when `bottomLineShows` says so and no page stands
+ * `instead` of the desk (another link version), and the mode's status region always, outside the
+ * line, so it is heard whatever the bars and the link.
+ */
+export function BottomArea(props: FrameProps & {readonly instead: boolean}): ReactNode {
+	const {frame, desk, armed, instead} = props;
+	const shows = bottomLineShows(frame, {armed, asking: desk?.ask != null});
+	return (
+		<>
+			{!instead && shows && <BottomLine {...props} />}
+			<ModeStatus frame={frame} />
+		</>
 	);
 }
 

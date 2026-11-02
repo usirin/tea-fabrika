@@ -135,7 +135,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `a` | open the asks list, or close it |
 | `J` | open the jobs list, or close it |
 | `?` | every key, with its name |
-| `i` | info mode: the bottom line explains whatever the pointer is over; again to stop |
+| `i` | info mode: the bottom line explains whatever the pointer is over or keyboard focus is on, even with the bars hidden; again, or Escape, to stop |
 | `B` | hide both bars; again to show them |
 | `A`, `S`, `H` | open the agents', sync or host lines under the top bar; again to close them |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |

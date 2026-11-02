@@ -95,7 +95,7 @@ const workspace = defineProgram({
 const SHOWN: Readonly<Record<Exclude<Show, "jobs">, string>> = {
 	asks: "Opens the asks list, or closes it.",
 	keys: "Lists every command, with its key and its tsh word.",
-	info: "Turns info mode on or off: the bottom line explains what the pointer is over.",
+	info: "Turns info mode on or off: the bottom line explains what the pointer is over or what has focus.",
 	bars: "Hides both bars, or shows them again.",
 	agents: "Opens the agents' lines under the top bar: each agent attached to this host.",
 	sync: "Opens the sync lines under the top bar: which ledger this home reads, and how.",

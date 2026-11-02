@@ -6,7 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
 import type {Shell} from "@kampus/fabrika-old";
-import {_electron, type ElectronApplication, type Page} from "playwright";
+import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -32,11 +32,15 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //
 // Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; what opens over the
 // desk (the asks list, the palette) takes focus and every key it reads, so no arrow reaches the tile
-// under it, and Escape or a press outside gives focus back, one open at a time; Ctrl-C over counter
-// is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
-// Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
-// window.open hands http and https to the browser and refuses file:, javascript: and the app's
-// own; the page cannot navigate away; and a second copy quits and leaves the first.
+// under it, and Escape or a press outside gives focus back, one open at a time; info mode (Ctrl-B i)
+// is said on and off in the window's status region and by its item's aria-pressed, explains what
+// keyboard focus is on when it comes on and what focus moves to, and Escape leaves it, and with the
+// bars hidden it is still seen, and still heard going off, and at 1024 by 700 an explanation is not
+// cut off; Ctrl-C
+// over counter is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is
+// in another's Up; the page has the bridge's three names and no Node; a message on the wrong port
+// is refused; window.open hands http and https to the browser and refuses file:, javascript: and
+// the app's own; the page cannot navigate away; and a second copy quits and leaves the first.
 //
 // No run opens a real browser: every launch swaps main's `shell.openExternal` for a list first,
 // and reads the swap back before anything is clicked.
@@ -314,6 +318,361 @@ const popovers = async (page: Page) => {
 	await prompted(page, "t3");
 };
 
+/** Every text a locator finds now, none when it finds nothing: a look that never waits. */
+const textsOf = (at: Locator) => at.evaluateAll((all) => all.map((el) => el.textContent ?? ""));
+/**
+ * The window's own status region for its mode: not a tile's closing note, and not the top bar's
+ * host item, which are status regions too. Waits until there is one, and it says `want`.
+ */
+const modeSaid = (page: Page, want: string) =>
+	until(
+		`one status region for the mode, saying "${want}"`,
+		() => textsOf(page.locator('[role="status"]:not([data-tile] *):not(.topbar *)')),
+		(said) => said.length === 1 && said[0] === want,
+	);
+const bottomLine = (page: Page) => page.locator("footer.bottomline");
+/** Waits until the bottom line's INFO words hold `want`. */
+const explained = (page: Page, want: string) =>
+	until(
+		`the bottom line to explain ${want}`,
+		() => textsOf(bottomLine(page).locator(".info")),
+		(said) => said.some((text) => text.includes(want)),
+	);
+
+/** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
+const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
+/** Click t3, and wait until focus is back in it. */
+const backInT3 = async (page: Page) => {
+	await tile(page, "t3").click();
+	await until(
+		"focus back in t3",
+		() => focusedIn(page),
+		(at) => at === "t3",
+	);
+};
+
+/**
+ * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
+ * on in the window's status region, and its item says it is pressed, under the same name; keyboard
+ * focus moving, with no pointer, is explained on the bottom line; while something is explained, the
+ * bottom line's right side keeps its items; Escape leaves it and says so. Turned on while
+ * focus is on one of the frame's parts, it explains that part at once. With the bars hidden, Ctrl-B
+ * i keeps the bottom line up, and Ctrl-B i again still says it is off: the region is drawn whatever
+ * the bars, never inside the bottom line.
+ */
+const infoMode = async (page: Page) => {
+	check(
+		"its item is not pressed while info mode is off",
+		(await infoItem(page).getAttribute("aria-pressed")) === "false",
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	check(
+		"the hint promises no Tab",
+		!(await textsOf(bottomLine(page).locator(".info"))).some((t) => t.includes("tab")),
+	);
+	check("Ctrl-B i turns info mode on, and the status region says so", true);
+	check(
+		"its item keeps its name and says it is pressed",
+		(await infoItem(page).getAttribute("aria-pressed")) === "true",
+	);
+	const right = await textsOf(bottomLine(page).locator(".right"));
+	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
+	await explained(page, "keys: press Ctrl-B");
+	check(
+		"while something is explained, the right side keeps its items",
+		(await textsOf(bottomLine(page).locator(".right"))).join() === right.join(),
+		right,
+	);
+	await page.keyboard.press("Shift+Tab");
+	await explained(page, (await infoItem(page).getAttribute("data-info")) ?? "info:");
+	check("keyboard focus moving, by Tab too, is explained on the bottom line", true);
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	check("the status region says nothing of each part explained", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	check(
+		"Escape leaves info mode, and the status region says so",
+		(await bottomLine(page).locator(".info").count()) === 0,
+	);
+	await backInT3(page);
+
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	const keysWords = (await keys.getAttribute("data-info")) ?? "keys:";
+	await keys.focus();
+	// Every text the bottom line's INFO words take on the way, the ones replaced in place too. Focus
+	// going back to the item explains it on its own (focusin), so only this tells "at once" from
+	// "point at anything" first (desk.tsx, focusWords).
+	const shown = await page.evaluateHandle(() => {
+		const seen: string[] = [];
+		const holdsInfo = (n: Node) =>
+			n instanceof Element && (n.matches(".info") || n.querySelector(".info") !== null);
+		const watch = new MutationObserver((records) => {
+			for (const r of records) {
+				const at = r.target instanceof Element ? r.target : r.target.parentElement;
+				const inside = at?.closest(".info") != null;
+				if (inside && r.oldValue !== null) seen.push(r.oldValue);
+				for (const n of [...r.addedNodes, ...r.removedNodes])
+					if (inside || holdsInfo(n)) seen.push(n.textContent ?? "");
+			}
+			const now = document.querySelector("footer.bottomline .info");
+			if (now !== null) seen.push(now.textContent ?? "");
+		});
+		watch.observe(document.body, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			characterDataOldValue: true,
+		});
+		return {seen, stop: () => watch.disconnect()};
+	});
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, keysWords);
+	const passed = await shown.evaluate((s) => {
+		s.stop();
+		return s.seen;
+	});
+	await shown.dispose();
+	check(
+		"turned on with focus on the keys item, info mode explains it at once, never the hint first",
+		passed.length > 0 && !passed.some((text) => text.includes("point at anything")),
+		passed,
+	);
+	// Ctrl-B swaps the right side's items for `esc cancels`, so focus falls to the page; the key
+	// done, it goes back to the item it was on (desk.tsx, focusBack).
+	await until(
+		"focus back on the keys item",
+		() => page.evaluate(() => document.activeElement?.getAttribute("data-info") ?? null),
+		(at) => at === keysWords,
+	);
+	check("the key done, focus is back on the keys item it fell from", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await backInT3(page);
+
+	await prefixed(page, "B");
+	await until(
+		"both bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	check("with the bars hidden, info mode keeps the bottom line up", true);
+	check(
+		"the status region is not inside the bottom line",
+		(await bottomLine(page).locator('[role="status"]').count()) === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode off.");
+	await until(
+		"the bottom line to go with the bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	check("with the bars hidden, Ctrl-B i twice still says info mode is off", true);
+	await prefixed(page, "B");
+	await bottomLine(page).waitFor();
+	check("Ctrl-B B shows both bars again, focus still in t3", (await focusedIn(page)) === "t3");
+	await prompted(page, "t3");
+};
+
+/**
+ * Info mode in a small window, 1024 by 700. The host item's words are among the longest a part has,
+ * and always on screen: explained, they wrap onto a second line and are not cut off. The right side
+ * never shrinks and keeps its items. While the mode is on, the bottom line keeps one height, so the
+ * desk is the same height for a short explanation and a long one, and no terminal refits as the
+ * pointer or focus moves. The way out goes first on the right, so the info item is where it was
+ * before the mode came on, and a second click there turns it off. The bottom line's items show
+ * their whole focus ring inside the window, the mode off and on, and with the mode on the bottom
+ * line starts on a whole pixel, so the tiles above it end on one. No width or height is guessed:
+ * each box is checked against the one it sits in, or against itself at another moment.
+ *
+ * Playwright sizes the page, not the window: macOS keeps a window inside the screen, and a CI
+ * runner's screen is too short for 700. It goes through the DevTools protocol, not
+ * `page.setViewportSize`, which also sets the pixel ratio to 1 and cannot be undone; scale 0 keeps
+ * the screen's own. The page goes back to the window's size after.
+ */
+const infoModeSmall = async (page: Page) => {
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setDeviceMetricsOverride", {
+		width: 1024,
+		height: 700,
+		deviceScaleFactor: 0,
+		mobile: false,
+	});
+	await until(
+		"the window at 1024 by 700",
+		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+		(size) => size === "1024x700",
+	);
+	/** Where the info item is now, in the window. */
+	const itemAt = async () => {
+		const box = await infoItem(page).boundingBox();
+		return box === null ? null : {x: box.x, y: box.y};
+	};
+	/** How tall the desk's workspace is now: it gives the bottom line whatever room it takes. */
+	const deskHeight = () =>
+		page.locator(".workspace").evaluate((el) => el.getBoundingClientRect().height);
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	/**
+	 * The focus ring of what has focus: its box grown by its outline's width and offset, whether
+	 * that box is inside the window, and whether a ring is drawn at all.
+	 */
+	const ring = () =>
+		page.evaluate(() => {
+			const el = document.activeElement;
+			if (el === null) return {drawn: false, inside: false, box: null, focused: null};
+			const style = getComputedStyle(el);
+			const out = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+			const r = el.getBoundingClientRect();
+			const box = {
+				left: r.left - out,
+				top: r.top - out,
+				right: r.right + out,
+				bottom: r.bottom + out,
+			};
+			return {
+				drawn: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+				inside:
+					box.left >= 0 &&
+					box.top >= 0 &&
+					box.right <= window.innerWidth &&
+					box.bottom <= window.innerHeight,
+				box,
+				focused: el.getAttribute("data-info"),
+			};
+		});
+	/**
+	 * Tab to the keys item and Shift+Tab back to the info item, by the keyboard, so each draws its
+	 * focus ring (`:focus-visible`): the whole ring is inside the window (WCAG 2.4.7, 2.4.11).
+	 */
+	const ringsInside = async (when: string) => {
+		const infoWords = await infoItem(page).getAttribute("data-info");
+		const keysWords = await keys.getAttribute("data-info");
+		await infoItem(page).focus();
+		const walk: ReadonlyArray<readonly [string, string | null, string]> = [
+			["Tab", keysWords, "keys"],
+			["Shift+Tab", infoWords, "info"],
+		];
+		for (const [press, words, name] of walk) {
+			await page.keyboard.press(press);
+			const seen = await until(`focus on the ${name} item`, ring, (r) => r.focused === words);
+			check(
+				`at 1024 by 700, ${when}, the ${name} item's focus ring is whole inside the window`,
+				seen.drawn && seen.inside,
+				seen,
+			);
+		}
+	};
+	/**
+	 * Where the bottom line starts and the desk ends, in px. On a fraction of a pixel, the tiles
+	 * above end there too: a tile's 1px edge smears over two rows at half strength, and its
+	 * terminal, which covers whole cells, paints over the upper row, so a focused tile's bottom edge
+	 * goes faint but for a short bright stub past the last column (round 3's shots 3b and 6a).
+	 */
+	const lineEdges = () =>
+		page.evaluate(() => {
+			const line = document.querySelector("footer.bottomline")?.getBoundingClientRect();
+			const desk = document.querySelector(".workspace")?.getBoundingClientRect();
+			return {line: line?.top ?? null, height: line?.height ?? null, desk: desk?.bottom ?? null};
+		});
+	await ringsInside("info mode off");
+	await backInT3(page);
+	const off = await itemAt();
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	const on = await itemAt();
+	const hint = await deskHeight();
+	const edges = await lineEdges();
+	check(
+		"at 1024 by 700 with info mode on, the bottom line and the desk's end fall on whole pixels",
+		[edges.line, edges.height, edges.desk].every((v) => v !== null && Number.isInteger(v)),
+		edges,
+	);
+	await ringsInside("info mode on");
+	await backInT3(page);
+	check(
+		"at 1024 by 700, the info item is where it was before the mode came on",
+		off !== null && on !== null && off.x === on.x && off.y === on.y,
+		{off, on},
+	);
+	await keys.focus();
+	await explained(page, (await keys.getAttribute("data-info")) ?? "keys:");
+	const short = await deskHeight();
+	const host = page.locator(HOST);
+	const words = (await host.getAttribute("data-info")) ?? "host:";
+	await host.focus();
+	await explained(page, words);
+	const long = await deskHeight();
+	check(
+		"at 1024 by 700, the desk keeps its height from the hint to a short explanation to a long one",
+		hint === short && short === long,
+		{hint, short, long},
+	);
+	const explaining = await itemAt();
+	check(
+		"and the info item stays put while a long explanation wraps",
+		off !== null && explaining !== null && off.x === explaining.x && off.y === explaining.y,
+		{off, explaining},
+	);
+	const seen = await bottomLine(page).evaluate((line, said) => {
+		/** Every rect of `el` lies inside `box`. */
+		const inside = (el: Element, box: DOMRect) =>
+			[...el.getClientRects()].every(
+				(r) =>
+					r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+			);
+		const view = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+		const left = line.querySelector(".left");
+		const info = line.querySelector(".info");
+		const out = [...line.querySelectorAll(".right *")].find(
+			(el) => el.children.length === 0 && el.textContent === "esc leaves",
+		);
+		if (left === null || info === null || out === undefined)
+			return {
+				found: false,
+				full: false,
+				wraps: false,
+				wide: false,
+				tall: false,
+				infoIn: false,
+				lineIn: false,
+				outIn: false,
+			};
+		return {
+			found: true,
+			full: (info.textContent ?? "").includes(said),
+			wraps: info.getClientRects().length > 1,
+			wide: left.scrollWidth <= left.clientWidth,
+			tall: left.scrollHeight <= left.clientHeight,
+			infoIn: inside(info, left.getBoundingClientRect()),
+			lineIn: inside(line, view),
+			outIn: inside(out, line.getBoundingClientRect()),
+		};
+	}, words);
+	check(
+		"at 1024 by 700, the host item is explained in full: it wraps, and the left side is not cut off",
+		seen.found && seen.full && seen.wraps && seen.wide && seen.tall && seen.infoIn,
+		seen,
+	);
+	check(
+		"at 1024 by 700, the way out is there in full, inside the bottom line, inside the window",
+		seen.lineIn && seen.outIn,
+		seen,
+	);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await cdp.send("Emulation.clearDeviceMetricsOverride");
+	await cdp.detach();
+	await backInT3(page);
+	await prompted(page, "t3");
+};
+
 /**
  * Press a chord, and wait until it has ended as `want` says: "free" if the page let the key go by
  * untouched, which is what lets Electron offer it to the menu, or "taken" if something on the page
@@ -534,6 +893,8 @@ const flow = async (app: ElectronApplication) => {
 	await focusIs(page, "t3");
 	check("a click focuses a tile", true);
 	await popovers(page);
+	await infoMode(page);
+	await infoModeSmall(page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();

@@ -1,4 +1,6 @@
 import {applyCell} from "@demlik/tea";
+import {createElement, isValidElement, type ReactNode} from "react";
+import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
@@ -17,15 +19,20 @@ import {
 	agoWord,
 	asksSections,
 	asksWord,
+	bottomLineShows,
 	clockWord,
 	commandsOf,
 	ENDED_SHOWN_MS,
+	EXPLAIN_ON,
 	FRAME,
 	type Frame,
+	type FrameMsg,
 	frameUpdate,
 	hereWord,
 	holdsWord,
 	hostWord,
+	INFO,
+	type InfoMode,
 	jobItem,
 	jobsList,
 	keyGoesTo,
@@ -43,6 +50,7 @@ import {
 	tookWord,
 	workspaceName,
 } from "./frame.ts";
+import {BottomArea, BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
 
 // The frame's words, from a real desk folded by the real machine, and the host's real table.
 
@@ -638,9 +646,12 @@ describe("the frame's own state", () => {
 	});
 
 	it("explains only in info mode, and hides both bars and back", () => {
-		expect(frameUpdate(FRAME, {type: "explain", text: "x"}).explained).toBeNull();
-		const info = frameUpdate(FRAME, {type: "show", what: "info"});
-		expect(frameUpdate(info, {type: "explain", text: "x"}).explained).toBe("x");
+		expect(frameUpdate(FRAME, {type: "explain", text: "x"})).toBe(FRAME);
+		const info = frameUpdate(FRAME, {type: "info", focus: null});
+		expect(frameUpdate(info, {type: "explain", text: "x"}).info).toEqual({
+			kind: "on",
+			explained: "x",
+		});
 		const bare = frameUpdate(FRAME, {type: "show", what: "bars"});
 		expect(bare.bare).toBe(true);
 		expect(frameUpdate(bare, {type: "show", what: "bars"}).bare).toBe(false);
@@ -656,5 +667,316 @@ describe("the frame's own state", () => {
 			kind: "item",
 			what: "sync",
 		});
+	});
+});
+
+// Today's info mode (C-b i) by the modes guidelines (docs/direction/modes.md, M2 to M4): one value
+// for its state, seen with the bars hidden, told to a screen reader, explained from the keyboard,
+// and left with Escape.
+describe("info mode", () => {
+	const quiet = {armed: false, asking: false};
+	/** C-b i, or a click on its item, with nothing in focus that has words. */
+	const toggle: FrameMsg = {type: "info", focus: null};
+	const escape: FrameMsg = {type: "escape", desk: quiet};
+	// Built as values, not stepped to, so what is drawn is checked apart from how it is reached.
+	const on: Frame = {...FRAME, info: {kind: "on", explained: null}};
+	const off: Frame = {...FRAME, info: {kind: "off"}};
+	const explaining = (text: string): Frame => ({...FRAME, info: {kind: "on", explained: text}});
+	const bare = frameUpdate(FRAME, {type: "show", what: "bars"});
+	const bareOn: Frame = {...bare, info: {kind: "on", explained: null}};
+	const noop = () => {};
+	const props = (frame: Frame): FrameProps => ({
+		desk: fold([]),
+		frame,
+		asks: null,
+		host: null,
+		link: {kind: "up"},
+		attachedOnce: true,
+		prefix: PREFIX,
+		table: TABLE,
+		shapes: SHAPES,
+		tickets: SHOWN,
+		armed: false,
+		toHost: noop,
+		toApp: noop,
+		toRun: noop,
+		step: noop,
+	});
+	/** The words a markup shows, its tags dropped. */
+	const words = (html: string) =>
+		html
+			.replace(/<[^>]+>/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+	const line = (frame: Frame) => renderToStaticMarkup(createElement(BottomLine, props(frame)));
+	/** The words of one side of the bottom line: `left` or `right`. */
+	const side = (frame: Frame, which: "left" | "right") => {
+		const html = line(frame);
+		const at = html.indexOf(`<div class="${which}">`);
+		expect(at).toBeGreaterThanOrEqual(0);
+		const rest = html.slice(at);
+		return words(which === "left" ? rest.slice(0, rest.indexOf('<div class="right">')) : rest);
+	};
+	/** The bottom line's info item: the button it draws, its attributes and its name. */
+	const infoItem = (frame: Frame) => {
+		const items = [...line(frame).matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)]
+			.map((m) => ({attrs: m[1] ?? "", name: words(m[2] ?? "")}))
+			.filter((b) => /\binfo( off)?$/.test(b.name));
+		expect(items).toHaveLength(1);
+		const [item] = items;
+		if (item === undefined) throw new Error("no info item");
+		return item;
+	};
+	/**
+	 * The bottom line's items as it builds them, with what each is given: its name, whether its
+	 * tooltip is kept quiet, and its click. Markup drops a click and a tooltip that has not shown yet,
+	 * so the line is read as elements, inside a render so its hooks run.
+	 */
+	const itemsOf = (frame: Frame, step: FrameProps["step"] = noop) => {
+		const items: {readonly name: unknown; readonly quiet: unknown; readonly onClick: unknown}[] =
+			[];
+		const walk = (node: unknown): void => {
+			if (Array.isArray(node)) {
+				for (const kid of node) walk(kid);
+				return;
+			}
+			if (!isValidElement(node)) return;
+			const given = node.props;
+			if (typeof given !== "object" || given === null) return;
+			if ("name" in given && "quiet" in given && "onClick" in given)
+				items.push({name: given.name, quiet: given.quiet, onClick: given.onClick});
+			if ("children" in given) walk(given.children);
+		};
+		function Read(): ReactNode {
+			const line = BottomLine({...props(frame), step});
+			walk(line);
+			return line;
+		}
+		renderToStaticMarkup(createElement(Read));
+		expect(items.map((i) => i.name)).toEqual(["info", "keys"]);
+		return items;
+	};
+	/** What the window's one status region says. It is drawn whatever the bars, so it is never gone. */
+	const said = (frame: Frame) => {
+		const html = renderToStaticMarkup(createElement(ModeStatus, props(frame)));
+		expect(html).toContain('role="status"');
+		return words(html);
+	};
+
+	it("keeps the bottom line with the bars hidden while it is on, as the armed prefix does", () => {
+		expect(bottomLineShows(FRAME, quiet)).toBe(true);
+		expect(bottomLineShows(bare, quiet)).toBe(false);
+		expect(bottomLineShows(bare, {armed: true, asking: false})).toBe(true);
+		expect(bottomLineShows(bare, {armed: false, asking: true})).toBe(true);
+		expect(bottomLineShows(frameUpdate(bare, {type: "say", note: "x"}), quiet)).toBe(true);
+		expect(bottomLineShows(bareOn, quiet)).toBe(true);
+		expect(bottomLineShows({...bare, info: {kind: "off"}}, quiet)).toBe(false);
+		expect(bottomLineShows(frameUpdate(bare, toggle), quiet)).toBe(true);
+	});
+
+	it("tells a screen reader when it turns on and off, and nothing on each hover", () => {
+		expect(said(FRAME)).toBe("");
+		expect(said(on)).toBe("Info mode on. Escape leaves.");
+		expect(said(explaining(INFO.asks))).toBe("Info mode on. Escape leaves.");
+		expect(said(off)).toBe("Info mode off.");
+		expect(said(frameUpdate(on, {type: "explain", text: INFO.asks}))).toBe(
+			"Info mode on. Escape leaves.",
+		);
+		expect(said(frameUpdate(on, toggle))).toBe("Info mode off.");
+	});
+
+	// The hint promises only what works: Tab cannot reach most parts it explains (the tiles' title
+	// bars, the pipes, the empty stretch), so it does not say "tab to it".
+	it("hints at pointing, and promises no Tab it cannot keep", () => {
+		expect(side(on, "left")).toBe("INFO · point at anything");
+	});
+
+	// What keyboard focus is on is explained the moment info mode comes on, not only once focus moves.
+	it("explains what has focus at once when it turns on", () => {
+		expect(frameUpdate(FRAME, {type: "info", focus: INFO.keys}).info).toEqual({
+			kind: "on",
+			explained: INFO.keys,
+		});
+		expect(frameUpdate(FRAME, toggle).info).toEqual({kind: "on", explained: null});
+		const left = frameUpdate(explaining(INFO.keys), {type: "info", focus: INFO.keys});
+		expect(left.info).toEqual({kind: "off"});
+		expect(frameUpdate(left, {type: "info", focus: INFO.here}).info).toEqual({
+			kind: "on",
+			explained: INFO.here,
+		});
+		expect(side(frameUpdate(FRAME, {type: "info", focus: INFO.keys}), "left")).toBe(
+			`INFO · ${INFO.keys}`,
+		);
+	});
+
+	it("leaves on Escape, once what lies over the desk has closed, and says so", () => {
+		const left = frameUpdate(on, escape);
+		expect(left.info).toEqual({kind: "off"});
+		expect(said(left)).toBe("Info mode off.");
+		expect(frameUpdate(explaining(INFO.keys), escape).info).toEqual({kind: "off"});
+		const closed = frameUpdate(frameUpdate(on, {type: "show", what: "asks"}), escape);
+		expect(closed.over).toEqual({kind: "none"});
+		expect(closed.info).toEqual({kind: "on", explained: null});
+		expect(frameUpdate(closed, escape).info).toEqual({kind: "off"});
+		// No mode and nothing over the desk: Escape is not the frame's, and goes on to the tile.
+		expect(frameUpdate(FRAME, escape)).toBe(FRAME);
+		expect(frameUpdate(off, escape)).toBe(off);
+		expect(side(on, "right")).toMatch(/^esc leaves · /);
+	});
+
+	// At 1024 wide the explanation was cut off: the right side never shrinks (`flex: none`), so the
+	// left gave way. The left wraps instead (window.css, checked at 1024 by 700 in e2e.ts), and the
+	// right side keeps its items: hiding one under the pointer would explain it away, and a focused
+	// one would drop focus.
+	it("keeps the right side's items while something is explained", () => {
+		const right = side(on, "right");
+		expect(right).toMatch(/^esc leaves · .* info · .* keys$/);
+		expect(side(explaining(INFO.info), "right")).toBe(right);
+		expect(side(explaining(INFO.keys), "right")).toBe(right);
+		expect(side(FRAME, "right")).not.toContain("esc leaves");
+		expect(side(off, "right")).not.toContain("esc leaves");
+	});
+
+	// The right side is pinned to the window's right edge, so a word added after the items would push
+	// them left: the info item would jump as the mode comes on, and a second click there would land
+	// on keys. The way out goes first, so the items stay put (checked in pixels in e2e.ts).
+	it("puts the way out first on the right while it is on, so the items after it stay put", () => {
+		const right = (frame: Frame) => {
+			const html = line(frame);
+			return html.slice(html.indexOf('<div class="right">') + '<div class="right">'.length);
+		};
+		expect(right(on)).toMatch(/^<span class="quiet">esc leaves<\/span>/);
+		expect(right(explaining(INFO.keys))).toMatch(/^<span class="quiet">esc leaves<\/span>/);
+		// The items' own words end the line the same, on or off.
+		const items = side(FRAME, "right");
+		expect(side(on, "right").endsWith(items)).toBe(true);
+		expect(side(off, "right")).toBe(items);
+	});
+
+	// The ARIA APG's toggle button: a name that stays, and `aria-pressed` for the state. A name that
+	// flips to "info off" says the state twice, and a screen reader hears a new button.
+	it("keeps its item's name and says on or off with aria-pressed", () => {
+		const never = infoItem(FRAME);
+		expect(never.name).toMatch(/ info$/);
+		expect(infoItem(on).name).toBe(never.name);
+		expect(infoItem(off).name).toBe(never.name);
+		expect(never.attrs).toContain('aria-pressed="false"');
+		expect(infoItem(on).attrs).toContain('aria-pressed="true"');
+		expect(infoItem(off).attrs).toContain('aria-pressed="false"');
+	});
+
+	// While info mode is on, the bottom line explains the item, so its tooltip would say it twice
+	// (pop.tsx, useTip: a quiet tooltip never shows). Off, with nothing over the desk, it shows.
+	it("keeps every item's tooltip quiet while it is on, and only then", () => {
+		expect(itemsOf(on).map((i) => i.quiet)).toEqual([true, true]);
+		expect(itemsOf(explaining(INFO.keys)).map((i) => i.quiet)).toEqual([true, true]);
+		expect(itemsOf(FRAME).map((i) => i.quiet)).toEqual([false, false]);
+		expect(itemsOf(off).map((i) => i.quiet)).toEqual([false, false]);
+	});
+
+	it("says where focus is on the left while it is off, and INFO only while it is on", () => {
+		const here = hereWord(fold([]), SHAPES, SHOWN);
+		for (const frame of [FRAME, off]) {
+			expect(line(frame)).not.toContain('class="info"');
+			expect(line(frame)).toContain('class="here"');
+			expect(side(frame, "left")).toBe(here);
+		}
+		expect(line(on)).toContain('class="info"');
+		expect(line(on)).not.toContain('class="here"');
+	});
+
+	// A click on the item is pointed at it, so the item is what info mode explains first.
+	it("turns on from its item's click, explaining the item", () => {
+		const stepped: FrameMsg[] = [];
+		const [info] = itemsOf(FRAME, (m) => stepped.push(m));
+		if (typeof info?.onClick !== "function") throw new Error("the info item has no click");
+		info.onClick();
+		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
+	});
+
+	// M2: the mode is one value. Never on, on with what it explains, or off after it was on: an
+	// explanation with the mode off, or "left" while it is on, cannot be built.
+	it("keeps its state in one value, so the impossible mixes cannot be built", () => {
+		expect(FRAME.info).toEqual({kind: "never"});
+		expect(Object.keys(FRAME).sort()).toEqual(["bare", "info", "note", "over"]);
+		const modes: readonly InfoMode[] = [
+			{kind: "never"},
+			{kind: "on", explained: null},
+			{kind: "on", explained: INFO.keys},
+			{kind: "off"},
+		];
+		expect(modes.map((m) => m.kind)).toEqual(["never", "on", "on", "off"]);
+		// @ts-expect-error off explains nothing
+		const offExplains: InfoMode = {kind: "off", explained: INFO.keys};
+		// @ts-expect-error before it ever came on, it explains nothing
+		const neverExplains: InfoMode = {kind: "never", explained: null};
+		// @ts-expect-error on says what it explains, if only null
+		const onSaysNothing: InfoMode = {kind: "on"};
+		// @ts-expect-error no explanation beside the mode
+		const beside: Frame = {...FRAME, explained: null};
+		// @ts-expect-error no "left once" flag beside the mode: `off` is that
+		const leftFlag: Frame = {...FRAME, leftInfo: true};
+		// @ts-expect-error info mode comes on only with what focus explains: C-b i is no plain show
+		const plainShow: FrameMsg = {type: "show", what: "info"};
+		expect([offExplains, neverExplains, onSaysNothing, beside, leftFlag, plainShow]).toHaveLength(
+			6,
+		);
+	});
+
+	// Escape is one key with three owners. What lies over the desk closes first; then, while the
+	// desk is mid-key, the desk cancels its prefix or its question; only then does info mode go.
+	// The same frame back means the frame did not take it, and the key goes on.
+	it("lets the desk cancel its prefix or its question with Escape before info mode goes", () => {
+		const asks = frameUpdate(on, {type: "show", what: "asks"});
+		for (const desk of [
+			{armed: true, asking: false},
+			{armed: false, asking: true},
+		]) {
+			expect(frameUpdate(on, {type: "escape", desk})).toBe(on);
+			const closed = frameUpdate(asks, {type: "escape", desk});
+			expect(closed.over).toEqual({kind: "none"});
+			expect(closed.info).toEqual({kind: "on", explained: null});
+		}
+	});
+
+	it("explains on keyboard focus wherever it explains on the pointer (WCAG 2.1.1)", () => {
+		expect(EXPLAIN_ON).toEqual(["pointerover", "focusin"]);
+	});
+
+	/** A desk asking its own question: Ctrl-B x on t1. */
+	const asking = fold([
+		{type: "key", key: "<c-b>", at: 0},
+		{type: "key", key: "x", at: 1},
+	]);
+	/**
+	 * The desk's bottom area as drawn: whether its bottom line shows, and what its one status region
+	 * says. The region is checked to be there, and outside the bottom line, in every case.
+	 */
+	const area = (frame: Frame, over: Partial<FrameProps> & {readonly instead?: boolean} = {}) => {
+		const html = renderToStaticMarkup(
+			createElement(BottomArea, {...props(frame), instead: false, ...over}),
+		);
+		const line = /<footer class="bottomline">[\s\S]*<\/footer>/.exec(html)?.[0] ?? null;
+		expect(line ?? "").not.toContain('role="status"');
+		const rest = line === null ? html : html.replace(line, "");
+		const status = [...rest.matchAll(/<(\w+)[^>]*role="status"[^>]*>([\s\S]*?)<\/\1>/g)];
+		expect(status).toHaveLength(1);
+		return {line: line !== null, said: words(status[0]?.[2] ?? "")};
+	};
+
+	it("draws its status region apart from the bottom line, whatever the bars and the link", () => {
+		expect(area(FRAME)).toEqual({line: true, said: ""});
+		expect(area(on)).toEqual({line: true, said: "Info mode on. Escape leaves."});
+		expect(area(bare)).toEqual({line: false, said: ""});
+		expect(area(bareOn)).toEqual({line: true, said: "Info mode on. Escape leaves."});
+		// The bars hidden and info mode just left: the bottom line goes, and "off" is still heard.
+		expect(area(frameUpdate(bareOn, toggle))).toEqual({
+			line: false,
+			said: "Info mode off.",
+		});
+		expect(area(bare, {armed: true}).line).toBe(true);
+		expect(area(bare, {desk: asking}).line).toBe(true);
+		// A page in place of the desk (another link version): no bottom line, the region still there.
+		expect(area(on, {instead: true})).toEqual({line: false, said: "Info mode on. Escape leaves."});
 	});
 });
