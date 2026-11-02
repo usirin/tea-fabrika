@@ -294,7 +294,10 @@ changelog), and Reviews is its diff view [l11]. Third-party agents use the same 
 
 ### Clashes for the owner
 
-Each is with a decided principle, so the note keeps the principle until the owner picks.
+Each was with a decided principle. **The owner picked on 2026-11-01:** a person's `stop` is a
+saved pause; a person may speak unasked by a plain ticket comment, which records the run it was
+written `during`; red goes back by default, with a repository setting to turn it off. The
+questions as they were asked:
 
 1. **A person's `stop` (P4).** Ours ends the lane for good. Linear's halts and waits for "a clear
    signal" to come back, in the same session. Pick: keep, or make it a saved pause like P10's

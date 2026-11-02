@@ -1,8 +1,10 @@
 # Pipeline guidelines: a factory that resumes, and asks a person only to judge
 
-**Proposed 2026-11-01.** Five principles are **decided 2026-11-01** by the owner: P1, P2, P4, P5
-and P6, and the core of P7 (every step is idempotent and resumable). P9 was decided on 2026-10-05
-and P12 on 2026-10-22, in their own notes. **Everything else is a lean,** each with how sure.
+**Decided 2026-11-01.** The owner set P1, P2, P4, P5 and P6, the core of P7 (every step is
+idempotent and resumable) and "record wide" first, then approved every lean below and the three
+Linear clashes after a walk of each part. The confidence numbers stay as written, so a later run can
+test the least sure: the bounds in P8 (65%) and two nudges in P11 (60%). P9 was decided on
+2026-10-05 and P12 on 2026-10-22, in their own notes.
 
 Built from [experiment 186](../../experiments/186-pipeline-guidelines.md), which read how
 factories, supervisors, durable workflows, CI systems and build caches handle a stop, and
@@ -110,17 +112,17 @@ const OURS = {
   not wait for a person.
 - **A lean changed.** P11 gains one: an unanswered ask gets at most two nudges, then shows as
   waiting, as Linear does for a missed project update. 60%.
-- **Clashes for the owner to pick.** Each is with a decided principle, so it stays until the owner
-  says.
-  1. **A person's `stop`.** P4: it ends the lane for good. Linear: `stop` is a pause; the agent
-     steps back and comes back only on "a clear signal", in the same session. Pick: keep "for
-     good", or make a person's stop a saved pause, like P10's `stop` pick.
-  2. **A person who speaks unasked.** Linear lets a person "steer the approach" of a running
-     session at any time. P1 and P5 cover only answers to an ask. Pick: a note to a running step
-     waits for the step's end and goes to the next round, or it is not allowed.
-  3. **Red goes back on its own.** P2 sends red to the builder by default. Linear makes that a loop
-     each team turns on. Pick: keep the default (one owner, who wants a factory), or make it a
-     setting.
+- **Clashes with Linear, decided by the owner on 2026-11-01.**
+  1. **A person's `stop` is a saved pause, not an end.** Linear's `stop` is a pause too. The same
+     line goes on from the step that was stopped (P4). A lane a person wants gone closes with its
+     ticket. 85%.
+  2. **A person may speak unasked, by a plain comment.** Linear lets a person "steer the approach"
+     of a running session. Here a comment on the ticket is the way in: the running step reads it
+     at its next turn, or the next step does when none runs. It never cuts a turn off. The comment's
+     fact records `during`, the run that was live when it was written, filled in by code (what the
+     person saw, recorded now). A "reply to this step" view is later a filter on `during`. 80%.
+  3. **Red goes back on its own, by default.** Linear makes it a loop each team turns on. Here it is
+     on, with a repository setting to turn it off. 70%.
 
 ## The twelve principles
 
@@ -142,7 +144,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 - **How Linear would do it. Agree.** "An agent cannot be held accountable": a delegated issue keeps
   a person as assignee, and a coding session runs on its own, "you'll be notified when your input
   is needed". GitHub's review rules still decide what ships. Linear also lets a person steer a
-  running session without being asked; we have no door for that yet (clash 2 below).
+  running session without being asked; here that door is a plain ticket comment (clash 2).
 - **On ticket 117.** The plan's yes was a real judgment, and it was asked. Then the lane ended stuck
   on one stale test, and finding the cause took a read-only agent run by hand. Under P1 the next
   ask after the plan's yes would have been the merge.
@@ -162,8 +164,8 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 - **How Linear would do it. Agree on the route, differ on the default.** A coding session can be
   told to "fix lint issues" or "address review comments", in the same thread, and a loop can start
   on "checks passed or failed". But each is a person's delegation or a loop a person sets up. Our
-  lane does it on its own, within the round bound, because P1 says red is not a judgment
-  (clash 3 below).
+  lane does it on its own, within the round bound, because P1 says red is not a judgment. It is
+  on by default, with a repository setting to turn it off (clash 3).
 - **On ticket 117.** `tsh.test.ts:724` still expected `takes("map")` to be `[]`. It is not an exam
   file, so the builder may change it. Round 2 with that name would most likely have fixed it.
 - **What holds it.** A law: after a build whose `checked` is red with rounds left, the lane's next
@@ -194,8 +196,9 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 
 - **What it means.** A stuck or crashed lane is a crash recovery case. It goes on from the step that
   broke, with the carry it had, and keeps every step that ended `done`. It never starts the lane
-  from scratch. A stop is not the end of the lane's memory; only a person's `stop`, or a case that
-  is not this lane's to run, ends a lane for good.
+  from scratch. A stop is not the end of the lane's memory. A person's `stop` is a saved pause
+  (clash 1); only a case that is not this lane's to run, or a ticket a person closes, ends a lane
+  for good.
 - **The known way.** OTP `one_for_one`: "only that process is restarted". Temporal's reset keeps
   the history "up to and including the reset point". GitHub's `rerun --failed` runs only the
   failed jobs, on the same commit.
@@ -203,7 +206,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
   goes on in the same session when a person replies: "Blocked work does not resume
   automatically", and the reply keeps what was done. A stale session is "recoverable by sending
   another agent activity". But Linear's `stop` is a pause: the agent steps back and comes back on
-  "a clear signal". P4 says a person's `stop` ends a lane for good (clash 1 below).
+  "a clear signal". Decided the same way here: a person's `stop` is a saved pause (clash 1).
 - **On ticket 117.** The resume starts at mutation. Triage, the plan and its yes, the test writer's
   `5d38d582` and the builder's `315df8e6` all stay. Main has moved, so the unpushed branch is
   rebased, code's checks run at the new head, and build round 2 gets the red name.
