@@ -651,6 +651,19 @@ const goesOnFrom = (at: Resume, outcome: LaneOutcome): Resume =>
 		? {...at, round: "next"}
 		: at;
 
+/**
+ * How a person's pause on `question` stops the lane: a stop on the rounds is stuck on them, and any
+ * other is a person's no to the change. Pure.
+ */
+const pausedBy = (question: Question): StopOutcome =>
+	question.for === "rounds_spent"
+		? {kind: "stuck", why: "rounds_spent"}
+		: {kind: "ask", who: "owner", for: "paused"};
+
+/** Where the same line typed again goes on after a pause on `pick`: where the restart takes it. Pure. */
+const pausedAt = (question: Question, pick: string): Resume =>
+	goesOnFrom(resumeOf(question, pick), pausedBy(question));
+
 /** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
 const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer" : "build");
 
@@ -814,7 +827,7 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 	const next = NEXT[question.step];
 	const {call} = question;
 	const spent = question.for === "rounds_spent";
-	const then = goesOnWords(s, resumeOf(question, pick));
+	const then = goesOnWords(s, pausedAt(question, pick));
 	const pauses: Readonly<Record<string, string>> = {
 		no:
 			question.for === "approve"
@@ -1039,10 +1052,7 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 	// A person's `no` or `stop` pauses the lane where the pick goes on, saved. A stop on the rounds
 	// says so: the lane is stuck on them, and no person's no to the change.
 	return releasing(held, {
-		outcome:
-			question.for === "rounds_spent"
-				? {kind: "stuck", why: "rounds_spent"}
-				: {kind: "ask", who: "owner", for: "paused"},
+		outcome: pausedBy(question),
 		said: `${question.ask}: ${pick}`,
 		at,
 	});
