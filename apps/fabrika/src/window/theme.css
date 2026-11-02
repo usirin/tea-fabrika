@@ -4,8 +4,8 @@
  * a Manti part looks like the rest of the app and nothing of Manti's own palette shows. It is
  * unlayered, so it wins over Manti's layered defaults without !important.
  *
- * Dark only, as the app is. Light would set each color below as light-dark(<light>, <dark>), with
- * a light ramp for --n-* and --a-*, and drop color-scheme: dark from window.css.
+ * Both looks: each name below points at a window.css token, and those are light-dark() pairs, so
+ * a Manti part follows the system's look with the rest of the window.
  */
 :root {
 	/* Type: Inter for the UI, mono only for typed things; the px scale of window.css. */
@@ -37,7 +37,7 @@
 	--manti-focus-ring: var(--focus);
 	--manti-focus-ring-width: 2px;
 	--manti-focus-ring-offset: 2px;
-	--manti-selection-bg: var(--a-5);
+	--manti-selection-bg: var(--surface-selected);
 	--manti-selection-text: var(--text-primary);
 
 	/* What each color means is ours: the accent is "your turn" and nothing else. */

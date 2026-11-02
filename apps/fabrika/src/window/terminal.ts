@@ -3,6 +3,7 @@ import {FitAddon, Ghostty, Terminal} from "ghostty-web";
 import wasm from "ghostty-web/ghostty-vt.wasm";
 import type {TileId} from "../desk/layout/index.ts";
 import {readToTerminal} from "../messages.ts";
+import {fabrika, fabrikaLight, terminalTheme} from "../themes.ts";
 
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
@@ -25,8 +26,14 @@ import {readToTerminal} from "../messages.ts";
 // fetched (`Ghostty.load` fetches a data: url, which this page's policy refuses), once, and
 // every tile's terminal shares it.
 
-/** The app's own colors (window.css): a tile's surface (`--n-2`), and its second ink (`--n-11`). */
-const THEME = {background: "#101113", foreground: "#bababc", cursor: "#bababc"};
+/**
+ * The built-in theme for the system's look, as the window's stylesheet picks it with light-dark().
+ * Read when a terminal is made: ghostty-web 0.4 cannot change a terminal's colors once it is open.
+ */
+const themeNow = () =>
+	terminalTheme(
+		window.matchMedia("(prefers-color-scheme: light)").matches ? fabrikaLight : fabrika,
+	);
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 /** Rows of the screen read back as text: the newest, as the draft's terminal reads them. */
 const MIRRORED = 200;
@@ -88,7 +95,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
 		cursorBlink: false,
 		scrollback: 1000,
-		theme: THEME,
+		theme: themeNow(),
 	});
 	const fit = new FitAddon();
 	term.loadAddon(fit);

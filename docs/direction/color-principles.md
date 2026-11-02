@@ -64,10 +64,32 @@ type Color =
 one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so it cannot carry a needed
 fact. The title bar and the focus edge do that.
 
+**A line or a fill is never text (added 2026-11-01, approved by the owner from the design review).**
+Principle 5 holds for each use, not only for each value. A token made from a border step (4 to 8)
+or a solid fill (9, 10) is never a `color:`. Text takes 11 or 12, and it must read 4.5:1 on every
+place it sits, hovered and selected rows included, not only on the page.
+
+```css
+/* Before: the wire line's step used as words, 1.87 to 3.02 */
+.topbar .num { color: var(--wire); }       /* slate a8 */
+/* After: the text step the top bar's other words use, 5.32 or more */
+.topbar .num { color: var(--text-faint); } /* slate a11 */
+```
+
+- What it changed: in `fabrika-light`, done and stuck moved from step 11 to step 12 and turn-text
+  from indigo 11 to indigo a11, since step 11 fails on a selected row. The values are in
+  [themes](./themes.md).
+- What it costs: done and stuck in light read close to black, so the word and the mark carry the
+  state more than the hue does. Quiet top-bar numbers and pipes get as strong as its other quiet
+  words.
+
 ## What today's code still breaks
 
-- Colors are hand-written oklch in `apps/fabrika/src/window/window.css`, and some are written straight
-  into `apps/fabrika/src/window/terminal.ts` and `apps/fabrika/src/main.ts`.
+- The grays and the state colors in `apps/fabrika/src/window/window.css` are Radix steps since
+  ticket 144, and the terminal and the window's frame read them from `apps/fabrika/src/themes.ts`.
+  The hues are still hand-written oklch: the line tints, the type colors and the service colors.
+- The editor's tables (`apps/fabrika/src/editor/screen.ts`) still print 24-bit colors tuned to the
+  old dark grays, so in the light look their strong text is near white.
 - Three of the six tints sit on amber, red and green, so they break principle 2.
 - Pipes have no second cue yet, so they break principle 3.
 

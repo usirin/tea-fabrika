@@ -63,6 +63,21 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
   Tracker ticket 144 holds the token-by-token mapping. The guidelines pages use the same values
   ([PR 291](https://github.com/usirin/tea-fabrika/pull/291)). This moves values only: theme files
   and the `themes` program stay in `next/`.
+  - The window follows the system's look: each token is `light-dark(<fabrika-light>, <fabrika>)`
+    under `color-scheme: light dark`. `apps/fabrika/src/themes.ts` holds both themes for the
+    terminal and the window's frame.
+  - **Added 2026-11-01, approved by the owner from the design review:** a line or fill token is
+    never a text color. Eight rules drew text in `--wire` (slate a8), `--border-strong` (slate a7)
+    or `--key` (indigo 9), which read as low as 1.54 on a row. Those words now take `--text-faint` (slate a11)
+    or `--turn` (accent 11, a11 in light). The tokens stay for the lines and fills they draw.
+    `apps/fabrika/src/themes.test.ts` holds every `color:` token to 4.5:1 on the desk, the ground,
+    raised and hovered and selected rows, in both looks.
+  - The one named exception: white on the hovered turn fill (indigo 10) in dark reads 4.28. The
+    owner kept Radix's step; tracker ticket 153 tracks it.
+  - Not set by this note, picked by the builder from the text steps, for the owner to confirm:
+    `--text-secondary` is slate 11 in dark and slate a11 in light (slate 11 reads 4.42 on a
+    selected row there), and `--text-muted` is slate a11. So today's four text grays become
+    Radix's two text steps.
 
 ## The same rule as keybindings
 
@@ -135,12 +150,36 @@ terminal: every color but black (0, a fill) 4.82 or more on the background
 moved by repair: 0
 ```
 
-**The built-in `fabrika-light`:** the same pick, `look = "light"`. Two colors are a step up from
-the dark one, because repair would move them there: `running` is amber 12, since amber 11 reads 4.38,
-and `focus` is slate a9, since a8 reads 1.90. With those written in, repair moves nothing: text
-15.58, faint 5.81, done 4.82, running 10.81, stuck 4.96, focus 3.27. In the terminal, white and bright
-white (7 and 15, slate 8 and 7) are fills, and every other color reads 4.65 or more on the
-background. The cost: running reads brown, not amber.
+**The built-in `fabrika-light`:** the same pick, `look = "light"`. Five colors are a step up from
+the dark one:
+
+- `running` is amber 12, since amber 11 reads 4.38, and `focus` is slate a9, since a8 reads 1.90.
+  Repair would move both there.
+- **Changed 2026-11-01, approved by the owner from the design review of ticket 144:** `done` is
+  grass 12 (`#203c25`), `stuck` red 12 (`#641723`) and `turn-text` indigo a11 (`#002bb7c5`). This
+  note had them at step 11. Step 11 passes on the desk, the ground and raised, but the window also
+  draws these words on hovered and selected rows, and there step 11 fails: grass 11 reads 3.77, red
+  11 3.88 and indigo 11 4.47 on a selected row. Grass a11 and red a11 fail there too (4.05, 4.15),
+  so step 12 is the nearest that passes. Indigo a11 is the same step 11, see-through, and passes.
+
+```toml
+# fabrika-light's [colors], the three that changed
+turn-text = "#002bb7c5" # accent a11; was accent 11, #3a5bc7
+done = "#203c25"        # step 12; was step 11, #2a7e3b
+stuck = "#641723"       # step 12; was step 11, #ce2c31
+```
+
+```text
+over desk, ground and raised:   text 15.58  faint 5.81  turn-text 5.79  done 11.51  running 10.81
+                                stuck 11.83  focus 3.27
+also over hovered and selected rows, the worst:  faint 5.32  turn-text 4.93  done 9.02  stuck 9.26
+```
+
+With those written in, repair moves nothing. In the terminal, white and bright white (7 and 15, slate
+8 and 7) are fills, and every other color reads 4.65 or more on the background. The terminal keeps
+grass 11 and red 11, since its colors sit on its own background, never on a row. The cost: running
+reads brown, not amber, and done and stuck read close to black next to body text, so the word and
+the mark carry the state more than the hue does.
 
 **A Base16 file, mapped in:**
 
