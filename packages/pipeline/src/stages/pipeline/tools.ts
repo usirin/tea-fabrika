@@ -24,6 +24,7 @@ import {TestsAgents, TestsWork} from "../test-writer/program.ts";
 import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
+import {type CheckRun, CheckRunner, checkRunner} from "./checks.ts";
 import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
 import {LaneHome, LaneWork} from "./work.ts";
@@ -405,6 +406,49 @@ export const laneMutationScope = Layer.effect(
 						{concurrency: 1},
 					);
 					return {diff: {files, added}, kept: spans.flat(), exam: checksums};
+				}),
+		};
+	}),
+);
+
+/**
+ * Code's own `[build] checks`, as the repo's settings name them at each run, in the head's installed
+ * copy: the one the mutation step's tests run in. What could not be set up is `not_run`, never green.
+ */
+export const laneCheckRunner = Layer.effect(
+	CheckRunner,
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		return {
+			run: (head) =>
+				Effect.gen(function* () {
+					const notRun = (commands: readonly string[], tail: string): CheckRun => ({
+						head,
+						commands,
+						result: "not_run",
+						failed: [],
+						tail,
+					});
+					const settings = yield* Effect.result(work.settings);
+					if (settings._tag === "Failure")
+						return notRun(
+							[],
+							`The repository's settings could not be read, so no check ran at ${head}. ${settings.failure.says ?? ""}`.trim(),
+						);
+					const commands = settings.success.build?.checks ?? [];
+					const copy = yield* Effect.result(work.copy(head));
+					if (copy._tag === "Failure")
+						return notRun(
+							commands.map((command) => command.join(" ")),
+							`The copy of ${head} could not be made, so no check ran there. ${copy.failure.says ?? ""}`.trim(),
+						);
+					const folder = copy.success;
+					return yield* Effect.provide(
+						Effect.gen(function* () {
+							return yield* (yield* CheckRunner).run(head);
+						}),
+						checkRunner({folder: () => folder, commands}),
+					);
 				}),
 		};
 	}),

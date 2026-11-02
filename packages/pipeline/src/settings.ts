@@ -18,7 +18,8 @@ import {parse, TomlError} from "smol-toml";
 //
 //   [build]
 //   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
-//   checks = [["npm", "test"]]        # the commands the builder is told to run
+//   checks = [["npm", "test"]]        # code runs these at the head after every build; the builder is
+//                                     # told them too. With {out}, vitest's report names each test that fails
 //   send_back = true                  # a red head goes back to the builder; false asks a person at once
 //
 //   [test_writer]
@@ -148,6 +149,11 @@ const Command = Schema.NonEmptyArray(Word);
 const Build = Schema.Struct({
 	/** `[]`: install nothing. */
 	install: Schema.optionalKey(Schema.Array(Word)),
+	/**
+	 * Code runs each at the head after every build, in a copy of it: a build is done only on green.
+	 * `{out}`: where vitest writes its JSON report, which names each test that fails. The builder is
+	 * told them without it.
+	 */
 	checks: Schema.optionalKey(Schema.Array(Command)),
 	/** A head whose own tests fail goes back to the builder, a round at a time. `false`: a person is asked at once. */
 	send_back: Schema.optionalKey(Schema.Boolean),

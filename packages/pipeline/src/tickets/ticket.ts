@@ -87,6 +87,30 @@ export const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{7,64}$/));
 /** A count: 0, 1, 2. */
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
+/** Each failing test by name, at most `FAILED_MOST`. */
+const Failed = Schema.Array(Schema.String).check(Schema.isMaxLength(FAILED_MOST));
+
+/**
+ * Code's own run of `[build] checks` at a head, after a build (docs/plan/pipeline-self-fix.md, PR 4).
+ * `commands`: as the settings say them, `{out}` and all, so no path from the machine that ran them.
+ * `failed`: each failing test by name, when a command wrote vitest's report. `not_run`: a command
+ * could not start, after one more try, so nothing says whether the head holds. Never read as green.
+ * The lane and the mutation step hand it on with any head; on the ticket the head is a sha.
+ *
+ *   {head: "7a41…", commands: ["vitest run --reporter=json --outputFile={out}"], result: "red",
+ *    failed: ["src/clamp.test.ts > clamp > keeps a high number"]}
+ */
+export const Checked = Schema.Struct({
+	head: Schema.String,
+	commands: Schema.Array(Schema.String),
+	result: Schema.Literals(["green", "red", "not_run"]),
+	failed: Failed,
+});
+export type Checked = typeof Checked.Type;
+
+/** Checks a step trusted in place of a run of its own: only green ones, at a sha. */
+const Trusted = Schema.Struct({...Checked.fields, head: Sha, result: Schema.Literal("green")});
+
 /** A stage's answer, in the five verbs (docs/direction/outcome-names.md): the `AnyOutcome` shape. */
 export const Outcome = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("done"), part: Schema.Boolean}),
@@ -201,8 +225,15 @@ export const CodeFact = Schema.Union([
 		listUsd: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
 		minutes: Schema.optionalKey(Schema.Finite),
 		/** The tests that failed at the run's head, by name, at most `FAILED_MOST`. The error text exists only now. */
-		failed: Schema.optionalKey(Schema.Array(Schema.String).check(Schema.isMaxLength(FAILED_MOST))),
+		failed: Schema.optionalKey(Failed),
+		/**
+		 * The green checks at the run's head it trusted in place of a run of its own, so a skip never
+		 * reads as a clean run: the mutation step's, which then runs no suite of its own.
+		 */
+		trusted: Schema.optionalKey(Trusted),
 	}),
+	/** Code ran `[build] checks` at `head`, after a build: what it found there. */
+	Schema.Struct({type: Schema.Literal("checked"), ...Checked.fields, head: Sha}),
 	/**
 	 * A run's agent opened its session, once, after the run's `started`. `id`: the harness's own id
 	 * for the conversation: the Codex thread, the ACP session, the Agent SDK session. Only known
@@ -328,6 +359,7 @@ export const WRITTEN_BY = {
 	started: "anyone",
 	session: "anyone",
 	ended: "anyone",
+	checked: "anyone",
 	planned: "anyone",
 	pushed: "anyone",
 	reviewed: "anyone",

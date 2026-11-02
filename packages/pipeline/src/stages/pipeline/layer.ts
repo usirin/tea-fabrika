@@ -16,6 +16,7 @@ import {laneProgram} from "./program.ts";
 import {laneLocalHost, lanePulls, laneRecord, laneWatch, localWire} from "./pulls.ts";
 import {
 	laneBuildWrites,
+	laneCheckRunner,
 	laneExamWork,
 	laneMutationRunner,
 	laneMutationScope,
@@ -59,7 +60,7 @@ export const laneLayer = (home: LaneHome["Service"]) => {
 		layerLanes(),
 	);
 	const second = laneWork.pipe(Layer.provideMerge(first));
-	const third = Layer.mergeAll(laneAgents, lanePulls, laneMutationRunner).pipe(
+	const third = Layer.mergeAll(laneAgents, lanePulls, laneMutationRunner, laneCheckRunner).pipe(
 		Layer.provideMerge(second),
 	);
 	return Layer.mergeAll(

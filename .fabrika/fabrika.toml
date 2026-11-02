@@ -4,10 +4,13 @@
 
 [build]
 install = ["pnpm", "install", "--frozen-lockfile"]
+# Code runs these itself at the head after every build, in a copy of it, and a build is done only on
+# green. `{out}`: where vitest writes its JSON report, which names each test that fails, for the
+# builder. The builder is told them without the report.
 checks = [
 	["nice", "-n", "15", "pnpm", "typecheck"],
 	["nice", "-n", "15", "pnpm", "lint"],
-	["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"],
+	["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"],
 ]
 
 [test_writer]
