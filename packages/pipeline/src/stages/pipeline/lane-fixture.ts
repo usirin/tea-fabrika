@@ -145,7 +145,9 @@ export function makeLaneHome({
 			"",
 			"[build]",
 			`install = ["ln", "-s", ${JSON.stringify(nodeModules)}, "node_modules"]`,
-			'checks = [["node_modules/.bin/vitest", "run"]]',
+			// Code runs these itself after every build. The JSON report names each failing test, so a
+			// red head goes back to the builder with them; the builder's brief leaves the report out.
+			'checks = [["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]]',
 			...(sendBack === undefined ? [] : [`send_back = ${sendBack}`]),
 			"",
 			"[test_writer]",

@@ -61,11 +61,41 @@ const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	killed: 4 - n,
 	survived: Array.from({length: n}, () => SURVIVED),
 }));
-/** A start that allows the disable comment, the ignorer as it was approved, or nothing. */
+/** Code's checks at a head, as the lane hands them on (self-fix PR 4). */
+interface Checked {
+	readonly head: string;
+	readonly commands: readonly string[];
+	readonly result: "green" | "red" | "not_run";
+	readonly failed: readonly string[];
+}
+const checkedAt = (head: string, result: Checked["result"]): Checked => ({
+	head,
+	commands: ["node_modules/.bin/vitest run"],
+	result,
+	failed: [],
+});
+const GREEN_HERE = checkedAt(HEAD, "green");
+const checkedOf = (ask: unknown): Checked | null =>
+	(ask as {readonly checked?: Checked}).checked ?? null;
+const trustedOf = (report: unknown): Checked | null =>
+	(report as {readonly trusted?: Checked | null}).trusted ?? null;
+/** Green checks at the ask's own head: the one case the step may skip its suite run on. */
+const greenHere = (ask: {readonly head: string}) => {
+	const checked = checkedOf(ask);
+	return checked !== null && checked.result === "green" && checked.head === ask.head;
+};
+
+/**
+ * A start that allows the disable comment, the ignorer as it was approved, or nothing; and one
+ * after code's checks: green at its head, green at another, or red at its head.
+ */
 const asks = fc.constantFrom(
 	ASK,
 	{...ASK, allowed: [{kind: "disable" as const, ...DISABLE}]},
 	{...ASK, allowed: APPROVED.map((s) => ({kind: "exam" as const, ...s}))},
+	{...ASK, checked: GREEN_HERE},
+	{...ASK, checked: checkedAt("o".repeat(40), "green")},
+	{...ASK, checked: checkedAt(HEAD, "red")},
 );
 
 const SCOPE_CMD = readScope({base: ASK.base, head: HEAD, kept: ASK.kept, exam: ASK.exam});
@@ -143,12 +173,42 @@ const redGoesBack: Law = ({prev, msg, next}) => {
 	return sentBack ? `sent to the builder on ${msg.type}` : null;
 };
 
-/** Stryker runs only on green from the repo's own tests, or again after a restart that found it in flight. */
+/**
+ * Stryker runs only on green from the repo's own tests, on the diff read when code's checks were
+ * green at this very head, or again after a restart that found it in flight.
+ */
 const testsFirst: Law = ({prev, msg, cmds}) => {
 	if (!cmds.some((c) => c.type === "mutation_run")) return null;
 	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") return null;
+	if (msg.type === "mutation_scope_ok" && prev.phase === "reading" && greenHere(prev.ask))
+		return null;
 	if (msg.type === "resume" && prev.phase === "mutating") return null;
 	return `Stryker started on ${msg.type}`;
+};
+
+/**
+ * A skip is written (P9): a run that ended after Stryker ran, with no green run of the repo's own
+ * tests, names the green checks at its head it trusted in their place. A report never trusts
+ * checks that were not green, or were at another head.
+ */
+const skipIsWritten: TraceLaw = (steps) => {
+	let tested = false;
+	for (const {prev, msg, next} of steps) {
+		if (msg.type === "start" && prev.phase === "idle") tested = false;
+		if (
+			msg.type === "mutation_tests_ok" &&
+			prev.phase === "testing" &&
+			msg.value.result === "green"
+		)
+			tested = true;
+		if (prev.phase === "over" || next.phase !== "over") continue;
+		const trusted = trustedOf(next.report);
+		if (trusted !== null && (trusted.result !== "green" || trusted.head !== next.ask.head))
+			return `trusted checks ${trusted.result} at ${trusted.head}`;
+		if (next.report.ran !== null && !tested && trusted === null)
+			return "Stryker ran with no tests run and no checks named";
+	}
+	return null;
 };
 
 /** A change to the exam the owner did not allow never reaches a run: the last diff read had none. */
@@ -183,6 +243,10 @@ describe("the mutation step's laws", () => {
 
 	it("a red run goes back to the builder with its failing tests' names", () => {
 		checkEach(mutation, redGoesBack);
+	});
+
+	it("a run that skips its own tests on code's green checks says so, naming them", () => {
+		checkWhole(mutation, skipIsWritten);
 	});
 });
 
@@ -298,5 +362,48 @@ describe("each law is seen to fail on a planted mistake", () => {
 			},
 		});
 		expect(() => checkEach(leaks, kept)).toThrow();
+	});
+
+	/** The machine with its diff read going straight to Stryker whenever `skips` says so. */
+	const skipping = (skips: (s: Extract<Mutation, {phase: "reading"}>) => boolean) =>
+		plant({
+			mutation_scope_ok: (s, m) => {
+				const [next, cmds] = mutation.update.mutation_scope_ok(s, m);
+				if (s.phase !== "reading" || next.phase !== "testing" || !skips(s)) return [next, cmds];
+				const {head, seed, most} = s.ask;
+				const asked = runMutants({head, spans: next.spans, seed, most});
+				return [{ask: s.ask, spans: next.spans, phase: "mutating", asked}, [asked]];
+			},
+		});
+
+	it("Stryker started on checks that were green at another head, or red", () => {
+		const anyChecks = skipping((s) => checkedOf(s.ask) !== null);
+		expect(() => checkEach(anyChecks, testsFirst)).toThrow();
+	});
+
+	it("a skip that names no checks", () => {
+		const silent = plant({
+			...skipping((s) => greenHere(s.ask)).update,
+			mutation_run_ok: (s, m) => {
+				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
+				if (next.phase !== "over") return [next, cmds];
+				const {trusted: _, ...report} = next.report as typeof next.report & {trusted?: unknown};
+				return [{...next, report}, cmds];
+			},
+		});
+		expect(() => checkWhole(silent, skipIsWritten)).toThrow();
+	});
+
+	it("a skip that names checks from another head", () => {
+		const elsewhere = plant({
+			...skipping((s) => greenHere(s.ask)).update,
+			mutation_run_ok: (s, m) => {
+				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
+				if (next.phase !== "over") return [next, cmds];
+				const report = {...next.report, trusted: {...GREEN_HERE, head: "o".repeat(40)}};
+				return [{...next, report}, cmds];
+			},
+		});
+		expect(() => checkWhole(elsewhere, skipIsWritten)).toThrow();
 	});
 });

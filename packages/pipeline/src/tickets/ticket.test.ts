@@ -293,6 +293,73 @@ describe("a lane's facts", () => {
 			expect(readRow(row({data: JSON.stringify(before), kind: "ended"})).kind).toBe("entry");
 		});
 	});
+
+	// Self-fix PR 4: code runs `[build] checks` at the head after every build, and the ticket keeps
+	// what it found. The mutation step that skips its own suite run on a green one says so on its end.
+	describe("code's checks at a head", () => {
+		const lane = {kind: "agent", id: "lane", for: "owner"} as const;
+		const head = "c".repeat(40);
+		const name = (n: number) => `src/clamp.test.ts > clamp > case ${n}`;
+		const checked = (result: string, failed: readonly string[] = []) => ({
+			type: "checked",
+			head,
+			commands: ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"],
+			result,
+			failed,
+		});
+
+		it("read as a `checked` fact, green, red with its names, or not_run, and nothing else", () => {
+			for (const fact of [
+				checked("green"),
+				checked("red", [name(1), name(2)]),
+				checked("not_run"),
+			]) {
+				const read = readRow(
+					row({data: JSON.stringify(fact), kind: "checked", writer: "agent:lane"}),
+				);
+				expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+			}
+			// Broken: a result that is not one of the three, a head that is not a sha, or 51 names.
+			const wrong = [
+				checked("skipped"),
+				{...checked("green"), head: "main"},
+				checked(
+					"red",
+					Array.from({length: 51}, (_, i) => name(i)),
+				),
+			];
+			for (const fact of wrong)
+				expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+		});
+
+		it("are code's to write: the lane may write one", () => {
+			expect(mayWrite(lane, "checked" as Fact["type"])).toBe(true);
+		});
+
+		const mutationEnd = {
+			type: "ended",
+			run: "r-mutation-4",
+			stage: "mutation",
+			outcome: {kind: "done", part: false},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+		};
+
+		it("a mutation step's end names the green checks it trusted in place of its own suite run", () => {
+			const {type: _, ...trusted} = checked("green");
+			const fact = {...mutationEnd, trusted};
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it("an end that trusted checks that were not green is broken: a skip is never on a red", () => {
+			const {type: _, ...trusted} = checked("red", [name(1)]);
+			const fact = {...mutationEnd, trusted};
+			expect(readRow(row({data: JSON.stringify(fact), kind: "ended"})).kind).toBe("broken");
+		});
+	});
 });
 
 // Record wide (docs/plan/pipeline-self-fix.md, PR 7): what exists only while a run happens. A run's

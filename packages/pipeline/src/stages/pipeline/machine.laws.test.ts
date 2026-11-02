@@ -65,9 +65,15 @@ const OUTCOMES: readonly Outcome[] = [
 	{kind: "send", to: "test_writer", why: "mutant_survived"},
 	{kind: "stuck", why: "push_failed"},
 ];
+/** A head, and green checks code ran there: what a build leaves for the steps after it (self-fix PR 4). */
+const BUILT_HEAD = "4".repeat(40);
+const GREEN_CARRY = {
+	head: BUILT_HEAD,
+	checked: {head: BUILT_HEAD, commands: ["vitest run"], result: "green", failed: []},
+} as const;
 const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
-	carry: fc.constant({}),
+	carry: fc.constantFrom({}, GREEN_CARRY),
 });
 
 const arbs: MsgArbitraryTable<Msg> = {
@@ -334,7 +340,9 @@ describe("the questions a lane asks, over any run", () => {
 						s.step === "triage"
 							? {outcome: SEND, carry: {}}
 							: (leftEnds.shift() ?? {outcome: DONE, carry: {}});
-					return machine.update.lane_step_ok(s, runStep.ok(STEP, end, 0));
+					// A build leaves green checks at its head, so the run reaches the steps after it.
+					const built = s.step === "build" ? {...end, carry: {...end.carry, ...GREEN_CARRY}} : end;
+					return machine.update.lane_step_ok(s, runStep.ok(STEP, built, 0));
 				}
 				case "asking": {
 					const {ask, picks: offered} = s.question;
@@ -402,7 +410,8 @@ describe("the whole lane, step by step", () => {
 		for (let i = 0; i < 40 && s.phase !== "over"; i++) {
 			if (s.phase === "running") {
 				seen.push(s.step);
-				go(runStep.ok(STEP, {outcome: answers[s.step] ?? DONE, carry: {}}, 0));
+				const carry = s.step === "build" ? GREEN_CARRY : {};
+				go(runStep.ok(STEP, {outcome: answers[s.step] ?? DONE, carry}, 0));
 			} else if (s.phase === "asking") {
 				seen.push(s.question.for);
 				go({
@@ -493,6 +502,20 @@ describe("the whole lane, step by step", () => {
 		expect(s.phase === "over" && nameOf(s.outcome)).toBe("stuck:rounds_spent");
 	});
 
+	// Self-fix PR 4: red comes from code's checks after the build, and goes back to the build itself.
+	it("red checks at the build go back to the build each round, and once rounds run out a person is asked", () => {
+		const {s, seen} = walk(
+			{
+				triage: {kind: "send", to: "plan", why: "yes"},
+				exam: {kind: "skip", why: "no_rules_change"},
+				build: {kind: "send", to: "builder", why: "checks_red"},
+			},
+			{rounds_spent: "stop"},
+		);
+		expect(seen.slice(seen.indexOf("build"))).toEqual(["build", "build", "build", "rounds_spent"]);
+		expect(s.phase === "over" && nameOf(s.outcome)).toBe("stuck:rounds_spent");
+	});
+
 	it("a person's no ends the lane, and nothing merges", () => {
 		const asked = [
 			{type: "start", number: 7, lane: ID},
@@ -564,7 +587,11 @@ describe("red and green heads, over any run", () => {
 					return claimLane.ok(CLAIM, ID, 0);
 				case "running":
 					if (s.step === "build") builds++;
-					return runStep.ok(STEP, {outcome: answerTo(s), carry: {}}, 0);
+					return runStep.ok(
+						STEP,
+						{outcome: answerTo(s), carry: s.step === "build" ? GREEN_CARRY : {}},
+						0,
+					);
 				case "asking": {
 					const spent = s.question.for === "rounds_spent";
 					const pick = spent ? (answers.shift() ?? "stop") : (s.question.picks[0] ?? "");
@@ -628,5 +655,193 @@ describe("red and green heads, over any run", () => {
 				),
 		});
 		expect(() => holds(uncapped)).toThrow();
+	});
+});
+
+// Self-fix PR 4's law, over a whole run: no step after build runs on a head without green checks
+// that code ran at that very head. A build ends on green, red or checks that could not run, or says
+// `done` on checks that do not hold for its head. A later commit, the mutants job's, comes with checks
+// of its own or none. A person's answers are any the question offers.
+describe("code's checks after the build, over any run", () => {
+	const AFTER_BUILD: ReadonlySet<string> = new Set([
+		"mutation",
+		"mutants",
+		"review",
+		"push",
+		"merge",
+	]);
+	const COMMANDS = ["vitest run --reporter=json --outputFile={out}"];
+	const NAME = "src/red.test.ts > a planted red > stays red";
+	/** Each commit the run makes gets a head of its own. */
+	const headOf = (n: number) => n.toString(16).padStart(40, "a");
+	const ELSEWHERE = headOf(0xfff);
+	type Checks = "green" | "elsewhere" | "red" | "not_run" | "none";
+	/** What a step leaves at `head`: the checks code ran there, at another head, or none. */
+	const at = (head: string, checks: Checks) => {
+		const ran = (on: string, result: "green" | "red" | "not_run") =>
+			({head: on, commands: COMMANDS, result, failed: result === "red" ? [NAME] : []}) as const;
+		switch (checks) {
+			case "green":
+				return {head, checked: ran(head, "green")};
+			case "elsewhere":
+				return {head, checked: ran(ELSEWHERE, "green")};
+			case "red":
+				return {head, checked: ran(head, "red")};
+			case "not_run":
+				return {head, checked: ran(head, "not_run")};
+			case "none":
+				return {head};
+		}
+	};
+	type BuildEnd = readonly ["done" | "checks_red" | "checks_not_run", Checks];
+	const BUILD_ENDS: readonly BuildEnd[] = [
+		["done", "green"],
+		["done", "elsewhere"],
+		["done", "red"],
+		["done", "not_run"],
+		["done", "none"],
+		["checks_red", "red"],
+		["checks_not_run", "not_run"],
+	];
+	const runs = fc.record({
+		/** Each build, in turn. Past the last, done on green checks at its head. */
+		builds: fc.array(fc.constantFrom(...BUILD_ENDS), {maxLength: 12}),
+		/** Each mutation step, in turn. Past the last, done. */
+		mutations: fc.array(fc.constantFrom("done", "survived", "tests_red"), {maxLength: 8}),
+		/** The checks on each mutants job's commit, in turn. Past the last, green. */
+		mutants: fc.array(fc.constantFrom<Checks>("green", "elsewhere", "red", "none"), {maxLength: 8}),
+		/** Each review, in turn: `true` sends it back. Past the last, it passes. */
+		reviews: fc.array(fc.boolean(), {maxLength: 6}),
+		/** Each answer, in turn: one the question does not offer falls to its first pick. */
+		picks: fc.array(fc.constantFrom("again", "go_on", "stop"), {maxLength: 12}),
+	});
+	type Run = typeof runs extends fc.Arbitrary<infer R> ? R : never;
+
+	const stepsIn = (cmds: readonly LaneCmd[]) =>
+		cmds.flatMap((c) => (c.type === "lane_step" ? [c] : []));
+
+	/** Walk `machine` from its start on one run, checking every step it starts. What broke, a line each. */
+	const broken = (machine: Machine, run: Run): readonly string[] => {
+		const builds = [...run.builds];
+		const mutations = [...run.mutations];
+		const mutants = [...run.mutants];
+		const reviews = [...run.reviews];
+		const picks = [...run.picks];
+		const problems: string[] = [];
+		let commits = 0;
+		const endOf = (s: Extract<Lane, {phase: "running"}>): StepEnd => {
+			const DONE = {kind: "done", part: false} as const;
+			switch (s.step) {
+				case "triage":
+					return {outcome: {kind: "send", to: "plan", why: "yes"}, carry: {}};
+				case "exam":
+					return {outcome: {kind: "skip", why: "no_rules_change"}, carry: {}};
+				case "test_writer":
+					return {outcome: DONE, carry: {head: headOf(++commits)}};
+				case "build": {
+					const [how, checks] = builds.shift() ?? ["done", "green"];
+					const outcome =
+						how === "done"
+							? DONE
+							: how === "checks_red"
+								? ({kind: "send", to: "builder", why: "checks_red"} as const)
+								: ({kind: "stuck", why: "checks_not_run"} as const);
+					return {outcome, carry: at(headOf(++commits), checks)};
+				}
+				case "mutation": {
+					const how = mutations.shift() ?? "done";
+					const outcome =
+						how === "done"
+							? DONE
+							: how === "survived"
+								? ({kind: "send", to: "test_writer", why: "mutant_survived"} as const)
+								: ({kind: "send", to: "builder", why: "tests_red"} as const);
+					return {outcome, carry: {}};
+				}
+				case "mutants":
+					return {outcome: DONE, carry: at(headOf(++commits), mutants.shift() ?? "green")};
+				case "review":
+					return {
+						outcome:
+							reviews.shift() === true ? {kind: "send", to: "builder", why: "review_failed"} : DONE,
+						carry: {},
+					};
+				default:
+					return {outcome: DONE, carry: {}};
+			}
+		};
+		const msgFor = (s: Lane): Msg | null => {
+			switch (s.phase) {
+				case "idle":
+					return {type: "start", number: 7, lane: ID};
+				case "reading":
+					return readFiled.ok(READ, {state: "open", mine: true}, 0);
+				case "claiming":
+					return claimLane.ok(CLAIM, ID, 0);
+				case "running":
+					return runStep.ok(STEP, endOf(s), 0);
+				case "asking": {
+					const {ask, picks: offered} = s.question;
+					const wanted = picks.shift() ?? "";
+					return {
+						type: "lane_answered",
+						ask,
+						pick: offered.includes(wanted) ? wanted : (offered[0] ?? ""),
+					};
+				}
+				case "releasing":
+					return releaseLane.ok(RELEASE, "released", 0);
+				case "over":
+					return null;
+			}
+		};
+		let s: Lane = {phase: "idle"};
+		for (let i = 0; i < 300; i++) {
+			const msg = msgFor(s);
+			if (msg === null) break;
+			const [next, cmds] = (
+				machine.update[msg.type] as (s: Lane, m: Msg) => readonly [Lane, readonly LaneCmd[]]
+			)(s, msg);
+			for (const cmd of stepsIn(cmds)) {
+				if (!AFTER_BUILD.has(cmd.step)) continue;
+				const {head, checked} = cmd.carry as {
+					readonly head: string | null;
+					readonly checked?: {readonly head: string; readonly result: string};
+				};
+				if (checked?.result !== "green" || checked.head !== head)
+					problems.push(
+						`${cmd.step} ran on ${head} with checks ${JSON.stringify(checked ?? null)}`,
+					);
+			}
+			s = next;
+		}
+		return problems;
+	};
+
+	const holds = (machine: Machine) =>
+		fc.assert(
+			fc.property(runs, (run) => {
+				expect(broken(machine, run)).toEqual([]);
+			}),
+			{numRuns: 300, seed: 119120},
+		);
+
+	it("no step after build runs on a head without green checks code ran at that very head", () => {
+		holds(lane);
+	});
+
+	it("that law catches its plant: a lane that hands on a step without the checks it holds", () => {
+		const unchecked = plant({
+			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) => {
+				const [next, cmds] = lane.update.lane_step_ok(s, m);
+				return [
+					next,
+					cmds.map((c: LaneCmd) =>
+						c.type === "lane_step" ? {...c, carry: {...c.carry, checked: undefined}} : c,
+					),
+				] as never;
+			},
+		});
+		expect(() => holds(unchecked)).toThrow();
 	});
 });

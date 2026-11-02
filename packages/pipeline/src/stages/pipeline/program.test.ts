@@ -21,6 +21,7 @@ import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
+import {CheckRunner} from "./checks.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {Lane} from "./machine.ts";
@@ -262,6 +263,22 @@ const lane = ({
 						checksDown() ? Effect.fail({_tag: "could_not_run"} as const) : runner.tests(head),
 					),
 			})),
+			// Code's own checks after a build (self-fix PR 4) go down with them: they could not run.
+			Effect.updateService(CheckRunner, (checks) => ({
+				...checks,
+				run: (head) =>
+					Effect.suspend(() =>
+						checksDown()
+							? Effect.succeed({
+									head,
+									commands: ["node_modules/.bin/vitest run"],
+									result: "not_run" as const,
+									failed: [],
+									tail: "spawn ENOSPC",
+								})
+							: checks.run(head),
+					),
+			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
@@ -480,8 +497,9 @@ describe("a lane, whole", () => {
 		},
 	);
 
-	// Self-fix PR 3, the one whole-lane case: each build leaves a test that fails, so the mutation step
-	// finds the head red three times. No Stryker run, no review: it stops at the rounds' question.
+	// Self-fix PR 3's whole-lane case, as PR 4 has it: each build leaves a test that fails, so code's
+	// checks after the build find the head red three times. No mutation step, no review: it stops at
+	// the rounds' question.
 	it(
 		"sends a red head back to the builder with the failing test's name, and asks once the rounds are spent",
 		{timeout: 300_000},
@@ -507,19 +525,22 @@ describe("a lane, whole", () => {
 				"exam",
 				"test_writer",
 				"build",
-				"mutation",
 				"build",
-				"mutation",
 				"build",
-				"mutation",
 			]);
 
-			// The ticket keeps the name each time the head was red.
-			const reds = ran.facts.filter((f) => f.type === "ended" && f.stage === "mutation");
+			// The ticket keeps the name each time the head was red: on the build's end, and on code's
+			// `checked` at each head the builder left.
+			const reds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+			expect(reds).toHaveLength(3);
 			for (const end of reds) {
-				expect(end.outcome).toEqual({kind: "send", to: "builder", why: "tests_red"});
+				expect(end.outcome).toEqual({kind: "send", to: "builder", why: "checks_red"});
 				expect(end.failed).toEqual([NAME]);
 			}
+			const checked = ran.facts.filter((f) => f.type === "checked");
+			expect(checked).toHaveLength(3);
+			for (const fact of checked) expect(fact).toMatchObject({result: "red", failed: [NAME]});
+			expect(new Set(checked.map((f) => f.head)).size).toBe(3);
 			// A comment lists it, with the first line of its error.
 			const comments = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 			expect(comments.some((c) => c.includes(NAME) && c.includes("expected 1 to be 2"))).toBe(true);
@@ -543,6 +564,74 @@ describe("a lane, whole", () => {
 			const cost = /\$\d|price unknown/;
 			expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
 			expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
+		},
+	);
+
+	// Self-fix PR 4, the one whole-lane case: code runs `[build] checks` at the head after every build,
+	// and code decides, not the builder's form. Round 1's builder leaves a failing test and says its
+	// checks passed: red, back to the builder with the name. Round 2's fixes it and says its checks
+	// failed: green, so the lane goes on, and the mutation step trusts those checks in place of its
+	// own suite run, and says so.
+	it(
+		"runs the checks itself after each build: red goes back with the name, green goes on whatever the form says",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/red.test.ts > a planted red > stays red";
+			const planted = (n: number) => [
+				{
+					path: "src/red.test.ts",
+					text: `import {describe, expect, it} from "vitest";\n\ndescribe("a planted red", () => {\n\tit("stays red", () => {\n\t\texpect(1).toBe(${n});\n\t});\n});\n`,
+				},
+			];
+			const ran = await lane({
+				within: 200,
+				fake: {
+					writesAt: {build: {0: planted(2), 1: planted(1)}},
+					answers: {build: [null, {with: {ran: [{command: "pnpm test", passed: false}]}}]},
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.stages, said).toEqual([
+				"triage",
+				"plan",
+				"exam",
+				"test_writer",
+				"build",
+				"build",
+				"mutation",
+				"mutants",
+				"review",
+				"push",
+				"merge",
+			]);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+
+			// The first build's end: red, with the name. The second's: done.
+			const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+			expect(builds[0]).toMatchObject({
+				outcome: {kind: "send", to: "builder", why: "checks_red"},
+				failed: [NAME],
+			});
+			expect(builds[1]?.outcome).toEqual({kind: "done", part: false});
+			const prompts = codexRuns(ran.dir).filter((r) => r.step === "build");
+			expect(prompts[1]?.prompt).toContain(NAME);
+
+			// The ticket keeps what code found at each head the builder left: red, then green.
+			const checked = ran.facts.filter((f) => f.type === "checked");
+			expect(checked.slice(0, 2)).toMatchObject([
+				{result: "red", failed: [NAME]},
+				{result: "green", failed: []},
+			]);
+			expect(checked[0]?.head).not.toBe(checked[1]?.head);
+			expect(checked[1]?.commands).toEqual([
+				"node_modules/.bin/vitest run --reporter=json --outputFile={out}",
+			]);
+
+			// The mutation step ran no suite of its own, and its end names the green checks it trusted.
+			const mutation = ran.facts.find((f) => f.type === "ended" && f.stage === "mutation");
+			const {type: _, ...green} = checked[1] ?? {type: ""};
+			expect(mutation?.trusted).toEqual(green);
 		},
 	);
 
@@ -2109,8 +2198,9 @@ describe("a lane, on what the real agents answered", () => {
 			);
 
 			// P28: no question comes if the checks are down when the builder ends, so to hold a go_on on
-			// offer the lane was asked with them up, and they went down while it waited. The go_on carries on
-			// to the mutation step, whose own first run of the checks can't run either.
+			// offer the lane was asked with them up, and they went down while it waited. Self-fix PR 4: the
+			// checks code ran at that head were red, so the go_on has no green checks to carry on with, and
+			// the mutation step never starts.
 			it(
 				"a lane saved with go_on on offer, picked once the checks can't run, lands nothing: green is never guessed",
 				{timeout: 100_000},
@@ -2125,8 +2215,7 @@ describe("a lane, on what the real agents answered", () => {
 					});
 					expect(answeredWith(ran, "go_on")).toHaveLength(1);
 					expect(ran.lines).not.toContain(TIMED_OUT);
-					// `run_failed`, not `tests_red`: the new test is red here too, and the checks never said so.
-					expect(ran.names.mutation).toContain("run_failed");
+					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).not.toContain("mutation");
 					expect(bye(ran)).toContain("stuck");
 					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 				},

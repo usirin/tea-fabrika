@@ -1,6 +1,7 @@
+import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
-import {readScope, runMutants, runTests} from "./machine.ts";
+import {Mutation, type MutationAsk, readScope, runMutants, runTests} from "./machine.ts";
 import {changesOf, hashOf, type Scope} from "./scope.ts";
 import {
 	ASK,
@@ -161,5 +162,58 @@ describe("the mutation step", () => {
 			);
 			expect(cmds).toHaveLength(4);
 		}
+	});
+});
+
+// Self-fix PR 4: code ran `[build] checks` at the head just before this step. On a green run at
+// this very head the step skips its own suite run, and its report names the checks it trusted, so
+// a skip never looks like a clean run. Any other checks, or none, and it runs the tests as before.
+describe("the mutation step after code's checks", () => {
+	const COMMANDS = ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"];
+	const checkedAt = (head: string, result: "green" | "red" | "not_run") => ({
+		head,
+		commands: COMMANDS,
+		result,
+		failed: result === "red" ? [FAILING] : [],
+	});
+	const GREEN_HERE = checkedAt(HEAD, "green");
+	const decode = Schema.decodeUnknownSync(Mutation);
+	const encode = Schema.encodeSync(Mutation);
+
+	it("skips its own suite run on green checks at its head, and names them in the report", () => {
+		const {over, cmds} = drive({tests: RED}, {...ASK, checked: GREEN_HERE} as MutationAsk);
+		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_run"]);
+		if (over.phase !== "over") throw new Error("over");
+		expect(nameOf(over.outcome)).toBe("done");
+		expect((over.report as {readonly trusted?: unknown}).trusted).toEqual(GREEN_HERE);
+	});
+
+	it.each([
+		["green at another head", checkedAt("o".repeat(40), "green")],
+		["red at its head", checkedAt(HEAD, "red")],
+		["not_run at its head", checkedAt(HEAD, "not_run")],
+	])("runs its own tests first on checks %s, and trusts none", (_, checked) => {
+		const {over, cmds} = drive({}, {...ASK, checked} as MutationAsk);
+		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_tests", "mutation_run"]);
+		if (over.phase !== "over") throw new Error("over");
+		expect((over.report as {readonly trusted?: unknown}).trusted ?? null).toBeNull();
+	});
+
+	it("keeps the checks it was asked with through its schema, and the ones it trusted, so a restart reads them back", () => {
+		const {over} = drive({}, {...ASK, checked: GREEN_HERE} as MutationAsk);
+		const back = decode(encode(over));
+		expect(back).toEqual(over);
+		expect((back as {readonly ask?: {readonly checked?: unknown}}).ask?.checked).toEqual(
+			GREEN_HERE,
+		);
+	});
+
+	it("skips the same after a restart while it reads the diff", () => {
+		const {over, cmds} = drive({tests: RED, restartAt: "reading"}, {
+			...ASK,
+			checked: GREEN_HERE,
+		} as MutationAsk);
+		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_scope", "mutation_run"]);
+		expect(over.phase === "over" && nameOf(over.outcome)).toBe("done");
 	});
 });
