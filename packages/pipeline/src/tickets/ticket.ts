@@ -209,6 +209,8 @@ export const CodeFact = Schema.Union([
 		harness: Schema.optionalKey(Schema.String),
 		model: Schema.optionalKey(Schema.String),
 		effort: Schema.optionalKey(Schema.String),
+		/** The lane's round the run is in (self-fix PR 5). Left out: a start written before this key, or round 1. */
+		round: Schema.optionalKey(Count),
 	}),
 	/**
 	 * The run ended, with its stage's answer, what it cost and how long it went. `usd`: dollars at
@@ -247,6 +249,13 @@ export const CodeFact = Schema.Union([
 		 * (`stages/pipeline/key.ts`). Only known now. Left out: an end written before the key.
 		 */
 		key: Schema.optionalKey(Hash),
+		/**
+		 * What the step left for the steps after it: the change to the lane's carry, which the lane's
+		 * fold reads back when its save is gone (self-fix PR 5, `stages/pipeline/restart.ts`). Only
+		 * known now. Its shape is the lane's own, which this file cannot name: the lane's types import
+		 * this one, so the fold decodes it. Left out: an end written before this key, or a run that broke.
+		 */
+		carry: Schema.optionalKey(Schema.Unknown),
 	}),
 	/** Code ran `[build] checks` at `head`, after a build: what it found there. */
 	Schema.Struct({type: Schema.Literal("checked"), ...Checked.fields, head: Sha}),
@@ -435,6 +444,14 @@ export const ROOT = "tracker/ticket";
 export const nameOf = (number: number) => `${ROOT}/${number}`;
 
 const INBOX = /^tracker\/ticket\/([1-9]\d*)\/inbox$/;
+
+/**
+ * The ledger kind a fact is kept under: its own type, except where the ledger keeps that word for
+ * itself and refuses it from anyone else (host/rules.ts, `LEDGER_KINDS`). `restarted` is the ledger's
+ * own, for a name it started again, so a lane's restart is kept as `lane_restarted`.
+ */
+const KEPT_AS: Partial<Record<Fact["type"], string>> = {restarted: "lane_restarted"};
+export const kindOf = (type: Fact["type"]): string => KEPT_AS[type] ?? type;
 const decodeFact = Schema.decodeUnknownOption(Schema.fromJsonString(Fact));
 
 /** What one ledger row is to the tracker: a fact on a ticket, a row of no ticket's facts, or broken. */
@@ -455,7 +472,7 @@ export function readRow(row: Row): Read {
 	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
 	const fact = Option.getOrNull(decodeFact(row.data));
 	if (fact === null) return broken(`its data is not a fact`);
-	if (fact.type !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
+	if (kindOf(fact.type) !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
 	return {kind: "entry", entry: {pos: row.pos, ticket: Number(ticket), by, at: row.at, fact}};
 }
 
