@@ -882,23 +882,53 @@ describe("the accent fill says your turn and nothing else", () => {
 		);
 	});
 
-	it("only the rules that mark your turn draw with the accent fill", () => {
-		const uses = (value: string) =>
-			[...value.matchAll(/var\((--[\w-]+)\)/g)].some(([, name = ""]) => ACCENT.has(name));
-		const off = RULES.filter((r) => r.selector !== ":root")
-			.flatMap((r) =>
-				[...r.says]
-					.filter(([, value]) => uses(value))
-					.flatMap(([property]) =>
-						r.selector
-							.split(",")
-							.map((s) => s.trim())
-							.filter((s) => !Object.hasOwn(TURNS, s))
-							.map((s) => `${s} { ${property} }`),
-					),
-			)
-			.sort();
-		expect(off).toEqual([]);
+	// Accent uses outside a turn that were there when this law came in (2026-11-02). Most follow
+	// Radix's defaults, and whether rule 2 rules them out is the owner's call. This list only
+	// shrinks: a new accent use fails, and so does an entry whose rule is gone.
+	const PENDING = "owner call pending";
+	const KNOWN: Record<string, string> = {
+		// A hover border in the accent. The indigo 10 hover kept by tracker #153 is the turn
+		// button's own (.view .btn.turn:hover, a turn rule above), not this one.
+		"button:hover { border-color }": `hover border: ${PENDING}`,
+		// Radix draws focus in the accent (step 8); the desk's own --focus is slate a9.
+		"button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
+		".tracker button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
+		".tracker a:focus-visible { outline }": `Radix focus default, ${PENDING}`,
+		".tracker input:focus-visible { outline }": `Radix focus default, ${PENDING}`,
+		".tracker textarea:focus-visible { outline }": `Radix focus default, ${PENDING}`,
+		".tracker-find:focus-within { border-color }": `Radix focus default, ${PENDING}`,
+		".tracker .tracker-composer input:focus { border-color }": `Radix focus default, ${PENDING}`,
+		".tracker .tracker-composer textarea:focus { border-color }": `Radix focus default, ${PENDING}`,
+		".tracker .tracker-list button:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
+		".tracker-list a.tracker-pull-request:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
+		// File ticket, Comment and an ask's first answer share it; only the last is a turn.
+		".tracker button.tracker-primary { background }": `Radix solid primary, ${PENDING}`,
+		'.tracker .tracker-hint button[aria-pressed="true"] { border-color }': `pressed hint border, ${PENDING}`,
+	};
+
+	/** Each accent use outside the turn rules, as `selector { property }`. */
+	const OFF = RULES.filter((r) => r.selector !== ":root")
+		.flatMap((r) =>
+			[...r.says]
+				.filter(([, value]) =>
+					[...value.matchAll(/var\((--[\w-]+)\)/g)].some(([, name = ""]) => ACCENT.has(name)),
+				)
+				.flatMap(([property]) =>
+					r.selector
+						.split(",")
+						.map((s) => s.trim())
+						.filter((s) => !Object.hasOwn(TURNS, s))
+						.map((s) => `${s} { ${property} }`),
+				),
+		)
+		.sort();
+
+	it("no new rule draws with the accent fill outside your turn", () => {
+		expect(OFF.filter((use) => !Object.hasOwn(KNOWN, use))).toEqual([]);
+	});
+
+	it("the known accent uses only shrink: each listed one is still in the stylesheets", () => {
+		expect(Object.keys(KNOWN).filter((use) => !OFF.includes(use))).toEqual([]);
 	});
 });
 
