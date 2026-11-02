@@ -520,7 +520,7 @@ P11, decided 2026-11-01: count now, no cap, at most two nudges.
 
 ## PR 10: the exam pull request is formatted, reviewed and fixed by the lane, and a yes binds to the diff
 
-**Scope decided by the owner 2026-11-02; this text waits on the owner's yes.** Today's version:
+**Scope decided by the owner 2026-11-02; approved by the owner 2026-11-02, with every lean.** Today's version:
 `packages/pipeline`. From ticket 117's live run on 2026-11-02 and its exam pull request,
 [PR 313](https://github.com/usirin/tea-fabrika/pull/313), and from
 [experiment 193](../../experiments/193-lane-holes.md). It builds
@@ -837,7 +837,7 @@ exam -> exam_review -> (yes) -> exam_merge -> test_writer
 
 ## PR 11: every outcome has a route, and a fixable stop never stops
 
-**Scope decided by the owner 2026-11-02; this text waits on the owner's yes.** Today's version:
+**Scope decided by the owner 2026-11-02; approved by the owner 2026-11-02, with every lean.** Today's version:
 `packages/pipeline`, and one change in `packages/fabrika`'s writer use. On PR 10. It builds jidoka
 row 9's cure, every machine-fixable and preventable row of
 [the jidoka table](../direction/jidoka-and-andon.md#every-place-todays-lane-stops-or-asks) that
@@ -1189,6 +1189,9 @@ Settled 2026-11-02 by the owner's scope for PRs 10 and 11, kept for the record: 
 step's routes go in PR 11, not later; a format-only commit keeps the yes (the diff rule, `kept`,
 `formatted`); PR 10's Part 1 rides in PR 10, since nothing runs before both land; no table row
 waits for a ticket.
+
+Questions 8 to 15 below: **the owner took every lean, 2026-11-02.** Kept as asked, for the
+record. PR 11 is two pull requests, 11a (routes and the law) and 11b (waits and records).
 
 8. Exam criteria made by code, one per change the plan lists? Lean yes, 70%. Why: code cannot
    miss one. Cost: none extra. Doubt: the planner's own exam task gets judged twice.
