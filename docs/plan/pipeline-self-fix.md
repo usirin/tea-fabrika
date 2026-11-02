@@ -123,7 +123,10 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     round, with each name as an open item (`Item` already allows "red checks").
   - Past `MAX_ROUNDS`, the lane asks `rounds_spent` instead of ending. Review's send-backs
     share the same count. The ask shows what is still red and the dollars the rounds spent.
-    Its picks: "again" runs build, one more round; "stop" is a saved pause, not an end: it
+    Its picks: "again" runs one more round: build after a red head, and after a review's
+    send-back the test writer, then build. Decided 2026-11-02 by the owner: again after a review
+    runs the test writer, then build, since a review often asks for tests. "stop" is a saved
+    pause, not an end: it
     ends the run `stuck:rounds_spent`, which PR 5 saves at build, so the same line goes on
     there.
   - Red goes back by default (P2). `[build] send_back = false` in a repository's
@@ -149,7 +152,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   - `after("mutation", send:builder:tests_red, 1)` is `{to: "build", round: 2}`, and at round 3
     it is `{ask: "rounds_spent"}`. Today both are the lane's end.
   - The `rounds_spent` ask holds the open names and the rounds' dollars. "again" routes to
-    build, and nothing before it runs.
+    build after a red head, and to the test writer after a review's send-back; nothing before
+    that runs.
   - On the lane fixture, a head with a failing test: the ticket's `ended` holds the name, and
     build round 2's brief has it in `open`.
   - Law: in any order of messages, build runs at most `MAX_ROUNDS` times, plus one per

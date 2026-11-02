@@ -115,7 +115,8 @@ type Picks = readonly [Pick, ...Pick[]];
 type Pick = {readonly pick: string; readonly does: string; readonly resume: LaneStep | "here"};
 const PICKS = {
 	rounds_spent: [
-		{pick: "again", does: "one more round, with what is still red", resume: "build"},
+		// After a review's send-back, "again" resumes at test_writer (decided 2026-11-02).
+		{pick: "again", does: "one more round, with what is still open", resume: "build"},
 		{pick: "stop", does: "a saved pause; the same line goes on at build", resume: "build"},
 	],
 	spend: [ // "here": the step that ran out
@@ -321,7 +322,7 @@ counts once.
 | 5 | `stuck:step_failed`: a step could not run (`run_failed`, a missing input) | machine-fixable | `once`, on the same intent, then stop. |
 | 6 | `stuck:step_failed`: a question could not be written | machine-fixable | Write it again. Its id makes that safe. |
 | 7 | `stuck:step_failed`: no `origin`, or it names no repo | preventable | Already refused before any agent starts. Keep. |
-| 8 | `stuck:rounds_spent`: review sent it back past round 3 | judgment | Becomes an ask, with what is open and what the rounds cost: one more round (build), or stop (saved at build). |
+| 8 | `stuck:rounds_spent`: review sent it back past round 3 | judgment | Becomes an ask, with what is open and what the rounds cost: one more round (the test writer, then build), or stop (saved at build). Decided 2026-11-02 by the owner: again after a review runs the test writer, then build, since a review often asks for tests. |
 | 9 | `stuck:sent_back`: a `send` with no route | preventable | A route table typed over every step's sends, so a send with no route does not compile. |
 | 10 | `ask approve`: the plan | judgment | Keep. A `no` is a saved pause at plan: the same line runs the plan again, with the note. |
 | 11 | `ask exam_merge`: the rule changes' own pull request | judgment | Keep. A `no` is a saved pause at that ask. |
