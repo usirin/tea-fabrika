@@ -580,6 +580,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 		"a pop's title": [".pop-title"],
 		"a trace row's name": [".trace-view .wf-name"],
 		"the ticket's title": [".ticket-view .tk-title"],
+		"a tracker ticket page's title": [".tracker h2", ".tracker"],
 		"a map node's name": [".map-view .node-h .n"],
 		"a map frame's name": [".map-view .frame-h .n"],
 		"a map chip's name": [".map-view .chip .n"],
@@ -617,6 +618,76 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 			}).toEqual({restIsLow: true, focused: SLATE[look].high});
 		},
 	);
+
+	// Radix's TextField draws typed text at step 12 and its placeholder at the low step, and its
+	// SegmentedControl draws the pressed segment at 12. A control's own text, typed or pressed, is
+	// what a person reads, so it is step 12, and typed text never looks like the placeholder.
+	const CONTROLS: Record<string, readonly string[]> = {
+		"text typed in the tracker's find": [".tracker .tracker-find input", ".tracker-find"],
+		"text typed in the composer's line": [".tracker .tracker-composer input"],
+		"text typed in the composer's box": [".tracker .tracker-composer textarea"],
+		"a pressed tracker segment": [
+			'.tracker .tracker-shows button[aria-pressed="true"]',
+			".tracker .tracker-shows button",
+		],
+		"a pressed hint button": [
+			'.tracker .tracker-hint button[aria-pressed="true"]',
+			".tracker .tracker-hint button",
+		],
+	};
+
+	it.each(LOOKS)("typed text and a pressed segment are slate 12, %s", (look) => {
+		const got = Object.fromEntries(
+			Object.entries(CONTROLS).map(([what, chain]) => [what, colorOf(chain, look)]),
+		);
+		const want = Object.fromEntries(Object.keys(CONTROLS).map((what) => [what, SLATE[look].high]));
+		expect(got).toEqual(want);
+	});
+
+	it.each(LOOKS)("typed text is not drawn in the placeholder's color, %s", (look) => {
+		const placeholder = colorOf([".tracker input::placeholder"], look);
+		const typed = [
+			colorOf(CONTROLS["text typed in the tracker's find"] ?? [], look),
+			colorOf(CONTROLS["text typed in the composer's line"] ?? [], look),
+			colorOf(CONTROLS["text typed in the composer's box"] ?? [], look),
+		];
+		expect({placeholderIsLow: SLATE[look].low.includes(placeholder)}).toEqual({
+			placeholderIsLow: true,
+		});
+		expect(typed.filter((color) => color === placeholder)).toEqual([]);
+	});
+
+	// --ink was an old name that pointed at --text-secondary, so when that became the low step every
+	// rule through --ink went quiet with it, titles and typed text included. Each rule names the
+	// text token it means.
+	it("window.css names no --ink, so each rule names its own text token", () => {
+		const uses = [...uncommented(CSS).matchAll(/--ink(?![\w-])/g)].length;
+		expect({uses}).toEqual({uses: 0});
+	});
+
+	// Two text steps only: an opacity under 1 on a box of text draws a third gray. A part may still
+	// fade when it is out of reach (WCAG 1.4.3 does not hold an inactive part to contrast), when it
+	// holds no text, or in an animation. Each such rule is named here with its reason; any other
+	// opacity between 0 and 1 is a third gray.
+	const FADES: Record<string, string> = {
+		".tracker button:disabled": "a disabled button: an inactive part",
+		".desk.lost .workspace": "the link is down: the desk is out of reach till it is back",
+		".desk.lost .topbar .right > .fb": "the link is down: the top bar's asks are out of reach",
+		".runs-view .wait": "a waiting bar's striped fill, no text",
+		".runs-view .wait.done": "a waiting bar's striped fill, no text",
+		".trace-view .wf-span": "a trace bar's fill, aria-hidden, no text",
+	};
+
+	it("no rule dims text with an opacity under 1, past the named fades", () => {
+		const keyframe = /^(from|to|[\d.]+%)$/;
+		const dims = rulesOf(CSS)
+			.filter((r) => !keyframe.test(r.selector) && !Object.hasOwn(FADES, r.selector))
+			.flatMap((r) => {
+				const value = Number(r.says.get("opacity"));
+				return value > 0 && value < 1 ? [`${r.selector} { opacity: ${String(value)} }`] : [];
+			});
+		expect(dims).toEqual([]);
+	});
 
 	// A row: its title, and the quieter text beside it.
 	const ROWS: Record<string, {title: readonly string[]; beside: readonly (readonly string[])[]}> = {
