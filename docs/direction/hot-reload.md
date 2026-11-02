@@ -2,8 +2,10 @@
 
 **Decided 2026-11-01 by the owner:** `next/` has hot reload from day one. Saving a program's file
 brings its new code into the running app with no restart, so Tier 1's slice has it. **How it works
-is proposed:** the six principles below, what each layer does, the facts on the ledger, where it
-is off, and the laws, each with a lean.
+was decided 2026-11-01 too:** after a walk, the owner approved the six principles below, what each
+layer does, the facts on the ledger, where it is off, and the laws, each with its lean. The window
+swap, the least sure at 60%, was approved on its own. Each lean keeps its number: a lean under 80%
+is decided but still names what would settle it.
 
 Built from [experiment 183](../../experiments/183-hmr.md), which swapped a program's code under a
 running process in Miniflare and read how about ten tools do it, and a clickable page, "Hot reload
@@ -35,13 +37,12 @@ guidelines", a private page with the six principles you can press.
 
 ### H0: hot reload in `next/` from day one
 
-Decided by the owner today. Tier 1 ships with it, not a later tier. The line to add to
-[Tier 1's rules](../plan/tier-1.md#rules-that-bind) is proposed in this note's pull request, for
-the owner to place.
+Decided by the owner on 2026-11-01. Tier 1 ships with it, not a later tier, and
+[Tier 1's rules](../plan/tier-1.md#rules-that-bind) carry the line.
 
-## What is proposed
+## What was decided with it
 
-Six principles. Each is a lean, with why, cost and how sure.
+Six principles, approved 2026-11-01. Each is a lean, with why, cost and how sure.
 
 ### H1: new code, same session
 
@@ -185,7 +186,7 @@ decodes it. A mode in that model stays with its window, or goes to null with a l
 - **Cost:** the brain serves a program's window bundle by hash, and the window imports it. That
   import is a one-line platform edge ([no Promises](./no-promises.md)).
 - **How sure:** 60%. No window was reloaded in experiment 183. A first build of the counter tile
-  settles it.
+  settles it. Approved by the owner on its own, 2026-11-01.
 
 ## Where it is off
 
