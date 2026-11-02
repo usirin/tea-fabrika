@@ -98,6 +98,31 @@ export type AskFor = typeof AskFor.Type;
  */
 export const MAX_ROUNDS = 3;
 
+const isAskFor = Schema.is(AskFor);
+
+/** The kind of question a lane's ask id names: `a-approve-3` is `approve`. `null`: not a lane's. Pure. */
+export const askedFor = (ask: string): AskFor | null => {
+	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
+	return kind !== undefined && isAskFor(kind) ? kind : null;
+};
+
+/** The picks that give the builder one more round past the bound: a person's call, each counted once. */
+const GRANTS: Readonly<Partial<Record<AskFor, readonly string[]>>> = {
+	rounds_spent: ["again"],
+	exam_touched: ["builder_wrong", "test_wrong"],
+};
+
+/**
+ * The rounds a lane runs before it asks: `MAX_ROUNDS`, and one more for each answer in its trail that
+ * grants one. Read from the trail, so the fold of the facts gives the same bound. Pure.
+ */
+export const boundOf = (trail: readonly {readonly step: string; readonly said: string}[]): number =>
+	MAX_ROUNDS +
+	trail.filter((row) => {
+		const kind = askedFor(row.step);
+		return kind !== null && (GRANTS[kind]?.includes(row.said) ?? false);
+	}).length;
+
 /** A Property of the plan with no test, in its own words, and why the test writer wrote none. */
 export const Untested = Schema.Struct({when: Schema.String, why: Schema.String});
 export type Untested = typeof Untested.Type;
@@ -459,19 +484,21 @@ const NEXT: Readonly<Record<LaneStep, Move>> = {
 };
 
 /** Another round, if the rounds allow it: else a person is asked. */
-const back = (to: LaneStep, round: number): Move =>
-	round >= MAX_ROUNDS ? {ask: "rounds_spent"} : {to, round: round + 1};
+const back = (to: LaneStep, round: number, bound: number): Move =>
+	round >= bound ? {ask: "rounds_spent"} : {to, round: round + 1};
 
 /**
  * The whole order, as one pure function: where a lane goes when `step` ends with `outcome` in
- * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back.
+ * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back. `lane.trail`: the
+ * answers that grant rounds past the bound (`boundOf`); left out, none.
  */
 export const after = (
 	step: LaneStep,
 	outcome: Outcome,
 	round: number,
-	lane: {readonly sendBack?: boolean} = {},
+	lane: {readonly sendBack?: boolean; readonly trail?: Held["trail"]} = {},
 ): Move => {
+	const bound = boundOf(lane.trail ?? []);
 	switch (outcome.kind) {
 		case "stuck":
 			// A build that changed the test writer's files: the person says which was wrong.
@@ -501,9 +528,9 @@ export const after = (
 			// The head's own tests fail, by code's checks after the build or by the mutation step's run:
 			// the builder gets them by name, unless the repository says ask.
 			if ((step === "build" || step === "mutation") && outcome.to === "builder")
-				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round);
+				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round, bound);
 			// A finding needs a test, and the builder cannot add one: the writer goes first.
-			if (step === "review" && outcome.to === "builder") return back("test_writer", round);
+			if (step === "review" && outcome.to === "builder") return back("test_writer", round, bound);
 			return stuck("sent_back");
 		case "done":
 			// Triage closed it, as a no or a duplicate. Done, and nobody is next.
@@ -611,9 +638,16 @@ const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer"
 export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
 	kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
 
-/** Where a lane goes on after `step` ended with `outcome` in `round`, had it stopped right there. Pure. */
-export const resumeAfter = (step: LaneStep, outcome: Outcome, round: number): Resume =>
-	resumeOfMove(after(step, outcome, round), step);
+/**
+ * Where a lane goes on after `step` ended with `outcome` in `round`, with `trail` behind it, had it
+ * stopped right there. Pure.
+ */
+export const resumeAfter = (
+	step: LaneStep,
+	outcome: Outcome,
+	round: number,
+	trail: Held["trail"],
+): Resume => resumeOfMove(after(step, outcome, round, {trail}), step);
 
 /** The step that sent the work back, for the rounds' question asked again: the inverse of `againTo`. */
 const sentFrom = (to: LaneStep): LaneStep => (to === "test_writer" ? "review" : "build");
@@ -698,8 +732,9 @@ const spentQuestion = (s: Held, step: LaneStep): string => {
 		step === "review"
 			? "the review still sends the work back"
 			: "the repository's own tests still fail at this head";
-	return s.round >= MAX_ROUNDS
-		? `Round ${s.round} of ${MAX_ROUNDS} is spent, and ${still}. Should the work go round once more?`
+	const bound = boundOf(s.trail);
+	return s.round >= bound
+		? `Round ${s.round} of ${bound} is spent, and ${still}. Should the work go round once more?`
 		: `[build] send_back is false in this repository, and ${still}. Should the work go round once more?`;
 };
 
@@ -775,7 +810,7 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 				: spent
 					? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
 					: question.step === "build"
-						? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${MAX_ROUNDS}.`
+						? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${boundOf(s.trail)}.`
 						: `The ${words} step runs once more, from the start.`,
 		go_on:
 			call === undefined

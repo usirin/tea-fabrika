@@ -4,7 +4,8 @@ import {Tickets} from "../../tickets/tickets.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft} from "../plan/plan.ts";
 import {
-	AskFor,
+	type AskFor,
+	askedFor,
 	askedStep,
 	Carry,
 	EMPTY,
@@ -89,14 +90,7 @@ export const Folded = Schema.Struct({
 export type Folded = typeof Folded.Type;
 
 const isStep = Schema.is(LaneStep);
-const isAsk = Schema.is(AskFor);
 const changeOf = Schema.decodeUnknownOption(StepEnd.fields.carry);
-
-/** The kind of question a lane's ask id names: `a-approve-3` is `approve`. `null`: not a lane's. Pure. */
-const kindOf = (ask: string): AskFor | null => {
-	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
-	return kind !== undefined && isAsk(kind) ? kind : null;
-};
 
 /** How early a place to go on is: by its step, and a question after the step it is about. Pure. */
 const rank = (at: Resume): number => STEPS.indexOf(at.step) * 2 + (at._tag === "ask" ? 1 : 0);
@@ -221,11 +215,11 @@ export const fold = (seen: Seen): Folded => {
 				if (fact.stage === "plan") approved = false;
 				last = fact.stage;
 				inRun = undefined;
-				at = resumeAfter(fact.stage, fact.outcome, round);
+				at = resumeAfter(fact.stage, fact.outcome, round, trail);
 				break;
 			}
 			case "asked": {
-				const kind = kindOf(fact.ask);
+				const kind = askedFor(fact.ask);
 				if (kind === null) break;
 				kinds.set(fact.ask, kind);
 				const step = askedStep(kind, last);
