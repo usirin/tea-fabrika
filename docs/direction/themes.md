@@ -74,10 +74,19 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
     raised and hovered and selected rows, in both looks.
   - The one named exception: white on the hovered turn fill (indigo 10) in dark reads 4.28. The
     owner kept Radix's step; tracker ticket 153 tracks it.
-  - Not set by this note, picked by the builder from the text steps, for the owner to confirm:
-    `--text-secondary` is slate 11 in dark and slate a11 in light (slate 11 reads 4.42 on a
-    selected row there), and `--text-muted` is slate a11. So today's four text grays become
-    Radix's two text steps.
+  - **Decided 2026-11-02 by the owner, from the screenshot review of ticket 144:** text takes
+    Radix's two text steps only. Slate 12 is for titles and main lines. Slate a11, the look's low
+    step, is for secondary, muted and faint text alike. Rank comes from weight and size, not a third
+    gray. So `--text-secondary` and `--text-muted` both point at `--text-faint`.
+    - What changed: dark `--text-secondary` was slate 11, a third gray between a11 and 12, and a11
+      read stronger than a slate 11 title on dark rows. Four main lines (a tracker ticket row's and pull
+      request row's titles, a palette command's name, a trace row's name) drew in the low step and
+      now draw in slate 12.
+    - Kept low on purpose: a set-aside row's title. Set aside is a state, not a rank, and its
+      dashed ring is the second cue.
+    - `apps/fabrika/src/themes.test.ts` holds it: every gray text token is slate 12 or the one low
+      step, every listed main line is slate 12, and a row's title reads at least as strong as the
+      text beside it, at rest, hovered and selected.
 
 ## The same rule as keybindings
 

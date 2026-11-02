@@ -57,8 +57,15 @@ type Color =
 | 3 | component background | title when focused |
 | 4 | component hover | resting tile edge, a bend (below) |
 | 8 | strong border and focus | focus edge |
-| 11 | low-contrast text | name at rest |
-| 12 | high-contrast text | name when focused, the letter |
+| 11 | low-contrast text | name at rest, and all quieter text |
+| 12 | high-contrast text | name when focused, the letter, every title and main line |
+
+**Two text steps, no third gray (decided 2026-11-02 by the owner, from the screenshot review).**
+Text uses step 12 and the look's low step only: slate 11, or a11 where 11 fails (in today's app,
+slate a11 in both looks). Secondary, muted and faint text are all the low step. Rank comes from
+weight and size, never from a gray between the two. A title is always step 12, so it never reads
+weaker than the text beside it on a row at rest, hovered or selected. A row set aside stays at the
+low step, since that is a state and not a rank, and its dashed ring carries it too (principle 3).
 
 **The one bend.** Radix gives borders steps 6 to 8. Our resting tile edge is step 4, because a higher
 one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so it cannot carry a needed

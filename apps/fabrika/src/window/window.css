@@ -21,10 +21,15 @@
 	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
 	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
 	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
+	/*
+	 * Text takes Radix's two text steps only (decided 2026-11-02): slate 12 for titles and main
+	 * lines, slate a11 for everything quieter. Rank comes from weight and size, not a third gray, so
+	 * secondary, muted and faint are one step under three names. Slate 11 is not used: in light it
+	 * reads 4.42 on a selected row.
+	 */
 	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
 	--text-muted: var(--text-faint);
-	/* slate a11; slate 11. Slate 11 in light reads 4.42 on a selected row. */
-	--text-secondary: light-dark(#0007149f, #b0b4ba);
+	--text-secondary: var(--text-faint);
 	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
 	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9: a8 is under 3:1 on the desk */
 	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
@@ -1198,7 +1203,7 @@ main.program > [role="alert"] {
 	height: var(--row-2h);
 	padding: 0 10px;
 	border-radius: var(--r);
-	color: var(--text-secondary);
+	color: var(--text-primary);
 	cursor: default;
 }
 
@@ -1870,6 +1875,7 @@ button:focus-visible {
 
 .tracker-title {
 	overflow: hidden;
+	color: var(--text-primary);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 14px;
@@ -3651,7 +3657,7 @@ main.program:has(> .view) {
 .trace-view .wf-name {
 	overflow: hidden;
 	white-space: nowrap;
-	color: var(--text-secondary);
+	color: var(--text-primary);
 }
 
 .trace-view .wf-in {
