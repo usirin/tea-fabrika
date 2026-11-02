@@ -108,7 +108,7 @@ export const throughWords = ({findings, mutants}: Through = NOTHING): readonly s
  * than the longest run inside it, and a space each side where it starts or ends with one
  * (CommonMark 0.31, code spans). Still made inert, so no reference in it reaches a code host. Pure.
  */
-const codeSpan = (text: string): string => {
+export const codeSpan = (text: string): string => {
 	const line = inert(text.replace(/\s+/g, " "));
 	const fence = "`".repeat(
 		Math.max(0, ...[...line.matchAll(/`+/g)].map((run) => run[0].length)) + 1,

@@ -1,4 +1,5 @@
-import {Effect, Schema} from "effect";
+import type {Effect} from "effect";
+import {Schema} from "effect";
 import {sha256} from "../../tickets/approval.ts";
 import type {Hash} from "../../tickets/ticket.ts";
 import {LaneStep} from "./machine.ts";
@@ -37,7 +38,9 @@ export const Inputs = Schema.Struct({
 });
 export type Inputs = typeof Inputs.Type;
 
-const FIELDS = Object.keys(Inputs.fields).filter((name): name is keyof Inputs => name in Inputs.fields);
+const FIELDS = Object.keys(Inputs.fields).filter(
+	(name): name is keyof Inputs => name in Inputs.fields,
+);
 
 /** The key of `inputs`: SHA-256 of their values, in the fields' order. */
 export const keyOf = (inputs: Inputs): Effect.Effect<Hash> =>

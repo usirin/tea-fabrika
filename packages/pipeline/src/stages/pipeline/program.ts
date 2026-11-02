@@ -7,18 +7,21 @@ import {
 	type RefsOf,
 	type Send,
 } from "@kampus/fabrika-old";
-import {Clock, Effect, Exit, Ref, Schema, Stream} from "effect";
+import {Clock, Effect, Exit, Option, Ref, Schema, Stream} from "effect";
 import {claim, newLane, release} from "../../asks/claims.ts";
 import {readFacts, sendFact} from "../../asks/ledger.ts";
 import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
+import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
 import {
 	type Checked,
 	type CodeFact,
+	type Entry,
 	FAILED_MOST,
 	factsOf,
+	type Hash,
 	type Outcome,
 	saidOf,
 	TicketNumber,
@@ -27,6 +30,7 @@ import {Tickets} from "../../tickets/tickets.ts";
 import {inert} from "../build/body.ts";
 import type {Built} from "../build/form.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
+import type {Item} from "../build/ticket.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
@@ -54,6 +58,7 @@ import {CheckRunner} from "./checks.ts";
 import {formatExam} from "./format.ts";
 import {
 	againstWords,
+	codeSpan,
 	decidedWords,
 	foundWords,
 	jobsList,
@@ -68,6 +73,7 @@ import {
 	withRed,
 } from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
+import {keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
 	type askPerson,
@@ -82,8 +88,9 @@ import {
 	type runStep,
 	type StepEnd,
 } from "./machine.ts";
-import {LANE_NAMES} from "./outcome.ts";
+import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
 import {LaneWatch} from "./pulls.ts";
+import {fold, seenOf} from "./restart.ts";
 import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
@@ -193,6 +200,26 @@ export const filedBy = (
 	by: {readonly kind: string; readonly id?: string; readonly for?: string} | undefined,
 	person: string,
 ): boolean => by !== undefined && (by.kind === "agent" ? by.for === person : by.id === person);
+
+/** The head of the test writer's last commit, as its `ended` fact keeps it. `null`: none kept one. Pure. */
+const examHeadOf = (timeline: readonly Entry[]): string | null => {
+	for (const {fact} of timeline.toReversed()) {
+		if (fact.type !== "ended" || fact.stage !== "test_writer") continue;
+		const kept = Schema.decodeUnknownOption(ExamHead)(fact.carry);
+		if (Option.isSome(kept)) return kept.value.head;
+	}
+	return null;
+};
+const ExamHead = Schema.Struct({head: Schema.String});
+
+/** A file main changed while the lane was stopped, where main's side now stands: the step that redoes it reads it. Pure. */
+const conflictItem = (file: string, base: string | null, onto: string): Item => ({
+	criterion: null,
+	text: `${file} conflicted with main, which moved from ${base ?? "where the lane left it"} to ${onto}. Main's version of it now stands.`,
+	says: `Main changed ${file} while the lane was stopped. Main's side was kept, and this lane's change to it is gone.`,
+	where: [file],
+	wants: [`${file} does again what this lane needs, on top of main's version`],
+});
 
 const AGENT_STEPS: Partial<
 	Record<Carried["step"], {readonly step: AgentStep; readonly brief: string}>
@@ -309,8 +336,12 @@ const propertiesOf = (carry: Carry, round: number) => {
  * Code's own `[build] checks` at `head`, after a build (self-fix PR 4), and what the ticket keeps of
  * them: the `checked` fact, and on red, a comment with each failing test by name and the first lines
  * of why. Both exist only now. The carry gets `checked`; the run's own words come back beside it.
+ * `at.run`: the ids the facts go under, a step's run or a restart's fresh read of main.
  */
-const recordChecks = (at: At, head: string) =>
+const recordChecks = (
+	at: Pick<At, "run"> & {readonly cmd: {readonly number: number}},
+	head: string,
+) =>
 	Effect.gen(function* () {
 		const tickets = yield* Tickets;
 		const ran = yield* (yield* CheckRunner).run(head);
@@ -421,12 +452,20 @@ const bodies = {
 			const work = yield* LaneWork;
 			const tickets = yield* Tickets;
 			const main = yield* work.main;
+			// A plan written again after a person's `no` (self-fix PR 5): what they wrote beside it binds it.
+			const said = at.cmd.carry.decided?.said ?? [];
 			yield* at.tell(yield* work.copy(main), "read", {
 				ticket: ticketWords(at),
 				base: main,
 				code_context: "None gathered. Read the code in your folder.",
 				names: "None gathered.",
-				decisions: "None.",
+				decisions:
+					said.length === 0
+						? "None."
+						: [
+								"A person said no to the last plan, and wrote this beside their answer:",
+								listed(said),
+							].join("\n"),
 				note: "",
 			});
 			const end = yield* planToTheEnd(
@@ -967,8 +1006,65 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),
 
-	// STUB (self-fix PR 5 test writer): the builder reads main fresh here, rebases or merges, and writes `restarted`.
-	lane_fresh: (_cmd: ReturnType<typeof freshMain>) => Effect.fail(unknown),
+	// A restart's fresh read of main (self-fix PR 5): the ticket first, then main, then the lane's branch
+	// put on it, rebased if never pushed and merged if pushed. The ticket's row says from where, and main
+	// then and now. A new head gets code's checks there, before any step after the build runs on it.
+	lane_fresh: (cmd: ReturnType<typeof freshMain>) =>
+		Effect.gen(function* () {
+			const tickets = yield* Tickets;
+			const work = yield* LaneWork;
+			const {person} = yield* LaneHome;
+			yield* work.servingLane(cmd.number);
+			const ticket = yield* tickets.read(cmd.number);
+			if (ticket.state === "closed") return {_tag: "closed"} as const;
+			if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
+			const onto = yield* work.main;
+			const {base, head, pr, exam, open} = cmd.carry;
+			yield* tickets.write(cmd.number, cmd.intent, {
+				type: "restarted",
+				from: cmd.from.step,
+				base,
+				onto,
+			});
+			if (base === null || head === null || base === onto)
+				return {_tag: "fresh", carry: {}} as const;
+			const put = yield* work.onMain(cmd.number, head, onto, pr !== null);
+			const files = put.conflicts;
+			if (files.length > 0) {
+				yield* tickets
+					.talk(cmd.number, `${cmd.intent}/conflicts`, {
+						type: "commented",
+						body: saidOf(
+							[
+								`Main moved from ${base} to ${onto} while the lane was stopped, and these files conflicted with it. Main's side now stands in each:`,
+								listed(files.map(codeSpan)),
+							].join("\n"),
+						),
+					})
+					.pipe(Effect.ignore);
+				const opened = [...open, ...files.map((file) => conflictItem(file, base, onto))];
+				if (!files.some((file) => exam.includes(file)))
+					return {
+						_tag: "conflicts",
+						files,
+						carry: {base: onto, head: put.head, open: opened},
+					} as const;
+				// The test writer's files: the branch goes back to the test writer's own last commit, on main,
+				// so what it writes again is judged before any build, and the build runs again on it.
+				const written = examHeadOf(ticket.timeline);
+				const again =
+					written === null ? put : yield* work.onMain(cmd.number, written, onto, pr !== null);
+				return {
+					_tag: "exam_conflict",
+					files,
+					carry: {base: onto, head: again.head, open: opened},
+				} as const;
+			}
+			const carry = {base: onto, head: put.head};
+			if (cmd.carry.checked === undefined) return {_tag: "fresh", carry} as const;
+			const {checked} = yield* recordChecks({run: cmd.intent, cmd}, put.head);
+			return {_tag: "fresh", carry: {...carry, checked}} as const;
+		}).pipe(Effect.mapError(() => unknown)),
 
 	lane_step: (cmd: Carried) =>
 		Effect.gen(function* () {
@@ -981,6 +1077,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 			const seen = yield* Ref.make<Picked | null>(null);
+			const keyed = yield* Ref.make<Hash | null>(null);
 
 			const body = Effect.gen(function* () {
 				const {repo} = yield* work.origin;
@@ -992,6 +1089,23 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
 				const ticket = yield* tickets.read(cmd.number);
 				const first = ticket.timeline[0]?.fact;
+				// What the step reads, as its input key (P7): only known now.
+				yield* Ref.set(
+					keyed,
+					yield* keyOf({
+						step: cmd.step,
+						ticket: yield* hashOf(textOf(ticket)),
+						plan: cmd.carry.version,
+						base: cmd.carry.base,
+						exam: examHeadOf(ticket.timeline),
+						head: cmd.carry.head,
+						brief: brief?.hash ?? null,
+						harness: picked?.harness ?? null,
+						model: picked?.model ?? null,
+						effort: picked?.effort ?? null,
+						settings: yield* sha256(JSON.stringify(settings)),
+					}),
+				);
 				yield* now.exam.set(cmd.carry.exam);
 				const trace = yield* jobTraceId;
 				// Before any setup: the ticket shows the step running, and a crash leaves `started` behind.
@@ -1002,6 +1116,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					stage: cmd.step,
 					task: null,
 					log: null,
+					round: cmd.round,
 					...(trace === null ? {} : {trace}),
 					...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
 					...(picked === null
@@ -1035,7 +1150,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const picked = yield* Ref.get(seen);
 			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
-			const write = (outcome: Outcome, more: Pick<BodyEnd, "failed" | "trusted"> = {}) =>
+			const key = yield* Ref.get(keyed);
+			// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
+			const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -1055,6 +1172,8 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
 					...(more.failed === undefined ? {} : {failed: more.failed}),
 					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
+					...(key === null ? {} : {key}),
+					carry: more.carry,
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
 				const {outcome, carry, problems, after: past} = exit.value;
@@ -1084,7 +1203,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);
 			yield* sessionLeft.pipe(Effect.ignore);
-			yield* write(factOutcome({kind: "stuck", why: "run_failed"})).pipe(Effect.ignore);
+			yield* write(factOutcome({kind: "stuck", why: "run_failed"}), {carry: {}}).pipe(
+				Effect.ignore,
+			);
 			yield* said(`could not run: ${stops}`);
 			return yield* Effect.fail(unknown);
 		}).pipe(Effect.mapError(() => unknown)),
@@ -1173,7 +1294,13 @@ export const laneProgram = defineProgram({
 			const ref = machines.lane.get(`lane/${n}`);
 			const kept = yield* ref.read;
 			const laneId =
-				kept !== null && kept.phase !== "idle" && "lane" in kept ? kept.lane : yield* newLane(id);
+				kept === null || kept.phase === "idle"
+					? yield* newLane(id)
+					: "lane" in kept
+						? kept.lane
+						: "held" in kept
+							? kept.held.lane
+							: yield* newLane(id);
 			// Copied into the lane as it starts: a machine decides with it, so a later edit cannot change a run.
 			const settings = yield* Effect.result((yield* LaneWork).settings);
 			const sendBack =
@@ -1182,6 +1309,30 @@ export const laneProgram = defineProgram({
 				{type: "start", number: n, lane: laneId, sendBack},
 				{conflict: "use_existing"},
 			);
+			// The same line typed again on a lane that stopped (self-fix PR 5): a kept run that is over gets
+			// no first Msg, so the restart goes to it here. A stop saved before it kept a `Held` goes on from
+			// the fold of the ticket's facts, under the lane this line named.
+			if (kept?.phase === "over" && !isEnd(kept.outcome)) {
+				const folded = "held" in kept ? null : fold(yield* seenOf(n));
+				const at = "at" in kept ? kept.at : folded?.at;
+				const from =
+					at === undefined ? "" : at._tag === "run" ? at.step : `${at.step}, asking ${at.for}`;
+				yield* send(
+					"step",
+					`restart: #${n} from ${from}, which ended ${nameOf(kept.outcome)} (${kept.said})`,
+				);
+				yield* runtime
+					.dispatch(folded === null ? {type: "restart"} : {type: "restart", folded, lane: laneId})
+					.pipe(Effect.orDie);
+			} else if (
+				kept?.phase === "over" &&
+				kept.outcome.kind === "stuck" &&
+				FINAL.has(kept.outcome.why)
+			)
+				yield* send(
+					"step",
+					`restart: #${n} ended ${nameOf(kept.outcome)}, a person's call: ${kept.said}`,
+				);
 			const end = yield* runtime.done();
 			if (end.phase !== "over") return yield* Effect.die(`the lane stopped in ${end.phase}`);
 			yield* send("ended", {name: nameOf(end.outcome) as never, said: end.said});

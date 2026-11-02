@@ -173,6 +173,12 @@ export type Formatted =
 	| {readonly _tag: "none"}
 	| {readonly _tag: "failed"; readonly says: string};
 
+/** A branch put on main: its new head, and the files main's side was taken in. */
+export interface OnMain {
+	readonly head: string;
+	readonly conflicts: readonly string[];
+}
+
 export class LaneWork extends Context.Service<
 	LaneWork,
 	{
@@ -252,6 +258,17 @@ export class LaneWork extends Context.Service<
 		) => Effect.Effect<readonly {readonly sha: string; readonly title: string}[], Failed>;
 		/** Whether `head` can merge onto main. */
 		readonly mergeable: (head: string) => Effect.Effect<"clean" | "conflicts", Failed>;
+		/**
+		 * Ticket `n`'s branch, at `head`, put on `onto` (self-fix PR 5): rebased when it was never pushed,
+		 * else main merged into it, so a pushed head is never rewritten. In each file that conflicts, main's
+		 * side is taken. Answers the new head and the files that conflicted.
+		 */
+		readonly onMain: (
+			n: number,
+			head: string,
+			onto: string,
+			pushed: boolean,
+		) => Effect.Effect<OnMain, Failed>;
 		/** A branch off the remote. Only a lane's own, and only once it has merged. */
 		readonly dropBranch: (branch: string) => Effect.Effect<void, Failed>;
 		/** The lane whose copies and homes these are, from now on. One `LaneWork` serves one lane. */
@@ -663,6 +680,50 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				});
 			});
 
+		/**
+		 * The branch put on main: `git rebase` for a branch never pushed, `git merge` for one that was. At
+		 * each stop on a conflict, main's side of each file stands (`--ours` in a rebase, where main is
+		 * the side being built on; `--theirs` in a merge into the branch), or the file goes where main
+		 * removed it. A commit that is empty once main's side stands is dropped.
+		 */
+		const onMain = (n: number, from: string, onto: string, pushed: boolean) =>
+			Effect.gen(function* () {
+				const {tree} = yield* made(String(n), `lane/${n}`);
+				yield* git(tree, ["reset", "--quiet", "--hard", from]);
+				const side = pushed ? "--theirs" : "--ours";
+				const conflicts = new Set<string>();
+				const commits = Number(yield* git(tree, ["rev-list", "--count", `${onto}..${from}`]));
+				let ran = yield* gitIn(
+					tree,
+					pushed ? ["merge", "--quiet", "--no-edit", onto] : ["rebase", "--quiet", onto],
+				);
+				// One stop per commit at most, and one for a merge: past that it is not settling.
+				for (let left = commits + 2; ran.code !== 0; left--) {
+					const files = yield* names(tree, ["diff", "--name-only", "--diff-filter=U"]);
+					if (left === 0 || (pushed && files.length === 0)) {
+						yield* gitIn(tree, [pushed ? "merge" : "rebase", "--abort"]);
+						return yield* Effect.fail(said(pushed ? "merge" : "rebase", ran));
+					}
+					if (files.length === 0) {
+						ran = yield* gitIn(tree, ["rebase", "--skip"]);
+						continue;
+					}
+					for (const file of files) {
+						conflicts.add(file);
+						const named = ["--", `:(literal)${file}`];
+						const taken = yield* gitIn(tree, ["checkout", side, ...named]);
+						yield* git(tree, taken.code === 0 ? ["add", ...named] : ["rm", "--quiet", ...named]);
+					}
+					ran = yield* gitIn(
+						tree,
+						pushed
+							? ["commit", "--quiet", "--no-edit"]
+							: ["-c", "core.editor=true", "rebase", "--continue"],
+					);
+				}
+				return {head: yield* head(tree), conflicts: [...conflicts]};
+			});
+
 		const empty = Effect.gen(function* () {
 			const folder = at("empty");
 			yield* quiet(fs.makeDirectory(folder, {recursive: true}));
@@ -741,6 +802,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 						}),
 					),
 				),
+			onMain,
 			mergeable: (sha) =>
 				gitIn(clone, ["merge-tree", "--write-tree", "origin/main", sha]).pipe(
 					Effect.map((ran) => (ran.code === 0 ? ("clean" as const) : ("conflicts" as const))),
