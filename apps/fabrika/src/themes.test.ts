@@ -127,9 +127,9 @@ const FILLS: Record<Look, ReadonlySet<number>> = {dark: new Set([0]), light: new
 /**
  * Each token the window names, and its value in each look. A token the note names takes the
  * note's color; a raw step the note does not name takes the step Radix gives that job (ticket
- * 144's table). Tokens with no clear step yet (--text-secondary, --text-muted, --person-bg,
- * --agent-bg, --ty-*, --svc-*) are the owner's pick, so they are not pinned here; the text ones
- * still meet the contrast law and the two text steps below.
+ * 144's table). --text-secondary and --text-muted are the low step, decided by the owner on
+ * 2026-11-02 (two text steps, color-principles.md). Tokens with no clear step yet (--person-bg,
+ * --agent-bg, --ty-*, --svc-*) wait on the owner's pick, so they are not pinned here.
  */
 const TOKENS: Record<string, Record<Look, string>> = {
 	"--surface-sunken": {dark: DARK.desk, light: LIGHT.desk},
@@ -145,6 +145,8 @@ const TOKENS: Record<string, Record<Look, string>> = {
 	"--focus": {dark: "#dfebfd6d", light: "#00051d74"}, // slate a9: a8 is under 3:1 on the desk
 	"--text-primary": {dark: DARK.text, light: LIGHT.text},
 	"--text-faint": {dark: DARK.faint, light: LIGHT.faint},
+	"--text-secondary": {dark: DARK.faint, light: LIGHT.faint}, // the low step: two text steps
+	"--text-muted": {dark: DARK.faint, light: LIGHT.faint}, // the low step: two text steps
 	"--turn": {dark: DARK["turn-text"], light: LIGHT["turn-text"]},
 	"--turn-fill": {dark: DARK.turn, light: LIGHT.turn},
 	"--turn-fill-hover": {dark: "#5472e4", light: "#3358d4"}, // indigo 10: hovered solid
@@ -460,6 +462,39 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 			expect(under(pairs)).toEqual([]);
 		},
 	);
+
+	// The checks above hold text to the pages and rows it may sit on. A rule that sets its own
+	// background, such as a button on the indigo fill, draws its text on that instead, so each rule
+	// that sets both a `color` and a one-color `background` is held to 4.5:1 on its own background.
+	// A background with alpha is drawn over the ground and over raised, the two pages a control sits on.
+	const PAINTS = [...rulesOf(CSS), ...rulesOf(THEME)].flatMap((r) => {
+		const fg = r.says.get("color");
+		const bg = r.says.get("background-color") ?? r.says.get("background");
+		return fg === undefined || bg === undefined ? [] : [{selector: r.selector, fg, bg}];
+	});
+	const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|oklch\([^()]*\))$/;
+
+	it("finds the rules that set their own text and background, the turn fill's button among them", () => {
+		expect(PAINTS.map((p) => p.selector)).toContain(".tracker button.tracker-primary");
+	});
+
+	it.each(LOOKS)("a rule's text reads 4.5:1 on the background it sets, %s", (look) => {
+		const pairs = PAINTS.flatMap(({selector, fg, bg}) => {
+			const ink = valueIn(fg, look);
+			const fill = valueIn(bg, look);
+			if (!COLOR.test(ink) || !COLOR.test(fill)) return [];
+			return ["--surface", "--surface-raised"].map(
+				(page) =>
+					[
+						`${selector}: ${fg} on ${bg} over ${page}`,
+						ink,
+						hexFrom(over(fill, tokenIn(page, look))),
+						4.5,
+					] as const,
+			);
+		});
+		expect(under(pairs)).toEqual([]);
+	});
 
 	it("on-turn reads 4.5:1 on the turn fill, at rest in both looks and hovered in light", () => {
 		expect(
