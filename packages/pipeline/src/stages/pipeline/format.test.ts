@@ -1,6 +1,7 @@
 import {execFileSync} from "node:child_process";
 import {
 	appendFileSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
@@ -201,6 +202,23 @@ describe("the exam's format commit before a build round", () => {
 		expect(gitIn(tree)("show", `${formatted}:${EXAM}`)).toBe(TABS.trim());
 	});
 
+	it("an exam file's folder a turned-back round left as a link out of the copy: nothing is written there", async () => {
+		const run = lane(["node", FORMATTER.path, "{files}"]);
+		const outside = join(dir, "outside");
+		mkdirSync(outside);
+		writeFileSync(join(outside, "lower.test.ts"), "outside\n");
+		const {tree, formatted} = await run(
+			Effect.gen(function* () {
+				const {tree} = yield* examOnTree;
+				rmSync(join(tree, "src"), {recursive: true});
+				symlinkSync(outside, join(tree, "src"));
+				return {tree, formatted: yield* formatExam(NUMBER, tree, [EXAM])};
+			}),
+		);
+		expect(readFileSync(join(outside, "lower.test.ts"), "utf8")).toBe("outside\n");
+		expect(gitIn(tree)("show", `${formatted}:${EXAM}`)).toBe(TABS.trim());
+	});
+
 	it("an exam file already formatted gets no commit", async () => {
 		const run = lane(["node", FORMATTER.path, "{files}"]);
 		const formatted = await run(
@@ -368,6 +386,22 @@ describe("the builder's files before the build's commit", () => {
 });
 
 describe("the working copy's own format and commit", () => {
+	it("a path through a linked folder is never handed to the formatter", async () => {
+		const run = lane(["node", FORMATTER.path, "{files}"]);
+		const outside = join(dir, "outside");
+		mkdirSync(outside);
+		writeFileSync(join(outside, "a.ts"), SPACES);
+		const formatted = await run(
+			Effect.gen(function* () {
+				const {tree} = yield* examOnTree;
+				symlinkSync(outside, join(tree, "lib"));
+				return yield* (yield* LaneWork).format(tree, ["lib/a.ts"]);
+			}),
+		);
+		expect(formatted).toEqual({_tag: "formatted"});
+		expect(readFileSync(join(outside, "a.ts"), "utf8")).toBe(SPACES);
+	});
+
 	it("a formatter that fails says its words trimmed and cut to 300 characters", async () => {
 		const run = lane(["node", LONG.path, "{files}"]);
 		const formatted = await run(

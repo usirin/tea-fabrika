@@ -187,7 +187,7 @@ export class LaneWork extends Context.Service<
 		/** A branch of its own, from main, in a working copy of its own: the exam's. */
 		readonly side: (name: string) => Effect.Effect<Tree, Failed>;
 		readonly head: (folder: string) => Effect.Effect<string, Failed>;
-		/** Write `files` into `folder`, as they are. A link in a file's place is replaced, never followed. */
+		/** Write `files` into `folder`, as they are. A link in a file's place, or a folder's on the way, is replaced, never followed. */
 		readonly write: (folder: string, files: readonly PlainFile[]) => Effect.Effect<void, Failed>;
 		/**
 		 * The repository's `[format] run` on `files`, paths from `folder`'s root, run there as the install
@@ -387,13 +387,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				for (const file of files) {
 					const to = path.join(folder, file.path);
-					// A link where the file goes, as a round the guard turned back can leave, is taken away
-					// first, so the file is written in the copy and never where the link points.
-					const linked = yield* fs.lstat(to).pipe(
-						Effect.map((info) => info.type === "SymbolicLink"),
-						Effect.orElseSucceed(() => false),
-					);
-					if (linked) yield* quiet(fs.remove(to));
+					// A link where the file goes, or where a folder on the way to it goes, as a round the guard
+					// turned back can leave, is taken away first: the file is written in the copy, never where a
+					// link points.
+					const parts = file.path.split("/");
+					for (let i = 1; i <= parts.length; i++) {
+						const at = path.join(folder, ...parts.slice(0, i));
+						const linked = yield* fs.lstat(at).pipe(
+							Effect.map((info) => info.type === "SymbolicLink"),
+							Effect.orElseSucceed(() => false),
+						);
+						if (linked) yield* quiet(fs.remove(at));
+					}
 					yield* quiet(fs.makeDirectory(path.dirname(to), {recursive: true}));
 					yield* quiet(fs.writeFileString(to, file.text));
 				}
