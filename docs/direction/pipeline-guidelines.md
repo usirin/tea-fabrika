@@ -387,6 +387,10 @@ unanswered ask, 60%, added 2026-11-01 from Linear.**
   cause is in no count at all.
 - **What holds it.** A view over facts that already exist, so nothing to forget. A cap that blocks
   needs its false alarms measured first (Google, CACM 2018), so none yet.
+- **Record wide.** Decided 2026-11-01, for the whole repo in AGENTS.md: the lane records every
+  measure it can, read or not, as long as recording does not slow the lane and never holds a
+  secret. A count we later wish we had, like the time a person spent finding 117's stop, can never
+  be filled in for runs that are already over.
 
 ### P12: nobody writes their own exam, and these guidelines are exam too
 
