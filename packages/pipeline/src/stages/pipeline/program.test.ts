@@ -1247,8 +1247,21 @@ describe("a stopped lane, typed again", () => {
 			// The second line says it restarts, and from where. The ticket keeps one row with both bases.
 			expect(secondLine(ran)).toMatch(/restart: #1 from mutation\b/);
 			const [base, onto] = bases;
+			// The head the lane goes on from: the rebased one, where the restart ran the checks.
+			const at = ran.facts.findIndex((f) => f.type === "restarted");
+			const to = ran.facts.slice(at).find((f) => f.type === "checked")?.head;
+			expect(to, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(to).not.toBe(headBefore(ran));
 			expect(ran.facts.filter((f) => f.type === "restarted")).toEqual([
-				{type: "restarted", from: "mutation", base, onto},
+				{
+					type: "restarted",
+					from: "mutation",
+					base,
+					onto,
+					head: headBefore(ran),
+					to,
+					conflicts: [],
+				},
 			]);
 
 			// No step that ended done runs again: each agent once, the plan's yes once.
