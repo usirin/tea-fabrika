@@ -58,16 +58,43 @@ const questionFor = (rules: readonly string[]) => {
 		ask: approve.ask,
 		pick: "approve",
 	});
-	const [, cmds] = ended(examining, {
+	const [reviewing] = ended(examining, {
 		outcome: {kind: "ask", who: "owner", for: "check_change"},
-		carry: {},
+		carry: {examPr: EXAM_PR, examPull: {head: EXAM_HEAD}},
+	});
+	// Self-fix PR 10: the exam's pull request gets the lane's own review before the person is asked.
+	const [, cmds] = ended(reviewing, {
+		outcome: {kind: "done", part: false},
+		carry: {examPull: {head: EXAM_HEAD, reviewed: REVIEWED_AT(EXAM_HEAD)}},
 	});
 	const asked = cmds.find((cmd: LaneCmd) => cmd.type === "lane_ask");
 	if (asked?.type !== "lane_ask") throw new Error("the rule change's merge was not asked");
 	return asked;
 };
 
+/** The exam's pull request, and its head as the exam step landed it. */
+const EXAM_PR = "local:example/lane/pull/1";
+const EXAM_HEAD = "3".repeat(40);
+/** What the exam review read at `head`, and what it met: what `carry` needs (self-fix PR 10, Part 4). */
+const REVIEWED_AT = (head: string) => ({
+	head,
+	onto: "main",
+	base: "9".repeat(40),
+	diff: "d".repeat(40),
+	met: 1,
+	of: 1,
+});
+
 describe("the question a lane asks", () => {
+	// Self-fix PR 10: the person sees the review's count and the head the checks passed at.
+	it("on the exam's pull request, says what the review met and where the checks passed", () => {
+		const {what} = questionFor([".oxlintrc.json"]);
+		expect(what).toContain("The review met 1 of 1, and the checks passed at");
+		expect(what).toContain(EXAM_HEAD.slice(0, 7));
+		expect(what).toContain("Do you want to merge these rule changes:");
+		expect(what).toContain(".oxlintrc.json");
+	});
+
 	it("is a Title when a rule file's name holds a line break", () => {
 		expect(Schema.is(Title)(questionFor([".oxlintrc.json\nand more"]).what)).toBe(true);
 	});

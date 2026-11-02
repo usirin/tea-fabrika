@@ -1,5 +1,6 @@
 import {execFileSync} from "node:child_process";
 import {
+	appendFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -201,6 +202,8 @@ interface Script {
 	readonly beforeChecks?: boolean;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
 	readonly beforeCarries?: boolean;
+	/** Main names its formatter (`FORMATTER`) before the lane starts: `[format] run`, pushed. */
+	readonly formatter?: boolean;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -350,6 +353,43 @@ const keptAsAsking = (home: string, offers: readonly string[]) =>
 		);
 	}).pipe(Effect.orDie);
 
+/**
+ * The toy repository's own formatter: each leading pair of spaces becomes a tab. It stands for
+ * `node oxlint-plugins/format.ts {files}` here, as in ./program.format.test.ts.
+ */
+const FORMATTER = {
+	path: "fmt.mjs",
+	text: [
+		'import {readFileSync, writeFileSync} from "node:fs";',
+		"for (const file of process.argv.slice(2))",
+		'\twriteFileSync(file, readFileSync(file, "utf8").replace(/^(?: {2})+/gm, (s) => "\\t".repeat(s.length / 2)));',
+		"",
+	].join("\n"),
+};
+
+/** Main names its formatter: `[format] run`, with `{files}` for the paths, pushed as a commit of its own. */
+const nameFormatter = (seed: string) => {
+	appendFileSync(
+		join(seed, ".fabrika", "fabrika.toml"),
+		`\n[format]\nrun = ${JSON.stringify(["node", FORMATTER.path, "{files}"])}\n`,
+	);
+	const git = (...args: readonly string[]) =>
+		execFileSync("git", args, {
+			cwd: seed,
+			env: {
+				...process.env,
+				GIT_AUTHOR_NAME: "fixture",
+				GIT_AUTHOR_EMAIL: "fixture@fabrika.invalid",
+				GIT_COMMITTER_NAME: "fixture",
+				GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
+			},
+			stdio: "pipe",
+		});
+	git("add", "-A");
+	git("commit", "--quiet", "-m", "name the formatter");
+	git("push", "--quiet", "origin", "main");
+};
+
 /** Every folder a run made, for those tests that clean up after themselves. */
 const made: string[] = [];
 
@@ -379,6 +419,7 @@ const lane = ({
 	readFailsAt,
 	beforeChecks = false,
 	beforeCarries = false,
+	formatter = false,
 }: Script): Promise<Ran> => {
 	let checksRan = 0;
 	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
@@ -400,9 +441,12 @@ const lane = ({
 		host: story === undefined ? "local" : "github",
 		...(rubrics === undefined ? {} : {rubrics}),
 		...(counted === undefined ? {} : {github: counted}),
-		...(mainFiles === undefined ? {} : {mainFiles}),
+		...(mainFiles === undefined && !formatter
+			? {}
+			: {mainFiles: [...(mainFiles ?? []), ...(formatter ? [FORMATTER] : [])]}),
 		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
 	});
+	if (formatter) nameFormatter(seed);
 	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
 	if (fake !== undefined) writeFileSync(join(dir, "script.json"), JSON.stringify(fake));
 	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
@@ -691,6 +735,8 @@ describe("a lane, whole", () => {
 				"triage",
 				"plan",
 				"exam",
+				// Self-fix PR 10: the exam's pull request is reviewed before the person is asked.
+				"exam_review",
 				"exam_merge",
 				"test_writer",
 				"build",
@@ -4014,6 +4060,264 @@ describe("a lane, on what the real agents answered", () => {
 			});
 			expect(ran.names.plan).toContain('"ask"');
 			expect(commentsOf(ran).filter((body) => body.includes(REAL_LEAN))).not.toEqual([]);
+		},
+	);
+});
+
+// ---------------------------------------------------------------- the exam's pull request (self-fix PR 10)
+//
+// The exam's pull request is formatted, reviewed and fixed by the lane, before a person is asked to merge
+// it. A failed review goes back to the exam writer, never the builder, and the builder never starts
+// before `exam_merge` ends done. The exam review runs the review step's own brief over the exam's
+// pull request, so the fake `codex` answers it as a `review` run, the first runs of that step.
+
+describe("the exam's pull request", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	const RULES = "[rules] Read names in one form";
+	const RULE = ".oxlintrc.json";
+	/** The plan's one rule change, as the fake plan writes it (fixtures/pipeline-lane/codex.mjs). */
+	const E1 =
+		"When a reviewer reads `.oxlintrc.json` on this pull request, it does this: add an empty rules list, because the plan needs it";
+	const FAULT = "The rules list is not empty: it turns on a rule the plan never named.";
+	/** A review of the exam's pull request that fails its one criterion, with the finding it rests on. */
+	const FAILS_E1 = {
+		with: {
+			rows: [{id: "e1", grade: "fail", where: [{file: RULE, first: 1, last: 1}], says: FAULT}],
+			findings: [
+				{
+					kind: "review-code",
+					from: {source: "criterion", id: "e1"},
+					fault: FAULT,
+					at: {file: RULE, first: 1, last: 1},
+					proof: "Read from the file.",
+					wants: "The rules list is empty, as the plan says.",
+					seen: "read",
+				},
+			],
+			skipped: [],
+		},
+	};
+	const exams = (ran: Ran) => codexRuns(ran.dir).filter((r) => r.step === "exam");
+	const pullOfExam = (ran: Ran) =>
+		ran.facts
+			.filter((f) => f.type === "ended" && f.stage === "exam")
+			.map((f) => (f.carry as {readonly examPr?: string} | undefined)?.examPr);
+	/** Where in the facts the first end of `stage` is, or -1. */
+	const endOf = (ran: Ran, stage: string) =>
+		ran.facts.findIndex((f) => f.type === "ended" && f.stage === stage);
+	const lastEndOf = (ran: Ran, stage: string) =>
+		ran.facts.findLastIndex((f) => f.type === "ended" && f.stage === stage);
+
+	it(
+		"is reviewed against the plan's own words before the person is asked, and the ask says what the review met",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({title: RULES, picks: YES});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const [pr] = pullOfExam(ran);
+			expect(pr, said).toEqual(expect.any(String));
+			const reviewed = ran.facts.findIndex((f) => f.type === "reviewed" && f.pr === pr);
+			const asked = ran.facts.findIndex(
+				(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_merge-"),
+			);
+			expect(reviewed, said).toBeGreaterThan(-1);
+			expect(asked).toBeGreaterThan(reviewed);
+			expect(ran.facts[reviewed]).toMatchObject({met: 1, of: 1});
+			expect(String(ran.facts[asked]?.what)).toContain(
+				"The review met 1 of 1, and the checks passed at",
+			);
+			// The review read the criterion code made from the plan's list, never one an agent wrote.
+			const review = codexRuns(ran.dir).find((r) => r.step === "review");
+			expect(review?.prompt).toContain(`- e1: ${E1}`);
+		},
+	);
+
+	it(
+		"a review that fails e1 runs the exam step again from the exam head, with the finding, on the same pull request, and the build waits",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({title: RULES, picks: YES, fake: {answers: {review: [FAILS_E1]}}});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const runs = exams(ran);
+			expect(runs, said).toHaveLength(2);
+			expect(runs[1]?.prompt).toContain(FAULT);
+			const prs = pullOfExam(ran);
+			expect(prs).toHaveLength(2);
+			expect(prs[1]).toBe(prs[0]);
+			// Nothing of the lane's own starts before the rule changes merged.
+			const merged = lastEndOf(ran, "exam_merge");
+			expect(merged, said).toBeGreaterThan(-1);
+			expect(endOf(ran, "test_writer")).toBeGreaterThan(merged);
+			expect(endOf(ran, "build")).toBeGreaterThan(merged);
+			expect(
+				ran.facts.slice(0, merged).filter((f) => f.type === "started" && f.stage === "build"),
+			).toEqual([]);
+		},
+	);
+
+	it(
+		"a review that keeps failing runs the exam step 3 times, then asks rounds_spent, and its stop folds as it was saved",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fold: true,
+				fake: {answers: {review: [FAILS_E1, FAILS_E1, FAILS_E1, FAILS_E1]}},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(exams(ran)).toHaveLength(3);
+			expect(askedFor(ran, "rounds_spent")).toHaveLength(1);
+			expect(ran.stages).not.toContain("test_writer");
+			expect(ran.stages).not.toContain("build");
+			foldsAsSaved(ran, 0);
+		},
+	);
+
+	it(
+		"the exam's merge question, left unanswered: the fold of the facts goes on at it, with the review the lane held",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 120,
+				picks: {approve: "approve"},
+				leave: ["exam_merge"],
+				fold: true,
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.stages, said).toContain("exam_review");
+			expect(askedFor(ran, "exam_merge"), said).toHaveLength(1);
+			// Waiting on the person, the lane is asking: the fold of its facts goes on at the same question.
+			const folded = ran.folds[0];
+			expect(typeof folded === "string" ? folded : folded?.at).toMatchObject({
+				_tag: "ask",
+				for: "exam_merge",
+			});
+			expect(typeof folded === "string" ? folded : folded?.held.carry).toMatchObject({
+				examPull: {reviewed: {met: 1, of: 1}},
+			});
+		},
+	);
+
+	it(
+		"a rule file the exam writer wrote with spaces lands formatted, on a repository that names its formatter",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				picks: YES,
+				formatter: true,
+				fake: {answers: {exam: [{with: {files: [{path: RULE, text: '{\n  "rules": {}\n}\n'}]}}]}},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			expect(onMain(ran.remote, RULE)).toBe('{\n\t"rules": {}\n}\n');
+		},
+	);
+
+	it(
+		"with no formatter named, the rule file lands as written, and the ticket says so once",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				picks: YES,
+				fake: {answers: {exam: [{with: {files: [{path: RULE, text: '{\n  "rules": {}\n}\n'}]}}]}},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			expect(onMain(ran.remote, RULE)).toBe('{\n  "rules": {}\n}\n');
+			const lines = ran.facts.filter(
+				(f) =>
+					f.type === "commented" && String(f.body).startsWith("This repository names no formatter"),
+			);
+			expect(lines).toHaveLength(1);
+		},
+	);
+});
+
+// Self-fix PR 10, Part 1: the side tree starts from main on the first landing of each plan version.
+// Today it is made once and reused, so a second exam landing after a plan restart commits on top of the
+// old rule changes, on an old main (experiment 193's new hole).
+describe("the exam's side tree, after a plan restarts to a new version", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	const RULE = ".oxlintrc.json";
+	const FAULT = "The rules list is not empty: it turns on a rule the plan never named.";
+	const FAILS_E1 = {
+		with: {
+			rows: [{id: "e1", grade: "fail", where: [{file: RULE, first: 1, last: 1}], says: FAULT}],
+			findings: [
+				{
+					kind: "review-code",
+					from: {source: "criterion", id: "e1"},
+					fault: FAULT,
+					at: {file: RULE, first: 1, last: 1},
+					proof: "Read from the file.",
+					wants: "The rules list is empty, as the plan says.",
+					seen: "read",
+				},
+			],
+			skipped: [],
+		},
+	};
+	const remoteGit = (remote: string, ...args: readonly string[]) =>
+		execFileSync("git", ["--git-dir", remote, ...args], {encoding: "utf8", stdio: "pipe"}).trim();
+	const isAncestor = (remote: string, older: string, newer: string) => {
+		try {
+			remoteGit(remote, "merge-base", "--is-ancestor", older, newer);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+
+	it(
+		"a plan written again as version 2 lands its exam on a side tree from main, not on version 1's rule changes",
+		{timeout: 600_000},
+		async () => {
+			const ran = await lane({
+				title: "[rules] Read names in one form",
+				within: 250,
+				picks: {...YES, rounds_spent: "stop"},
+				// Version 1's exam review fails each round, and the person stops it. The line typed again
+				// finds a save and a ticket from before the lane kept its carry, so the fold names `plan`,
+				// and the plan runs again, as version 2.
+				fake: {answers: {review: [FAILS_E1, FAILS_E1, FAILS_E1]}},
+				beforeCarries: true,
+				again: [{between: ({home}) => keptAsLegacy(home)}],
+			});
+			const said = ran.lines.join("\n");
+			const versions = ran.facts.filter((f) => f.type === "planned").map((f) => f.version);
+			expect(versions, said).toEqual([1, 2]);
+			const heads = ran.facts.filter((f) => f.type === "reviewed").map((f) => String(f.head));
+			expect(heads.length, said).toBeGreaterThan(3);
+			const first = heads[0] ?? "";
+			const last = heads.at(-1) ?? "";
+			expect(last).not.toBe(first);
+			expect(isAncestor(ran.remote, first, last), "version 2's exam stands on version 1's").toBe(
+				false,
+			);
 		},
 	);
 });

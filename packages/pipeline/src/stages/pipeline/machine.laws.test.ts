@@ -15,8 +15,10 @@ import {make} from "../../entity.ts";
 import {LaneId} from "../../ids.ts";
 import type {Outcome} from "../../tickets/ticket.ts";
 import {nameOf} from "../outcome.ts";
+import {SHIP_NAMES} from "../ship/outcome.ts";
 import {
 	AskFor,
+	askedFor,
 	askPerson,
 	after as afterStep,
 	claimLane,
@@ -97,9 +99,30 @@ const GREEN_CARRY = {
 		failed: [],
 	},
 } as const;
+/** The exam's pull request at its first head, and at a later one (self-fix PR 10). */
+const EXAM_A = "3".repeat(40);
+const EXAM_B = "6".repeat(40);
+/** What a yes or a review read at `head`: what `carry` needs (self-fix PR 10, Part 4). */
+const givenAt = (head: string) => ({
+	head,
+	onto: "main",
+	base: "9".repeat(40),
+	diff: "d".repeat(40),
+});
+/** What the exam review read at `head`, and what it met. */
+const reviewedAt = (head: string) => ({...givenAt(head), met: 1, of: 1});
+/** The exam's pull request as a step may leave it: landed, reviewed, said yes to, at the head or behind it. */
+const EXAM_PULLS = [
+	{examPull: {head: EXAM_A}},
+	{examPull: {head: EXAM_A, reviewed: reviewedAt(EXAM_A)}},
+	{examPull: {head: EXAM_A, reviewed: reviewedAt(EXAM_A), yes: givenAt(EXAM_A)}},
+	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_B), yes: givenAt(EXAM_A)}},
+	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_A)}},
+] as const;
 const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
-	carry: fc.constantFrom({}, GREEN_CARRY),
+	// Self-fix PR 10: the exam's pull request in the carry, so every law here reads it too.
+	carry: fc.constantFrom<StepEnd["carry"]>({}, GREEN_CARRY, ...EXAM_PULLS),
 });
 /** What a restart's fresh read of main may find (self-fix PR 5). */
 const freshes: fc.Arbitrary<Fresh> = fc.oneof(
@@ -221,6 +244,16 @@ const inOrder = ({prev, msg, cmds}: LaneStep) => {
 		}
 		if (msg.type !== "lane_step_ok" || prev.phase !== "running")
 			throw new Error(`a step started on ${msg.type} in ${prev.phase}`);
+		// Self-fix PR 10: a passing exam review goes on by what its carry holds, which `after` does not
+		// read. A yes that carries to the head runs the merge with no second question; a review or a
+		// yes at another head goes back to the review (`running`'s guard). The laws of the exam's pull
+		// request below pin which.
+		if (
+			prev.step === "exam_review" &&
+			msg.value.outcome.kind === "done" &&
+			(started === "exam_merge" || started === "exam_review")
+		)
+			return started;
 		const want = afterStep(prev.step, msg.value.outcome, prev.round);
 		if (!("to" in want)) throw new Error(`${started} started where the order says stop`);
 		return want.to;
@@ -242,6 +275,24 @@ const noMergeUnasked = ({prev, msg, cmds}: LaneStep) => {
 		// A restart goes on at a merge only where the lane stopped in it, after the person's yes.
 		if (msg.type === "lane_fresh_ok") {
 			expect(freshFrom(prev)).toEqual({_tag: "run", step: cmd.step});
+			continue;
+		}
+		// Self-fix PR 10: the person's `merge` carries to a new exam head when `carry` keeps it, so the
+		// exam's merge runs with no second question: the yes is in the carry it starts with, at its
+		// head. Ship's `ejected` runs the same merge once more, on the same yes.
+		if (
+			cmd.step === "exam_merge" &&
+			msg.type === "lane_step_ok" &&
+			prev.phase === "running" &&
+			(prev.step === "exam_review" || prev.step === "exam_merge")
+		) {
+			const pull = (
+				cmd.carry as {
+					readonly examPull?: {readonly head: string; readonly yes?: {readonly head: string}};
+				}
+			).examPull;
+			expect(pull?.head, "the exam's merge ran on no exam head").toEqual(expect.any(String));
+			expect(pull?.yes?.head, "the exam's merge ran with no yes at its head").toBe(pull?.head);
 			continue;
 		}
 		if (msg.type !== "lane_answered" || prev.phase !== "asking")
@@ -570,7 +621,14 @@ describe("the whole lane, step by step", () => {
 		for (let i = 0; i < 40 && s.phase !== "over"; i++) {
 			if (s.phase === "running") {
 				seen.push(s.step);
-				const carry = s.step === "build" ? GREEN_CARRY : {};
+				const carry =
+					s.step === "build"
+						? GREEN_CARRY
+						: s.step === "exam"
+							? {examPull: {head: EXAM_A}}
+							: s.step === "exam_review"
+								? {examPull: {head: EXAM_A, reviewed: reviewedAt(EXAM_A)}}
+								: {};
 				go(runStep.ok(STEP, {outcome: answers[s.step] ?? DONE, carry}, 0));
 			} else if (s.phase === "asking") {
 				seen.push(s.question.for);
@@ -610,9 +668,11 @@ describe("the whole lane, step by step", () => {
 			triage: {kind: "send", to: "plan", why: "yes"},
 			exam: {kind: "ask", who: "owner", for: "check_change"},
 		});
-		expect(seen.slice(2, 7)).toEqual([
+		// Self-fix PR 10: the exam's pull request gets the lane's own review before the person's yes.
+		expect(seen.slice(2, 8)).toEqual([
 			"approve",
 			"exam",
+			"exam_review",
 			"exam_merge",
 			"exam_merge",
 			"test_writer",
@@ -1111,7 +1171,12 @@ const ROUTE: Readonly<Record<StepName, StepEnd>> = {
 	plan: {outcome: {kind: "done", part: false}, carry: {version: 1}},
 	exam: {
 		outcome: {kind: "ask", who: "owner", for: "check_change"},
-		carry: {rules: [".oxlintrc.json"]},
+		carry: {rules: [".oxlintrc.json"], examPull: {head: EXAM_A}},
+	},
+	// Self-fix PR 10: the review passes at the exam's head, and the person's yes is asked after it.
+	exam_review: {
+		outcome: {kind: "done", part: false},
+		carry: {examPull: {head: EXAM_A, reviewed: reviewedAt(EXAM_A)}},
 	},
 	exam_merge: DONE_END,
 	test_writer: {outcome: {kind: "done", part: false}, carry: {exam: ["src/lower.test.ts"]}},
@@ -1759,5 +1824,462 @@ describe("a stopped lane goes on, case by case", () => {
 		);
 		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
 		for (const file of TOUCHED) expect(s.question.what).toContain(file);
+	});
+});
+
+// ---------------------------------------------------------------- the exam's pull request (self-fix PR 10)
+//
+// exam -> exam_review -> (yes) -> exam_merge -> test_writer. The exam's `check_change` runs code and one
+// fresh review of its pull request first. A review or checks that fail send the exam writer a redo. A ship
+// refusal at `exam_merge` goes to the step that can fix it (./routes.ts), never `stuck:sent_back`. A
+// person's yes that carries to a new head (`carry`, Part 4) is not asked again; anything the exam
+// writer rewrote is. Walked from the lane's start in a world that answers each Act as a script says.
+
+const RULE = ".oxlintrc.json";
+const EXAM_PR = "local:example/lane/pull/1";
+/** A head the exam's pull request had before: a yes or a review bound to it does not hold now. */
+const EXAM_OLD = `${"0".repeat(39)}1`;
+/** Each head the exam's pull request gets, in turn. */
+const examHead = (n: number) => n.toString(16).padStart(40, "e");
+
+/** How one exam review ends. `moved`: it read a new head on the host, as a person's push or code's format commit. */
+interface ReviewEnd {
+	readonly how: "pass" | "review_failed" | "checks_red";
+	/** The head its verdicts are at: the pull request's, or an older one. */
+	readonly reviewed: "head" | "old";
+	/** A person's yes the review's Gather found still holds (`carry` kept), and at which head. */
+	readonly yes: "none" | "head" | "old";
+	readonly moved: boolean;
+}
+const PASS: ReviewEnd = {how: "pass", reviewed: "head", yes: "none", moved: false};
+
+interface ExamScript {
+	/** Each exam review, in turn. Past the last: `PASS`. */
+	readonly reviews?: readonly ReviewEnd[];
+	/** Each exam merge, in turn: ship's name for how it ended, or `done`. Past the last: done. */
+	readonly merges?: readonly string[];
+	/** Each answer, in turn. One the question does not offer falls to its first pick. */
+	readonly picks?: readonly string[];
+}
+
+/** Ship's end, from its name: `send:reviewer:no_review`, `stuck:checks_stuck`, `done`. */
+const shipEnd = (name: string): Outcome => {
+	const [verb, a = "", b = ""] = name.split(":");
+	if (verb === "send") return {kind: "send", to: a, why: b};
+	if (verb === "stuck") return {kind: "stuck", why: a};
+	return {kind: "done", part: false};
+};
+
+/** The exam's pull request as the lane holds it now. */
+const pullOf = (carry: unknown) =>
+	(
+		carry as {
+			readonly examPull?: {
+				readonly head: string;
+				readonly reviewed?: {readonly head: string};
+				readonly yes?: {readonly head: string};
+			};
+		}
+	).examPull;
+
+/** The world of one script: the exam lands a new head each time, and the rest goes as `ROUTE` says. */
+const examWorld = (script: ExamScript): World => {
+	const reviews = [...(script.reviews ?? [])];
+	const merges = [...(script.merges ?? [])];
+	const picks = [...(script.picks ?? [])];
+	let heads = 0;
+	return {
+		end: (s) => {
+			switch (s.step) {
+				case "exam":
+					return {
+						outcome: {kind: "ask", who: "owner", for: "check_change"},
+						carry: {rules: [RULE], examPr: EXAM_PR, examPull: {head: examHead(++heads)}},
+					} as StepEnd;
+				case "exam_review": {
+					const r = reviews.shift() ?? PASS;
+					const head = r.moved ? examHead(++heads) : (pullOf(s.carry)?.head ?? EXAM_OLD);
+					if (r.how !== "pass")
+						return {
+							outcome: {kind: "send", to: "builder", why: r.how},
+							carry: {examPull: {head}},
+						} as StepEnd;
+					const at = (which: "head" | "old") => (which === "head" ? head : EXAM_OLD);
+					return {
+						outcome: {kind: "done", part: false},
+						carry: {
+							examPull: {
+								head,
+								reviewed: reviewedAt(at(r.reviewed)),
+								...(r.yes === "none" ? {} : {yes: givenAt(at(r.yes))}),
+							},
+						},
+					} as StepEnd;
+				}
+				case "exam_merge":
+					return {outcome: shipEnd(merges.shift() ?? "done"), carry: {}};
+				default:
+					return ROUTE[s.step];
+			}
+		},
+		pick: (q) => {
+			const want = picks.shift() ?? "";
+			return q.picks.includes(want) ? want : (q.picks[0] ?? "");
+		},
+	};
+};
+
+/** Walk the lane from its start on one script, until the test writer or the build starts, or it stops. */
+const examRun = (script: ExamScript, machine: Machine = lane) =>
+	drive(
+		IDLE,
+		START,
+		examWorld(script),
+		(s) => s.phase === "running" && (s.step === "test_writer" || s.step === "build"),
+		machine,
+	);
+
+/** What the lane did, in order: each step it started, and each question it asked as `ask:<kind>`. */
+const doneInOrder = (moves: readonly Moved[]): readonly string[] =>
+	cmdsOf(moves).flatMap((c) =>
+		c.type === "lane_step"
+			? [c.step]
+			: c.type === "lane_ask"
+				? [`ask:${askedFor(c.ask) ?? c.ask}`]
+				: [],
+	);
+
+const examsIn = (moves: readonly Moved[]) =>
+	stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam");
+const countOf = (seen: readonly string[], what: string) => seen.filter((x) => x === what).length;
+
+describe("the exam's pull request, step by step", () => {
+	it("the exam's ask runs exam_review, then the person's yes, then exam_merge, then the test writer", () => {
+		expect(doneInOrder(examRun({}).moves)).toEqual([
+			"triage",
+			"plan",
+			"ask:approve",
+			"exam",
+			"exam_review",
+			"ask:exam_merge",
+			"exam_merge",
+			"test_writer",
+		]);
+	});
+
+	it("the person's `merge` runs exam_merge with their yes at the head they were asked about", () => {
+		const {moves} = examRun({});
+		const merge = stepsIn(cmdsOf(moves)).find((c) => c.step === "exam_merge");
+		expect(pullOf(merge?.carry)).toMatchObject({
+			head: examHead(1),
+			reviewed: {head: examHead(1)},
+			yes: {head: examHead(1)},
+		});
+	});
+
+	for (const why of ["review_failed", "checks_red"] as const)
+		it(`a review that ends ${why} runs the exam step again, from the exam head, and the build never starts first`, () => {
+			const {moves} = examRun({reviews: [{...PASS, how: why}]});
+			expect(doneInOrder(moves).slice(3)).toEqual([
+				"exam",
+				"exam_review",
+				"exam",
+				"exam_review",
+				"ask:exam_merge",
+				"exam_merge",
+				"test_writer",
+			]);
+			// The redo starts in a copy of the exam head, and lands on the same pull request.
+			expect(pullOf(examsIn(moves)[1]?.carry)?.head).toBe(examHead(1));
+			expect(examsIn(moves)[1]?.carry.examPr).toBe(EXAM_PR);
+		});
+
+	it("a review that keeps failing runs the exam step at most the bound, then asks `rounds_spent`", () => {
+		const failing = Array.from({length: 8}, () => ({...PASS, how: "review_failed" as const}));
+		const {s, moves} = examRun({reviews: failing, picks: ["approve", "stop"]});
+		expect(examsIn(moves)).toHaveLength(MAX_ROUNDS);
+		expect(doneInOrder(moves).at(-1)).toBe("ask:rounds_spent");
+		expect(doneInOrder(moves)).not.toContain("test_writer");
+		expect(s.phase).toBe("over");
+	});
+
+	/** The step ship's `send` at exam_merge runs next (./routes.ts). */
+	const NEXT_AFTER_SHIP: Readonly<Record<string, StepName>> = {
+		"send:reviewer:no_review": "exam_review",
+		"send:builder:checks_red": "exam_review",
+		"send:builder:behind": "exam_review",
+		"send:builder:review_failed": "exam",
+		"send:builder:conflicts": "exam",
+		"send:builder:bot_comment": "exam",
+		"send:builder:ejected": "exam_merge",
+	};
+
+	it("names a next step for every send ship can end with", () => {
+		expect(Object.keys(NEXT_AFTER_SHIP).sort()).toEqual(
+			SHIP_NAMES.filter((name) => name.startsWith("send:")).sort(),
+		);
+	});
+
+	for (const [send, next] of Object.entries(NEXT_AFTER_SHIP))
+		it(`ship's ${send} at exam_merge runs ${next} next, and never ends stuck:sent_back`, () => {
+			const {moves} = examRun({merges: [send]});
+			const steps = doneInOrder(moves).filter((x) => !x.startsWith("ask:"));
+			expect(steps[steps.indexOf("exam_merge") + 1]).toBe(next);
+			for (const m of moves) expect(JSON.stringify(m.next)).not.toContain('"sent_back"');
+		});
+
+	it("ship's no_review: the lane runs exam_review, then exam_merge, and asks the person no second time", () => {
+		const {moves} = examRun({
+			merges: ["send:reviewer:no_review"],
+			reviews: [PASS, {...PASS, yes: "head"}],
+		});
+		expect(doneInOrder(moves).slice(3)).toEqual([
+			"exam",
+			"exam_review",
+			"ask:exam_merge",
+			"exam_merge",
+			"exam_review",
+			"exam_merge",
+			"test_writer",
+		]);
+	});
+
+	// Ticket 117's shape, in the machine: the yes was said at the first head, a commit that only formats
+	// moved it, and the review's Gather found the yes carries there.
+	it("a new head the yes carries to: the checks and the review run there, then exam_merge with no new ask", () => {
+		const {moves} = examRun({
+			merges: ["send:builder:checks_red"],
+			reviews: [PASS, {...PASS, yes: "head", moved: true}],
+		});
+		const seen = doneInOrder(moves);
+		expect(countOf(seen, "ask:exam_merge")).toBe(1);
+		expect(countOf(seen, "exam_merge")).toBe(2);
+		expect(seen.at(-1)).toBe("test_writer");
+		const merges = stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam_merge");
+		expect(pullOf(merges[1]?.carry)?.head).toBe(examHead(2));
+	});
+
+	it("the exam writer's redo changes a rule's text: the lane asks exam_merge again", () => {
+		const {moves} = examRun({merges: ["send:builder:review_failed"]});
+		const seen = doneInOrder(moves);
+		expect(seen.slice(3)).toEqual([
+			"exam",
+			"exam_review",
+			"ask:exam_merge",
+			"exam_merge",
+			"exam",
+			"exam_review",
+			"ask:exam_merge",
+			"exam_merge",
+			"test_writer",
+		]);
+	});
+
+	it("a yes the review found at another head is no yes: the person is asked", () => {
+		const seen = doneInOrder(examRun({reviews: [{...PASS, yes: "old"}]}).moves);
+		expect(seen.indexOf("ask:exam_merge")).toBeGreaterThan(-1);
+		expect(seen.indexOf("ask:exam_merge")).toBeLessThan(seen.indexOf("exam_merge"));
+	});
+
+	it("verdicts at another head never start exam_merge, even on a person's merge", () => {
+		const {moves} = examRun({reviews: [{...PASS, reviewed: "old"}, PASS]});
+		for (const cmd of stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam_merge")) {
+			const pull = pullOf(cmd.carry);
+			expect(pull?.reviewed?.head).toBe(pull?.head);
+		}
+		expect(doneInOrder(moves).at(-1)).toBe("test_writer");
+	});
+
+	it("ship's ejected twice: exam_merge runs once more, then the lane stops, with ship's why", () => {
+		const {s, moves} = examRun({merges: ["send:builder:ejected", "send:builder:ejected"]});
+		const seen = doneInOrder(moves);
+		expect(countOf(seen, "exam_merge")).toBe(2);
+		expect(seen).not.toContain("test_writer");
+		expect(s.phase).toBe("over");
+		expect(JSON.stringify(s)).toContain("ejected");
+		expect(JSON.stringify(s)).not.toContain('"sent_back"');
+	});
+});
+
+// ---------------------------------------------------------------- its laws, over any script
+
+describe("the exam's pull request, over any script", () => {
+	const reviewEnds: fc.Arbitrary<ReviewEnd> = fc.record({
+		how: fc.constantFrom("pass", "pass", "review_failed", "checks_red"),
+		reviewed: fc.constantFrom("head", "head", "old"),
+		yes: fc.constantFrom("none", "head", "old"),
+		moved: fc.boolean(),
+	});
+	const scripts: fc.Arbitrary<ExamScript> = fc.record({
+		reviews: fc.array(reviewEnds, {maxLength: 8}),
+		merges: fc.array(
+			fc.constantFrom(
+				"done",
+				...SHIP_NAMES.filter((n) => n.startsWith("send:")),
+				"stuck:checks_stuck",
+			),
+			{maxLength: 8},
+		),
+		picks: fc.array(fc.constantFrom("approve", "merge", "no", "again", "stop"), {maxLength: 12}),
+	});
+	/** Scripts each planted break below fails on, run first on every law. */
+	const EXAMPLES: readonly [ExamScript][] = [
+		[{merges: Array.from({length: 6}, () => "send:builder:review_failed")}],
+		[{reviews: [{...PASS, yes: "old"}], merges: ["send:reviewer:no_review"]}],
+		[{merges: ["send:builder:bot_comment"]}],
+	];
+
+	/** What broke on one script, a line each. */
+	type Law = (moves: readonly Moved[]) => readonly string[];
+
+	/** Every ship send at exam_merge routes somewhere other than `stuck:sent_back`. */
+	const routed: Law = (moves) =>
+		moves.flatMap((m) =>
+			m.prev.phase === "running" &&
+			m.prev.step === "exam_merge" &&
+			m.msg.type === "lane_step_ok" &&
+			m.msg.value.outcome.kind === "send" &&
+			JSON.stringify(m.next).includes('"sent_back"')
+				? [`${nameOf(m.msg.value.outcome)} at exam_merge ended stuck:sent_back`]
+				: [],
+		);
+
+	/**
+	 * exam_merge never starts on a head where the exam review and a person's yes do not both carry, and
+	 * never without green checks there. Read off what the world said, not what the lane holds.
+	 */
+	const guarded: Law = (moves) => {
+		const green = new Set<string>();
+		const yes = new Set<string>();
+		const problems: string[] = [];
+		for (const {prev, msg, cmds} of moves) {
+			if (msg.type === "lane_step_ok" && prev.phase === "running" && prev.step === "exam_review") {
+				const pull = pullOf(msg.value.carry);
+				if (msg.value.outcome.kind !== "done") {
+					if (pull !== undefined) green.delete(pull.head);
+				} else if (pull !== undefined) {
+					if (pull.reviewed?.head === pull.head) green.add(pull.head);
+					if (pull.yes !== undefined) yes.add(pull.yes.head);
+				}
+			}
+			if (
+				msg.type === "lane_answered" &&
+				prev.phase === "asking" &&
+				prev.question.for === "exam_merge" &&
+				msg.pick === "merge"
+			) {
+				const head = pullOf(prev.carry)?.head;
+				if (head !== undefined) yes.add(head);
+			}
+			for (const cmd of stepsIn(cmds)) {
+				if (cmd.step !== "exam_merge") continue;
+				const head = pullOf(cmd.carry)?.head ?? "(none)";
+				if (!green.has(head))
+					problems.push(`exam_merge started at ${head} with no green review there`);
+				if (!yes.has(head)) problems.push(`exam_merge started at ${head} with no yes there`);
+			}
+		}
+		return problems;
+	};
+
+	/** The exam step runs at most the bound, plus one per person's `again`. */
+	const bounded: Law = (moves) => {
+		const exams = examsIn(moves).length;
+		const agains = moves.filter(
+			(m) =>
+				m.msg.type === "lane_answered" &&
+				m.prev.phase === "asking" &&
+				m.prev.question.for === "rounds_spent" &&
+				m.msg.pick === "again",
+		).length;
+		return exams > MAX_ROUNDS + agains
+			? [`the exam step ran ${exams} times, with ${agains} again`]
+			: [];
+	};
+
+	/** The builder, and the test writer before it, never start before exam_merge ends done or the exam skips. */
+	const examFirst: Law = (moves) => {
+		let cleared = false;
+		const problems: string[] = [];
+		for (const {prev, msg, cmds} of moves) {
+			if (msg.type === "lane_step_ok" && prev.phase === "running") {
+				const {outcome} = msg.value;
+				if (prev.step === "exam_merge" && outcome.kind === "done") cleared = true;
+				if (prev.step === "exam" && outcome.kind === "skip") cleared = true;
+			}
+			for (const cmd of stepsIn(cmds))
+				if (!cleared && (cmd.step === "test_writer" || cmd.step === "build"))
+					problems.push(`${cmd.step} started before the rule changes merged`);
+		}
+		return problems;
+	};
+
+	const holds = (machine: Machine, law: Law) =>
+		fc.assert(
+			fc.property(scripts, (script) => {
+				expect(law(examRun(script, machine).moves)).toEqual([]);
+			}),
+			{numRuns: 300, seed: 119120, examples: [...EXAMPLES]},
+		);
+
+	const LAWS_10 = {routed, guarded, bounded, examFirst};
+	for (const [name, law] of Object.entries(LAWS_10))
+		it(`${name} holds on the real reducer`, () => holds(lane, law));
+
+	/** The lane, with each `lane_step_ok` it is sent rewritten first. */
+	const rewriting = (to: (s: Lane, end: StepEnd) => StepEnd): Machine =>
+		plant({
+			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) =>
+				lane.update.lane_step_ok(s, {...m, value: to(s, m.value)}),
+		});
+
+	it("routed catches its plant: a ship send with no row ends stuck:sent_back", () => {
+		const planted = rewriting((s, end) =>
+			s.phase === "running" &&
+			s.step === "exam_merge" &&
+			nameOf(end.outcome) === "send:builder:bot_comment"
+				? {...end, outcome: {kind: "send", to: "nobody", why: "bot_comment"}}
+				: end,
+		);
+		expect(() => holds(planted, routed)).toThrow();
+	});
+
+	it("guarded catches its plant: the guard reads examPull.head for the yes's head", () => {
+		/** Any yes reads as at the head: what a guard that compares the head with itself lets through. */
+		const yesAtHead = (carry: unknown): unknown => {
+			const pull = pullOf(carry);
+			return pull?.yes === undefined
+				? carry
+				: {...(carry as object), examPull: {...pull, yes: {...pull.yes, head: pull.head}}};
+		};
+		const planted = rewriting((s, end) =>
+			s.phase === "running" && s.step === "exam_review"
+				? ({...end, carry: yesAtHead(end.carry)} as StepEnd)
+				: end,
+		);
+		expect(() => holds(planted, guarded)).toThrow();
+	});
+
+	it("bounded catches its plant: `back` forgets to count a route from exam_merge", () => {
+		const planted = plant({
+			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) => {
+				const [next, cmds] = lane.update.lane_step_ok(s, m);
+				if (s.phase !== "running" || s.step !== "exam" || !("trail" in next)) return [next, cmds];
+				if (!next.trail.some((row) => row.step === "exam_merge")) return [next, cmds];
+				// The exam's own row, after a route from exam_merge, is not on the trail the bound reads.
+				const at = next.trail.findLastIndex((row) => row.step === "exam");
+				return [{...next, trail: next.trail.filter((_, i) => i !== at)}, cmds] as never;
+			},
+		});
+		expect(() => holds(planted, bounded)).toThrow();
+	});
+
+	it("examFirst catches its plant: the exam's ask goes straight to the test writer", () => {
+		const planted = rewriting((s, end) =>
+			s.phase === "running" && s.step === "exam" && end.outcome.kind === "ask"
+				? {...end, outcome: {kind: "skip", why: "no_rules_change"}}
+				: end,
+		);
+		expect(() => holds(planted, examFirst)).toThrow();
 	});
 });

@@ -279,7 +279,8 @@ const ANSWERS = {
 		};
 	},
 	review: () => {
-		const ids = [...new Set(brief.match(/^- (c\d+):/gm) ?? [])].map((row) => row.slice(2, -1));
+		// `c1`: a ticket's criteria. `e1`: an exam pull request's, one per rule change (self-fix PR 10).
+		const ids = [...new Set(brief.match(/^- ([a-z]\d+):/gm) ?? [])].map((row) => row.slice(2, -1));
 		if (script.unseen !== undefined)
 			return {
 				rows: ids.map((id) => ({id, grade: "unseen", says: script.unseen})),
@@ -308,7 +309,11 @@ const ANSWERS = {
 			rows: ids.map((id) => ({
 				id,
 				grade: "pass",
-				where: [{file: "src/lower.ts", first: 2, last: 2}],
+				where: [
+					id.startsWith("e")
+						? {file: ".oxlintrc.json", first: 1, last: 1}
+						: {file: "src/lower.ts", first: 2, last: 2},
+				],
 				says: "The test and the code both show it.",
 				limit: null,
 			})),
