@@ -79,14 +79,15 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
   `text` trace of one press or one save, step by step.
 - `## Which version`: `next/` and today's version, one bullet each.
 - `## The shape`, if the area adds fields or types: the types, and how they were checked.
-- `## The N principles`: about six. Each is `### X1: <name>`, then **Lean, NN%.** or **Decided
-  DATE.** on its own line, then bullets: what it means, why (a quoted source), the Linear row,
-  the Elm or OTP answer, the doubt and what would settle it, the cost, and today's example
+- `## The N principles`: about six. Each is `### X1: <name>`, then **Lean, NN%.**, **No lean, the owner picks.** or
+  **Decided DATE.** on its own line, then bullets: what it means, why (a quoted source), the Linear row,
+  the Elm or OTP answer, what holds it (the type, test or refusal that enforces it), the doubt and what would settle it, the cost, and today's example
   (follows or breaks, with `file:line`). More than eight principles means some are rules: group
   them under a principle, as hot reload's six held seventeen rules.
-- The smaller calls, each with options as small code blocks, a lean and how sure.
+- The smaller calls, each with options as small code blocks, a lean and how sure (or "No lean,
+  the owner picks", as for a clash with Linear).
 - What the ledger records, or "nothing new", and what fact is lost if it is not recorded now.
-- `## A tryout in today's version`: small fixes offered, not filed, with a size in lines and
+- `## A tryout in today's version`: small fixes offered, not filed (when the area has one), with a size in lines and
   agent hours.
 - `## Where this differs from settled notes`, `## What it costs`, `## What it cannot tell us`.
 
@@ -98,7 +99,8 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 ### 8. Build and publish the page
 
 - Follow `references/page-structure.md`: the structure checklist, the page rules and the
-  highlight snippet. Every box on its list is checked before publishing.
+  highlight snippet. Every box on its list is checked before publishing. View every page at
+  1280 and 390 wide on a local copy first, then again after publishing.
 - Publish it as a private artifact titled "<Area> guidelines". Later changes republish to the
   same URL. The page goes in no file in the repo.
 
@@ -108,7 +110,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 - Run `pnpm format`, then `pnpm lint` once. Grep the added lines for names, machine paths and
   keys, as `AGENTS.md`'s public repo rules say.
 - Title: `direction: <area>, proposed, with experiment NN`. The body, as PR 287: what is in it,
-  the principles with their leans, the shape, today's example, what was decided, what other open
+  the principles with their leans (or "No lean, the owner picks"), the shape, today's example, what was decided, what other open
   pull requests would change to match, open calls, what it cannot tell us.
 - Log the hand run in `field/` the same day. It lands by
   [the plan's rule](../../../docs/plan/README.md#how-a-change-lands), after the owner's yes.
@@ -117,7 +119,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 - One step per message, titled `**Step N of M: <name>**`. Step one is the whole idea, then one
   step per principle, then the smaller calls.
-- 3 to 5 short bullets per step, each with its lean and how sure. Then one everyday comparison.
+- 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks". Then one everyday comparison.
   End with "Say next." and wait.
 - The owner's answer on a lean changes the page first, then the note, then the pull request.
 - The last step asks one yes or no: merge it?

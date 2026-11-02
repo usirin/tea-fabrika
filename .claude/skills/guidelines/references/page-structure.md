@@ -37,19 +37,20 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 - [ ] **Try it:** what to press in the demo, with the keys or buttons named, and what to watch.
 - [ ] A **Today** verdict, a word and a glyph first ("follows", "breaks", "half"), then why.
 - [ ] **Rules:** each one as "Rule K <name>", its mark and one line. A "Why" disclosure holds
-  labeled rows: Why, Source (a short quote), Measured, Linear, Elm or OTP, Cost, Doubt, Try.
+  labeled rows: Why, Source (a short quote), Measured, Linear, Elm or OTP, Holds it (the type, test or refusal
+  that enforces the rule: poka-yoke), Cost, Doubt, Try.
   Every rule has a Linear row, or "No Linear answer" with the reason.
 
 ## Today's running example
 
 - [ ] A what, today, where table, with `file:line`.
-- [ ] The fixes offered, not filed, and the example in the new shape as code.
+- [ ] The fixes offered, not filed (when the area has one), and the example in the new shape as code.
 - [ ] The demo can switch between "Proposed" and "Today", so the owner sees each break.
 
 ## Your calls
 
 - [ ] "N picks are open. Each has a lean and how sure it is."
-- [ ] Each call: a numbered question, then "NN% Lean: <answer>", then the options side by side,
+- [ ] Each call: a numbered question, then "NN% Lean: <answer>" or "No lean, the owner picks", then the options side by side,
   each labeled in words (the lean says so), then Why, Cost and Doubt rows.
 - [ ] Previous and Next buttons through the calls.
 
@@ -59,12 +60,12 @@ the one keybindings, hot reload and modes share. Check every box before you publ
   setting that changes where it runs or which version it shows, and Start over.
 - [ ] A log of what fired, as the ledger or the brain would write it, and a line for what a screen
   reader is told.
-- [ ] When the area has a file (a key file, a program's source), that file is shown and changes
-  live.
+- [ ] When the area has one (a key file, a program's source), that file is shown and changes live.
 
 ## Marks
 
-- [ ] A lean is "Lean · NN%" in a dashed outline. Decided is "Decided" in a solid outline. A
+- [ ] State colors (below) always come with a word or shape: "done ✓", "running ●", "stuck ✕",
+  "your turn". A lean is "Lean · NN%" in a dashed outline. Decided is "Decided" in a solid outline. A
   breaks or follows verdict carries its word and a glyph. The word always carries the meaning.
 
 ## Page rules
@@ -77,8 +78,11 @@ the one keybindings, hot reload and modes share. Check every box before you publ
   overflow-wrap: anywhere`), and no box has its own scroll bar.
 - [ ] Color is never the only cue (WCAG 1.4.1). Focus shows a ring. Motion stops under
   `prefers-reduced-motion`.
-- [ ] Looked at at 1280 and at 390 wide, every view, before publishing.
-- [ ] The fabrika dark theme, the values from `apps/fabrika/src/window/window.css` `:root` (the
+- [ ] Looked at at 1280 and at 390 wide, every view, on the local copy before publishing, and
+  again on the published page.
+- [ ] The fabrika dark theme, today's app values for now. The owner may pick the `next/` built-in
+  `fabrika` values (`docs/direction/themes.md`), so keep the palette in this one block, to swap.
+  The values from `apps/fabrika/src/window/window.css` `:root` (the
   names `theme.css` maps Manti onto), copied, not invented:
 
 ```css
@@ -92,6 +96,10 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 	--strong: oklch(0.94 0.001 260); /* --text-primary, n-12: headings */
 	--faint: oklch(0.625 0.004 260); /* --text-faint, n-9 */
 	--focus: oklch(0.79 0.002 260); /* --focus, n-11 */
+	--done: oklch(0.78 0.1 155); /* green: done */
+	--running: oklch(0.82 0.1 82); /* amber: running */
+	--stuck: oklch(0.72 0.15 25); /* red: stuck or broken */
+	--turn: oklch(0.8 0.084 266); /* --turn, a-11: waiting on a person, "your turn", nothing else */
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
@@ -106,7 +114,9 @@ A token in the theme's own ink gets no color, so the page's `--ink` shows, as in
 
 ```js
 // build.mjs, the page's build script. Run it from a folder where the package resolves:
-//   cd programs/markdown && node --input-type=module < <scratch>/build.mjs > <scratch>/index.html
+//   cd programs/markdown && node <scratch>/build.mjs > <scratch>/index.html
+// Node refuses a script on stdin, so run it as a file. A fresh worktree has no node_modules:
+// run it from `programs/markdown` in the main checkout, where the package is installed.
 import {codeToTokens, isSupportedLanguage} from "@pierre/highlights";
 import theme from "@pierre/highlights/themes/github-dark-dimmed";
 
@@ -156,3 +166,8 @@ pre.code {
 The pipeline page (PR 290) is one long column with no list of views, no demo, no Try it, no
 Your calls and no disclosures, on a light theme with code in plain mono. Build from the modes
 page's shape instead.
+
+## Test browser files
+
+Playwright MCP saves files only under the main checkout's `.playwright-mcp/`. After a check, move
+your own files out of it. Never delete anyone else's.
