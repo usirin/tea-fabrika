@@ -11,11 +11,12 @@ import {
 	type FolderAccess,
 	fenceTooBig,
 	localDisk,
+	shellSet,
 	writeSystem,
 } from "../acp/harness.ts";
 import {formOf} from "../agent/core.ts";
 import {type Adapter, failed, type Raw} from "../agent/turn.ts";
-import {type Env, runEnv, toolHome} from "../claude/env.ts";
+import {type Env, runEnv} from "../claude/env.ts";
 import {gitOf, onPath, toolchain, toolRoot} from "../claude/sandbox.ts";
 
 // Codex through `codex exec --json`, as an adapter of the interface
@@ -35,7 +36,8 @@ import {gitOf, onPath, toolchain, toolRoot} from "../claude/sandbox.ts";
 //     (`OPENAI_API_KEY`, `CODEX_API_KEY`) is ever handed on;
 //   - the permission profile of the ACP row (`codexConfig`): the folder and the
 //     toolchain open and what is beside them under home closed (`homeFence`),
-//     the login closed wherever it is, core shell variables only, no login
+//     the login closed wherever it is, core shell variables only with the
+//     fence's PATH and git settings (`fencedEnv`), no login
 //     shell, no web search, Codex's far-reaching features off. A worktree's
 //     clone is opened to read (`gitOf`), so git works in a lane's tree. A table
 //     too big for the box starts nothing (`fenceTooBig`);
@@ -220,7 +222,7 @@ export const codexAdapter = (
 						owner,
 						config.access,
 						localDisk,
-						toolHome(parent),
+						shellSet(parent),
 						[login],
 					);
 					const tooBig = fenceTooBig(profile.permissions.fenced.filesystem);

@@ -78,6 +78,10 @@ import type {Spawnable} from "./client.ts";
 //     Codex's features that reach past the folder off, and a permission
 //     profile that opens the folder and the toolchain and closes what is beside
 //     them under home (`homeFence`).
+//   - its commands get the fence's PATH and git settings, as the Claude row's
+//     do (`fencedEnv`), set in that config: the PATH keeps only the folders the
+//     box opens, and git and npm read no user config. Without them `git` from
+//     node died with EPERM (self-fix PR 2).
 //   - `NO_BROWSER`: no browser login is offered.
 //
 // What it does not hold, measured in experiment 153: writes in the temp
@@ -488,12 +492,16 @@ export const codexConfig = (
 	access: FolderAccess,
 	/** How home is read and links are followed, for what the profile opens and closes (`homeFence`). */
 	disk: Disk,
-	/** Core variables only, plus this: where a version manager holds the real tools (`toolHome`). */
+	/** Core variables only, plus these, fenced: the PATH and where a version manager holds the tools (`shellSet`). */
 	set: Readonly<Record<string, string>> = {},
 	/** Logins a variable moved, by their paths: closed wherever they are (`homeFence`). */
 	logins: readonly string[] = [],
 ) => ({
-	shell_environment_policy: {inherit: "core", ...(Object.keys(set).length > 0 ? {set} : {})},
+	// Only core variables reach a command, and Codex puts a folder in its own home, which the box
+	// closes, first on the PATH it hands on. A lookup ends with EPERM at the first closed folder, and
+	// git stops on a user config it may not read. So a command gets the fence's PATH, git and npm
+	// settings by name, as the Claude row's do (`fencedEnv`): its PATH keeps only folders the box opens.
+	shell_environment_policy: {inherit: "core", set: fencedEnv(set, tools)},
 	allow_login_shell: false,
 	web_search: "disabled",
 	default_permissions: "fenced",
@@ -528,6 +536,12 @@ export const codexConfig = (
 		skill_mcp_dependency_install: false,
 		goals: false,
 	},
+});
+
+/** What a command in Codex's box gets beyond the core variables, before the fence (`codexConfig`). */
+export const shellSet = (parent: Env): Record<string, string> => ({
+	...toolHome(parent),
+	...(parent.PATH === undefined ? {} : {PATH: parent.PATH}),
 });
 
 /** The owner's login file, by where Codex keeps it. Only ever linked to. */
@@ -593,7 +607,7 @@ const rowConfig = (parent: Env, folder: string, access: FolderAccess, tools: rea
 		parent.HOME ?? codexHomeOf(folder, parent),
 		access,
 		localDisk,
-		toolHome(parent),
+		shellSet(parent),
 		[codexLogin(parent)],
 	);
 
@@ -605,7 +619,11 @@ const fenceFits = (parent: Env, folder: string, access: FolderAccess) =>
 		return tooBig === null ? Effect.void : Effect.fail(tooBig);
 	});
 
-/** The Codex adapter's whole environment: a program's, its home, its mode and config, both by `access`. */
+/**
+ * The Codex adapter's whole environment: a program's, its home, its mode and config, both by
+ * `access`. Codex itself gets the host's PATH; its commands get the fence's, by its config
+ * (`codexConfig`).
+ */
 export const codexEnv = (
 	parent: Env,
 	folder: string,
