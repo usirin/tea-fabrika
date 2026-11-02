@@ -1,0 +1,24 @@
+{
+	"ran": "2026-11-01",
+	"on": "Electron 45.2.1, macOS 15.5, the app's own binary, a window at opacity 0",
+	"srcdocRan": false,
+	"srcdocWhy": "Executing inline script violates the following Content Security Policy directive 'script-src 'self' 'wasm-unsafe-eval''",
+	"frame": {
+		"inlineRan": true,
+		"parentDocument": "blocked",
+		"localStorage": "throws",
+		"fabrikaBridge": "undefined",
+		"topNavigation": "blocked",
+		"origin": "fabrika-artifact://shell",
+		"fetch": "blocked",
+		"violations": ["connect-src https://example.com/", "script-src-elem https://evil.example/x.js"]
+	},
+	"originSeen": "null",
+	"keys": {
+		"frameHadFocus": false,
+		"keysSeenByDesk": 1,
+		"keysForwarded": 0,
+		"settled": false,
+		"why": "a click sent with sendInputEvent did not move focus into the frame in a window with no focus, so the key landed in the desk; this does not tell whether a key inside the frame reaches the desk"
+	}
+}

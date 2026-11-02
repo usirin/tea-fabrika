@@ -1,0 +1,5 @@
+{
+	"name": "artifact-probe",
+	"type": "module",
+	"main": "main.mjs"
+}
