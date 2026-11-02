@@ -59,6 +59,7 @@ describe("loading the tickets", () => {
 // save; the person never types it. Missing means no run was live.
 describe("saving a person's comment", () => {
 	const lane = "agent:lane for:owner";
+	const filed = {type: "filed", title: "Login fails", body: ""};
 	const started = {type: "started", run: "r-build-1", stage: "build", task: null, log: null};
 	const ended = {
 		type: "ended",
@@ -83,7 +84,7 @@ describe("saving a person's comment", () => {
 					saveCell({id, write: {kind: "comment", ticket: 1, body}, next: 1} as ReturnType<
 						typeof save
 					>);
-				yield* send("w1", "user:owner", {type: "filed", title: "Login fails", body: ""});
+				yield* send("w1", "user:owner", filed);
 				yield* comment("c1", "Before any run.");
 				yield* send("r-build-1/started", lane, started);
 				yield* comment("c2", "Skip part 2.");
