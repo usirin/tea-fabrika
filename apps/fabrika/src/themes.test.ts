@@ -575,7 +575,6 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 			".tracker-list a.tracker-pull-request",
 		],
 		"an asks or jobs row's title": [".pop-row .t"],
-		"a set-aside row's title": ['.pop-row[data-icon="later"] .t', ".pop-row .t"],
 		"a palette command's name": [".pop-cmd .name", ".pop-cmd"],
 		"a selected palette command's name": [".pop-cmd.on .name", ".pop-cmd .name", ".pop-cmd.on"],
 		"a pop's title": [".pop-title"],
@@ -594,6 +593,16 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 		);
 		const want = Object.fromEntries(Object.keys(TITLES).map((what) => [what, SLATE[look].high]));
 		expect(got).toEqual(want);
+	});
+
+	// Color principles' step table: 11 is a name at rest, 12 a name when focused. A row set aside
+	// ("later") is a state, not a rank, so its title stays at the low step; its dashed ring is the
+	// second cue (pop.test.ts), so color is never alone. The tile's title bar, 11 unfocused and 12
+	// focused, is the same rule and is not a main line here.
+	it.each(LOOKS)("a set-aside row's title stays at the low step, %s", (look) => {
+		expect(SLATE[look].low).toContain(
+			colorOf(['.pop-row[data-icon="later"] .t', ".pop-row .t"], look),
+		);
 	});
 
 	// A row: its title, and the quieter text beside it.
