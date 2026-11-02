@@ -1,5 +1,13 @@
 import {execFileSync} from "node:child_process";
-import {appendFileSync, mkdtempSync, realpathSync, rmSync, writeFileSync} from "node:fs";
+import {
+	appendFileSync,
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -101,10 +109,10 @@ const IDENTITY = {
 };
 
 /** Main names its formatter: `[format] run`, with `{files}` for the paths, pushed as a commit of its own. */
-const nameFormatter = (seed: string) => {
+const nameFormatter = (seed: string, formatter = FORMATTER.path) => {
 	appendFileSync(
 		join(seed, ".fabrika", "fabrika.toml"),
-		`\n[format]\nrun = ${JSON.stringify(["node", FORMATTER.path, "{files}"])}\n`,
+		`\n[format]\nrun = ${JSON.stringify(["node", formatter, "{files}"])}\n`,
 	);
 	const git = (...args: readonly string[]) =>
 		execFileSync("git", args, {cwd: seed, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
@@ -236,6 +244,114 @@ describe("an exam file that fails the format check before a build round", () => 
 			expect(builds, said).toHaveLength(2);
 			expect(builds.filter((outcome) => outcome.includes("exam_touched"))).toEqual([]);
 			expect(builds.at(-1)).toContain('"done"');
+		},
+	);
+});
+
+/** The test the fake's mutants answer writes, as fixtures/pipeline-lane/codex.mjs names it. */
+const ANSWER = "src/lower-spaces.test.ts";
+const ANSWER_SPACES =
+	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("cuts spaces", () => {\n  expect(lower(" Ab ")).toBe("ab");\n});\n';
+/** What the formatter makes of `ANSWER_SPACES`. */
+const ANSWER_TABS = ANSWER_SPACES.replace("\n  expect", "\n\texpect");
+
+/**
+ * `FORMATTER`, but the first time it is handed `ANSWER` it fails and writes nothing, as one that crashed
+ * would. So the answers' own commit keeps the file as written, and only the format after it can fix it.
+ * What it has met is kept in `seen`, outside the working copy.
+ */
+const crashesOnce = (seen: string) => ({
+	path: "fmt-once.mjs",
+	text: [
+		'import {appendFileSync, existsSync, readFileSync, writeFileSync} from "node:fs";',
+		`const seen = ${JSON.stringify(seen)};`,
+		"const files = process.argv.slice(2);",
+		`if (files.includes(${JSON.stringify(ANSWER)}) && !(existsSync(seen) && readFileSync(seen, "utf8").includes(${JSON.stringify(ANSWER)}))) {`,
+		`\tappendFileSync(seen, ${JSON.stringify(`${ANSWER}\n`)});`,
+		'\tprocess.stderr.write("crashed\\n");',
+		"\tprocess.exit(1);",
+		"}",
+		"for (const file of files)",
+		'\twriteFileSync(file, readFileSync(file, "utf8").replace(/^(?: {2})+/gm, (s) => "\\t".repeat(s.length / 2)));',
+		"",
+	].join("\n"),
+});
+
+describe("a test the mutants' writer adds that fails the format check", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-fmt-")));
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		rmSync(dir, {recursive: true, force: true});
+	});
+
+	it(
+		"gets a code commit after the answers, and the review is handed that head",
+		{timeout: 300_000},
+		async () => {
+			const formatter = crashesOnce(join(dir, "seen"));
+			const {home, seed} = makeLaneHome({
+				dir,
+				nodeModules: MODULES,
+				reads: [dirname(dirname(dirname(MODULES)))],
+				mainFiles: [formatter],
+			});
+			nameFormatter(seed, formatter.path);
+			writeFileSync(
+				join(dir, "script.json"),
+				JSON.stringify({
+					answers: {mutants: [{with: {files: [{path: ANSWER, text: ANSWER_SPACES}]}}]},
+				}),
+			);
+			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+			const lines: string[] = [];
+			const say = (said: string) => Effect.sync(() => void lines.push(said));
+			const log = join(dir, "codex.log");
+			// The review's brief is all this needs, so the lane stops once the review has started.
+			const over = () =>
+				(existsSync(log) && readFileSync(log, "utf8").includes('"step":"review"')) ||
+				lines.some((said) => said.startsWith(`#${NUMBER} ended`));
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					yield* file;
+					yield* Effect.forkScoped(answering({step: "go_on", merge: "no"}));
+					const running = yield* Effect.forkScoped(
+						runLane(NUMBER, say).pipe(
+							Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+						),
+					);
+					yield* Effect.gen(function* () {
+						while (!over()) yield* Effect.sleep("50 millis");
+					}).pipe(Effect.timeoutOption(Duration.seconds(240)));
+					yield* Fiber.interrupt(running);
+				}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+			);
+
+			const said = lines.join("\n");
+			const tree = join(home, "work", "trees", String(NUMBER));
+			const git = (...args: readonly string[]) =>
+				execFileSync("git", args, {cwd: tree, encoding: "utf8", stdio: "pipe"}).trim();
+			// The answers' commit as written, then the code's format commit, which holds that file alone.
+			const touching = git("log", "--format=%H", "HEAD", "--", ANSWER).split("\n");
+			expect(touching, said).toHaveLength(2);
+			const [formatted = "", answered = ""] = touching;
+			expect(git("show", `${answered}:${ANSWER}`)).toBe(ANSWER_SPACES.trim());
+			expect(git("show", "--format=", "--name-only", formatted)).toBe(ANSWER);
+			expect(git("show", `${formatted}:${ANSWER}`)).toBe(ANSWER_TABS.trim());
+
+			// The review's diff holds the formatted test, not the one as written.
+			const review = readFileSync(log, "utf8")
+				.trim()
+				.split("\n")
+				.map((row) => JSON.parse(row) as {readonly step: string; readonly diff: string | null})
+				.find((run) => run.step === "review");
+			expect(review?.diff, said).toContain('+\texpect(lower(" Ab ")).toBe("ab");');
+			expect(review?.diff).not.toContain('+  expect(lower(" Ab ")).toBe("ab");');
 		},
 	);
 });

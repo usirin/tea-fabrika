@@ -51,6 +51,16 @@ const FAILS = {
 		"",
 	].join("\n"),
 };
+/** Fails with blank error output and 1,000 characters, padded with blanks, on its other output. */
+const LONG = {
+	path: "long.mjs",
+	text: [
+		'process.stderr.write("  \\n");',
+		'process.stdout.write("\\n  " + "y".repeat(1000) + "  \\n");',
+		"process.exit(3);",
+		"",
+	].join("\n"),
+};
 
 const EXAM = "src/lower.test.ts";
 const SPACES = 'it("lowers", () => {\n  expect(lower("AB")).toBe("ab");\n});\n';
@@ -115,7 +125,7 @@ const lane = (run: readonly string[] | null) => {
 	const {home, seed} = makeLaneHome({
 		dir,
 		nodeModules: join(dir, "no-modules"),
-		mainFiles: [FORMATTER, FAILS],
+		mainFiles: [FORMATTER, FAILS, LONG],
 	});
 	if (run !== null) nameFormatter(seed, run);
 	const work = laneWork.pipe(
@@ -208,6 +218,22 @@ describe("the exam's format commit before a build round", () => {
 		expect(said[0]).toContain("ended with 2: x Expected `}` but found `EOF`");
 	});
 
+	it("a formatter that fails on two heads: the ticket says so for each", async () => {
+		const run = lane(["node", FAILS.path, "{files}"]);
+		const {rounds, said} = await run(
+			Effect.gen(function* () {
+				const {tree} = yield* examOnTree;
+				const first = yield* formatExam(NUMBER, tree, [EXAM]);
+				const second = yield* formatExam(NUMBER, tree, [EXAM]);
+				return {rounds: [first, second], said: yield* comments};
+			}),
+		);
+		// The first commits what it wrote, so the second runs on a head of its own.
+		expect(rounds[0]).not.toBeNull();
+		expect(rounds[1]).toBeNull();
+		expect(said).toHaveLength(2);
+	});
+
 	it("a formatter that cannot start: the files stay as written, and the ticket says so", async () => {
 		const run = lane(["no-such-formatter", "{files}"]);
 		const {formatted, said} = await run(
@@ -269,10 +295,57 @@ describe("the builder's files before the build's commit", () => {
 		expect(said[0]).toContain("The formatter failed on the builder's files");
 	});
 
+	it("a formatter that fails on two rounds: the ticket says so for each", async () => {
+		const run = lane(["node", FAILS.path, "{files}"]);
+		const said = await run(
+			Effect.gen(function* () {
+				yield* round(builds);
+				const writes = yield* BuildWrites;
+				const copied = yield* writes.copy(TICKET, NUMBER);
+				writeFileSync(join(copied.tree, "src/lower.ts"), "export const lower = 2;\n");
+				yield* writes.push(TICKET, copied, "the second build");
+				return yield* comments;
+			}),
+		);
+		expect(said).toHaveLength(2);
+	});
+
 	it("no formatter named: the builder's files are committed as written, with no line from the push", async () => {
 		const run = lane(null);
 		const {tree, pushed, said} = await run(round(builds));
 		expect(gitIn(tree)("show", `${pushed.head}:src/lower.ts`)).toContain("\n  return");
 		expect(said).toEqual([]);
+	});
+});
+
+describe("the working copy's own format and commit", () => {
+	it("a formatter that fails says its words trimmed and cut to 300 characters", async () => {
+		const run = lane(["node", LONG.path, "{files}"]);
+		const formatted = await run(
+			Effect.gen(function* () {
+				const {tree} = yield* examOnTree;
+				return yield* (yield* LaneWork).format(tree, [EXAM]);
+			}),
+		);
+		// Its error output is blank, so its other output is said.
+		expect(formatted).toEqual({
+			_tag: "failed",
+			says: `node ${LONG.path} {files} ended with 3: ${"y".repeat(300)}`,
+		});
+	});
+
+	it("a commit of no paths commits nothing, even with a file staged", async () => {
+		const run = lane(null);
+		const {tree, head, after} = await run(
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				const {tree, head} = yield* examOnTree;
+				writeFileSync(join(tree, "src/staged.ts"), "export const staged = 1;\n");
+				gitIn(tree)("add", "src/staged.ts");
+				return {tree, head, after: yield* work.commitOnly(tree, [], "nothing")};
+			}),
+		);
+		expect(after).toBe(head);
+		expect(gitIn(tree)("rev-parse", "HEAD")).toBe(head);
 	});
 });
