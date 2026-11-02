@@ -4,24 +4,31 @@
 `programs/pipeline`, and one change in `packages/fabrika`. It builds
 [jidoka and andon](../direction/jidoka-and-andon.md) for what ticket 117's first run hit.
 A fix to the lane's own steps goes by hand for its pull request, and is logged in `field/`.
-Revised 2026-11-01 against the pipeline guidelines and experiment 186, on
-[PR 290](https://github.com/usirin/tea-fabrika/pull/290). A `P` number is one of its principles.
+Revised 2026-11-01 against [the pipeline guidelines](../direction/pipeline-guidelines.md),
+from experiment 186, merged in [PR 290](https://github.com/usirin/tea-fabrika/pull/290). A `P`
+number is one of its principles. Revised again the same day with the owner's decisions on its
+three Linear clashes and on "record wide": PRs 3 and 5 grow, and PRs 7, 8 and 9 are new.
 
 ```text
 PR 1  code formats what agents write          (e)   small, alone
 PR 2  git works in the Codex box              (d)   small, alone
+PR 7  the lane records wide                          alone
 PR 3  failing test names are kept, and red     (a, b)
       goes back to the builder, then an ask
 PR 4  code runs the checks after the builder;  (c)   on PR 3
       red or not run is never done
-PR 5  a stuck lane restarts from its step      (g)   on PR 4
-      -> ticket 117 restarts                   (h)   needs PRs 1, 3, 4, 5; PR 2 helps
+PR 5  a stuck lane restarts from its step;     (g)   on PR 4
+      a person's stop is a saved pause
+      -> ticket 117 restarts                   (h)   needs PRs 1, 3, 4, 5, 7; PR 2 helps
 PR 6  the plan step lists existing tests       (f)   on PR 4, any time
       that run the code it changes
+PR 8  a person speaks unasked, by a comment          on PRs 5 and 7
+PR 9  attention is counted, with two nudges          on PR 5
 ```
 
-Merge order: 1 and 2 in either order, then 3, 4, 5. Then ticket 117 restarts. PR 6 can land
-before or after the restart.
+Merge order: 1, 2 and 7 in any order, then 3, 4, 5. Then ticket 117 restarts. PRs 6, 8 and 9
+can land before or after the restart. PR 7 goes first because what it records exists only while
+a run happens, so every run before it, the by-hand runs of PRs 3 to 5 included, loses it.
 
 ## What happened on ticket 117
 
@@ -114,8 +121,12 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     round, with each name as an open item (`Item` already allows "red checks").
   - Past `MAX_ROUNDS`, the lane asks `rounds_spent` instead of ending. Review's send-backs
     share the same count. The ask shows what is still red and the dollars the rounds spent.
-    Its picks: "again" runs build, one more round; "stop" ends `stuck:rounds_spent`, which
-    PR 5 saves at build, like every stuck end, so the same line goes on there.
+    Its picks: "again" runs build, one more round; "stop" is a saved pause, not an end: it
+    ends the run `stuck:rounds_spent`, which PR 5 saves at build, so the same line goes on
+    there.
+  - Red goes back by default (P2). `[build] send_back = false` in a repository's
+    `.fabrika/fabrika.toml` turns it off: then the first red asks `rounds_spent` at once, with
+    the same picks. A repository that names nothing gets `true`.
   - The ticket keeps the names: `ended` gains `failed` (at most 50 names), and a comment
     lists them with the first lines of up to five errors. The full JSON report is kept in the
     lane's work folder until the lane ends `done`.
@@ -127,6 +138,7 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
   - `packages/pipeline/src/stages/pipeline/machine.ts`: `after()` routes it, and
     `rounds_spent` becomes an ask.
   - `packages/pipeline/src/tickets/ticket.ts`: `ended.failed`.
+  - `packages/pipeline/src/settings.ts`: `[build] send_back`, default `true`.
   - `.fabrika/fabrika.toml`: `[mutation] tests` gains `--reporter=json --outputFile={out}`.
   - Tests beside each: `stryker.test.ts`, `machine.test.ts`, `machine.laws.test.ts`,
     `program.test.ts`.
@@ -140,7 +152,9 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     build round 2's brief has it in `open`.
   - Law: in any order of messages, build runs at most `MAX_ROUNDS` times, plus one per
     person's `again`.
-- **Size.** 11 files, 220 to 330 lines, 2 to 3 agent hours.
+  - With `send_back = false`, the first red is `{ask: "rounds_spent"}`. With the key left
+    out, it is build round 2.
+- **Size.** 12 files, 250 to 380 lines, 2.5 to 3.5 agent hours.
 - **The bound.** 3 is today's constant and a guess (P8); see
   [bounds](../direction/jidoka-and-andon.md#bounds).
 
@@ -220,7 +234,18 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     rebased head as the next round. "Stop": saved at the rebase, so the same line goes on
     there.
   - Not restartable: the closed list `FINAL`, `not_yours` and `merged_elsewhere`. The line
-    says why. Every other stuck reason restarts, a new one included (P4).
+    says why. Every other stuck reason restarts, a new one included (P4). The restart reads
+    the ticket fresh, so a ticket a person closed ends `skip:closed` there.
+  - A person's `stop` or `no` is a saved pause, not an end (decided 2026-11-01). Today any
+    pick but the first ends `skip:owner_no` (`machine.ts:613-617`). After: it saves the lane
+    at its pick's resume step, like a stuck end, and the same line goes on there. A `no` on
+    the plan's yes resumes at plan, with the person's note in its brief; a `no` on a merge
+    or an exam merge asks that question again. Only `done`, `FINAL` and a closed ticket end a
+    lane.
+  - Each `done` fact keeps its input key (P7, decided 2026-11-01): a hash of what the step
+    read (ticket text, plan version, base, exam commit, head, brief hash, harness, model,
+    effort, settings). It goes on the `ended` fact beside the outcome. Nothing reads it to
+    skip a step yet; a key not written now can never be worked out later for an agent step.
   - `exam_touched` asks the person, with two picks. "The builder was wrong": code puts the
     touched files back at the test writer's commit, on top of the builder's head, and build
     runs there as the next round. "The test is wrong": the test writer redoes only the touched
@@ -241,7 +266,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     local branch).
   - New `packages/pipeline/src/stages/pipeline/restart.ts` and `restart.test.ts`: what may
     restart, and the carry from facts.
-  - `packages/pipeline/src/tickets/ticket.ts`: the `restarted` fact.
+  - New `packages/pipeline/src/stages/pipeline/key.ts` and `key.test.ts`: the input key.
+  - `packages/pipeline/src/tickets/ticket.ts`: the `restarted` fact, and `key` on `ended`.
   - `programs/ticket`: the row.
   - `machine.laws.test.ts`, `program.test.ts`.
   - `programs/pipeline/README.md`, `docs/how-to/run-a-pipeline-ticket.md` ("When a lane is
@@ -267,11 +293,22 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     `approve` answer removed, the restart names `decided` and asks the plan's yes again; the
     plan, triage and the test writer do not run. With the test writer's commit removed, it
     names `exam` and resumes at the test writer; triage, the plan and its yes do not run.
-- **Size.** 11 files, 800 to 1,100 lines, 8 to 11 agent hours. The biggest piece.
+  - A `stop` on `rounds_spent`, then the same line: build runs, round + 1. Today the lane
+    has ended `skip:owner_no`.
+  - A `no` on the plan's yes, then the same line: the plan runs with the note; triage does
+    not run.
+  - Law: no pick of any ask ends a lane. The only ends are `done`, a reason in `FINAL`, and
+    `skip:closed`.
+  - A ticket closed while the lane is paused: the same line ends `skip:closed` and runs no
+    step.
+  - Property test: changing any one input field changes the key, and the same inputs give the
+    same key. Every `done` the lane fixture writes has a key.
+- **Size.** 13 files, 960 to 1,360 lines, 10 to 13.5 agent hours. The biggest piece: the
+  pause adds about 60 to 100 lines, the key about 100 to 160.
 
 ## Ticket 117 restarts
 
-It can restart from its own state, once PRs 1, 3, 4 and 5 land, through PR 5's fold. Its
+It can restart from its own state, once PRs 1, 3, 4, 5 and 7 land, through PR 5's fold. Its
 saved `over` has no carry, so each field comes from a fact or from code's own commits. If no
 fact proves a field, the lane goes back to the step that writes it, and no further:
 
@@ -318,6 +355,101 @@ whose inputs can be proved runs again.
   imports it. The plan's pointers on the ticket include `old.test.ts`. Today they do not.
 - **Size.** 7 files, 200 to 300 lines, 2 to 3 agent hours.
 
+## PR 7: the lane records wide
+
+Record wide, read later (AGENTS.md, decided 2026-11-01). Each fact here exists only while a run
+happens. Nothing reads them yet.
+
+- **What.**
+  - **Each run's harness session id.** `started` gains `session`, the harness's own id for the
+    conversation. Where code names it ahead (the Agent SDK path, `BuildBrief.session`), it goes
+    on `started`. On the ACP path the agent names it when `session/new` answers (field note
+    2026-10-18-27), so code writes `started` after that answer and before the first prompt. A
+    run that crashes still has it, so a later restart can load that session.
+  - **Each run's content.** Prompts, replies, and each tool's input and result go in the run's
+    job record, in the `content` table beside its spans, the shape
+    [an agent run keeps its content](../direction/an-agent-run-keeps-its-content.md) gives. For
+    a lane's runs the mask (`mask: () => KEPT_OUT` in `agents/trace/agent.ts`) keeps the content.
+    Content stays deletable, one span at a time. Text that matches a key's shape (the leak
+    grep's patterns) is cut before it is written. Drawing it in `trace` waits.
+  - **`during` on a comment.** A `commented` fact gains `during`: the run that was live when it
+    was written, the ticket's last `started` with no `ended`. Code fills it in when the comment
+    is written; a person never types it. Missing means no run was live.
+- **Files.**
+  - `packages/pipeline/src/tickets/ticket.ts`, `tickets.ts`: `session` on `started`, `during`
+    on `commented`.
+  - `packages/pipeline/src/stages/pipeline/program.ts`: write `started` with the session.
+  - `packages/fabrika/src/agents/acp/harness.ts`: hand the session id back before the first
+    prompt.
+  - `packages/fabrika/src/agents/trace/agent.ts`: keep content for a lane's runs, with the cut.
+  - `packages/fabrika/src/host/job-record.ts`: the `content` table and its delete.
+  - Tests beside each: `ticket.test.ts`, `tickets.test.ts`, `program.test.ts`,
+    `job-record.test.ts`.
+- **Tests, red first.**
+  - A scripted ACP run: its `started` fact holds the session id the fake agent named.
+  - A person's comment written while a run is live has `during` set to that run; one written
+    with none live has no `during`.
+  - A lane run's job record holds the reply text of each turn. Today it holds `[kept out]`.
+  - A tool result holding a key-shaped string is cut before it is written.
+  - Deleting one span's content leaves the span and a row that says who deleted it and why.
+- **Size.** 10 files, 350 to 500 lines, 3.5 to 5 agent hours.
+- **How sure: 75%.** The doubt: "an agent run keeps its content" is still **proposed**. This
+  PR builds only its recording half, as record wide asks, and leaves its view open.
+
+**Checkpoint commits stay their own change**, tracker ticket 145, after ticket 117 restarts.
+They change how the builder's working copy is committed, which PRs 1 and 4 also change, so
+they land after those. What waiting loses: the builder's work between commits on the runs
+before 145 lands. Ticket 117's own working copy is whole, so its restart does not need them.
+70% sure.
+
+## PR 8: a person speaks unasked, by a comment
+
+Decided 2026-11-01 (the guidelines' clash 2). The ticket comment is the one way in.
+
+- **What.**
+  - An agent step's next turn carries the comments written since its last turn: the Check
+    loop's `continues` prompt, and the builder's next round's brief. A turn in flight is
+    never cut off.
+  - A step that has no next turn leaves the comment to the next step: its brief carries every
+    comment since the last step started, read from the ledger, as "A person said, unasked".
+  - A comment answers no ask. An ask still waits for a pick.
+  - The ticket shows each comment under the run its `during` names.
+- **Files.** `packages/pipeline/src/combos.ts` (the `continues` prompt),
+  `packages/pipeline/src/stages/pipeline/program.ts` (the briefs),
+  `programs/pipeline/briefs/build.md` and `test-writer.md` (one line each),
+  `programs/ticket` (the row), `combos.test.ts`, `program.test.ts`.
+- **Tests, red first.**
+  - A comment written while a scripted step's first draft runs: its second draft's prompt holds
+    the comment. Today it does not.
+  - A comment written between two steps: the next step's brief holds it, once.
+  - A comment written while the lane asks: the ask stays open.
+- **Size.** 7 files, 200 to 300 lines, 2 to 3 agent hours. **How sure: 75%.** The doubt: a
+  builder turn of ten minutes or more holds a comment that long.
+
+## PR 9: attention is counted, with two nudges
+
+P11, decided 2026-11-01: count now, no cap, at most two nudges.
+
+- **What.**
+  - A view, not new facts: asks per lane and minutes from ask to answer, read from `asked` and
+    `answered`, on the ticket beside the dollars. A restart's `restarted` row adds what it kept
+    and what it ran again, so the money a resume saved is a view too.
+  - An unanswered ask gets at most two nudges: a code comment on the ticket that names the ask
+    and how long it has waited, each a `nudged` fact. After the second, the window shows the
+    ask as waiting, with its age, and pings no more. The gaps are an open question below.
+  - No cap on asks. A cap that blocks needs its false alarms measured first.
+- **Files.** `packages/pipeline/src/stages/pipeline/machine.ts` (a Listen on time while
+  `asking`), `program.ts`, `packages/pipeline/src/tickets/ticket.ts` (`nudged`),
+  `programs/ticket` (the count and "waiting"), `machine.laws.test.ts`, `program.test.ts`.
+- **Tests, red first.**
+  - An ask left unanswered past both gaps: two `nudged` facts, then none, and the ask shows as
+    waiting.
+  - An answer after the first nudge: no second nudge.
+  - Law: an ask is never nudged more than twice.
+  - The ticket's count on the lane fixture: asks and minutes match its `asked` and `answered`.
+- **Size.** 6 files, 250 to 350 lines, 2.5 to 3.5 agent hours. **How sure: 60%,** the
+  guidelines' number for two nudges.
+
 ## How each pull request goes
 
 Each is a fix to the lane's own steps, so it goes by hand
@@ -328,16 +460,33 @@ touching them, the mutation step runs on a fixed-seed sample of about 150 (seed 
 same day, with what ran it. The owner's yes and green CI, then an agent merges after a leak
 grep.
 
-Total: about 48 file changes (some files change in more than one pull request), 1,890 to
-2,670 lines, 18.5 to 27 agent hours. The revision against the guidelines added about 230 to
-350 lines, most of it in PR 5.
+Total: about 74 file changes (some files change in more than one pull request), 2,880 to
+4,130 lines, 29 to 41.5 agent hours. Before ticket 117 restarts (PRs 1, 2, 3, 4, 5 and 7):
+2,230 to 3,180 lines, 22.5 to 32 agent hours. The first revision against the guidelines added
+about 230 to 350 lines, most of it in PR 5. The owner's decisions added about 990 to 1,460:
+PRs 7, 8 and 9, the pause and the key in PR 5, and the setting in PR 3.
+
+| PR | Files | Lines | Agent hours |
+|---|---|---|---|
+| 1 | 6 | 150 to 200 | 1.5 to 2 |
+| 2 | 2 to 3 | 60 to 120 | 1 to 2 |
+| 3 | 12 | 250 to 380 | 2.5 to 3.5 |
+| 4 | 10 | 460 to 620 | 4 to 6 |
+| 5 | 13 | 960 to 1,360 | 10 to 13.5 |
+| 6 | 7 | 200 to 300 | 2 to 3 |
+| 7 | 10 | 350 to 500 | 3.5 to 5 |
+| 8 | 7 | 200 to 300 | 2 to 3 |
+| 9 | 6 | 250 to 350 | 2.5 to 3.5 |
 
 ## What this plan does not do
 
 - The other rows of [the table](../direction/jidoka-and-andon.md#every-place-todays-lane-stops-or-asks):
   retries on reads, ship's sends with no route, the spend asks. One tracker ticket each, after
   ticket 117 lands.
-- Counting a person's attention as a view. The facts are there already; the view waits.
+- Checkpoint commits: tracker ticket 145, after ticket 117 restarts ([PR 7](#pr-7-the-lane-records-wide)).
+- Reading the input key to skip a step whose inputs did not change. PR 5 writes it; a later
+  ticket reads it, once restarts show how often keys match.
+- Drawing a run's content in `trace`. PR 7 records it; the view waits.
 - A box for the head's own code. The checks run as the person, as the mutation step does
   today.
 
@@ -350,19 +499,22 @@ Total: about 48 file changes (some files change in more than one pull request), 
   names the step it goes back to.
 - Whether the guessed bounds (`once`, `drafts`, 3 rounds) are right. The `step` rows will
   show the spread.
+- Whether two nudges are too many or too few. PR 9's count will say.
 
 ## Unresolved questions
 
 Settled 2026-11-01, kept for the record: restart = same line typed again; `exam_touched` asks
 with two picks and goes on from step before (P5); fold misses a field = resume at that
-field's step, never a fresh lane (P4).
+field's step, never a fresh lane (P4). Then, with the guidelines: one shared round count of 3,
+`once`, `drafts` = 3, and service `wait` with no cap (P8, leans approved); `exam_conflict` and
+its picks (P1's list of 16); input key on `done`, written in PR 5; rebase an unpushed branch,
+merge a pushed one; count attention now, no cap, at most two nudges (P11); `stop` = saved
+pause; unasked comment with `during`; red goes back by default, setting to turn off.
 
-1. One round count (3) shared by review + red checks? Lean yes, 70%. Guess (P8).
-2. `once` = one more try per intent, `drafts` = 3? Lean yes, 65%. Guesses (P8); `step` rows settle.
-3. Service `wait`: no cap on tries, tile says what it waits on? Lean yes, 60%. Doubt: a host down for hours holds the lane silently.
-4. New ask `exam_conflict`, picks "test writer again" / "stop"? Lean yes, 75%.
-5. Input hash on every `done` (P7), written in PR 5, used later? Lean yes, 70%: a key not written now is lost. Adds about 80 to 120 lines, not in sizes.
-6. Mutation skips own suite on green `checked`, skip written? Lean yes, 70%.
-7. Code formats builder's files too, not just test writer's? Lean yes, 80%.
-8. Unpushed branch on restart: rebase, not merge? Lean rebase, 85%.
-9. Attention: count now, no cap until real lanes? Lean yes, 80%.
+1. Mutation skips own suite on green `checked`, skip written? Lean yes, 70%.
+2. Code formats builder's files too, not just test writer's? Lean yes, 80%.
+3. Nudge gaps: Linear's 1 and 2 working days? Lean yes, 55%. Doubt: long for an ask that holds a lane.
+4. Nudge = code comment on ticket? Lean yes, 65%.
+5. PR 7 builds content recording from "an agent run keeps its content" (proposed), view later? Lean yes, 75%.
+6. Checkpoint commits (145) after 117 restarts, not in this plan? Lean yes, 70%.
+7. Setting name `[build] send_back`? Lean yes, 75%.

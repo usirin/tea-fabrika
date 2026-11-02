@@ -1,11 +1,13 @@
 # Jidoka and andon: the lane fixes what code can, and asks a person only to judge
 
-**Decided 2026-11-01**, the two rules in [what was decided](#what-was-decided). The details
+**Decided 2026-11-01**, the rules in [what was decided](#what-was-decided). The details
 under them are leans, each marked with how sure. Today's version (`packages/pipeline`,
 `programs/pipeline`). The plan that builds it is [pipeline-self-fix](../plan/pipeline-self-fix.md).
-Revised 2026-11-01 against the twelve principles of the note "Pipeline guidelines", with
-experiment 186, both on [PR 290](https://github.com/usirin/tea-fabrika/pull/290). A `P` number
-below is one of those principles.
+Revised 2026-11-01 against the twelve principles of
+[the pipeline guidelines](./pipeline-guidelines.md), from experiment 186, merged in
+[PR 290](https://github.com/usirin/tea-fabrika/pull/290). A `P` number below is one of those
+principles. The same day the owner decided its three clashes with Linear and "record wide"; they
+are folded in below.
 
 ```ts
 // A sketch. Where the lane goes after a build, once code has run the checks at its head.
@@ -51,6 +53,20 @@ Decided by the owner on 2026-11-01.
 - **Crash recovery is required.** A stuck or crashed lane restarts from the step that broke,
   and keeps the steps that finished. The earlier "comes back to the owner after ticket 117"
   deferral is over.
+
+Also decided by the owner on 2026-11-01, with the pipeline guidelines:
+
+- **A person's `stop` is a saved pause, not an end.** The same line goes on from the step that
+  was stopped. Only a case that is not this lane's to run, or a ticket a person closes, ends a
+  lane for good ([restart](#restart-from-the-step-that-broke)).
+- **A person may speak unasked, by a plain ticket comment.** The running step reads it at its
+  next turn, or the next step does if none is running. It never cuts a turn off. The comment's
+  fact records `during`, the run that was live, filled in by code
+  ([a person speaks unasked](#a-person-speaks-unasked)).
+- **Red goes back to the builder by default,** with a repository setting to turn it off
+  ([a skipped check never looks clean](#a-skipped-check-never-looks-clean)).
+- **Record wide, read later** (AGENTS.md). The lane records every measure it can now, read or
+  not ([what the lane records now](#what-the-lane-records-now)).
 
 ## The known way
 
@@ -100,19 +116,28 @@ type Pick = {readonly pick: string; readonly does: string; readonly resume: Lane
 const PICKS = {
 	rounds_spent: [
 		{pick: "again", does: "one more round, with what is still red", resume: "build"},
-		{pick: "stop", does: "saved; the same line goes on at build", resume: "build"},
+		{pick: "stop", does: "a saved pause; the same line goes on at build", resume: "build"},
 	],
 	spend: [ // "here": the step that ran out
 		{pick: "more", does: "the cut-off session goes on with the new limit", resume: "here"},
-		{pick: "stop", does: "saved; the same line goes on at that step", resume: "here"},
+		{pick: "stop", does: "a saved pause; the same line goes on at that step", resume: "here"},
+	],
+	approve: [
+		{pick: "approve", does: "the exam step runs", resume: "exam"},
+		{pick: "no", does: "a saved pause; the same line runs the plan again, with the note", resume: "plan"},
 	],
 	// ...one entry per kind. A kind with no picks, or a pick with no resume, does not compile.
+	// No pick ends the lane: there is no `resume: "end"` to write.
 } satisfies Record<Judgment, Picks>;
 ```
 
 - **Judgment** keeps its ask, with the reason and its picks. `exam_touched` and
   `exam_conflict` are new kinds, so the list grows from 14 to 16. Each pick says what it does and
   where the lane goes on. A `stop` pick saves its resume point too.
+- **A person's `stop` or `no` is a saved pause** (decided 2026-11-01). Today any pick but the
+  first ends the lane `skip:owner_no` (`machine.ts:613-617`). From now on it saves the lane at
+  its pick's `resume`, and the same line goes on there. A person pulls the andon cord; the line
+  does not throw the work away. A lane a person wants gone ends when they close its ticket.
 - **Machine-fixable** gets a route: run again, send back with what failed, or fix in code.
   Each route has a number on it ([bounds](#bounds)). Past the bound it becomes an ask
   (`rounds_spent`) or an andon stop.
@@ -156,6 +181,15 @@ still said `done`. Nothing in code ran the checks after it. From now on:
 - The failing tests' names are kept on the ticket: in the `ended` fact and in a comment.
 - A check skipped on purpose writes that it skipped, and what it relied on. The mutation
   step that skips its own suite run writes the `checked` fact it trusted (P9).
+- **Red goes back by default** (decided 2026-11-01, P2). A repository can turn it off in its
+  own `.fabrika/fabrika.toml`, as a team turns Linear's loop on or off. Off, the first red is
+  the ask `rounds_spent` at once, with what is red and the same two picks, so no new ask kind
+  is needed. A repository that names nothing gets the default.
+
+  ```toml
+  [build]
+  send_back = true   # the default; false asks a person on the first red
+  ```
 
 ### Restart from the step that broke
 
@@ -196,7 +230,9 @@ restart: (s, m) =>
   from the builder's rebased head, next round. "Stop": saved at the rebase, so the same line
   goes on there (P5, P6, P10).
 - **Not restartable:** `not_yours` and `merged_elsewhere`, the closed `FINAL` list. Each is a
-  person's call, and the ticket says what to do instead.
+  person's call, and the ticket says what to do instead. A restart reads the ticket fresh, so a
+  ticket a person has closed ends `skip:closed` there. Those three and `done` are the only ends
+  of a lane; a person's `stop` or `no` is a pause, and restarts like any stuck end.
 - **`exam_touched` stops the line and asks, then goes on from the step before.** The
   person picks one of two. "The builder was wrong": code puts the touched exam files back as
   the test writer's commit left them, on top of the builder's head, and build runs there as
@@ -211,6 +247,29 @@ restart: (s, m) =>
   new base, and which steps it kept and which it ran again. Data first: these facts exist only
   at the moment of the restart.
 
+### A person speaks unasked
+
+Decided 2026-11-01 (the guidelines' clash 2). A person who wants to steer a running lane writes a
+plain comment on its ticket. Linear lets a person "steer the approach" of a running session; here
+the ticket is the one way in, so nothing new opens a door into a running agent.
+
+```ts
+// A sketch. Today's `commented` fact (tickets/ticket.ts) gains one field, which code fills in.
+{type: "commented", body: "Keep the old name as an alias.", during: "r-7"}
+// `during`: the run that was live when the comment was written, read from the ticket's own
+// `started` with no `ended`. Missing: no run was live. A person never types it.
+```
+
+- **Who reads it.** The running step reads it at its next turn: an agent step's next prompt in
+  its session (its Check loop's `continues`, or the builder's next round) carries the comments
+  written since its last turn. A step with no next turn leaves it to the next step, whose brief
+  carries every comment since the last step started. A comment never cuts a turn off.
+- **What it is not.** A comment answers no ask, as today (`ticket.ts`: "A comment is never an
+  answer"). An ask still waits for a pick.
+- **Why `during` now.** What the person saw when they wrote is a fact that exists only then. A
+  "reply to this step" view is later a filter on `during`; comments written before the field
+  never get it.
+
 ### Count a person's attention
 
 - **Lean: count it now, cap it later.** Every ask is already an `asked` fact with the
@@ -219,8 +278,29 @@ restart: (s, m) =>
 - **No cap yet.** A number with no data is a guess, and a cap that blocks needs its false
   alarms measured first (Google, CACM 2018). After a few real lanes, the count says
   whether a cap is worth it. 70% sure.
+- **At most two nudges.** An unanswered ask gets at most two nudges, then shows as waiting in
+  the window, with no more pings, as Linear does for a missed project update (P11). Each nudge
+  is a `nudged` fact, so the count sees it. 60% sure; the gaps between nudges are open.
 - **A design that adds an ask says why only a person can answer it.** The `Judgment` list
   above is closed, so a new ask is a new literal, a change someone reviews.
+
+### What the lane records now
+
+Record wide, read later (AGENTS.md, and the guidelines' P11). Each of these exists only at the
+moment of the run, so a lane that does not write it loses it for good.
+
+| What | Where it goes | Built in |
+|---|---|---|
+| Each step's input key on `done` (P7) | the `ended` fact, beside its outcome | the plan's PR 5 |
+| Each run's harness session id | the run's facts, as soon as the harness names it | the plan's PR 7 |
+| Each run's content: prompts, replies, tool inputs and results | the run's job record, deletable, as [an agent run keeps its content](./an-agent-run-keeps-its-content.md) says | the plan's PR 7 |
+| `during` on a comment | the `commented` fact | the plan's PR 7 |
+| Failing test names and first error lines | `ended.failed` and a comment | the plan's PR 3 |
+| Each nudge | a `nudged` fact | the plan's PR 9 |
+| The builder's work between commits | checkpoint commits | tracker ticket 145, its own change |
+
+- **The limits** are AGENTS.md's: recording must not slow the lane in a way we can measure, and
+  it never holds a secret. Content that matches a key's shape is cut before it is written.
 
 ## Every place today's lane stops or asks
 
@@ -243,9 +323,9 @@ counts once.
 | 7 | `stuck:step_failed`: no `origin`, or it names no repo | preventable | Already refused before any agent starts. Keep. |
 | 8 | `stuck:rounds_spent`: review sent it back past round 3 | judgment | Becomes an ask, with what is open and what the rounds cost: one more round (build), or stop (saved at build). |
 | 9 | `stuck:sent_back`: a `send` with no route | preventable | A route table typed over every step's sends, so a send with no route does not compile. |
-| 10 | `ask approve`: the plan | judgment | Keep. |
-| 11 | `ask exam_merge`: the rule changes' own pull request | judgment | Keep. |
-| 12 | `ask merge`: the merge yes | judgment | Keep. |
+| 10 | `ask approve`: the plan | judgment | Keep. A `no` is a saved pause at plan: the same line runs the plan again, with the note. |
+| 11 | `ask exam_merge`: the rule changes' own pull request | judgment | Keep. A `no` is a saved pause at that ask. |
+| 12 | `ask merge`: the merge yes | judgment | Keep. A `no` is a saved pause at that ask; a person who wants it gone closes the ticket. |
 | 13 | A step's `skip` the lane cannot pass: build `closed`, `merged`; review `merged`, `closed`, `draft`; ship `closed`, `draft`, `not_ours`. Today `stuck:step_stuck` | machine-fixable | Route by meaning: a close or a draft ends `skip`, a merge reads the host fresh and ends `done` or `merged_elsewhere`. |
 | 14 | build `skip:not_ready`. Today `stuck:step_stuck` | preventable | The lane's yes writes the approval before build starts. A law shows build after `approve` never reads `not_ready`. |
 
@@ -331,8 +411,9 @@ counts once.
 
 - Four judgment rows are `over_budget` spend asks. A standing project limit, as the
   [one meter](./one-ask-and-one-meter.md) note proposes, would make most of them rare.
-- The plan builds rows 5, 8, 36, 42, 43, 44, 46, 47 and 50, plus the restart and its ask
-  `exam_conflict`. The other rows go in later pull requests, one tracker ticket each.
+- The plan builds rows 5, 8, 10, 11, 12, 36, 42, 43, 44, 46, 47 and 50, plus the restart and
+  its ask `exam_conflict`, the unasked comment, the nudges and what the lane records now. The
+  other rows go in later pull requests, one tracker ticket each.
 
 ## Why
 
@@ -354,6 +435,11 @@ counts once.
 - **65% on the other numbers in [bounds](#bounds).** `once` and `drafts` are guesses, as P8
   says. The `step` rows in `field/runs.jsonl` settle them.
 - **The same line restarting a stuck lane is decided,** 2026-11-01.
+- **Decided 2026-11-01, with the guidelines' numbers:** a person's `stop` as a saved pause, 85%;
+  a comment read at the next turn, never cutting one off, 80%; red going back by default, 70%.
+  The doubt on the last: a repository that wants a person on every red has to know the setting
+  exists.
+- **60% on two nudges.** The gaps between them are not chosen yet.
 
 ## What would change it
 
@@ -369,4 +455,6 @@ counts once.
   lanes will say.
 - Whether every row above sits in the right class. Each was read from code, not run.
 - Whether a resume keyed by place, as today, is enough once main moves. A key by the step's
-  inputs (P7, a lean) could tell; this note does not build it.
+  inputs (P7) could tell. The plan writes the key from PR 5 on; nothing reads it to skip a
+  step yet.
+- Whether a person reads a comment's effect as steering. No lane has had an unasked comment.
