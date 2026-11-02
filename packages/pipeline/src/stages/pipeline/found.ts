@@ -1,5 +1,6 @@
 import type {Ended} from "@kampus/fabrika-old";
 import {Cause} from "effect";
+import type {FactOf} from "../../tickets/ticket.ts";
 import {inert} from "../build/body.ts";
 import type {Item} from "../build/ticket.ts";
 import type {ExamChange} from "../exam/machine.ts";
@@ -134,6 +135,26 @@ export const redWords = (failed: readonly string[], tail: string, most: number):
 		...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
 		...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
 	].join("\n");
+
+/** Dollars as a person reads them. `null`: a price nobody knows, never read as free. */
+export const money = (usd: number | null) =>
+	usd === null ? "price unknown" : `$${usd.toFixed(2)}`;
+
+/**
+ * What the runs on a ticket cost so far, from their `ended` facts, at list price where a rate is
+ * known. A run whose price nobody knows is counted as unknown, so the sum never reads as free. Pure.
+ */
+export const spentWords = (ends: readonly FactOf<"ended">[]): string => {
+	const prices = ends.map((e) =>
+		e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null),
+	);
+	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
+	const total = known.reduce((sum, usd) => sum + usd, 0);
+	const unknown = prices.length - known.length;
+	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
+	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
+	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
+};
 
 /** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
 export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>

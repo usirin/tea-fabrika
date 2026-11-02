@@ -17,7 +17,6 @@ import type {AgentStep} from "../../settings.ts";
 import {
 	type CodeFact,
 	FAILED_MOST,
-	type FactOf,
 	factsOf,
 	type Outcome,
 	saidOf,
@@ -58,9 +57,11 @@ import {
 	foundWords,
 	jobsList,
 	mutantWords,
+	money,
 	redItems,
 	redWords,
 	ruleChangeLines,
+	spentWords,
 	throughWords,
 	untestedRows,
 	untestedWords,
@@ -822,24 +823,6 @@ const shipped = (at: At, pr: string) =>
 		if (end.phase !== "over") return yield* Effect.die(`the ship stopped in ${end.phase}`);
 		return end.outcome;
 	}).pipe(Effect.scoped);
-
-const money = (usd: number | null) => (usd === null ? "price unknown" : `$${usd.toFixed(2)}`);
-
-/**
- * What the runs on a ticket cost so far, from their `ended` facts, at list price where a rate is
- * known. A run whose price nobody knows is counted as unknown, so the sum never reads as free. Pure.
- */
-const spentWords = (ends: readonly FactOf<"ended">[]): string => {
-	const prices = ends.map((e) =>
-		e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null),
-	);
-	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
-	const total = known.reduce((sum, usd) => sum + usd, 0);
-	const unknown = prices.length - known.length;
-	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
-	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
-	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
-};
 
 const laneInterpret = ({send, machines}: Stages) => ({
 	lane_read: (cmd: ReturnType<typeof readFiled>) =>
