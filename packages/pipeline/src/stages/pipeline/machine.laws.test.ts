@@ -1376,6 +1376,87 @@ describe("every pick of every question goes on at the step its definition names 
 				);
 			}
 		});
+
+	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
+
+	/** Each kind as `REACH` reaches it, and the cases a kind's own words or resume differ by. */
+	const CASES: readonly (readonly [string, () => Reached])[] = [
+		...AskFor.literals.map((kind) => [kind, REACH[kind]] as const),
+		// The review sent the work back past the rounds: its `again` goes to the writer, not the build.
+		[
+			"rounds_spent, after the review",
+			() =>
+				reach(
+					"rounds_spent",
+					stoppingAt("review", {
+						outcome: {kind: "send", to: "builder", why: "review_failed"},
+						carry: {},
+					}),
+				),
+		],
+		// A build's own question: a build run again is the next round.
+		[
+			"step, at the build",
+			() =>
+				reach(
+					"step",
+					stoppingAt("build", {outcome: {kind: "ask", who: "owner", for: "still_red"}, carry: {}}),
+				),
+		],
+	];
+
+	/** A question as a person meets it: everything but its id, which counts the trail. */
+	const shown = (q: Question) => ({
+		for: q.for,
+		step: q.step,
+		what: q.what,
+		picks: q.picks,
+		call: q.call,
+	});
+
+	for (const [name, reached] of CASES)
+		it(`${name}: a question that could not be asked is asked again as it was; a step's own runs the step`, () => {
+			const {s} = reached();
+			const failed = drive(s, askPerson.err(ASK, {_tag: "unknown"}, 0), ROUTED).s;
+			expect(failed.phase, name).toBe("over");
+			const {moves} = drive(failed, RESTART, ROUTED, (at) => at.phase === "asking");
+			const start = firstStart(moves);
+			const again = moves.at(-1)?.next;
+			const went =
+				start?.type === "lane_step"
+					? {run: start.step}
+					: again?.phase === "asking"
+						? {ask: shown(again.question)}
+						: start?.type;
+			const runs = s.question.for === "step" || s.question.call !== undefined;
+			expect(went, name).toEqual(runs ? {run: s.question.step} : {ask: shown(s.question)});
+		});
+
+	for (const [name, reached] of CASES)
+		it(`${name}: each pick's line names the round the lane runs next, and no other round`, () => {
+			const {s, world} = reached();
+			const ask = s.asked;
+			expect(ask.type, name).toBe("lane_ask");
+			const lines = ask.type === "lane_ask" ? (ask.does ?? []) : [];
+			for (const [i, pick] of s.question.picks.entries()) {
+				const after = drive(s, answer(s, pick), world).moves;
+				// The pick's own turn: a pause, a step it runs, or a question it asks.
+				const turned = after.find(
+					(m) =>
+						m.next.phase === "over" ||
+						m.cmds.some((c) => c.type === "lane_step" || c.type === "lane_ask"),
+				)?.next;
+				const moves = turned?.phase === "over" ? drive(turned, RESTART, world).moves : after;
+				const start = firstStart(moves);
+				const round = start?.type === "lane_step" ? start.round : s.round;
+				const named = [...(lines[i] ?? "").matchAll(/\bround (\d+)/g)].map((m) => Number(m[1]));
+				// A line may say a round once or twice; each time, the one the lane runs.
+				expect(
+					[...new Set(named)],
+					`${name}: \`${pick}\` runs round ${round}: ${lines[i]}`,
+				).toEqual(round > s.round ? [round] : []);
+			}
+		});
 });
 
 describe("a stopped lane goes on, case by case", () => {
@@ -1539,5 +1620,42 @@ describe("a stopped lane goes on, case by case", () => {
 		expect(paused).toMatchObject({phase: "over", at: {_tag: "run", step: "build"}});
 		const ran = stepsIn(cmdsOf(drive(paused, RESTART, ROUTED).moves));
 		expect(ran[0]).toMatchObject({step: "build", round: MAX_ROUNDS + 1});
+	});
+
+	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
+
+	it("a stop before any step keeps `[build] send_back` as the line read it, and says why it stopped", () => {
+		const OFF: Msg = {type: "start", number: 7, lane: ID, sendBack: false};
+		const reading = drive(IDLE, OFF, ROUTED, (at) => at.phase === "reading").s;
+		const claiming = drive(IDLE, OFF, ROUTED, (at) => at.phase === "claiming").s;
+		const stops = {
+			read: foldUpdates<Lane, Msg, LaneCmd>(lane, reading, [
+				readFiled.err(READ, {_tag: "unknown"}, 0),
+			]).state,
+			claim: foldUpdates<Lane, Msg, LaneCmd>(lane, claiming, [
+				claimLane.err(CLAIM, {_tag: "unknown"}, 0),
+			]).state,
+		};
+		for (const [how, over] of Object.entries(stops))
+			expect(over, `the ${how} failed`).toMatchObject({
+				phase: "over",
+				said: expect.stringMatching(/\S/),
+				held: {sendBack: false},
+			});
+	});
+
+	it("a build that changed the test writer's files asks which was wrong, naming the files", () => {
+		const TOUCHED = ["src/lower.test.ts", "src/upper.test.ts"];
+		const {s} = drive(
+			IDLE,
+			START,
+			stoppingAt("build", {
+				outcome: {kind: "stuck", why: "exam_touched"},
+				carry: {touched: TOUCHED},
+			}),
+			(at) => at.phase === "asking" && at.question.for === "exam_touched",
+		);
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		for (const file of TOUCHED) expect(s.question.what).toContain(file);
 	});
 });

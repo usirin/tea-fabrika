@@ -1514,6 +1514,12 @@ describe("a stopped lane, typed again", () => {
 			expect(roundsOf(ran, "build")).toEqual([1, 2]);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(onMain(ran.remote, "src/lower.test.ts")).toContain(WRITTEN);
+			// Each build keeps the key of what it read (P7). The second read another head, so its key is another.
+			const keys = ran.facts
+				.filter((f) => f.type === "ended" && f.stage === "build")
+				.map((f) => String(f.key));
+			expect(keys, said).toHaveLength(2);
+			expect(keys[1]).not.toBe(keys[0]);
 		},
 	);
 
@@ -1555,6 +1561,16 @@ describe("a stopped lane, typed again", () => {
 			expect(roundsOf(ran, "build")).toEqual([1, 2]);
 			expect(ran.lines.at(-1)).toContain("ended: done");
 			expect(onMain(ran.remote, "src/lower.test.ts")).toContain(REDONE_MARK);
+			// The redo's rows stand in for the old ones of the files it wrote again: no test is listed twice.
+			const redone = ran.facts
+				.filter((f) => f.type === "ended" && f.stage === "test_writer")
+				.at(-1);
+			const {written} = Schema.decodeUnknownSync(
+				Schema.Struct({written: Schema.Struct({tests: Schema.Array(Schema.Unknown)})}),
+			)(redone?.carry);
+			expect(written.tests).toEqual([
+				{property: "p1", file: "src/lower.test.ts", name: "lowers capitals"},
+			]);
 		},
 	);
 
@@ -1583,6 +1599,9 @@ describe("a stopped lane, typed again", () => {
 			// The file exists on main, so the test writer must be let write it again: not a new file beside it.
 			const checks = ran.onBase.filter((c) => c.line === 1);
 			expect(checks[0]?.files, said).toEqual(["src/lower.test.ts"]);
+			// Main's side of the conflicted file stands, so the test writer starts from main's version.
+			const writers = codexRuns(ran.dir).filter((r) => r.step === "tests");
+			expect(writers[1]?.seen["src/lower.test.ts"], said).toContain("lowers on main");
 			const redo = checks[0]?.commit ?? "";
 			expect(changedBy(ran, redo)).toEqual(["src/lower.test.ts"]);
 			expect(holds(ran, redo, "src/lower.ts")).toBe(false);
@@ -1627,6 +1646,49 @@ describe("a stopped lane, typed again", () => {
 				}
 			})();
 			expect(under, `${head} is not under main`).toBe(true);
+		},
+	);
+
+	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
+
+	it(
+		"main changes the builder's file while the lane is stuck: main's side stands, and the build runs again from it",
+		{timeout: 300_000},
+		async () => {
+			const MAIN_LOWER =
+				"// Written on main.\nexport function lower(name: string): string {\n\treturn name.toLowerCase();\n}\n";
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				fake: {see: SEE},
+				again: [
+					{
+						between: (where) =>
+							Effect.sync(() => pushToMain(where, [{path: "src/lower.ts", text: MAIN_LOWER}])),
+					},
+				],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const builds = codexRuns(ran.dir).filter((r) => r.step === "build");
+			expect(builds, said).toHaveLength(2);
+			expect(builds[1]?.prompt).toContain("src/lower.ts");
+			expect(builds[1]?.seen["src/lower.ts"], said).toContain("Written on main.");
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a stop no line restarts, typed again: the line says it is a person's call, and restarts nothing",
+		{timeout: 60_000},
+		async () => {
+			const ran = await lane({writer: "user:someone", again: [{}]});
+			const again = secondLine(ran);
+			expect(again, ran.lines.join("\n")).toContain("a person's call");
+			expect(again).not.toMatch(/restart: #\d+ from/);
+			expect(ran.stages).toEqual([]);
+			expect(ran.lines.at(-1)).toMatch(/not_yours/);
 		},
 	);
 });

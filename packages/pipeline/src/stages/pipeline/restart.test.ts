@@ -4,6 +4,7 @@ import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {make} from "../../entity.ts";
 import {LaneId} from "../../ids.ts";
+import {Entry} from "../../tickets/ticket.ts";
 import {HeldDraft} from "../plan/plan.ts";
 import {claimLane, EMPTY, freshMain, Lane, type LaneCmd, lane, readFiled} from "./machine.ts";
 import {LANE_NAMES} from "./outcome.ts";
@@ -115,6 +116,76 @@ describe("the fold of a lane's facts", () => {
 		const folded = fold({...SEEN, commits: SEEN.commits.filter((c) => c.by !== "test_writer")});
 		expect(folded.missing).toContain("exam");
 		expect(folded.at).toEqual({_tag: "run", step: "test_writer"});
+	});
+
+	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
+	const decodeEntry = Schema.decodeUnknownSync(Entry);
+
+	it("with no working copy to read a base from, it names `base` and goes on at the test writer", () => {
+		const folded = fold({...SEEN, base: null});
+		expect(folded.missing).toContain("base");
+		expect(folded.at).toEqual({_tag: "run", step: "test_writer"});
+	});
+
+	it("a second answer to a question already answered changes nothing: the first is the one the lane took", () => {
+		const last = TIMELINE.at(-1);
+		if (last === undefined) throw new Error("the timeline is empty");
+		const late = decodeEntry({
+			...last,
+			pos: last.pos + 1,
+			by: OWNER,
+			fact: {type: "answered", ask: "a-approve-3", pick: "no", note: "On second thought, no."},
+		});
+		expect(fold({...SEEN, timeline: [...SEEN.timeline, late]})).toEqual(fold(SEEN));
+	});
+
+	it("a `go_on` the person gave lets through what the step could not test, as the lane did", () => {
+		const ROW = {when: "a name has no letters", why: "no test can build such a name"};
+		const writer = SEEN.timeline.findIndex(
+			(e) => e.fact.type === "started" && e.fact.stage === "test_writer",
+		);
+		const more: readonly (readonly [unknown, Readonly<Record<string, unknown>>])[] = [
+			[LANE, {type: "started", run: "r4", stage: "test_writer", task: null, log: null}],
+			[
+				LANE,
+				{
+					type: "ended",
+					run: "r4",
+					stage: "test_writer",
+					outcome: {kind: "ask", who: "owner", for: "cannot_test"},
+					usd: 0,
+					input: 0,
+					output: 0,
+					turns: 1,
+					carry: {cannot: [ROW]},
+				},
+			],
+			[
+				LANE,
+				{
+					type: "asked",
+					ask: "a-step-9",
+					what: "No test can check it.",
+					picks: ["again", "go_on", "stop"],
+				},
+			],
+			[OWNER, {type: "answered", ask: "a-step-9", pick: "go_on", note: ""}],
+		];
+		const timeline = [
+			...SEEN.timeline.slice(0, writer),
+			...more.map(([by, fact], i) =>
+				decodeEntry({
+					pos: writer + i + 1,
+					ticket: 7,
+					by,
+					at: 1_762_000_000_000 + (writer + i) * 1_000,
+					fact,
+				}),
+			),
+		];
+		const {carry} = fold({...SEEN, timeline}).held;
+		expect(carry.untested).toEqual([ROW]);
+		expect(carry.cannot ?? []).toEqual([]);
 	});
 });
 
