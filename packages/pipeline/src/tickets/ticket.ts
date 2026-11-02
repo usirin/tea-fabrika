@@ -91,18 +91,29 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Failed = Schema.Array(Schema.String).check(Schema.isMaxLength(FAILED_MOST));
 
 /**
+ * One command of code's checks, as it ran. `command`: as the settings say it, `{out}` and all, so no
+ * path from the machine that ran it. `code`: its exit code; `null` when it could not start or ran past
+ * its time. `ms`: how long it took, both tries of one that could not start at first.
+ */
+const CommandRun = Schema.Struct({
+	command: Schema.String,
+	code: Schema.NullOr(Schema.Int),
+	ms: Count,
+});
+
+/**
  * Code's own run of `[build] checks` at a head, after a build (docs/plan/pipeline-self-fix.md, PR 4).
- * `commands`: as the settings say them, `{out}` and all, so no path from the machine that ran them.
  * `failed`: each failing test by name, when a command wrote vitest's report. `not_run`: a command
- * could not start, after one more try, so nothing says whether the head holds. Never read as green.
- * The lane and the mutation step hand it on with any head; on the ticket the head is a sha.
+ * could not start, after one more try, or ran past its time, so nothing says whether the head holds.
+ * Never read as green. The lane and the mutation step hand it on with any head; on the ticket the
+ * head is a sha.
  *
- *   {head: "7a41…", commands: ["vitest run --reporter=json --outputFile={out}"], result: "red",
- *    failed: ["src/clamp.test.ts > clamp > keeps a high number"]}
+ *   {head: "7a41…", result: "red", failed: ["src/clamp.test.ts > clamp > keeps a high number"],
+ *    commands: [{command: "vitest run --reporter=json --outputFile={out}", code: 1, ms: 41250}]}
  */
 export const Checked = Schema.Struct({
 	head: Schema.String,
-	commands: Schema.Array(Schema.String),
+	commands: Schema.Array(CommandRun),
 	result: Schema.Literals(["green", "red", "not_run"]),
 	failed: Failed,
 });

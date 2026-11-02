@@ -309,7 +309,7 @@ const propertiesOf = (carry: Carry, round: number) => {
  * them: the `checked` fact, and on red, a comment with each failing test by name and the first lines
  * of why. Both exist only now. The carry gets `checked`; the run's own words come back beside it.
  */
-const checksAt = (at: At, head: string) =>
+const recordChecks = (at: At, head: string) =>
 	Effect.gen(function* () {
 		const tickets = yield* Tickets;
 		const ran = yield* (yield* CheckRunner).run(head);
@@ -345,7 +345,7 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string) =>
 	Effect.gen(function* () {
 		const {round} = at.cmd;
 		const head = yield* need(kept.head, "no head to run the checks at");
-		const {checked, ran} = yield* checksAt(at, head);
+		const {checked, ran} = yield* recordChecks(at, head);
 		const carry = {...kept, checked};
 		if (checked.result === "not_run")
 			return ended({kind: "stuck", why: "checks_not_run"}, carry, [
@@ -371,7 +371,7 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string) =>
 const builtAndChecked = (at: At, built: BodyEnd) =>
 	Effect.gen(function* () {
 		const head = yield* need(built.carry.head, "no head to run the checks at");
-		const {checked, ran} = yield* checksAt(at, head);
+		const {checked, ran} = yield* recordChecks(at, head);
 		const carry = {...built.carry, checked};
 		switch (checked.result) {
 			case "green":
@@ -707,7 +707,7 @@ const bodies = {
 				files.length === 0 ? null : yield* formatExam(at.cmd.number, tree.tree, files);
 			const next = formatted ?? commit ?? head;
 			// A new head needs green checks of its own before the review reads it: the build's were not at it.
-			const checked = next === head ? {} : {checked: (yield* checksAt(at, next)).checked};
+			const checked = next === head ? {} : {checked: (yield* recordChecks(at, next)).checked};
 			const answers = end.report.answered?.answers ?? [];
 			return ended(
 				end.outcome,

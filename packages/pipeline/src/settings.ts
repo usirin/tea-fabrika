@@ -20,6 +20,7 @@ import {parse, TomlError} from "smol-toml";
 //   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
 //   checks = [["npm", "test"]]        # code runs these at the head after every build; the builder is
 //                                     # told them too. With {out}, vitest's report names each test that fails
+//   checks_within = 2400              # whole seconds each check may run; past it, the checks did not run
 //   send_back = true                  # a red head goes back to the builder; false asks a person at once
 //
 //   [test_writer]
@@ -143,6 +144,13 @@ const Agent = Schema.Struct({
 	usd: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
 });
 
+/**
+ * How long one of `[build] checks` may run when `checks_within` is left out, in seconds: twice the
+ * slowest full test run measured on this repository, about 20 minutes (CI shard "test (3)",
+ * 2026-11-02).
+ */
+export const CHECKS_WITHIN = 2400;
+
 /** A command as its words, the program first: run as it is, never by a shell. */
 const Command = Schema.NonEmptyArray(Word);
 
@@ -155,6 +163,11 @@ const Build = Schema.Struct({
 	 * told them without it.
 	 */
 	checks: Schema.optionalKey(Schema.Array(Command)),
+	/**
+	 * How long each of `checks` may run, in whole seconds. One that runs past it is stopped, with all it
+	 * started, and the checks are not run. Left out: `CHECKS_WITHIN`.
+	 */
+	checks_within: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
 	/** A head whose own tests fail goes back to the builder, a round at a time. `false`: a person is asked at once. */
 	send_back: Schema.optionalKey(Schema.Boolean),
 });
@@ -258,7 +271,8 @@ const File = Schema.Struct({
 			review: Schema.optionalKey(Agent),
 		}),
 	),
-	build: Schema.optionalKey(Build),
+	// `undefined` reads as left out: a reader that rebuilds the table may hand it on as it found it.
+	build: Schema.optional(Build),
 	test_writer: Schema.optionalKey(TestWriterTable),
 	mutation: Schema.optionalKey(MutationTable),
 	format: Schema.optionalKey(FormatTable),

@@ -20,6 +20,7 @@ const lane = outcomesOf({
 	 * `step_stuck`: a step ended stuck. `rounds_spent`: review kept sending it back.
 	 * `sent_back`: a step sent it somewhere this lane has no way to go. `checks_not_run`: code's checks
 	 * after the build could not run at its head, or a step after build had no green ones there.
+	 * `checks_red`: code's checks failed at a head no builder goes back to, the mutants job's commit.
 	 */
 	stuck: [
 		"not_yours",
@@ -30,6 +31,7 @@ const lane = outcomesOf({
 		"rounds_spent",
 		"sent_back",
 		"checks_not_run",
+		"checks_red",
 	],
 });
 

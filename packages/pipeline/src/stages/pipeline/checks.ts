@@ -1,7 +1,8 @@
 import {homedir} from "node:os";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
-import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
+import {cutKeys} from "@kampus/fabrika-old/agents/trace";
+import {Context, Duration, Effect, FileSystem, Layer, Option, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild} from "../../child.ts";
 import type {Checked} from "../../tickets/ticket.ts";
@@ -15,11 +16,13 @@ import {failuresOf, Report} from "../test-writer/results.ts";
 //   one exits non-zero                         red: each failing test by name where `{out}` has
 //                                              vitest write its JSON report, else its last 40 lines
 //   one cannot start, and again on one more    not_run: nothing says whether the head holds, so it
-//   try                                        is never green
+//   try, or runs past `within`                 is never green. A command that hangs is not tried again
 //
-// Each command runs in the head's own copy, under `nice -n 15`, with `runEnv`: no login in reach.
-// `commands` keeps each as the settings say it, `{out}` and all, and `tail` has the copy's folder
-// as `.` and the home as `~`: both go on a public ticket.
+// Each command runs in the head's own copy, as the settings write it (with their own `nice`), with
+// `runEnv`: no login in reach. `{out}` is a file in a folder of its own outside the copy, gone after
+// the run, so the copy holds nothing new and a second run at the same head sees what the first did.
+// `commands` keeps each as the settings say it, `{out}` and all, with its exit code and time. `tail`
+// has the copy's folder as `.`, the home as `~` and each key cut: it goes on a public ticket.
 
 type Command = readonly [string, ...string[]];
 
@@ -36,16 +39,22 @@ export interface CheckSetup {
 	/** Where `head` is checked out: its own copy. */
 	readonly folder: (head: string) => string;
 	readonly commands: readonly Command[];
+	/** How long each command may run. Past it, it is stopped with all it started: `not_run`. */
+	readonly within: Duration.Duration;
 }
 
 /** The last lines a red command with no test named shows. */
 const TAIL_LINES = 40;
+
+/** How long a stopped command's processes have after SIGTERM before SIGKILL. */
+const KILL_AFTER = Duration.seconds(5);
 
 /** What one command did: as `Checked` reads it, with its failing tests and why. */
 type Did = {
 	readonly result: Checked["result"];
 	readonly failed: readonly string[];
 	readonly why: string;
+	readonly ran: Checked["commands"][number];
 };
 
 /** Every command's result as one: any not run is not run, else any red is red. Pure. */
@@ -56,15 +65,24 @@ const worst = (did: readonly Did[]): Checked["result"] =>
 			? "red"
 			: "green";
 
+/** Text that goes on a public ticket: the copy as `.`, the home as `~`, and no key. Pure. */
+export const publicText = (text: string, folders: readonly string[] = []): string =>
+	cutKeys(
+		tidyPaths(
+			folders.reduce((out, folder) => tidyPaths(out, folder, ""), text),
+			"",
+			homedir(),
+		),
+	);
+
 const checksAt = (setup: CheckSetup, head: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-		const commands = setup.commands.map((command) => command.join(" "));
 		const ran = (did: readonly Did[]): CheckRun => ({
 			head,
-			commands,
+			commands: did.map((d) => d.ran),
 			result: did.length === 0 ? "not_run" : worst(did),
 			failed: did.flatMap((d) => d.failed),
 			tail: did
@@ -86,28 +104,61 @@ const checksAt = (setup: CheckSetup, head: string) =>
 				tail: `The copy of ${head} could not be read, so no check ran there.`,
 			};
 		const folder = real.success;
-		const low = (words: readonly string[]): Effect.Effect<Exited> =>
+		/** One try, stopped with all it started past `within`. `None`: it ran past. */
+		const once = ([file, ...args]: readonly string[]): Effect.Effect<Option.Option<Exited>> =>
 			Effect.provideService(
-				runChild("nice", ["-n", "15", ...words], {cwd: folder, env: runEnv()}),
+				runChild(file ?? "", args, {cwd: folder, env: runEnv(), forceKillAfter: KILL_AFTER}),
 				ChildProcessSpawner.ChildProcessSpawner,
 				spawner,
-			);
+			).pipe(Effect.timeoutOption(setup.within));
 		/** One command, and once more if it could not start (`once`, a guess: docs/direction/jidoka-and-andon.md#bounds). */
-		const one = (command: Command, at: number) =>
+		const one = (command: Command) =>
 			Effect.gen(function* () {
-				const out = path.join(folder, `.checks-report-${at}.json`);
-				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
-				const words = command.map((word) => word.replaceAll("{out}", out));
-				const first = yield* low(words);
-				const exited = NOT_STARTED.has(first.code) ? yield* low(words) : first;
-				const output = `${exited.out}${exited.err}`;
-				if (NOT_STARTED.has(exited.code))
+				const said = command.join(" ");
+				const reports = yield* Effect.result(
+					fs.makeTempDirectoryScoped({prefix: "checks-report-"}),
+				);
+				if (reports._tag === "Failure")
 					return {
 						result: "not_run",
 						failed: [],
-						why: `\`${command.join(" ")}\` could not start: ${output.trim().slice(0, 300)}`,
+						why: `\`${said}\` did not run: no folder could be made for its report.`,
+						ran: {command: said, code: null, ms: 0},
 					} satisfies Did;
-				if (exited.code === 0) return {result: "green", failed: [], why: ""} satisfies Did;
+				const out = path.join(reports.success, "report.json");
+				const words = command.map((word) => word.replaceAll("{out}", out));
+				const [took, exited] = yield* Effect.timed(
+					Effect.gen(function* () {
+						const first = yield* once(words);
+						return Option.isSome(first) && NOT_STARTED.has(first.value.code)
+							? yield* once(words)
+							: first;
+					}),
+				);
+				const ms = Math.round(Duration.toMillis(took));
+				if (Option.isNone(exited))
+					return {
+						result: "not_run",
+						failed: [],
+						why: `\`${said}\` timed out: it ran past ${Duration.format(setup.within)}, and was stopped with all it started.`,
+						ran: {command: said, code: null, ms},
+					} satisfies Did;
+				const {code} = exited.value;
+				const output = `${exited.value.out}${exited.value.err}`.replaceAll(out, "{out}");
+				if (NOT_STARTED.has(code))
+					return {
+						result: "not_run",
+						failed: [],
+						why: `\`${said}\` could not start: ${output.trim().slice(0, 300)}`,
+						ran: {command: said, code: null, ms},
+					} satisfies Did;
+				if (code === 0)
+					return {
+						result: "green",
+						failed: [],
+						why: "",
+						ran: {command: said, code, ms},
+					} satisfies Did;
 				// A report that is missing or does not read names none: it never turns red into green.
 				const failures = command.some((word) => word.includes("{out}"))
 					? yield* fs.readFileString(out).pipe(
@@ -120,16 +171,14 @@ const checksAt = (setup: CheckSetup, head: string) =>
 					result: "red",
 					failed: failures.map((f) => f.name),
 					why: whyRed(failures, output, TAIL_LINES),
+					ran: {command: said, code, ms},
 				} satisfies Did;
-			});
+			}).pipe(Effect.scoped);
 		// One at a time, in the order written: each runs the whole suite in the same copy.
 		const did = yield* Effect.forEach(setup.commands, one, {concurrency: 1});
 		const checked = ran(did);
 		// The real folder and the one asked for: a temp folder is a link on macOS.
-		return {
-			...checked,
-			tail: tidyPaths(tidyPaths(checked.tail, folder, ""), asked, homedir()),
-		};
+		return {...checked, tail: publicText(checked.tail, [folder, asked])};
 	});
 
 /** `CheckRunner` on this machine, with Effect's platform services as `@effect/platform-node` gives them. */

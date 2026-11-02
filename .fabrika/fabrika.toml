@@ -12,6 +12,9 @@ checks = [
 	["nice", "-n", "15", "pnpm", "lint"],
 	["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3", "--reporter=json", "--outputFile={out}"],
 ]
+# Each check may run this many seconds, then it is stopped and the checks did not run. Twice the
+# slowest full test run measured here, about 20 minutes: CI shard "test (3)", 2026-11-02.
+checks_within = 2400
 
 [test_writer]
 includes = ["**/*.test.ts"]

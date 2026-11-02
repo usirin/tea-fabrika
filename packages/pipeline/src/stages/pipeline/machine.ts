@@ -34,7 +34,8 @@ import {LaneOutcome} from "./outcome.ts";
 // decides nothing. Red goes back to the build, a round up, with each failing test open: so does a
 // head the mutation step finds red. Checks that could not run end the lane `stuck:checks_not_run`.
 // No step after build runs on a head without green checks code ran at that very head: the carry's
-// `checked` says which head they were at, and `running` is the one place a step starts.
+// `checked` says which head they were at, and `running` is the one place a step starts. Red there,
+// as at the mutants job's commit, ends the lane `stuck:checks_red`; none, or not run, `checks_not_run`.
 //
 // A review's finding goes to the test writer, a round up. Both count in the same rounds, and once
 // `MAX_ROUNDS` are spent a person is asked `rounds_spent`: `again` runs one more round, `stop` ends
@@ -581,9 +582,15 @@ const asking = (s: Held, question: Question): Step_ => {
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
 };
 
-/** Green checks code ran at the carry's own head: what every step after build needs. Pure. */
-const checkedHere = ({head, checked}: Carry): boolean =>
-	checked !== undefined && checked.result === "green" && checked.head === head;
+/**
+ * Why a step after build may not run on the carry's head. `null`: code's checks there are green, what
+ * every step after build needs. Red ones there are red; any other, or none, did not run. Pure.
+ */
+const uncheckedAt = ({head, checked}: Carry): "checks_red" | "checks_not_run" | null => {
+	if (checked === undefined || checked.head !== head) return "checks_not_run";
+	if (checked.result === "green") return null;
+	return checked.result === "red" ? "checks_red" : "checks_not_run";
+};
 
 /** Why a step after build does not run, in words. Pure. */
 const uncheckedWords = (step: LaneStep, {head, checked}: Carry): string => {
@@ -597,9 +604,10 @@ const uncheckedWords = (step: LaneStep, {head, checked}: Carry): string => {
 
 /** The one place a step starts: one after build only on a head with green checks there. */
 const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
-	if (AFTER_BUILD.has(step) && !checkedHere(s.carry))
+	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
+	if (unchecked !== null)
 		return releasing(s, {
-			outcome: {kind: "stuck", why: "checks_not_run"},
+			outcome: {kind: "stuck", why: unchecked},
 			said: uncheckedWords(step, s.carry),
 		});
 	const at: Held = {...s, count: s.count + 1, round};
