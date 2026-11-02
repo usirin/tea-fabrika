@@ -16,12 +16,16 @@ import {table} from "./screen.ts";
 
 const TONES = ["strong", "muted", "faint", "accent", "warning", "plain"] as const;
 
+/** A column headed by a tone's name. */
+const column = (tone: (typeof TONES)[number]) => ({header: tone, align: "left" as const});
+
 /** One row with a cell in each tone, so every tone the palette has is printed. */
 const everyTone: Shell.Table = {
 	title: "Experiments",
 	note: "newest first",
 	total: 1,
-	columns: TONES.map((tone) => ({header: tone, align: "left" as const})),
+	// The first column written out, so the list is never empty, as a table's columns must not be.
+	columns: [column("strong"), ...TONES.slice(1).map(column)],
 	cut: 0,
 	rows: [TONES.map((tone) => ({text: `${tone}-cell`, tone}))],
 	hints: [{line: "experiments --all", for: "for every row"}],
