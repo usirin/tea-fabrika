@@ -821,7 +821,7 @@ describe("info mode", () => {
 		// No mode and nothing over the desk: Escape is not the frame's, and goes on to the tile.
 		expect(frameUpdate(FRAME, escape)).toBe(FRAME);
 		expect(frameUpdate(off, escape)).toBe(off);
-		expect(side(on, "right")).toMatch(/esc leaves$/);
+		expect(side(on, "right")).toMatch(/^esc leaves · /);
 	});
 
 	// At 1024 wide the explanation was cut off: the right side never shrinks (`flex: none`), so the
@@ -830,11 +830,27 @@ describe("info mode", () => {
 	// one would drop focus.
 	it("keeps the right side's items while something is explained", () => {
 		const right = side(on, "right");
-		expect(right).toMatch(/ info · .* keys · esc leaves$/);
+		expect(right).toMatch(/^esc leaves · .* info · .* keys$/);
 		expect(side(explaining(INFO.info), "right")).toBe(right);
 		expect(side(explaining(INFO.keys), "right")).toBe(right);
 		expect(side(FRAME, "right")).not.toContain("esc leaves");
 		expect(side(off, "right")).not.toContain("esc leaves");
+	});
+
+	// The right side is pinned to the window's right edge, so a word added after the items would push
+	// them left: the info item would jump as the mode comes on, and a second click there would land
+	// on keys. The way out goes first, so the items stay put (checked in pixels in e2e.ts).
+	it("puts the way out first on the right while it is on, so the items after it stay put", () => {
+		const right = (frame: Frame) => {
+			const html = line(frame);
+			return html.slice(html.indexOf('<div class="right">') + '<div class="right">'.length);
+		};
+		expect(right(on)).toMatch(/^<span class="quiet">esc leaves<\/span>/);
+		expect(right(explaining(INFO.keys))).toMatch(/^<span class="quiet">esc leaves<\/span>/);
+		// The items' own words end the line the same, on or off.
+		const items = side(FRAME, "right");
+		expect(side(on, "right").endsWith(items)).toBe(true);
+		expect(side(off, "right")).toBe(items);
 	});
 
 	// The ARIA APG's toggle button: a name that stays, and `aria-pressed` for the state. A name that

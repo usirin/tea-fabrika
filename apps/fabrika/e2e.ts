@@ -481,11 +481,14 @@ const infoMode = async (page: Page) => {
 };
 
 /**
- * Info mode in a small window, 1024 by 700: explaining its own item, the longest part's words, the
- * bottom line's left side is not cut off. The right side never shrinks and keeps its items, so an
- * explanation that does not fit wraps onto a second line, and the bottom line grows to hold it. No
- * width or height is guessed: each box is checked against the one it sits in. The window goes back
- * to its size after.
+ * Info mode in a small window, 1024 by 700. The host item's words are among the longest a part has,
+ * and always on screen: explained, they wrap onto a second line and are not cut off. The right side
+ * never shrinks and keeps its items. While the mode is on, the bottom line keeps one height, so the
+ * desk is the same height for a short explanation and a long one, and no terminal refits as the
+ * pointer or focus moves. The way out goes first on the right, so the info item is where it was
+ * before the mode came on, and a second click there turns it off. No width or height is guessed:
+ * each box is checked against the one it sits in, or against itself at another moment. The window
+ * goes back to its size after.
  */
 const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 	const was = await app.evaluate(({BrowserWindow}) => {
@@ -500,12 +503,45 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
 		(size) => size === "1024x700",
 	);
-	const item = infoItem(page);
-	const words = (await item.getAttribute("data-info")) ?? "info:";
-	await item.focus();
+	/** Where the info item is now, in the window. */
+	const itemAt = async () => {
+		const box = await infoItem(page).boundingBox();
+		return box === null ? null : {x: box.x, y: box.y};
+	};
+	/** How tall the desk's workspace is now: it gives the bottom line whatever room it takes. */
+	const deskHeight = () =>
+		page.locator(".workspace").evaluate((el) => el.getBoundingClientRect().height);
+	const off = await itemAt();
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	const on = await itemAt();
+	const hint = await deskHeight();
+	check(
+		"at 1024 by 700, the info item is where it was before the mode came on",
+		off !== null && on !== null && off.x === on.x && off.y === on.y,
+		{off, on},
+	);
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	await keys.focus();
+	await explained(page, (await keys.getAttribute("data-info")) ?? "keys:");
+	const short = await deskHeight();
+	const host = page.locator(HOST);
+	const words = (await host.getAttribute("data-info")) ?? "host:";
+	await host.focus();
 	await explained(page, words);
+	const long = await deskHeight();
+	check(
+		"at 1024 by 700, the desk keeps its height from the hint to a short explanation to a long one",
+		hint === short && short === long,
+		{hint, short, long},
+	);
+	const explaining = await itemAt();
+	check(
+		"and the info item stays put while a long explanation wraps",
+		off !== null && explaining !== null && off.x === explaining.x && off.y === explaining.y,
+		{off, explaining},
+	);
 	const seen = await bottomLine(page).evaluate((line, said) => {
 		/** Every rect of `el` lies inside `box`. */
 		const inside = (el: Element, box: DOMRect) =>
@@ -523,6 +559,7 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 			return {
 				found: false,
 				full: false,
+				wraps: false,
 				wide: false,
 				tall: false,
 				infoIn: false,
@@ -532,6 +569,7 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 		return {
 			found: true,
 			full: (info.textContent ?? "").includes(said),
+			wraps: info.getClientRects().length > 1,
 			wide: left.scrollWidth <= left.clientWidth,
 			tall: left.scrollHeight <= left.clientHeight,
 			infoIn: inside(info, left.getBoundingClientRect()),
@@ -540,8 +578,8 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 		};
 	}, words);
 	check(
-		"at 1024 by 700, info mode's own item is explained in full: the left side is not cut off",
-		seen.found && seen.full && seen.wide && seen.tall && seen.infoIn,
+		"at 1024 by 700, the host item is explained in full: it wraps, and the left side is not cut off",
+		seen.found && seen.full && seen.wraps && seen.wide && seen.tall && seen.infoIn,
 		seen,
 	);
 	check(
