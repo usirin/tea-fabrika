@@ -102,28 +102,33 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   ship ends `stuck: merge_unknown`, so the lane ends `stuck: step_stuck`. It does not wait and look again.
 - **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
   Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
-  `stuck: sent_back`. Then typing the line again only says how it ended. The pull request and its branch
-  stay open and nothing more runs. Inside a live run nothing but ship merges. Once a lane is finished and
-  stuck, what is left is a by-hand change, under the by-hand rule: the owner's yes, green CI, and an agent
-  merges after a leak grep. The other choice is a new ticket.
+  `stuck: sent_back`. The pull request and its branch stay open. Typing the line again restarts the lane
+  at the step that stopped, after a fresh read of main (see "A stopped lane goes on" below). Inside a live
+  run nothing but ship merges.
 - **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
   `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
   is a new pull request.
 - **A merge ship finds already done shows as GitHub reads it.** The ticket's `pr` fact holds the head that
   merged and its checks as they read. At the head the lane judged, the lane ends `done`: it cannot tell
   its own merge with a lost answer from a person's merge of that head, so red checks there show as red.
-  At another head, the merge step ends `stuck: merged_elsewhere`, so the lane ends `stuck: step_stuck`,
-  and the ticket says both heads.
+  At another head, the merge step ends `stuck: merged_elsewhere`, and so does the lane, which never
+  restarts from it. The ticket says both heads.
 
 ## What it holds to
 
 - **A ticket must be yours.** One filed by someone else is refused before any agent starts.
-- **No agent approves.** The lane asks a person four kinds of question, each answered in the ticket
-  window: `approve` (the plan), `exam_merge` (the exam's own pull request), `merge` (the merge yes), and
-  `step` (a step ended on `ask`, and may be run again). Merge is `ship`, with its guards.
+- **No agent approves.** The lane asks a person seven kinds of question, each answered in the ticket
+  window: `approve` (the plan), `exam_merge` (the exam's own pull request), `merge` (the merge yes),
+  `step` (a step ended on `ask`, and may be run again), `rounds_spent` (the rounds are used up),
+  `exam_touched` (the builder changed the test writer's files) and `exam_conflict` (main changed them
+  while the lane was stopped). Merge is `ship`, with its guards.
 - **The builder cannot touch the exam.** A change to a file the test writer's commits touched, or to
-  a rule file, ends the build in `stuck: exam_touched`, so the lane ends `stuck: step_stuck`, and the
-  ticket says so.
+  a rule file, ends the build in `stuck: exam_touched`. Its work is held as a commit of its own, and the
+  lane asks the person which side was wrong. `builder_wrong` puts those files back as the test writer
+  wrote them, on top of that work, and the build runs there. `test_wrong` has the test writer write only
+  those files again, with the person's note, on its own commit; its check runs, and the build goes on
+  from the builder's work with the new files. Either pick is the next round, and adds one round to the
+  bound, as a spent round's `again` does.
 - **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
 - **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
@@ -132,7 +137,26 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 - **A later round with no change is a question.** The person picks whether the work goes on as it is,
   with code's checks still ahead of it, or the lane stops. A first round with no change stays stuck.
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
-- **A stuck lane is final.** Typing the line again says how it ended, and runs nothing.
+- **A stopped lane goes on.** A stop saves what the lane held and the step it goes on at. Typing the
+  same line again claims the ticket, reads the ticket and main fresh, and goes on at that step: no step
+  that ended done runs again. If main moved, a branch never pushed is rebased onto it: the test writer's
+  commit first, where its check runs again, then the builder's. A pushed one has main merged in, so the
+  pushed head stays under it; that new head is one no review read, so the review and the push run again
+  before a merge. The ticket gets a `restarted` row with main's old and new commit, the lane's head
+  before and after, and the files where main's side won. A lane that goes on at a step after the build
+  with no green checks at its head gets code's checks there first: red sends the build round again, or
+  asks once the rounds are spent. A build whose checks could not run goes on at those checks, never the
+  builder. A file that conflicts keeps main's side: a test writer's file, or a test whose
+  check no longer holds on main, asks `exam_conflict`, whose `again` has the test writer write only those
+  files again; any other file sends the build round again. A lane saved before this change goes on
+  from what the ticket's facts prove (`stages/pipeline/restart.ts`); one that goes on before the test
+  writer starts its branch again from main, with the old head kept under the ref `restarted` names.
+  A ticket that cannot be read then stops the lane `stuck: step_failed`.
+- **A person's `no` or `stop` pauses.** It ends the line `ask: owner: paused` (or `stuck: rounds_spent`
+  for a stop on the spent rounds), saved where the pick goes on. A `no` on the plan writes it again with
+  the person's note; a `no` on a merge asks again; a `stop` on the rounds runs the build as the next round.
+- **Some ends are final.** `done`, `skip` (closed, research, a no at triage), and `stuck: not_yours`.
+  Typing the line again on one says how it ended, and runs nothing.
 
 ## What's in it
 

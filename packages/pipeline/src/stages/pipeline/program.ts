@@ -7,26 +7,33 @@ import {
 	type RefsOf,
 	type Send,
 } from "@kampus/fabrika-old";
-import {Clock, Effect, Exit, Ref, Schema, Stream} from "effect";
+import {Clock, Effect, Exit, Option, Ref, Schema, Stream} from "effect";
 import {claim, newLane, release} from "../../asks/claims.ts";
 import {readFacts, sendFact} from "../../asks/ledger.ts";
 import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
+import {mustFail, mustPass} from "../../controls.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
+import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
 import {
 	type Checked,
 	type CodeFact,
+	type Entry,
 	FAILED_MOST,
 	factsOf,
+	type Hash,
 	type Outcome,
 	saidOf,
 	TicketNumber,
 } from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {inert} from "../build/body.ts";
+import {examTouched} from "../build/check.ts";
 import type {Built} from "../build/form.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
+import type {Item} from "../build/ticket.ts";
+import {ruleFiles} from "../exam/machine.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
@@ -45,7 +52,14 @@ import {Ship, ship} from "../ship/machine.ts";
 import {sortChild, sortToTheEnd} from "../sort/program.ts";
 import {reviewLine, shipLine} from "../status.ts";
 import type {PropertyId} from "../test-writer/brief.ts";
-import {answersChild, answersToTheEnd, testsChild, testsToTheEnd} from "../test-writer/program.ts";
+import {testsOf} from "../test-writer/checked.ts";
+import {
+	answersChild,
+	answersToTheEnd,
+	TestsWork,
+	testsChild,
+	testsToTheEnd,
+} from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
@@ -54,6 +68,7 @@ import {CheckRunner} from "./checks.ts";
 import {formatExam} from "./format.ts";
 import {
 	againstWords,
+	codeSpan,
 	decidedWords,
 	foundWords,
 	jobsList,
@@ -68,21 +83,29 @@ import {
 	withRed,
 } from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
+import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
+	afterBuild,
+	askedFor,
 	type askPerson,
 	type Carry,
 	type claimLane,
+	type Fresh,
+	type freshMain,
 	Lane,
 	lane,
 	MAX_ROUNDS,
 	type readFiled,
 	type releaseLane,
+	type Resume,
 	type runStep,
+	STEPS,
 	type StepEnd,
 } from "./machine.ts";
-import {LANE_NAMES} from "./outcome.ts";
+import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
 import {LaneWatch} from "./pulls.ts";
+import {fold, seenOf} from "./restart.ts";
 import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
@@ -192,6 +215,278 @@ export const filedBy = (
 	by: {readonly kind: string; readonly id?: string; readonly for?: string} | undefined,
 	person: string,
 ): boolean => by !== undefined && (by.kind === "agent" ? by.for === person : by.id === person);
+
+/** The head `stage` left last, as its `ended` fact keeps it. `null`: none kept one. Pure. */
+const headOf = (timeline: readonly Entry[], stage: string): string | null => {
+	for (const {fact} of timeline.toReversed()) {
+		if (fact.type !== "ended" || fact.stage !== stage) continue;
+		const kept = Schema.decodeUnknownOption(ExamHead)(fact.carry);
+		if (Option.isSome(kept)) return kept.value.head;
+	}
+	return null;
+};
+const ExamHead = Schema.Struct({head: Schema.String});
+
+/**
+ * Whether a person answered which side was wrong about the test writer's files since the build last
+ * ended: code put those files back, or the test writer wrote them again, under the builder. Pure.
+ */
+const examPickedSinceBuild = (timeline: readonly Entry[]): boolean => {
+	const built = timeline.findLastIndex(({fact}) => fact.type === "ended" && fact.stage === "build");
+	return timeline.slice(built + 1).some(({fact}) => {
+		if (fact.type !== "answered") return false;
+		const kind = askedFor(String(fact.ask));
+		return kind === "exam_touched" || kind === "exam_conflict";
+	});
+};
+
+/** The head of the test writer's last commit. Pure. */
+const examHeadOf = (timeline: readonly Entry[]): string | null => headOf(timeline, "test_writer");
+
+/** A file main changed while the lane was stopped, where main's side now stands: the step that redoes it reads it. Pure. */
+const conflictItem = (file: string, base: string | null, onto: string): Item => ({
+	criterion: null,
+	text: `${file} conflicted with main, which moved from ${base ?? "where the lane left it"} to ${onto}. Main's version of it now stands.`,
+	says: `Main changed ${file} while the lane was stopped. Main's side was kept, and this lane's change to it is gone.`,
+	where: [file],
+	wants: [`${file} does again what this lane needs, on top of main's version`],
+});
+
+/** What a fresh read found, with what it changed: every kind but a closed ticket's and another's. */
+type Found = Exclude<Fresh, {readonly _tag: "closed" | "not_yours"}>;
+
+/**
+ * The lane's branch on main as read fresh: what was found, the files where main's side won, and the
+ * ref the old head stays under when the branch started again from main.
+ */
+interface Put {
+	readonly found: Found;
+	readonly conflicts: readonly string[];
+	readonly kept?: string;
+}
+
+/**
+ * The lane goes on at a step before the test writer, such as an old save whose fold names `plan`
+ * (self-fix PR 5): nothing on its branch stands, so the branch starts again from `onto`, and the old
+ * head stays under a ref the restart names. Nothing built: the branch moves to `onto` as it is.
+ */
+const startOver = (cmd: ReturnType<typeof freshMain>, onto: string) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const {head} = cmd.carry;
+		const kept = head === null || head === onto ? undefined : `refs/kept/${cmd.intent}`;
+		if (head !== null && kept !== undefined) yield* work.keep(head, kept);
+		yield* work.reset(cmd.number, onto);
+		const put: Put = {
+			found: {_tag: "fresh", carry: {base: onto, head: onto, exam: []}},
+			conflicts: [],
+			...(kept === undefined ? {} : {kept}),
+		};
+		return put;
+	});
+
+/** Whether a restart that goes on from `from` starts the branch again from main: before the test writer. Pure. */
+const startsOver = (from: Resume): boolean =>
+	STEPS.indexOf(from.step) < STEPS.indexOf("test_writer");
+
+/**
+ * The lane's branch put on `onto` (self-fix PR 5). Never pushed: the test writer's own commit is
+ * rebased first, then the builder's commits onto it, so its check runs again on main and a conflict
+ * in its files is told from one in the builder's. Pushed: main is merged in, and the head that was
+ * pushed stays under the new one. In every conflict main's side stands.
+ */
+const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const tickets = yield* Tickets;
+		const {number, carry} = cmd;
+		const {base, head, pr, exam, open, written} = carry;
+		const answer = (f: Found, conflicts: readonly string[] = []): Put => ({found: f, conflicts});
+		if (base === null || head === null || base === onto) return answer({_tag: "fresh", carry: {}});
+		const pushed = pr !== null;
+		const first =
+			pushed || written === undefined
+				? null
+				: yield* work.onMain(number, written.commit, onto, false);
+		const put =
+			first === null
+				? yield* work.onMain(number, head, onto, pushed)
+				: yield* work.onMain(number, head, first.head, false, written?.commit);
+		const moved: StepEnd["carry"] = {
+			base: onto,
+			head: put.head,
+			...(first === null || written === undefined
+				? {}
+				: {written: {...written, commit: first.head}}),
+		};
+		const conflicts = [...(first?.conflicts ?? []), ...put.conflicts];
+		if (conflicts.length > 0)
+			yield* tickets
+				.talk(number, `${cmd.intent}/conflicts`, {
+					type: "commented",
+					body: saidOf(
+						[
+							`Main moved from ${base} to ${onto} while the lane was stopped, and these files conflicted with it. Main's side now stands in each:`,
+							listed(conflicts.map(codeSpan)),
+						].join("\n"),
+					),
+				})
+				.pipe(Effect.ignore);
+		// The test writer's files: it writes them again on main, and the build goes on from its own work.
+		const tests = conflicts.filter((file) => exam.includes(file));
+		if (tests.length > 0)
+			return answer(
+				{_tag: "exam_conflict", files: tests, carry: {...moved, touched: tests}},
+				conflicts,
+			);
+		if (conflicts.length > 0)
+			return answer(
+				{
+					_tag: "conflicts",
+					files: conflicts,
+					carry: {
+						...moved,
+						open: [...open, ...conflicts.map((file) => conflictItem(file, base, onto))],
+					},
+				},
+				conflicts,
+			);
+		// The test writer's check again, on its commit put on main: each new test still fails there, each
+		// existing one still passes. A file whose test does not is the test writer's to write again.
+		const off =
+			first === null || written === undefined ? [] : yield* offOnMain(carry, first.head, written);
+		if (off.length > 0) {
+			yield* tickets
+				.talk(number, `${cmd.intent}/off`, {
+					type: "commented",
+					body: saidOf(
+						[
+							`On main as it is now (${onto}), these tests no longer fail or pass as the plan says:`,
+							listed(off.map(codeSpan)),
+						].join("\n"),
+					),
+				})
+				.pipe(Effect.ignore);
+			return answer({_tag: "exam_conflict", files: off, carry: {...moved, touched: off}});
+		}
+		return answer({_tag: pushed ? "merged" : "fresh", carry: moved});
+	});
+
+/**
+ * The files of the test writer's tests that, run on `commit`, no longer do what the plan's Properties
+ * say: a `new` one's test green there, an `existing` one's red.
+ */
+const offOnMain = (carry: Carry, commit: string, written: Redo["written"]) =>
+	Effect.gen(function* () {
+		if (written.tests.length === 0) return [];
+		const results = yield* (yield* TestsWork).onBase(commit, written.tests);
+		const behaviors = new Map<string, string>(
+			propertiesOf(carry, 1).map((p) => [p.id, p.behavior]),
+		);
+		const off = results.flatMap(({property, result}) => {
+			const behavior = behaviors.get(property);
+			if (behavior === undefined) return [];
+			const control = behavior === "new" ? mustFail(result) : mustPass(result);
+			return control.kind === "ok"
+				? []
+				: written.tests.filter((t) => t.property === property).map((t) => t.file);
+		});
+		return [...new Set(off)];
+	});
+
+/** A redo the test writer owes: the files a person sent back, and its own commit to write them on. */
+interface Redo {
+	readonly files: readonly string[];
+	readonly written: NonNullable<Carry["written"]>;
+}
+
+/** The redo `carry` holds, if any. Pure. */
+const redoOf = (carry: Carry): Redo | null => {
+	const files = carry.touched ?? [];
+	return files.length === 0 || carry.written === undefined ? null : {files, written: carry.written};
+};
+
+/**
+ * The test writer writes the files a person sent back again, on its own commit and never on the
+ * builder's work (self-fix PR 5): only those files, for the Properties tested in them, told what the
+ * person wrote. Its check runs there. Then the new files are laid on the builder's head, where the
+ * build goes on.
+ */
+const writtenAgain = (at: At, redo: Redo) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const settings = yield* work.settings;
+		const {carry, round, number} = at.cmd;
+		const head = yield* need(carry.head, "no head to put the tests on");
+		const on = redo.written.commit;
+		const sent = new Set(redo.files);
+		const ids = new Set<string>(
+			redo.written.tests.filter((t) => sent.has(t.file)).map((t) => t.property),
+		);
+		const all = propertiesOf(carry, 1);
+		const properties = ids.size === 0 ? all : all.filter((p) => ids.has(p.id));
+		const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
+		const taken = (yield* work.judgedFiles(on)).filter(includedBy(includes));
+		const version = (carry.version ?? 1) + round - 1;
+		const summary = carry.plan?.summary ?? at.title;
+		const pointers = carry.plan?.pointers ?? [];
+		yield* work.reset(number, on);
+		yield* at.tell(yield* work.judgeCopy(on), "read", {
+			ticket: ticketWords(at),
+			plan: `Version ${version}. ${summary}`,
+			jobs: jobsList(carry.plan),
+			base: on,
+			properties: fenced(JSON.stringify(properties, null, 1), "json"),
+			interface: carry.plan?.interface === undefined ? "None." : fenced(carry.plan.interface, "ts"),
+			pointers: listed(pointers.map((p) => `${p.at}: ${p.why}`)),
+			includes: listed(includes),
+			taken: listed(taken),
+			test_command: (settings.test_writer?.run ?? []).join(" "),
+			decided: decidedWords(carry),
+			redo: listed(redo.files.map(codeSpan)),
+			note: "",
+		});
+		const end = yield* testsToTheEnd(at.stages.tests, at.cmd.intent, {
+			ticket: at.url,
+			plan: {version, summary},
+			base: on,
+			properties,
+			pointers,
+			includes,
+			tries: 3,
+			rewrite: redo.files,
+		});
+		const commit = end.report.commit;
+		const answers = end.report.written?.answers ?? [];
+		const problems = [...end.report.problems, ...foundWords(properties, end.report.found, answers)];
+		// Back on the builder's work, which the build goes on from.
+		yield* work.reset(number, head);
+		if (commit === null) return ended(end.outcome, {}, problems);
+		const files = yield* work.filesOf(work.at("clone"), commit);
+		const next = yield* work.putBack(
+			number,
+			commit,
+			files,
+			`the test writer's files, written again, for ${at.url}`,
+		);
+		return ended(
+			end.outcome,
+			{
+				head: next,
+				touched: [],
+				exam: [...carry.exam, ...files.filter((file) => !carry.exam.includes(file))],
+				written: {
+					commit,
+					tests: [
+						...redo.written.tests.filter((t) => !sent.has(t.file)),
+						...testsOf(answers).map(({property, file, name}) => ({property, file, name})),
+					],
+				},
+				cannot: untestedRows(properties, answers),
+			},
+			problems,
+		);
+	});
 
 const AGENT_STEPS: Partial<
 	Record<Carried["step"], {readonly step: AgentStep; readonly brief: string}>
@@ -308,8 +603,12 @@ const propertiesOf = (carry: Carry, round: number) => {
  * Code's own `[build] checks` at `head`, after a build (self-fix PR 4), and what the ticket keeps of
  * them: the `checked` fact, and on red, a comment with each failing test by name and the first lines
  * of why. Both exist only now. The carry gets `checked`; the run's own words come back beside it.
+ * `at.run`: the ids the facts go under, a step's run or a restart's fresh read of main.
  */
-const recordChecks = (at: At, head: string) =>
+const recordChecks = (
+	at: Pick<At, "run"> & {readonly cmd: {readonly number: number}},
+	head: string,
+) =>
 	Effect.gen(function* () {
 		const tickets = yield* Tickets;
 		const ran = yield* (yield* CheckRunner).run(head);
@@ -341,7 +640,12 @@ const notRunWords = (head: string, tail: string) =>
  *   red           again or stop, or the lane ends once its rounds are spent: a go_on could not land
  *   could not run the lane ends stuck: it never guesses green
  */
-const nothingChanged = (at: At, kept: StepEnd["carry"], says: string) =>
+/**
+ * A later round the builder changed nothing in, by code's checks at its head. `moved`: code changed
+ * the test writer's files under the builder since its last round, so a green head is the work done,
+ * with nothing to ask.
+ */
+const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boolean) =>
 	Effect.gen(function* () {
 		const {round} = at.cmd;
 		const head = yield* need(kept.head, "no head to run the checks at");
@@ -352,7 +656,9 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string) =>
 				`The builder changed nothing. ${notRunWords(head, ran.tail)} ${says}`,
 			]);
 		if (checked.result === "green")
-			return asksFirst("no_change", ended({kind: "done", part: false}, carry), [says]);
+			return moved
+				? ended({kind: "done", part: false}, carry, [says])
+				: asksFirst("no_change", ended({kind: "done", part: false}, carry), [says]);
 		if (round >= MAX_ROUNDS)
 			return ended({kind: "stuck", why: "rounds_spent"}, carry, [
 				`The builder changed nothing in round ${round} of ${MAX_ROUNDS}, and the new test is still failing. ${says}`,
@@ -420,12 +726,20 @@ const bodies = {
 			const work = yield* LaneWork;
 			const tickets = yield* Tickets;
 			const main = yield* work.main;
+			// A plan written again after a person's `no` (self-fix PR 5): what they wrote beside it binds it.
+			const said = at.cmd.carry.decided?.said ?? [];
 			yield* at.tell(yield* work.copy(main), "read", {
 				ticket: ticketWords(at),
 				base: main,
 				code_context: "None gathered. Read the code in your folder.",
 				names: "None gathered.",
-				decisions: "None.",
+				decisions:
+					said.length === 0
+						? "None."
+						: [
+								"A person said no to the last plan, and wrote this beside their answer:",
+								listed(said),
+							].join("\n"),
 				note: "",
 			});
 			const end = yield* planToTheEnd(
@@ -521,6 +835,8 @@ const bodies = {
 			const settings = yield* work.settings;
 			const {carry, round} = at.cmd;
 			const tree = yield* work.tree(at.cmd.number);
+			const redo = redoOf(carry);
+			if (redo !== null) return yield* writtenAgain(at, redo);
 			const base = round > 1 ? yield* need(carry.head, "no head to add tests on") : tree.base;
 			const properties = propertiesOf(carry, round);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
@@ -542,6 +858,7 @@ const bodies = {
 				taken: listed(taken),
 				test_command: (settings.test_writer?.run ?? []).join(" "),
 				decided: decidedWords(carry),
+				redo: "None.",
 				note: "",
 			});
 			const end = yield* testsToTheEnd(at.stages.tests, at.cmd.intent, {
@@ -563,6 +880,15 @@ const bodies = {
 					head: commit ?? base,
 					exam: [...carry.exam, ...files],
 					cannot: untestedRows(properties, answers),
+					// The first writing is the one under the build: a restart runs its check again on main.
+					...(round === 1 && commit !== null
+						? {
+								written: {
+									commit,
+									tests: testsOf(answers).map(({property, file, name}) => ({property, file, name})),
+								},
+							}
+						: {}),
 				},
 				[...end.report.problems, ...foundWords(properties, end.report.found, answers)],
 			);
@@ -574,8 +900,27 @@ const bodies = {
 			const settings = yield* work.settings;
 			const {carry, round} = at.cmd;
 			const tree = yield* work.tree(at.cmd.number);
+			// A person said the builder was wrong to change the test writer's files: they go back as it
+			// wrote them, on top of the builder's work, and this round builds there (self-fix PR 5).
+			const touched = carry.touched ?? [];
+			const restored =
+				touched.length === 0 || carry.written === undefined || carry.head === null
+					? null
+					: yield* work
+							.reset(at.cmd.number, carry.head)
+							.pipe(
+								Effect.andThen(
+									work.putBack(
+										at.cmd.number,
+										carry.written.commit,
+										touched,
+										"put the test writer's files back",
+									),
+								),
+							);
 			// Before the builder's copy is read, so the round's base holds it and its diff never does.
 			const formatted = yield* formatExam(at.cmd.number, tree.tree, carry.exam);
+			const before = yield* work.head(tree.tree);
 			const tests = propertiesOf(carry, round);
 			const pointers = carry.plan?.pointers ?? [];
 			const untested = carry.untested ?? [];
@@ -616,18 +961,43 @@ const bodies = {
 					body: saidOf(told),
 				});
 			const kept = {
-				head: end.report.head ?? formatted ?? carry.head,
+				head: end.report.head ?? formatted ?? restored ?? carry.head,
 				deviations: end.report.built?.deviations ?? [],
 				left: end.report.built?.left ?? [],
+				...(touched.length === 0 ? {} : {touched: []}),
 			};
+			// The builder changed the test writer's files: its work is held as a commit of its own, and a
+			// person says which was wrong. Either way the build goes on from it.
+			if (end.outcome.kind === "stuck" && end.outcome.why === "exam_touched") {
+				const changed = yield* work.staged(tree.tree, before);
+				const held = yield* work.commit(
+					tree.tree,
+					[],
+					"the build's work, held: it changed the test writer's files",
+				);
+				return ended(
+					end.outcome,
+					{
+						...kept,
+						head: held,
+						touched: examTouched(changed, carry.exam, (file) => ruleFiles([file]).length > 0),
+					},
+					end.report.problems,
+				);
+			}
 			// A first round with no change has no work to go on with. A later one has the last round's,
 			// and what can be asked about it depends on what the head's checks say now.
-			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change")
+			if (round > 1 && end.outcome.kind === "stuck" && end.outcome.why === "no_change") {
+				// A person's exam pick since the builder's last round changed the test writer's files under
+				// it: the builder judged a head new to it.
+				const {timeline} = yield* (yield* Tickets).read(at.cmd.number);
 				return yield* nothingChanged(
 					at,
 					kept,
 					`The builder says: ${inert(end.report.built?.summary ?? "nothing")}`,
+					examPickedSinceBuild(timeline),
 				);
+			}
 			const built = ended(end.outcome, kept, end.report.problems);
 			return end.outcome.kind === "done" ? yield* builtAndChecked(at, built) : built;
 		}),
@@ -966,6 +1336,46 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),
 
+	// A restart's fresh read of main (self-fix PR 5): the ticket first, then main, then the lane's branch
+	// put on it (`putOnMain`). The ticket's row says from where, main then and now, and what changed.
+	lane_fresh: (cmd: ReturnType<typeof freshMain>) =>
+		Effect.gen(function* () {
+			const tickets = yield* Tickets;
+			const work = yield* LaneWork;
+			const {person} = yield* LaneHome;
+			yield* work.servingLane(cmd.number);
+			const ticket = yield* tickets.read(cmd.number);
+			if (ticket.state === "closed") return {_tag: "closed"} as const;
+			if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
+			const onto = yield* work.main;
+			const put = startsOver(cmd.from) ? yield* startOver(cmd, onto) : yield* putOnMain(cmd, onto);
+			const {found} = put;
+			const head = cmd.carry.head;
+			const to = found.carry?.head ?? head;
+			yield* tickets.write(cmd.number, cmd.intent, {
+				type: "restarted",
+				from: cmd.from.step,
+				base: cmd.carry.base,
+				onto,
+				head,
+				to,
+				conflicts: put.conflicts,
+				...(put.kept === undefined ? {} : {kept: put.kept}),
+			});
+			if (found._tag === "conflicts" || found._tag === "exam_conflict") return found;
+			// A step after the build runs only on green checks at its head: code runs them now, if the head
+			// has none, so a red one goes back to the builder and one that could not run stops the lane.
+			const checked = found.carry.checked ?? cmd.carry.checked;
+			const green = checked !== undefined && checked.head === to && checked.result === "green";
+			if (!afterBuild(cmd.from.step) || to === null || green) return found;
+			const ran = yield* recordChecks({run: cmd.intent, cmd}, to);
+			const red =
+				ran.checked.result === "red"
+					? {open: withRed(found.carry.open ?? cmd.carry.open, ran.ran.failed, ran.ran.tail)}
+					: {};
+			return {...found, carry: {...found.carry, checked: ran.checked, ...red}};
+		}).pipe(Effect.mapError(() => unknown)),
+
 	lane_step: (cmd: Carried) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
@@ -977,6 +1387,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 			const seen = yield* Ref.make<Picked | null>(null);
+			const keying = yield* Ref.make<{readonly key: Hash; readonly inputs: Inputs} | null>(null);
 
 			const body = Effect.gen(function* () {
 				const {repo} = yield* work.origin;
@@ -988,6 +1399,22 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
 				const ticket = yield* tickets.read(cmd.number);
 				const first = ticket.timeline[0]?.fact;
+				// What the step reads, as its input key (P7): only known now. The end keeps the inputs too, the
+				// same value the key is made of, so a later reader can say which one changed.
+				const inputs: Inputs = {
+					step: cmd.step,
+					ticket: yield* hashOf(textOf(ticket)),
+					plan: cmd.carry.version,
+					base: cmd.carry.base,
+					exam: examHeadOf(ticket.timeline),
+					head: cmd.carry.head,
+					brief: brief?.hash ?? null,
+					harness: picked?.harness ?? null,
+					model: picked?.model ?? null,
+					effort: picked?.effort ?? null,
+					settings: yield* sha256(JSON.stringify(settings)),
+				};
+				yield* Ref.set(keying, {key: yield* keyOf(inputs), inputs});
 				yield* now.exam.set(cmd.carry.exam);
 				const trace = yield* jobTraceId;
 				// Before any setup: the ticket shows the step running, and a crash leaves `started` behind.
@@ -998,6 +1425,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					stage: cmd.step,
 					task: null,
 					log: null,
+					round: cmd.round,
 					...(trace === null ? {} : {trace}),
 					...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
 					...(picked === null
@@ -1031,7 +1459,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const picked = yield* Ref.get(seen);
 			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
-			const write = (outcome: Outcome, more: Pick<BodyEnd, "failed" | "trusted"> = {}) =>
+			const keyed = yield* Ref.get(keying);
+			// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
+			const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -1051,6 +1481,8 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
 					...(more.failed === undefined ? {} : {failed: more.failed}),
 					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
+					...(keyed === null ? {} : keyed),
+					carry: more.carry,
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
 				const {outcome, carry, problems, after: past} = exit.value;
@@ -1080,7 +1512,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);
 			yield* sessionLeft.pipe(Effect.ignore);
-			yield* write(factOutcome({kind: "stuck", why: "run_failed"})).pipe(Effect.ignore);
+			yield* write(factOutcome({kind: "stuck", why: "run_failed"}), {carry: {}}).pipe(
+				Effect.ignore,
+			);
 			yield* said(`could not run: ${stops}`);
 			return yield* Effect.fail(unknown);
 		}).pipe(Effect.mapError(() => unknown)),
@@ -1116,6 +1550,7 @@ const laneKind = kind({
 			lane_claim: "claim it",
 			lane_step: "run a step",
 			lane_ask: "ask the person",
+			lane_fresh: "read main fresh",
 			lane_answer: "wait for the answer",
 			lane_release: "let it go",
 		},
@@ -1168,7 +1603,13 @@ export const laneProgram = defineProgram({
 			const ref = machines.lane.get(`lane/${n}`);
 			const kept = yield* ref.read;
 			const laneId =
-				kept !== null && kept.phase !== "idle" && "lane" in kept ? kept.lane : yield* newLane(id);
+				kept === null || kept.phase === "idle"
+					? yield* newLane(id)
+					: "lane" in kept
+						? kept.lane
+						: "held" in kept
+							? kept.held.lane
+							: yield* newLane(id);
 			// Copied into the lane as it starts: a machine decides with it, so a later edit cannot change a run.
 			const settings = yield* Effect.result((yield* LaneWork).settings);
 			const sendBack =
@@ -1177,6 +1618,40 @@ export const laneProgram = defineProgram({
 				{type: "start", number: n, lane: laneId, sendBack},
 				{conflict: "use_existing"},
 			);
+			// The same line typed again on a lane that stopped (self-fix PR 5): a kept run that is over gets
+			// no first Msg, so the restart goes to it here. A stop saved before it kept a `Held` goes on from
+			// the fold of the ticket's facts, under the lane this line named.
+			if (kept?.phase === "over" && !isEnd(kept.outcome)) {
+				// A save with no `Held` goes on from its ticket's facts: one that cannot be read stops the lane,
+				// never folds from nothing.
+				const seen = "held" in kept ? null : yield* Effect.result(seenOf(n));
+				if (seen?._tag === "Failure") {
+					yield* send("ended", {
+						name: "stuck:step_failed",
+						said: `the ticket could not be read to go on: ${seen.failure.says}`,
+					});
+					return;
+				}
+				const folded = seen === null ? null : fold(seen.success);
+				const at = "at" in kept ? kept.at : folded?.at;
+				const from =
+					at === undefined ? "" : at._tag === "run" ? at.step : `${at.step}, asking ${at.for}`;
+				yield* send(
+					"step",
+					`restart: #${n} from ${from}, which ended ${nameOf(kept.outcome)} (${kept.said})`,
+				);
+				yield* runtime
+					.dispatch(folded === null ? {type: "restart"} : {type: "restart", folded, lane: laneId})
+					.pipe(Effect.orDie);
+			} else if (
+				kept?.phase === "over" &&
+				kept.outcome.kind === "stuck" &&
+				FINAL.has(kept.outcome.why)
+			)
+				yield* send(
+					"step",
+					`restart: #${n} ended ${nameOf(kept.outcome)}, a person's call: ${kept.said}`,
+				);
 			const end = yield* runtime.done();
 			if (end.phase !== "over") return yield* Effect.die(`the lane stopped in ${end.phase}`);
 			yield* send("ended", {name: nameOf(end.outcome) as never, said: end.said});

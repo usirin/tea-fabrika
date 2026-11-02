@@ -57,13 +57,17 @@ export const includedBy = (includes: readonly string[]) => {
 const outside = (path: string) =>
 	path.startsWith("/") || path.split("/").some((part) => part === ".." || part === "");
 
-/** The box's wall: each file new, plain, once, and where `includes` lets it be. Both jobs' Checks start here. */
+/**
+ * The box's wall: each file new, plain, once, and where `includes` lets it be. Both jobs' Checks start
+ * here. A redo (`rewrite`) may write the existing files it names again, and no other existing one.
+ */
 export function fileProblems(
 	files: readonly File[],
-	brief: Pick<WriterBrief, "includes" | "taken">,
+	brief: Pick<WriterBrief, "includes" | "taken" | "rewrite">,
 ): readonly string[] {
 	const included = includedBy(brief.includes);
-	const taken = new Set(brief.taken);
+	const rewrite = brief.rewrite === undefined ? null : new Set(brief.rewrite);
+	const taken = new Set(brief.taken.filter((path) => rewrite?.has(path) !== true));
 	const seen = new Set<string>();
 	return files.flatMap((f) => {
 		if (outside(f.path)) return [`\`${f.path}\` is not a plain path inside the repository.`];

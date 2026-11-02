@@ -6,6 +6,7 @@ import {
 	type Entry,
 	type Fact,
 	fold,
+	kindOf,
 	nameOf,
 	PrFact,
 	readRow,
@@ -123,9 +124,9 @@ export class Watcher extends Context.Service<
 const failed = (ticket: number, why: typeof Why.Type, says: string) =>
 	new TicketsFailed({ticket, why, says});
 
-/** A fact as the ledger keeps it: its kind, and its data encoded. */
+/** A fact as the ledger keeps it: its kind (`kindOf`), and its data encoded. */
 interface Checked {
-	readonly kind: Fact["type"];
+	readonly kind: string;
 	readonly data: unknown;
 }
 
@@ -142,7 +143,7 @@ const checking =
 	(n: number, fact: Fact): Effect.Effect<Checked, TicketsFailed> =>
 		kinds.includes(fact.type)
 			? encode(fact).pipe(
-					Effect.map((data) => ({kind: fact.type, data})),
+					Effect.map((data) => ({kind: kindOf(fact.type), data})),
 					Effect.mapError((e) => failed(n, "bad_fact", e.message)),
 				)
 			: Effect.fail(failed(n, "not_yours", `${who} may not write a ${fact.type} fact`));

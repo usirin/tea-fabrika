@@ -14,6 +14,7 @@ slots:
   includes: the patterns a new file must match
   taken: files at the base that includes covers
   test_command: how to run one test file here
+  redo: on a redo, the files of yours a person sent back, to write again; else None.
   note: on a later try, the Check's problems, sent instead of this brief
 ---
 
@@ -64,6 +65,12 @@ These exist already, so they are never written:
 {taken}
 
 A helper shared by several tests goes in a new file under a pattern above.
+
+# Files to write again
+
+{redo}
+
+When files are named here, this is a redo: write each of them again, whole, with what a person decided above. Each may exist already; no other file that exists may change. Answer only for the Properties tested in them.
 
 # How to work
 

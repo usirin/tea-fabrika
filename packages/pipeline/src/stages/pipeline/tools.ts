@@ -91,7 +91,7 @@ export const laneBuildWrites = Layer.effect(
 						yield* tickets
 							.talk(numberOf(ticket), `exam-touched/${copied.base}`, {
 								type: "commented",
-								body: `The build changed the exam, so nothing it did is kept: ${touched.join(", ")}.`,
+								body: `The build changed the exam: ${touched.join(", ")}. Its work is held apart until a person says which was wrong.`,
 							})
 							.pipe(Effect.ignore);
 						return yield* Effect.fail({_tag: "exam_touched" as const});

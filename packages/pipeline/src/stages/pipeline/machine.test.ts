@@ -16,6 +16,8 @@ import {
 	lane,
 	MAX_ROUNDS,
 	readFiled,
+	releaseLane,
+	resumeOf,
 	runStep,
 	type StepEnd,
 } from "./machine.ts";
@@ -353,14 +355,23 @@ describe("a review that could not see", () => {
 		expect(asking(writer).question.picks).toEqual(["again", "go_on", "stop"]);
 	});
 
-	it("its `stop` is the person's no, and never the rounds' stuck", () => {
+	// Self-fix PR 5: a person's `stop` is a saved pause at the step its pick names, not an end.
+	it("its `stop` pauses the lane where its pick says, and never as the rounds' stuck", () => {
 		const [next] = ended(atReview(), {outcome: UNSEEN, carry: {}});
-		const [over] = lane.update.lane_answered(asking(next), {
+		const question = asking(next).question;
+		const [releasing] = lane.update.lane_answered(asking(next), {
 			type: "lane_answered",
-			ask: unseenAsked().question.ask,
+			ask: question.ask,
 			pick: "stop",
 		});
-		expect(over.phase === "releasing" && nameOf(over.outcome)).toBe("skip:owner_no");
+		expect(releasing.phase === "releasing" && nameOf(releasing.outcome)).not.toBe(
+			"stuck:rounds_spent",
+		);
+		const [over] = lane.update.lane_release_ok(
+			releasing,
+			releaseLane.ok(releaseLane({number: 7, lane: ID, intent: "r"}), "released", 0),
+		);
+		expect(over).toMatchObject({phase: "over", at: resumeOf(question, "stop")});
 	});
 });
 

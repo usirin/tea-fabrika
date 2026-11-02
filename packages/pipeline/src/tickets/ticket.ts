@@ -209,6 +209,8 @@ export const CodeFact = Schema.Union([
 		harness: Schema.optionalKey(Schema.String),
 		model: Schema.optionalKey(Schema.String),
 		effort: Schema.optionalKey(Schema.String),
+		/** The lane's round the run is in (self-fix PR 5). Left out: a start written before this key, or round 1. */
+		round: Schema.optionalKey(Count),
 	}),
 	/**
 	 * The run ended, with its stage's answer, what it cost and how long it went. `usd`: dollars at
@@ -242,6 +244,26 @@ export const CodeFact = Schema.Union([
 		 * reads as a clean run: the mutation step's, which then runs no suite of its own.
 		 */
 		trusted: Schema.optionalKey(Trusted),
+		/**
+		 * The step's input key (self-fix PR 5, P7): a hash of what it read
+		 * (`stages/pipeline/key.ts`). Only known now. Left out: an end written before the key.
+		 */
+		key: Schema.optionalKey(Hash),
+		/**
+		 * What `key` was made of, by name: values and hashes only, never a path or a secret, so a later
+		 * reader can say which input changed. Its shape is `stages/pipeline/key.ts`'s `Inputs`, which
+		 * this file cannot name. Left out: an end written before this key, or one with no key.
+		 */
+		inputs: Schema.optionalKey(
+			Schema.Record(Schema.String, Schema.NullOr(Schema.Union([Schema.String, Schema.Finite]))),
+		),
+		/**
+		 * What the step left for the steps after it: the change to the lane's carry, which the lane's
+		 * fold reads back when its save is gone (self-fix PR 5, `stages/pipeline/restart.ts`). Only
+		 * known now. Its shape is the lane's own, which this file cannot name: the lane's types import
+		 * this one, so the fold decodes it. Left out: an end written before this key, or a run that broke.
+		 */
+		carry: Schema.optionalKey(Schema.Unknown),
 	}),
 	/** Code ran `[build] checks` at `head`, after a build: what it found there. */
 	Schema.Struct({type: Schema.Literal("checked"), ...Checked.fields, head: Sha}),
@@ -252,6 +274,25 @@ export const CodeFact = Schema.Union([
 	 * its harness names none.
 	 */
 	Schema.Struct({type: Schema.Literal("session"), run: Id, id: Id}),
+	/**
+	 * A stopped lane started again (self-fix PR 5): who is the entry's writer, and when its time.
+	 * `from`: the step it went on from. `base`: the commit the lane stood on when it stopped, `null` if
+	 * it had none. `onto`: main as read fresh, which the lane's branch stands on now: the same commit
+	 * when main had not moved. `head` and `to`: the lane's head before and after, `null` if it had
+	 * none. `conflicts`: the files where main's side won. `kept`: the ref the old head stays under,
+	 * when the branch started again from main. Only known at the restart. The four are left out on a
+	 * restart written before them.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("restarted"),
+		from: Stage,
+		base: Schema.NullOr(Sha),
+		onto: Sha,
+		head: Schema.optionalKey(Schema.NullOr(Sha)),
+		to: Schema.optionalKey(Schema.NullOr(Sha)),
+		conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
+		kept: Schema.optionalKey(Schema.String),
+	}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({
 		type: Schema.Literal("planned"),
@@ -371,6 +412,7 @@ export const WRITTEN_BY = {
 	session: "anyone",
 	ended: "anyone",
 	checked: "anyone",
+	restarted: "anyone",
 	planned: "anyone",
 	pushed: "anyone",
 	reviewed: "anyone",
@@ -417,6 +459,14 @@ export const ROOT = "tracker/ticket";
 export const nameOf = (number: number) => `${ROOT}/${number}`;
 
 const INBOX = /^tracker\/ticket\/([1-9]\d*)\/inbox$/;
+
+/**
+ * The ledger kind a fact is kept under: its own type, except where the ledger keeps that word for
+ * itself and refuses it from anyone else (host/rules.ts, `LEDGER_KINDS`). `restarted` is the ledger's
+ * own, for a name it started again, so a lane's restart is kept as `lane_restarted`.
+ */
+const KEPT_AS: Partial<Record<Fact["type"], string>> = {restarted: "lane_restarted"};
+export const kindOf = (type: Fact["type"]): string => KEPT_AS[type] ?? type;
 const decodeFact = Schema.decodeUnknownOption(Schema.fromJsonString(Fact));
 
 /** What one ledger row is to the tracker: a fact on a ticket, a row of no ticket's facts, or broken. */
@@ -437,7 +487,7 @@ export function readRow(row: Row): Read {
 	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
 	const fact = Option.getOrNull(decodeFact(row.data));
 	if (fact === null) return broken(`its data is not a fact`);
-	if (fact.type !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
+	if (kindOf(fact.type) !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
 	return {kind: "entry", entry: {pos: row.pos, ticket: Number(ticket), by, at: row.at, fact}};
 }
 

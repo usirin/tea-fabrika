@@ -9,7 +9,8 @@ import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
 import {openWords, throughWords} from "./found.ts";
-import {LaneOutcome} from "./outcome.ts";
+import {EndOutcome, isEnd, LaneOutcome, StopOutcome} from "./outcome.ts";
+import type {Folded} from "./restart.ts";
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
 // its own, and the lane starts each as one Act and reads its outcome, as `operate` does; it never
@@ -40,6 +41,15 @@ import {LaneOutcome} from "./outcome.ts";
 // A review's finding goes to the test writer, a round up. Both count in the same rounds, and once
 // `MAX_ROUNDS` are spent a person is asked `rounds_spent`: `again` runs one more round, `stop` ends
 // the lane `stuck:rounds_spent`. With `[build] send_back = false` the first red asks at once.
+//
+// A lane ends or stops (self-fix PR 5, ./outcome.ts). An end, done or a skip or a stuck reason in
+// `FINAL`, keeps nothing. A stop keeps its `Held` and where it goes on (`Resume`), both required, and
+// so does a person's `no` or `stop`, a pause (`ask:owner:paused`). The same line typed again sends
+// `restart`: the lane claims the ticket again, reads the ticket and main fresh (`lane_fresh`), then
+// goes on there. A step that could not run is run once more, on the same Act, before the lane stops.
+//
+//   over (stuck:step_stuck, at run mutation) --restart--> restarting --claim--> refreshing
+//     --fresh--> running mutation, with the carry it held and what main changed in it
 
 const Unknown = ["unknown"] as const;
 
@@ -62,19 +72,67 @@ export type LaneStep = typeof LaneStep.Type;
 
 /** The steps after build: each runs only on a head with green checks code ran there. */
 const AFTER_BUILD: ReadonlySet<LaneStep> = new Set(STEPS.slice(STEPS.indexOf("build") + 1));
+/** Whether `step` runs only on a head with green checks: a restart that goes on there runs them first. Pure. */
+export const afterBuild = (step: LaneStep): boolean => AFTER_BUILD.has(step);
+
+/**
+ * Where a stop goes on: the step that stopped. A build whose checks could not run goes on at the
+ * checks: the step after it, which a restart runs them for, and never the builder again. Pure.
+ */
+const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
+	step === "build" && end.kind === "stuck" && end.why === "checks_not_run"
+		? {_tag: "run", step: "mutation"}
+		: {_tag: "run", step};
 
 /**
  * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
  * `rounds_spent`: the work went back as often as it may, and a person says whether once more.
+ * `exam_touched`: a build changed the test writer's files, and a person says which was wrong.
+ * `exam_conflict`: main changed the test writer's files while the lane was stopped, and a person says
+ * whether the test writer writes them again.
  */
-const ASKS = ["approve", "exam_merge", "merge", "step", "rounds_spent"] as const;
-const AskFor = Schema.Literals(ASKS);
+const ASKS = [
+	"approve",
+	"exam_merge",
+	"merge",
+	"step",
+	"rounds_spent",
+	"exam_touched",
+	"exam_conflict",
+] as const;
+export const AskFor = Schema.Literals(ASKS);
+export type AskFor = typeof AskFor.Type;
 
 /**
  * The most builds a ticket gets on its own: the first, and each one a red head or a review sent it
  * back for. Past it, only a person's `again`. 3 is a guess (docs/direction/jidoka-and-andon.md#bounds).
  */
 export const MAX_ROUNDS = 3;
+
+const isAskFor = Schema.is(AskFor);
+
+/** The kind of question a lane's ask id names: `a-approve-3` is `approve`. `null`: not a lane's. Pure. */
+export const askedFor = (ask: string): AskFor | null => {
+	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
+	return kind !== undefined && isAskFor(kind) ? kind : null;
+};
+
+/** The picks that give the builder one more round past the bound: a person's call, each counted once. */
+const GRANTS: Readonly<Partial<Record<AskFor, readonly string[]>>> = {
+	rounds_spent: ["again"],
+	exam_touched: ["builder_wrong", "test_wrong"],
+};
+
+/**
+ * The rounds a lane runs before it asks: `MAX_ROUNDS`, and one more for each answer in its trail that
+ * grants one. Read from the trail, so the fold of the facts gives the same bound. Pure.
+ */
+export const boundOf = (trail: readonly {readonly step: string; readonly said: string}[]): number =>
+	MAX_ROUNDS +
+	trail.filter((row) => {
+		const kind = askedFor(row.step);
+		return kind !== null && (GRANTS[kind]?.includes(row.said) ?? false);
+	}).length;
 
 /** A Property of the plan with no test, in its own words, and why the test writer wrote none. */
 export const Untested = Schema.Struct({when: Schema.String, why: Schema.String});
@@ -100,6 +158,16 @@ const Decided = Schema.Struct({
 
 /** What the review judged last, for the question of whether it lands. */
 const Reviewed = Schema.Struct({title: Schema.String, met: Schema.Finite, of: Schema.Finite});
+
+/** One test the test writer's check runs: the Property it tests, its file, and its name there. */
+const WrittenTest = Schema.Struct({
+	property: Schema.String,
+	file: Schema.String,
+	name: Schema.String,
+});
+
+/** The test writer's own commit, and the tests its check ran there. */
+const Written = Schema.Struct({commit: Schema.String, tests: Schema.Array(WrittenTest)});
 
 /** What one step leaves for the steps after it. */
 const carried = {
@@ -146,6 +214,17 @@ const carried = {
 	posts: Schema.Array(Post),
 	/** The lane's pull request. `null`: none yet. */
 	pr: Schema.NullOr(Schema.String),
+	/**
+	 * The test writer's own commit under the build, and the tests its check ran there (self-fix PR 5): a
+	 * restart runs that check again with the commit put on main, and a redo writes on it. Optional: a
+	 * lane saved before this key still reads, and has no check to run again.
+	 */
+	written: Schema.optionalKey(Written),
+	/**
+	 * The test writer's files a build or main changed, waiting on a person's pick: the next build puts
+	 * them back as `written` has them, and the next test writer writes them again. Optional, as `left` is.
+	 */
+	touched: Schema.optionalKey(Schema.Array(Schema.String)),
 };
 export const Carry = Schema.Struct(carried);
 export type Carry = typeof Carry.Type;
@@ -226,14 +305,15 @@ export type LaneCmd =
 	| ReturnType<typeof claimLane>
 	| ReturnType<typeof releaseLane>
 	| ReturnType<typeof runStep>
-	| ReturnType<typeof askPerson>;
+	| ReturnType<typeof askPerson>
+	| ReturnType<typeof freshMain>;
 
 /** A person's call on a step's end: what the step asked about, and how it ends if they let it through. */
 const Call = Schema.Struct({about: Schema.String, after: Outcome});
 type Call = typeof Call.Type;
 
 /** A question on the ticket. `step`: the step it comes back to. Left out, `call`: any other question. */
-const Question = Schema.Struct({
+export const Question = Schema.Struct({
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
@@ -241,7 +321,7 @@ const Question = Schema.Struct({
 	step: LaneStep,
 	call: Schema.optionalKey(Call),
 });
-type Question = typeof Question.Type;
+export type Question = typeof Question.Type;
 
 /** One step as it ended, or one person's answer: what a lane leaves behind it, in order. */
 const Row = Schema.Struct({step: Schema.String, said: Schema.String});
@@ -249,19 +329,85 @@ const Row = Schema.Struct({step: Schema.String, said: Schema.String});
 /** Whether a red head goes back to the builder on its own: `[build] send_back`. Left out: it does. */
 const SendBack = {sendBack: Schema.optionalKey(Schema.Boolean)};
 
-const Held = Schema.Struct({
+export const Held = Schema.Struct({
 	number: Schema.Finite,
 	lane: LaneId,
 	...SendBack,
+	/** The steps run and the restarts made: each names its intents by it, so none is used twice. */
 	count: Schema.Finite,
 	round: Schema.Finite,
 	carry: Carry,
 	trail: Schema.Array(Row),
 });
-type Held = typeof Held.Type;
+export type Held = typeof Held.Type;
 
-const Ended = Schema.Struct({outcome: LaneOutcome, said: Schema.String});
-type Ended = typeof Ended.Type;
+/**
+ * Where a stopped lane goes on when the same line is typed again (self-fix PR 5, P6 and P10): a step
+ * it runs, or a question it asks again. `round: "next"`: the step runs as the round after the one
+ * the lane held, as a person's `again` would run it. Left out: the round it held. `step`, on an ask:
+ * the step the question is about.
+ *
+ *   {_tag: "run", step: "mutation"}                  // a stuck mutation step runs again
+ *   {_tag: "run", step: "build", round: "next"}      // a `stop` on the spent rounds
+ *   {_tag: "ask", for: "merge", step: "push"}        // a `no` on the merge asks it again
+ */
+export const Resume = Schema.Union([
+	Schema.TaggedStruct("run", {step: LaneStep, round: Schema.optionalKey(Schema.Literal("next"))}),
+	Schema.TaggedStruct("ask", {for: AskFor, step: LaneStep}),
+]);
+export type Resume = typeof Resume.Type;
+
+/** A restart's fresh read of main: where the lane stopped, and what it held then. */
+const FreshIn = Schema.Struct({number: Schema.Finite, from: Resume, carry: Carry});
+
+/** What a fresh read of main changed in the carry: the branch's base and head, the checks there. */
+const Changed = StepEnd.fields.carry;
+
+/**
+ * What the fresh read found, with the lane's branch rebased onto main (never pushed) or merged with it
+ * (pushed). `fresh`: it went on, and `carry` is what changed, such as the base, the head and the
+ * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
+ * `conflicts`: the builder's files do. On both, main's side was taken, and `carry`, when there, is
+ * the branch on main with each such file open: the test writer, or the builder, redoes it.
+ * `merged`: the branch was pushed, so main was merged into it, and its new head is one no review read
+ * and the pull request does not show. `closed`: the ticket was closed while the lane was stopped.
+ * `not_yours`: it was not filed by the person running this, or an agent of theirs.
+ */
+export const Fresh = Schema.Union([
+	Schema.TaggedStruct("fresh", {carry: Changed}),
+	Schema.TaggedStruct("merged", {carry: Changed}),
+	Schema.TaggedStruct("exam_conflict", {
+		files: Schema.Array(Schema.String),
+		carry: Schema.optionalKey(Changed),
+	}),
+	Schema.TaggedStruct("conflicts", {
+		files: Schema.Array(Schema.String),
+		carry: Schema.optionalKey(Changed),
+	}),
+	Schema.TaggedStruct("closed", {}),
+	Schema.TaggedStruct("not_yours", {}),
+]);
+export type Fresh = typeof Fresh.Type;
+
+export const freshMain = act("lane_fresh", {input: FreshIn, ok: Fresh, err: Unknown});
+
+/** How a lane ends: nobody goes on from it. */
+const End = Schema.Struct({outcome: EndOutcome, said: Schema.String});
+type End = typeof End.Type;
+/** How a lane stops, and where the same line goes on. */
+const Stop = Schema.Struct({outcome: StopOutcome, said: Schema.String, at: Resume});
+type Stop = typeof Stop.Type;
+
+const Over = {phase: Schema.Literal("over"), number: Schema.Finite, trail: Schema.Array(Row)};
+const Releasing = {
+	...Held.fields,
+	phase: Schema.Literal("releasing"),
+	asked: keptAct(releaseLane, ReleaseIn),
+};
+
+/** A stop the same line goes on from: the lane's `Held`, as it was, and where it goes on. Both required (P6). */
+export const Stopped = Schema.Struct({...Over, ...Stop.fields, held: Held});
+export type Stopped = typeof Stopped.Type;
 
 export const Lane = Schema.Union([
 	Schema.Struct({phase: Schema.Literal("idle")}),
@@ -281,6 +427,8 @@ export const Lane = Schema.Union([
 		...Held.fields,
 		phase: Schema.Literal("running"),
 		step: LaneStep,
+		/** The Act runs a second time, after it could not run (P8). Left out: its first. */
+		again: Schema.optionalKey(Schema.Literal(true)),
 		asked: keptAct(runStep, StepIn),
 	}),
 	Schema.Struct({
@@ -289,18 +437,30 @@ export const Lane = Schema.Union([
 		question: Question,
 		asked: keptAct(askPerson, AskIn),
 	}),
+	// The same line typed again on a stop: the ticket is claimed again, where the stop goes on in hand.
 	Schema.Struct({
 		...Held.fields,
-		...Ended.fields,
-		phase: Schema.Literal("releasing"),
-		asked: keptAct(releaseLane, ReleaseIn),
+		at: Resume,
+		phase: Schema.Literal("restarting"),
+		asked: keptAct(claimLane, LaneIn),
 	}),
+	// Claimed: main and the ticket are read fresh, and the lane's branch stands on main.
 	Schema.Struct({
-		...Ended.fields,
-		phase: Schema.Literal("over"),
-		number: Schema.Finite,
-		trail: Schema.Array(Row),
+		...Held.fields,
+		at: Resume,
+		phase: Schema.Literal("refreshing"),
+		asked: keptAct(freshMain, FreshIn),
 	}),
+	Schema.Struct({...Releasing, ...Stop.fields}),
+	// An end. Also a release saved before a stop kept where it goes on: it ends as a stop saved before.
+	Schema.Struct({...Releasing, outcome: LaneOutcome, said: Schema.String}),
+	// First, so a saved one never reads as a shape below with its `held` dropped.
+	Stopped,
+	Schema.Struct({...Over, ...End.fields}),
+	// A stop saved before a stop kept its `Held` (self-fix PR 5). No code here builds one: it is only ever
+	// read back from a save, and `restart` goes on from it with what the ticket's facts prove
+	// (./restart.ts). Its shape is the end's above, with any outcome, so a save from before still reads.
+	Schema.Struct({...Over, outcome: LaneOutcome, said: Schema.String}),
 ]);
 export type Lane = typeof Lane.Type;
 
@@ -314,6 +474,13 @@ export type LaneMsg =
 	  }
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
 	| {readonly type: "resume"}
+	/**
+	 * The same line typed again on a lane that stopped (self-fix PR 5): it claims the ticket again,
+	 * reads main fresh, and goes on where it stopped. For a lane saved before its stop kept a `Held`,
+	 * `folded` is what the ticket's facts prove (./restart.ts), and `lane` the lane the program named
+	 * for this line, since that save keeps none. Both, or such a lane does nothing.
+	 */
+	| {readonly type: "restart"; readonly folded?: Folded; readonly lane?: LaneId}
 	/** A person answered `ask` on the ticket: the Listen below heard it. */
 	| {
 			readonly type: "lane_answered";
@@ -352,25 +519,31 @@ const NEXT: Readonly<Record<LaneStep, Move>> = {
 };
 
 /** Another round, if the rounds allow it: else a person is asked. */
-const back = (to: LaneStep, round: number): Move =>
-	round >= MAX_ROUNDS ? {ask: "rounds_spent"} : {to, round: round + 1};
+const back = (to: LaneStep, round: number, bound: number): Move =>
+	round >= bound ? {ask: "rounds_spent"} : {to, round: round + 1};
 
 /**
  * The whole order, as one pure function: where a lane goes when `step` ends with `outcome` in
- * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back.
+ * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back. `lane.trail`: the
+ * answers that grant rounds past the bound (`boundOf`); left out, none.
  */
 export const after = (
 	step: LaneStep,
 	outcome: Outcome,
 	round: number,
-	lane: {readonly sendBack?: boolean} = {},
+	lane: {readonly sendBack?: boolean; readonly trail?: Held["trail"]} = {},
 ): Move => {
+	const bound = boundOf(lane.trail ?? []);
 	switch (outcome.kind) {
 		case "stuck":
+			// A build that changed the test writer's files: the person says which was wrong.
+			if (step === "build" && outcome.why === "exam_touched") return {ask: "exam_touched"};
 			// A builder that changed nothing in a round at the cap: the same question as any spent round.
 			if (step === "build" && outcome.why === "rounds_spent") return {ask: "rounds_spent"};
 			// Code's checks after the build could not run, after one more try: never guessed green.
 			if (step === "build" && outcome.why === "checks_not_run") return stuck("checks_not_run");
+			// Someone else merged the pull request: what landed is theirs, and the lane ends on it.
+			if (step === "merge" && outcome.why === "merged_elsewhere") return stuck("merged_elsewhere");
 			return stuck("step_stuck");
 		case "ask":
 			// A plan with open questions goes to the same yes: the person reads them there.
@@ -392,9 +565,9 @@ export const after = (
 			// The head's own tests fail, by code's checks after the build or by the mutation step's run:
 			// the builder gets them by name, unless the repository says ask.
 			if ((step === "build" || step === "mutation") && outcome.to === "builder")
-				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round);
+				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round, bound);
 			// A finding needs a test, and the builder cannot add one: the writer goes first.
-			if (step === "review" && outcome.to === "builder") return back("test_writer", round);
+			if (step === "review" && outcome.to === "builder") return back("test_writer", round, bound);
 			return stuck("sent_back");
 		case "done":
 			// Triage closed it, as a no or a duplicate. Done, and nobody is next.
@@ -410,16 +583,130 @@ export const PICKS = {
 	merge: ["merge", "no"],
 	step: ["again", "stop"],
 	rounds_spent: ["again", "stop"],
+	exam_touched: ["builder_wrong", "test_wrong"],
+	exam_conflict: ["again", "stop"],
 } as const;
+
+/**
+ * The picks that pause the lane, by the kind of question (self-fix PR 5): it is saved where the pick
+ * goes on, and the same line goes on there. Every other pick goes on at once. No pick ends a lane.
+ */
+const PAUSES: Readonly<Record<AskFor, readonly string[]>> = {
+	approve: ["no"],
+	exam_merge: ["no"],
+	merge: ["no"],
+	step: ["stop"],
+	rounds_spent: ["stop"],
+	exam_touched: [],
+	exam_conflict: ["stop"],
+};
+
+/** Where the lane goes on when `m` is where it moves. No question's `go_on` ends a lane. Pure. */
+const resumeOfMove = (m: Move, step: LaneStep): Resume => {
+	if ("to" in m)
+		return {_tag: "run", step: m.to, ...(m.round === undefined ? {} : {round: "next"})};
+	if ("ask" in m) return {_tag: "ask", for: m.ask, step};
+	return stopsAt(step, m.end);
+};
+
+/**
+ * Where a pick of `question` goes on (P10): every ask kind names it here, and the lane routes by it.
+ *
+ *   approve        approve: the exam step     no: the plan, written again with the person's note
+ *   exam_merge     merge: its merge           no: the same question again
+ *   merge          merge: the merge           no: the same question again
+ *   step           again, stop: the step again, the build as the next round
+ *   rounds_spent   again: the step again, as the next round   stop: the step again (a restart runs
+ *                  it as the next round, by the stop's own outcome: `goesOnFrom`)
+ *   exam_touched   builder_wrong: the build, next round   test_wrong: the test writer, then the build
+ *   exam_conflict  again: the test writer, then the build, next round   stop: the same question
+ *
+ * A `go_on` goes where the step's end goes: a call's end, as in a round with rounds left (the lane
+ * asks the rounds' question itself when none are).
+ */
+export const resumeOf = (question: Question, pick: string): Resume => {
+	const {step} = question;
+	const run = (to: LaneStep, next = false): Resume => ({
+		_tag: "run",
+		step: to,
+		...(next ? {round: "next" as const} : {}),
+	});
+	const again: Resume = {_tag: "ask", for: question.for, step};
+	if (pick === "go_on")
+		return resumeOfMove(
+			question.call === undefined ? NEXT[step] : after(step, question.call.after, 1),
+			step,
+		);
+	switch (question.for) {
+		case "approve":
+			return pick === "approve" ? run("exam") : run("plan");
+		case "exam_merge":
+			return pick === "merge" ? run("exam_merge") : again;
+		case "merge":
+			return pick === "merge" ? run("merge") : again;
+		case "step":
+			// A build run again is a round: the builder gets another try, and the tries are counted.
+			return run(step, step === "build");
+		case "rounds_spent":
+			return run(step, pick === "again");
+		case "exam_touched":
+			return pick === "test_wrong" ? run("test_writer", true) : run("build", true);
+		case "exam_conflict":
+			return pick === "again" ? run("test_writer", true) : again;
+	}
+};
+
+/**
+ * Where a stop goes on when the same line is typed again: where it saved, and a stop on the spent
+ * rounds as the round after them, as the person's `again` would have. Pure.
+ */
+const goesOnFrom = (at: Resume, outcome: LaneOutcome): Resume =>
+	at._tag === "run" && outcome.kind === "stuck" && outcome.why === "rounds_spent"
+		? {...at, round: "next"}
+		: at;
+
+/**
+ * How a person's pause on `question` stops the lane: a stop on the rounds is stuck on them, and any
+ * other is a person's no to the change. Pure.
+ */
+const pausedBy = (question: Question): StopOutcome =>
+	question.for === "rounds_spent"
+		? {kind: "stuck", why: "rounds_spent"}
+		: {kind: "ask", who: "owner", for: "paused"};
+
+/** Where the same line typed again goes on after a pause on `pick`: where the restart takes it. Pure. */
+const pausedAt = (question: Question, pick: string): Resume =>
+	goesOnFrom(resumeOf(question, pick), pausedBy(question));
 
 /** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
 const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer" : "build");
+
+/**
+ * The step a question of `kind` comes back to, asked after `step` ended. The rounds' question comes
+ * back to where its `again` goes; main's change to the test writer's files, to the test writer. Pure.
+ */
+export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
+	kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
+
+/**
+ * Where a lane goes on after `step` ended with `outcome` in `round`, with `trail` behind it, had it
+ * stopped right there. Pure.
+ */
+export const resumeAfter = (
+	step: LaneStep,
+	outcome: Outcome,
+	round: number,
+	trail: Held["trail"],
+): Resume => resumeOfMove(after(step, outcome, round, {trail}), step);
+
+/** The step that sent the work back, for the rounds' question asked again: the inverse of `againTo`. */
+const sentFrom = (to: LaneStep): LaneStep => (to === "test_writer" ? "review" : "build");
 
 /** A person's call: what is there stands or stops. Nothing would change by running the step again. */
 const CALL_PICKS = ["go_on", "stop"] as const;
 
 /** What a person may answer: a step that ended on `ask` may also be let through, unless it can't be. */
-const picksFor = (kind: (typeof ASKS)[number], step: LaneStep): readonly string[] =>
+const picksFor = (kind: AskFor, step: LaneStep): readonly string[] =>
 	kind === "step" && !NO_GO_ON.has(step) ? ["again", "go_on", "stop"] : PICKS[kind];
 
 /**
@@ -495,14 +782,15 @@ const spentQuestion = (s: Held, step: LaneStep): string => {
 		step === "review"
 			? "the review still sends the work back"
 			: "the repository's own tests still fail at this head";
-	return s.round >= MAX_ROUNDS
-		? `Round ${s.round} of ${MAX_ROUNDS} is spent, and ${still}. Should the work go round once more?`
+	const bound = boundOf(s.trail);
+	return s.round >= bound
+		? `Round ${s.round} of ${bound} is spent, and ${still}. Should the work go round once more?`
 		: `[build] send_back is false in this repository, and ${still}. Should the work go round once more?`;
 };
 
 const questionFor = (
 	s: Held,
-	kind: (typeof ASKS)[number],
+	kind: AskFor,
 	step: LaneStep,
 	asks: string,
 	call?: Call,
@@ -513,22 +801,35 @@ const questionFor = (
 		merge: titleOf(mergeWords(s.carry)),
 		step: titleOf(asks),
 		rounds_spent: titleOf(spentQuestion(s, step)),
+		exam_touched: titleOf(
+			`The build changed the test writer's files${(s.carry.touched ?? []).length === 0 ? "" : `: ${(s.carry.touched ?? []).join(", ")}`}. Which was wrong: the builder, or the test?`,
+		),
+		exam_conflict: titleOf(asks),
 	}[kind];
 	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
 	// the old count is safe too: that count was never more than the trail, and its answer added a row.
 	const ask = `a-${kind}-${s.trail.length}`;
-	// The rounds' question comes back to where its `again` goes.
-	const to = kind === "rounds_spent" ? againTo(step) : step;
+	const to = askedStep(kind, step);
 	return call === undefined
 		? {ask, what, picks: picksFor(kind, to), for: kind, step: to}
 		: {ask, what, picks: CALL_PICKS, for: kind, step: to, call};
 };
+
+/** The question when main changed the test writer's files: which, and what `again` does. Pure. */
+const conflictWords = (files: readonly string[]): string =>
+	`Main changed the test writer's files: ${files.join(", ")}. Should the test writer write those tests again on main's version?`;
 
 /** Where the lane goes on a `go_on`, in words. Pure. */
 const goOnWords = (next: Move): string => {
 	if ("to" in next) return `The lane moves on to the ${STEP_WORDS[next.to]} step.`;
 	return "ask" in next ? "The lane moves on, and asks you what comes next." : "The lane ends here.";
 };
+
+/** What typing the same line again does after a pause at `to`, in words. Pure. */
+const goesOnWords = (s: Held, to: Resume): string =>
+	to._tag === "ask"
+		? "Type the same line again and it asks you again."
+		: `Type the same line again and the ${STEP_WORDS[to.step]} step runs${to.round === "next" ? `, as round ${s.round + 1}` : ""}.`;
 
 /** The line for one pick of a question: what picking it does, in words. Pure. */
 const pickLine = (s: Held, question: Question, pick: string): string => {
@@ -540,14 +841,27 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 	const next = NEXT[question.step];
 	const {call} = question;
 	const spent = question.for === "rounds_spent";
+	const then = goesOnWords(s, pausedAt(question, pick));
+	const pauses: Readonly<Record<string, string>> = {
+		no:
+			question.for === "approve"
+				? `Nothing is built, and the lane pauses, saved. ${then} A note you write beside this answer goes to the planner.`
+				: `This change does not land now, and the lane pauses, saved. ${then}`,
+		stop: spent
+			? `The lane stops here, stuck on its rounds, and this change does not land now. Its working copy stays. ${then}`
+			: `The lane pauses here, saved, and this change does not land now. ${then}`,
+	};
 	const says: Readonly<Record<string, string>> = {
 		approve: `The plan stands as written${lean}. The lane goes on with it.`,
 		merge: "The change lands on main.",
-		again: spent
-			? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
-			: question.step === "build"
-				? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${MAX_ROUNDS}.`
-				: `The ${words} step runs once more, from the start.`,
+		again:
+			question.for === "exam_conflict"
+				? `The test writer writes those tests again on main's version, then the build runs, as round ${s.round + 1}.`
+				: spent
+					? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
+					: question.step === "build"
+						? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${boundOf(s.trail)}.`
+						: `The ${words} step runs once more, from the start.`,
 		go_on:
 			call === undefined
 				? [
@@ -560,10 +874,9 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 						...(CALL_WORDS[call.about] === undefined ? [] : [CALL_WORDS[call.about]]),
 						goOnWords(after(question.step, call.after, s.round, s)),
 					].join(" "),
-		stop: spent
-			? "The lane ends here, stuck on its rounds, and this change does not land. Its working copy stays."
-			: "The lane ends here, and this change does not land.",
-		no: "The lane ends here, and this change does not land.",
+		builder_wrong: `The test writer's files go back as it wrote them, on top of the builder's work, and the build runs again there, as round ${s.round + 1}. A note you write beside this answer goes to the builder.`,
+		test_wrong: `The test writer writes those files again, and only those, with the note you write beside this answer. Then the build goes on from the builder's work, as round ${s.round + 1}.`,
+		...(PAUSES[question.for].includes(pick) ? pauses : {}),
 	};
 	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
 };
@@ -602,6 +915,13 @@ const uncheckedWords = (step: LaneStep, {head, checked}: Carry): string => {
 	return `${why}, so the ${STEP_WORDS[step]} step does not run`;
 };
 
+/** Where a step that stops goes on: itself, in the round it was to run in. Pure. */
+const runAt = (s: Held, step: LaneStep, round: number): Resume => ({
+	_tag: "run",
+	step,
+	...(round > s.round ? {round: "next" as const} : {}),
+});
+
 /** The one place a step starts: one after build only on a head with green checks there. */
 const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
 	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
@@ -609,6 +929,7 @@ const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
 		return releasing(s, {
 			outcome: {kind: "stuck", why: unchecked},
 			said: uncheckedWords(step, s.carry),
+			at: runAt(s, step, round),
 		});
 	const at: Held = {...s, count: s.count + 1, round};
 	const cmd = runStep({
@@ -619,28 +940,46 @@ const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
 		carry: at.carry,
 		intent: intentOf("lane", s.number, at.count, step),
 	});
-	return [{...at, phase: "running", step, asked: cmd}, [cmd]];
+	return [{...heldOf(at), phase: "running", step, asked: cmd}, [cmd]];
 };
 
-const releasing = (s: Held, ended: Ended): Step_ => {
+/** The lane lets the ticket go: on an end, with nothing kept; on a stop, with its `Held` and where it goes on. */
+const releasing = (s: Held, close: End | Stop): Step_ => {
 	const cmd = releaseLane({
 		number: s.number,
 		lane: s.lane,
-		outcome: ended.outcome,
+		outcome: close.outcome,
 		intent: intentOf("lane", s.number, "release"),
 	});
-	return [{...s, ...ended, phase: "releasing", asked: cmd}, [cmd]];
+	return [{...heldOf(s), ...close, phase: "releasing", asked: cmd}, [cmd]];
 };
 
 /** `said`: what the trail and the end say. `asks`: the question, if this move asks one. `call`: if that question is a call. */
 const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call): Step_ => {
 	if ("to" in m) return running(s, m.to, m.round);
 	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, asks, call));
-	return releasing(s, {outcome: m.end, said});
+	// A stop goes on at the step that stopped: the same line runs it again.
+	return isEnd(m.end)
+		? releasing(s, {outcome: m.end, said})
+		: releasing(s, {outcome: m.end, said, at: stopsAt(step, m.end)});
+};
+
+/** The question a lane that goes on by asking asks again: the one it stopped on. Pure. */
+const askedAgain = (s: Held, kind: Exclude<AskFor, "step">, step: LaneStep): Question =>
+	kind === "rounds_spent"
+		? questionFor(s, kind, sentFrom(step), "")
+		: questionFor(s, kind, step, kind === "exam_conflict" ? conflictWords(s.carry.exam) : "");
+
+/** The lane goes on where `at` says: a step it runs, or a question it asks again. */
+const goOn = (s: Held, at: Resume): Step_ => {
+	if (at._tag === "run") return running(s, at.step, at.round === "next" ? s.round + 1 : s.round);
+	// A step's own question is asked by the step: it runs again, and asks again if it still has to.
+	if (at.for === "step") return running(s, at.step);
+	return asking(s, askedAgain(s, at.for, at.step));
 };
 
 /** A person wrote something beside their answer: every step after this one is told it. Pure. */
-const withNote = (carry: Carry, note: string): Carry =>
+export const withNote = (carry: Carry, note: string): Carry =>
 	note.trim() === ""
 		? carry
 		: {
@@ -661,7 +1000,7 @@ const joined = <A>(had: readonly A[], more: readonly A[], same: (a: A, b: A) => 
  * A person let a step through: what its writer could not test is now what nobody tested, and what
  * the question would let through now is. Pure.
  */
-const letThrough = (carry: Carry): Carry => {
+export const letThrough = (carry: Carry): Carry => {
 	const {waiting, ...rest} = carry;
 	const cannot = carry.cannot ?? [];
 	return {
@@ -697,6 +1036,10 @@ const heldOf = (s: Held): Held => ({
 	trail: s.trail,
 });
 
+/** What a fresh read of main changed, laid over the carry. Left out: nothing. Pure. */
+const withFresh = (s: Held, carry: StepEnd["carry"] | undefined): Held =>
+	carry === undefined ? s : {...s, carry: {...s.carry, ...carry}};
+
 const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: string): Step_ => {
 	const {question} = s;
 	const held: Held = {
@@ -718,31 +1061,45 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 					askWords(question.step, call.after),
 				);
 	}
-	// A stop on the rounds is no person's no to the change: the lane is stuck on its rounds.
-	if (question.for === "rounds_spent" && pick === "stop")
-		return releasing(held, {
-			outcome: {kind: "stuck", why: "rounds_spent"},
-			said: `${question.ask}: ${pick}`,
-		});
-	// The first pick goes on. Any other is the person's no.
-	if (pick !== question.picks[0])
-		return releasing(held, {
-			outcome: {kind: "skip", why: "owner_no"},
-			said: `${question.ask}: ${pick}`,
-		});
-	switch (question.for) {
-		case "approve":
-			return running(held, "exam");
-		case "exam_merge":
-			return running(held, "exam_merge");
-		case "merge":
-			return running(held, "merge");
-		case "step":
-			// A build run again is a round: the builder gets another try, and the tries are counted.
-			return running(held, question.step, question.step === "build" ? s.round + 1 : s.round);
-		case "rounds_spent":
-			return running(held, question.step, s.round + 1);
-	}
+	const at = resumeOf(question, pick);
+	if (!PAUSES[question.for].includes(pick)) return goOn(held, at);
+	// A person's `no` or `stop` pauses the lane where the pick goes on, saved. A stop on the rounds
+	// says so: the lane is stuck on them, and no person's no to the change.
+	return releasing(held, {
+		outcome: pausedBy(question),
+		said: `${question.ask}: ${pick}`,
+		at,
+	});
+};
+
+/** Where a question that could not be asked goes on: a step's own question runs the step again. Pure. */
+const askAt = (question: Question): Resume =>
+	question.for === "step" || question.call !== undefined
+		? {_tag: "run", step: question.step}
+		: {_tag: "ask", for: question.for, step: question.step};
+
+/** A stop the lane makes with no ticket to let go: it never claimed one, or the claim did not hold. */
+const stopped = (s: Held, outcome: StopOutcome, said: string, at: Resume): Step_ => [
+	{phase: "over", number: s.number, trail: s.trail, outcome, said, at, held: heldOf(s)},
+	[],
+];
+
+/** An end the lane makes with no ticket to let go. */
+const ended = (number: number, outcome: EndOutcome, said: string): Step_ => [
+	{phase: "over", number, trail: [], outcome, said},
+	[],
+];
+
+/** The trail's row for a step that could not run twice: the name its `ended` fact on the ticket has. */
+const RUN_FAILED = nameOf({kind: "stuck", why: "run_failed"});
+
+/** The lane goes on from a release: an end keeps nothing, a stop keeps its `Held` and where it goes on. */
+const released = (s: Lane): Step_ => {
+	if (s.phase !== "releasing") return [s, []];
+	const over = {phase: "over" as const, number: s.number, trail: s.trail};
+	if ("at" in s)
+		return [{...over, outcome: s.outcome, said: s.said, at: s.at, held: heldOf(s)}, []];
+	return [{...over, outcome: s.outcome, said: s.said}, []];
 };
 
 /** The Listen on a person's answer: on for as long as the lane is asking. */
@@ -764,7 +1121,7 @@ export const lane = defineMachine({
 		>,
 		ctx: undefined,
 	},
-	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson],
+	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson, freshMain],
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step_ => {
@@ -772,6 +1129,27 @@ export const lane = defineMachine({
 			const asked = readFiled({number: m.number});
 			const sendBack = m.sendBack === undefined ? {} : {sendBack: m.sendBack};
 			return [{phase: "reading", number: m.number, lane: m.lane, ...sendBack, asked}, [asked]];
+		},
+		// The same line typed again: a stop claims the ticket again, then reads main fresh. An end, or a
+		// stop in `FINAL`, stays as it is. A stop saved before a stop kept its `Held` goes on from its fold.
+		restart: (s, m): Step_ => {
+			if (s.phase !== "over" || isEnd(s.outcome)) return [s, []];
+			const held: Held | null =
+				"held" in s
+					? s.held
+					: m.folded === undefined || m.lane === undefined
+						? null
+						: {number: s.number, lane: m.lane, ...m.folded.held};
+			const at = "at" in s ? s.at : m.folded?.at;
+			if (held === null || at === undefined) return [s, []];
+			// Each restart counts, so two that stop before any step runs never share a claim or a read.
+			const count = held.count + 1;
+			const asked = claimLane({
+				number: s.number,
+				lane: held.lane,
+				intent: intentOf("lane", s.number, "claim", count, held.trail.length),
+			});
+			return [{...held, count, at: goesOnFrom(at, s.outcome), phase: "restarting", asked}, [asked]];
 		},
 		resume: (s): Step_ => {
 			if (s.phase === "idle" || s.phase === "over") return [s, []];
@@ -789,27 +1167,13 @@ export const lane = defineMachine({
 				trail: [],
 			};
 			if (!m.value.mine)
-				return [
-					{
-						phase: "over",
-						number: s.number,
-						trail: [],
-						outcome: {kind: "stuck", why: "not_yours"},
-						said: `#${s.number} was not filed by you or an agent of yours`,
-					},
-					[],
-				];
+				return ended(
+					s.number,
+					{kind: "stuck", why: "not_yours"},
+					`#${s.number} was not filed by you or an agent of yours`,
+				);
 			if (m.value.state === "closed")
-				return [
-					{
-						phase: "over",
-						number: s.number,
-						trail: [],
-						outcome: {kind: "skip", why: "closed"},
-						said: `#${s.number} is closed`,
-					},
-					[],
-				];
+				return ended(s.number, {kind: "skip", why: "closed"}, `#${s.number} is closed`);
 			const asked = claimLane({
 				number: s.number,
 				lane: s.lane,
@@ -819,44 +1183,105 @@ export const lane = defineMachine({
 		},
 		lane_read_err: (s): Step_ =>
 			s.phase === "reading"
-				? [
+				? stopped(
 						{
-							phase: "over",
 							number: s.number,
+							lane: s.lane,
+							...(s.sendBack === undefined ? {} : {sendBack: s.sendBack}),
+							count: 0,
+							round: 1,
+							carry: EMPTY,
 							trail: [],
-							outcome: {kind: "stuck", why: "no_ticket"},
-							said: `#${s.number} could not be read`,
 						},
-						[],
-					]
+						{kind: "stuck", why: "no_ticket"},
+						`#${s.number} could not be read`,
+						{_tag: "run", step: "triage"},
+					)
 				: [s, []],
 		lane_claim_ok: (s, m): Step_ => {
+			if (s.phase === "restarting") {
+				if (m.value !== s.lane)
+					return stopped(s, {kind: "stuck", why: "claim_held"}, `lane ${m.value} holds it`, s.at);
+				const asked = freshMain({
+					number: s.number,
+					from: s.at,
+					carry: s.carry,
+					intent: intentOf("lane", s.number, "fresh", s.count, s.trail.length),
+				});
+				return [{...heldOf(s), at: s.at, phase: "refreshing", asked}, [asked]];
+			}
 			if (s.phase !== "claiming") return [s, []];
 			if (m.value !== s.lane)
-				return [
-					{
-						phase: "over",
-						number: s.number,
-						trail: s.trail,
-						outcome: {kind: "stuck", why: "claim_held"},
-						said: `lane ${m.value} holds it`,
-					},
-					[],
-				];
+				return stopped(s, {kind: "stuck", why: "claim_held"}, `lane ${m.value} holds it`, {
+					_tag: "run",
+					step: "triage",
+				});
 			return running(heldOf(s), "triage");
 		},
-		lane_claim_err: (s): Step_ =>
-			s.phase === "claiming"
-				? [
-						{
-							phase: "over",
-							number: s.number,
-							trail: s.trail,
-							outcome: {kind: "stuck", why: "step_failed"},
-							said: "the claim could not be made",
-						},
-						[],
-					]
+		lane_claim_err: (s): Step_ => {
+			const said = "the claim could not be made";
+			const failed = {kind: "stuck", why: "step_failed"} as const;
+			if (s.phase === "claiming") return stopped(s, failed, said, {_tag: "run", step: "triage"});
+			if (s.phase === "restarting") return stopped(s, failed, said, s.at);
+			return [s, []];
+		},
+		lane_fresh_ok: (s, m): Step_ => {
+			if (s.phase !== "refreshing") return [s, []];
+			const held = heldOf(s);
+			const found = m.value;
+			switch (found._tag) {
+				case "closed":
+					return releasing(held, {
+						outcome: {kind: "skip", why: "closed"},
+						said: `#${s.number} was closed while the lane was stopped`,
+					});
+				case "not_yours":
+					return releasing(held, {
+						outcome: {kind: "stuck", why: "not_yours"},
+						said: `#${s.number} was not filed by you or an agent of yours`,
+					});
+				// The builder's files conflict with main: main's side stands, and the builder redoes them.
+				case "conflicts":
+					return running(withFresh(held, found.carry), "build", held.round + 1);
+				// The test writer's files do: the person says whether the test writer writes them again.
+				case "exam_conflict": {
+					const on = withFresh(held, found.carry);
+					return asking(
+						on,
+						questionFor(on, "exam_conflict", "test_writer", conflictWords(found.files)),
+					);
+				}
+				case "fresh":
+				case "merged": {
+					const on = withFresh(held, found.carry);
+					// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
+					const at: Resume =
+						found._tag === "merged" && STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
+							? {_tag: "run", step: "review"}
+							: s.at;
+					// Code's checks at the head a step after the build goes on at are red: the builder gets
+					// them, a round up, as after a build's own red, or a person is asked past the bound.
+					if (!AFTER_BUILD.has(at.step) || uncheckedAt(on.carry) !== "checks_red")
+						return goOn(on, at);
+					const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
+					return move(
+						on,
+						"build",
+						after("build", red, on.round, on),
+						nameOf(red),
+						askWords("build", red),
+					);
+				}
+			}
+		},
+		// Main could not be read: the lane stops where it was to go on, and lets the ticket go.
+		lane_fresh_err: (s): Step_ =>
+			s.phase === "refreshing"
+				? releasing(heldOf(s), {
+						outcome: {kind: "stuck", why: "step_failed"},
+						said: "main could not be read fresh",
+						at: s.at,
+					})
 				: [s, []],
 		lane_step_ok: (s, m): Step_ => {
 			if (s.phase !== "running") return [s, []];
@@ -878,12 +1303,17 @@ export const lane = defineMachine({
 					: undefined,
 			);
 		},
+		// A step that could not run is run once more, as the same Act (P8). Twice: the lane stops there.
 		lane_step_err: (s): Step_ => {
 			if (s.phase !== "running") return [s, []];
-			const said = `${s.step}: could not run`;
+			if (s.again !== true) return [{...s, again: true}, [s.asked]];
 			return releasing(
-				{...heldOf(s), trail: [...s.trail, {step: s.step, said}]},
-				{outcome: {kind: "stuck", why: "step_failed"}, said},
+				{...heldOf(s), trail: [...s.trail, {step: s.step, said: RUN_FAILED}]},
+				{
+					outcome: {kind: "stuck", why: "step_failed"},
+					said: `${s.step}: could not run`,
+					at: {_tag: "run", step: s.step},
+				},
 			);
 		},
 		// The question is on the ticket. The Listen goes on hearing for the answer.
@@ -893,39 +1323,16 @@ export const lane = defineMachine({
 				? releasing(heldOf(s), {
 						outcome: {kind: "stuck", why: "step_failed"},
 						said: `${s.question.ask}: could not be asked`,
+						at: askAt(s.question),
 					})
 				: [s, []],
 		lane_answered: (s, m): Step_ =>
 			s.phase === "asking" && m.ask === s.question.ask && s.question.picks.includes(m.pick)
 				? answered(s, m.pick, m.note ?? "")
 				: [s, []],
-		lane_release_ok: (s): Step_ =>
-			s.phase === "releasing"
-				? [
-						{
-							phase: "over",
-							number: s.number,
-							trail: s.trail,
-							outcome: s.outcome,
-							said: s.said,
-						},
-						[],
-					]
-				: [s, []],
+		lane_release_ok: (s): Step_ => released(s),
 		// The ticket's lease runs out by itself: the lane has ended all the same.
-		lane_release_err: (s): Step_ =>
-			s.phase === "releasing"
-				? [
-						{
-							phase: "over",
-							number: s.number,
-							trail: s.trail,
-							outcome: s.outcome,
-							said: s.said,
-						},
-						[],
-					]
-				: [s, []],
+		lane_release_err: (s): Step_ => released(s),
 	},
 	subs: [answerSub],
 });
