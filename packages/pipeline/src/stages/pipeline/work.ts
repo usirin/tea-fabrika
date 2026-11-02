@@ -260,15 +260,29 @@ export class LaneWork extends Context.Service<
 		readonly mergeable: (head: string) => Effect.Effect<"clean" | "conflicts", Failed>;
 		/**
 		 * Ticket `n`'s branch, at `head`, put on `onto` (self-fix PR 5): rebased when it was never pushed,
-		 * else main merged into it, so a pushed head is never rewritten. In each file that conflicts, main's
-		 * side is taken. Answers the new head and the files that conflicted.
+		 * else main merged into it, so a pushed head is never rewritten. `since`, on a rebase: only the
+		 * commits after it are put on `onto`. In each file that conflicts, `onto`'s side is taken. Answers
+		 * the new head and the files that conflicted.
 		 */
 		readonly onMain: (
 			n: number,
 			head: string,
 			onto: string,
 			pushed: boolean,
+			since?: string,
 		) => Effect.Effect<OnMain, Failed>;
+		/** Ticket `n`'s branch moved to `commit`, its working copy with it: nothing it held besides is kept. */
+		readonly reset: (n: number, commit: string) => Effect.Effect<void, Failed>;
+		/**
+		 * On ticket `n`'s branch as it is, `files` as `from` has them, or gone where `from` has none,
+		 * committed with `message`. Answers the head; nothing changed, the head as it was.
+		 */
+		readonly putBack: (
+			n: number,
+			from: string,
+			files: readonly string[],
+			message: string,
+		) => Effect.Effect<string, Failed>;
 		/** A branch off the remote. Only a lane's own, and only once it has merged. */
 		readonly dropBranch: (branch: string) => Effect.Effect<void, Failed>;
 		/** The lane whose copies and homes these are, from now on. One `LaneWork` serves one lane. */
@@ -686,16 +700,22 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		 * the side being built on; `--theirs` in a merge into the branch), or the file goes where main
 		 * removed it. A commit that is empty once main's side stands is dropped.
 		 */
-		const onMain = (n: number, from: string, onto: string, pushed: boolean) =>
+		const onMain = (n: number, from: string, onto: string, pushed: boolean, since?: string) =>
 			Effect.gen(function* () {
 				const {tree} = yield* made(String(n), `lane/${n}`);
 				yield* git(tree, ["reset", "--quiet", "--hard", from]);
 				const side = pushed ? "--theirs" : "--ours";
 				const conflicts = new Set<string>();
-				const commits = Number(yield* git(tree, ["rev-list", "--count", `${onto}..${from}`]));
+				const commits = Number(
+					yield* git(tree, ["rev-list", "--count", `${since ?? onto}..${from}`]),
+				);
 				let ran = yield* gitIn(
 					tree,
-					pushed ? ["merge", "--quiet", "--no-edit", onto] : ["rebase", "--quiet", onto],
+					pushed
+						? ["merge", "--quiet", "--no-edit", onto]
+						: since === undefined
+							? ["rebase", "--quiet", onto]
+							: ["rebase", "--quiet", "--onto", onto, since],
 				);
 				// One stop per commit at most, and one for a merge: past that it is not settling.
 				for (let left = commits + 2; ran.code !== 0; left--) {
@@ -803,6 +823,26 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					),
 				),
 			onMain,
+			reset: (n, sha) =>
+				Effect.gen(function* () {
+					const {tree} = yield* made(String(n), `lane/${n}`);
+					yield* git(tree, ["reset", "--quiet", "--hard", sha]);
+					yield* git(tree, ["clean", "--quiet", "-fd"]);
+				}),
+			putBack: (n, from, files, message) =>
+				Effect.gen(function* () {
+					const {tree} = yield* made(String(n), `lane/${n}`);
+					// Each checked out of `from` is staged; each `from` has none is taken out, staged too.
+					for (const file of files) {
+						const named = ["--", `:(literal)${file}`];
+						const taken = yield* gitIn(tree, ["checkout", from, ...named]);
+						if (taken.code !== 0)
+							yield* git(tree, ["rm", "--quiet", "-r", "--ignore-unmatch", ...named]);
+					}
+					const same = yield* gitIn(tree, ["diff", "--cached", "--quiet", "HEAD"]);
+					if (same.code !== 0) yield* git(tree, ["commit", "--quiet", "-m", message]);
+					return yield* head(tree);
+				}),
 			mergeable: (sha) =>
 				gitIn(clone, ["merge-tree", "--write-tree", "origin/main", sha]).pipe(
 					Effect.map((ran) => (ran.code === 0 ? ("clean" as const) : ("conflicts" as const))),
