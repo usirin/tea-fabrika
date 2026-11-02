@@ -36,15 +36,15 @@ const checksFromSettings = Effect.gen(function* () {
 }).pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
 
 /**
- * The code host `<home>/pipeline.json` names. A home with no such file gets the local one: it serves
+ * The code host the checkout's origin names. A checkout with no origin gets the local one: it serves
  * nothing, since the lane's first read says what is missing and stops.
  */
 const laneHost = Layer.unwrap(
 	Effect.gen(function* () {
 		const work = yield* LaneWork;
-		const config = yield* work.config.pipe(Effect.orElseSucceed(() => null));
-		return config?.host === "github"
-			? laneGitHubHost(config.repo, checksFromSettings)
+		const origin = yield* work.origin.pipe(Effect.orElseSucceed(() => null));
+		return origin?.host === "github"
+			? laneGitHubHost(origin.repo, checksFromSettings)
 			: Layer.merge(laneLocalHost(checksFromSettings), localWire);
 	}),
 );

@@ -28,7 +28,7 @@ const shots = process.env.SHOTS ?? mkdtempSync(join(tmpdir(), "lane-shots-"));
 mkdirSync(shots, {recursive: true});
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-e2e-")));
-const {home, remote} = makeLaneHome({
+const {home, remote, seed} = makeLaneHome({
 	dir,
 	nodeModules: join(here, "../../packages/pipeline/node_modules"),
 	reads: [join(here, "../..")],
@@ -167,7 +167,9 @@ const hostPid = () => {
 	}
 };
 
-const app = await _electron.launch({executablePath: electronPath, args: [here], env});
+// Started in the toy checkout, as a person starts the app in theirs: the host it starts runs there,
+// and the lane reads its repository off that checkout's origin.
+const app = await _electron.launch({executablePath: electronPath, args: [here], env, cwd: seed});
 let failed = false;
 try {
 	const page = await app.firstWindow();

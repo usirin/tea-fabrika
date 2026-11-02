@@ -20,14 +20,24 @@ triage -> plan -> the person approves -> exam, when rules change -> test writer
 
 ## What it needs
 
-`<home>/pipeline.json`, read when a lane starts:
+A checkout of the repository, where the app and its host were started. `pnpm fabrika` starts them in
+this one. When a lane starts it reads that checkout's `origin`, as written in git's config, the way
+`gh` reads the folder it runs in. No file names the repository: its address is the repository's own
+fact, and the app's home holds only the person's things
+([one fabrika.toml per repo](../../docs/direction/one-fabrika-toml-per-repo.md)).
 
-```json
-{"repo": "owner/name", "remote": "git@host:owner/name.git", "host": "github"}
+```text
+https://github.com/acme/web.git    acme/web, on the GitHub host
+git@github.com:acme/web.git        the same
+/srv/git/acme/web.git              acme/web, on the local host: a bare git remote and a file of pull requests, for proof
+https://gitlab.com/acme/web.git    refused: the lane ends before any agent starts, and says why
+no origin, or no checkout          refused the same way
 ```
 
-`host` is `github` or `local`. `local` is a bare git remote and a file of pull requests, for proof.
-`codex` names another program than the `codex` on the path. The repository holds
+Only `origin` is read. `gh` picks among several remotes by name, `upstream` first, then `github`, then
+`origin` (`remoteNameSortScore` in `context/remote.go` of `cli/cli`), because it reads and opens pull
+requests against a fork's parent. The lane pushes branches and merges, so it works where git itself
+pushes by default: `origin`. The lane runs the `codex` on the path. The repository holds
 `.fabrika/fabrika.toml`, with `[[checks.run]]`, one `[agents.<step>]` table per step you want to
 change, and its review rules in `[review]`. Each step defaults to Codex on `gpt-6-astra`, effort
 `high`. Triage defaults to `claude` on `opus`.
@@ -54,7 +64,7 @@ so a lane's home does not hold it and removing a run's home does not remove it.
 
 ## On GitHub
 
-`host: "github"` works through your own `gh`. It has run only over a stand-in `gh`
+An `origin` on GitHub works through your own `gh`. It has run only over a stand-in `gh`
 (`fixtures/pipeline-lane/gh.mjs`), never against real GitHub. Only the stand-in's answer to the facts
 query is compared with a recorded one in `fixtures/code-host/`. Its other answers and all its refusals
 are written from what the code expects.

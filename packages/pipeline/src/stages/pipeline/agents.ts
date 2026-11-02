@@ -191,8 +191,8 @@ export const laneAgents: Layer.Layer<LaneAgents, never, LaneHome | LaneWork> = L
 		const fs = yield* FileSystem.FileSystem;
 		const agents = yield* Effect.cached(
 			Effect.gen(function* () {
-				const config = yield* work.config.pipe(Effect.orElseSucceed(() => null));
-				const codex = config?.codex ?? "codex";
+				// The `codex` on the path, as the person's own shell finds it.
+				const codex = "codex";
 				const parent = process.env;
 				const adapters = {
 					codex: yield* codexAdapter({codex, parent, access: "write"}),

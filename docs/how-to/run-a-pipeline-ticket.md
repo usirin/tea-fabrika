@@ -26,12 +26,13 @@ An agent goes through this list and tells the owner what is missing.
 
 1. **[PR 267](https://github.com/usirin/tea-fabrika/pull/267) is merged.** Until it is, the lane cannot
    handle what real agents answer.
-2. **The owner answered both questions in [the plan](../plan/README.md#where-we-are-now):**
-   - May `pipeline.json` go in the app's real home? Without it, a lane is not started there.
-   - May this first run go without a box? The lane has no box setting for head code: the install, the
-     checks and the mutants run as the person. So a "no" means this run does not happen until head code
-     is boxed. Lean: yes, 75%.
+2. **The owner answered the question in [the plan](../plan/README.md#where-we-are-now):** may this
+   first run go without a box? The lane has no box setting for head code: the install, the checks and
+   the mutants run as the person. So a "no" means this run does not happen until head code is boxed.
+   Lean: yes, 75%.
 3. **`.fabrika/fabrika.toml` is on the repository.** This one has it.
+   The lane needs no other file. It reads the repository off the `origin` of the checkout the app was
+   started in, the way `gh` reads the folder it runs in (see [who starts it](#who-starts-it)).
 4. **Everyone is logged in.** Run these as they are, so no token is printed, and do not paste their
    output anywhere, since it can name the account:
    - `codex login status`
@@ -57,19 +58,8 @@ An agent goes through this list and tells the owner what is missing.
 
 ## Who starts it
 
-1. **After the owner's yes,** an agent writes `<home>/pipeline.json`. The lane reads this file each time
-   a lane starts, so writing it needs no restart.
-
-   ```json
-   {"repo": "owner/name", "remote": "git@host:owner/name.git", "host": "github"}
-   ```
-
-   `<home>` is the app's own data folder. It is `FABRIKA_HOME` when that is set, and otherwise Electron's
-   userData folder (`apps/fabrika/src/main.ts`). The owner's normal start does not set it. Electron names
-   that folder after `productName` in `apps/fabrika/package.json`, and on a Mac it is under
-   `~/Library/Application Support/`. The right folder holds `ledger.sqlite` and `host/sock`.
-
-2. **The owner gets the host onto main's code,** doing each of these: Cmd-Q, pull, install, open. The lane runs in the host, not in the app, and Cmd-Q leaves the host
+1. **The owner gets the host onto main's code, started in the checkout,** doing each of these: Cmd-Q,
+   pull, install, open. The lane runs in the host, not in the app, and Cmd-Q leaves the host
    running. So quitting and opening again may keep old code. The steps:
 
    ```sh
@@ -91,7 +81,19 @@ An agent goes through this list and tells the owner what is missing.
    If a tile says `pipeline could not load`, the host outlived a rebuild and its files are gone. Stopping
    it takes that same button.
 
-3. **The owner types the line in their app.** No agent types it, because no agent answers the questions
+   **The lane works on the repository the host's checkout names.** `pnpm fabrika` starts the app in
+   this checkout, and the host the app starts runs in the same folder. A lane reads that checkout's
+   `origin` when it starts: `github.com` is the GitHub host, a folder on this disk is the local one.
+   There is no file to write. A host started anywhere else, such as an app opened from the Finder, or a
+   checkout with no `origin`, ends the lane before any agent starts, and the tile says why:
+
+   ```text
+   #117 ended: stuck:step_failed. <checkout> has no origin: start the app from a checkout of the repository
+   ```
+
+   To see what the lane will read, in the checkout: `git config --local --get remote.origin.url`.
+
+2. **The owner types the line in their app.** No agent types it, because no agent answers the questions
    the lane puts to a person.
 
 ## The steps

@@ -6,11 +6,14 @@ import {LaneRunner} from "./index.ts";
 
 // `@tea-fabrika/pipeline/node`: a lane on this machine, in the host's process.
 //
-//   <home>/pipeline.json   the repository, its remote and which host, read when a lane starts
-//   briefs                 the plain files of ../briefs; a bundle keeps its copy beside itself
-//   person                 who typed the line: its ticket must be theirs, and the lane writes for them
+//   checkout   the folder the host was started in. `pnpm fabrika` starts the app, and so its host,
+//              in a checkout: its `origin` is the repository, its remote and which host, read when
+//              a lane starts, as `gh` reads the folder it runs in
+//   briefs     the plain files of ../briefs; a bundle keeps its copy beside itself
+//   person     who typed the line: its ticket must be theirs, and the lane writes for them
 //
-// A home that has no such file refuses the lane, in the tile, and nothing else changes.
+// A host started outside a checkout, or in one with no origin it knows, refuses the lane, in the
+// tile, and nothing else changes. Node at its edge, said here: `process.env` and `process.cwd()`.
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -37,7 +40,7 @@ const laneCode = Effect.tryPromise({
 const personOf = (writer: Writer): string => ("for" in writer ? writer.for : writer.id);
 
 /**
- * Runs lanes from the home the host was started on, for `writer`. Each lane gets its own services,
+ * Runs lanes from the home and the checkout the host was started on, for `writer`. Each lane gets its own services,
  * made for that run: a lane's step and spend belong to it alone.
  */
 export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledger> =>
@@ -61,6 +64,7 @@ export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledge
 									Effect.provide(
 										laneLayer({
 											home,
+											checkout: process.cwd(),
 											briefs: briefsFolder(),
 											person: personOf(writer),
 											...(ignorer === undefined ? {} : {ignorer}),

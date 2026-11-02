@@ -1,6 +1,6 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {hostEnv, runEnv} from "@kampus/fabrika-old/agents/sandbox";
-import {Context, Effect, FileSystem, Layer, Path, Schema, type Scope, Semaphore} from "effect";
+import {Context, Effect, FileSystem, Layer, Path, type Scope, Semaphore} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild} from "../../child.ts";
 import {listedAt, textAt} from "../../git-read.ts";
@@ -15,10 +15,12 @@ import {
 import {shippedRubrics} from "../../setup.ts";
 import {titleOf} from "../../tickets/ticket.ts";
 
-// Where a lane works, on the machine it runs on. Read when a step needs it, so a home with no
-// config starts the lane and ends it on a named state that says which file to write.
+// Where a lane works, on the machine it runs on. The repository is the one the checkout's `origin`
+// names, the checkout the app was started from, as `gh` reads a repository off the folder it runs in.
+// Read when a step needs it, so a checkout with no origin starts the lane and ends it on a named state
+// that says so. The home holds only the lane's own work:
 //
-//   <home>/pipeline.json     {"repo": "owner/name", "remote": "<a git url>", "host": "local"}
+//   <checkout>               git's `remote.origin.url`: the repository, its remote and which host
 //   <home>/work/clone        the repository, fetched before each read
 //   <home>/work/trees/<n>    ticket n's working copy, on branch lane/<n>: tests, then the build
 //   <home>/work/copies/<c>   the code at commit c, plain files with no .git: what tests run in
@@ -37,7 +39,8 @@ type Failed = {readonly _tag: "unknown"; readonly says?: string};
 const failed = (says: string): Failed => ({_tag: "unknown", says});
 
 /**
- * Where this lane's files are: the app's home, and the folder its brief files were put in. `person`:
+ * Where this lane's files are: the app's home, the checkout it was started from, whose `origin` names
+ * the repository, and the folder its brief files were put in. `person`:
  * who is running it, by the id the tracker knows them by. `ignorer`: the mutation step's ignorer
  * plugin, where a bundle put it. Left out: beside its source. `shipped`: the rubrics fabrika ships,
  * where a bundle put them. Left out: beside their source.
@@ -46,6 +49,7 @@ export class LaneHome extends Context.Service<
 	LaneHome,
 	{
 		readonly home: string;
+		readonly checkout: string;
 		readonly briefs: string;
 		readonly person: string;
 		readonly ignorer?: string;
@@ -88,16 +92,44 @@ const loadsItself = (file: string): boolean => {
 	return LOADED_FILES.has(parts.at(-1) ?? "") || parts.some((part) => LOADED_FOLDERS.has(part));
 };
 
-/** `<home>/pipeline.json`. `host`: `local` is a bare git remote and a file of pull requests. */
-export const LaneConfig = Schema.Struct({
+/**
+ * The repository a lane works on, read off its checkout's `origin`. `host`: `local` is a bare git
+ * remote on this disk and a file of pull requests.
+ */
+export interface Origin {
 	/** `owner/name`: names the ticket's id, never read from a code host. */
-	repo: Schema.String.check(Schema.isPattern(/^[^/\s]+\/[^/\s]+$/)),
-	remote: Schema.String,
-	host: Schema.Literals(["local", "github"]),
-	/** The `codex` to run. Left out: `codex` on the path. */
-	codex: Schema.optionalKey(Schema.String),
-});
-export type LaneConfig = typeof LaneConfig.Type;
+	readonly repo: string;
+	/** The url as origin has it: what the lane clones, fetches and pushes, through git's own config. */
+	readonly remote: string;
+	readonly host: "local" | "github";
+}
+
+/** GitHub's three ways to name a repository to git: https, ssh, and ssh's short form. */
+const ON_GITHUB = [
+	/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/,
+	/^ssh:\/\/git@github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/,
+	/^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/,
+];
+
+/** A folder on this disk, by its whole path: its last two parts are the owner and the name. */
+const ON_DISK = /^(?:file:\/\/)?\/(?:.*\/)?([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/;
+
+/**
+ * What an origin's url names, as written in git's config, before any `insteadOf`. `null`: a host
+ * this lane does not know, or a relative path, which git would read from wherever it runs. Pure.
+ *
+ *   readOrigin("git@github.com:acme/web.git")   // {repo: "acme/web", host: "github", remote: ...}
+ *   readOrigin("/srv/git/acme/web.git")         // {repo: "acme/web", host: "local", remote: ...}
+ *   readOrigin("https://gitlab.com/acme/web")   // null
+ */
+export const readOrigin = (url: string): Origin | null => {
+	for (const form of ON_GITHUB) {
+		const m = form.exec(url);
+		if (m !== null) return {repo: `${m[1]}/${m[2]}`, remote: url, host: "github"};
+	}
+	const m = ON_DISK.exec(url);
+	return m === null ? null : {repo: `${m[1]}/${m[2]}`, remote: url, host: "local"};
+};
 
 const GIT = [
 	"-c",
@@ -131,7 +163,8 @@ export interface PlainFile {
 export class LaneWork extends Context.Service<
 	LaneWork,
 	{
-		readonly config: Effect.Effect<LaneConfig, Failed>;
+		/** The repository the checkout's `origin` names. No origin, or one `readOrigin` does not know, fails it. */
+		readonly origin: Effect.Effect<Origin, Failed>;
 		/** Fetch, and answer main's tip now. */
 		readonly main: Effect.Effect<string, Failed>;
 		/** The repository's `.fabrika/fabrika.toml`, at main. An old file `settingsRefusal` refuses fails it, and so does a read that broke. */
@@ -225,7 +258,7 @@ const makerOf = (tree: string): Semaphore.Semaphore => {
 export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 	LaneWork,
 	Effect.gen(function* () {
-		const {home, shipped} = yield* LaneHome;
+		const {home, checkout, shipped} = yield* LaneHome;
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -259,18 +292,26 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const quiet = <A, E extends {readonly message: string}>(effect: Effect.Effect<A, E>) =>
 			effect.pipe(Effect.mapError((e) => failed(e.message)));
 
-		const config = Effect.gen(function* () {
-			const file = path.join(home, "pipeline.json");
-			const text = yield* fs
-				.readFileString(file)
-				.pipe(Effect.mapError(() => failed(`write ${file}: {"repo", "remote", "host"}`)));
-			return yield* Schema.decodeEffect(Schema.fromJsonString(LaneConfig))(text).pipe(
-				Effect.mapError(() => failed(`${file} does not fit: {"repo", "remote", "host"}`)),
-			);
+		// The url as written, with `--local` so a person's own config is not read as the checkout's.
+		// `get-url` would apply `insteadOf` first, and name the folder a rewrite points at, not the repo.
+		// git exits 1 when the key is not there; any other failure is no checkout at all.
+		const START = "start the app from a checkout of the repository";
+		const origin = Effect.gen(function* () {
+			const ran = yield* gitIn(checkout, ["config", "--local", "--get", "remote.origin.url"]);
+			if (ran.code === 1) return yield* Effect.fail(failed(`${checkout} has no origin: ${START}`));
+			if (ran.code !== 0)
+				return yield* Effect.fail(failed(`${checkout} is not a git checkout: ${START}`));
+			const url = ran.out.trim();
+			const read = readOrigin(url);
+			if (read === null)
+				return yield* Effect.fail(
+					failed(`origin ${url} is not on GitHub or a folder on this disk: ${START}`),
+				);
+			return read;
 		});
 
 		const fetched = Effect.gen(function* () {
-			const {remote} = yield* config;
+			const {remote} = yield* origin;
 			if (!(yield* fs.exists(clone).pipe(Effect.orElseSucceed(() => false)))) {
 				yield* quiet(fs.makeDirectory(at(), {recursive: true}));
 				yield* git(at(), ["clone", "--quiet", remote, clone]);
@@ -549,7 +590,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		});
 
 		return {
-			config,
+			origin,
 			main,
 			settings,
 			tree: (n) =>

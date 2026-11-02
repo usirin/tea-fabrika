@@ -114,7 +114,8 @@ interface Script {
 	readonly notes?: Readonly<Record<string, string>>;
 	/** Stop the lane when a line holding this is said, then type the line again. */
 	readonly killAt?: string;
-	readonly noConfig?: boolean;
+	/** The checkout the lane starts from has no origin. */
+	readonly noOrigin?: boolean;
 	/** The host is GitHub, played by a stand-in `gh` that tells this story. */
 	readonly story?: GhStory;
 	/** `[review] rubrics`. `null`: the file leaves the table out. */
@@ -204,7 +205,7 @@ const lane = ({
 	steps,
 	notes,
 	killAt,
-	noConfig = false,
+	noOrigin = false,
 	story,
 	rubrics,
 	counted,
@@ -218,7 +219,7 @@ const lane = ({
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const red = join(dir, "red");
-	const {home, remote} = makeLaneHome({
+	const {home, remote, seed} = makeLaneHome({
 		dir,
 		nodeModules: MODULES,
 		reads: [dirname(dirname(dirname(MODULES)))],
@@ -228,7 +229,7 @@ const lane = ({
 		...(mainFiles === undefined ? {} : {mainFiles}),
 		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
 	});
-	if (noConfig) rmSync(join(home, "pipeline.json"));
+	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
 	if (fake !== undefined) writeFileSync(join(dir, "script.json"), JSON.stringify(fake));
 	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
@@ -247,7 +248,7 @@ const lane = ({
 						checksDown() ? Effect.fail({_tag: "could_not_run"} as const) : runner.tests(head),
 					),
 			})),
-			Effect.provide(laneLayer({home, briefs: BRIEFS, person: "owner"})),
+			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
 				Option.isNone(ended) ? Effect.sync(() => void lines.push(TIMED_OUT)) : Effect.void,
@@ -447,10 +448,11 @@ describe("a lane, whole", () => {
 		},
 	);
 
-	it("says what is missing when the home names no repository", {timeout: 60_000}, async () => {
-		const ran = await lane({noConfig: true});
+	it("says what is missing when its checkout has no origin", {timeout: 60_000}, async () => {
+		const ran = await lane({noOrigin: true});
 		expect(ran.stages).toEqual([]);
-		expect(ran.lines.join("\n")).toContain("pipeline.json");
+		expect(ran.lines.join("\n")).toMatch(/ended: stuck:step_failed\. .* has no origin/);
+		expect(codexRuns(ran.dir)).toEqual([]);
 	});
 
 	it(
@@ -617,9 +619,10 @@ describe("which rubrics judge a change, on the local host", () => {
 	});
 });
 
-// The proof that matters. The whole lane on `host: "github"`: the real machines, the real host code
-// and the real `gh` call, reaching a stand-in `gh` on the path (fixtures/pipeline-lane/gh.mjs) and
-// real git on a bare remote. No real GitHub is touched. What this cannot prove: that GitHub answers
+// The proof that matters. The whole lane on the GitHub host, from a checkout whose origin is on
+// GitHub: the real machines, the real host code and the real `gh` call, reaching a stand-in `gh` on
+// the path (fixtures/pipeline-lane/gh.mjs), and real git on a bare remote that the fake home's
+// `~/.gitconfig` sends that origin to. No real GitHub is touched. What this cannot prove: that GitHub answers
 // as the stand-in does. Only its answer to the facts query is compared with `fixtures/code-host/`.
 // Every other answer and every refusal is written from what the code expects, and its branch rule and
 // rollup timing are guesses. Today's version.
@@ -2524,7 +2527,7 @@ describe("a lane, on what the real agents answered", () => {
 			async () => {
 				const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 				made.push(dir);
-				const {home} = makeLaneHome({
+				const {home, seed} = makeLaneHome({
 					dir,
 					nodeModules: MODULES,
 					reads: [dirname(dirname(dirname(MODULES)))],
@@ -2533,7 +2536,7 @@ describe("a lane, on what the real agents answered", () => {
 				const lines: string[] = [];
 				const line = (n: number) =>
 					runLane(n, (said) => Effect.sync(() => void lines.push(said))).pipe(
-						Effect.provide(laneLayer({home, briefs: BRIEFS, person: "owner"})),
+						Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 						Effect.timeoutOption(Duration.seconds(90)),
 					);
 				const OTHER = NUMBER + 1;

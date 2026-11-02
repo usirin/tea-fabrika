@@ -11,7 +11,7 @@ import type {PrFacts, ReviewKind} from "../ship/facts.ts";
 import {laneLocalHost, LanePulls, mergeAnswered, type Pull, pullFacts, PullWire} from "./pulls.ts";
 import {LaneWork} from "./work.ts";
 
-// The lane's code host when `<home>/pipeline.json` says `github`. Today's version. It has run only
+// The lane's code host when the checkout's origin is on GitHub. Today's version. It has run only
 // over a stand-in `gh` (fixtures/pipeline-lane/gh.mjs), never against real GitHub. What differs from
 // the local host:
 //

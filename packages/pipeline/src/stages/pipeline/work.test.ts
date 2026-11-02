@@ -17,11 +17,11 @@ import {Effect, Layer, type Result, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_MOVED} from "../../settings.ts";
 import {Title} from "../../tickets/ticket.ts";
-import {makeLaneHome} from "./lane-fixture.ts";
-import {LaneHome, LaneWork, laneWork} from "./work.ts";
+import {checkoutFor, LANE_REPO, makeLaneHome} from "./lane-fixture.ts";
+import {LaneHome, LaneWork, laneWork, readOrigin} from "./work.ts";
 
-// The lane reads a repository's settings at main's tip, in a clone of its own, on real git over a
-// bare remote. Today's version.
+// The lane learns its repository from its checkout's origin, and reads that repository's settings
+// at main's tip, in a clone of its own, on real git over a bare remote. Today's version.
 
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fixture",
@@ -29,6 +29,104 @@ const IDENTITY = {
 	GIT_COMMITTER_NAME: "fixture",
 	GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
 };
+
+/** `LaneWork` for a home the fixture made, started from `checkout`: the fixture's seed when left out. */
+const provideLane = (home: string, checkout = checkoutFor(home)) =>
+	Effect.provide(
+		laneWork.pipe(
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout, briefs: "", person: "owner"})),
+		),
+	);
+
+describe("the repository a lane works on", () => {
+	it.each([
+		["https://github.com/acme/web.git", "github", "acme/web"],
+		["https://github.com/acme/web", "github", "acme/web"],
+		["git@github.com:acme/web.git", "github", "acme/web"],
+		["ssh://git@github.com/acme/web.git", "github", "acme/web"],
+		["/srv/git/acme/web.git", "local", "acme/web"],
+		["file:///srv/git/acme/web.git", "local", "acme/web"],
+	])("reads %s as %s, %s", (url, host, repo) => {
+		expect(readOrigin(url)).toEqual({repo, remote: url, host});
+	});
+
+	it.each([
+		"https://gitlab.com/acme/web.git",
+		"git@gitlab.com:acme/web.git",
+		"https://github.com/acme",
+		"https://github.com/acme/web/tree/main",
+		"../acme/web.git",
+		"web.git",
+		"/web.git",
+		"",
+	])("does not know %j", (url) => {
+		expect(readOrigin(url)).toBeNull();
+	});
+
+	describe("from the checkout it starts from", () => {
+		let dir: string;
+		beforeEach(() => {
+			dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-origin-")));
+		});
+		afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+		const originOf = (home: string, checkout?: string) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return yield* (yield* LaneWork).origin;
+				}).pipe(provideLane(home, checkout), Effect.result),
+			);
+		const git = (cwd: string, ...args: readonly string[]) =>
+			execFileSync("git", args, {cwd, stdio: "pipe"});
+
+		it("is its origin: a bare folder on this disk is the local host", async () => {
+			const {home, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+			expect(await originOf(home)).toMatchObject({
+				_tag: "Success",
+				success: {repo: LANE_REPO, remote, host: "local"},
+			});
+		});
+
+		it("is its origin from a folder inside it too, as git finds it", async () => {
+			const {home, seed, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+			expect(await originOf(home, join(seed, "src"))).toMatchObject({
+				success: {repo: LANE_REPO, remote, host: "local"},
+			});
+		});
+
+		it("is GitHub when origin is on GitHub", async () => {
+			const {home} = makeLaneHome({dir, nodeModules: join(dir, "no-modules"), host: "github"});
+			expect(await originOf(home)).toMatchObject({
+				success: {repo: LANE_REPO, remote: `https://github.com/${LANE_REPO}.git`, host: "github"},
+			});
+		});
+
+		it("refuses, and says so, when the checkout has no origin", async () => {
+			const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+			git(seed, "remote", "remove", "origin");
+			const got = await originOf(home);
+			expect(got._tag).toBe("Failure");
+			expect(got._tag === "Failure" ? got.failure.says : "").toMatch(/no origin/);
+		});
+
+		it("refuses, and says so, when it starts from no checkout at all", async () => {
+			const {home} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+			const nowhere = join(dir, "nowhere");
+			mkdirSync(nowhere);
+			const got = await originOf(home, nowhere);
+			expect(got._tag === "Failure" ? got.failure.says : "").toMatch(/not a git checkout/);
+		});
+
+		it("refuses an origin it does not know, and names it", async () => {
+			const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+			git(seed, "remote", "set-url", "origin", "https://gitlab.com/acme/web.git");
+			const got = await originOf(home);
+			expect(got._tag === "Failure" ? got.failure.says : "").toContain(
+				"https://gitlab.com/acme/web.git",
+			);
+		});
+	});
+});
 
 describe("the settings a lane works by", () => {
 	let dir: string;
@@ -48,11 +146,6 @@ describe("the settings a lane works by", () => {
 		git("push", "--quiet", "origin", "main");
 		return home;
 	};
-
-	const provideLane = (home: string) =>
-		Effect.provide(
-			laneWork.pipe(Layer.provide(Layer.succeed(LaneHome, {home, briefs: "", person: "owner"}))),
-		);
 
 	const settingsIn = (home: string) =>
 		Effect.runPromise(
@@ -612,15 +705,16 @@ describe("the settings a lane works by", () => {
 		afterEach(() => vi.unstubAllEnvs());
 
 		/**
-		 * The toy remote at an ssh url, and an `ssh` first on the path that behaves as a real one does:
-		 * no agent's socket, no way in. Git really reaches for it, so this sees the environment each
-		 * remote call really had. No network: it runs git's own command on this machine.
+		 * The checkout's origin an ssh url on GitHub, which the fake home's `~/.gitconfig` sends to the
+		 * toy remote at an ssh url, and an `ssh` first on the path that behaves as a real one does: no
+		 * agent's socket, no way in. Git really reaches for it, so this sees the environment each remote
+		 * call really had. No network: it runs git's own command on this machine.
 		 */
 		const overSsh = () => {
 			const made = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 			const seen = join(dir, "ssh-seen");
 			const bin = join(dir, "bin");
-			mkdirSync(bin);
+			mkdirSync(bin, {recursive: true});
 			writeFileSync(
 				join(bin, "ssh"),
 				[
@@ -633,14 +727,14 @@ describe("the settings a lane works by", () => {
 				].join("\n"),
 			);
 			chmodSync(join(bin, "ssh"), 0o755);
-			const config = join(made.home, "pipeline.json");
+			const origin = "git@github.com:example/lane.git";
+			execFileSync("git", ["remote", "set-url", "origin", origin], {cwd: made.seed, stdio: "pipe"});
+			const user = join(dir, "user");
 			writeFileSync(
-				config,
-				JSON.stringify({
-					...JSON.parse(readFileSync(config, "utf8")),
-					remote: `ssh://keyed.invalid${made.remote}`,
-				}),
+				join(user, ".gitconfig"),
+				`[url ${JSON.stringify(`ssh://keyed.invalid${made.remote}`)}]\n\tinsteadOf = ${origin}\n`,
 			);
+			vi.stubEnv("HOME", user);
 			vi.stubEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
 			return {...made, seen};
 		};

@@ -793,7 +793,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 
 	lane_claim: (cmd: ReturnType<typeof claimLane>) =>
 		Effect.gen(function* () {
-			const {repo} = yield* (yield* LaneWork).config;
+			const {repo} = yield* (yield* LaneWork).origin;
 			return yield* claim(`${repo}#${cmd.number}` as TicketId, cmd.lane);
 		}).pipe(Effect.mapError(() => unknown)),
 
@@ -801,7 +801,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 		Effect.gen(function* () {
 			// First: it never fails, and a kill before the release comes back here to finish both.
 			yield* leaveBehind(cmd.number, cmd.outcome);
-			const {repo} = yield* (yield* LaneWork).config;
+			const {repo} = yield* (yield* LaneWork).origin;
 			yield* release(`${repo}#${cmd.number}` as TicketId, cmd.lane);
 			return "released" as const;
 		}).pipe(Effect.mapError(() => unknown)),
@@ -841,7 +841,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 
 			const body = Effect.gen(function* () {
-				const {repo} = yield* work.config;
+				const {repo} = yield* work.origin;
 				const url = ticketUrlOf(repo, cmd.number);
 				const id = yield* need(readTicketId(url), `${url} names no ticket`);
 				const settings = yield* work.settings;
@@ -1020,17 +1020,17 @@ export const laneProgram = defineProgram({
 	main: ({flags, send, machines}) =>
 		Effect.gen(function* () {
 			const n = flags.ticket;
-			const config = yield* Effect.result((yield* LaneWork).config);
-			if (config._tag === "Failure") {
-				const says = config.failure.says ?? "no config";
+			const origin = yield* Effect.result((yield* LaneWork).origin);
+			if (origin._tag === "Failure") {
+				const says = origin.failure.says ?? "the checkout's origin could not be read";
 				yield* send("ended", {name: "stuck:step_failed", said: says});
 				return;
 			}
-			const id = readTicketId(`${config.success.repo}#${n}`);
+			const id = readTicketId(`${origin.success.repo}#${n}`);
 			if (id === null) {
 				yield* send("ended", {
 					name: "stuck:step_failed",
-					said: `${config.success.repo} names no repo`,
+					said: `${origin.success.repo} names no repo`,
 				});
 				return;
 			}
