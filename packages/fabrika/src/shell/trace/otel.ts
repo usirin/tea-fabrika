@@ -10,7 +10,7 @@ import {
 	type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer} from "effect";
-import {MAX_TAG, type SpanRow} from "../../host/otlp.ts";
+import {cutTag, type SpanRow} from "../../host/otlp.ts";
 import type {Records} from "../../host/records.ts";
 import {DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
 
@@ -129,22 +129,22 @@ export const endpointOf = (env: Readonly<Record<string, string | undefined>>): s
 	return set.startsWith("http://") || set.startsWith("https://") ? set : DEFAULT_ENDPOINT;
 };
 
-/** A tag as a record keeps it: text cut at `MAX_TAG`, a list as its JSON. */
-const keptTag = (v: unknown): string | number | boolean | undefined => {
+/** A tag as a record keeps it: a list as its JSON, text cut as `cutTag` cuts it. */
+const keptTag = (key: string, v: unknown): string | number | boolean | undefined => {
 	const t =
 		typeof v === "string" || typeof v === "number" || typeof v === "boolean"
 			? v
 			: Array.isArray(v)
 				? JSON.stringify(v)
 				: undefined;
-	return typeof t === "string" && t.length > MAX_TAG ? `${t.slice(0, MAX_TAG)}…` : t;
+	return t === undefined ? undefined : cutTag(key, t);
 };
 
 /** Attributes as a record keeps its tags: each one `keptTag` keeps. */
 const keptTags = (attributes: Readonly<Record<string, unknown>>) => {
 	const out: Record<string, string | number | boolean> = {};
 	for (const [k, v] of Object.entries(attributes)) {
-		const t = keptTag(v);
+		const t = keptTag(k, v);
 		if (t !== undefined) out[k] = t;
 	}
 	return out;

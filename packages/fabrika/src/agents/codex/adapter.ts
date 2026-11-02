@@ -101,6 +101,8 @@ const Item = Schema.Struct({
 	type: Schema.String,
 	text: Schema.optional(Schema.String),
 	command: Schema.optional(Schema.String),
+	/** What a command printed, out and err together, once it ends. */
+	aggregated_output: Schema.optional(Schema.String),
 	status: Schema.optional(Schema.String),
 });
 /** The events of `codex exec --json` this adapter reads. Others are let through as nothing. */
@@ -142,6 +144,7 @@ export const rawOfLine = (line: string): Raw[] | {readonly broke: string} => {
 					title: e.item.command ?? e.item.type,
 					status:
 						e.item.status === "failed" || e.item.status === "declined" ? "failed" : "completed",
+					...(e.item.aggregated_output === undefined ? {} : {output: e.item.aggregated_output}),
 				},
 			];
 		case "turn.completed": {

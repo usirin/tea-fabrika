@@ -17,7 +17,9 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 // itself is in ./job-record.ts (workerd) and ./job-rules.ts (its SQL); a program's runs write it
 // through `jobStorage`, the same `Storage` every program takes.
 //
-// Spans keep names, tags and ids, never values (../program/trace.ts). Steps keep values: they are
+// Spans keep names, tags and ids, never values (../program/trace.ts). An agent run's content, its
+// prompt, replies and tool results where its harness keeps them, is the exception: it sits in
+// `content` beside the spans, the one part of a record a person can delete. Steps keep values: they are
 // written by the run's own storage into this record, behind the door, never sent to a viewer
 // elsewhere. A step's state never holds a secret: storage refuses one (../program/secrets.ts).
 
@@ -113,6 +115,33 @@ export const Opened = Schema.Struct({
 });
 export type Opened = typeof Opened.Type;
 
+/**
+ * One span's content: what an agent was given and what came back, as tea's `agentSpans` writes
+ * them, each its JSON text (docs/direction/an-agent-run-keeps-its-content.md). `null`: the span
+ * has none of that side, as a tool still running has no result. Kept apart from the span, so it is
+ * the one part of a record a person can delete.
+ */
+export const KeptContent = Schema.Struct({
+	span: SpanId,
+	input: Schema.NullOr(Schema.String),
+	output: Schema.NullOr(Schema.String),
+});
+
+/** One span's content, deleted by a person: the span stays, and this says who, when and why. */
+export const DeletedContent = Schema.Struct({
+	span: SpanId,
+	deleted: Schema.Struct({
+		/** The person, as the door stamped them: `user:<id>`. */
+		by: Schema.String,
+		/** Unix ms, on the record's clock. */
+		at: Schema.Number,
+		why: Schema.String,
+	}),
+});
+
+export const Content = Schema.Union([KeptContent, DeletedContent]);
+export type Content = typeof Content.Type;
+
 /** A job's whole record, read: what the trace tile draws. */
 export const JobTrace = Schema.Struct({
 	trace: TraceId,
@@ -167,6 +196,11 @@ export const JobCall = Schema.Union([
 	}),
 	Schema.Struct({op: Schema.Literal("spanOf"), run: Schema.String}),
 	Schema.Struct({op: Schema.Literal("read")}),
+	/**
+	 * Delete one span's content, and say why. Only a person may: a call the door stamped as an
+	 * agent's is refused, as no agent answers what the machine asked a person.
+	 */
+	Schema.Struct({op: Schema.Literal("deleteContent"), span: SpanId, why: Schema.String}),
 ]);
 export type JobCall = typeof JobCall.Type;
 
@@ -177,6 +211,8 @@ export const RecordRead = Schema.Struct({
 	spans: Schema.Array(Span),
 	steps: Schema.Array(Step),
 	opened: Schema.Array(Opened),
+	/** By span id. */
+	content: Schema.Array(Content),
 });
 export type RecordRead = typeof RecordRead.Type;
 

@@ -1,6 +1,8 @@
 import {apply, diff, type Json} from "../program/json-patch.ts";
+import {CONTENT} from "./otlp.ts";
 import type {Db, SqlRow} from "./rules.ts";
-import type {Job, JobCall, Opened, RecordRead, Span, Step} from "./traces.ts";
+import type {Content, Job, JobCall, Opened, RecordRead, Span, Step} from "./traces.ts";
+import {writerOf} from "./writer.ts";
 
 // A job's record, as SQL: the tables and every call on them. The Durable Object (./job-record.ts)
 // runs these on its own SQLite; nothing here knows workerd.
@@ -13,10 +15,19 @@ import type {Job, JobCall, Opened, RecordRead, Span, Step} from "./traces.ts";
 //   spans   one row per span of the job's trace, from any host
 //   opened  one row per span a run's work hangs under, written as it opens: a span reaches
 //           `spans` only once it ends, and a child run started meanwhile must nest under it
+//   content one row per span that carried an agent's content (its Langfuse input and output),
+//           taken off the span as it is kept (docs/direction/an-agent-run-keeps-its-content.md)
 //
-// Nothing is ever deleted. A key the storage removes keeps its row with no value, and a span sent
-// twice (an exporter's retry) is kept once. `beats`, `summary` and `logs` come with their writers
-// (./README.md says when).
+//   keepSpans(db, [{span: "7f2c…", name: "execute_tool Read", tags: {"langfuse.observation.output": "…"}}], by)
+//   // spans    {span: "7f2c…", name: "execute_tool Read", tags: {}}
+//   // content  {span: "7f2c…", input: null, output: "…"}
+//   callJob(db, heads, {op: "deleteContent", span: "7f2c…", why: "a key in .env was read"}, "user:owner", now, k)
+//   // content  {span: "7f2c…", deleted: {by: "user:owner", at: now, why: "a key in .env was read"}}
+//
+// Nothing else is ever deleted. A key the storage removes keeps its row with no value, and a span
+// sent twice (an exporter's retry) is kept once. Content is the one exception, and only a person
+// deletes it: its row stays, and says who, when and why. `beats`, `summary` and `logs` come with
+// their writers (./README.md says when).
 
 /**
  * At most this many patches after a whole state, by default (experiment 166). The bytes rule in
@@ -43,10 +54,17 @@ export const migrateJob = (db: Db) => {
 	db.all(`CREATE TABLE IF NOT EXISTS opened (
 		run TEXT NOT NULL, span TEXT NOT NULL, at REAL NOT NULL, by TEXT NOT NULL,
 		PRIMARY KEY (run, span))`);
+	// A row is kept (`deleted_by` null) or deleted (all three set, and no input or output left).
+	db.all(`CREATE TABLE IF NOT EXISTS content (
+		span TEXT PRIMARY KEY, input TEXT, output TEXT, by TEXT NOT NULL,
+		deleted_by TEXT, deleted_at REAL, why TEXT,
+		CHECK ((deleted_by IS NULL AND deleted_at IS NULL AND why IS NULL)
+			OR (deleted_by IS NOT NULL AND deleted_at IS NOT NULL AND why IS NOT NULL
+				AND input IS NULL AND output IS NULL)))`);
 };
 
 /** Every table of a record, by name: what a law reads to look at every row. */
-export const TABLES = ["job", "state", "steps", "spans", "opened"] as const;
+export const TABLES = ["job", "state", "steps", "spans", "opened", "content"] as const;
 
 const text = (row: SqlRow | undefined, key: string): string | null => {
 	const v = row?.[key];
@@ -151,10 +169,30 @@ const spansOf = (db: Db): Span[] =>
 		by: String(r.by),
 	}));
 
-/** Keep each span once, by its id: a span sent again is the same span. */
+/** A content tag's text: what the span carried on that side, or `null`. */
+const sideOf = (tags: Span["tags"], key: string): string | null => {
+	const v = tags[key];
+	return v === undefined ? null : String(v);
+};
+
+/** A span's tags without its content, and its content, if it carried any. Pure. */
+const splitContent = (tags: Span["tags"]) => {
+	const rest = Object.fromEntries(
+		Object.entries(tags).filter(([key]) => key !== CONTENT.input && key !== CONTENT.output),
+	);
+	const input = sideOf(tags, CONTENT.input);
+	const output = sideOf(tags, CONTENT.output);
+	return {rest, content: input === null && output === null ? null : {input, output}};
+};
+
+/**
+ * Keep each span once, by its id: a span sent again is the same span. Its content goes to
+ * `content`, also once: a span sent again after its content was deleted stays deleted.
+ */
 export const keepSpans = (db: Db, spans: readonly Omit<Span, "by">[], by: string) =>
 	db.tx(() => {
-		for (const s of spans)
+		for (const s of spans) {
+			const {rest, content} = splitContent(s.tags);
 			db.all(
 				`INSERT OR IGNORE INTO spans (span, parent, name, service, start, end, status, tags, events, by)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -165,12 +203,32 @@ export const keepSpans = (db: Db, spans: readonly Omit<Span, "by">[], by: string
 				s.start,
 				s.end,
 				s.status,
-				JSON.stringify(s.tags),
+				JSON.stringify(rest),
 				JSON.stringify(s.events),
 				by,
 			);
+			if (content !== null)
+				db.all(
+					`INSERT OR IGNORE INTO content (span, input, output, by) VALUES (?, ?, ?, ?)`,
+					s.span,
+					content.input,
+					content.output,
+					by,
+				);
+		}
 		return {kept: spans.length};
 	});
+
+const contentOf = (db: Db): Content[] =>
+	db.all(`SELECT * FROM content ORDER BY span`).map((r) => {
+		const by = text(r, "deleted_by");
+		return by === null
+			? {span: String(r.span), input: text(r, "input"), output: text(r, "output")}
+			: {span: String(r.span), deleted: {by, at: num(r, "deleted_at"), why: String(r.why)}};
+	});
+
+/** Who may delete content: a person, as the door stamped them. */
+const isPerson = (by: string) => writerOf(by)?.kind === "user";
 
 /**
  * One call, as one transaction. `by`: who the door said sent it. `now`: the record's clock.
@@ -286,7 +344,23 @@ export const callJob = (
 					spans: spansOf(db),
 					steps: stepsOf(db.all(`SELECT * FROM steps ORDER BY run, machine, id, n`)),
 					opened: openedOf(db),
+					content: contentOf(db),
 				} satisfies RecordRead;
+			case "deleteContent":
+				if (!isPerson(by)) return {error: `only a person deletes content, and ${by} is not one`};
+				// A span that carried none gets the row too: what a person deleted, and why, is kept.
+				db.all(
+					`INSERT INTO content (span, input, output, by, deleted_by, deleted_at, why)
+					 VALUES (?, NULL, NULL, ?, ?, ?, ?)
+					 ON CONFLICT (span) DO UPDATE SET input = NULL, output = NULL,
+						deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, why = excluded.why`,
+					call.span,
+					by,
+					by,
+					now,
+					call.why,
+				);
+				return null;
 		}
 	});
 

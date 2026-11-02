@@ -78,7 +78,9 @@ import {LaneHome, LaneWork} from "./work.ts";
 //
 //   lane_step {step: "build", count: 7, ...}
 //     1. tells the agents who runs this step, from what brief, in what folder
-//     2. writes `started`, with the brief's name and hash, under `r-build-7/started`
+//     2. writes `started`, with the brief's name and hash, under `r-build-7/started`: at once for a
+//        step with no agent, and when the agent's session opens for one with, with the harness's
+//        own id for that session (or at the step's end, with none, if it never opened)
 //     3. runs build's own machine under the Act's intent, to its end
 //     4. writes `ended`, with both token counts and dollars, under `r-build-7/ended`
 //     5. says one line
@@ -852,18 +854,23 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const first = ticket.timeline[0]?.fact;
 				yield* now.exam.set(cmd.carry.exam);
 				const trace = yield* jobTraceId;
-				yield* tickets.write(cmd.number, `${run}/started`, {
-					type: "started",
-					run,
-					stage: cmd.step,
-					task: null,
-					log: null,
-					...(trace === null ? {} : {trace}),
-					...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
-					...(picked === null
-						? {}
-						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
-				} as CodeFact);
+				const started = (session: string | null) =>
+					tickets.write(cmd.number, `${run}/started`, {
+						type: "started",
+						run,
+						stage: cmd.step,
+						task: null,
+						log: null,
+						...(trace === null ? {} : {trace}),
+						...(session === null ? {} : {session}),
+						...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
+						...(picked === null
+							? {}
+							: {harness: picked.harness, model: picked.model, effort: picked.effort}),
+					} as CodeFact);
+				// A step with an agent starts when its session opens, so `started` can say which one it is.
+				if (agent === undefined) yield* started(null);
+				else yield* now.start.set(started);
 				const at: At = {
 					cmd,
 					repo,
@@ -885,6 +892,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			}).pipe(Effect.scoped);
 
 			const exit = yield* Effect.exit(body);
+			// A step whose agent never opened, or whose start could not be written then, starts here,
+			// with no session: every `ended` comes after its `started`.
+			const startedFirst = now.start.write(null);
 			const spent = yield* now.take;
 			const picked = Exit.isSuccess(exit) ? exit.value.picked : null;
 			const listUsd =
@@ -918,6 +928,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
 				const {outcome, carry, problems, after: past} = exit.value.end;
+				yield* startedFirst;
 				yield* write(outcome);
 				yield* said(
 					[
@@ -949,7 +960,10 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			}
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);
-			yield* write(factOutcome({kind: "stuck", why: "run_failed"})).pipe(Effect.ignore);
+			yield* startedFirst.pipe(
+				Effect.andThen(write(factOutcome({kind: "stuck", why: "run_failed"}))),
+				Effect.ignore,
+			);
 			yield* said(`could not run: ${stops}`);
 			return yield* Effect.fail(unknown);
 		}).pipe(Effect.mapError(() => unknown)),

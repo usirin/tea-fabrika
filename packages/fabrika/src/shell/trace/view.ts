@@ -20,7 +20,9 @@ import {ATTR, SERVICE_NAME, traceParentIdOf} from "../../program/trace.ts";
 //   root      a line's or a run's made-up parent (../program/trace.ts `traceOf`) is
 //             dropped, so the viewer does not look for a span that never comes
 //   agent     an agent run's turns and tool calls become events on one span,
-//             folded into the span it ran under: `builder · 14 turns`
+//             folded into the span it ran under: `builder · 14 turns`. A run that
+//             keeps its content (`tea.agent.content: kept`, a lane's) also shows
+//             each of them under that span, so a record keeps what each read and wrote
 //
 // Why fold the agent here and not where its spans are made: the spans stay
 // whole for any other reader (an LLM viewer wants every turn as a span), and
@@ -85,9 +87,11 @@ interface Folded {
 	readonly outputTokens: number;
 	readonly cachedTokens: number;
 	readonly events: readonly TimedEvent[];
+	/** Its turns and tool calls that kept their content: shown too, so a record can keep it. */
+	readonly kept: readonly ReadableSpan[];
 }
 
-/** An agent run's span and its turns and tool calls, as one. Nothing it read or wrote comes along. */
+/** An agent run's span and its turns and tool calls, as one. What it read or wrote comes along only in `kept`. */
 const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 	const tools = new Map<string, number>();
 	const events: TimedEvent[] = [];
@@ -119,7 +123,8 @@ const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 		}
 	}
 	events.sort((a, b) => ms(a.time) - ms(b.time));
-	return {span: agent, turns, tools, model, inputTokens, outputTokens, cachedTokens, events};
+	const kept = parts.filter((part) => part.attributes[ATTR.content] === "kept");
+	return {span: agent, turns, tools, model, inputTokens, outputTokens, cachedTokens, events, kept};
 };
 
 /** What an agent's span says once folded, without anything kept out or meant for an LLM viewer. */
@@ -229,6 +234,16 @@ export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor 
 			[agent],
 		);
 
+	/**
+	 * The turns and tool calls of `agents` that kept their content, each under `under`, the span
+	 * they were folded into, in its service: a record keeps what they read and wrote by their ids.
+	 */
+	const keptUnder = (under: ReadableSpan, agents: readonly Folded[]) => {
+		for (const agent of agents)
+			for (const part of agent.kept)
+				next.onEnd(changed(part, {resource: under.resource}, under.spanContext()));
+	};
+
 	return {
 		onStart: (span, context) => next.onStart(span, context),
 		onEnd: (span) => {
@@ -247,13 +262,20 @@ export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor 
 			}
 			const under = agents.get(id) ?? [];
 			agents.delete(id);
-			next.onEnd(shown(span, under));
+			const out = shown(span, under);
+			next.onEnd(out);
+			keptUnder(out, under);
 		},
 		forceFlush: () => next.forceFlush(),
 		shutdown: () => {
 			// What never found the span it would fold into: each agent run on its own, and
 			// the turns of a run that never ended as they were made.
-			for (const held of agents.values()) for (const agent of held) next.onEnd(alone(agent));
+			for (const held of agents.values())
+				for (const agent of held) {
+					const out = alone(agent);
+					next.onEnd(out);
+					keptUnder(out, [agent]);
+				}
 			for (const held of parts.values()) for (const part of held) next.onEnd(shown(part));
 			agents.clear();
 			parts.clear();

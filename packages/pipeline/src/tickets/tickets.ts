@@ -2,6 +2,7 @@ import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika-old";
 import {Clock, Context, Effect, Layer, Ref, Schema} from "effect";
 import {
 	CodeFact,
+	type Comment,
 	type Entry,
 	type Fact,
 	fold,
@@ -10,6 +11,7 @@ import {
 	readRow,
 	type Ticket,
 	TicketFact,
+	writtenDuring,
 } from "./ticket.ts";
 
 /** A ticket's number, as the tracker counts them from 1. */
@@ -85,14 +87,25 @@ export class Tickets extends Context.Service<
 		) => Effect.Effect<void, TicketsFailed>;
 		/**
 		 * A comment on the ticket, or its close: what the triage step says when it answers no. Kept
-		 * apart from `write`, so a writer that has no reason to talk is never handed the words.
+		 * apart from `write`, so a writer that has no reason to talk is never handed the words. A
+		 * comment gets `during`, the run live as it is written, from the ticket's own facts.
 		 */
 		readonly talk: (n: TicketNumber, id: WriteId, fact: Talk) => Effect.Effect<void, TicketsFailed>;
 	}
 >()("Tickets") {}
 
 /** What a lane may say on a ticket: a comment, or the close. Never a person's kinds. */
-export type Talk = Extract<Fact, {readonly type: "commented" | "closed"}>;
+export type Talk = Comment | Extract<Fact, {readonly type: "closed"}>;
+
+/** `fact` as it goes onto ticket `n`: a comment with its `during` filled in from `read`. */
+const heard = (
+	read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>,
+	n: TicketNumber,
+	fact: Talk,
+): Effect.Effect<Fact, TicketsFailed> =>
+	fact.type === "commented"
+		? Effect.map(read(n), (ticket) => writtenDuring(fact, ticket.timeline))
+		: Effect.succeed(fact);
 
 /** The PR watcher's one write: what it read from GitHub, on a change only. */
 export class Watcher extends Context.Service<
@@ -186,22 +199,28 @@ export const ticketsOnLedger = (writer: Writer): Layer.Layer<Tickets, never, Led
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			const send = sendOn(ledger, writer);
-			return {
-				read: (n) =>
-					ledger.readStream(streams(nameOf(n)).inbox, 0, -1).pipe(
-						Effect.mapError((e) => failed(n, "unreachable", e.message)),
-						Effect.flatMap((rows) =>
-							ticketIn(
-								n,
-								rows.flatMap((row) => {
-									const read = readRow(row);
-									return read.kind === "entry" ? [read.entry] : [];
-								}),
-							),
+			const read = (n: TicketNumber) =>
+				ledger.readStream(streams(nameOf(n)).inbox, 0, -1).pipe(
+					Effect.mapError((e) => failed(n, "unreachable", e.message)),
+					Effect.flatMap((rows) =>
+						ticketIn(
+							n,
+							rows.flatMap((row) => {
+								const one = readRow(row);
+								return one.kind === "entry" ? [one.entry] : [];
+							}),
 						),
 					),
+				);
+			return {
+				read,
 				write: (n, id, fact) => send(n, id, laneChecked(n, fact)),
-				talk: (n, id, fact) => send(n, id, talkChecked(n, fact)),
+				talk: (n, id, fact) =>
+					send(
+						n,
+						id,
+						Effect.flatMap(heard(read, n, fact), (said) => talkChecked(n, said)),
+					),
 			};
 		}),
 	);
@@ -289,7 +308,9 @@ export const ticketsInMemory = (writer: Writer): Layer.Layer<Tickets, never, Mem
 				write: (n, id, fact) =>
 					laneChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
 				talk: (n, id, fact) =>
-					talkChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
+					Effect.flatMap(heard(memory.read, n, fact), (said) =>
+						talkChecked(n, said).pipe(Effect.andThen(memory.add(n, id, writer, said))),
+					),
 			};
 		}),
 	);

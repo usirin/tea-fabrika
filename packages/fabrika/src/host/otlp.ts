@@ -56,26 +56,52 @@ export const TracesRequest = Schema.Struct({
 
 /** The most spans one request may hold, and the most text a tag's value may: the record is forever. */
 export const MAX_SPANS = 5000;
-export const MAX_TAG = 1024;
+const MAX_TAG = 1024;
+
+/**
+ * The two tags that hold an agent run's content, in Langfuse's names, as tea's `agentSpans` writes
+ * them: what the agent was given and what came back. A job's record keeps them in its `content`
+ * table, not on the span (./job-rules.ts), so they are cut at `MAX_CONTENT`, not `MAX_TAG`.
+ */
+export const CONTENT = {
+	input: "langfuse.observation.input",
+	output: "langfuse.observation.output",
+} as const;
+
+/**
+ * The most text one content value may hold. A Durable Object's row stops at 2 MB
+ * (developers.cloudflare.com/durable-objects/platform/limits), and a content row holds an input
+ * and an output, each up to 3 bytes a character in UTF-8: two of these stay under it. A value over
+ * it is cut, as a tag is; moving it to `Blobs` instead waits for the first real job's sizes.
+ */
+const MAX_CONTENT = 262_144;
 
 type Tag = string | number | boolean;
 
+const isContent = (key: string) => key === CONTENT.input || key === CONTENT.output;
+
+/** A tag's value as a record keeps it: text cut at its key's most, content's or any tag's. */
+export const cutTag = (key: string, t: Tag): Tag => {
+	const most = isContent(key) ? MAX_CONTENT : MAX_TAG;
+	return typeof t === "string" && t.length > most ? `${t.slice(0, most)}…` : t;
+};
+
 const tagOf = (v: typeof AnyValue.Type | undefined): Tag | undefined => {
 	if (v === undefined) return undefined;
-	const t: Tag | undefined =
+	return (
 		v.stringValue ??
 		v.boolValue ??
 		(v.intValue === undefined ? undefined : Number(v.intValue)) ??
 		v.doubleValue ??
-		(v.arrayValue === undefined ? undefined : JSON.stringify(v.arrayValue));
-	return typeof t === "string" && t.length > MAX_TAG ? `${t.slice(0, MAX_TAG)}…` : t;
+		(v.arrayValue === undefined ? undefined : JSON.stringify(v.arrayValue))
+	);
 };
 
 const tagsOf = (kvs: readonly (typeof KeyValue.Type)[] | undefined): Record<string, Tag> => {
 	const out: Record<string, Tag> = {};
 	for (const kv of kvs ?? []) {
 		const t = tagOf(kv.value);
-		if (t !== undefined) out[kv.key] = t;
+		if (t !== undefined) out[kv.key] = cutTag(kv.key, t);
 	}
 	return out;
 };

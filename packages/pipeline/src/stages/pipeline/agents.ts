@@ -3,9 +3,11 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Agent} from "@kampus/fabrika-old";
 import {claudeAdapter, type DraftRun, psReaper} from "@kampus/fabrika-old/agents/claude";
 import {codexAdapter, codexHomeOf} from "@kampus/fabrika-old/agents/codex";
+import {heardTrace} from "@kampus/fabrika-old/agents/trace";
 import {Context, Effect, FileSystem, Layer, Option, Result, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import type {AgentStep, Settings} from "../../settings.ts";
+import type {TicketsFailed} from "../../tickets/tickets.ts";
 import {type BuildDrafted, Builder, type BuildBrief} from "../build/form.ts";
 import {Built} from "../build/form.ts";
 import {PlanDraft} from "../plan/plan.ts";
@@ -128,13 +130,27 @@ export class LaneNow extends Context.Service<
 			readonly set: (files: readonly string[]) => Effect.Effect<void>;
 			readonly get: Effect.Effect<readonly string[]>;
 		};
+		/**
+		 * The step's `started`, written once: when its agent's session opens, with the harness's own
+		 * id for it, before the agent is prompted; or with none, by the step, when no agent opened.
+		 */
+		readonly start: {
+			/** What writes it, for the step on now. Its first `write` that lands is the only one. */
+			readonly set: (write: StartWrite) => Effect.Effect<void>;
+			/** Write it now, with `session`, unless it is written. */
+			readonly write: (session: string | null) => Effect.Effect<void, TicketsFailed>;
+		};
 	}
 >()("LaneNow") {}
+
+/** What writes a step's `started`, with the harness's own id for its session, or none. */
+type StartWrite = (session: string | null) => Effect.Effect<void, TicketsFailed>;
 
 export const laneNow = Layer.sync(LaneNow, () => {
 	let now: StepNow | null = null;
 	let spent = NOTHING;
 	let exam: readonly string[] = [];
+	let start: StartWrite | null = null;
 	return {
 		set: (next) =>
 			Effect.sync(() => {
@@ -169,13 +185,39 @@ export const laneNow = Layer.sync(LaneNow, () => {
 				}),
 			get: Effect.sync(() => exam),
 		},
+		start: {
+			set: (write) =>
+				Effect.sync(() => {
+					start = write;
+				}),
+			write: (session) =>
+				Effect.suspend(() => {
+					const write = start;
+					if (write === null) return Effect.void;
+					return write(session).pipe(
+						Effect.tap(() =>
+							Effect.sync(() => {
+								if (start === write) start = null;
+							}),
+						),
+					);
+				}),
+		},
 	};
 });
+
+/**
+ * The agents a lane runs, and the harness's own id for each of our sessions once it opened: the
+ * Codex thread, the Agent SDK session. `null`: that session never opened.
+ */
+export type Held = typeof Agent.Agents.Service & {
+	readonly own: (session: string) => Effect.Effect<string | null>;
+};
 
 /** The adapters a lane's agents run through. */
 export class LaneAgents extends Context.Service<
 	LaneAgents,
-	{readonly agents: Effect.Effect<typeof Agent.Agents.Service>}
+	{readonly agents: Effect.Effect<Held>}
 >()("LaneAgents") {}
 
 const READ_ONLY_CLAUDE = {
@@ -200,11 +242,8 @@ export const laneAgents: Layer.Layer<LaneAgents, never, LaneHome | LaneWork> = L
 					claude: claudeAdapter({}),
 					claude_read: claudeAdapter({more: () => READ_ONLY_CLAUDE}),
 				};
-				const made = Agent.makeAgents({
-					adapters,
-					sessions: yield* Agent.fileSessions(work.at("sessions")),
-					reaper: psReaper,
-				});
+				const sessions = yield* Agent.fileSessions(work.at("sessions"));
+				const made = Agent.makeAgents({adapters, sessions, reaper: psReaper});
 				// Each Codex session makes a home of its own: the lane says so before it can exist, so the
 				// lane's end can take it, however the run went. A hold that cannot be written costs a folder.
 				const run: typeof made.run = (turn) =>
@@ -215,7 +254,9 @@ export const laneAgents: Layer.Layer<LaneAgents, never, LaneHome | LaneWork> = L
 									.pipe(Effect.ignore, Effect.as(made.run(turn))),
 							)
 						: made.run(turn);
-				return {...made, run};
+				const own = (session: string) =>
+					Effect.map(sessions.get(session), (known) => known?.own ?? null);
+				return {...made, run, own} satisfies Held;
 			}).pipe(
 				Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
 				Effect.provideService(FileSystem.FileSystem, fs),
@@ -285,20 +326,41 @@ const misfitPrompt = (said: string): string =>
 	].join("\n");
 
 /**
+ * One turn on the agents, as the lane runs every one: drawn as the agent's spans under the step's,
+ * with its content kept for the job's record (docs/direction/an-agent-run-keeps-its-content.md), and
+ * the step's `started` written when its session opens, with the harness's own id for it.
+ */
+const opened = <A>(
+	name: string,
+	agents: Held,
+	lane: LaneNow["Service"],
+	turn: Agent.Turn<A>,
+): Stream.Stream<Agent.Heard<A>, Agent.AgentFailed> =>
+	heardTrace(name, turn, agents.run(turn), "kept").pipe(
+		Stream.tap((heard) =>
+			heard._tag === "started"
+				? // A start that cannot be written now is written by the step, with no session, at its end.
+					Effect.flatMap(agents.own(heard.session), lane.start.write).pipe(Effect.ignore)
+				: Effect.void,
+		),
+	);
+
+/**
  * A step's turn on the agents, counted as it ends, with one more try on a last message that does not
  * fit. The first try's end is never heard: only the second's, an answer or a misfit, which ends the
  * step as a misfit always has. Every step comes through here, so a machine's own limit on its tries
  * stays a limit on what its Check sent back.
  */
 const tried = <A>(
-	agents: typeof Agent.Agents.Service,
+	name: string,
+	agents: Held,
 	lane: LaneNow["Service"],
 	turn: Agent.Turn<A>,
 ): Stream.Stream<Agent.Heard<A>, Agent.AgentFailed> =>
 	Stream.unwrap(
 		Effect.sync(() => {
 			let last = "";
-			return metered(agents.run(turn), lane.spend).pipe(
+			return metered(opened(name, agents, lane, turn), lane.spend).pipe(
 				Stream.tap((heard) =>
 					heard._tag === "said"
 						? Effect.sync(() => {
@@ -310,7 +372,12 @@ const tried = <A>(
 					heard._tag === "ended" && heard.stop === "end_turn" && heard.answer === null
 						? Stream.unwrap(
 								lane.misfit.pipe(
-									Effect.as(metered(agents.run({...turn, prompt: misfitPrompt(last)}), lane.spend)),
+									Effect.as(
+										metered(
+											opened(name, agents, lane, {...turn, prompt: misfitPrompt(last)}),
+											lane.spend,
+										),
+									),
 								),
 							)
 						: Stream.succeed(heard),
@@ -330,20 +397,20 @@ export const draftRunner = <N extends string, O>(
 		const {agents} = yield* LaneAgents;
 		const held = yield* agents;
 		const now = yield* lane.get;
-		const trying: typeof held = {...held, run: (turn) => tried(held, lane, turn)};
+		const trying: typeof held = {...held, run: (turn) => tried(name, held, lane, turn)};
 		return Agent.agentRunner(name, trying, (run) =>
 			turnOf(now, {session: run.session.id, prompt: promptFor(now, run, slot)}, answer),
 		);
 	});
 
-/** One whole run on the agents: `ended`, or how it failed. */
-const wholeRun = <A>(turn: (now: StepNow) => Agent.Turn<A>) =>
+/** One whole run on the agents, named `name` in the trace: `ended`, or how it failed. */
+const wholeRun = <A>(name: string, turn: (now: StepNow) => Agent.Turn<A>) =>
 	Effect.gen(function* () {
 		const lane = yield* LaneNow;
 		const {agents} = yield* LaneAgents;
 		const held = yield* agents;
 		const now = yield* lane.get;
-		const heard = yield* tried(held, lane, turn(now)).pipe(Stream.runLast, Effect.result);
+		const heard = yield* tried(name, held, lane, turn(now)).pipe(Stream.runLast, Effect.result);
 		return heard;
 	});
 
@@ -417,7 +484,7 @@ export const laneBuilder = Layer.effect(
 		const home = yield* LaneAgents;
 		return {
 			build: (brief: BuildBrief): Effect.Effect<BuildDrafted> =>
-				wholeRun<Built>((now) =>
+				wholeRun<Built>("build", (now) =>
 					turnOf(
 						{...now, folder: brief.tree},
 						{
@@ -456,7 +523,7 @@ export const laneReviewer = Layer.effect(
 		return {
 			review: (brief: ReviewBrief, _settings, note: string | null): Stream.Stream<Said> =>
 				Stream.fromEffect(
-					wholeRun<Form>((now) =>
+					wholeRun<Form>("review", (now) =>
 						turnOf(
 							now,
 							{
