@@ -113,7 +113,7 @@ Every step answers in the same five verbs, and the lane does too:
 | `skip` | Nothing more to do, on someone's decision: `closed`, `owner_no`, `research`. |
 | `stuck` | It stopped and did not guess. The word after it says why. |
 
-The lane asks a person four kinds of question (`packages/pipeline/src/stages/pipeline/machine.ts`):
+The lane asks a person seven kinds of question (`packages/pipeline/src/stages/pipeline/machine.ts`):
 
 | Ask | What it is about |
 |---|---|
@@ -121,25 +121,38 @@ The lane asks a person four kinds of question (`packages/pipeline/src/stages/pip
 | `exam_merge` | The exam's own pull request is open, and rules are the person's call. |
 | `merge` | The merge yes, after the push. |
 | `step` | A step ended on `ask`, and it may be run again. |
+| `rounds_spent` | Review sent the build back too many times. `again` runs one more round; `stop` pauses. |
+| `exam_touched` | The builder changed the test writer's files. `builder_wrong` runs the build again; `test_wrong` runs the test writer, then the build. |
+| `exam_conflict` | Main changed the test writer's files while the lane was stopped. `again` runs the test writer, then the build; `stop` pauses. |
 
 ## When a lane is stuck
 
-**A stuck lane is final. Restarting is not built.** Typing the line again only says how it ended, and
-runs nothing.
+**A stopped lane goes on.** Typing the same line again restarts it from the step that broke. It
+claims the ticket again, reads the ticket and main fresh, and runs no step that already ended done.
+Only `done`, a `skip`, and `stuck: not_yours` are final: on those, typing the line again says how it
+ended and runs nothing.
 
 Stuck words come at two levels. The ticket shows both.
 
 | Level | Words | Where |
 |---|---|---|
 | The lane, seven words | `not_yours`, `no_ticket`, `claim_held`, `step_failed`, `step_stuck`, `rounds_spent`, `sent_back` | `stages/pipeline/outcome.ts` |
-| One step, under a lane's `step_stuck` | Such as `exam_touched` (build), `checks_stuck`, `merge_failed`, `merge_unknown` (ship), `merged_elsewhere` (merge) | That step's own outcome, in the line it printed |
+| One step, under a lane's `step_stuck` | Such as `checks_stuck`, `merge_failed`, `merge_unknown` (ship), `merged_elsewhere` (merge) | That step's own outcome, in the line it printed |
+
+A person's `no` or `stop` is a pause, not an end: the line ends `ask: owner: paused` (a `stop` on the
+spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pick goes.
 
 1. Read both words on the ticket. The program's README says what each GitHub one means.
-2. Say exactly what is left: a claim, a branch, a pull request.
-3. **Inside a live run nothing but ship merges.** Once a lane is finished and stuck, what is left is a
-   by-hand change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green
-   CI, and an agent merges after a leak grep. The other choice is a new ticket.
-4. Log it in `field/`. A stuck lane teaches as much as a merged one.
+2. Fix what stopped it, if it needs fixing, then type the same line again. The ticket gets a
+   `restarted` row: the step it goes on from, and main then and now.
+3. If main changed a file the lane also changed, main's side stands. A test writer's file asks you
+   `exam_conflict`: `again` runs the test writer, then the build. Any other file sends the build
+   round again.
+4. **Inside a live run nothing but ship merges.** If the lane cannot go on, what is left is a by-hand
+   change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green CI,
+   and an agent merges after a leak grep. The other choice is a new ticket. Say exactly what is left:
+   a claim, a branch, a pull request.
+5. Log it in `field/`. A stuck lane teaches as much as a merged one.
 
 ## The leak check
 

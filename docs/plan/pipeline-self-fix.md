@@ -241,12 +241,14 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     only those files on the new base, its check runs, and build goes on from the builder's
     rebased head as the next round. "Stop": saved at the rebase, so the same line goes on
     there.
-  - Not restartable: the closed list `FINAL`, `not_yours` and `merged_elsewhere`. The line
-    says why. Every other stuck reason restarts, a new one included (P4). The restart reads
+  - Not restartable: the closed list `FINAL`. Today it is `not_yours` alone: `merged_elsewhere`
+    is not in the code yet, and joins the list when it is. The line says why. Every other stuck reason restarts, a new one included (P4). The restart reads
     the ticket fresh, so a ticket a person closed ends `skip:closed` there.
   - A person's `stop` or `no` is a saved pause, not an end (decided 2026-11-01). Today any
     pick but the first ends `skip:owner_no` (`machine.ts:613-617`). After: it saves the lane
-    at its pick's resume step, like a stuck end, and the same line goes on there. A `no` on
+    at its pick's resume step, like a stuck end, and the same line goes on there. The pause
+    ends `ask:owner:paused`, except a stop on `rounds_spent`, which ends `stuck:rounds_spent`
+    today. A `no` on
     the plan's yes resumes at plan, with the person's note in its brief; a `no` on a merge
     or an exam merge asks that question again. Only `done`, `FINAL` and a closed ticket end a
     lane.
@@ -276,7 +278,7 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     restart, and the carry from facts.
   - New `packages/pipeline/src/stages/pipeline/key.ts` and `key.test.ts`: the input key.
   - `packages/pipeline/src/tickets/ticket.ts`: the `restarted` fact, and `key` on `ended`.
-  - `programs/ticket`: the row.
+  - `programs/tracker/src/rows.ts`: the row, which the ticket program draws.
   - `machine.laws.test.ts`, `program.test.ts`.
   - `programs/pipeline/README.md`, `docs/how-to/run-a-pipeline-ticket.md` ("When a lane is
     stuck").
@@ -301,8 +303,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     `approve` answer removed, the restart names `decided` and asks the plan's yes again; the
     plan, triage and the test writer do not run. With the test writer's commit removed, it
     names `exam` and resumes at the test writer; triage, the plan and its yes do not run.
-  - A `stop` on `rounds_spent`, then the same line: build runs, round + 1. Today the lane
-    has ended `skip:owner_no`.
+  - A `stop` on `rounds_spent`, then the same line: build runs, round + 1. A stop on
+    `rounds_spent` ends `stuck:rounds_spent` today, not `skip:owner_no`.
   - A `no` on the plan's yes, then the same line: the plan runs with the note; triage does
     not run.
   - Law: no pick of any ask ends a lane. The only ends are `done`, a reason in `FINAL`, and
