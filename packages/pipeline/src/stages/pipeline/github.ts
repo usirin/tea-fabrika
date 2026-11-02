@@ -9,7 +9,7 @@ import {Tickets} from "../../tickets/tickets.ts";
 import {ghOn, reviewWritesOn} from "../operate/writes.ts";
 import type {PrFacts, ReviewKind} from "../ship/facts.ts";
 import {laneLocalHost, LanePulls, mergeAnswered, type Pull, pullFacts, PullWire} from "./pulls.ts";
-import {LaneWork} from "./work.ts";
+import {LaneHome, LaneWork} from "./work.ts";
 
 // The lane's code host when the checkout's origin is on GitHub. Today's version. It has run only
 // over a stand-in `gh` (fixtures/pipeline-lane/gh.mjs), never against real GitHub. What differs from
@@ -111,16 +111,21 @@ export const laneGitHubHost = (
 ): Layer.Layer<
 	CodeHost | CodeHostWrites | PullWire,
 	never,
-	LaneWork | LanePulls | Tickets | Ledger
+	LaneHome | LaneWork | LanePulls | Tickets | Ledger
 > =>
 	Layer.effectContext(
 		Effect.gen(function* () {
 			const gh = yield* ghOn;
+			const {pollMs} = yield* LaneHome;
 			const work = yield* LaneWork;
 			const pulls = yield* LanePulls;
 			const tickets = yield* Tickets;
 			const local = yield* CodeHost;
-			const base = codeHostOn(gh, {own: [], reviewers: []});
+			const base = codeHostOn(gh, {
+				own: [],
+				reviewers: [],
+				...(pollMs === undefined ? {} : {pollMs}),
+			});
 			const writes = codeHostWritesOn(gh);
 			// The file can change on main between two calls, so each call reads it.
 			const counted = work.settings.pipe(

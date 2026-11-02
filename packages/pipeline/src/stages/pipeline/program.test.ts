@@ -248,7 +248,8 @@ const lane = ({
 						checksDown() ? Effect.fail({_tag: "could_not_run"} as const) : runner.tests(head),
 					),
 			})),
-			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+			// GitHub's checks wait asks again at once, not in 30 seconds: the fake answers in no time.
+			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner", pollMs: 1})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
 				Option.isNone(ended) ? Effect.sync(() => void lines.push(TIMED_OUT)) : Effect.void,

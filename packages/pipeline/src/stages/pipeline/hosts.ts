@@ -1,9 +1,11 @@
-import {Effect, Layer, Stream} from "effect";
+import {streams} from "@kampus/fabrika-old";
+import {Effect, Layer, Queue, Stream} from "effect";
 import {Ledger, readFacts} from "../../asks/ledger.ts";
 import {foldLedger, planFor} from "../../asks/rules.ts";
 import {currentOf} from "../../criteria/book.ts";
 import {readTicketId} from "../../ids.ts";
 import {covers} from "../../tickets/approval.ts";
+import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {BuildHost} from "../build/services.ts";
 import {numberOf} from "../build/ticket.ts";
@@ -177,14 +179,23 @@ export const laneBuildHost = Layer.effect(
 );
 
 /**
- * A person's answer to `ask`, heard once, looked for each second as the tracker's own window does.
- * Only a person's counts: an agent's row is passed over. An `approve` counts only while it covers
- * the ticket's text as it reads now, so an edit after it is asked again.
+ * A person's answer to `ask`, heard once. The ticket's doorbell wakes the lane when a row lands on
+ * it, and a look each second stays for a ledger whose bell does not ring. Only a person's counts: an
+ * agent's row is passed over. An `approve` counts only while it covers the ticket's text as it reads
+ * now, so an edit after it is asked again.
  */
 export const answerHeard = (number: number, ask: string, picks: readonly string[]) =>
 	Stream.unwrap(
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
+			const ledger = yield* Ledger;
+			// Listened to for the whole wait, so a ring during a look is kept: one, since a look reads it
+			// all. A bell that ends rings no more, and the wait is left with its second.
+			const rang = yield* Queue.sliding<void>(1);
+			yield* ledger.watch(streams(nameOf(number)).inbox).pipe(
+				Stream.runForEach(() => Queue.offer(rang, undefined)),
+				Effect.forkScoped,
+			);
 			const look = Effect.gen(function* () {
 				const ticket = yield* tickets.read(number);
 				for (const entry of ticket.timeline) {
@@ -202,7 +213,9 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 				readonly note: string;
 			}> = look.pipe(
 				Effect.flatMap((heard) =>
-					heard === null ? Effect.andThen(Effect.sleep("1 second"), wait) : Effect.succeed(heard),
+					heard === null
+						? Queue.take(rang).pipe(Effect.timeoutOption("1 second"), Effect.andThen(wait))
+						: Effect.succeed(heard),
 				),
 			);
 			return Stream.fromEffect(wait);

@@ -43,7 +43,8 @@ const failed = (says: string): Failed => ({_tag: "unknown", says});
  * the repository, and the folder its brief files were put in. `person`:
  * who is running it, by the id the tracker knows them by. `ignorer`: the mutation step's ignorer
  * plugin, where a bundle put it. Left out: beside its source. `shipped`: the rubrics fabrika ships,
- * where a bundle put them. Left out: beside their source.
+ * where a bundle put them. Left out: beside their source. `pollMs`: how often a wait on the code
+ * host asks again. Left out: the host's own pace.
  */
 export class LaneHome extends Context.Service<
 	LaneHome,
@@ -54,6 +55,7 @@ export class LaneHome extends Context.Service<
 		readonly person: string;
 		readonly ignorer?: string;
 		readonly shipped?: string;
+		readonly pollMs?: number;
 	}
 >()("LaneHome") {}
 
