@@ -1,4 +1,6 @@
 import {applyCell} from "@demlik/tea";
+import {createElement} from "react";
+import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
@@ -17,6 +19,7 @@ import {
 	agoWord,
 	asksSections,
 	asksWord,
+	bottomLineShows,
 	clockWord,
 	commandsOf,
 	ENDED_SHOWN_MS,
@@ -26,6 +29,7 @@ import {
 	hereWord,
 	holdsWord,
 	hostWord,
+	INFO,
 	jobItem,
 	jobsList,
 	keyGoesTo,
@@ -43,6 +47,7 @@ import {
 	tookWord,
 	workspaceName,
 } from "./frame.ts";
+import {BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
 
 // The frame's words, from a real desk folded by the real machine, and the host's real table.
 
@@ -656,5 +661,80 @@ describe("the frame's own state", () => {
 			kind: "item",
 			what: "sync",
 		});
+	});
+});
+
+// Today's info mode (C-b i) by the modes guidelines (docs/direction/modes.md, M3 and M4): seen with
+// the bars hidden, told to a screen reader, explained from the keyboard, and left with Escape.
+describe("info mode", () => {
+	const quiet = {armed: false, asking: false};
+	const on = frameUpdate(FRAME, {type: "show", what: "info"});
+	const bare = frameUpdate(FRAME, {type: "show", what: "bars"});
+	const noop = () => {};
+	const props = (frame: Frame): FrameProps => ({
+		desk: fold([]),
+		frame,
+		asks: null,
+		host: null,
+		link: {kind: "up"},
+		attachedOnce: true,
+		prefix: PREFIX,
+		table: TABLE,
+		shapes: SHAPES,
+		tickets: SHOWN,
+		armed: false,
+		toHost: noop,
+		toApp: noop,
+		toRun: noop,
+		step: noop,
+	});
+	/** The words a markup shows, its tags dropped. */
+	const words = (html: string) =>
+		html
+			.replace(/<[^>]+>/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+	const bottom = (frame: Frame) =>
+		words(renderToStaticMarkup(createElement(BottomLine, props(frame))));
+	/** What the window's one status region says. It is drawn whatever the bars, so it is never gone. */
+	const said = (frame: Frame) => {
+		const html = renderToStaticMarkup(createElement(ModeStatus, props(frame)));
+		expect(html).toContain('role="status"');
+		return words(html);
+	};
+
+	it("keeps the bottom line with the bars hidden while it is on, as the armed prefix does", () => {
+		expect(bottomLineShows(FRAME, quiet)).toBe(true);
+		expect(bottomLineShows(bare, quiet)).toBe(false);
+		expect(bottomLineShows(bare, {armed: true, asking: false})).toBe(true);
+		expect(bottomLineShows(bare, {armed: false, asking: true})).toBe(true);
+		expect(bottomLineShows(frameUpdate(bare, {type: "say", note: "x"}), quiet)).toBe(true);
+		expect(bottomLineShows(frameUpdate(bare, {type: "show", what: "info"}), quiet)).toBe(true);
+	});
+
+	it("tells a screen reader when it turns on and off, and nothing on each hover", () => {
+		expect(said(FRAME)).toBe("");
+		expect(said(on)).toBe("Info mode on. Escape leaves.");
+		expect(said(frameUpdate(on, {type: "explain", text: INFO.asks}))).toBe(
+			"Info mode on. Escape leaves.",
+		);
+		expect(said(frameUpdate(on, {type: "show", what: "info"}))).toBe("Info mode off.");
+	});
+
+	it("says it explains what keyboard focus is on, not only the pointer", () => {
+		expect(bottom(on)).toContain("INFO · point at anything, or tab to it");
+	});
+
+	it("leaves on Escape, once what lies over the desk has closed, and says so", () => {
+		const left = frameUpdate(on, {type: "escape"});
+		expect(left.info).toBe(false);
+		expect(said(left)).toBe("Info mode off.");
+		const closed = frameUpdate(frameUpdate(on, {type: "show", what: "asks"}), {type: "escape"});
+		expect(closed.over).toEqual({kind: "none"});
+		expect(closed.info).toBe(true);
+		expect(frameUpdate(closed, {type: "escape"}).info).toBe(false);
+		// No mode and nothing over the desk: Escape is not the frame's, and goes on to the tile.
+		expect(frameUpdate(FRAME, {type: "escape"})).toBe(FRAME);
+		expect(bottom(on)).toMatch(/esc leaves$/);
 	});
 });
