@@ -49,6 +49,7 @@ const FILES = [
 	"rules",
 	"sshsig",
 	"traces",
+	"writer",
 ] as const;
 
 /** A copy of the Worker's files with one mistake in durable-object.ts, imported from its own folder. */

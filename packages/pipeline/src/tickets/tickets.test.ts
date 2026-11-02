@@ -204,6 +204,54 @@ describe("Tickets", () => {
 		expect(seen).toEqual({ledger: expectedRefusal, memory: expectedRefusal});
 	});
 
+	// Record wide (docs/plan/pipeline-self-fix.md, PR 7).
+	it("keeps a run's harness session id as a fact of its own, on both Layers", async () => {
+		const session: CodeFact = {type: "session", run: "r-1", id: "fake-triage"};
+		const seen = await onBoth(
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				yield* tickets.write(1, "r-1/started", started);
+				yield* tickets.write(1, "r-1/session", session);
+				return (yield* tickets.read(1)).timeline.map((e) => e.fact);
+			}),
+		);
+		const expected = [filed.fact, started, session];
+		expect(seen).toEqual({ledger: expected, memory: expected});
+	});
+
+	it("fills in `during` on a lane's comment: the run live when it was written, and none after its end", async () => {
+		const ended: CodeFact = {
+			type: "ended",
+			run: "r-1",
+			stage: "triage",
+			outcome: {kind: "done", part: false},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 1,
+		};
+		const seen = await onBoth(
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				yield* tickets.talk(1, "before", {type: "commented", body: "Nothing runs yet."});
+				yield* tickets.write(1, "r-1/started", started);
+				yield* tickets.talk(1, "while", {type: "commented", body: "Seen while triage runs."});
+				yield* tickets.write(1, "r-1/ended", ended);
+				yield* tickets.talk(1, "after", {type: "commented", body: "Seen after it ended."});
+				return (yield* tickets.read(1)).timeline.flatMap((e) =>
+					e.fact.type === "commented" ? [e.fact] : [],
+				);
+			}),
+		);
+		const comments = [
+			{type: "commented", body: "Nothing runs yet."},
+			{type: "commented", body: "Seen while triage runs.", during: "r-1"},
+			{type: "commented", body: "Seen after it ended."},
+		];
+		// Strict: with no run live, `during` is missing, never `undefined` or `null`.
+		expect(seen).toStrictEqual({ledger: comments, memory: comments});
+	});
+
 	it("fails a fact that does not fit its schema as `bad_fact`, not a crash", async () => {
 		const asked: CodeFact = {type: "asked", ask: "a-1", what: "Ship it?\nNow?", picks: ["yes"]};
 		const seen = await onBoth(

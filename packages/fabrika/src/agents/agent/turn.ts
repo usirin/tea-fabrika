@@ -63,8 +63,16 @@ export const Update = Schema.Union([
 	Schema.TaggedStruct("started", {session: Schema.String}),
 	/** One whole agent message (ACP streams chunks; we join them). */
 	Schema.TaggedStruct("said", {text: Schema.String}),
-	/** ACP's `tool_call` and `tool_call_update`, joined by `id`. */
-	Schema.TaggedStruct("tool", {id: Schema.String, title: Schema.String, status: ToolStatus}),
+	/**
+	 * ACP's `tool_call` and `tool_call_update`, joined by `id`. `output`: what the tool gave back, on
+	 * its end, where the maker says (Codex's `aggregated_output`).
+	 */
+	Schema.TaggedStruct("tool", {
+		id: Schema.String,
+		title: Schema.String,
+		status: ToolStatus,
+		output: Schema.optionalKey(Schema.String),
+	}),
 	/** ACP's `session/request_permission`. Refused: a contained run asks nobody. */
 	Schema.TaggedStruct("asked", {id: Schema.String, title: Schema.String}),
 	/** The turn's tokens so far. */
@@ -189,6 +197,7 @@ export type Raw =
 			readonly id: string;
 			readonly title: string;
 			readonly status: ToolStatus;
+			readonly output?: string;
 	  }
 	| {readonly _tag: "asked"; readonly id: string; readonly title: string}
 	/** One model request's tokens (`whole: false`), or the turn's total (`whole: true`). */

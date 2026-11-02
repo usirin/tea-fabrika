@@ -59,6 +59,8 @@ export const ATTR = {
 	head: "tea.head",
 	/** How a stage ended, by its name: `done`, `send:builder:checks_red`, `stuck:read_failed`. */
 	outcome: "tea.outcome",
+	/** `kept`, on each span of an agent run that keeps what it read and wrote: a lane's. */
+	content: "tea.agent.content",
 	/**
 	 * Why a stage could not use what an agent handed back: code's own
 	 * sentences about the agent's answer, one per line. They may quote the

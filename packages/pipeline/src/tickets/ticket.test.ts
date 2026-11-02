@@ -1,7 +1,18 @@
 import type {Row} from "@kampus/fabrika-old";
 import {Schema} from "effect";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Entry, type Fact, fold, mayWrite, readRow, Said, Title, WRITTEN_BY} from "./ticket.ts";
+import {
+	type Entry,
+	type Fact,
+	fold,
+	liveRun,
+	mayWrite,
+	readRow,
+	Said,
+	Title,
+	WRITTEN_BY,
+} from "./ticket.ts";
 
 // A ticket from its rows: what reads, what is broken, and what the fold makes of the facts.
 
@@ -247,6 +258,128 @@ describe("a lane's facts", () => {
 		];
 		for (const fact of wrong)
 			expect(readRow(row({data: JSON.stringify(fact), kind: fact.type})).kind).toBe("broken");
+	});
+});
+
+// Record wide (docs/plan/pipeline-self-fix.md, PR 7): what exists only while a run happens. A run's
+// harness session id goes on its `started`, and a comment names the run that was live when it
+// was written, as `during`. Both are new keys, so the rows written before them still read.
+describe("what a lane records wide", () => {
+	const lane = {kind: "agent", id: "lane", for: "owner"} as const;
+	const by = (pos: number, who: Entry["by"], fact: Fact): Entry => ({
+		...entry(pos, 1, fact),
+		by: who,
+	});
+	const filed = entry(1, 1, {type: "filed", title: "Login fails", body: ""});
+	const start = (pos: number, run: string): Entry =>
+		by(pos, lane, {type: "started", run, stage: "build", task: null, log: null});
+	const end = (pos: number, run: string): Entry =>
+		by(pos, lane, {
+			type: "ended",
+			run,
+			stage: "build",
+			outcome: {kind: "done", part: false},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 1,
+		});
+	const said = (pos: number): Entry => entry(pos, 1, {type: "commented", body: "Skip part 2."});
+
+	it("reads a run's session as a fact of its own, and keeps it off the start", () => {
+		const fact = {type: "session", run: "r-build-1", id: "fake-build"};
+		const read = readRow(row({data: JSON.stringify(fact), kind: "session"}));
+		expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		const onStart = {
+			type: "started",
+			run: "r-build-1",
+			stage: "build",
+			task: null,
+			log: null,
+			session: "fake-build",
+		};
+		const started = readRow(row({data: JSON.stringify(onStart), kind: "started"}));
+		expect(started.kind === "entry" && "session" in started.entry.fact).toBe(false);
+	});
+
+	it("takes a run's session once, after its start", () => {
+		const session = (pos: number, run: string): Entry =>
+			by(pos, lane, {type: "session", run, id: `fake-${run}`});
+		expect(fold([], [filed, start(2, "r-build-1"), session(3, "r-build-1")]).problems).toEqual([]);
+		expect(fold([], [filed, session(2, "r-build-1")]).problems).toEqual([
+			"row 2 on #1: run r-build-1 opened a session, but it never started",
+		]);
+		expect(
+			fold([], [filed, start(2, "r-build-1"), session(3, "r-build-1"), session(4, "r-build-1")])
+				.problems,
+		).toEqual(["row 4 on #1: run r-build-1 opened a session a second time"]);
+	});
+
+	it("names the live run from its start alone, before its session opens", () => {
+		expect(liveRun([filed, start(2, "r-build-1")])).toBe("r-build-1");
+	});
+
+	it("reads a comment with the run it was written during, and a comment from before it", () => {
+		const facts = [
+			{type: "commented", body: "Skip part 2.", during: "r-build-1"},
+			{type: "commented", body: "Skip part 2.", asks: "changes", during: "r-build-1"},
+			{type: "commented", body: "Seen it."},
+		];
+		for (const fact of facts) {
+			const read = readRow(row({data: JSON.stringify(fact), kind: "commented"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		}
+		const spaced = {type: "commented", body: "Skip.", during: "r build 1"};
+		expect(readRow(row({data: JSON.stringify(spaced), kind: "commented"})).kind).toBe("broken");
+	});
+
+	it("names the live run: the ticket's last start with no end", () => {
+		expect(liveRun([filed])).toBeNull();
+		expect(liveRun([filed, start(2, "r-build-1")])).toBe("r-build-1");
+		expect(liveRun([filed, start(2, "r-build-1"), said(3)])).toBe("r-build-1");
+		expect(liveRun([filed, start(2, "r-build-1"), end(3, "r-build-1")])).toBeNull();
+		expect(
+			liveRun([filed, start(2, "r-build-1"), end(3, "r-build-1"), start(4, "r-review-1")]),
+		).toBe("r-review-1");
+	});
+
+	it("names no run once a later run ended, though an earlier one never did: that one died", () => {
+		// r-build-1 crashed with no end; the lane restarted and r-build-2 ran to its end.
+		const timeline = [filed, start(2, "r-build-1"), start(3, "r-build-2"), end(4, "r-build-2")];
+		expect(liveRun(timeline)).toBeNull();
+	});
+
+	it("names the last start, if and only if that run has not ended, on any timeline that folds", () => {
+		const step = fc.record({kind: fc.constantFrom("start", "end", "said"), pick: fc.nat()});
+		fc.assert(
+			fc.property(fc.array(step, {maxLength: 16}), (steps) => {
+				// Only what the fold keeps: each run starts once, and ends once, after its start.
+				const timeline: Entry[] = [filed];
+				const open: string[] = [];
+				let runs = 0;
+				for (const {kind, pick} of steps) {
+					const pos = timeline.length + 1;
+					if (kind === "start") {
+						runs += 1;
+						open.push(`r-build-${runs}`);
+						timeline.push(start(pos, `r-build-${runs}`));
+					} else if (kind === "end" && open.length > 0) {
+						const [run = ""] = open.splice(pick % open.length, 1);
+						timeline.push(end(pos, run));
+					} else timeline.push(said(pos));
+				}
+				expect(fold([], timeline).problems).toEqual([]);
+				// The model: the last start, unless an end after it names the same run.
+				const at = timeline.findLastIndex((e) => e.fact.type === "started");
+				const last = timeline[at]?.fact;
+				const run = last?.type === "started" ? last.run : null;
+				const ended = timeline
+					.slice(at + 1)
+					.some((e) => e.fact.type === "ended" && e.fact.run === run);
+				expect(liveRun(timeline)).toBe(run === null || ended ? null : run);
+			}),
+			{numRuns: 300, seed: 119120},
+		);
 	});
 });
 

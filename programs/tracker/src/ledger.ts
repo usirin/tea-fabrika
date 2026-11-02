@@ -1,5 +1,21 @@
-import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika-old";
-import {type Entry, mayWrite, nameOf, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
+import {
+	Ledger,
+	MEMBERS,
+	namesOf,
+	type Row,
+	streams,
+	type Writer,
+	writerText,
+} from "@kampus/fabrika-old";
+import {
+	type Entry,
+	fold,
+	mayWrite,
+	nameOf,
+	ROOT,
+	readRow,
+	writtenDuring,
+} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
 import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";
 import {factOf} from "./ticket.ts";
@@ -72,6 +88,15 @@ const claim = (next: number, writer: string) =>
 		return yield* Effect.fail(refused(`${TRIES} ticket numbers from ${next}: every one was taken`));
 	});
 
+/** Ticket `n`'s timeline, folded from its inbox's rows, so a fact that does not fit is kept out. */
+const timelineOf = (n: number, rows: readonly Row[]): readonly Entry[] => {
+	const entries = rows.flatMap((row) => {
+		const read = readRow(row);
+		return read.kind === "entry" ? [read.entry] : [];
+	});
+	return fold([], entries).tickets.find((t) => t.number === n)?.timeline ?? [];
+};
+
 /** One write, as one fact in its ticket's inbox, under the write's message id. */
 export const saveCell = (cmd: ReturnType<typeof save>) =>
 	Effect.gen(function* () {
@@ -87,11 +112,13 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 				why: `only a person writes ${fact.type}, and this tracker writes as agent ${author.id}`,
 			});
 		const ticket = write.kind === "file" ? yield* claim(cmd.next, writer) : write.ticket;
-		yield* ledger.send(streams(nameOf(ticket)).inbox, cmd.id, {
-			kind: fact.type,
-			writer,
-			data: fact,
-		});
+		const inbox = streams(nameOf(ticket)).inbox;
+		// A comment names the run live as it is written, read off the ticket's own facts.
+		const data =
+			fact.type === "commented"
+				? writtenDuring(fact, timelineOf(ticket, yield* ledger.readStream(inbox, 0, -1)))
+				: fact;
+		yield* ledger.send(inbox, cmd.id, {kind: data.type, writer, data});
 		return {ticket};
 	}).pipe(
 		Effect.catchTags({

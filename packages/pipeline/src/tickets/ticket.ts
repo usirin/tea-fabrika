@@ -58,14 +58,15 @@ export const saidOf = (text: string): string =>
 
 // ---------------------------------------------------------------- what a lane writes
 //
-// Nine more kinds, the facts a lane works with
+// More kinds, the facts a lane works with
 // (docs/direction/what-a-ticket-shows.md, section 2). Each is a tagged struct under `type`, the
 // key the tracker's first four already use on the ledger, so the rows written before still read.
-// The fields added since (`asks` on a comment, `text` on an answer, `trace` on a start) are
-// optional for that reason.
+// The fields added since (`asks` and `during` on a comment, `text` on an answer, `trace` on a
+// start) are optional for that reason.
 //
 //   {type: "started", run: "r-7", stage: "build", task: "t-2", log: null,
 //    trace: "9c41…e07a"}                                                             code
+//   {type: "session", run: "r-7", id: "019a2f…"}                                      code, once
 //   {type: "ended", run: "r-7", stage: "build", outcome: {kind: "send", to: "review", why: "built"},
 //    usd: 0.41, input: 12000, output: 3000, turns: 14}                               code
 //   {type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve", "no"]}   the stage that asks
@@ -130,7 +131,17 @@ export const Asks = Schema.Literal("changes");
 /** The tracker's own four: a ticket filed, talked about, closed and opened again. */
 export const TicketFact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("filed"), title: Title, body: Body}),
-	Schema.Struct({type: Schema.Literal("commented"), body: Said, asks: Schema.optionalKey(Asks)}),
+	Schema.Struct({
+		type: Schema.Literal("commented"),
+		body: Said,
+		asks: Schema.optionalKey(Asks),
+		/**
+		 * The run that was live when the comment was written: the ticket's {@link liveRun}. Code fills
+		 * it in at the write; a person never types it. Missing: no run was live, or the comment was
+		 * written before the key.
+		 */
+		during: Schema.optionalKey(Id),
+	}),
 	Schema.Struct({type: Schema.Literal("closed")}),
 	Schema.Struct({type: Schema.Literal("reopened")}),
 ]);
@@ -187,6 +198,13 @@ export const CodeFact = Schema.Union([
 		listUsd: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
 		minutes: Schema.optionalKey(Schema.Finite),
 	}),
+	/**
+	 * A run's agent opened its session, once, after the run's `started`. `id`: the harness's own id
+	 * for the conversation: the Codex thread, the ACP session, the Agent SDK session. Only known
+	 * then, and a later restart loads the session by it. No fact: the agent never opened one, or
+	 * its harness names none.
+	 */
+	Schema.Struct({type: Schema.Literal("session"), run: Id, id: Id}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({
 		type: Schema.Literal("planned"),
@@ -303,6 +321,7 @@ export const WRITTEN_BY = {
 	closed: "anyone",
 	reopened: "anyone",
 	started: "anyone",
+	session: "anyone",
 	ended: "anyone",
 	planned: "anyone",
 	pushed: "anyone",
@@ -393,12 +412,52 @@ export const factsOf = <T extends Fact["type"]>(
 ): readonly FactOf<T>[] =>
 	timeline.flatMap((e) => (e.fact.type === type ? [e.fact as FactOf<T>] : []));
 
+/**
+ * The run live on a timeline: its last `started`, while no `ended` names that run. `null`: none
+ * is. An earlier start that never ended is a run that died, so a later start, ended or not, is
+ * the one that counts. Pure.
+ *
+ *   liveRun([filed, started r-1])            // "r-1"
+ *   liveRun([filed, started r-1, ended r-1]) // null
+ */
+export const liveRun = (timeline: readonly Entry[]): string | null => {
+	const last = factsOf(timeline, "started").at(-1);
+	if (last === undefined) return null;
+	return factsOf(timeline, "ended").some((e) => e.run === last.run) ? null : last.run;
+};
+
+/** A comment as its writer gives it: never with `during`, which only code fills in. */
+export type Comment = Omit<FactOf<"commented">, "during">;
+
+/**
+ * A comment as it is written onto `timeline`: with `during` set to the {@link liveRun}, or
+ * missing when none is live. Built key by key, so a `during` cast past the type is dropped. Pure.
+ */
+export const writtenDuring = (
+	comment: Comment,
+	timeline: readonly Entry[],
+): FactOf<"commented"> => {
+	const during = liveRun(timeline);
+	return {
+		type: "commented",
+		body: comment.body,
+		...(comment.asks === undefined ? {} : {asks: comment.asks}),
+		...(during === null ? {} : {during}),
+	};
+};
+
 /** Why a lane fact does not fit the timeline before it, or `null` when it fits. */
 const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 	switch (fact.type) {
 		case "started":
 			return factsOf(timeline, "started").some((s) => s.run === fact.run)
 				? `run ${fact.run} started a second time`
+				: null;
+		case "session":
+			if (!factsOf(timeline, "started").some((s) => s.run === fact.run))
+				return `run ${fact.run} opened a session, but it never started`;
+			return factsOf(timeline, "session").some((s) => s.run === fact.run)
+				? `run ${fact.run} opened a session a second time`
 				: null;
 		case "ended": {
 			const started = factsOf(timeline, "started").find((s) => s.run === fact.run);
