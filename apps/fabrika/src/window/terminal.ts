@@ -166,9 +166,15 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * only what was kept. Every tile's terminal lives in one Ghostty, and ghostty-web 0.4's wasm
 	 * does not clear the memory it hands out again: a terminal made after another was freed starts
 	 * with the freed one's rows, and a look change frees and makes one per tile. Without the reset,
-	 * a tile showed another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts). It
-	 * comes after the fit, as the fit's resize can take up a freed terminal's rows again; for the
-	 * same reason it is not in the ghostty-web patch, where it would run before the fit.
+	 * a tile showed another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts).
+	 *
+	 * It comes after the fit. Moved before it, "starts blank when a tile opens after another
+	 * closed" in terminal.replay.test.ts fails with " sh$ tracker" on the first row: that test reads
+	 * the screen as 0.4's renderer does (update, then getViewport) between the steps, and with those
+	 * reads the fit's resize takes up the freed terminal's rows again. Runs on the bare wasm, without
+	 * them, come out clean either way. The ghostty-web patch's constructor runs before the fit, so it
+	 * is the same failing order. The public `term.write` is not used, because terminal.test.ts checks
+	 * the replayed bytes exactly, and a reset there would show up as an extra write.
 	 */
 	const open = () => {
 		term.open(screen);
