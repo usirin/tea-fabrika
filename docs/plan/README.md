@@ -54,7 +54,7 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **App icon and top bar.** Merged ([274](https://github.com/usirin/tea-fabrika/pull/274), [275](https://github.com/usirin/tea-fabrika/pull/275)). → nothing
 - **[PR 192](https://github.com/usirin/tea-fabrika/pull/192), `claude` and `codex` as programs.** Overlaps pipeline v0. → the owner says yes or no; on a yes, an agent merges
 - **Pipe colors and tiles.** The rules are decided ([pipe colors](../direction/pipe-colors.md), [color principles](../direction/color-principles.md), [tile guidelines](../direction/tile-guidelines.md)), not built. The build is ticket 124. → a pull request through the pipeline, after ticket 117
-- **Studies done, not walked yet.** React tryout, themes, the DeepSeek repo, [Windows](../direction/windows-in-next.md), Effect on Cloudflare. → the owner
+- **Studies done, not walked yet.** React tryout, themes, [the DeepSeek repo](../../experiments/185-dsh-superagent-study.md), [Windows](../direction/windows-in-next.md), Effect on Cloudflare. → the owner
 - **demlik.** Epics landed, no release yet. The three issues that waited have rulings as of 2026-11-01: [756](https://github.com/kamp-us/demlik/issues/756#issuecomment-6564399911), [782](https://github.com/kamp-us/demlik/issues/782#issuecomment-6564266885) and [777](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162). → demlik's agents build them, and the release stays the owner's call
 - **Copying for the app and Tuval in `next/`.** Lean, 70%: rethink stays the default, plus a named Tier 2 copy list. → the owner decides
 - **Two people before agents, Tier 3 before Tier 5 in `next/`.** Lean yes, 70%. → the owner answers
