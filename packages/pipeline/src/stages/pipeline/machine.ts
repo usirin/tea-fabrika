@@ -148,6 +148,16 @@ const Decided = Schema.Struct({
 /** What the review judged last, for the question of whether it lands. */
 const Reviewed = Schema.Struct({title: Schema.String, met: Schema.Finite, of: Schema.Finite});
 
+/** One test the test writer's check runs: the Property it tests, its file, and its name there. */
+const WrittenTest = Schema.Struct({
+	property: Schema.String,
+	file: Schema.String,
+	name: Schema.String,
+});
+
+/** The test writer's own commit, and the tests its check ran there. */
+const Written = Schema.Struct({commit: Schema.String, tests: Schema.Array(WrittenTest)});
+
 /** What one step leaves for the steps after it. */
 const carried = {
 	/** The plan as data, once it is written. Every later step reads it. */
@@ -193,6 +203,17 @@ const carried = {
 	posts: Schema.Array(Post),
 	/** The lane's pull request. `null`: none yet. */
 	pr: Schema.NullOr(Schema.String),
+	/**
+	 * The test writer's own commit under the build, and the tests its check ran there (self-fix PR 5): a
+	 * restart runs that check again with the commit put on main, and a redo writes on it. Optional: a
+	 * lane saved before this key still reads, and has no check to run again.
+	 */
+	written: Schema.optionalKey(Written),
+	/**
+	 * The test writer's files a build or main changed, waiting on a person's pick: the next build puts
+	 * them back as `written` has them, and the next test writer writes them again. Optional, as `left` is.
+	 */
+	touched: Schema.optionalKey(Schema.Array(Schema.String)),
 };
 export const Carry = Schema.Struct(carried);
 export type Carry = typeof Carry.Type;
@@ -336,11 +357,13 @@ const Changed = StepEnd.fields.carry;
  * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
  * `conflicts`: the builder's files do. On both, main's side was taken, and `carry`, when there, is
  * the branch on main with each such file open: the test writer, or the builder, redoes it.
- * `closed`: the ticket was closed while the lane was stopped. `not_yours`: it was not filed by the
- * person running this, or an agent of theirs.
+ * `merged`: the branch was pushed, so main was merged into it, and its new head is one no review read
+ * and the pull request does not show. `closed`: the ticket was closed while the lane was stopped.
+ * `not_yours`: it was not filed by the person running this, or an agent of theirs.
  */
 export const Fresh = Schema.Union([
 	Schema.TaggedStruct("fresh", {carry: Changed}),
+	Schema.TaggedStruct("merged", {carry: Changed}),
 	Schema.TaggedStruct("exam_conflict", {
 		files: Schema.Array(Schema.String),
 		carry: Schema.optionalKey(Changed),
@@ -752,7 +775,7 @@ const questionFor = (
 		step: titleOf(asks),
 		rounds_spent: titleOf(spentQuestion(s, step)),
 		exam_touched: titleOf(
-			"The build changed the test writer's files, so nothing it did is kept. Which was wrong: the builder, or the test?",
+			`The build changed the test writer's files${(s.carry.touched ?? []).length === 0 ? "" : `: ${(s.carry.touched ?? []).join(", ")}`}. Which was wrong: the builder, or the test?`,
 		),
 		exam_conflict: titleOf(asks),
 	}[kind];
@@ -824,8 +847,8 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 						...(CALL_WORDS[call.about] === undefined ? [] : [CALL_WORDS[call.about]]),
 						goOnWords(after(question.step, call.after, s.round, s)),
 					].join(" "),
-		builder_wrong: `The build runs again on the head before it, as round ${s.round + 1}, with the test writer's files as they were. A note you write beside this answer goes to the builder.`,
-		test_wrong: `The test writer writes its tests again, with the note you write beside this answer, then the build runs, as round ${s.round + 1}.`,
+		builder_wrong: `The test writer's files go back as it wrote them, on top of the builder's work, and the build runs again there, as round ${s.round + 1}. A note you write beside this answer goes to the builder.`,
+		test_wrong: `The test writer writes those files again, and only those, with the note you write beside this answer. Then the build goes on from the builder's work, as round ${s.round + 1}.`,
 		...(PAUSES[question.for].includes(pick) ? pauses : {}),
 	};
 	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
@@ -1204,6 +1227,14 @@ export const lane = defineMachine({
 				}
 				case "fresh":
 					return goOn(withFresh(held, found.carry), s.at);
+				// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
+				case "merged":
+					return goOn(
+						withFresh(held, found.carry),
+						STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
+							? {_tag: "run", step: "review"}
+							: s.at,
+					);
 			}
 		},
 		// Main could not be read: the lane stops where it was to go on, and lets the ticket go.
