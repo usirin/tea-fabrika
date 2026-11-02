@@ -111,8 +111,8 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 - **A merge ship finds already done shows as GitHub reads it.** The ticket's `pr` fact holds the head that
   merged and its checks as they read. At the head the lane judged, the lane ends `done`: it cannot tell
   its own merge with a lost answer from a person's merge of that head, so red checks there show as red.
-  At another head, the merge step ends `stuck: merged_elsewhere`, so the lane ends `stuck: step_stuck`,
-  and the ticket says both heads.
+  At another head, the merge step ends `stuck: merged_elsewhere`, and so does the lane, which never
+  restarts from it. The ticket says both heads.
 
 ## What it holds to
 
@@ -142,11 +142,16 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   that ended done runs again. If main moved, a branch never pushed is rebased onto it: the test writer's
   commit first, where its check runs again, then the builder's. A pushed one has main merged in, so the
   pushed head stays under it; that new head is one no review read, so the review and the push run again
-  before a merge. The ticket gets a `restarted` row with main's old and new commit, and code's checks
-  run at the new head. A file that conflicts keeps main's side: a test writer's file, or a test whose
+  before a merge. The ticket gets a `restarted` row with main's old and new commit, the lane's head
+  before and after, and the files where main's side won. A lane that goes on at a step after the build
+  with no green checks at its head gets code's checks there first: red sends the build round again, or
+  asks once the rounds are spent. A build whose checks could not run goes on at those checks, never the
+  builder. A file that conflicts keeps main's side: a test writer's file, or a test whose
   check no longer holds on main, asks `exam_conflict`, whose `again` has the test writer write only those
   files again; any other file sends the build round again. A lane saved before this change goes on
-  from what the ticket's facts prove (`stages/pipeline/restart.ts`).
+  from what the ticket's facts prove (`stages/pipeline/restart.ts`); one that goes on before the test
+  writer starts its branch again from main, with the old head kept under the ref `restarted` names.
+  A ticket that cannot be read then stops the lane `stuck: step_failed`.
 - **A person's `no` or `stop` pauses.** It ends the line `ask: owner: paused` (or `stuck: rounds_spent`
   for a stop on the spent rounds), saved where the pick goes on. A `no` on the plan writes it again with
   the person's note; a `no` on a merge asks again; a `stop` on the rounds runs the build as the next round.

@@ -129,22 +129,24 @@ The lane asks a person seven kinds of question (`packages/pipeline/src/stages/pi
 
 **A stopped lane goes on.** Typing the same line again restarts it from the step that broke. It
 claims the ticket again, reads the ticket and main fresh, and runs no step that already ended done.
-Only `done`, a `skip`, and `stuck: not_yours` are final: on those, typing the line again says how it
+Only `done`, a `skip`, `stuck: not_yours` and `stuck: merged_elsewhere` are final: on those, typing the line again says how it
 ended and runs nothing.
 
 Stuck words come at two levels. The ticket shows both.
 
 | Level | Words | Where |
 |---|---|---|
-| The lane, seven words | `not_yours`, `no_ticket`, `claim_held`, `step_failed`, `step_stuck`, `rounds_spent`, `sent_back` | `stages/pipeline/outcome.ts` |
-| One step, under a lane's `step_stuck` | Such as `checks_stuck`, `merge_failed`, `merge_unknown` (ship), `merged_elsewhere` (merge) | That step's own outcome, in the line it printed |
+| The lane, ten words | `not_yours`, `no_ticket`, `claim_held`, `step_failed`, `step_stuck`, `rounds_spent`, `sent_back`, `checks_not_run`, `checks_red`, `merged_elsewhere` | `stages/pipeline/outcome.ts` |
+| One step, under a lane's `step_stuck` | Such as `checks_stuck`, `merge_failed`, `merge_unknown` (ship) | That step's own outcome, in the line it printed |
 
 A person's `no` or `stop` is a pause, not an end: the line ends `ask: owner: paused` (a `stop` on the
 spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pick goes.
 
 1. Read both words on the ticket. The program's README says what each GitHub one means.
 2. Fix what stopped it, if it needs fixing, then type the same line again. The ticket gets a
-   `restarted` row: the step it goes on from, and main then and now.
+   `restarted` row: the step it goes on from, main then and now, the lane's head before and after,
+   and the files where main's side won. If the step it goes on at comes after the build, code's checks
+   run at the head first, and red ones send the build round again.
 3. If main changed a file the lane also changed, main's side stands. A test writer's file asks you
    `exam_conflict`, and so does a test whose check no longer holds on main: `again` has the test
    writer write only those files again, then the build goes on. Any other file sends the build round

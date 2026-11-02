@@ -241,8 +241,8 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     only those files on the new base, its check runs, and build goes on from the builder's
     rebased head as the next round. "Stop": saved at the rebase, so the same line goes on
     there.
-  - Not restartable: the closed list `FINAL`. Today it is `not_yours` alone: `merged_elsewhere`
-    is not in the code yet, and joins the list when it is. The line says why. Every other stuck reason restarts, a new one included (P4). The restart reads
+  - Not restartable: the closed list `FINAL`: `not_yours` and `merged_elsewhere`, the merge
+    step's end when someone else merged the pull request at another head. The line says why. Every other stuck reason restarts, a new one included (P4). The restart reads
     the ticket fresh, so a ticket a person closed ends `skip:closed` there.
   - A person's `stop` or `no` is a saved pause, not an end (decided 2026-11-01). Today any
     pick but the first ends `skip:owner_no` (`machine.ts:613-617`). After: it saves the lane
@@ -321,30 +321,32 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
 
 ## Ticket 117 restarts
 
-It can restart from its own state, once PRs 1, 3, 4, 5 and 7 land, through PR 5's fold. Its
-saved `over` has no carry, so each field comes from a fact or from code's own commits. If no
-fact proves a field, the lane goes back to the step that writes it, and no further:
+**Proposed, waiting on the owner's yes.**
 
-| Field | Where it comes from | If nothing proves it, resume at |
-|---|---|---|
-| `plan`, `version`, `rules` | the ledger's `planned` fact for 117's plan | plan |
-| `decided` | the plan's questions, and the note on the ticket's `approve` answer | the plan's yes: the `approve` ask again, one click |
-| `base` | the lane's working copy (`work.tree(117).base`) | no step: main is read fresh and the branch rebased anyway |
-| `exam` | the files of `5d38d582`, the commit code made for the test writer (`tests for ...`) | the test writer |
-| `head` | `lane/117`'s tip, `315df8e6`, the commit code made for the builder | build, round 1, on the exam commit |
-| `count`, `trail` | the ticket's `started` and `ended` facts | triage, since these are the facts the fold reads; with none there is nothing to keep |
+Ticket 117 was planned before PR 7, so its ends kept no carry, and PR 5's fold has to rebuild
+the lane from the ledger and the branch. The ledger keeps the plan's revision (the `planned`
+fact) and the plan's text in its comment. It does not keep the plan's properties, its
+interface or its gaps, so the fold cannot prove `plan`, and names it (a sketch of the line):
 
-Then, in order: main has moved, so `lane/117` is rebased onto it (it was never pushed); the
-test writer's check runs on the new base; PR 1 formats `window.test.ts` in a code commit; the
-lane runs PR 4's checks at the head, gets `tsh.test.ts` red with its name, and sends it to
-build round 2. The builder may change `tsh.test.ts`, since it is not exam, and says so in
-its deviations.
+```text
+pipeline --ticket 117 | runs
+restart: #117 from plan, which ended stuck:step_stuck (mutation: stuck:tests_red)
+```
 
-If the fold cannot prove a field, the restart names it and resumes at that field's step, as
-the table says (P4). Every step before it keeps its `done`. A step after it keeps its `done`
-when the fields it reads come out the same: a yes asked again on the same plan version keeps
-the test writer's and the builder's commits. Nobody edits a saved state by hand, and no step
-whose inputs can be proved runs again.
+What happens then, in order:
+
+- Triage stays done. It does not run again.
+- `lane/117`'s head, `315df8e6`, is kept under a ref the restart names, such as
+  `refs/kept/lane/117/fresh/<count>/<n>`, and on the `restarted` fact as `kept`. Nothing
+  built is lost.
+- The branch starts again from main as read fresh.
+- The plan runs again, and the person is asked for the yes again.
+- The test writer writes its tests on that fresh branch, and its check runs there.
+- The build runs from round 1, on the test writer's commit, and the steps after it follow.
+
+What this costs: one more plan, one more yes, one more test writer run and one more build
+before the lane is where it stopped. A lane planned after PR 7 keeps its plan in its ends'
+carry, so its fold names the step that broke, and none of this runs again.
 
 ## PR 6: the plan step lists existing tests that run the code it changes
 
