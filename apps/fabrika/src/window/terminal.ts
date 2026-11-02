@@ -181,7 +181,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * Focus stays where it was. ghostty-web 0.4's open() focuses the terminal, at once and again
 	 * after a zero timeout, and a look change remakes every tile's terminal, so the last one would
 	 * take focus from the tile or the input a person is in. A remake that had focus keeps it;
-	 * otherwise focus goes back where it was, at once and after open()'s own timeout. A pnpm patch
+	 * otherwise focus goes back where it was, at once and after open()'s own timeout, and where
+	 * nothing had focus, the remade terminal lets go of it, so keys typed next reach no tile
+	 * nobody picked (terminal.focus.test.ts). A pnpm patch
 	 * that stops open() focusing would be cleaner, but every first open then needs its own focus(),
 	 * and the tests model 0.4's open() as it is.
 	 */
@@ -194,8 +196,14 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		if (!opened) return;
 		open();
 		if (focused) return term.focus();
+		const remade = term;
+		const nowhere = active === null || active === document.body;
 		const back = () => {
-			if (
+			if (nowhere) {
+				const held = document.activeElement;
+				for (const at of [remade.textarea, remade.element])
+					if (at !== undefined && at === held) at.blur();
+			} else if (
 				typeof active === "object" &&
 				active !== null &&
 				"focus" in active &&
