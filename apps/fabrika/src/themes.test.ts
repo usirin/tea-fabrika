@@ -129,7 +129,7 @@ const FILLS: Record<Look, ReadonlySet<number>> = {dark: new Set([0]), light: new
  * note's color; a raw step the note does not name takes the step Radix gives that job (ticket
  * 144's table). Tokens with no clear step yet (--text-secondary, --text-muted, --person-bg,
  * --agent-bg, --ty-*, --svc-*) are the owner's pick, so they are not pinned here; the text ones
- * still meet the contrast law below.
+ * still meet the contrast law and the two text steps below.
  */
 const TOKENS: Record<string, Record<Look, string>> = {
 	"--surface-sunken": {dark: DARK.desk, light: LIGHT.desk},
@@ -512,6 +512,139 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 			]),
 		).toEqual([]);
 	});
+});
+
+// The owner's ruling of 2026-11-02: text uses Radix's two text steps only. Step 12 is the main line
+// (titles, names), step 11 or a11 (where the look needs it to pass) is everything quieter. Rank
+// comes from weight and size, never a third gray, and a title is always step 12.
+describe("text takes Radix's two text steps, and a title is step 12, in both looks", () => {
+	const SLATE: Record<Look, {high: string; low: readonly string[]}> = {
+		dark: {high: "#edeef0", low: ["#b0b4ba", "#f1f7feb5"]}, // slate 12; slate 11, slate a11
+		light: {high: "#1c2024", low: ["#60646c", "#0007149f"]}, // slate 12; slate 11, slate a11
+	};
+
+	// The tokens with a hue: state words and the turn. Every other token set as `color:` is a gray.
+	const HUES = ["--turn", "--done", "--running", "--stuck", "--open", "--alert"];
+	const GRAYS = [
+		...new Set([
+			"--text-primary",
+			"--text-secondary",
+			"--text-muted",
+			"--text-faint",
+			...[...uncommented(CSS + THEME).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)]
+				.map(([, name = ""]) => name)
+				.filter((name) => name !== "--turn-fg" && !HUES.includes(name)),
+		]),
+	].sort();
+
+	it.each(LOOKS)("every gray text token is slate 12 or the look's one low step, %s", (look) => {
+		const values = GRAYS.map((name) => [name, tokenIn(name, look)] as const);
+		const steps = new Set(values.map(([, value]) => value));
+		expect({
+			offSteps: values
+				.filter(([, value]) => value !== SLATE[look].high && !SLATE[look].low.includes(value))
+				.map(([name, value]) => `${name} ${value}`),
+			high: steps.has(SLATE[look].high),
+			low: [...steps].filter((value) => value !== SLATE[look].high).sort(),
+		}).toEqual({offSteps: [], high: true, low: [expect.any(String)]});
+	});
+
+	const RULES = rulesOf(CSS);
+
+	/**
+	 * The color an element is drawn in: the first selector in its chain (its own rules, then each
+	 * parent's) whose rule sets `color`, the last such rule winning, as the cascade does.
+	 */
+	const colorOf = (chain: readonly string[], look: Look) => {
+		for (const selector of chain) {
+			const sets = RULES.filter(
+				(r) => r.selector.split(",").some((s) => s.trim() === selector) && r.says.has("color"),
+			);
+			const last = sets[sets.length - 1];
+			if (last !== undefined) return valueIn(last.says.get("color") ?? "", look);
+		}
+		return `(no color for ${chain.join(" in ")})`;
+	};
+
+	// Each main line the window draws, with the selectors its color comes from (found in window.css,
+	// the app's window components and programs/*/src/window.tsx).
+	const TITLES: Record<string, readonly string[]> = {
+		"a tracker ticket row's title": [".tracker-title", ".tracker .tracker-list button"],
+		"a tracker pull request row's title": [
+			".tracker-title",
+			".tracker-list a.tracker-pull-request",
+		],
+		"an asks or jobs row's title": [".pop-row .t"],
+		"a set-aside row's title": ['.pop-row[data-icon="later"] .t', ".pop-row .t"],
+		"a palette command's name": [".pop-cmd .name", ".pop-cmd"],
+		"a selected palette command's name": [".pop-cmd.on .name", ".pop-cmd .name", ".pop-cmd.on"],
+		"a pop's title": [".pop-title"],
+		"a trace row's name": [".trace-view .wf-name"],
+		"the ticket's title": [".ticket-view .tk-title"],
+		"a map node's name": [".map-view .node-h .n"],
+		"a map frame's name": [".map-view .frame-h .n"],
+		"a map chip's name": [".map-view .chip .n"],
+		"a runs track's name": [".runs-view .trk-h .n"],
+		"a markdown heading": [".markdown h1"],
+	};
+
+	it.each(LOOKS)("every title and main line is slate 12, %s", (look) => {
+		const got = Object.fromEntries(
+			Object.entries(TITLES).map(([what, chain]) => [what, colorOf(chain, look)]),
+		);
+		const want = Object.fromEntries(Object.keys(TITLES).map((what) => [what, SLATE[look].high]));
+		expect(got).toEqual(want);
+	});
+
+	// A row: its title, and the quieter text beside it.
+	const ROWS: Record<string, {title: readonly string[]; beside: readonly (readonly string[])[]}> = {
+		"a tracker ticket row": {
+			title: TITLES["a tracker ticket row's title"] ?? [],
+			beside: [[".tracker-number"], [".tracker-sub"]],
+		},
+		"an asks or jobs row": {
+			title: TITLES["an asks or jobs row's title"] ?? [],
+			beside: [[".pop-row .s"], [".pop-row .side"]],
+		},
+		"a palette command": {
+			title: TITLES["a palette command's name"] ?? [],
+			beside: [[".pop-cmd .word"]],
+		},
+		"a trace row": {
+			title: TITLES["a trace row's name"] ?? [],
+			beside: [[".view .faint"]],
+		},
+	};
+
+	it.each(LOOKS)(
+		"a row's title reads at least as strong as the text beside it, at rest, hovered and selected, %s",
+		(look) => {
+			const states = ["--surface", "--surface-raised"].flatMap((page) => [
+				[`rest on ${page}`, tokenIn(page, look)] as const,
+				...["--surface-hover", "--surface-selected"].map(
+					(row) =>
+						[
+							`${row} over ${page}`,
+							hexFrom(over(tokenIn(row, look), tokenIn(page, look))),
+						] as const,
+				),
+			]);
+			const beaten = Object.entries(ROWS).flatMap(([row, {title, beside}]) =>
+				states.flatMap(([state, bg]) => {
+					const strong = ratio(colorOf(title, look), bg);
+					return beside.flatMap((chain) => {
+						const quiet = ratio(colorOf(chain, look), bg);
+						return quiet > strong
+							? [
+									`${row}, ${state}: ${chain.join(" in ")} ${quiet.toFixed(2)} > title ${strong.toFixed(2)}`,
+								]
+							: [];
+					});
+				}),
+			);
+			expect(beaten).toEqual([]);
+		},
+	);
 });
 
 // ---- one set of values for the window, the terminal and the window's frame ---------------------
