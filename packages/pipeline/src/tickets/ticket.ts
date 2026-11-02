@@ -242,6 +242,11 @@ export const CodeFact = Schema.Union([
 		 * reads as a clean run: the mutation step's, which then runs no suite of its own.
 		 */
 		trusted: Schema.optionalKey(Trusted),
+		/**
+		 * The step's input key (self-fix PR 5, P7): a hash of what it read
+		 * (`stages/pipeline/key.ts`). Only known now. Left out: an end written before the key.
+		 */
+		key: Schema.optionalKey(Hash),
 	}),
 	/** Code ran `[build] checks` at `head`, after a build: what it found there. */
 	Schema.Struct({type: Schema.Literal("checked"), ...Checked.fields, head: Sha}),
@@ -252,6 +257,18 @@ export const CodeFact = Schema.Union([
 	 * its harness names none.
 	 */
 	Schema.Struct({type: Schema.Literal("session"), run: Id, id: Id}),
+	/**
+	 * A stopped lane started again (self-fix PR 5): who is the entry's writer, and when its time.
+	 * `from`: the step it went on from. `base`: the commit the lane stood on when it stopped, `null` if
+	 * it had none. `onto`: main as read fresh, which the lane's branch stands on now: the same commit
+	 * when main had not moved. Only known at the restart.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("restarted"),
+		from: Stage,
+		base: Schema.NullOr(Sha),
+		onto: Sha,
+	}),
 	/** The plan stage wrote a plan, or a new version of it. */
 	Schema.Struct({
 		type: Schema.Literal("planned"),
@@ -371,6 +388,7 @@ export const WRITTEN_BY = {
 	session: "anyone",
 	ended: "anyone",
 	checked: "anyone",
+	restarted: "anyone",
 	planned: "anyone",
 	pushed: "anyone",
 	reviewed: "anyone",

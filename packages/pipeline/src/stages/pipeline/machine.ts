@@ -10,6 +10,7 @@ import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
 import {openWords, throughWords} from "./found.ts";
 import {LaneOutcome} from "./outcome.ts";
+import type {Folded} from "./restart.ts";
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
 // its own, and the lane starts each as one Act and reads its outcome, as `operate` does; it never
@@ -67,8 +68,17 @@ const AFTER_BUILD: ReadonlySet<LaneStep> = new Set(STEPS.slice(STEPS.indexOf("bu
  * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
  * `rounds_spent`: the work went back as often as it may, and a person says whether once more.
  */
-const ASKS = ["approve", "exam_merge", "merge", "step", "rounds_spent"] as const;
-const AskFor = Schema.Literals(ASKS);
+const ASKS = [
+	"approve",
+	"exam_merge",
+	"merge",
+	"step",
+	"rounds_spent",
+	"exam_touched",
+	"exam_conflict",
+] as const;
+export const AskFor = Schema.Literals(ASKS);
+export type AskFor = typeof AskFor.Type;
 
 /**
  * The most builds a ticket gets on its own: the first, and each one a red head or a review sent it
@@ -226,14 +236,15 @@ export type LaneCmd =
 	| ReturnType<typeof claimLane>
 	| ReturnType<typeof releaseLane>
 	| ReturnType<typeof runStep>
-	| ReturnType<typeof askPerson>;
+	| ReturnType<typeof askPerson>
+	| ReturnType<typeof freshMain>;
 
 /** A person's call on a step's end: what the step asked about, and how it ends if they let it through. */
 const Call = Schema.Struct({about: Schema.String, after: Outcome});
 type Call = typeof Call.Type;
 
 /** A question on the ticket. `step`: the step it comes back to. Left out, `call`: any other question. */
-const Question = Schema.Struct({
+export const Question = Schema.Struct({
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
@@ -241,7 +252,7 @@ const Question = Schema.Struct({
 	step: LaneStep,
 	call: Schema.optionalKey(Call),
 });
-type Question = typeof Question.Type;
+export type Question = typeof Question.Type;
 
 /** One step as it ended, or one person's answer: what a lane leaves behind it, in order. */
 const Row = Schema.Struct({step: Schema.String, said: Schema.String});
@@ -249,7 +260,7 @@ const Row = Schema.Struct({step: Schema.String, said: Schema.String});
 /** Whether a red head goes back to the builder on its own: `[build] send_back`. Left out: it does. */
 const SendBack = {sendBack: Schema.optionalKey(Schema.Boolean)};
 
-const Held = Schema.Struct({
+export const Held = Schema.Struct({
 	number: Schema.Finite,
 	lane: LaneId,
 	...SendBack,
@@ -258,7 +269,38 @@ const Held = Schema.Struct({
 	carry: Carry,
 	trail: Schema.Array(Row),
 });
-type Held = typeof Held.Type;
+export type Held = typeof Held.Type;
+
+/**
+ * Where a stopped lane goes on when the same line is typed again (self-fix PR 5, P6 and P10): a step
+ * it runs, or a question it asks again. `step`, on an ask: the step the question is about.
+ * STUB, written by the test writer: the builder owns its shape past these two.
+ */
+export const Resume = Schema.Union([
+	Schema.TaggedStruct("run", {step: LaneStep}),
+	Schema.TaggedStruct("ask", {for: AskFor, step: LaneStep}),
+]);
+export type Resume = typeof Resume.Type;
+
+/** A restart's fresh read of main: where the lane stopped, and what it held then. */
+const FreshIn = Schema.Struct({number: Schema.Finite, from: Resume, carry: Carry});
+
+/**
+ * What the fresh read found, with the lane's branch rebased onto main (never pushed) or merged with it
+ * (pushed). `fresh`: it went on, and `carry` is what changed, such as the base, the head and the
+ * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
+ * `conflicts`: the builder's files do. `closed`: the ticket was closed while the lane was stopped.
+ * STUB, written by the test writer: the builder owns the program side.
+ */
+export const Fresh = Schema.Union([
+	Schema.TaggedStruct("fresh", {carry: StepEnd.fields.carry}),
+	Schema.TaggedStruct("exam_conflict", {files: Schema.Array(Schema.String)}),
+	Schema.TaggedStruct("conflicts", {files: Schema.Array(Schema.String)}),
+	Schema.TaggedStruct("closed", {}),
+]);
+export type Fresh = typeof Fresh.Type;
+
+export const freshMain = act("lane_fresh", {input: FreshIn, ok: Fresh, err: Unknown});
 
 const Ended = Schema.Struct({outcome: LaneOutcome, said: Schema.String});
 type Ended = typeof Ended.Type;
@@ -295,6 +337,17 @@ export const Lane = Schema.Union([
 		phase: Schema.Literal("releasing"),
 		asked: keptAct(releaseLane, ReleaseIn),
 	}),
+	// STUB (self-fix PR 5 test writer): a stop that saved what a restart needs, its `Held` and where it
+	// goes on. The builder makes this the only shape a stop that may restart can take (P6). First, so a
+	// saved one never reads as the shape below with its `held` dropped.
+	Schema.Struct({
+		...Ended.fields,
+		phase: Schema.Literal("over"),
+		number: Schema.Finite,
+		trail: Schema.Array(Row),
+		held: Held,
+		at: Resume,
+	}),
 	Schema.Struct({
 		...Ended.fields,
 		phase: Schema.Literal("over"),
@@ -314,6 +367,12 @@ export type LaneMsg =
 	  }
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
 	| {readonly type: "resume"}
+	/**
+	 * The same line typed again on a lane that stopped (self-fix PR 5): it reads the ticket and main
+	 * fresh, and goes on where it stopped. `folded`: for a lane saved before its stop kept a `Held`,
+	 * what the ticket's facts prove (./restart.ts).
+	 */
+	| {readonly type: "restart"; readonly folded?: Folded}
 	/** A person answered `ask` on the ticket: the Listen below heard it. */
 	| {
 			readonly type: "lane_answered";
@@ -410,7 +469,17 @@ export const PICKS = {
 	merge: ["merge", "no"],
 	step: ["again", "stop"],
 	rounds_spent: ["again", "stop"],
+	exam_touched: ["builder_wrong", "test_wrong"],
+	exam_conflict: ["again", "stop"],
 } as const;
+
+/**
+ * Where a pick of `question` goes on (P10): every ask kind names it in its own definition, and the
+ * lane routes by it. STUB, written by the test writer: the builder owns it.
+ */
+export const resumeOf = (_question: Question, _pick: string): Resume => {
+	throw new Error("resumeOf: not built yet (self-fix PR 5)");
+};
 
 /** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
 const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer" : "build");
@@ -513,6 +582,9 @@ const questionFor = (
 		merge: titleOf(mergeWords(s.carry)),
 		step: titleOf(asks),
 		rounds_spent: titleOf(spentQuestion(s, step)),
+		// STUB (self-fix PR 5 test writer): the builder words these two questions.
+		exam_touched: titleOf(asks),
+		exam_conflict: titleOf(asks),
 	}[kind];
 	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
 	// the old count is safe too: that count was never more than the trail, and its answer added a row.
@@ -742,6 +814,10 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 			return running(held, question.step, question.step === "build" ? s.round + 1 : s.round);
 		case "rounds_spent":
 			return running(held, question.step, s.round + 1);
+		// STUB (self-fix PR 5 test writer): nothing asks these yet; the builder routes them.
+		case "exam_touched":
+		case "exam_conflict":
+			return [s, []];
 	}
 };
 
@@ -764,7 +840,7 @@ export const lane = defineMachine({
 		>,
 		ctx: undefined,
 	},
-	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson],
+	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson, freshMain],
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step_ => {
@@ -773,6 +849,10 @@ export const lane = defineMachine({
 			const sendBack = m.sendBack === undefined ? {} : {sendBack: m.sendBack};
 			return [{phase: "reading", number: m.number, lane: m.lane, ...sendBack, asked}, [asked]];
 		},
+		// STUB (self-fix PR 5 test writer): today a restart does nothing.
+		restart: (s): Step_ => [s, []],
+		lane_fresh_ok: (s): Step_ => [s, []],
+		lane_fresh_err: (s): Step_ => [s, []],
 		resume: (s): Step_ => {
 			if (s.phase === "idle" || s.phase === "over") return [s, []];
 			return [s, [s.asked as LaneCmd]];

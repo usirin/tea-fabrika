@@ -73,6 +73,7 @@ import {
 	type askPerson,
 	type Carry,
 	type claimLane,
+	type freshMain,
 	Lane,
 	lane,
 	MAX_ROUNDS,
@@ -966,6 +967,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),
 
+	// STUB (self-fix PR 5 test writer): the builder reads main fresh here, rebases or merges, and writes `restarted`.
+	lane_fresh: (_cmd: ReturnType<typeof freshMain>) => Effect.fail(unknown),
+
 	lane_step: (cmd: Carried) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
@@ -1116,6 +1120,7 @@ const laneKind = kind({
 			lane_claim: "claim it",
 			lane_step: "run a step",
 			lane_ask: "ask the person",
+			lane_fresh: "read main fresh",
 			lane_answer: "wait for the answer",
 			lane_release: "let it go",
 		},

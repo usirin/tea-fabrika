@@ -1,3 +1,4 @@
+import {foldUpdates} from "@demlik/tea";
 import {
 	arbConstantMsg,
 	arbMsg,
@@ -14,21 +15,33 @@ import {make} from "../../entity.ts";
 import {LaneId} from "../../ids.ts";
 import type {Outcome} from "../../tickets/ticket.ts";
 import {nameOf} from "../outcome.ts";
-import type {STEPS} from "./machine.ts";
 import {
+	AskFor,
 	askPerson,
 	after as afterStep,
 	claimLane,
 	EMPTY,
+	type Filed,
+	type Fresh,
+	freshMain,
+	Held,
 	Lane,
 	type LaneCmd,
+	type LaneStep as StepName,
 	lane,
 	MAX_ROUNDS,
+	PICKS,
+	type Question,
+	type Resume,
 	readFiled,
 	releaseLane,
+	resumeOf,
 	runStep,
+	STEPS,
 	type StepEnd,
 } from "./machine.ts";
+import {LANE_NAMES, type LaneOutcome} from "./outcome.ts";
+import {FINAL} from "./restart.ts";
 
 // The lane's laws, on tea's own property tests, on the real reducer from its real `init`. Each
 // folds a random list of Msgs through the machine and checks a law after every step. Each law is
@@ -51,6 +64,12 @@ const ASK = askPerson({number: 7, ask: "a", what: "w", picks: ["x"], intent: "i"
 const READ = readFiled({number: 7});
 const CLAIM = claimLane({number: 7, lane: ID, intent: "c"});
 const RELEASE = releaseLane({number: 7, lane: ID, intent: "r"});
+const FRESH = freshMain({
+	number: 7,
+	from: {_tag: "run", step: "mutation"},
+	carry: EMPTY,
+	intent: "f",
+});
 
 const OUTCOMES: readonly Outcome[] = [
 	{kind: "done", part: false},
@@ -64,6 +83,8 @@ const OUTCOMES: readonly Outcome[] = [
 	{kind: "send", to: "builder", why: "tests_red"},
 	{kind: "send", to: "test_writer", why: "mutant_survived"},
 	{kind: "stuck", why: "push_failed"},
+	// Self-fix PR 5: a build that changed the test writer's files asks the person which was wrong.
+	{kind: "stuck", why: "exam_touched"},
 ];
 /** A head, and green checks code ran there: what a build leaves for the steps after it (self-fix PR 4). */
 const BUILT_HEAD = "4".repeat(40);
@@ -80,13 +101,23 @@ const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
 	carry: fc.constantFrom({}, GREEN_CARRY),
 });
+/** What a restart's fresh read of main may find (self-fix PR 5). */
+const freshes: fc.Arbitrary<Fresh> = fc.oneof(
+	fc.constantFrom({}, GREEN_CARRY).map((carry) => ({_tag: "fresh" as const, carry})),
+	fc.constant({_tag: "exam_conflict" as const, files: ["src/lower.test.ts"]}),
+	fc.constant({_tag: "conflicts" as const, files: ["src/lower.ts"]}),
+	fc.constant({_tag: "closed" as const}),
+);
+/** Every pick any question offers, and a call's `go_on`. */
+const ANY_PICK = [...new Set<string>([...Object.values(PICKS).flat(), "go_on"])];
 
 const arbs: MsgArbitraryTable<Msg> = {
 	start: arbRecordMsg("start", {number: fc.constant(7), lane: fc.constant(ID)}),
 	resume: arbConstantMsg("resume"),
+	restart: arbConstantMsg("restart"),
 	lane_answered: arbRecordMsg("lane_answered", {
 		ask: fc.string(),
-		pick: fc.constantFrom("approve", "merge", "no", "again", "go_on", "stop"),
+		pick: fc.constantFrom(...ANY_PICK),
 	}),
 	lane_read_ok: fc
 		.record({state: fc.constantFrom("open" as const, "closed" as const), mine: fc.boolean()})
@@ -100,6 +131,8 @@ const arbs: MsgArbitraryTable<Msg> = {
 	lane_ask_err: fc.constant(askPerson.err(ASK, {_tag: "unknown"}, 0)),
 	lane_release_ok: fc.constant(releaseLane.ok(RELEASE, "released", 0)),
 	lane_release_err: fc.constant(releaseLane.err(RELEASE, {_tag: "unknown"}, 0)),
+	lane_fresh_ok: freshes.map((v) => freshMain.ok(FRESH, v, 0)),
+	lane_fresh_err: fc.constant(freshMain.err(FRESH, {_tag: "unknown"}, 0)),
 };
 
 /**
@@ -143,6 +176,22 @@ const plant = (update: Partial<Machine["update"]>): Machine =>
 const stepsIn = (cmds: readonly LaneCmd[]) =>
 	cmds.flatMap((c) => (c.type === "lane_step" ? [c] : []));
 
+type FreshCmd = ReturnType<typeof freshMain>;
+const isFresh = (cmd: {readonly type: string}): cmd is FreshCmd => cmd.type === "lane_fresh";
+
+/** Where the restart `s` waits on goes on: the `from` of its fresh read of main. `null`: it waits on none. */
+const freshFrom = (s: Lane): Resume | null => {
+	if (!("asked" in s)) return null;
+	const asked: {readonly type: string} = s.asked;
+	return isFresh(asked) ? asked.from : null;
+};
+
+/** The ends a lane never goes on from: done, a stop in `FINAL`, and a ticket a person closed. */
+const ends = (outcome: LaneOutcome): boolean =>
+	outcome.kind === "done" ||
+	(outcome.kind === "skip" && outcome.why === "closed") ||
+	(outcome.kind === "stuck" && FINAL.has(outcome.why));
+
 // ---------------------------------------------------------------- the laws
 
 /** A step starts only as `after` says, or as a person's answer says. */
@@ -155,6 +204,21 @@ const inOrder = ({prev, msg, cmds}: LaneStep) => {
 			if (prev.phase !== "asking") throw new Error("a step started on no question");
 			return started;
 		}
+		// A step that could not run is run once more, as it was (self-fix PR 5, P8).
+		if (msg.type === "lane_step_err") {
+			if (prev.phase !== "running")
+				throw new Error(`a step started on a failed step in ${prev.phase}`);
+			return prev.step;
+		}
+		// A restart's fresh read: the step the lane stopped at, or the build for the builder's conflicts.
+		if (msg.type === "lane_fresh_ok") {
+			const from = freshFrom(prev);
+			if (from === null)
+				throw new Error(`a step started on a fresh read nobody asked, in ${prev.phase}`);
+			if (msg.value._tag === "conflicts") return "build";
+			if (from._tag === "run") return from.step;
+			throw new Error(`${started} started where the lane goes on by asking ${from.for}`);
+		}
 		if (msg.type !== "lane_step_ok" || prev.phase !== "running")
 			throw new Error(`a step started on ${msg.type} in ${prev.phase}`);
 		const want = afterStep(prev.step, msg.value.outcome, prev.round);
@@ -162,6 +226,9 @@ const inOrder = ({prev, msg, cmds}: LaneStep) => {
 		return want.to;
 	};
 	for (const cmd of stepsIn(cmds)) expect(cmd.step).toBe(wanted(cmd.step));
+	// The step run once more is the same Act, under the same intent.
+	if (msg.type === "lane_step_err" && prev.phase === "running")
+		for (const cmd of stepsIn(cmds)) expect(cmd).toEqual(prev.asked);
 };
 
 /** No merge, of the change or of the rules, but on the person's own answer to the right question. */
@@ -170,6 +237,13 @@ const noMergeUnasked = ({prev, msg, cmds}: LaneStep) => {
 	if (msg.type === "resume") return;
 	for (const cmd of stepsIn(cmds)) {
 		if (cmd.step !== "merge" && cmd.step !== "exam_merge") continue;
+		// The same merge, run once more after it could not run: `inOrder` holds it to the same Act.
+		if (msg.type === "lane_step_err") continue;
+		// A restart goes on at a merge only where the lane stopped in it, after the person's yes.
+		if (msg.type === "lane_fresh_ok") {
+			expect(freshFrom(prev)).toEqual({_tag: "run", step: cmd.step});
+			continue;
+		}
 		if (msg.type !== "lane_answered" || prev.phase !== "asking")
 			throw new Error(`${cmd.step} started on ${msg.type}`);
 		// "again" on a step already asked about comes back to it; it was a person's answer as well.
@@ -190,6 +264,11 @@ const resumeRepeats = ({prev, msg, next, cmds}: LaneStep) => {
 const eachStepOnce = ({prev, msg, next, cmds}: LaneStep) => {
 	if (msg.type === "resume") return;
 	const was = "count" in prev ? prev.count : 0;
+	// A step that could not run is run once more under its own intent: the only Act sent twice (P8).
+	if (msg.type === "lane_step_err") {
+		for (const cmd of stepsIn(cmds)) expect(cmd.count).toBe(was);
+		return;
+	}
 	for (const cmd of stepsIn(cmds)) {
 		expect(cmd.count).toBe(was + 1);
 		expect(cmd.intent).toBe(`lane/${cmd.number}/${cmd.count}/${cmd.step}`);
@@ -204,12 +283,29 @@ const everyEndWritten = ({prev, msg, next}: LaneStep) => {
 	expect(next.trail.at(-1)).toEqual({step: prev.step, said: nameOf(msg.value.outcome)});
 };
 
-/** A stuck child ends the lane in a named state: never silent, never another step. */
+/**
+ * A stuck child ends the lane in a named state: never silent, never another step. A step that could
+ * not run is run once more first, as it was (self-fix PR 5, P8), and a build that changed the test
+ * writer's files asks the person which was wrong.
+ */
 const stuckEnds = ({prev, msg, next, cmds}: LaneStep) => {
+	if (prev.phase !== "running") return;
+	if (msg.type === "lane_step_err" && next.phase === "running") {
+		expect(cmds).toEqual([prev.asked]);
+		return;
+	}
 	const stuck =
 		(msg.type === "lane_step_ok" && msg.value.outcome.kind === "stuck") ||
 		msg.type === "lane_step_err";
-	if (!stuck || prev.phase !== "running") return;
+	if (!stuck) return;
+	if (
+		msg.type === "lane_step_ok" &&
+		prev.step === "build" &&
+		nameOf(msg.value.outcome) === "stuck:exam_touched"
+	) {
+		expect(next.phase === "asking" && next.question.for).toBe("exam_touched");
+		return;
+	}
 	expect(next.phase).toBe("releasing");
 	if (next.phase !== "releasing") return;
 	expect(next.outcome.kind).toBe("stuck");
@@ -229,6 +325,44 @@ const refusesOthers = ({prev, msg, next, cmds}: LaneStep) => {
 	expect(cmds).toEqual([]);
 };
 
+const decodeHeld = Schema.decodeUnknownSync(Held);
+
+/**
+ * A stop saves what a restart needs (self-fix PR 5, P6): a stop that may go on keeps the lane's `Held`,
+ * as it was, and where it goes on. An end, done or a closed ticket, keeps neither.
+ */
+const stopsSave = ({prev, next}: LaneStep) => {
+	if (next.phase !== "over" || prev.phase === "over") return;
+	const {outcome} = next;
+	const name = nameOf(outcome);
+	const kept = "held" in next || "at" in next;
+	if ((outcome.kind === "done" || name === "skip:closed") && kept)
+		throw new Error(`${name} kept a Held or a place to go on`);
+	const mayGoOn = outcome.kind === "stuck" && !ends(outcome);
+	if (mayGoOn && (!("held" in next) || !("at" in next)))
+		throw new Error(`${name} from ${prev.phase} kept no Held or no place to go on`);
+	const saved =
+		mayGoOn && "held" in next && "count" in prev ? {kept: next.held, had: decodeHeld(prev)} : null;
+	expect(saved?.kept, `${name} from ${prev.phase} changed its Held`).toEqual(saved?.had);
+};
+
+/**
+ * The same line typed again on a stop that may go on reads the ticket and main before any step runs.
+ * On anything else it does nothing.
+ */
+const restartReadsFirst = ({prev, msg, next, cmds}: LaneStep) => {
+	if (msg.type !== "restart") return;
+	expect(stepsIn(cmds), "a step started on the restart itself").toEqual([]);
+	const stopped = prev.phase === "over" && "held" in prev && !ends(prev.outcome);
+	if (!stopped) {
+		expect(next).toEqual(prev);
+		expect(cmds).toEqual([]);
+		return;
+	}
+	expect(next.phase).not.toBe("over");
+	expect(cmds).not.toEqual([]);
+};
+
 const LAWS = {
 	inOrder,
 	noMergeUnasked,
@@ -238,6 +372,8 @@ const LAWS = {
 	stuckEnds,
 	kept,
 	refusesOthers,
+	stopsSave,
+	restartReadsFirst,
 };
 
 describe("the lane's laws", () => {
@@ -289,6 +425,24 @@ describe("each law fails on its planted break", () => {
 		refusesOthers: {
 			lane_read_ok: (s: Lane, m: Extract<Msg, {type: "lane_read_ok"}>) =>
 				lane.update.lane_read_ok(s, {...m, value: {...m.value, mine: true}}),
+		},
+		stopsSave: {
+			lane_release_ok: (s: Lane) =>
+				s.phase === "releasing"
+					? [
+							{
+								phase: "over",
+								number: s.number,
+								trail: s.trail,
+								outcome: s.outcome,
+								said: s.said,
+							},
+							[],
+						]
+					: [s, []],
+		},
+		restartReadsFirst: {
+			restart: (s: Lane) => (s.phase === "over" ? [s, [STEP]] : [s, []]),
 		},
 	};
 	for (const [name, law] of Object.entries(LAWS))
@@ -356,7 +510,8 @@ describe("the questions a lane asks, over any run", () => {
 				}
 				case "releasing":
 					return machine.update.lane_release_ok(s, releaseLane.ok(RELEASE, "released", 0));
-				case "over":
+				// A phase a restart waits in (self-fix PR 5): this walk never restarts.
+				default:
 					return [s, []];
 			}
 		};
@@ -521,7 +676,8 @@ describe("the whole lane, step by step", () => {
 		expect(s.phase === "over" && nameOf(s.outcome)).toBe("stuck:rounds_spent");
 	});
 
-	it("a person's no ends the lane, and nothing merges", () => {
+	// Self-fix PR 5: a person's no is a saved pause, not an end. It goes on at the plan.
+	it("a person's no on the plan pauses the lane at the plan, and nothing merges", () => {
 		const asked = [
 			{type: "start", number: 7, lane: ID},
 			readFiled.ok(READ, {state: "open", mine: true}, 0),
@@ -531,7 +687,10 @@ describe("the whole lane, step by step", () => {
 		].reduce<Lane>((s, m) => stepped(s, m as Msg), IDLE);
 		if (asked.phase !== "asking") throw new Error(asked.phase);
 		const end = stepped(asked, {type: "lane_answered", ask: asked.question.ask, pick: "no"});
-		expect(end.phase === "releasing" && nameOf(end.outcome)).toBe("skip:owner_no");
+		expect(end.phase).toBe("releasing");
+		const over = stepped(end, releaseLane.ok(RELEASE, "released", 0));
+		expect(over.phase === "over" && nameOf(over.outcome)).not.toBe("done");
+		expect(over).toMatchObject({phase: "over", at: {_tag: "run", step: "plan"}});
 	});
 });
 
@@ -605,7 +764,8 @@ describe("red and green heads, over any run", () => {
 				}
 				case "releasing":
 					return releaseLane.ok(RELEASE, "released", 0);
-				case "over":
+				// A phase a restart waits in (self-fix PR 5): this walk never restarts.
+				default:
 					return null;
 			}
 		};
@@ -806,7 +966,8 @@ describe("code's checks after the build, over any run", () => {
 				}
 				case "releasing":
 					return releaseLane.ok(RELEASE, "released", 0);
-				case "over":
+				// A phase a restart waits in (self-fix PR 5): this walk never restarts.
+				default:
 					return null;
 			}
 		};
@@ -858,5 +1019,497 @@ describe("code's checks after the build, over any run", () => {
 			},
 		});
 		expect(() => holds(unchecked)).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------- a stopped lane goes on (self-fix PR 5)
+//
+// Laws over whole runs: a lane walked from its start in a world that answers each Act it sends, stopped,
+// then sent the same line again. Each law iterates the unions it names (the steps, the stuck reasons,
+// the asks and their picks), so a new member joins it by being in the union.
+
+type Running = Extract<Lane, {phase: "running"}>;
+type Asking = Extract<Lane, {phase: "asking"}>;
+type StepCmd = ReturnType<typeof runStep>;
+
+/** What the lane's Acts meet: how each step ends, what a person picks, the ticket, and main. */
+interface World {
+	/** How a step ends. `err`: it could not run at all. */
+	readonly end: (s: Running, cmd: StepCmd) => StepEnd | "err";
+	readonly pick: (question: Question) => string;
+	/** The ticket, read. Left out: open, and yours. */
+	readonly filed?: Filed;
+	/** What a restart's fresh read of main finds. Left out: nothing moved, and nothing changed. */
+	readonly fresh?: Fresh;
+}
+
+interface Moved {
+	readonly prev: Lane;
+	readonly msg: Msg;
+	readonly next: Lane;
+	readonly cmds: readonly LaneCmd[];
+}
+
+/** The answers to one Act, as the world gives them. */
+const repliesTo = (cmd: LaneCmd, s: Lane, world: World): readonly Msg[] => {
+	switch (cmd.type) {
+		case "lane_read":
+			return [readFiled.ok(cmd, world.filed ?? {state: "open", mine: true}, 0)];
+		case "lane_claim":
+			return [claimLane.ok(cmd, cmd.lane, 0)];
+		case "lane_fresh":
+			return [freshMain.ok(cmd, world.fresh ?? {_tag: "fresh", carry: {}}, 0)];
+		case "lane_step": {
+			if (s.phase !== "running") return [];
+			const end = world.end(s, cmd);
+			return [end === "err" ? runStep.err(cmd, {_tag: "unknown"}, 0) : runStep.ok(cmd, end, 0)];
+		}
+		case "lane_ask":
+			if (s.phase !== "asking") return [];
+			return [
+				askPerson.ok(cmd, null, 0),
+				{type: "lane_answered", ask: cmd.ask, pick: world.pick(s.question)},
+			];
+		case "lane_release":
+			return [releaseLane.ok(cmd, "released", 0)];
+	}
+};
+
+/** Walk `machine` from `from` on `first`, answering each Act as `world` does, until nothing is in flight or `until`. */
+const drive = (
+	from: Lane,
+	first: Msg,
+	world: World,
+	until: (s: Lane) => boolean = () => false,
+	machine: Machine = lane,
+) => {
+	const moves: Moved[] = [];
+	const queue: Msg[] = [first];
+	let s = from;
+	for (let i = 0; i < 400 && !until(s); i++) {
+		const msg = queue.shift();
+		if (msg === undefined) break;
+		const {state, cmds} = foldUpdates<Lane, Msg, LaneCmd>(machine, s, [msg]);
+		moves.push({prev: s, msg, next: state, cmds});
+		s = state;
+		for (const cmd of cmds) queue.push(...repliesTo(cmd, s, world));
+	}
+	return {s, moves};
+};
+
+const cmdsOf = (moves: readonly Moved[]) => moves.flatMap((m) => m.cmds);
+
+const IDLE: Lane = {phase: "idle"};
+const START: Msg = {type: "start", number: 7, lane: ID};
+const RESTART: Msg = {type: "restart"};
+const DONE_END: StepEnd = {outcome: {kind: "done", part: false}, carry: {}};
+const STUCK_END: StepEnd = {outcome: {kind: "stuck", why: "tests_red"}, carry: {}};
+
+/** A lane through every step: the exam asks for its rule change, a mutant survives, the rest is done. */
+const ROUTE: Readonly<Record<StepName, StepEnd>> = {
+	triage: {outcome: {kind: "send", to: "plan", why: "yes"}, carry: {}},
+	plan: {outcome: {kind: "done", part: false}, carry: {version: 1}},
+	exam: {
+		outcome: {kind: "ask", who: "owner", for: "check_change"},
+		carry: {rules: [".oxlintrc.json"]},
+	},
+	exam_merge: DONE_END,
+	test_writer: {outcome: {kind: "done", part: false}, carry: {exam: ["src/lower.test.ts"]}},
+	build: {outcome: {kind: "done", part: false}, carry: GREEN_CARRY},
+	mutation: {outcome: {kind: "send", to: "test_writer", why: "mutant_survived"}, carry: {}},
+	mutants: DONE_END,
+	review: DONE_END,
+	push: DONE_END,
+	merge: DONE_END,
+};
+
+/** Every step ends as the route says, and a person takes each question's first pick. */
+const ROUTED: World = {end: (s) => ROUTE[s.step], pick: (q) => q.picks[0] ?? ""};
+
+/** The route, with `step` ending as `how` every time it runs. */
+const stoppingAt = (step: StepName, how: StepEnd | "err", world: World = ROUTED): World => ({
+	...world,
+	end: (s, cmd) => (s.step === step ? how : world.end(s, cmd)),
+});
+
+/** A lane walked from its start until it stops at `step`, ending as `how`. */
+const stoppedAt = (step: StepName, how: StepEnd | "err") => {
+	const walked = drive(IDLE, START, stoppingAt(step, how));
+	if (walked.s.phase !== "over") throw new Error(`the lane did not stop at ${step}`);
+	const ran = stepsIn(cmdsOf(walked.moves)).filter((c) => c.step === step);
+	const last = ran.at(-1);
+	if (last === undefined) throw new Error(`${step} never ran`);
+	return {over: walked.s, ran: last, moves: walked.moves};
+};
+
+/** The answer that picks `pick` on the question `s` asks. */
+const answer = (s: Asking, pick: string, note?: string): Msg => ({
+	type: "lane_answered",
+	ask: s.question.ask,
+	pick,
+	...(note === undefined ? {} : {note}),
+});
+
+/** The first Act after `moves` that runs a step or asks a person. */
+const firstStart = (moves: readonly Moved[]) =>
+	cmdsOf(moves).find((c) => c.type === "lane_step" || c.type === "lane_ask");
+
+const approveAsks = (moves: readonly Moved[]) =>
+	moves.filter(
+		(m) => m.next.phase === "asking" && m.next.question.for === "approve" && m.cmds.length > 0,
+	);
+
+describe("a lane stopped at any step goes on there, with the carry it had", () => {
+	const WAYS: readonly {readonly name: string; readonly how: StepEnd | "err"}[] = [
+		{name: "ended stuck", how: STUCK_END},
+		{name: "could not run, twice", how: "err"},
+	];
+	for (const step of STEPS)
+		for (const {name, how} of WAYS)
+			it(`${step}, which ${name}: the restart reads main, then runs ${step}, and no step before it`, () => {
+				const {over, ran} = stoppedAt(step, how);
+				expect(over, "the stop saved where it goes on").toMatchObject({at: {_tag: "run", step}});
+				const again = drive(over, RESTART, ROUTED);
+				const cmds = cmdsOf(again.moves);
+				const started = stepsIn(cmds)[0];
+				expect(started?.step, "the first step the restart runs").toBe(step);
+				expect(started?.carry).toEqual(ran.carry);
+				expect(started?.count ?? 0).toBeGreaterThan(ran.count);
+				const at = started === undefined ? -1 : cmds.indexOf(started);
+				expect(cmds.slice(0, at).map((c) => c.type)).toEqual(
+					expect.arrayContaining(["lane_claim", "lane_fresh"]),
+				);
+				expect(cmds.slice(0, at).filter((c) => c.type === "lane_ask")).toEqual([]);
+				// A restart never asks the plan's yes again while the plan's version is the same.
+				if (STEPS.indexOf(step) > STEPS.indexOf("plan"))
+					expect(approveAsks(again.moves)).toEqual([]);
+				expect(again.s.phase === "over" && nameOf(again.s.outcome)).toBe("done");
+			});
+});
+
+describe("every stop, at every step, for every reason", () => {
+	const decodeLane = Schema.decodeUnknownSync(Lane);
+	const HELD = {
+		number: 7,
+		lane: "L1",
+		count: 9,
+		round: 2,
+		carry: {...EMPTY, version: 1, exam: ["src/lower.test.ts"], ...GREEN_CARRY},
+		trail: [{step: "triage", said: "send:plan:yes"}],
+	};
+	/** A stop as a lane saved it: its reason, its `Held`, and the step it goes on at. */
+	const stop = (outcome: unknown, step: StepName) =>
+		decodeLane({
+			phase: "over",
+			number: 7,
+			trail: HELD.trail,
+			outcome,
+			said: "stopped",
+			held: HELD,
+			at: {_tag: "run", step},
+		});
+	const STUCK = LANE_NAMES.flatMap((name) =>
+		name.startsWith("stuck:") ? [name.slice("stuck:".length)] : [],
+	);
+
+	it("FINAL is the closed list: not_yours, and no reason that is not a lane's", () => {
+		expect(FINAL.has("not_yours")).toBe(true);
+		for (const why of FINAL) expect(STUCK).toContain(why);
+	});
+
+	it("a reason in FINAL never restarts; every other one runs the step it stopped at, with the carry it held", () => {
+		for (const step of STEPS)
+			for (const why of STUCK) {
+				const over = stop({kind: "stuck", why}, step);
+				if (over.phase !== "over" || !("held" in over)) throw new Error("a stop did not read back");
+				const {moves} = drive(over, RESTART, ROUTED);
+				if (ends(over.outcome)) {
+					expect(moves[0]?.cmds, `${why} restarted`).toEqual([]);
+					expect(moves[0]?.next).toEqual(over);
+					continue;
+				}
+				const cmds = cmdsOf(moves);
+				const started = stepsIn(cmds)[0];
+				expect(started?.step, `${why} at ${step}`).toBe(step);
+				expect(started?.carry, `${why} at ${step}`).toEqual(over.held.carry);
+				const at = started === undefined ? -1 : cmds.indexOf(started);
+				expect(cmds.slice(0, at).some(isFresh), `${why} at ${step}: main read first`).toBe(true);
+				if (STEPS.indexOf(step) > STEPS.indexOf("plan")) expect(approveAsks(moves)).toEqual([]);
+			}
+	});
+
+	it("done, and a ticket a person closed, never restart", () => {
+		for (const outcome of [
+			{kind: "done", part: false},
+			{kind: "skip", why: "closed"},
+		]) {
+			const over = decodeLane({phase: "over", number: 7, trail: [], outcome, said: "ended"});
+			const {moves} = drive(over, RESTART, ROUTED);
+			expect(moves[0]?.cmds).toEqual([]);
+			expect(moves[0]?.next).toEqual(over);
+		}
+	});
+});
+
+describe("a step that could not run is run once more, on the same intent (`once`, P8)", () => {
+	for (const step of STEPS)
+		it(`${step}: run once more at once, and the lane goes on`, () => {
+			let failed = false;
+			const world: World = {
+				...ROUTED,
+				end: (s, cmd) => {
+					if (s.step !== step || failed) return ROUTED.end(s, cmd);
+					failed = true;
+					return "err";
+				},
+			};
+			const {s, moves} = drive(IDLE, START, world);
+			const runs = stepsIn(cmdsOf(moves)).filter((c) => c.step === step);
+			expect(runs.length).toBeGreaterThanOrEqual(2);
+			expect(runs[1]?.intent).toBe(runs[0]?.intent);
+			expect(s.phase === "over" && nameOf(s.outcome)).toBe("done");
+		});
+
+	it("on any run, an intent starts at most twice, and a second time only at once after it could not run", () => {
+		fc.assert(
+			fc.property(fc.array(fc.boolean(), {maxLength: 40}), (errs) => {
+				const left = [...errs];
+				const world: World = {
+					...ROUTED,
+					end: (s, cmd) => (left.shift() === true ? "err" : ROUTED.end(s, cmd)),
+				};
+				const {s, moves} = drive(IDLE, START, world);
+				const starts = new Map<string, number>();
+				for (const cmd of stepsIn(cmdsOf(moves)))
+					starts.set(cmd.intent, (starts.get(cmd.intent) ?? 0) + 1);
+				for (const [intent, n] of starts) expect(n, intent).toBeLessThanOrEqual(2);
+				for (const [at, m] of moves.entries()) {
+					if (m.msg.type !== "lane_step_err" || m.prev.phase !== "running") continue;
+					const intent = m.prev.asked.intent;
+					const before = stepsIn(cmdsOf(moves.slice(0, at))).filter((c) => c.intent === intent);
+					// Its first failure: run again now. Its second: the lane stops there, to go on there.
+					if (before.length === 1) expect(m.cmds).toEqual([m.prev.asked]);
+					else expect(stepsIn(m.cmds)).toEqual([]);
+				}
+				if (s.phase === "over" && s.outcome.kind === "stuck")
+					expect(s).toMatchObject({at: {_tag: "run"}});
+			}),
+			{numRuns: 200, seed: 119120},
+		);
+	});
+});
+
+describe("every pick of every question goes on at the step its definition names (P10)", () => {
+	interface Reached {
+		readonly s: Asking;
+		/** The world the lane goes on in, after the pick. */
+		readonly world: World;
+	}
+	const asksFor =
+		(kind: AskFor) =>
+		(s: Lane): boolean =>
+			s.phase === "asking" && s.question.for === kind;
+	const reach = (kind: AskFor, world: World, from: Lane = IDLE, first: Msg = START): Reached => {
+		const {s} = drive(from, first, world, asksFor(kind));
+		if (s.phase !== "asking" || s.question.for !== kind)
+			throw new Error(`the lane never asked ${kind}; it is ${s.phase}`);
+		return {s, world: ROUTED};
+	};
+	const CONFLICT: Fresh = {_tag: "exam_conflict", files: ["src/lower.test.ts"]};
+	/** How a lane comes to ask each kind of question. A new kind does not compile until it is here. */
+	const REACH: Readonly<Record<AskFor, () => Reached>> = {
+		approve: () => reach("approve", ROUTED),
+		exam_merge: () => reach("exam_merge", ROUTED),
+		merge: () => reach("merge", ROUTED),
+		step: () =>
+			reach(
+				"step",
+				stoppingAt("review", {outcome: {kind: "ask", who: "owner", for: "questions"}, carry: {}}),
+			),
+		rounds_spent: () =>
+			reach(
+				"rounds_spent",
+				stoppingAt("build", {outcome: {kind: "stuck", why: "rounds_spent"}, carry: {}}),
+			),
+		exam_touched: () =>
+			reach(
+				"exam_touched",
+				stoppingAt("build", {outcome: {kind: "stuck", why: "exam_touched"}, carry: {}}),
+			),
+		exam_conflict: () => {
+			const {over} = stoppedAt("mutation", STUCK_END);
+			const world: World = {...ROUTED, fresh: CONFLICT};
+			return {...reach("exam_conflict", world, over, RESTART), world};
+		},
+	};
+
+	for (const kind of AskFor.literals)
+		it(`${kind}: each pick goes on at its own step, and no step before it; no pick ends the lane`, () => {
+			const {s, world} = REACH[kind]();
+			for (const pick of s.question.picks) {
+				const to = resumeOf(s.question, pick);
+				const after = drive(s, answer(s, pick), world).moves;
+				const turn = after.findIndex(
+					(m) =>
+						m.next.phase === "over" ||
+						m.cmds.some((c) => c.type === "lane_step" || c.type === "lane_ask"),
+				);
+				const turned = after[turn];
+				if (turned === undefined) throw new Error(`${kind}: ${pick} went nowhere`);
+				// A pause, not an end: it keeps its Held and where it goes on, and the same line goes on there.
+				const paused = turned.next.phase === "over";
+				expect(paused ? turned.next : {held: "running", at: to}, `${kind}: ${pick}`).toMatchObject({
+					held: expect.anything(),
+					at: to,
+				});
+				const moves = paused ? drive(turned.next, RESTART, world).moves : after.slice(turn);
+				const start = firstStart(moves);
+				const asked = moves.find((m) => m.cmds.some((c) => c === start))?.next;
+				const went =
+					start?.type === "lane_step"
+						? {run: start.step}
+						: asked?.phase === "asking"
+							? {ask: asked.question.for}
+							: start?.type;
+				expect(went, `${kind}: ${pick}`).toEqual(
+					to._tag === "run" ? {run: to.step} : {ask: to.for},
+				);
+			}
+		});
+});
+
+describe("a stopped lane goes on, case by case", () => {
+	const ONTO = "9".repeat(40);
+
+	it("a lane stuck at mutation, sent `restart`: main is read fresh and checked, then mutation runs", () => {
+		const {over} = stoppedAt("mutation", STUCK_END);
+		const moved = {
+			base: ONTO,
+			head: "7".repeat(40),
+			checked: {...GREEN_CARRY.checked, head: "7".repeat(40)},
+		};
+		const {moves} = drive(over, RESTART, {...ROUTED, fresh: {_tag: "fresh", carry: moved}});
+		expect(moves[0]?.cmds, "the restart did nothing").not.toEqual([]);
+		const cmds = cmdsOf(moves);
+		const fresh = cmds.findIndex(isFresh);
+		const first = stepsIn(cmds)[0];
+		expect(fresh).toBeGreaterThanOrEqual(0);
+		expect(first === undefined ? -1 : cmds.indexOf(first)).toBeGreaterThan(fresh);
+		expect(first?.step).toBe("mutation");
+		expect(first?.carry).toMatchObject(moved);
+	});
+
+	it("a build that changed the test writer's files asks which was wrong; each pick is a next round", () => {
+		const {s} = drive(
+			IDLE,
+			START,
+			stoppingAt("build", {outcome: {kind: "stuck", why: "exam_touched"}, carry: {}}),
+			(at) => at.phase === "asking" && at.question.for === "exam_touched",
+		);
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		expect(s.question.for).toBe("exam_touched");
+		expect(s.question.picks).toEqual(PICKS.exam_touched);
+		// The builder was wrong: the files go back, and the build runs again as the next round.
+		const builder = stepsIn(cmdsOf(drive(s, answer(s, "builder_wrong"), ROUTED).moves));
+		expect(builder[0]).toMatchObject({step: "build", round: s.round + 1});
+		// The test was wrong: the test writer redoes the touched files, then the build, as the next round.
+		const test = stepsIn(cmdsOf(drive(s, answer(s, "test_wrong"), ROUTED).moves));
+		expect(test.slice(0, 2)).toMatchObject([
+			{step: "test_writer"},
+			{step: "build", round: s.round + 1},
+		]);
+	});
+
+	it("main changed an exam file: the restart asks, with the files; `again` reruns the test writer, then build", () => {
+		const {over} = stoppedAt("mutation", STUCK_END);
+		const conflict: World = {
+			...ROUTED,
+			fresh: {_tag: "exam_conflict", files: ["src/lower.test.ts"]},
+		};
+		const {s} = drive(over, RESTART, conflict, (at) => at.phase === "asking");
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		expect(s.question.for).toBe("exam_conflict");
+		expect(s.question.what).toContain("src/lower.test.ts");
+		expect(s.question.picks).toEqual(PICKS.exam_conflict);
+		expect(
+			stepsIn(cmdsOf(drive(over, RESTART, conflict, (at) => at.phase === "asking").moves)),
+		).toEqual([]);
+		const again = stepsIn(cmdsOf(drive(s, answer(s, "again"), ROUTED).moves));
+		expect(again.slice(0, 2)).toMatchObject([
+			{step: "test_writer"},
+			{step: "build", round: s.round + 1},
+		]);
+		// `stop`: saved at the rebase, so the same line reads main again.
+		const stopped = drive(s, answer(s, "stop"), conflict).s;
+		expect(stopped).toMatchObject({phase: "over", held: expect.anything(), at: expect.anything()});
+		const later = cmdsOf(drive(stopped, RESTART, conflict).moves);
+		expect(later.some(isFresh)).toBe(true);
+	});
+
+	it("main conflicts with the builder's files: the build runs again", () => {
+		const {over} = stoppedAt("mutation", STUCK_END);
+		const {moves} = drive(over, RESTART, {
+			...ROUTED,
+			fresh: {_tag: "conflicts", files: ["src/lower.ts"]},
+		});
+		expect(stepsIn(cmdsOf(moves))[0]?.step).toBe("build");
+	});
+
+	it("a ticket closed while the lane was stopped: the restart ends `skip:closed` and runs no step", () => {
+		const {over} = stoppedAt("mutation", STUCK_END);
+		const {s, moves} = drive(over, RESTART, {
+			...ROUTED,
+			filed: {state: "closed", mine: true},
+			fresh: {_tag: "closed"},
+		});
+		expect(moves[0]?.cmds, "the restart did nothing").not.toEqual([]);
+		expect(stepsIn(cmdsOf(moves))).toEqual([]);
+		expect(s.phase === "over" && nameOf(s.outcome)).toBe("skip:closed");
+	});
+
+	it("a `no` on the plan's yes pauses at the plan; the same line runs the plan with the note, and not triage", () => {
+		const {s} = drive(IDLE, START, ROUTED, (at) => at.phase === "asking");
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		expect(s.question.for).toBe("approve");
+		const NOTE = "Keep it to ASCII.";
+		const paused = drive(s, answer(s, "no", NOTE), ROUTED).s;
+		expect(paused).toMatchObject({phase: "over", at: {_tag: "run", step: "plan"}});
+		const ran = stepsIn(cmdsOf(drive(paused, RESTART, ROUTED).moves));
+		expect(ran[0]?.step).toBe("plan");
+		expect(ran[0]?.carry.decided?.said).toContain(NOTE);
+		expect(ran.map((c) => c.step)).not.toContain("triage");
+	});
+
+	it("a `no` on the merge pauses; the same line asks the merge again, and runs no step first", () => {
+		const {s} = drive(
+			IDLE,
+			START,
+			ROUTED,
+			(at) => at.phase === "asking" && at.question.for === "merge",
+		);
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		const paused = drive(s, answer(s, "no"), ROUTED).s;
+		expect(paused).toMatchObject({phase: "over", at: {_tag: "ask", for: "merge"}});
+		const {moves} = drive(paused, RESTART, ROUTED, (at) => at.phase === "asking");
+		const start = firstStart(moves);
+		expect(start?.type).toBe("lane_ask");
+		expect(moves.at(-1)?.next.phase === "asking" && moves.at(-1)?.next).toMatchObject({
+			question: {for: "merge"},
+		});
+	});
+
+	it("a `stop` on the spent rounds pauses; the same line runs the build, round + 1", () => {
+		const RED: StepEnd = {outcome: {kind: "send", to: "builder", why: "checks_red"}, carry: {}};
+		const {s} = drive(
+			IDLE,
+			START,
+			stoppingAt("build", RED),
+			(at) => at.phase === "asking" && at.question.for === "rounds_spent",
+		);
+		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+		const paused = drive(s, answer(s, "stop"), ROUTED).s;
+		expect(paused).toMatchObject({phase: "over", at: {_tag: "run", step: "build"}});
+		const ran = stepsIn(cmdsOf(drive(paused, RESTART, ROUTED).moves));
+		expect(ran[0]).toMatchObject({step: "build", round: MAX_ROUNDS + 1});
 	});
 });

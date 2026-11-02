@@ -1,6 +1,7 @@
 import {execFileSync} from "node:child_process";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
@@ -13,7 +14,7 @@ import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Ledger, streams} from "@kampus/fabrika-old";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
-import {Duration, Effect, Fiber, Layer, Option, Schema} from "effect";
+import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
@@ -24,7 +25,8 @@ import {MutationRunner} from "../mutation/services.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
-import {Lane} from "./machine.ts";
+import {Lane, PICKS} from "./machine.ts";
+import {type Folded, fold, seenOf} from "./restart.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
 // adapter over a fake `codex`, real git on a bare remote, real vitest and Stryker, the real box, and
@@ -66,8 +68,10 @@ const answering = (
 	{
 		steps = [],
 		notes = {},
+		queues = {},
+		leave = [],
 		onlyStep,
-	}: Pick<Script, "steps" | "notes"> & {
+	}: Pick<Script, "steps" | "notes" | "queues" | "leave"> & {
 		/** The one step's question this person answers. Any other waits for ever. */
 		readonly onlyStep?: string;
 	} = {},
@@ -76,6 +80,7 @@ const answering = (
 		const ledger = yield* Ledger;
 		const done = new Set<string>();
 		const queue = [...steps];
+		const inTurn = new Map(Object.entries(queues).map(([kind, said]) => [kind, [...said]]));
 		for (;;) {
 			const ticket = yield* read;
 			for (const entry of ticket.timeline) {
@@ -84,7 +89,10 @@ const answering = (
 				const kind = fact.ask.split("-")[1] ?? "";
 				if (kind === "step" && onlyStep !== undefined && fact.ask !== onlyStep) continue;
 				done.add(fact.ask);
-				const pick = (kind === "step" ? queue.shift() : undefined) ?? picks[kind];
+				// A question this person leaves: the lane waits on it.
+				if (leave.includes(kind)) continue;
+				const pick =
+					(kind === "step" ? queue.shift() : undefined) ?? inTurn.get(kind)?.shift() ?? picks[kind];
 				if (pick === undefined)
 					return yield* Effect.die(
 						new Error(
@@ -109,6 +117,10 @@ const answering = (
 
 interface Ran {
 	readonly lines: readonly string[];
+	/** The lane as it was saved after each line, in turn. `null`: it did not read back. */
+	readonly stops: readonly (Lane | null)[];
+	/** With `fold`: the fold of the lane's facts after each line, or why it failed. */
+	readonly folds: readonly (Folded | string)[];
 	readonly stages: readonly string[];
 	readonly names: Readonly<Record<string, string>>;
 	readonly facts: readonly {readonly type: string; readonly [key: string]: unknown}[];
@@ -127,6 +139,21 @@ interface Script {
 	readonly steps?: readonly string[];
 	/** What a person writes beside their pick, by the kind of question. */
 	readonly notes?: Readonly<Record<string, string>>;
+	/** The person's picks for one kind of question, in turn. Past the last, `picks` answers. */
+	readonly queues?: Readonly<Record<string, readonly string[]>>;
+	/** Kinds of question the person never answers: the lane waits on them until `within`. */
+	readonly leave?: readonly string[];
+	/**
+	 * After the line ends, type it again, once per entry, each after its `between`: what happens while
+	 * the lane is stopped, such as main moving or a person closing the ticket (self-fix PR 5).
+	 */
+	readonly again?: readonly {
+		readonly between?: (at: Where) => Effect.Effect<void, never, Ledger>;
+	}[];
+	/** The mutation step's Stryker run cannot run, on the first line only: the lane stops at mutation. */
+	readonly failMutation?: boolean;
+	/** After each line, fold the lane's facts (./restart.ts), to set beside what it saved. */
+	readonly fold?: boolean;
 	/** Stop the lane when a line holding this is said, then type the line again. */
 	readonly killAt?: string;
 	/** The checkout the lane starts from has no origin. */
@@ -186,6 +213,77 @@ interface FakeScript {
 
 const TIMED_OUT = "-- timed out --";
 const KILLED = "-- killed --";
+/** The same line, typed again. */
+const AGAIN = "-- the same line again --";
+
+/** Where a run's files are, for what happens between two lines. */
+interface Where {
+	readonly dir: string;
+	readonly home: string;
+	readonly remote: string;
+}
+
+/** The lane as it is saved now, read back, or `null` when it does not read. */
+const savedLane = (home: string) =>
+	Effect.gen(function* () {
+		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+		const store = handle.store("lane", `lane/${NUMBER}`, Lane);
+		const saved = store.migrate(yield* Effect.promise(() => store.load()));
+		return Schema.is(Lane)(saved) ? saved : null;
+	}).pipe(Effect.orDie);
+
+const LegacyOver = Schema.Struct({
+	phase: Schema.Literal("over"),
+	number: Schema.Finite,
+	trail: Schema.Array(Schema.Unknown),
+	outcome: Schema.Unknown,
+	said: Schema.String,
+});
+
+/** The stopped lane, saved again as code from before self-fix PR 5 kept a stop: no `Held`, nowhere to go on. */
+const keptAsLegacy = (home: string) =>
+	Effect.gen(function* () {
+		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+		const store = handle.store("lane", `lane/${NUMBER}`, Schema.Unknown);
+		const raw = yield* Effect.promise(() => store.load());
+		if (!Schema.is(LegacyOver)(raw))
+			return yield* Effect.die(new Error("the lane was not saved over"));
+		const {phase, number, trail, outcome, said} = raw;
+		yield* Effect.promise(() => store.save({phase, number, trail, outcome, said}));
+	}).pipe(Effect.orDie);
+
+/** One commit on the remote's main, as someone working elsewhere would push it. */
+const pushToMain = (
+	{dir, remote}: Where,
+	files: readonly {readonly path: string; readonly text: string}[],
+) => {
+	const work = join(dir, "elsewhere");
+	const git = (...args: readonly string[]) =>
+		execFileSync(
+			"git",
+			["-c", "user.name=Elsewhere", "-c", "user.email=elsewhere@example.com", ...args],
+			{cwd: work, stdio: "pipe"},
+		);
+	execFileSync("git", ["clone", "-q", remote, work], {stdio: "pipe"});
+	for (const {path, text} of files) {
+		mkdirSync(dirname(join(work, path)), {recursive: true});
+		writeFileSync(join(work, path), text);
+	}
+	git("add", "-A");
+	git("commit", "-qm", "Main moved elsewhere");
+	git("push", "-q", "origin", "HEAD:main");
+	rmSync(work, {recursive: true, force: true});
+};
+
+/** A person closes the ticket, in the window. */
+const closeTicket = Effect.gen(function* () {
+	const ledger = yield* Ledger;
+	yield* ledger.send(streams(nameOf(NUMBER)).inbox, `close-${NUMBER}`, {
+		kind: "closed",
+		writer: OWNER,
+		data: {type: "closed"},
+	});
+}).pipe(Effect.orDie);
 
 const SAVED_ASK = "a-step-99";
 
@@ -224,6 +322,11 @@ const lane = ({
 	picks = {},
 	steps,
 	notes,
+	queues,
+	leave,
+	again = [],
+	failMutation = false,
+	fold: folding = false,
 	killAt,
 	noOrigin = false,
 	story,
@@ -238,6 +341,8 @@ const lane = ({
 	checksSay,
 }: Script): Promise<Ran> => {
 	let checksRan = 0;
+	/** How many times the line was typed again. */
+	let typed = 0;
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const red = join(dir, "red");
@@ -257,6 +362,23 @@ const lane = ({
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
 	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
 	const lines: string[] = [];
+	const stops: (Lane | null)[] = [];
+	const folds: (Folded | string)[] = [];
+	/** What a line left: the lane as saved, and with `fold`, the fold of its facts. */
+	const kept = () =>
+		Effect.gen(function* () {
+			stops.push(yield* savedLane(home));
+			if (!folding) return;
+			const folded = yield* Effect.exit(
+				seenOf(NUMBER).pipe(
+					Effect.map(fold),
+					Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+				),
+			);
+			folds.push(
+				Exit.isSuccess(folded) ? folded.value : `the fold failed: ${String(folded.cause)}`,
+			);
+		});
 	const checksDown = () =>
 		checksStopRunning === "at_second_writer"
 			? codexRuns(dir).filter((run) => run.step === "tests").length > 1
@@ -268,6 +390,12 @@ const lane = ({
 				tests: (head) =>
 					Effect.suspend(() =>
 						checksDown() ? Effect.fail({_tag: "could_not_run"} as const) : runner.tests(head),
+					),
+				run: (ask) =>
+					Effect.suspend(() =>
+						failMutation && typed === 0
+							? Effect.fail({_tag: "could_not_run"} as const)
+							: runner.run(ask),
 					),
 			})),
 			// Code's own checks after a build (self-fix PR 4) go down with them: they could not run.
@@ -301,6 +429,8 @@ const lane = ({
 				answering(picks, {
 					...(steps === undefined ? {} : {steps}),
 					...(notes === undefined ? {} : {notes}),
+					...(queues === undefined ? {} : {queues}),
+					...(leave === undefined ? {} : {leave}),
 					...(savedAsking === undefined ? {} : {onlyStep: SAVED_ASK}),
 				}),
 			);
@@ -320,6 +450,14 @@ const lane = ({
 					if (redAfterKill) writeFileSync(red, "");
 				}
 				yield* line();
+				yield* kept();
+				for (const {between} of again) {
+					if (between !== undefined) yield* between({dir, home, remote});
+					typed++;
+					lines.push(AGAIN);
+					yield* line();
+					yield* kept();
+				}
 			});
 			// The person's fiber ends only when it fails: then the test fails with it, now.
 			yield* Effect.raceFirst(run, Fiber.join(person));
@@ -328,6 +466,8 @@ const lane = ({
 			const ends = facts.filter((f) => f.type === "ended");
 			return {
 				lines,
+				stops,
+				folds,
 				facts,
 				dir,
 				remote,
@@ -489,17 +629,25 @@ describe("a lane, whole", () => {
 		},
 	);
 
+	// Self-fix PR 5: a touched exam is the person's call now, with two picks. The person here leaves
+	// it unanswered, so the lane waits on it until `within`.
 	it(
-		"keeps nothing of a build that changes a test the writer wrote",
+		"keeps nothing of a build that changes a test the writer wrote, and asks the person",
 		{timeout: 300_000},
 		async () => {
 			const ran = await lane({
 				title: "[touch-exam] Read names in one form",
+				within: 60,
 				picks: {approve: "approve"},
+				leave: ["exam_touched"],
 			});
 			expect(ran.stages).toEqual(["triage", "plan", "exam", "test_writer", "build"]);
 			expect(ran.names.build).toContain("exam_touched");
-			expect(ran.lines.at(-1)).toContain("exam_touched");
+			const asked = ran.facts.filter(
+				(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"),
+			);
+			expect(asked).toHaveLength(1);
+			expect(asked[0]?.picks).toEqual(PICKS.exam_touched);
 			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 			const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 			expect(said.some((body) => body.includes("src/lower.test.ts"))).toBe(true);
@@ -953,6 +1101,288 @@ describe("which rubrics judge a change, on the local host", () => {
 		expect(reviewRubrics(ran.dir)).toContain(SHIPPED_RUBRIC);
 		expect(reviewRubrics(ran.dir)).not.toContain(TOY_RUBRIC);
 	});
+});
+
+// Self-fix PR 5: a stopped lane goes on where it stopped when the same line is typed again. On the
+// local host fixture, the lane stops, something happens while it waits, and the line is typed again.
+// Today's version.
+
+/** The lane as line `i` saved it, when that is a stop that kept its `Held` and where it goes on. */
+const heldAt = (ran: Ran, i: number) => {
+	const stop = ran.stops[i];
+	return stop?.phase === "over" && "held" in stop ? stop : null;
+};
+
+/** The fold of the ticket's facts after line `i` gives the `Held` that line saved, and misses nothing. */
+const foldsAsSaved = (ran: Ran, i: number) => {
+	const stop = heldAt(ran, i);
+	expect(stop, `line ${i} saved no Held`).not.toBeNull();
+	if (stop === null) return;
+	const {count, round, carry, trail} = stop.held;
+	expect(ran.folds[i]).toEqual({held: {count, round, carry, trail}, missing: [], at: stop.at});
+};
+
+/** What the line said after it was typed again. */
+const secondLine = (ran: Ran) => ran.lines.slice(ran.lines.indexOf(AGAIN) + 1).join("\n");
+
+const askedFor = (ran: Ran, kind: string) =>
+	ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith(`a-${kind}-`));
+
+describe("a stopped lane, typed again", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	it(
+		"stuck at mutation while main moves one commit: it rebases, writes `restarted` with both bases, runs the checks, then mutation, and lands",
+		{timeout: 300_000},
+		async () => {
+			const bases: string[] = [];
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				fold: true,
+				again: [
+					{
+						between: (where) =>
+							Effect.sync(() => {
+								bases.push(remoteGit(where.remote, "rev-parse", "main"));
+								pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]);
+								bases.push(remoteGit(where.remote, "rev-parse", "main"));
+							}),
+					},
+				],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.names.mutation, said).toBeDefined();
+
+			// The first line stopped at mutation, and saved its `Held` and where it goes on.
+			expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "mutation"});
+			foldsAsSaved(ran, 0);
+
+			// The second line says it restarts, and from where. The ticket keeps one row with both bases.
+			expect(secondLine(ran)).toMatch(/restart: #1 from mutation\b/);
+			const [base, onto] = bases;
+			expect(ran.facts.filter((f) => f.type === "restarted")).toEqual([
+				{type: "restarted", from: "mutation", base, onto},
+			]);
+
+			// No step that ended done runs again: each agent once, the plan's yes once.
+			expect(codexRuns(ran.dir).map((r) => r.step)).toEqual([
+				"triage",
+				"plan",
+				"tests",
+				"build",
+				"mutants",
+				"review",
+			]);
+			expect(askedFor(ran, "approve")).toHaveLength(1);
+			expect(ran.stages.filter((s) => s !== "mutation")).toEqual(
+				WHOLE.filter((s) => s !== "mutation"),
+			);
+			expect(ran.stages.slice(ran.stages.lastIndexOf("mutation"))).toEqual([
+				"mutation",
+				"mutants",
+				"review",
+				"push",
+				"merge",
+			]);
+
+			// After the rebase the head is new, so code's checks run there before mutation starts again.
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			expect(restarted).toBeGreaterThan(-1);
+			const checkedAgain = ran.facts.findIndex((f, i) => i > restarted && f.type === "checked");
+			const mutationAgain = ran.facts.findIndex(
+				(f, i) => i > restarted && f.type === "started" && f.stage === "mutation",
+			);
+			expect(checkedAgain).toBeGreaterThan(restarted);
+			expect(mutationAgain).toBeGreaterThan(checkedAgain);
+			const firstChecked = ran.facts.find((f) => f.type === "checked");
+			expect(ran.facts[checkedAgain]).toMatchObject({result: "green"});
+			expect(ran.facts[checkedAgain]?.head).not.toBe(firstChecked?.head);
+
+			expect(ran.lines.at(-1)).toContain("ended: done");
+			expect(onMain(ran.remote, "docs/elsewhere.md")).toContain("Written elsewhere.");
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+
+			// Every `done` keeps its input key (P7).
+			const done = ran.facts.filter(
+				(f) => f.type === "ended" && JSON.stringify(f.outcome).includes('"kind":"done"'),
+			);
+			expect(done.length).toBeGreaterThan(0);
+			for (const end of done)
+				expect(String(end.key), String(end.stage)).toMatch(/^sha256:[0-9a-f]{64}$/);
+		},
+	);
+
+	it(
+		"a lane saved before this change, with no `Held`: the fold gives the carry from its facts, and it goes on at mutation with no done step again",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failMutation: true,
+				again: [{between: ({home}) => keptAsLegacy(home)}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(secondLine(ran)).toMatch(/restart: #1 from mutation\b/);
+			expect(ran.facts.filter((f) => f.type === "restarted")).toMatchObject([
+				{type: "restarted", from: "mutation"},
+			]);
+			expect(codexRuns(ran.dir).map((r) => r.step)).toEqual([
+				"triage",
+				"plan",
+				"tests",
+				"build",
+				"mutants",
+				"review",
+			]);
+			expect(askedFor(ran, "approve")).toHaveLength(1);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"main changes an exam file while the lane is stuck: the restart asks exam_conflict with the file, and `again` reruns the test writer, then build",
+		{timeout: 300_000},
+		async () => {
+			const ON_MAIN =
+				'import {expect, it} from "vitest";\n\nit("lowers on main", () => {\n\texpect("AB".toLowerCase()).toBe("ab");\n});\n';
+			const ran = await lane({
+				within: 140,
+				picks: {...YES, exam_conflict: "again"},
+				failMutation: true,
+				again: [
+					{
+						between: (where) =>
+							Effect.sync(() => pushToMain(where, [{path: "src/lower.test.ts", text: ON_MAIN}])),
+					},
+				],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+
+			// Asked once, with the file, and the picks its definition gives.
+			const asked = askedFor(ran, "exam_conflict");
+			expect(asked, said).toHaveLength(1);
+			expect(asked[0]?.picks).toEqual(PICKS.exam_conflict);
+			const told = [
+				String(asked[0]?.what),
+				...ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body)),
+			];
+			expect(told.filter((text) => text.includes("src/lower.test.ts"))).not.toEqual([]);
+
+			// After the restart: the test writer, told the file, then build. No triage, plan or yes again.
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			expect(restarted).toBeGreaterThan(-1);
+			const after = ran.facts
+				.slice(restarted)
+				.filter((f) => f.type === "started")
+				.map((f) => String(f.stage));
+			expect(after.slice(0, 2)).toEqual(["test_writer", "build"]);
+			const runs = codexRuns(ran.dir);
+			expect(
+				runs.filter((r) => r.step === "triage" || r.step === "plan").map((r) => r.step),
+			).toEqual(["triage", "plan"]);
+			const writers = runs.filter((r) => r.step === "tests");
+			expect(writers).toHaveLength(2);
+			expect(writers[1]?.prompt).toContain("src/lower.test.ts");
+			expect(runs.filter((r) => r.step === "build")).toHaveLength(2);
+			expect(askedFor(ran, "approve")).toHaveLength(1);
+		},
+	);
+
+	it(
+		"a `stop` on rounds_spent, then the same line: build runs once more, as the next round, and the lane lands",
+		{timeout: 300_000},
+		async () => {
+			/** A build's own test: red for any `n` but 1, a little different each round. */
+			const planted = (n: number) => [
+				{
+					path: "src/red.test.ts",
+					text: `import {describe, expect, it} from "vitest";\n\ndescribe("a planted red", () => {\n\tit("stays red", () => {\n\t\texpect(1).toBe(${n});\n\t});\n});\n`,
+				},
+			];
+			const ran = await lane({
+				within: 140,
+				picks: {...YES, rounds_spent: "stop"},
+				fold: true,
+				fake: {writesAt: {build: {0: planted(2), 1: planted(3), 2: planted(4), 3: planted(1)}}},
+				again: [{}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "build"});
+			foldsAsSaved(ran, 0);
+			expect(askedFor(ran, "rounds_spent")).toHaveLength(1);
+			const runs = codexRuns(ran.dir).map((r) => r.step);
+			expect(runs.filter((step) => step === "build")).toHaveLength(4);
+			expect(runs.filter((step) => step !== "build").slice(0, 3)).toEqual([
+				"triage",
+				"plan",
+				"tests",
+			]);
+			expect(runs.filter((step) => step === "tests")).toHaveLength(1);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a `no` on the plan's yes, then the same line: the plan runs again with the person's note, and triage does not",
+		{timeout: 300_000},
+		async () => {
+			const NOTE = "Keep it to ASCII.";
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				queues: {approve: ["no", "approve"]},
+				notes: {approve: NOTE},
+				fold: true,
+				again: [{}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "plan"});
+			foldsAsSaved(ran, 0);
+			const runs = codexRuns(ran.dir);
+			expect(runs.filter((r) => r.step === "triage")).toHaveLength(1);
+			const plans = runs.filter((r) => r.step === "plan");
+			expect(plans).toHaveLength(2);
+			expect(plans[1]?.prompt).toContain(NOTE);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+		},
+	);
+
+	it(
+		"a ticket closed while the lane is paused: the same line ends skip:closed and runs no step",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				queues: {approve: ["no"]},
+				again: [{between: () => closeTicket}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			// The `no` paused the lane: it kept its `Held`.
+			expect(heldAt(ran, 0), said).not.toBeNull();
+			const closed = ran.facts.findIndex((f) => f.type === "closed");
+			expect(ran.facts.slice(closed).filter((f) => f.type === "started")).toEqual([]);
+			expect(codexRuns(ran.dir).map((r) => r.step)).toEqual(["triage", "plan"]);
+			expect(askedFor(ran, "approve")).toHaveLength(1);
+			expect(ran.lines.at(-1)).toContain("skip:closed");
+		},
+	);
 });
 
 // The proof that matters. The whole lane on the GitHub host, from a checkout whose origin is on
@@ -2136,7 +2566,8 @@ describe("a lane, on what the real agents answered", () => {
 					expect(ran.names.review).toContain('"ask"');
 					reads(ran, "a-step", [RUN3_LEAN, RUN3_FINDING.fault]);
 					expect(runsOf(ran, "tests")).toHaveLength(1);
-					expect(bye(ran)).toContain("skip:owner_no");
+					// Self-fix PR 5: the person's `stop` is a saved pause, not `skip:owner_no`.
+					expect(heldAt(ran, 0), bye(ran)).not.toBeNull();
 				},
 			);
 
@@ -2214,7 +2645,8 @@ describe("a lane, on what the real agents answered", () => {
 					// Its own reason: not the words any step falls back on.
 					expect(what).not.toMatch(/stopped and needs your call/);
 					expect(picks).toEqual(["again", "stop"]);
-					expect(bye(ran)).toContain("skip:owner_no");
+					// Self-fix PR 5: the person's `stop` is a saved pause, not `skip:owner_no`.
+					expect(heldAt(ran, 0), bye(ran)).not.toBeNull();
 				},
 			);
 
@@ -2506,7 +2938,8 @@ describe("a lane, on what the real agents answered", () => {
 						ran.facts.findIndex((f) => f.type === type && f.ask === ask);
 					expect(at("answered", asked[1]?.ask)).toBeGreaterThan(at("asked", asked[1]?.ask));
 					expect(at("asked", asked[1]?.ask)).toBeGreaterThan(at("answered", asked[0]?.ask));
-					expect(bye(ran)).toContain("skip:owner_no");
+					// Self-fix PR 5: the person's `stop` is a saved pause, not `skip:owner_no`.
+					expect(heldAt(ran, 0), bye(ran)).not.toBeNull();
 					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 				},
 			);
@@ -2934,14 +3367,12 @@ describe("a lane, on what the real agents answered", () => {
 
 		it(
 			"a lane that ends stuck keeps its tree for a person to read, and its Codex homes still go",
-			{timeout: 60_000},
+			{timeout: 100_000},
 			async () => {
-				const ran = await lane({
-					title: "[touch-exam] Read names in one form",
-					within: 50,
-					picks: {approve: "approve"},
-				});
-				expect(ran.names.build).toContain("exam_touched");
+				// Self-fix PR 5: a touched exam asks the person now, so the stuck end here is a mutation
+				// step that could not run.
+				const ran = await lane({within: 90, picks: {approve: "approve"}, failMutation: true});
+				expect(ran.names.mutation).toContain("run_failed");
 				const left = leftBehind(ran.dir);
 				expect(left.trees).toContain("1");
 				expect(left.codexHomes).toEqual([]);

@@ -83,6 +83,9 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 				`checks at ${short(fact.head)}: ${fact.result === "not_run" ? "could not run" : fact.result}`,
 				fact.failed.length === 0 ? "" : counted(fact.failed.length, "failing test"),
 			);
+		// STUB (self-fix PR 5 test writer): the builder writes the restart's row.
+		case "restarted":
+			return said("");
 		case "planned":
 			return said(`plan v${fact.version}`, counted(fact.tasks.length, "task"));
 		case "pushed": {
