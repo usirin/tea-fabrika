@@ -214,7 +214,7 @@ editing     EDITING · t3 notes                                       mod+enter 
   menus stack and needs `C-q` to leave them all; we do not want a second key for that.
 - **A popover is not a mode.** It has its own edge, focus moves into it, and Escape and a click
   outside close it, one at a time ([popovers](./popovers.md)). Keys go where focus is. This answers
-  the question PR 282 left open, as a lean.
+  the question the keybindings note left open.
 
 ### M6: a mode stays where it lives
 
