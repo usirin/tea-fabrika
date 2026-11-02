@@ -28,7 +28,7 @@ guidelines", a private page with the six principles you can press.
   recorded now so the facts are right from the first entry.
 - **Today's version (`apps/fabrika`):** not changed by this note. To get new code today, a person
   quits, rebuilds, and presses "Stop the old host and start this one", which stops every job. A
-  fix to one program restarts everything, even mid-lane. Tracker #67 is today's ticket for that;
+  fix to one program restarts everything, even mid-lane. Tracker ticket 67 is today's ticket for that;
   see [a tryout in today's version](#a-tryout-in-todays-version).
 
 ## What was decided
@@ -118,7 +118,7 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
 | a state the new code cannot read | H3 | `code.refused` |
 | a step that throws | the process goes back to the code before, and the same Msg runs once there | `step.crashed`, then `code.rolled_back` |
 
-- **Why:** Vite and Fast Refresh fall back to a full reload and keep going; tracker #67 says
+- **Why:** Vite and Fast Refresh fall back to a full reload and keep going; tracker ticket 67 says
   "Syntax error: keep the old code, show the error". A step is pure, so a step that threw sent
   nothing, and running its Msg on the old code is safe.
 - **Cost:** the core keeps one `was` hash per process.
@@ -156,7 +156,7 @@ counter-2   [!] new code can't read this state   [Restart counter-2]   (stays un
 
 - A quiet mark on that tile's title bar, a word and an icon, never color alone (WCAG 1.4.1). Gone
   at the next key. A refusal or an error stays until acted on.
-- An agent sees the same facts through its tools: the `code.*` entries, as tracker #67 asks.
+- An agent sees the same facts through its tools: the `code.*` entries, as tracker ticket 67 asks.
 - Every entry a process writes carries `build`. So a step, a Cmd or a job record always says which
   code made it.
 - **Why:** elm-watch reloads and "tells you why"; a silent swap that went wrong would look like a
@@ -170,7 +170,8 @@ The window is a client, and a browser tab on Cloudflare has no dev server
 ([a browser is always a client](./a-browser-is-always-a-client.md)). So a window does not take
 code from Vite. It hears the same `code.loaded` fact, imports that program's view by hash from the
 brain, and swaps it in, Elm's way: the window machine's model stays if the new view's schema
-decodes it.
+decodes it. A mode in that model stays with its window, or goes to null with a line saying so
+([M6 in modes](./modes.md#m6-a-mode-stays-where-it-lives)).
 
 ```ts
 // A sketch. The window's own machine hears the fact through a Sub, like any other fact.
@@ -194,7 +195,7 @@ decodes it.
   ([changelog](https://developers.cloudflare.com/changelog/post/2026-10-30-durable-objects-deferred-code-updates/)),
   so a core deploy loses nothing either. 80%.
 - **A live lane pins its own stage programs.** A lane's steps keep the build they started with,
-  for the lane's life. Other programs, such as `runs`, still reload. Why: a lane's result must say
+  for the lane's life. Other programs, such as `trace`, still reload. Why: a lane's result must say
   which code judged it. `build` on every record (H6) is what makes this possible later. 70%: the
   doubt is a person who just fixed a stage and expects the lane to take it. Not in Tier 1, which
   has no lane in `next/`.
@@ -251,7 +252,7 @@ with fixed seeds, as fast-check properties:
 | A new shape with no upcast | refuse for that process; it keeps the old code; a person restarts it | 85% |
 | A bad save | never runs; a throwing step rolls back and the Msg runs once on the old code | 70% |
 | The core, libfabrika | a workerd restart, lossless | 80% |
-| A window | swap the view by hash from the brain; keep its model if it decodes | 60% |
+| A window | swap the view by hash from the brain; keep its model if it decodes, modes as in [M6](./modes.md#m6-a-mode-stays-where-it-lives) | 60% |
 | Hands | a restart, with terminals in their own process | 60% |
 | What a person sees | a quiet word and icon on the tile; a refusal stays with Restart | 65% |
 | Where it is off | the cloud takes code by deploy only; a lane pins its stage programs | 70% |
@@ -266,12 +267,12 @@ with fixed seeds, as fast-check properties:
 - **[Experiment 173](../../experiments/173-worker-loader.md)'s lean** is one isolate per version by
   content hash. This keeps it, and adds that memory per save is real, so local workerd restarts on
   its mark.
-- **Tracker #67** sketched today's host reloading programs in Node with a `?gen=N` stamp. `next/`
+- **Tracker ticket 67** sketched today's host reloading programs in Node with a `?gen=N` stamp. `next/`
   loads by hash in the brain instead. Its rules all carry over.
 
 ## A tryout in today's version
 
-Not built. Tracker #67, "Programs update live while agents edit them (host reload)", filed
+Not built. Tracker ticket 67, "Programs update live while agents edit them (host reload)", filed
 2026-10-28, open, is the ticket. Its first step is the counter: "Edit it, see the tile change,
 count kept." What it would teach `next/`: whether people edit programs live often enough to see
 the refusal path, and how the tile's mark reads. Its open doubt, the bare-import trick on Node 24
