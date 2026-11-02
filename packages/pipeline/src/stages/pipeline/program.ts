@@ -892,8 +892,8 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			}).pipe(Effect.scoped);
 
 			const exit = yield* Effect.exit(body);
-			// A step whose agent never opened, or whose start could not be written then, starts here,
-			// with no session: every `ended` comes after its `started`.
+			// A step whose agent never opened starts here, with no session; one whose start could not
+			// be written then, with the session it opened: every `ended` comes after its `started`.
 			const startedFirst = now.start.write(null);
 			const spent = yield* now.take;
 			const picked = Exit.isSuccess(exit) ? exit.value.picked : null;

@@ -1,4 +1,4 @@
-import type {AgentEvent, ToolCall} from "@demlik/tea/agent";
+import type {AgentEvent, ToolCall, ToolFailure} from "@demlik/tea/agent";
 import {Clock, Effect, Stream} from "effect";
 import type {Heard, Turn} from "../agent/turn.ts";
 import {agentTrace, type ContentIs} from "./agent.ts";
@@ -18,6 +18,9 @@ import {agentTrace, type ContentIs} from "./agent.ts";
 // the stretch from one message to the next. What the spans keep of the words is the caller's
 // choice (`agentTrace`'s `content`).
 
+/** A failed tool's reason: the same word for every failure, so no tool's words reach it. */
+const TOOL_FAILED = "tool_failed";
+
 /** A tool's title that reads as a tool's name, as Claude's `Read`; any other is a command line. */
 const NAME = /^[A-Za-z_][\w.-]{0,63}$/;
 
@@ -33,7 +36,6 @@ const heardEvents = (runId: string) => {
 	/** A model call open from here, if none is: the stretch to the next message. */
 	const think = (at: number): AgentEvent<string | null>[] => {
 		if (thinking) return [];
-		thinking = true;
 		turn += 1;
 		return [{...head(at), type: "BrainStarted", turn, purpose: "turn", model: null, payload: null}];
 	};
@@ -46,17 +48,17 @@ const heardEvents = (runId: string) => {
 	): AgentEvent<string | null>[] => {
 		if (!open.has(id)) return [];
 		open.delete(id);
-		return failed
-			? [
-					{
-						...head(at),
-						type: "ToolFailed",
-						callId: id,
-						name: names.get(id) ?? "tool",
-						failure: {kind: "error", reason: output ?? "", _tag: "tool_error"},
-					},
-				]
-			: [{...head(at), type: "ToolSettled", callId: id, result: output}];
+		if (!failed) return [{...head(at), type: "ToolSettled", callId: id, result: output}];
+		// tea writes a failure's `reason` as the span's status message, which a record keeps forever
+		// on the span. So the reason is a fixed word, and what came back rides beside it, in the output
+		// a record keeps apart, where a person can delete it.
+		const failure: ToolFailure & {readonly output: string | null} = {
+			kind: "error",
+			reason: TOOL_FAILED,
+			_tag: "tool_error",
+			output,
+		};
+		return [{...head(at), type: "ToolFailed", callId: id, name: names.get(id) ?? "tool", failure}];
 	};
 
 	const seen = <A>(heard: Heard<A>, at: number): AgentEvent<string | null>[] => {

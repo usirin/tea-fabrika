@@ -109,4 +109,43 @@ describe("cutting key-shaped text", () => {
 			OPTS,
 		);
 	});
+
+	// A key's prefix inside a longer word is part of the word: `task-list…` holds `sk-`.
+	it.each([
+		"task-list-for-the-new-lane.md",
+		"whisk-together-the-eggs-and-the-flour",
+		["pnpm", "storepathforthisworkspaceandthenext1"].join("_"),
+		["thighs", "abcdefghijklmnopqrstuvwxyz0123456789"].join("_"),
+		["EURASIA", "0123456789ABCDEF"].join(""),
+		["desk", "test", "fixturesforthenewapp12"].join("_"),
+	])("keeps %s whole", (text) => {
+		expect(cutKeys(`see ${text} here`)).toBe(`see ${text} here`);
+	});
+
+	const alnum = "Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWxYz";
+	const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+	it.each([
+		["a GitHub classic token", ["ghp", alnum].join("_")],
+		["a GitHub fine-grained token", ["github", "pat", alnum, alnum].join("_")],
+		["an Anthropic key", ["sk", "ant", "api03", alnum].join("-")],
+		["an OpenAI project key", ["sk", "proj", alnum].join("-")],
+		["an AWS access key id", ["AKIA", "ABCDEFGHIJ234567"].join("")],
+		["a Slack token", ["xoxb", "1234567890", alnum].join("-")],
+		["a Google API key", ["AIza", alnum.slice(0, 32), "_-x"].join("")],
+		["a Stripe secret key", ["sk", "live", alnum].join("_")],
+		["an npm token", ["npm", alnum].join("_")],
+		[
+			"a JWT",
+			[base64url({alg: "HS256", typ: "JWT"}), base64url({sub: "made-up"}), "c2lnbmF0dXJl_-x"].join(
+				".",
+			),
+		],
+	])("cuts %s, and keeps the words around it", (_what, key) => {
+		expect(cutKeys(`token: ${key} end`)).toBe("token: [key cut] end");
+		expect(cutKeys(`token=${key}`)).toBe("token=[key cut]");
+		// The mask reads a value as JSON text: a key on its own line comes right after `\n`.
+		expect(cutKeys(JSON.stringify(`a line\n${key}\tend`))).toBe(
+			JSON.stringify("a line\n[key cut]\tend"),
+		);
+	});
 });

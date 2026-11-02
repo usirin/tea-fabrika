@@ -137,7 +137,10 @@ export class LaneNow extends Context.Service<
 		readonly start: {
 			/** What writes it, for the step on now. Its first `write` that lands is the only one. */
 			readonly set: (write: StartWrite) => Effect.Effect<void>;
-			/** Write it now, with `session`, unless it is written. */
+			/**
+			 * Write it now, with `session`, unless it is written. A session a write that failed was
+			 * given is kept: a later write with none, the step's at its end, writes that one.
+			 */
 			readonly write: (session: string | null) => Effect.Effect<void, TicketsFailed>;
 		};
 	}
@@ -150,7 +153,8 @@ export const laneNow = Layer.sync(LaneNow, () => {
 	let now: StepNow | null = null;
 	let spent = NOTHING;
 	let exam: readonly string[] = [];
-	let start: StartWrite | null = null;
+	/** The step's `started` not written yet: what writes it, and the session it was last given. */
+	let start: {readonly write: StartWrite; readonly session: string | null} | null = null;
 	return {
 		set: (next) =>
 			Effect.sync(() => {
@@ -188,16 +192,19 @@ export const laneNow = Layer.sync(LaneNow, () => {
 		start: {
 			set: (write) =>
 				Effect.sync(() => {
-					start = write;
+					start = {write, session: null};
 				}),
-			write: (session) =>
+			write: (given) =>
 				Effect.suspend(() => {
-					const write = start;
-					if (write === null) return Effect.void;
-					return write(session).pipe(
+					const held = start;
+					if (held === null) return Effect.void;
+					const session = given ?? held.session;
+					const now = {write: held.write, session};
+					start = now;
+					return held.write(session).pipe(
 						Effect.tap(() =>
 							Effect.sync(() => {
-								if (start === write) start = null;
+								if (start === now) start = null;
 							}),
 						),
 					);
@@ -339,7 +346,7 @@ const opened = <A>(
 	heardTrace(name, turn, agents.run(turn), "kept").pipe(
 		Stream.tap((heard) =>
 			heard._tag === "started"
-				? // A start that cannot be written now is written by the step, with no session, at its end.
+				? // A start that cannot be written now is written by the step at its end, with this session.
 					Effect.flatMap(agents.own(heard.session), lane.start.write).pipe(Effect.ignore)
 				: Effect.void,
 		),

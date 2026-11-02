@@ -12,7 +12,7 @@ import {
 import {Duration, Effect, Layer} from "effect";
 import {cutTag, type SpanRow} from "../../host/otlp.ts";
 import type {Records} from "../../host/records.ts";
-import {DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
+import {type ContentGoes, DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
 
 // Where a host's spans go: Effect's OpenTelemetry bridge
 // (`@effect/opentelemetry`), over one OpenTelemetry tracer provider. Every
@@ -27,7 +27,8 @@ import {DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
 //
 // Each span goes out through the view (./view.ts): listed under its program's
 // or stage's service, red when its outcome went wrong, with an agent's turns
-// folded into one span.
+// folded into one span. A lane's agent content goes only to a job's record,
+// where a person can delete it: never over OTLP to a collector.
 //
 // Tracing is off unless a host asks for it: with no Layer from here, no
 // provider and no exporter are built, and tsh turns Effect's own tracer off
@@ -66,10 +67,18 @@ const provider = (processor: SpanProcessor) =>
 		}),
 	);
 
-/** Effect's tracer and the raw OpenTelemetry tracer, both on one provider fed by `processor` through the view. */
-const over = (processor: SpanProcessor, viewing: Viewing | "raw") =>
+/**
+ * Effect's tracer and the raw OpenTelemetry tracer, both on one provider fed by `processor` through
+ * the view. `content`: what `processor` does with an agent run's content, `kept` only for a job's
+ * record (`recordTracing`), where a person can delete it.
+ */
+const over = (
+	processor: SpanProcessor,
+	viewing: Viewing | "raw",
+	content: ContentGoes = "kept_out",
+) =>
 	OtelTracer.layer.pipe(
-		Layer.provide(provider(viewing === "raw" ? processor : view(processor, viewing))),
+		Layer.provide(provider(viewing === "raw" ? processor : view(processor, viewing, content))),
 		Layer.provide(Resource.layer({serviceName: SERVICE})),
 	);
 
@@ -202,5 +211,5 @@ export const recordTracing = (records: Pick<Records, "keep">, viewing: Viewing =
 		},
 		shutdown: () => Promise.resolve(),
 	};
-	return over(new SimpleSpanProcessor(keeping), viewing);
+	return over(new SimpleSpanProcessor(keeping), viewing, "kept");
 };

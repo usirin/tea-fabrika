@@ -37,24 +37,39 @@ export const KEPT_OUT = "[not exported]";
 const KEY_CUT = "[key cut]";
 
 /**
+ * Where a key starts: not inside a longer word, so the `sk-` in `task-list` stays whole. Right
+ * after JSON's `\n`, `\r` or `\t` is a start too: the mask reads a value as JSON text, where a key
+ * on its own line follows the `n` of `\n`.
+ */
+const START = String.raw`(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))`;
+
+/** A key shape: `body` from a {@link START}. */
+const word = (body: string) => new RegExp(`${START}${body}`, "g");
+
+/**
  * Text shaped like a key, as the makers write theirs: what a leak grep looks for. Each is the
- * maker's published prefix and the run of characters after it, so a word is never cut. Text
- * fabrika gave an agent as a `Redacted` is not here: the content a lane keeps holds none yet.
+ * maker's published prefix, where a word starts, and the run of characters after it. A word that
+ * starts with a prefix and runs on long enough is still cut. Text fabrika gave an agent as a
+ * `Redacted` is not here: the content a lane keeps holds none yet.
  */
 const KEY_SHAPES: readonly RegExp[] = [
 	// GitHub: classic tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`), and fine-grained ones.
-	/gh[pousr]_[A-Za-z0-9]{30,}/g,
-	/github_pat_[A-Za-z0-9_]{30,}/g,
+	word(String.raw`gh[pousr]_[A-Za-z0-9]{30,}`),
+	word(String.raw`github_pat_[A-Za-z0-9_]{30,}`),
 	// Anthropic (`sk-ant-`), and OpenAI's `sk-`, `sk-proj-` and the rest.
-	/sk-[A-Za-z0-9_-]{20,}/g,
+	word(String.raw`sk-[A-Za-z0-9_-]{20,}`),
 	// AWS access key ids.
-	/(?:AKIA|ASIA)[0-9A-Z]{16}/g,
+	word(String.raw`(?:AKIA|ASIA)[0-9A-Z]{16}`),
 	// Slack.
-	/xox[abposr]-[A-Za-z0-9-]{10,}/g,
+	word(String.raw`xox[abposr]-[A-Za-z0-9-]{10,}`),
 	// Google API keys.
-	/AIza[0-9A-Za-z_-]{35}/g,
+	word(String.raw`AIza[0-9A-Za-z_-]{35}`),
 	// Stripe secret and restricted keys.
-	/[rs]k_(?:live|test)_[0-9A-Za-z]{20,}/g,
+	word(String.raw`[rs]k_(?:live|test)_[0-9A-Za-z]{20,}`),
+	// npm access tokens.
+	word(String.raw`npm_[A-Za-z0-9]{36,}`),
+	// A JWT: a header and a payload, each JSON as base64url (`{"` is `eyJ`), and a signature.
+	word(String.raw`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`),
 	// A private key, PEM or OpenSSH, whole, its line breaks as text or as JSON's `\n`.
 	/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
 ];

@@ -57,7 +57,12 @@ const traced = async (heard: readonly Heard<Answer>[]) => {
 	const kind = (operation: string) =>
 		spans
 			.filter((s) => s.attributes["gen_ai.operation.name"] === operation)
-			.map((s) => ({name: s.name, status: s.status.code, attributes: s.attributes}));
+			.map((s) => ({
+				name: s.name,
+				status: s.status.code,
+				message: s.status.message,
+				attributes: s.attributes,
+			}));
 	return {chats: kind("chat"), tools: kind("execute_tool"), runs: kind("invoke_agent")};
 };
 
@@ -103,7 +108,7 @@ describe("a turn heard on our agent interface, as spans", () => {
 		expect(tools[0]?.attributes[OUTPUT]).toBe(JSON.stringify("1"));
 	});
 
-	it("ends a failed tool as failed, with the maker's words as its reason", async () => {
+	it("ends a failed tool as failed, with a fixed reason, and what came back only in its output", async () => {
 		const {tools} = await traced([
 			tool("in_progress"),
 			tool("failed", "no such file"),
@@ -112,8 +117,16 @@ describe("a turn heard on our agent interface, as spans", () => {
 		]);
 		expect(tools).toHaveLength(1);
 		expect(tools[0]?.status).toBe(2);
+		expect(tools[0]?.message).toBe("tool_failed");
 		expect(tools[0]?.attributes["error.type"]).toBe("tool_error");
-		expect(tools[0]?.attributes["langfuse.observation.status_message"]).toBe("no such file");
+		expect(tools[0]?.attributes["langfuse.observation.status_message"]).toBe("tool_failed");
+		// What came back is content: in the output, the one tag a record keeps where a person can delete it.
+		expect(JSON.parse(String(tools[0]?.attributes[OUTPUT]))).toMatchObject({
+			reason: "tool_failed",
+			output: "no such file",
+		});
+		const {[OUTPUT]: _output, ...rest} = tools[0]?.attributes ?? {};
+		expect(JSON.stringify(rest)).not.toContain("no such file");
 	});
 
 	it("settles a tool still open at a clean end as ok, with nothing come back", async () => {

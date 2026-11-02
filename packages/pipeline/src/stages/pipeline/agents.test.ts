@@ -4,6 +4,7 @@ import {strictOk} from "@kampus/fabrika-old/agents/codex";
 import {Deferred, Effect, Fiber, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {criterionId} from "../../ids.ts";
+import {TicketsFailed} from "../../tickets/tickets.ts";
 import {Builder, Built} from "../build/form.ts";
 import {ExamWritten} from "../exam/machine.ts";
 import {PlanDraft} from "../plan/plan.ts";
@@ -143,5 +144,29 @@ describe("a step's started", () => {
 			}).pipe(Effect.provide(laneNow)),
 		);
 		expect(starts).toEqual(["first", "next"]);
+	});
+
+	it("keeps the session of a write that failed, for the step's own write at its end", async () => {
+		const starts: (string | null)[] = [];
+		const tries = await Effect.runPromise(
+			Effect.gen(function* () {
+				const now = yield* LaneNow;
+				let calls = 0;
+				yield* now.start.set((session) =>
+					Effect.suspend(() => {
+						calls += 1;
+						return calls === 1
+							? Effect.fail(new TicketsFailed({ticket: 1, why: "unreachable", says: "down"}))
+							: Effect.sync(() => void starts.push(session));
+					}),
+				);
+				// The write when the session opens does not land; the step's, with no session, does.
+				const first = yield* Effect.result(now.start.write("thread-1"));
+				yield* now.start.write(null);
+				return first._tag;
+			}).pipe(Effect.provide(laneNow)),
+		);
+		expect(tries).toBe("Failure");
+		expect(starts).toEqual(["thread-1"]);
 	});
 });
