@@ -99,10 +99,14 @@ afterEach(() => {
 const settled = () => new Promise((done) => setTimeout(done, 0));
 
 describe("a look change with nothing focused", () => {
-	it("leaves nothing focused once open()'s timeout has run", async () => {
+	// A page says nothing has focus with its body, or with null where it has no body to give.
+	it.each([
+		["the body", body],
+		["null", null],
+	])("leaves nothing focused once open()'s timeout has run, from %s", async (_, nothing) => {
 		const {terminalFor} = await import("./terminal.ts");
 		terminalFor({} as never, "t1" as never).attach(element() as never);
-		page.activeElement = body;
+		page.activeElement = nothing;
 		light = true;
 		change?.();
 		await settled();

@@ -296,6 +296,21 @@ describe("an open terminal follows the system's look", () => {
 			expect(page.activeElement).toBe(input);
 		});
 
+		// Between the remake and open()'s timeout, focus is already back: keys typed at once still
+		// reach the input, not the remade terminal.
+		it("an input outside any terminal has focus back at once, before open()'s timeout", async () => {
+			await openTerminal();
+			const input = {
+				name: "a tracker's input",
+				focus: () => {
+					page.activeElement = input;
+				},
+			};
+			page.activeElement = input;
+			switchTo("light");
+			expect(page.activeElement).toBe(input);
+		});
+
 		it("an unfocused tile's terminal does not take focus from the focused one", async () => {
 			const {terminalFor} = await import("./terminal.ts");
 			const first = terminalFor({} as never, "t1" as never);
