@@ -20,9 +20,10 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
 `next/`.
 
 1. **Land [PR 267](https://github.com/usirin/tea-fabrika/pull/267).** Today's pipeline
-   learns to handle what real agents answer.
+   learns to handle what real agents answer. Done 2026-11-01.
 2. **Run ticket 117 for real.** The pipeline builds it, and the owner watches in the app.
-   It is a small change to `map`.
+   It is a small change to `map`. The first try ended stuck; it restarts once
+   [the self-fix plan](./pipeline-self-fix.md) lands.
 3. **Switch to `next/`.** The owner approved [the Tier 1 plan](./tier-1.md) on 2026-11-01.
    After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
    get built through the pipeline, with one tracker ticket per pull request.
@@ -43,10 +44,10 @@ Dated 2026-11-01. **No merged pull request has been built by the pipeline yet, s
 has not really started. `next/` has not moved since 2026-10-31.** Each line is about
 today's version unless it says `next/`. The arrow says who has the next move.
 
-- **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo. No real ticket yet. → nothing, until ticket 117
-- **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Not merged. CI is green, and a second fresh review found no blockers. Its leftovers are ticket 125. The mutation step is not finished. → an agent finishes it, then the owner's yes
-- **First real run, ticket 117.** Waits on 267. The lane now reads its repository off the `origin` of the checkout the app is started in, so the question about `pipeline.json` in the app's real home is gone (the by-hand fix that removed the file). → then the owner answers one question: may this first run go without a box (lean yes, 75%)
-- **Skipping work already done, and restarting a stuck lane.** Today, a saved lane does not rerun a finished step, but it cannot skip work done outside the lane, and a stuck lane cannot restart. Whether it learns to comes back to the owner after ticket 117, with that run's numbers. What already covers it: [read fresh, run alone](../direction/read-fresh-run-alone.md), and [`idempotency.ts`](../../packages/pipeline/src/hosted/idempotency.ts) in the older code. → the owner, after ticket 117
+- **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan
+- **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
+- **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the lane, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → the owner says yes or no to [the self-fix plan](./pipeline-self-fix.md), then ticket 117 restarts from its own state
+- **The lane fixes itself, and a stuck lane restarts.** Decided 2026-11-01 ([jidoka and andon](../direction/jidoka-and-andon.md)): a person is asked only for a judgment, and a stuck or crashed lane restarts from the step that broke. The "after ticket 117" deferral is over. [The plan](./pipeline-self-fix.md) is six by-hand pull requests, about 16.5 to 24 agent hours, with the rebase on restart from tracker ticket 130. → the owner's yes on the plan
 - **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
 - **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the exam pull request, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
