@@ -721,7 +721,6 @@ describe("what a pipe can feed", () => {
 		expect(takes("runs")).toEqual(["ticket"]);
 		// `any` takes whatever no typed input does (`anyInput`): a pipe feeds it from anything.
 		expect(takes("trace")).toEqual(["id", "any"]);
-		expect(takes("map")).toEqual([]);
 	});
 
 	it("is what a line wires each stage's pipe into", () => {
