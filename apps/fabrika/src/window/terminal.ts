@@ -177,17 +177,34 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * The system's look changed. ghostty-web 0.4 does not draw a theme set after open(), so the
 	 * terminal is made again in the new one and opened with what it showed (themes.md, live
 	 * switching). Keys go to it as they went to the old one.
+	 *
+	 * Focus stays where it was. ghostty-web 0.4's open() focuses the terminal, at once and again
+	 * after a zero timeout, and a look change remakes every tile's terminal, so the last one would
+	 * take focus from the tile or the input a person is in. A remake that had focus keeps it;
+	 * otherwise focus goes back where it was, at once and after open()'s own timeout. A pnpm patch
+	 * that stops open() focusing would be cleaner, but every first open then needs its own focus(),
+	 * and the tests model 0.4's open() as it is.
 	 */
 	const remake = () => {
 		const old = term;
-		const focused = [old.textarea, old.element].some(
-			(at) => at !== undefined && at === document.activeElement,
-		);
+		const active: unknown = document.activeElement;
+		const focused = [old.textarea, old.element].some((at) => at !== undefined && at === active);
 		({term, fit} = make());
 		old.dispose();
 		if (!opened) return;
 		open();
-		if (focused) term.focus();
+		if (focused) return term.focus();
+		const back = () => {
+			if (
+				typeof active === "object" &&
+				active !== null &&
+				"focus" in active &&
+				typeof active.focus === "function"
+			)
+				active.focus();
+		};
+		back();
+		setTimeout(back, 0);
 	};
 	const look = window.matchMedia(LIGHT);
 	look.addEventListener("change", remake);
