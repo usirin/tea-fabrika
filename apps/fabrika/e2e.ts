@@ -489,17 +489,21 @@ const infoMode = async (page: Page) => {
  * before the mode came on, and a second click there turns it off. The bottom line's items show
  * their whole focus ring inside the window, the mode off and on, and with the mode on the bottom
  * line starts on a whole pixel, so the tiles above it end on one. No width or height is guessed:
- * each box is checked against the one it sits in, or against itself at another moment. The window
- * goes back to its size after.
+ * each box is checked against the one it sits in, or against itself at another moment.
+ *
+ * Playwright sizes the page, not the window: macOS keeps a window inside the screen, and a CI
+ * runner's screen is too short for 700. It goes through the DevTools protocol, not
+ * `page.setViewportSize`, which also sets the pixel ratio to 1 and cannot be undone; scale 0 keeps
+ * the screen's own. The page goes back to the window's size after.
  */
-const infoModeSmall = async (app: ElectronApplication, page: Page) => {
-	const was = await app.evaluate(({BrowserWindow}) => {
-		const [width = 1200, height = 760] = BrowserWindow.getAllWindows()[0]?.getSize() ?? [];
-		return {width, height};
+const infoModeSmall = async (page: Page) => {
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setDeviceMetricsOverride", {
+		width: 1024,
+		height: 700,
+		deviceScaleFactor: 0,
+		mobile: false,
 	});
-	await app.evaluate(({BrowserWindow}) =>
-		BrowserWindow.getAllWindows()[0]?.setContentSize(1024, 700),
-	);
 	await until(
 		"the window at 1024 by 700",
 		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
@@ -663,10 +667,8 @@ const infoModeSmall = async (app: ElectronApplication, page: Page) => {
 	);
 	await page.keyboard.press("Escape");
 	await modeSaid(page, "Info mode off.");
-	await app.evaluate(
-		({BrowserWindow}, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
-		was,
-	);
+	await cdp.send("Emulation.clearDeviceMetricsOverride");
+	await cdp.detach();
 	await backInT3(page);
 	await prompted(page, "t3");
 };
@@ -892,7 +894,7 @@ const flow = async (app: ElectronApplication) => {
 	check("a click focuses a tile", true);
 	await popovers(page);
 	await infoMode(page);
-	await infoModeSmall(app, page);
+	await infoModeSmall(page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
