@@ -326,7 +326,7 @@ body,
 }
 
 .tile.focused .titlebar {
-	color: var(--text-secondary);
+	color: var(--text-primary);
 }
 
 /*
