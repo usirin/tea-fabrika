@@ -267,6 +267,33 @@ inputs.**
   whether the old answer still holds, a code check before an agent; only a failing check runs the
   step again. Reads stay fresh ([read fresh, run alone](./read-fresh-run-alone.md)); a fresh read
   only changes a key.
+- **What a key is.** A short fingerprint of everything a step read. The same inputs always give
+  the same key; a change to any input gives another. It is one string, so any machine can compare
+  it, the way git names a commit by its content.
+
+  ```ts
+  // A sketch: ticket 117's build step.
+  const inputs = {
+  	plan: "v1#a41c…", // the approved plan's text, hashed
+  	exam: "5d38d582", // the test writer's commit
+  	base: "92740b74", // main when the step started
+  	brief: "build#7e02…", // the builder's brief, hashed
+  	model: "gpt-6-astra",
+  	effort: "high",
+  };
+  const key = sha256(JSON.stringify(inputs)); // "b3f1e9…" for these inputs, every time
+
+  // When build ends, its fact keeps the key:
+  // {_tag: "done", step: "build", key: "b3f1e9…", head: "315df8e6"}
+
+  // On a restart the lane works the key out again:
+  //   same key, and a done fact has it  -> build is skipped; the lane takes head 315df8e6
+  //   main moved, so base and the key changed -> a code check first: do the tests pass on the
+  //     rebased head? yes: a new done fact, no agent paid. no: the builder runs again.
+  ```
+
+  The risk is an input left out of the key: then a stale answer looks fresh. So every input has a
+  test that changing it changes the key.
 - **The known way.** Bazel and Nx: an action's hash covers its inputs, command line and
   environment, and a hit restores the output instead of running. *Build systems à la carte*
   (Mokhov, Mitchell and Peyton Jones, ICFP 2018) names the second half "early cutoff": a rebuilt
