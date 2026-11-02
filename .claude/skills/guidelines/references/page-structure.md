@@ -80,30 +80,44 @@ the one keybindings, hot reload and modes share. Check every box before you publ
   `prefers-reduced-motion`.
 - [ ] Looked at at 1280 and at 390 wide, every view, on the local copy before publishing, and
   again on the published page.
-- [ ] The fabrika dark theme, today's app values for now. The owner may pick the `next/` built-in
-  `fabrika` values (`docs/direction/themes.md`), so keep the palette in this one block, to swap.
-  The values from `apps/fabrika/src/window/window.css` `:root` (the
-  names `theme.css` maps Manti onto), copied, not invented:
+- [ ] The fabrika dark theme is the built-in `fabrika` from `docs/direction/themes.md`: Radix
+  3.0.0, gray slate, accent indigo. This is decided (the owner, 2026-11-01), and today's app moves
+  to the same values. Keep the palette in this one block, with the values copied from the note's
+  `[colors]`, not invented:
 
 ```css
 :root {
 	color-scheme: dark;
-	--ground: oklch(0.178 0.004 260); /* --surface, n-2: the page */
-	--raised: oklch(0.205 0.004 260); /* --surface-raised, n-3: panels and cards */
-	--code: oklch(0.15 0.003 260); /* --surface-sunken, n-1: a code block, as the markdown tile */
-	--line: oklch(0.256 0.004 260); /* --border-faint, n-5 */
-	--ink: oklch(0.79 0.002 260); /* --text-secondary, n-11: body text and code's own ink */
-	--strong: oklch(0.94 0.001 260); /* --text-primary, n-12: headings */
-	--faint: oklch(0.625 0.004 260); /* --text-faint, n-9 */
-	--focus: oklch(0.79 0.002 260); /* --focus, n-11 */
-	--done: oklch(0.78 0.1 155); /* green: done */
-	--running: oklch(0.82 0.1 82); /* amber: running */
-	--stuck: oklch(0.72 0.15 25); /* red: stuck or broken */
-	--turn: oklch(0.8 0.084 266); /* --turn, a-11: waiting on a person, "your turn", nothing else */
+	--ground: #111113; /* ground, slate 1: the page */
+	--raised: #18191b; /* raised, slate 2: panels and cards */
+	--code: #0c0d0e; /* desk, the one value darker than slate 1: a code block */
+	--hover: #ddeaf814; /* hover, slate a3 */
+	--line: #d3edf81d; /* edge, slate a4: a line that carries no fact */
+	--edge: #d6ebfd30; /* slate a6, Radix's subtle border: keys and buttons */
+	--edge-strong: #d9edff40; /* slate a7, Radix's UI border: a hovered border, the lean outline */
+	--ink: #edeef0; /* text, slate 12: body text and code's own ink */
+	--strong: #edeef0; /* text, slate 12: headings, set apart by weight and size */
+	--faint: #f1f7feb5; /* faint, slate a11 */
+	--focus: #dfebfd6d; /* slate a9: the keyboard ring (below) */
+	--turn: #3e63dd; /* turn, indigo 9: the "your turn" fill and its edge, nothing else */
+	--on-turn: #ffffff; /* on-turn: text on the turn fill */
+	--turn-text: #9eb1ff; /* turn-text, indigo 11: "your turn" as a word */
+	--done: #71d083; /* done, grass 11 */
+	--running: #ffca16; /* running, amber 11 */
+	--stuck: #ff9592; /* stuck, red 11: stuck or broken */
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 ```
+
+- Three values are Radix steps the note does not name. `--edge` and `--edge-strong` are slate a6
+  and a7, Radix's jobs for borders. `--focus` is slate a9, not the note's a8: a keyboard ring sits
+  on a code block or a hovered row too, and a8 reads 2.90 to 3.00 there, under the 3:1 of WCAG
+  1.4.11. The note's own repair rule steps a8 to a9, which reads 3.47 or more.
+- Radix gives text two steps: 12 for text and 11 for low-contrast text. So body and headings are
+  both slate 12, and `--faint` is a11.
+- "Your turn" is a chip: the `--turn` fill with `--on-turn` text (5.21:1), or the word in
+  `--turn-text`. No other color sits on the turn fill.
 
 ## Code is highlighted at build time
 
