@@ -24,9 +24,12 @@ Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then sw
 2. **Run ticket 117 for real.** The pipeline builds it, and the owner watches in the app.
    It is a small change to `map`. The first try ended stuck; it restarts once
    [the self-fix plan](./pipeline-self-fix.md) lands.
-3. **Switch to `next/`.** The owner approved [the Tier 1 plan](./tier-1.md) on 2026-11-01.
-   After ticket 117, [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest
-   get built through the pipeline, with one tracker ticket per pull request.
+3. **Switch to `next/`.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
+   After ticket 117, that text goes through the planner as
+   [a free-form plan](../direction/free-form-plan-to-planner.md), and the owner approves
+   that plan before builders start. An agent then files each task as a ticket by hand, once, as
+   a named exception. [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest get
+   built through the pipeline, with one tracker ticket per pull request.
 
 Also right after ticket 117, on today's version and beside Tier 1: remove `runs`, so `trace` becomes the ticket's view (ticket 141, which now holds 86), then the performance program (ticket 114). They and Tier 1 do not
 wait for each other. Past Tier 1, [seven tiers](./tiers.md) in all, the rest proposed.
@@ -47,8 +50,8 @@ today's version unless it says `next/`. The arrow says who has the next move.
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
 - **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the lane, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → [the self-fix plan](./pipeline-self-fix.md) is approved; ticket 117 restarts from its own state once PRs 1, 3, 4, 5 and 7 land
 - **The lane fixes itself, and a stuck lane restarts.** Decided 2026-11-01 ([jidoka and andon](../direction/jidoka-and-andon.md)): a person is asked only for a judgment, and a stuck or crashed lane restarts from the step that broke. The "after ticket 117" deferral is over. [The plan](./pipeline-self-fix.md) is nine by-hand pull requests, about 5 to 7 agent hours at the measured full-lane rate of 600 lines an agent hour (2 to 2.5 at this repo's 1,660), 4 to 5.5 of them before ticket 117 restarts ([agent hours](../direction/agent-hours.md), restated 2026-11-01; *old guess, wrong: 29 to 41.5, 22.5 to 32 before the restart*), with the rebase on restart from tracker ticket 130. It follows [the pipeline guidelines](../direction/pipeline-guidelines.md) ([PR 290](https://github.com/usirin/tea-fabrika/pull/290)): a restart that cannot prove a field goes back only to the step that writes it, every stop and every pick says where the lane goes on, a person's `stop` is a saved pause, a person may steer by a plain comment, red goes back by default, and the lane records wide from its first pull request. → approved 2026-11-01; builders start on PRs 1, 2 and 7
-- **Tier 1 plan for `next/`.** Approved by the owner 2026-11-01, not started. About 17 to 24 agent hours at the measured rate of 600 lines an agent hour (6 to 9 at 1,660), restated 2026-11-01; *old guess, wrong: 63 to 92*. Later tiers stay proposed. Each pull request gets [its own ticket](./tier-1.md#one-ticket-per-pull-request), and the owner approves that ticket's plan. → builders start after ticket 117
-- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → an agent rebases it after the exam pull request, as [Tier 1's order of work](./tier-1.md#the-order-of-work) says. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
+- **Tier 1 plan for `next/`.** What it builds was approved by the owner 2026-11-01, not started. About 17 to 24 agent hours at the measured rate of 600 lines an agent hour (6 to 9 at 1,660), restated 2026-11-01; *old guess, wrong: 63 to 92*. Later tiers stay proposed. After ticket 117 its text goes through the planner as [a free-form plan](../direction/free-form-plan-to-planner.md). The old approval does not cover the new breakdown. After the owner's yes, an agent files each task as [its own ticket](./tier-1.md#one-ticket-per-pull-request) by hand, logged in `field/`, and the owner approves each ticket's plan. → the owner approves the planner's plan, then builders start
+- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → it waits for the planner's output on Tier 1, which takes [Tier 1's order of work](./tier-1.md#the-order-of-work) as input. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Needs a rebase and a recheck. → an agent, after ticket 117
 - **Test windows.** Merged: [257](https://github.com/usirin/tea-fabrika/pull/257) made them see-through, then [271](https://github.com/usirin/tea-fabrika/pull/271) made them show again, without focus. → nothing
 - **App icon and top bar.** Merged ([274](https://github.com/usirin/tea-fabrika/pull/274), [275](https://github.com/usirin/tea-fabrika/pull/275)). → nothing
@@ -90,7 +93,7 @@ today's version unless it says `next/`. The arrow says who has the next move.
 
 - Decides which version a job is in when the brief says, or the rule in [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) answers it. If it still cannot tell, it asks.
 - Writes a note marked **proposed**, an experiment, or a field log.
-- Files Tier 1's tracker tickets, for the owner's GitHub id, after ticket 117 lands: the agent running this project session does it.
+- Files Tier 1's ticket, for the owner's GitHub id, after ticket 117 lands, and each task of its plan as a ticket once the owner approves that plan, with the existing tracker command, logged in `field/`: the agent running this project session does it. A named exception, once; no second project gets split by hand without the owner's yes.
 - Fixes a dead-code finding it checked by hand. If the finding is wrong, it stops and tells the owner.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
