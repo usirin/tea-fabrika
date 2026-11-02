@@ -786,7 +786,7 @@ next/apps/fabrika/src/entry/         wiring: browser.tsx, electron.tsx, and elec
 ```ts
 // next/packages/tuval/src/desktop/services.ts, the core. No platform.
 // Grows only when a Layer really provides a new one. The wire keeps plain strings, since other hosts add words.
-export type Capability = "screen" | "touch-id" | "keychain" | "open-link";
+export type Capability = "screen" | "verify" | "seal" | "open-link";
 
 export class Host extends Context.Service<Host, {
 	readonly platform: "browser" | "electron" | "headless"; // a plain field, and the hello's `platform`
@@ -834,7 +834,7 @@ windowApp.pipe(Effect.provide(layer), runMain);
 **What each Layer says it can do.** `Host` replaces `Backend`. A host is a place hands can run: a Mac, a VM or a browser profile. `has` is its capabilities, and it lists only what this Layer really provides. The words above are the real list for Tier 1, so `clipboard` and `notify` wait until a Layer provides them.
 
 - **browser:** `screen`, from `domScreen`.
-- **electron:** `screen`, plus three named extras. `touch-id` is `PersonCheck`, listed only where `canPromptTouchID` is true. `keychain` is `PersonKey` and the window key, listed only where `safeStorage` can seal. `open-link` is main handing a link to the person's browser. Their services stay. The names only tie them to `has`.
+- **electron:** `screen`, plus three named extras. `verify` is `PersonCheck`, listed only where `canPromptTouchID` is true. `seal` is `PersonKey` and the window key, listed only where `safeStorage` can seal. `open-link` is main handing a link to the person's browser. Their services stay. The names only tie them to `has`.
 - **headless:** none. A test hands in the list it wants. The bridge is an agent, not a host, so its hello says `has: []`.
 - **The list comes from the Layer, and the hello carries it (p66).** Main works out Electron's list at start and hands it over through the preload, and the menu bar's link sends the same list. Nothing reads `has` yet, and `door/hellos` records it. In PR A a tab has no Layer until T7, so its hello says `has: []`. No real ledger exists before PR D, so nothing is lost.
 - **A word says "can", never "may".** A client can claim anything. Whether it may do something is a grant.
@@ -1613,9 +1613,9 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 **p66, a host says what it can do.** `new`, node and real Chromium, real Electron for its half. s5, s2. `desktop/services.ts`, `tuval/*`, `transport/wire.ts`, `transport/waiting.ts`.
 - On each Layer, the hello that goes out holds exactly that Layer's `Host.has`, and its `door/hellos` fact records the same list. Over any list from a test Layer, the same list reaches the waiting row and the signed text of the grant a click makes.
-- Every word in a Layer's list has a service or a platform call behind it in that Layer. With `canPromptTouchID` false, `touch-id` is not listed. With `safeStorage` unable to seal, `keychain` is not listed.
-- Nothing reads it yet: any list gets the same answers from the door, and a hello from an unknown key that claims `touch-id` still gets `not_granted`.
-- Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `touch-id` listed where it can't prompt; the door branching on `has`.
+- Every word in a Layer's list has a service or a platform call behind it in that Layer. With `canPromptTouchID` false, `verify` is not listed. With `safeStorage` unable to seal, `seal` is not listed.
+- Nothing reads it yet: any list gets the same answers from the door, and a hello from an unknown key that claims `verify` still gets `not_granted`.
+- Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
 ## Criteria
 
