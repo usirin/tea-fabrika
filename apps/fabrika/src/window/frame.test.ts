@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {createElement} from "react";
+import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
@@ -727,6 +727,35 @@ describe("info mode", () => {
 		if (item === undefined) throw new Error("no info item");
 		return item;
 	};
+	/**
+	 * The bottom line's items as it builds them, with what each is given: its name, whether its
+	 * tooltip is kept quiet, and its click. Markup drops a click and a tooltip that has not shown yet,
+	 * so the line is read as elements, inside a render so its hooks run.
+	 */
+	const itemsOf = (frame: Frame, step: FrameProps["step"] = noop) => {
+		const items: {readonly name: unknown; readonly quiet: unknown; readonly onClick: unknown}[] =
+			[];
+		const walk = (node: unknown): void => {
+			if (Array.isArray(node)) {
+				for (const kid of node) walk(kid);
+				return;
+			}
+			if (!isValidElement(node)) return;
+			const given = node.props;
+			if (typeof given !== "object" || given === null) return;
+			if ("name" in given && "quiet" in given && "onClick" in given)
+				items.push({name: given.name, quiet: given.quiet, onClick: given.onClick});
+			if ("children" in given) walk(given.children);
+		};
+		function Read(): ReactNode {
+			const line = BottomLine({...props(frame), step});
+			walk(line);
+			return line;
+		}
+		renderToStaticMarkup(createElement(Read));
+		expect(items.map((i) => i.name)).toEqual(["info", "keys"]);
+		return items;
+	};
 	/** What the window's one status region says. It is drawn whatever the bars, so it is never gone. */
 	const said = (frame: Frame) => {
 		const html = renderToStaticMarkup(createElement(ModeStatus, props(frame)));
@@ -818,6 +847,35 @@ describe("info mode", () => {
 		expect(never.attrs).toContain('aria-pressed="false"');
 		expect(infoItem(on).attrs).toContain('aria-pressed="true"');
 		expect(infoItem(off).attrs).toContain('aria-pressed="false"');
+	});
+
+	// While info mode is on, the bottom line explains the item, so its tooltip would say it twice
+	// (pop.tsx, useTip: a quiet tooltip never shows). Off, with nothing over the desk, it shows.
+	it("keeps every item's tooltip quiet while it is on, and only then", () => {
+		expect(itemsOf(on).map((i) => i.quiet)).toEqual([true, true]);
+		expect(itemsOf(explaining(INFO.keys)).map((i) => i.quiet)).toEqual([true, true]);
+		expect(itemsOf(FRAME).map((i) => i.quiet)).toEqual([false, false]);
+		expect(itemsOf(off).map((i) => i.quiet)).toEqual([false, false]);
+	});
+
+	it("says where focus is on the left while it is off, and INFO only while it is on", () => {
+		const here = hereWord(fold([]), SHAPES, SHOWN);
+		for (const frame of [FRAME, off]) {
+			expect(line(frame)).not.toContain('class="info"');
+			expect(line(frame)).toContain('class="here"');
+			expect(side(frame, "left")).toBe(here);
+		}
+		expect(line(on)).toContain('class="info"');
+		expect(line(on)).not.toContain('class="here"');
+	});
+
+	// A click on the item is pointed at it, so the item is what info mode explains first.
+	it("turns on from its item's click, explaining the item", () => {
+		const stepped: FrameMsg[] = [];
+		const [info] = itemsOf(FRAME, (m) => stepped.push(m));
+		if (typeof info?.onClick !== "function") throw new Error("the info item has no click");
+		info.onClick();
+		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
 	});
 
 	// M2: the mode is one value. Never on, on with what it explains, or off after it was on: an

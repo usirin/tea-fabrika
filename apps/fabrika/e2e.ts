@@ -401,10 +401,53 @@ const infoMode = async (page: Page) => {
 	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
 	const keysWords = (await keys.getAttribute("data-info")) ?? "keys:";
 	await keys.focus();
+	// Every text the bottom line's INFO words take on the way, the ones replaced in place too. Focus
+	// going back to the item explains it on its own (focusin), so only this tells "at once" from
+	// "point at anything" first (desk.tsx, focusWords).
+	const shown = await page.evaluateHandle(() => {
+		const seen: string[] = [];
+		const holdsInfo = (n: Node) =>
+			n instanceof Element && (n.matches(".info") || n.querySelector(".info") !== null);
+		const watch = new MutationObserver((records) => {
+			for (const r of records) {
+				const at = r.target instanceof Element ? r.target : r.target.parentElement;
+				const inside = at?.closest(".info") != null;
+				if (inside && r.oldValue !== null) seen.push(r.oldValue);
+				for (const n of [...r.addedNodes, ...r.removedNodes])
+					if (inside || holdsInfo(n)) seen.push(n.textContent ?? "");
+			}
+			const now = document.querySelector("footer.bottomline .info");
+			if (now !== null) seen.push(now.textContent ?? "");
+		});
+		watch.observe(document.body, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			characterDataOldValue: true,
+		});
+		return {seen, stop: () => watch.disconnect()};
+	});
 	await prefixed(page, "i");
 	await modeSaid(page, "Info mode on. Escape leaves.");
 	await explained(page, keysWords);
-	check("turned on with focus on the keys item, info mode explains it at once", true);
+	const passed = await shown.evaluate((s) => {
+		s.stop();
+		return s.seen;
+	});
+	await shown.dispose();
+	check(
+		"turned on with focus on the keys item, info mode explains it at once, never the hint first",
+		passed.length > 0 && !passed.some((text) => text.includes("point at anything")),
+		passed,
+	);
+	// Ctrl-B swaps the right side's items for `esc cancels`, so focus falls to the page; the key
+	// done, it goes back to the item it was on (desk.tsx, focusBack).
+	await until(
+		"focus back on the keys item",
+		() => page.evaluate(() => document.activeElement?.getAttribute("data-info") ?? null),
+		(at) => at === keysWords,
+	);
+	check("the key done, focus is back on the keys item it fell from", true);
 	await page.keyboard.press("Escape");
 	await modeSaid(page, "Info mode off.");
 	await backInT3(page);
