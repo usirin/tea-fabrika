@@ -1,5 +1,5 @@
 import {Context, type Effect, Schema} from "effect";
-import type {Result} from "../../controls.ts";
+import {Result} from "../../controls.ts";
 import {Survived} from "./mutant.ts";
 import {type CodeRef, type Scope, Span} from "./scope.ts";
 
@@ -31,14 +31,27 @@ export const Ran = Schema.Struct({
 });
 export type Ran = typeof Ran.Type;
 
+/**
+ * One run of the repo's own tests. `failed`: each failing test by name, as vitest's JSON report
+ * spells it (`src/clamp.test.ts > clamp > keeps a number above the high`), or a test file that did
+ * not load, by its path. Empty when green, or when the command writes no report. `tail`: what a
+ * person reads of why, the first line of up to five errors, or the output's last lines with no report.
+ */
+export const Tested = Schema.Struct({
+	result: Result,
+	failed: Schema.Array(Schema.String),
+	tail: Schema.String,
+});
+export type Tested = typeof Tested.Type;
+
 export type CouldNotRun = {readonly _tag: "could_not_run"};
 
 /** Runs code at a head: the repo's own tests, and mutation testing over some of its lines. */
 export class MutationRunner extends Context.Service<
 	MutationRunner,
 	{
-		/** The repo's own tests at `head`: green when all pass. */
-		readonly tests: (head: string) => Effect.Effect<Result, CouldNotRun>;
+		/** The repo's own tests at `head`: green when all pass, and each failing test by name. */
+		readonly tests: (head: string) => Effect.Effect<Tested, CouldNotRun>;
 		/** Mutants over `spans` at `head`, each run against the repo's own tests. */
 		readonly run: (ask: RunAsk) => Effect.Effect<Ran, CouldNotRun>;
 	}

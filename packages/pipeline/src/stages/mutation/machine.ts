@@ -1,10 +1,9 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
-import {Result} from "../../controls.ts";
 import {checkRun, gather, keptCmd} from "../../primitives.ts";
 import {MutationOutcome} from "./outcome.ts";
 import {Change, CodeRef, changesOf, Scope, Span, spansOf, unapproved} from "./scope.ts";
-import {Ran, RunAsk} from "./services.ts";
+import {Ran, RunAsk, Tested} from "./services.ts";
 
 // The mutation step (docs/direction/promises-in-the-pipeline.md, step 5):
 // after the build, before review. No agent sits inside it; code does it all.
@@ -15,7 +14,8 @@ import {Ran, RunAsk} from "./services.ts";
 //              Then two pure Checks (./scope.ts): a change to the exam asks
 //              the owner, and no line to mutate is a skip
 //   testing    the repo's own tests at the head, first: a mutant is graded on
-//              what they miss, so they must pass. A Check that runs code
+//              what they miss, so they must pass. A red head goes back to the
+//              builder, each failing test by name. A Check that runs code
 //   mutating   StrykerJS over those lines, a fixed-seed sample of at most
 //              `most`, the ignorer's mutants left out, each mutant that
 //              survives typechecked and counted only if the typecheck takes
@@ -55,7 +55,7 @@ const ScopeIn = Schema.Struct({
 const TestsIn = Schema.Struct({head: Schema.String});
 
 export const readScope = gather("mutation_scope", {input: ScopeIn, ok: Scope, err: Unknown});
-export const runTests = checkRun("mutation_tests", {input: TestsIn, verdict: Result});
+export const runTests = checkRun("mutation_tests", {input: TestsIn, verdict: Tested});
 export const runMutants = checkRun("mutation_run", {input: RunAsk, verdict: Ran});
 
 type ScopeCmd = ReturnType<typeof readScope>;
@@ -71,6 +71,13 @@ export const MutationReport = Schema.Struct({
 	spans: Schema.Array(Span),
 	/** What Stryker found. `null`: it did not run. */
 	ran: Schema.NullOr(Ran),
+	/**
+	 * Each test that failed at the head, by name: what the builder is sent back with. Every run
+	 * writes it. Optional: a state saved before this key still reads.
+	 */
+	failed: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** On a red head: the first lines of why, for the ticket. The error text exists only now. */
+	tail: Schema.optionalKey(Schema.String),
 });
 export type MutationReport = typeof MutationReport.Type;
 
@@ -115,7 +122,7 @@ type Step = readonly [Mutation, readonly MutationCmd[]];
 const stay = (s: Mutation): Step => [s, []];
 const scoped = (s: Scoped): Scoped => ({ask: s.ask, spans: s.spans});
 
-const blank: MutationReport = {changes: [], spans: [], ran: null};
+const blank: MutationReport = {changes: [], spans: [], ran: null, failed: []};
 const end = (s: Held, outcome: MutationOutcome, report: Partial<MutationReport> = {}): Step => [
 	{ask: s.ask, phase: "over", outcome, report: {...blank, ...report}},
 	[],
@@ -162,7 +169,13 @@ export const mutation = defineMachine({
 
 		mutation_tests_ok: (s, m): Step => {
 			if (s.phase !== "testing") return stay(s);
-			if (m.value === "red") return end(s, {kind: "stuck", why: "tests_red"}, {spans: s.spans});
+			const {result, failed, tail} = m.value;
+			if (result === "red")
+				return end(
+					s,
+					{kind: "send", to: "builder", why: "tests_red"},
+					{spans: s.spans, failed, tail},
+				);
 			const {head, seed, most} = s.ask;
 			const asked = runMutants({head, spans: s.spans, seed, most});
 			return [{...scoped(s), phase: "mutating", asked}, [asked]];

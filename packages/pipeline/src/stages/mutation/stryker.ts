@@ -5,10 +5,11 @@ import {Instrumenter} from "@stryker-mutator/instrumenter";
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild} from "../../child.ts";
+import {failuresOf, Report as TestsReport} from "../test-writer/results.ts";
 import {IGNORER, shouldIgnore} from "./ignorer.ts";
 import {idOf, type Survived} from "./mutant.ts";
 import type {Span} from "./scope.ts";
-import {type CouldNotRun, MutationRunner, type Ran, type RunAsk} from "./services.ts";
+import {type CouldNotRun, MutationRunner, type Ran, type RunAsk, type Tested} from "./services.ts";
 
 // `MutationRunner` on StrykerJS (10.1.1, experiment 124's), its vitest
 // runner with per-test coverage, and ./ignorer.ts as its ignorer plugin.
@@ -177,6 +178,16 @@ function withMutant(text: string, m: Reported): {readonly original: string; read
 		m.mutatorName === "LogicalOperator" ? `(${m.replacement ?? ""})` : (m.replacement ?? "");
 	return {original: text.slice(a, b), text: `${text.slice(0, a)}${put}${text.slice(b)}`};
 }
+
+/** Where `{out}` in the tests' command points: vitest's JSON report, in the head's own copy. */
+const REPORT = ".tests-report.json";
+
+/** The errors a red run tells of, by their first line. */
+const ERRORS_SHOWN = 5;
+
+/** The last lines of a command's output: what tells why when no report names a test. Pure. */
+const lastLines = (text: string, most = 20): string =>
+	text.trimEnd().split("\n").slice(-most).join("\n");
 
 const quiet = () => {};
 /** The instrumenter's logger: warnings and errors only. */
@@ -380,10 +391,36 @@ const services = (setup: StrykerSetup) =>
 				return {...none, ran: picked.length, compileErrors, killed, survived};
 			}).pipe(Effect.catch(() => couldNotRun));
 
+		/**
+		 * The repo's own tests in the head's copy. The exit code says green or red. With `{out}` in the
+		 * command, vitest's JSON report is written there, in the copy, and names each test that failed.
+		 * A report that is missing or does not read names none: it never turns red into green.
+		 */
 		const tests = (head: string) =>
-			low(setup.tests, setup.folder(head)).pipe(
-				Effect.map((r) => (r.code === 0 ? ("green" as const) : ("red" as const))),
-			);
+			Effect.gen(function* () {
+				const folder = yield* fs.realPath(setup.folder(head)).pipe(Effect.mapError(() => notRun));
+				const out = path.join(folder, REPORT);
+				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
+				const command = setup.tests.map((word) => word.replaceAll("{out}", out)) as [
+					string,
+					...string[],
+				];
+				const ran = yield* low(command, folder);
+				if (ran.code === 0) return {result: "green", failed: [], tail: ""} satisfies Tested;
+				const failures = yield* fs.readFileString(out).pipe(
+					Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(TestsReport))),
+					Effect.map((report) => failuresOf(report, folder)),
+					Effect.orElseSucceed(() => []),
+				);
+				const tail =
+					failures.length === 0
+						? lastLines(`${ran.out}${ran.err}`)
+						: failures
+								.slice(0, ERRORS_SHOWN)
+								.map(({name, error}) => `${name}: ${error}`)
+								.join("\n");
+				return {result: "red", failed: failures.map((f) => f.name), tail} satisfies Tested;
+			});
 
 		return {tests, run};
 	});

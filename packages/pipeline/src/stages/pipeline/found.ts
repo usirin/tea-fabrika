@@ -1,6 +1,7 @@
 import type {Ended} from "@kampus/fabrika-old";
 import {Cause} from "effect";
 import {inert} from "../build/body.ts";
+import type {Item} from "../build/ticket.ts";
 import type {ExamChange} from "../exam/machine.ts";
 import {textOf} from "../plan/plan.ts";
 import {questionLines} from "../plan/render.ts";
@@ -9,7 +10,7 @@ import type {Found} from "../test-writer/checked.ts";
 import type {MutantAnswer} from "../test-writer/mutants.ts";
 import {Surprise} from "../test-writer/outcome.ts";
 import type {Answer} from "../test-writer/written.ts";
-import {listed} from "./briefs.ts";
+import {fenced, listed} from "./briefs.ts";
 import type {Carry, Through, Untested} from "./machine.ts";
 
 // What a step found, in the words a person or an agent reads it in. Today's version. All pure: the
@@ -100,6 +101,39 @@ export const throughWords = ({findings, mutants}: Through = NOTHING): readonly s
 				listed(mutants.map((row) => inert(`\`${row.mutant}\`: ${row.why}`))),
 			]),
 ];
+
+/** What is still open as the rounds run out, for the person asked whether once more. Nothing open: nothing said. */
+export const openWords = (open: readonly Item[]): readonly string[] =>
+	open.length === 0 ? [] : ["Still open:", listed(open.map((item) => inert(item.text)))];
+
+/** What the builder is told of a red head: each failing test, or with no name, the head as a whole. Pure. */
+export const redItems = (failed: readonly string[], tail: string): readonly Item[] =>
+	failed.length === 0
+		? [
+				{
+					criterion: null,
+					text: "The repository's own tests fail at the build's head.",
+					says: tail === "" ? "No test was named." : tail,
+					where: [],
+					wants: [],
+				},
+			]
+		: failed.map((name) => ({
+				criterion: null,
+				text: name,
+				says: "This test fails at the build's head.",
+				where: [name.split(" > ")[0] ?? name],
+				wants: [],
+			}));
+
+/** The ticket's comment on a red head: each failing test by name, and the first lines of why. Pure. */
+export const redWords = (failed: readonly string[], tail: string, most: number): string =>
+	[
+		"The repository's own tests fail at this head:",
+		listed(failed.slice(0, most).map(inert), "No test was named."),
+		...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
+		...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
+	].join("\n");
 
 /** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
 export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>

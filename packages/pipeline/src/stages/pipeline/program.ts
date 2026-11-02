@@ -14,7 +14,15 @@ import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
-import {type CodeFact, type Outcome, saidOf, TicketNumber} from "../../tickets/ticket.ts";
+import {
+	type CodeFact,
+	FAILED_MOST,
+	type FactOf,
+	factsOf,
+	type Outcome,
+	saidOf,
+	TicketNumber,
+} from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import {inert} from "../build/body.ts";
 import type {Built} from "../build/form.ts";
@@ -50,6 +58,8 @@ import {
 	foundWords,
 	jobsList,
 	mutantWords,
+	redItems,
+	redWords,
 	ruleChangeLines,
 	throughWords,
 	untestedRows,
@@ -227,8 +237,14 @@ const need = <A>(value: A | null | undefined, says: string): Effect.Effect<A, Br
 		? Effect.fail({_tag: "unknown", says})
 		: Effect.succeed(value);
 
-/** A step's end, and what its machine said went wrong: the ticket and the tile say it too. */
-type BodyEnd = StepEnd & {readonly problems: readonly string[]};
+/**
+ * A step's end, and what its machine said went wrong: the ticket and the tile say it too. `failed`:
+ * on a red head, each failing test by name, for the step's `ended` fact.
+ */
+type BodyEnd = StepEnd & {
+	readonly problems: readonly string[];
+	readonly failed?: readonly string[];
+};
 
 const ended = (
 	outcome: Parameters<typeof factOutcome>[0],
@@ -298,7 +314,7 @@ const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
 			return ended({kind: "stuck", why: "checks_not_run"}, kept, [
 				`The builder changed nothing, and the checks could not run at ${head}, so nothing says whether this work holds. ${says}`,
 			]);
-		if (checks.success === "green")
+		if (checks.success.result === "green")
 			return asksFirst("no_change", ended({kind: "done", part: false}, kept), [says]);
 		if (round >= MAX_ROUNDS)
 			return ended({kind: "stuck", why: "rounds_spent"}, kept, [
@@ -306,6 +322,13 @@ const nothingChanged = (round: number, kept: StepEnd["carry"], says: string) =>
 			]);
 		return ended({kind: "ask", who: "owner", for: "still_red"}, kept, [says]);
 	});
+
+/**
+ * A tests command as an agent runs it by hand: without the JSON report `{out}` asks for, which only
+ * code reads. With it, the agent would see no output and write a file named `{out}`. Pure.
+ */
+const byHand = (command: readonly string[]) =>
+	command.filter((word) => !word.includes("{out}") && word !== "--reporter=json");
 
 /** Each step: what its agent is told, and its machine, to its end. */
 const bodies = {
@@ -506,7 +529,7 @@ const bodies = {
 				quick: listed(
 					(settings.mutation?.tests ?? []).length === 0
 						? []
-						: [(settings.mutation?.tests ?? []).join(" ")],
+						: [byHand(settings.mutation?.tests ?? []).join(" ")],
 				),
 				decided: decidedWords(carry),
 			});
@@ -555,7 +578,21 @@ const bodies = {
 				seed: at.cmd.count,
 				most: MAX_MUTANTS,
 			});
-			return ended(end.outcome, {survived: end.report.ran?.survived ?? []});
+			const survived = end.report.ran?.survived ?? [];
+			if (end.outcome.kind !== "send" || end.outcome.to !== "builder")
+				return ended(end.outcome, {survived});
+			// A red head: the names and the first lines of why exist only now, so the ticket keeps them.
+			const {failed = [], tail = ""} = end.report;
+			yield* (yield* Tickets)
+				.talk(at.cmd.number, `${at.run}/red`, {
+					type: "commented",
+					body: saidOf(redWords(failed, tail, FAILED_MOST)),
+				})
+				.pipe(Effect.ignore);
+			return {
+				...ended(end.outcome, {survived, open: redItems(failed, tail)}),
+				failed: failed.slice(0, FAILED_MOST),
+			};
 		}),
 
 	mutants: (at: At) =>
@@ -787,6 +824,22 @@ const shipped = (at: At, pr: string) =>
 
 const money = (usd: number | null) => (usd === null ? "price unknown" : `$${usd.toFixed(2)}`);
 
+/**
+ * What the runs on a ticket cost so far, from their `ended` facts, at list price where a rate is
+ * known. A run whose price nobody knows is counted as unknown, so the sum never reads as free. Pure.
+ */
+const spentWords = (ends: readonly FactOf<"ended">[]): string => {
+	const prices = ends.map((e) =>
+		e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null),
+	);
+	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
+	const total = known.reduce((sum, usd) => sum + usd, 0);
+	const unknown = prices.length - known.length;
+	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
+	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
+	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
+};
+
 const laneInterpret = ({send, machines}: Stages) => ({
 	lane_read: (cmd: ReturnType<typeof readFiled>) =>
 		Effect.gen(function* () {
@@ -817,13 +870,29 @@ const laneInterpret = ({send, machines}: Stages) => ({
 	lane_ask: (cmd: ReturnType<typeof askPerson>) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
+			const spent =
+				cmd.spent === true
+					? [
+							yield* tickets.read(cmd.number).pipe(
+								Effect.map((ticket) => spentWords(factsOf(ticket.timeline, "ended"))),
+								Effect.orElseSucceed(
+									() => "What the runs on this ticket have cost could not be read: price unknown.",
+								),
+							),
+						]
+					: [];
 			// Before the question, so a person who sees it finds this already there.
 			if ((cmd.does ?? []).length > 0)
 				yield* tickets
 					.talk(cmd.number, `${cmd.ask}/picks`, {
 						type: "commented",
 						body: saidOf(
-							[...(cmd.also ?? []), "What each answer does:", listed(cmd.does ?? [])].join("\n"),
+							[
+								...(cmd.also ?? []),
+								...spent,
+								"What each answer does:",
+								listed(cmd.does ?? []),
+							].join("\n"),
 						),
 					})
 					.pipe(Effect.ignore);
@@ -909,7 +978,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						});
 			const usd = picked?.harness === "claude" ? (spent.usd ?? 0) : (listUsd ?? 0);
 			const to = yield* Clock.currentTimeMillis;
-			const write = (outcome: Outcome) =>
+			const write = (outcome: Outcome, failed?: readonly string[]) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -927,11 +996,12 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(picked === null
 						? {}
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
+					...(failed === undefined ? {} : {failed}),
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems, after: past} = exit.value.end;
+				const {outcome, carry, problems, after: past, failed} = exit.value.end;
 				yield* sessionLeft.pipe(Effect.ignore);
-				yield* write(outcome);
+				yield* write(outcome, failed);
 				yield* said(
 					[
 						nameOf(outcome),
@@ -1052,8 +1122,12 @@ export const laneProgram = defineProgram({
 			const kept = yield* ref.read;
 			const laneId =
 				kept !== null && kept.phase !== "idle" && "lane" in kept ? kept.lane : yield* newLane(id);
+			// Copied into the lane as it starts: a machine decides with it, so a later edit cannot change a run.
+			const settings = yield* Effect.result((yield* LaneWork).settings);
+			const sendBack =
+				settings._tag === "Success" ? (settings.success.build?.send_back ?? true) : true;
 			const runtime = yield* ref.start(
-				{type: "start", number: n, lane: laneId},
+				{type: "start", number: n, lane: laneId, sendBack},
 				{conflict: "use_existing"},
 			);
 			const end = yield* runtime.done();

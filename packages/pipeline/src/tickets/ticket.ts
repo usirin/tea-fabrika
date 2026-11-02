@@ -50,6 +50,9 @@ export const Body = Schema.String.check(Schema.isMaxLength(BODY_MOST));
 /** A comment's text: a body with something in it besides spaces. */
 export const Said = Body.check(Schema.isPattern(/\S/));
 
+/** The most failing tests a step's end names. A run with more keeps the first; the comment says how many. */
+export const FAILED_MOST = 50;
+
 const CUT_NOTE = "\n\n(cut here: it was too long for a comment)";
 
 /** Any text as what a {@link Said} can hold, saying so where it was cut. Pure. */
@@ -197,6 +200,8 @@ export const CodeFact = Schema.Union([
 		billed: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
 		listUsd: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
 		minutes: Schema.optionalKey(Schema.Finite),
+		/** The tests that failed at the run's head, by name, at most `FAILED_MOST`. The error text exists only now. */
+		failed: Schema.optionalKey(Schema.Array(Schema.String).check(Schema.isMaxLength(FAILED_MOST))),
 	}),
 	/**
 	 * A run's agent opened its session, once, after the run's `started`. `id`: the harness's own id

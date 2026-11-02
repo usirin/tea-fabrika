@@ -8,7 +8,7 @@ import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
-import {throughWords} from "./found.ts";
+import {openWords, throughWords} from "./found.ts";
 import {LaneOutcome} from "./outcome.ts";
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
@@ -29,6 +29,11 @@ import {LaneOutcome} from "./outcome.ts";
 //
 // `after` is the whole order, as data the laws read. A step's own `skip` moves on where the lane
 // can go on without it, and the fact that says so is written by the Act all the same.
+//
+// A head whose own tests fail goes back to the build, a round up, with each failing test open. A
+// review's finding goes to the test writer, a round up. Both count in the same rounds, and once
+// `MAX_ROUNDS` are spent a person is asked `rounds_spent`: `again` runs one more round, `stop` ends
+// the lane `stuck:rounds_spent`. With `[build] send_back = false` the first red asks at once.
 
 const Unknown = ["unknown"] as const;
 
@@ -49,11 +54,17 @@ export const STEPS = [
 export const LaneStep = Schema.Literals(STEPS);
 export type LaneStep = typeof LaneStep.Type;
 
-/** What the questions are about. `step`: a step that ended on `ask`, and may be run again. */
-const ASKS = ["approve", "exam_merge", "merge", "step"] as const;
+/**
+ * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
+ * `rounds_spent`: the work went back as often as it may, and a person says whether once more.
+ */
+const ASKS = ["approve", "exam_merge", "merge", "step", "rounds_spent"] as const;
 const AskFor = Schema.Literals(ASKS);
 
-/** The most builds a ticket gets: the first, and each one review sent it back for. */
+/**
+ * The most builds a ticket gets on its own: the first, and each one a red head or a review sent it
+ * back for. Past it, only a person's `again`. 3 is a guess (docs/direction/jidoka-and-andon.md#bounds).
+ */
 export const MAX_ROUNDS = 3;
 
 /** A Property of the plan with no test, in its own words, and why the test writer wrote none. */
@@ -170,6 +181,8 @@ const AskIn = Schema.Struct({
 	does: Schema.optionalKey(Schema.Array(Schema.String)),
 	/** What a person reads before they answer, a line for each. Left out: nothing more to read. */
 	also: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** The rounds' question: what the runs on the ticket cost is added from its facts, which the lane does not hold. */
+	spent: Schema.optionalKey(Schema.Literal(true)),
 });
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
 const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
@@ -219,9 +232,13 @@ type Question = typeof Question.Type;
 /** One step as it ended, or one person's answer: what a lane leaves behind it, in order. */
 const Row = Schema.Struct({step: Schema.String, said: Schema.String});
 
+/** Whether a red head goes back to the builder on its own: `[build] send_back`. Left out: it does. */
+const SendBack = {sendBack: Schema.optionalKey(Schema.Boolean)};
+
 const Held = Schema.Struct({
 	number: Schema.Finite,
 	lane: LaneId,
+	...SendBack,
 	count: Schema.Finite,
 	round: Schema.Finite,
 	carry: Carry,
@@ -238,6 +255,7 @@ export const Lane = Schema.Union([
 		phase: Schema.Literal("reading"),
 		number: Schema.Finite,
 		lane: LaneId,
+		...SendBack,
 		asked: keptCmd(readFiled, ReadIn),
 	}),
 	Schema.Struct({
@@ -273,7 +291,13 @@ export const Lane = Schema.Union([
 export type Lane = typeof Lane.Type;
 
 export type LaneMsg =
-	| {readonly type: "start"; readonly number: number; readonly lane: LaneId}
+	/** `sendBack`: `[build] send_back`, read once as the lane starts. Left out: true. */
+	| {
+			readonly type: "start";
+			readonly number: number;
+			readonly lane: LaneId;
+			readonly sendBack?: boolean;
+	  }
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
 	| {readonly type: "resume"}
 	/** A person answered `ask` on the ticket: the Listen below heard it. */
@@ -290,7 +314,7 @@ type Step_ = readonly [Lane, readonly LaneCmd[]];
 /** What a state moves to, after a step's outcome. */
 export type Move =
 	| {readonly to: LaneStep; readonly round?: number}
-	| {readonly ask: "approve" | "exam_merge" | "merge" | "step"}
+	| {readonly ask: (typeof ASKS)[number]}
 	| {readonly end: LaneOutcome};
 
 const stuck = (why: Extract<LaneOutcome, {kind: "stuck"}>["why"]): Move => ({
@@ -313,10 +337,24 @@ const NEXT: Readonly<Record<LaneStep, Move>> = {
 	merge: merged,
 };
 
-/** The whole order, as one pure function: where a lane goes when `step` ends with `outcome`. */
-export const after = (step: LaneStep, outcome: Outcome, round: number): Move => {
+/** Another round, if the rounds allow it: else a person is asked. */
+const back = (to: LaneStep, round: number): Move =>
+	round >= MAX_ROUNDS ? {ask: "rounds_spent"} : {to, round: round + 1};
+
+/**
+ * The whole order, as one pure function: where a lane goes when `step` ends with `outcome` in
+ * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back.
+ */
+export const after = (
+	step: LaneStep,
+	outcome: Outcome,
+	round: number,
+	lane: {readonly sendBack?: boolean} = {},
+): Move => {
 	switch (outcome.kind) {
 		case "stuck":
+			// A builder that changed nothing in a round at the cap: the same question as any spent round.
+			if (step === "build" && outcome.why === "rounds_spent") return {ask: "rounds_spent"};
 			return stuck("step_stuck");
 		case "ask":
 			// A plan with open questions goes to the same yes: the person reads them there.
@@ -335,9 +373,11 @@ export const after = (step: LaneStep, outcome: Outcome, round: number): Move => 
 			if (step === "triage")
 				return outcome.to === "research" ? {end: {kind: "skip", why: "research"}} : NEXT.triage;
 			if (step === "mutation" && outcome.to === "test_writer") return {to: "mutants"};
+			// The head's own tests fail: the builder gets them by name, unless the repository says ask.
+			if (step === "mutation" && outcome.to === "builder")
+				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round);
 			// A finding needs a test, and the builder cannot add one: the writer goes first.
-			if (step === "review" && outcome.to === "builder")
-				return round >= MAX_ROUNDS ? stuck("rounds_spent") : {to: "test_writer", round: round + 1};
+			if (step === "review" && outcome.to === "builder") return back("test_writer", round);
 			return stuck("sent_back");
 		case "done":
 			// Triage closed it, as a no or a duplicate. Done, and nobody is next.
@@ -352,7 +392,11 @@ export const PICKS = {
 	exam_merge: ["merge", "no"],
 	merge: ["merge", "no"],
 	step: ["again", "stop"],
+	rounds_spent: ["again", "stop"],
 } as const;
+
+/** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
+const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer" : "build");
 
 /** A person's call: what is there stands or stops. Nothing would change by running the step again. */
 const CALL_PICKS = ["go_on", "stop"] as const;
@@ -364,7 +408,7 @@ const picksFor = (kind: (typeof ASKS)[number], step: LaneStep): readonly string[
 /**
  * The steps whose plain question offers no `go_on`, since it could only lead to nothing landing:
  * one that merges or pushes has to have run, a review no one could judge is what ship's guard refuses,
- * and a build asks plainly only of a head whose tests fail, where the mutation step ends `tests_red`.
+ * and a build asks plainly only of a head whose tests fail, which the mutation step sends back.
  * A person's call on what is there (`Call`) is its own question, with its own picks.
  */
 const NO_GO_ON: ReadonlySet<LaneStep> = new Set(["push", "merge", "exam_merge", "review", "build"]);
@@ -428,6 +472,17 @@ const mergeWords = (carry: Carry): string => {
 		: `The review met ${reviewed.met} of ${reviewed.of}${throughCount(carry)}, and the repository's checks passed at its head. Do you want to merge "${reviewed.title}"?`;
 };
 
+/** The rounds' question, by the step that sent the work back and whether the rounds ran out. Pure. */
+const spentWords = (s: Held, step: LaneStep): string => {
+	const still =
+		step === "review"
+			? "the review still sends the work back"
+			: "the repository's own tests still fail at this head";
+	return s.round >= MAX_ROUNDS
+		? `Round ${s.round} of ${MAX_ROUNDS} is spent, and ${still}. Should the work go round once more?`
+		: `[build] send_back is false in this repository, and ${still}. Should the work go round once more?`;
+};
+
 const questionFor = (
 	s: Held,
 	kind: (typeof ASKS)[number],
@@ -440,13 +495,16 @@ const questionFor = (
 		exam_merge: titleOf(`Do you want to merge these rule changes: ${s.carry.rules.join(", ")}?`),
 		merge: titleOf(mergeWords(s.carry)),
 		step: titleOf(asks),
+		rounds_spent: titleOf(spentWords(s, step)),
 	}[kind];
 	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
 	// the old count is safe too: that count was never more than the trail, and its answer added a row.
 	const ask = `a-${kind}-${s.trail.length}`;
+	// The rounds' question comes back to where its `again` goes.
+	const to = kind === "rounds_spent" ? againTo(step) : step;
 	return call === undefined
-		? {ask, what, picks: picksFor(kind, step), for: kind, step}
-		: {ask, what, picks: CALL_PICKS, for: kind, step, call};
+		? {ask, what, picks: picksFor(kind, to), for: kind, step: to}
+		: {ask, what, picks: CALL_PICKS, for: kind, step: to, call};
 };
 
 /** Where the lane goes on a `go_on`, in words. Pure. */
@@ -464,11 +522,13 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 			: ", and a yes takes the lean on each open question";
 	const next = NEXT[question.step];
 	const {call} = question;
+	const spent = question.for === "rounds_spent";
 	const says: Readonly<Record<string, string>> = {
 		approve: `The plan stands as written${lean}. The lane goes on with it.`,
 		merge: "The change lands on main.",
-		again:
-			question.step === "build"
+		again: spent
+			? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
+			: question.step === "build"
 				? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${MAX_ROUNDS}.`
 				: `The ${words} step runs once more, from the start.`,
 		go_on:
@@ -481,9 +541,11 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 					].join(" ")
 				: [
 						...(CALL_WORDS[call.about] === undefined ? [] : [CALL_WORDS[call.about]]),
-						goOnWords(after(question.step, call.after, s.round)),
+						goOnWords(after(question.step, call.after, s.round, s)),
 					].join(" "),
-		stop: "The lane ends here, and this change does not land.",
+		stop: spent
+			? "The lane ends here, stuck on its rounds, and this change does not land. Its working copy stays."
+			: "The lane ends here, and this change does not land.",
 		no: "The lane ends here, and this change does not land.",
 	};
 	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
@@ -497,6 +559,7 @@ const asking = (s: Held, question: Question): Step_ => {
 		picks: question.picks,
 		does: question.picks.map((pick) => pickLine(s, question, pick)),
 		...(question.for === "merge" ? {also: throughWords(s.carry.through)} : {}),
+		...(question.for === "rounds_spent" ? {also: openWords(s.carry.open), spent: true} : {}),
 		intent: intentOf("lane", s.number, question.ask),
 	});
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
@@ -583,6 +646,7 @@ const letThrough = (carry: Carry): Carry => {
 const heldOf = (s: Held): Held => ({
 	number: s.number,
 	lane: s.lane,
+	...(s.sendBack === undefined ? {} : {sendBack: s.sendBack}),
 	count: s.count,
 	round: s.round,
 	carry: s.carry,
@@ -605,11 +669,17 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 			: move(
 					on,
 					question.step,
-					after(question.step, call.after, s.round),
+					after(question.step, call.after, s.round, s),
 					nameOf(call.after),
 					askWords(question.step, call.after),
 				);
 	}
+	// A stop on the rounds is no person's no to the change: the lane is stuck on its rounds.
+	if (question.for === "rounds_spent" && pick === "stop")
+		return releasing(held, {
+			outcome: {kind: "stuck", why: "rounds_spent"},
+			said: `${question.ask}: ${pick}`,
+		});
 	// The first pick goes on. Any other is the person's no.
 	if (pick !== question.picks[0])
 		return releasing(held, {
@@ -626,6 +696,8 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 		case "step":
 			// A build run again is a round: the builder gets another try, and the tries are counted.
 			return running(held, question.step, question.step === "build" ? s.round + 1 : s.round);
+		case "rounds_spent":
+			return running(held, question.step, s.round + 1);
 	}
 };
 
@@ -654,7 +726,8 @@ export const lane = defineMachine({
 		start: (s, m): Step_ => {
 			if (s.phase !== "idle") return [s, []];
 			const asked = readFiled({number: m.number});
-			return [{phase: "reading", number: m.number, lane: m.lane, asked}, [asked]];
+			const sendBack = m.sendBack === undefined ? {} : {sendBack: m.sendBack};
+			return [{phase: "reading", number: m.number, lane: m.lane, ...sendBack, asked}, [asked]];
 		},
 		resume: (s): Step_ => {
 			if (s.phase === "idle" || s.phase === "over") return [s, []];
@@ -665,6 +738,7 @@ export const lane = defineMachine({
 			const held: Held = {
 				number: s.number,
 				lane: s.lane,
+				...(s.sendBack === undefined ? {} : {sendBack: s.sendBack}),
 				count: 0,
 				round: 1,
 				carry: EMPTY,
@@ -752,7 +826,7 @@ export const lane = defineMachine({
 			return move(
 				held,
 				s.step,
-				after(s.step, outcome, s.round),
+				after(s.step, outcome, s.round, s),
 				said,
 				askWords(s.step, outcome),
 				outcome.kind === "ask" && past !== undefined
