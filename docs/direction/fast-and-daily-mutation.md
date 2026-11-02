@@ -1,14 +1,15 @@
 # A fast check per pull request, a mutation queue for the rest
 
-Decided 2026-11-01:
+**Decided 2026-11-01.** The owner approved every lean below, each with its confidence, and
+added two things: incremental reuse between rounds on one pull request, and the size restated
+at the measured rate.
 
 - A check that takes hours never gates a pull request. The check on each pull request is
   very fast.
 - The rest goes to a mutation queue, a program in `next/` shaped like a merge queue (Tier 6).
 - Today's version keeps only the speedups on each pull request. Its daily run is not built.
 
-The budget and the method below are **proposed**. The numbers are from
-[experiment 181](../../experiments/181-fast-and-daily-mutation.md).
+The numbers are from [experiment 181](../../experiments/181-fast-and-daily-mutation.md).
 
 ```ts
 // A sketch, not built. Two jobs for one tool.
@@ -19,6 +20,7 @@ const fast = mutation({
 	static: "off", // Stryker's ignoreStatic
 	tests: "related, the lane's end-to-end tests left out",
 	answer: "advice", // a survivor never stops the pull request
+	reuse: "incremental between rounds on one pull request; the last round before review uses force",
 });
 // `next/` only: the mutation queue, on a Durable Object alarm.
 const queue = scheduled("mutation_queue", {every: days(1)}, function* () {
@@ -54,7 +56,7 @@ Times are from 31 recent successful CI runs on this repo (p50, seconds).
 | typecheck, lint, build, the Promise gate | 43, 44, 9, 4 | gates |
 | Tests of changed files, per shard | 50 to 56 (p90 up to 243) | gates |
 | e2e on macOS | 96 (max 183) | gates |
-| Fast mutation on changed lines | 5 minutes at most, proposed | advises |
+| Fast mutation on changed lines | 5 minutes at most | advises |
 | All tests on main | 171 to 241 per shard | one merge late |
 | Mutation over the whole codebase | about 48 worker hours for a first pass, a guess | the queue, `next/` |
 | Mutants under the lane's end-to-end tests | about 100 s per mutant | not at all, for now |
@@ -67,7 +69,7 @@ typecheck, lint, the leak checks, the dead-export ledger, and the tests of chang
 one of these ever outgrows the budget, the budget grows or the check gets faster. It never
 moves.
 
-## The fast check, proposed
+## The fast check, decided 2026-11-01
 
 Today's version gets this now, through the pipeline. `next/` keeps the same settings.
 
@@ -84,11 +86,29 @@ Today's version gets this now, through the pipeline. `next/` keeps the same sett
     spot: one per line alone missed 27% to 40% of the lines where a mutant lived.
   - Cost: static mutants are not checked on a pull request. A pull request over the cap is
     only partly checked.
-  - Sure: 75%. The doubt is the rate on slow tests. A week of the real step's timings
-    settles it.
+  - Decided 2026-11-01, 75%. The doubt is the rate on slow tests. A week of the real step's
+    timings settles it.
+- **Reuse between rounds on one pull request.** Today's step turns on Stryker's `incremental`,
+  with its file kept per pull request. A rerun after a send-back reuses the answers of mutants
+  whose code and tests did not change. The last round before review runs with `force`, so a
+  stale answer cannot reach the review.
+  - Why: in 181, a rerun with no change took 0 s of mutant time and 14 s in all (the first
+    test run). A comment on top of `scope.ts` moved all 139 mutants down a line, and all 139
+    were reused: Stryker matches by the code's text, not the line number.
+  - What it misses: a change in a file the mutated code imports ("Stryker will not detect any
+    changes you've made in files other than mutated files and test files"), and static
+    mutants after a test change, which have no coverage to compare
+    ([Stryker](https://stryker-mutator.io/docs/stryker-js/incremental/)). Neither was tried
+    in 181: a changed test and a changed imported file are not tried.
+  - Why that is fine here: a survivor only advises, so a stale answer can show a wrong
+    survivor or hide one for a round, never block or pass a merge. The `force` round before
+    review clears both.
+  - Cost: about 20 to 40 lines in the step, and a file per pull request in its working copy.
+  - Decided 2026-11-01, 70%. The doubt is the two cases not tried. One send-back with a changed
+    test and one with a changed imported file settle it.
 - **The budget: 5 minutes of wall time on 2 workers.** About 90 to 300 mutants. The median
   merged pull request has 98. Why 5: CI's own checks take about 2.5 minutes, and a wait twice
-  that is still short. That is our judgment; no source gives a number. Sure: 70%.
+  that is still short. That is our judgment; no source gives a number. Decided 2026-11-01, 70%.
 - **Over the budget.** The check stops and says in plain words how many lines and mutants it
   did not reach. In `next/`, those enter the mutation queue. In today's version they are only
   reported, since nothing picks them up. A pull request is not split to fit the check.
@@ -107,11 +127,11 @@ type FastCheck = {
 // other 16 lines had only static mutants live.
 ```
 
-## What a survivor does, proposed
+## What a survivor does, decided 2026-11-01
 
 - **Today a survivor sends the lane back:** `send:test_writer:mutant_survived` in
   `stages/mutation/machine.ts`, and its comment says every survivor blocks.
-- **Proposed: a survivor advises and never blocks.** The step answers `done` with its
+- **Decided: a survivor advises and never blocks.** The step answers `done` with its
   survivors attached. They show in the review and on the ticket, and the owner rates each
   one, as [every finding is rated](./every-finding-is-rated.md) says. A survivor the owner
   rates `noise` is never shown again.
@@ -125,12 +145,12 @@ type FastCheck = {
   is under 10% with 95% confidence (the rule of three, 3 / 30:
   [Hanley and Lippman-Hand, 1983](https://doi.org/10.1001/jama.1983.03340130102038)), and the
   survivors may then be sent to the test writer once, inside the budget. Blocking needs about
-  300 in a row with no `noise` for 1%. Sure this is the right order: 85%.
+  300 in a row with no `noise` for 1%. The order: decided 2026-11-01, 85%.
 - **What a fast-check survivor is not.** A static mutant, or one no fast test covers, is "not
   covered by the fast tests", not a gap. In 181, 39% of those were caught by the lane's
   end-to-end tests.
 
-## The mutation queue, `next/` only, proposed
+## The mutation queue, `next/` only, decided 2026-11-01
 
 A program in Tier 6, under "Pipeline stages, schedules" in [the tiers](../plan/tiers.md).
 
@@ -180,12 +200,12 @@ bors checks "the combination, before it goes to master", batches pull requests u
 | It merges | Does not carry over: it files tickets |
 | Drops repeats | New here: neither page says a merge queue does; ours drops by `Gap` id |
 
-- **Sure: 70%.** The doubt is the hands. A first pass over about 87,000 mutants is about 48
+- **Decided 2026-11-01, 70%.** The doubt is the hands. A first pass over about 87,000 mutants is about 48
   worker hours (a guess), so a laptop's hands take days of rolling batches. After the first
   pass, only changed code and tests enter. If that is too slow, a VM host is the answer the
-  hands design already has, at no new account if it is free. That is not proposed here.
+  hands design already has, at no new account if it is free. That is not decided here.
 
-## Tickets from the queue, proposed
+## Tickets from the queue, decided 2026-11-01
 
 ```ts
 // A sketch. A survivor's name must not change when lines move. The example values are a real
@@ -212,13 +232,14 @@ type Daily = {filed: Gap["id"][]; updated: Gap["id"][]; closed: Gap["id"][]; hel
   the queue comments and closes the ticket.
 - **No flood.** At most 3 new tickets a day, ranked by how many gaps they hold. The rest are
   held, and `held` says how many. A gap the owner rated `noise` is never filed again. 3 is our
-  guess at what the lane takes in a day. Sure: 60%; a week of real tickets settles it.
+  guess at what the lane takes in a day. Decided 2026-11-01, 60%; a week of real tickets
+  settles it.
 - **The id is like Stryker's own.** Incremental reuse matches mutants by their text, not their
   line (181: every line moved, and every mutant was reused).
 - **Before any ticket, its false alarms are counted,** as scheduled jobs say. The first weeks
   report, and the owner rates.
 
-## The lane takes a weak-test ticket, proposed
+## The lane takes a weak-test ticket, decided 2026-11-01
 
 A weak-test ticket asks for a test and no product change. Today's lane cannot finish one:
 
@@ -234,22 +255,35 @@ green on the original, or `cannot`, or `noise`. So a weak-test ticket takes a sh
 triage, the `mutants` job on the ticket's gaps, one review, ship. No builder.
 
 **Where it gets fixed: in `next/`'s pipeline stages, in Tier 6, before the queue files its
-first ticket.** Today's version files no queue tickets, so its lane keeps the gap. Sure: 75%.
-The doubt is whether the plan step is still needed when the ticket already names the gaps.
+first ticket.** Today's version files no queue tickets, so its lane keeps the gap. Decided
+2026-11-01, 75%. The doubt is whether the plan step is still needed when the ticket already names the gaps.
 
 ## Size of the build
 
-**Today's version: the fast check only.** Through the pipeline, one pull request. Its daily run
-is not built: the fetch job, the Actions shards and the weak-test path were 15 to 24 agent
-hours in code that `next/` deletes.
+**Today's version: the fast check only.** Through the pipeline, one pull request. Sized at the
+measured rate of about 600 written lines an agent hour
+([agent hours](./agent-hours.md), experiment 187), on its doubling scale, restated 2026-11-01.
+Written lines count tests too. This note counted product lines and tests, not test lines, so
+the test lines are a guess: 10 to 15 lines a test.
 
-| Part | Files | Lines | Tests | Agent hours |
+| Part | Files | Lines | Tests | Agent hours at 600 an hour |
 |---|---|---|---|---|
-| Settings: 10 s test limit, static off, slow test files out | 1 to 2 | 30 to 60 | 4 to 6 | about 1 |
-| The 5-minute cap in the step, with the reporter that keeps each answer | 1 to 2 | 80 to 120 | 5 to 8 | 1 to 2 |
-| Lines first, then the rest, and the "not reached" count | 1 | 50 to 80 | 4 to 6 | about 1 |
-| A survivor answers `done` with advice, not `send` | 1 | 20 to 40 | 3 to 4 | under 1 |
-| **Total** | **3 to 5** | **180 to 300** | **16 to 24** | **3 to 5** |
+| Settings: 10 s test limit, static off, slow test files out | 1 to 2 | 30 to 60 | 4 to 6 | `0.25` (*old guess, wrong: about 1*) |
+| The 5-minute cap in the step, with the reporter that keeps each answer | 1 to 2 | 80 to 120 | 5 to 8 | `0.5` (*old guess, wrong: 1 to 2*) |
+| Lines first, then the rest, and the "not reached" count | 1 | 50 to 80 | 4 to 6 | `0.5` (*old guess, wrong: about 1*) |
+| A survivor answers `done` with advice, not `send` | 1 | 20 to 40 | 3 to 4 | `0.25` (*old guess, wrong: under 1*) |
+| Incremental reuse between rounds, `force` on the last | 1 | 20 to 40 | 2 to 3 | `0.25` (new) |
+| **Total** | **3 to 5** | **200 to 340** | **18 to 27** | **`2`** |
+
+- **The total.** 200 to 340 product lines and about 180 to 400 test lines: about 380 to 750
+  written lines, 0.6 to 1.25 agent hours, so a `2` on the scale. *Old guess, wrong: 3 to 5
+  agent hours.*
+- **How sure: 65%, a guess.** The doubt is the test lines, never counted. At 10 lines a test or
+  fewer, it is a `1`. The builder's own `estimated` fact on the ticket settles it.
+- **The daily run is not built.** The first draft sized the fetch job, the Actions shards and
+  the weak-test path at 750 to 1,100 product lines and about 60 tests: about 1,350 to 2,000
+  written lines with the same guess, 2.25 to 3.5 agent hours, a `4`, in code that `next/` deletes. *Old
+  guess, wrong: 15 to 24 agent hours.*
 
 The batch typecheck is left out: as built in 181 it gave wrong answers, and its safe form was
 never run. Survivors keep today's one typecheck each.

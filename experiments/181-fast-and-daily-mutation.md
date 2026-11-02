@@ -32,8 +32,11 @@ run over the whole codebase gets planned.
 - **What it means, as the owner then shaped it:**
   - **Today's version gets only the speedups on each pull request:** the 10 s test limit,
     static mutants off, slow test files out, the 5-minute cap in the step, and lines first.
-    About 3 to 5 agent hours. Its daily run is not built: that was 15 to 24 agent hours in
-    code that `next/` deletes.
+    The owner added incremental reuse between rounds on one pull request, with `force` on the
+    last round before review. About 380 to 750 written lines, a `2` at 600 lines an agent hour
+    ([agent hours](../docs/direction/agent-hours.md), restated 2026-11-01, a guess at 65%;
+    *old guess, wrong: 3 to 5 agent hours*). Its daily run is not built: that was a `4` (*old
+    guess, wrong: 15 to 24 agent hours*) in code that `next/` deletes. Decided 2026-11-01.
   - **In `next/`, the rest goes to a mutation queue,** a program shaped like a merge queue, in
     Tier 6. A pull request's unreached lines and a daily sweep go in, repeats drop by a stable
     id, hands run Stryker, and survivors come out as at most 3 tickets a day. It runs on a
@@ -219,8 +222,10 @@ step's timings settles it.
   ([limits](https://docs.github.com/en/actions/reference/limits)), so about 20 shards of 50
   minutes. Today's tracker is `ledger.sqlite` on the laptop, which Actions cannot reach
   (`fabrika post` needs a connected home and the person's key, `apps/fabrika/src/host/post.ts`),
-  so a laptop job would have fetched the results through `CodeHost`. That was about 15 to 24
-  agent hours in code that `next/` deletes. It is kept here as the road not taken.
+  so a laptop job would have fetched the results through `CodeHost`. That was about 1,350 to
+  2,000 written lines, a `4` at 600 lines an agent hour (restated 2026-11-01, a guess; *old
+  guess, wrong: 15 to 24 agent hours*), in code that `next/` deletes. It is kept here as the
+  road not taken.
 - **What the queue's hands face.** 48 worker hours is days of rolling batches on a laptop's
   hands for the first pass. After it, only changed code and tests go in.
 
