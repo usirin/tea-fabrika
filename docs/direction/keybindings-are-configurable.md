@@ -5,10 +5,12 @@ included; the prefix is a setting of its own, and bindings write `<prefix>` for 
 `<Leader>`; the bindings live in the person's own TOML file, as one flat list written command to
 key (a tryout); every command carries its program's name, `desk.split`; each mode gets a section
 of its own with a keys sub-section, named by its program, `[mode.terminal.copy]`; fabrika ships a
-program to change them; and Tier 1 reads the file while that program arrives in Tier 2. **What
-else a mode section holds, the key spelling, how a command's word is written, what a clash from
-the program does, live reload, and that keys and modes come from programs, not packs, are
-proposed,** each with a lean below.
+program to change them; and Tier 1 reads the file while that program arrives in Tier 2. **On 2026-11-01 the owner
+also approved every lean below, after a walk of each part:** what a mode section holds, the key
+spelling, how a command's word is written, `ignore`, what a clash does, a bad file, live reload,
+matching, and that keys and modes come from programs, not packs. Their confidence numbers stay as
+written, so a later run can test the least sure ones; matching on a non-Latin layout (60%) is
+first.
 
 Built from [experiment 182](../../experiments/182-keybindings.md), which read how about twenty
 tools do it, and a clickable page, "Keybinding guidelines", a private page with twelve rules
@@ -310,7 +312,7 @@ type Did = {type: "did"; does: Command; via: Via};
 
 ## Keys and modes come from programs, not packs
 
-**Proposed 2026-11-01, a lean.** Program level, 80% sure. The clash rule, 70%.
+**Decided 2026-11-01**, from a lean: program level, 80% sure; the clash rule, 70%.
 
 ```text
 a program says    its commands, its default keys, its modes, side by side
