@@ -1,3 +1,5 @@
+import {homedir} from "node:os";
+import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
@@ -148,5 +150,25 @@ describe("code's checks at a head", () => {
 		const {checked} = await checksIn([PASSES, REPORTS_RED]);
 		expect(checked.result).toBe("red");
 		expect(checked.failed).toEqual(["src/clamp.test.ts > clamp > keeps a high number"]);
+	});
+
+	it("is not_run, never red, when one command fails and another cannot run: nothing says the rest holds", async () => {
+		const {checked} = await checksIn([REPORTS_RED, NEVER_STARTS]);
+		expect(checked.result).toBe("not_run");
+	});
+
+	it("answers not_run, and says why, when `[build] checks` names no command: no check is never green", async () => {
+		const {checked, asked} = await checksIn([]);
+		expect(checked).toMatchObject({head: HEAD, commands: [], result: "not_run", failed: []});
+		expect(checked.tail).toMatch(/\[build\] checks names no command/);
+		expect(asked).toEqual([]);
+	});
+
+	it("says the home folder as `~` in the last lines, since they go on a public ticket", async () => {
+		const mine = join(homedir(), "code", "acme");
+		const {checked} = await checksIn([node("console.log(process.argv[1]); process.exit(1)", mine)]);
+		expect(checked.result).toBe("red");
+		expect(checked.tail).toContain("~/code/acme");
+		expect(checked.tail).not.toContain(homedir());
 	});
 });

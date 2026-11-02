@@ -7,8 +7,9 @@ import {placeIn} from "../mutation/mutant.ts";
 import {spansOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope, type RunAsk} from "../mutation/services.ts";
 import {TestsWork} from "../test-writer/program.ts";
+import {CheckRunner} from "./checks.ts";
 import {makeLaneHome} from "./lane-fixture.ts";
-import {laneMutationScope, laneTestsWork} from "./tools.ts";
+import {laneCheckRunner, laneMutationScope, laneTestsWork} from "./tools.ts";
 import {LaneHome, LaneWork, laneWork} from "./work.ts";
 
 // Today's version. The mutation step's read of a change, on real git over a bare remote.
@@ -120,5 +121,41 @@ describe("whether a new test kills its mutant", () => {
 
 	it("a mutant no longer surviving answers red", async () => {
 		expect((await killed([])).result).toBe("red");
+	});
+});
+
+// Self-fix PR 4: code runs `[build] checks` after every build. A repository whose settings name
+// none has nothing that says a head holds, so the checks are not run, never green.
+describe("code's checks, as the repository's settings name them", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-checks-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	it("are not_run when the settings name no `[build] checks`", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const real = laneWork.pipe(
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
+		);
+		// The fixture's own settings, with `[build] checks` left out.
+		const noChecks = Layer.effect(
+			LaneWork,
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				const settings = Effect.map(work.settings, (s) => {
+					const {checks: _, ...build} = s.build ?? {};
+					return {...s, build};
+				});
+				return {...work, settings};
+			}),
+		).pipe(Layer.provide(real));
+		const checked = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {base} = yield* (yield* LaneWork).tree(1);
+				return yield* (yield* CheckRunner).run(base);
+			}).pipe(Effect.provide(Layer.provideMerge(laneCheckRunner, noChecks))),
+		);
+		expect(checked).toMatchObject({commands: [], result: "not_run", failed: []});
 	});
 });

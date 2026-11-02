@@ -601,6 +601,12 @@ describe("code's checks after the build", () => {
 		expect(after("build", NOT_RUN, 1)).toEqual({end: NOT_RUN});
 	});
 
+	it("after: that name is the build's own; any other stuck, or the same words from another step, is step_stuck", () => {
+		const STEP_STUCK = {end: {kind: "stuck", why: "step_stuck"}};
+		expect(after("build", {kind: "stuck", why: "read_failed"}, 1)).toEqual(STEP_STUCK);
+		expect(after("mutation", NOT_RUN, 1)).toEqual(STEP_STUCK);
+	});
+
 	it("red checks run the build next, as round 2, with each failing test open", () => {
 		const [s, cmds] = firstBuildEnds(RED_BUILD);
 		expect(running(s).step).toBe("build");

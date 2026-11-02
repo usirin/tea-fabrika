@@ -208,6 +208,14 @@ describe("the mutation step after code's checks", () => {
 		);
 	});
 
+	it("a Stryker run that fails after a skip still says what it would have mutated and which checks it trusted", () => {
+		const {over} = drive({run: "fail"}, {...ASK, checked: GREEN_HERE} as MutationAsk);
+		if (over.phase !== "over") throw new Error("over");
+		expect(nameOf(over.outcome)).toBe("stuck:run_failed");
+		expect(over.report.spans).toEqual([{file: "src/clamp.ts", from: 9, to: 14}]);
+		expect((over.report as {readonly trusted?: unknown}).trusted).toEqual(GREEN_HERE);
+	});
+
 	it("skips the same after a restart while it reads the diff", () => {
 		const {over, cmds} = drive({tests: RED, restartAt: "reading"}, {
 			...ASK,

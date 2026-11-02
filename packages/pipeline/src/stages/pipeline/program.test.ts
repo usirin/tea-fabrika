@@ -21,7 +21,7 @@ import {nameOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
-import {CheckRunner} from "./checks.ts";
+import {type CheckRun, CheckRunner} from "./checks.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {Lane} from "./machine.ts";
@@ -152,6 +152,11 @@ interface Script {
 	readonly savedAsking?: {readonly at: RegExp; readonly offers: readonly string[]};
 	/** When the repo's own tests stop running at any head, as with a full disk: from a second test writer on, or once a lane stopped by `savedAsking` starts again. */
 	readonly checksStopRunning?: "at_second_writer" | "at_restart";
+	/**
+	 * What code's checks after a build answer at `head`, on their `nth` run, the first being 0. `null`:
+	 * they run for real.
+	 */
+	readonly checksSay?: (head: string, nth: number) => CheckRun | null;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -230,7 +235,9 @@ const lane = ({
 	fake,
 	savedAsking,
 	checksStopRunning,
+	checksSay,
 }: Script): Promise<Ran> => {
+	let checksRan = 0;
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const red = join(dir, "red");
@@ -267,8 +274,10 @@ const lane = ({
 			Effect.updateService(CheckRunner, (checks) => ({
 				...checks,
 				run: (head) =>
-					Effect.suspend(() =>
-						checksDown()
+					Effect.suspend(() => {
+						const said = checksSay?.(head, checksRan++) ?? null;
+						if (said !== null) return Effect.succeed(said);
+						return checksDown()
 							? Effect.succeed({
 									head,
 									commands: ["node_modules/.bin/vitest run"],
@@ -276,8 +285,8 @@ const lane = ({
 									failed: [],
 									tail: "spawn ENOSPC",
 								})
-							: checks.run(head),
-					),
+							: checks.run(head);
+					}),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
@@ -633,6 +642,88 @@ describe("a lane, whole", () => {
 			const mutation = ran.facts.find((f) => f.type === "ended" && f.stage === "mutation");
 			const {type: _, ...green} = checked[1] ?? {type: ""};
 			expect(mutation?.trusted).toEqual(green);
+		},
+	);
+
+	// Self-fix PR 4: a red head with more failing tests than the ticket keeps. The fact, the build's
+	// end and the carry hold the first 50; the comment names those and says how many more.
+	it(
+		"keeps the first 50 failing tests of a red head, and a comment says how many more",
+		{timeout: 300_000},
+		async () => {
+			const name = (n: number) => `src/many.test.ts > many > case ${n}`;
+			const failed = Array.from({length: 51}, (_, i) => name(i));
+			/** A build that changes something each round, so each round's head is new. */
+			const round = (n: number) => [{path: "src/round.ts", text: `export const round = ${n};\n`}];
+			const ran = await lane({
+				within: 200,
+				picks: {approve: "approve", rounds_spent: "stop"},
+				fake: {writesAt: {build: {0: round(1), 1: round(2), 2: round(3)}}},
+				checksSay: (head) => ({
+					head,
+					commands: ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"],
+					result: "red",
+					failed,
+					tail: `${name(0)}: AssertionError: expected 1 to be 2`,
+				}),
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.stages.slice(4), said).toEqual(["build", "build", "build"]);
+			const fifty = failed.slice(0, 50);
+			const checked = ran.facts.filter((f) => f.type === "checked");
+			expect(checked).toHaveLength(3);
+			for (const fact of checked) expect(fact.failed).toEqual(fifty);
+			const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+			for (const end of builds) expect(end.failed).toEqual(fifty);
+			// One comment per red head, from code's checks: each name as a code span, and the rest counted.
+			const red = ran.facts
+				.filter((f) => f.type === "commented")
+				.map((f) => String(f.body))
+				.filter((body) => body.includes("The repository's own tests fail at this head:"));
+			expect(red).toHaveLength(3);
+			for (const body of red) {
+				expect(body).toContain(`\`${name(49)}\``);
+				expect(body).not.toContain(`\`${name(50)}\``);
+				expect(body).toContain("And 1 more.");
+				expect(body).toContain("expected 1 to be 2");
+			}
+			expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
+		},
+	);
+
+	// Self-fix PR 4: the mutants job's commit is a new head, and code runs the checks there too. Red
+	// there is kept as red: the review never reads that head, and the lane stops, never done.
+	it(
+		"runs the checks again on the mutants job's commit, and red there stops the lane before the review",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/lower-spaces.test.ts > lower > cuts spaces";
+			const commands = ["node_modules/.bin/vitest run --reporter=json --outputFile={out}"];
+			const ran = await lane({
+				within: 200,
+				picks: YES,
+				checksSay: (head, nth) =>
+					nth === 0
+						? {head, commands, result: "green", failed: [], tail: ""}
+						: {head, commands, result: "red", failed: [NAME], tail: `${NAME}: boom`},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.stages.slice(4), said).toEqual(["build", "mutation", "mutants"]);
+			const checked = ran.facts.filter((f) => f.type === "checked");
+			expect(checked.map((f) => f.result)).toEqual(["green", "red"]);
+			expect(checked[1]?.failed).toEqual([NAME]);
+			expect(checked[1]?.head).not.toBe(checked[0]?.head);
+			// One red comment, for the red head alone, naming its test.
+			const red = ran.facts
+				.filter((f) => f.type === "commented")
+				.map((f) => String(f.body))
+				.filter((body) => body.includes("The repository's own tests fail at this head:"));
+			expect(red).toHaveLength(1);
+			expect(red[0]).toContain(`\`${NAME}\``);
+			expect(ran.lines.at(-1)).toContain("stuck:checks_not_run");
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		},
 	);
 

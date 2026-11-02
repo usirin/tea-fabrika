@@ -712,6 +712,11 @@ describe("code's checks after the build, over any run", () => {
 		mutants: fc.array(fc.constantFrom<Checks>("green", "elsewhere", "red", "none"), {maxLength: 8}),
 		/** Each review, in turn: `true` sends it back. Past the last, it passes. */
 		reviews: fc.array(fc.boolean(), {maxLength: 6}),
+		/**
+		 * Each push, in turn: a new head, with these checks at it, so the merge after it may start on a
+		 * head nobody checked. Past the last, the head stays as it was.
+		 */
+		pushes: fc.array(fc.constantFrom<Checks>("green", "elsewhere", "red", "none"), {maxLength: 3}),
 		/** Each answer, in turn: one the question does not offer falls to its first pick. */
 		picks: fc.array(fc.constantFrom("again", "go_on", "stop"), {maxLength: 12}),
 	});
@@ -726,6 +731,7 @@ describe("code's checks after the build, over any run", () => {
 		const mutations = [...run.mutations];
 		const mutants = [...run.mutants];
 		const reviews = [...run.reviews];
+		const pushes = [...run.pushes];
 		const picks = [...run.picks];
 		const problems: string[] = [];
 		let commits = 0;
@@ -766,6 +772,10 @@ describe("code's checks after the build, over any run", () => {
 							reviews.shift() === true ? {kind: "send", to: "builder", why: "review_failed"} : DONE,
 						carry: {},
 					};
+				case "push": {
+					const checks = pushes.shift();
+					return {outcome: DONE, carry: checks === undefined ? {} : at(headOf(++commits), checks)};
+				}
 				default:
 					return {outcome: DONE, carry: {}};
 			}
