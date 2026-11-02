@@ -28,6 +28,19 @@ export const NO_FORMATTER = `This repository names no formatter, so code commits
  *   it failed            what it wrote is committed, and the ticket says what it said
  */
 export const formatExam = (number: number, tree: string, exam: readonly string[]) =>
+	formatAt(number, tree, exam, {what: "the tests", message: `format the tests for ticket ${number}`});
+
+/**
+ * Files as `tree`'s head holds them, through the repository's formatter, and a code commit of what
+ * that changed, named `message`, as `formatExam` does. `what`: the files, as the ticket names them.
+ * The exam's rule files go through it too (self-fix PR 10).
+ */
+export const formatAt = (
+	number: number,
+	tree: string,
+	exam: readonly string[],
+	words: {readonly what: string; readonly message: string},
+) =>
 	Effect.gen(function* () {
 		const work = yield* LaneWork;
 		const tickets = yield* Tickets;
@@ -51,10 +64,10 @@ export const formatExam = (number: number, tree: string, exam: readonly string[]
 				.talk(number, `format-exam-failed/${head}`, {
 					type: "commented",
 					body: saidOf(
-						`The formatter failed on the tests, so what it could not format is kept as written. ${formatted.says}`,
+						`The formatter failed on ${words.what}, so what it could not format is kept as written. ${formatted.says}`,
 					),
 				})
 				.pipe(Effect.ignore);
-		const after = yield* work.commitOnly(tree, paths, `format the tests for ticket ${number}`);
+		const after = yield* work.commitOnly(tree, paths, words.message);
 		return after === head ? null : after;
 	});

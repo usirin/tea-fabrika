@@ -166,6 +166,18 @@ export type Hash = typeof Hash.Type;
  */
 export const Asks = Schema.Literal("changes");
 
+/**
+ * What a yes on a pull request was given on, so code can tell later whether it still stands
+ * (docs/direction/a-yes-binds-to-the-diff.md): `onto`, the branch it goes onto; `base`, where it left
+ * that branch; `diff`, the id of its diff (`git patch-id --verbatim` over `git diff -U0`). Only known
+ * when the yes is given. Each is left out on a fact written before them.
+ */
+const Given = Schema.Struct({
+	onto: Schema.optionalKey(Id),
+	base: Schema.optionalKey(Sha),
+	diff: Schema.optionalKey(Sha),
+});
+
 /** The tracker's own four: a ticket filed, talked about, closed and opened again. */
 export const TicketFact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("filed"), title: Title, body: Body}),
@@ -265,8 +277,17 @@ export const CodeFact = Schema.Union([
 		 */
 		carry: Schema.optionalKey(Schema.Unknown),
 	}),
-	/** Code ran `[build] checks` at `head`, after a build: what it found there. */
-	Schema.Struct({type: Schema.Literal("checked"), ...Checked.fields, head: Sha}),
+	/**
+	 * Code ran `[build] checks` at `head`, after a build: what it found there. `pr`: the pull request
+	 * whose head it was, when that is not the lane's own (the exam's), so the lane's fold never takes
+	 * them for its own checks. Left out: the lane's own, or a fact written before the key.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("checked"),
+		...Checked.fields,
+		head: Sha,
+		pr: Schema.optionalKey(Id),
+	}),
 	/**
 	 * A run's agent opened its session, once, after the run's `started`. `id`: the harness's own id
 	 * for the conversation: the Codex thread, the ACP session, the Agent SDK session. Only known
@@ -305,20 +326,41 @@ export const CodeFact = Schema.Union([
 		head: Sha,
 		commits: Schema.Array(Schema.Struct({sha: Sha, title: Title})),
 	}),
-	/** The review stage judged the criteria at `head`: `met` of `of`, and what it found, in its own words. */
+	/**
+	 * The review stage judged the criteria at `head`: `met` of `of`, and what it found, in its own
+	 * words. What it read, only known then (docs/direction/a-yes-binds-to-the-diff.md): `pr`, the pull
+	 * request; `onto`, the branch it goes onto; `base`, where it left that branch; `diff`, the id of its
+	 * diff. Left out on a review written before them.
+	 */
 	Schema.Struct({
 		type: Schema.Literal("reviewed"),
 		head: Sha,
 		met: Count,
 		of: Count,
 		findings: Schema.Array(Body),
+		pr: Schema.optionalKey(Id),
+		...Given.fields,
 	}),
-	/** A stage asks the owner something. `picks`: the buttons, at least one. */
+	/**
+	 * A stage asks the owner something. `picks`: the buttons, at least one. `head`: the commit the
+	 * person was shown, for a question about a pull request. Left out: any other question.
+	 */
 	Schema.Struct({
 		type: Schema.Literal("asked"),
 		ask: Id,
 		what: Title,
 		picks: Schema.NonEmptyArray(Title),
+		head: Schema.optionalKey(Sha),
+	}),
+	/**
+	 * Code found a yes given at `from` still stands at `to` (stages/pipeline/carry.ts): the same head,
+	 * a clean replay onto the branch, the base's formatter's own output, or a glance that said yes.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("carried"),
+		from: Sha,
+		to: Sha,
+		why: Schema.Literals(["same_head", "replayed", "formatted", "glanced"]),
 	}),
 ]);
 export type CodeFact = typeof CodeFact.Type;
@@ -350,6 +392,9 @@ export const PersonFact = Schema.Union([
 		pick: Title,
 		note: Body,
 		text: Schema.optionalKey(Hash),
+		/** The head a person's `merge` was given at, and what they saw there. Left out: any other answer. */
+		head: Schema.optionalKey(Sha),
+		...Given.fields,
 	}),
 	/** A person rated one of a review's findings. */
 	Schema.Struct({
@@ -418,6 +463,7 @@ export const WRITTEN_BY = {
 	reviewed: "anyone",
 	pr: "anyone",
 	asked: "anyone",
+	carried: "anyone",
 	answered: "person",
 	rated: "anyone",
 	maybe_duplicate: "anyone",

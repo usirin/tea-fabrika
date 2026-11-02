@@ -15,6 +15,7 @@ import {
 } from "../../settings.ts";
 import {shippedRubrics} from "../../setup.ts";
 import {titleOf} from "../../tickets/ticket.ts";
+import type {Given, Now} from "./carry.ts";
 
 // Where a lane works, on the machine it runs on. The repository is the one the checkout's `origin`
 // names, the checkout the app was started from, as `gh` reads a repository off the folder it runs in.
@@ -173,6 +174,9 @@ export type Formatted =
 	| {readonly _tag: "none"}
 	| {readonly _tag: "failed"; readonly says: string};
 
+/** The most of a range-diff a glance reads: past it, the rest is cut. */
+const RANGE_MOST = 8_000;
+
 /** A branch put on main: its new head, and the files main's side was taken in. */
 export interface OnMain {
 	readonly head: string;
@@ -192,6 +196,27 @@ export class LaneWork extends Context.Service<
 		readonly tree: (n: number) => Effect.Effect<Tree, Failed>;
 		/** A branch of its own, from main, in a working copy of its own: the exam's. */
 		readonly side: (name: string) => Effect.Effect<Tree, Failed>;
+		/** The same, started again from main now: the first landing of a plan's new version. */
+		readonly sideFresh: (name: string) => Effect.Effect<Tree, Failed>;
+		/**
+		 * The side's working copy moved to `to`, as the code host has its branch, only as a fast-forward.
+		 * `behind`: `to` is not one, so the copy stays where it was.
+		 */
+		readonly sideTo: (name: string, to: string) => Effect.Effect<"moved" | "behind", Failed>;
+		/**
+		 * Main merged into the side's branch, as a pushed branch takes it: the new head, or the files that
+		 * conflict, with the merge given up and the copy where it was.
+		 */
+		readonly sideMerge: (
+			name: string,
+		) => Effect.Effect<
+			{readonly _tag: "merged"; readonly head: string} | {readonly _tag: "conflicts"; readonly files: readonly string[]},
+			Failed
+		>;
+		/** What a yes at `head`, onto branch `onto`, is given on, after a fetch (./carry.ts). */
+		readonly given: (head: string, onto: string) => Effect.Effect<Given, Failed>;
+		/** The pull request at `head`, read against what a yes was given on, after a fetch (./carry.ts). */
+		readonly now: (given: Given, head: string) => Effect.Effect<Now, Failed>;
 		readonly head: (folder: string) => Effect.Effect<string, Failed>;
 		/** Write `files` into `folder`, as they are. A link in a file's place, or a folder's on the way, is replaced, never followed. */
 		readonly write: (folder: string, files: readonly PlainFile[]) => Effect.Effect<void, Failed>;
@@ -383,9 +408,10 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const show = (commit: string, file: string) =>
 			textAt(inClone, commit, file).pipe(Effect.mapError((ran) => said(`read of ${file}`, ran)));
 
-		const settings: Effect.Effect<Settings, Failed> = Effect.gen(function* () {
-			const tip = yield* main;
-			const refused = settingsRefusal(
+		/** The repository's settings as commit `tip` has them. */
+		const settingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
+			Effect.gen(function* () {
+				const refused = settingsRefusal(
 				yield* listedAt(inClone, tip, SETTINGS_PATHS).pipe(
 					Effect.mapError((ran) => said("read of the settings", ran)),
 				),
@@ -401,6 +427,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				Effect.mapError((e) => failed(e.why)),
 			);
 		});
+		const settings = Effect.flatMap(main, settingsAt);
 
 		const made = (name: string, branch: string) =>
 			Effect.gen(function* () {
@@ -625,6 +652,110 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const copy = (sha: string) => copyTo("copies", sha, install);
 
+		/** `git diff -U0 base head | git patch-id --verbatim`, its first word: a diff's id, whitespace kept. */
+		const diffId = (base: string, head: string) =>
+			Effect.gen(function* () {
+				const ran = yield* on(
+					runChild(
+						"sh",
+						[
+							"-c",
+							'git -C "$1" -c core.pager=cat diff -U0 "$2" "$3" | git -C "$1" patch-id --verbatim',
+							"sh",
+							clone,
+							base,
+							head,
+						],
+						{env: {...hostEnv(), ...IDENTITY}},
+					),
+				);
+				if (ran.code !== 0) return yield* Effect.fail(said("patch-id", ran));
+				// An empty diff has no id: the base's own sha stands for "nothing changed".
+				return ran.out.trim().split(" ")[0] || base;
+			});
+
+		/** What a yes at `head` onto `onto` is given on, read now, after a fetch. */
+		const given = (head: string, onto: string) =>
+			Effect.gen(function* () {
+				yield* fetched;
+				const base = yield* git(clone, ["merge-base", `origin/${onto}`, head]);
+				return {head, onto, base, diff: yield* diffId(base, head)};
+			});
+
+		/**
+		 * The base's formatter, run on `paths` of tree `replayed`: the tree it gives. The formatter, its
+		 * settings and its install come from `base`, never from the pull request, so a pull request that
+		 * changes its own formatter never excuses its own edit. `null`: the base names none, or it failed.
+		 */
+		const formattedTree = (base: string, replayed: string, paths: readonly string[]) =>
+			Effect.gen(function* () {
+				const run = (yield* settingsAt(base)).format?.run;
+				const [first, ...rest] = paths;
+				if (run === undefined || first === undefined) return null;
+				const from = yield* copy(base);
+				const tree = at("carry", replayed);
+				yield* cleared(tree);
+				yield* git(clone, ["worktree", "add", "--quiet", "--detach", tree, base]);
+				return yield* Effect.gen(function* () {
+					yield* git(tree, ["read-tree", "--reset", "-u", replayed]);
+					// Run from the base's copy, on the replayed files beside it: `{files}` are relative paths.
+					const [program, ...args] = formatCommand(
+						run,
+						[first, ...rest].map((file) => path.relative(from, path.join(tree, file))),
+					);
+					const ran = yield* on(runChild(program, args, {cwd: from, env: runEnv()}));
+					if (ran.code !== 0) return null;
+					yield* git(tree, ["add", "-A"]);
+					return yield* git(tree, ["write-tree"]);
+				}).pipe(
+					Effect.ensuring(
+						gitIn(clone, ["worktree", "remove", "--force", tree]).pipe(
+							Effect.andThen(gitIn(clone, ["worktree", "prune"])),
+							Effect.ignore,
+						),
+					),
+				);
+			}).pipe(Effect.orElseSucceed(() => null));
+
+		/** The pull request at `head`, read against what a yes was `given` on, after a fetch. */
+		const now = (was: Given, head: string) =>
+			Effect.gen(function* () {
+				yield* fetched;
+				const tree = yield* git(clone, ["rev-parse", `${head}^{tree}`]);
+				const base = yield* git(clone, ["merge-base", `origin/${was.onto}`, head]);
+				// The reviewed diff, from where it left the branch, onto where the branch is now.
+				const merged = yield* inClone([
+					"merge-tree",
+					"--write-tree",
+					`--merge-base=${was.base}`,
+					base,
+					was.head,
+				]);
+				const replayed = merged.code === 0 ? (lines(merged.out)[0] ?? "conflict") : "conflict";
+				const formatted =
+					replayed === "conflict" || replayed === tree
+						? null
+						: yield* formattedTree(
+								base,
+								replayed,
+								yield* names(clone, ["diff", "--no-renames", "--name-only", "--diff-filter=d", base, replayed]),
+							);
+				const range = yield* inClone([
+					"range-diff",
+					"--no-color",
+					`${was.base}..${was.head}`,
+					`${base}..${head}`,
+				]);
+				return {
+					head,
+					tree,
+					replayed,
+					formatted,
+					diff: yield* diffId(base, head),
+					range: range.code === 0 ? range.out.trim().slice(0, RANGE_MOST) : "",
+				};
+			});
+
 		/** The plain files at `sha`: no link, and no folder a submodule stands for. */
 		const plainAt = (sha: string) =>
 			gitIn(clone, ["ls-tree", "-r", "-z", sha]).pipe(
@@ -767,6 +898,31 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					return made_;
 				}),
 			side: (name) => made(name, name.replace(/-/, "/")),
+			sideFresh: (name) =>
+				Effect.gen(function* () {
+					const {tree, branch} = yield* made(name, name.replace(/-/, "/"));
+					yield* git(tree, ["checkout", "--quiet", "-B", branch, "origin/main"]);
+					yield* git(tree, ["clean", "--quiet", "-fd"]);
+					return yield* made(name, branch);
+				}),
+			sideTo: (name, to) =>
+				Effect.gen(function* () {
+					const {tree} = yield* made(name, name.replace(/-/, "/"));
+					const ran = yield* gitIn(tree, ["merge", "--quiet", "--ff-only", to]);
+					return ran.code === 0 ? ("moved" as const) : ("behind" as const);
+				}),
+			sideMerge: (name) =>
+				Effect.gen(function* () {
+					const {tree} = yield* made(name, name.replace(/-/, "/"));
+					const ran = yield* gitIn(tree, ["merge", "--quiet", "--no-edit", "origin/main"]);
+					if (ran.code === 0) return {_tag: "merged", head: yield* head(tree)} as const;
+					const files = yield* names(tree, ["diff", "--name-only", "--diff-filter=U"]);
+					yield* gitIn(tree, ["merge", "--abort"]);
+					if (files.length === 0) return yield* Effect.fail(said("merge", ran));
+					return {_tag: "conflicts", files} as const;
+				}),
+			given,
+			now,
 			head,
 			write,
 			format,
