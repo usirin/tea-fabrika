@@ -7,7 +7,7 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {tmpdir} from "node:os";
+import {homedir, tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
@@ -512,8 +512,8 @@ describe("codex: the system prompt", () => {
 		expect(table).not.toContain(`"${owner}"="deny"`);
 	});
 
-	/** The table of one turn in `home`'s `copy`, with `more` in the parent's environment and Codex at `codex`. */
-	const tableFor = async (
+	/** The arguments of one turn in `home`'s `copy`, with `more` in the parent's environment and Codex at `codex`. */
+	const argsFor = async (
 		home: string,
 		codex: string,
 		more: Readonly<Record<string, string>> = {},
@@ -537,9 +537,18 @@ describe("codex: the system prompt", () => {
 				Effect.provide(nodeServices),
 			),
 		);
-		const args = (seen[0]?.args ?? []).filter((arg) => typeof arg === "string");
-		return args.find((arg) => arg.startsWith("permissions.fenced.filesystem=")) ?? "";
+		return (seen[0]?.args ?? []).filter((arg) => typeof arg === "string");
 	};
+
+	/** The table of one turn in `home`'s `copy`, with `more` in the parent's environment and Codex at `codex`. */
+	const tableFor = async (
+		home: string,
+		codex: string,
+		more: Readonly<Record<string, string>> = {},
+	) =>
+		(await argsFor(home, codex, more)).find((arg) =>
+			arg.startsWith("permissions.fenced.filesystem="),
+		) ?? "";
 
 	it.each<[string, string, string]>([
 		["pnpm's folder on a Mac", "Library/pnpm/codex", "Library"],
@@ -605,6 +614,25 @@ describe("codex: the system prompt", () => {
 		writeFileSync(join(own, "gitdir"), `${join(tree, ".git")}\n`);
 		const table = await tableFor(home, "/nowhere/codex");
 		expect(table).toContain(`"${join(home, "clone", ".git")}"="read"`);
+	});
+
+	it("hands a command in the box the fence's PATH and git settings, the folders under home dropped", async () => {
+		const home = madeUpHome();
+		mkdirSync(join(home, "copy"));
+		// The fence drops what is under the running user's home (`fencedEnv` reads `homedir()`, not the
+		// parent's `HOME`), so the made-up folder on the PATH sits there. Nothing is made in it.
+		const PATH = `${join(homedir(), ".a-made-up-bin")}:/usr/bin:/bin`;
+		const args = await argsFor(home, "/nowhere/codex", {PATH});
+		const policy = args.filter(
+			(arg, i) => args[i - 1] === "-c" && arg.startsWith("shell_environment_policy."),
+		);
+		expect(policy).toEqual([
+			'shell_environment_policy.inherit="core"',
+			'shell_environment_policy.set.PATH="/usr/bin:/bin"',
+			'shell_environment_policy.set.GIT_CONFIG_GLOBAL="/dev/null"',
+			'shell_environment_policy.set.NPM_CONFIG_USERCONFIG="/dev/null"',
+			'shell_environment_policy.set.XDG_CONFIG_HOME="/var/empty"',
+		]);
 	});
 
 	it("starts nothing and says why when the box could not take the home's table", async () => {
