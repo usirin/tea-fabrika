@@ -207,7 +207,11 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
     says. After a rebase, code runs the test writer's check on the new base again. A conflict
     in the builder's files goes to build as `conflicts`. A conflict in an exam file stops the
     lane and names the files.
-  - Not restartable: `not_yours`, `merged_elsewhere`, `exam_touched`. The line says why.
+  - Not restartable: `not_yours`, `merged_elsewhere`. The line says why.
+  - `exam_touched` asks the person, with two picks. "The builder was wrong": code puts the
+    exam files back at the test writer's commit and runs build again. "The test is wrong":
+    the test writer runs again with the person's note, then build. Every other finished
+    step stays. Test: each pick resumes at its step, and no step before it runs again.
   - A step that could not run is run once more on the same intent before the lane stops.
   - A lane saved before this change has no `Held` in `over`. Its carry is folded from facts
     (below). A field no fact proves stops the restart and is named. Nothing is guessed.
@@ -313,11 +317,11 @@ Total: about 48 file changes (some files change in more than one pull request), 
 
 ## Unresolved questions
 
-1. Restart = same line typed again, not `--again` flag? Lean same line, 70%.
+1. Restart = same line typed again, not `--again` flag? Decided 2026-11-01: same line.
 2. One round count (3) shared by review + red checks? Lean yes, 70%.
 3. Mutation skips own suite when `checked` green at same head? Lean yes, 70%.
 4. Code formats builder's files too, not just test writer's? Lean yes, 80%.
 5. Unpushed branch on restart: rebase, not merge? Lean rebase, 85%.
-6. `exam_touched` stays a final stop, not restartable? Lean yes, 75%.
+6. `exam_touched`: stop, ask with two picks (builder wrong: exam back, build again; test wrong: test writer again), then go on, never from scratch? Lean yes, 85%.
 7. 117's fold fails a field: fresh lane on 117? Lean yes, 75%.
 8. Attention: count now, no cap until real lanes? Lean yes, 80%.
