@@ -67,9 +67,12 @@ weight and size, never from a gray between the two. A title is always step 12, s
 weaker than the text beside it on a row at rest, hovered or selected. A row set aside stays at the
 low step, since that is a state and not a rank, and its dashed ring carries it too (principle 3).
 
-**The one bend.** Radix gives borders steps 6 to 8. Our resting tile edge is step 4, because a higher
-one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so it cannot carry a needed
-fact. The title bar and the focus edge do that.
+**The bends.** Four, each with its reason, listed in `apps/fabrika/src/themes.ts`: the dark desk
+(`#0c0d0e`, darker than slate 1), white text on a step 9 fill (Radix's own rule for that step), the
+resting tile edge, and the light focus edge (slate a9 as a line, since a8 reads 1.90 on the desk).
+The one that needs a word here is the edge. Radix gives borders steps 6 to 8. Our resting tile edge
+is step 4, because a higher one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so
+it cannot carry a needed fact. The title bar and the focus edge do that.
 
 **A line or a fill is never text (added 2026-11-01, approved by the owner from the design review).**
 Principle 5 holds for each use, not only for each value. A token made from a border step (4 to 8)

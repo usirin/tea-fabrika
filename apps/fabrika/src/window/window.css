@@ -12,7 +12,10 @@
 :root {
 	color-scheme: light dark;
 
-	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* slate 2; dark: the one bend, under slate 1 */
+	--surface-sunken: light-dark(
+		#f9f9fb,
+		#0c0d0e
+	); /* slate 2; dark: a bend, under slate 1 (themes.ts) */
 	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
 	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
 	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
@@ -111,7 +114,6 @@
 
 	/* The names the counter's and the tracker's windows were written with, on the same palette. */
 	--ground: var(--surface);
-	--ink: var(--text-secondary);
 	--faint: var(--text-faint);
 	--line: var(--border);
 	--key: var(--turn-fill);
@@ -1298,7 +1300,7 @@ main.program > [role="alert"] {
 
 button {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-secondary);
 	background: var(--line);
 	border: 1px solid transparent;
 	border-radius: 6px;
@@ -1392,7 +1394,7 @@ button:focus-visible {
 	display: flex;
 	flex-direction: column;
 	background: var(--ground);
-	color: var(--ink);
+	color: var(--text-primary);
 	font: 400 var(--fs-prose) / 1.65 var(--font);
 	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;
@@ -1608,7 +1610,7 @@ button:focus-visible {
 	display: flex;
 	flex-direction: column;
 	background: var(--ground);
-	color: var(--ink);
+	color: var(--text-secondary);
 	font-family: var(--sans);
 	font-size: 13px;
 	line-height: 1.45;
@@ -1681,7 +1683,7 @@ button:focus-visible {
 }
 
 .tracker button.tracker-primary {
-	color: var(--ink);
+	color: var(--turn-fg);
 	background: var(--key);
 	border-color: transparent;
 	font-weight: 500;
@@ -1720,7 +1722,7 @@ button:focus-visible {
 
 .tracker .tracker-shows button[aria-pressed="true"] {
 	background: var(--raised);
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 500;
 	box-shadow: 0 0 0 1px var(--line);
 }
@@ -1758,7 +1760,7 @@ button:focus-visible {
 	padding: 5px 0;
 	border: none;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-primary);
 	font: inherit;
 	outline: none;
 }
@@ -1777,7 +1779,7 @@ button:focus-visible {
 .tracker .tracker-composer input,
 .tracker .tracker-composer textarea {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-primary);
 	background: var(--raised);
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -1846,7 +1848,7 @@ button:focus-visible {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-secondary);
 	text-align: left;
 	text-decoration: none;
 }
@@ -2001,6 +2003,7 @@ button:focus-visible {
 }
 
 .tracker h2 {
+	color: var(--text-primary);
 	font-size: 20px;
 	font-weight: 600;
 	line-height: 1.3;
@@ -2056,7 +2059,7 @@ button:focus-visible {
 }
 
 .tracker-who {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -2072,7 +2075,7 @@ button:focus-visible {
 .tracker-body {
 	max-width: 68ch;
 	margin-top: 4px;
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
 	line-height: 1.55;
 	white-space: pre-wrap;
@@ -2086,8 +2089,9 @@ button:focus-visible {
 	overflow-wrap: anywhere;
 }
 
-.tracker-pending {
-	opacity: 0.6;
+/* A comment still saving: its body at the low step, and "saving…" above it says so. */
+.tracker-pending .tracker-body {
+	color: var(--text-secondary);
 }
 
 .tracker-reply {
@@ -2123,12 +2127,12 @@ button:focus-visible {
 }
 
 .tracker-ask-what {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
 	font-weight: 600;
 }
 
-/* A duplicate hint: advice, so quieter than an ask. Dismissed, it fades. */
+/* A duplicate hint: advice, so quieter than an ask: a dashed edge, not a solid one. */
 .tracker-hint {
 	display: flex;
 	flex-direction: column;
@@ -2138,19 +2142,20 @@ button:focus-visible {
 	border-radius: 8px;
 }
 
-.tracker-hint[data-says="dismiss"] {
-	opacity: 0.6;
+.tracker-hint-what {
+	color: var(--text-primary);
 }
 
-.tracker-hint-what {
-	color: var(--ink);
+/* Dismissed, its words drop to the low step; the pressed Dismiss button says it in words. */
+.tracker-hint[data-says="dismiss"] .tracker-hint-what {
+	color: var(--text-secondary);
 }
 
 .tracker .tracker-hint-link {
 	padding: 0;
 	border: 0;
 	background: none;
-	color: var(--ink);
+	color: inherit;
 	font: inherit;
 	font-weight: 600;
 	text-decoration: underline;
@@ -2159,7 +2164,7 @@ button:focus-visible {
 
 .tracker .tracker-hint button[aria-pressed="true"] {
 	border-color: var(--key);
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -3218,9 +3223,10 @@ main.program:has(> .view) {
 	outline-offset: -1px;
 }
 
+/* A step not built yet: no fill, a dashed edge (.nb) and its "not built" words; its name drops to
+   the low step below. */
 .map-view .spot.nob {
 	background: none;
-	opacity: 0.75;
 }
 
 .map-view .nob .n,

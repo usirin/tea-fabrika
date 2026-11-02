@@ -127,7 +127,7 @@ accent = "indigo"
 # red, grass, amber, blue, purple and cyan, in that order
 
 [colors]
-desk = "#0c0d0e"      # no gray step is darker than 1: the one bend, see below
+desk = "#0c0d0e"      # no gray step is darker than 1: a bend, see below
 ground = "#111113"    # gray 1
 raised = "#18191b"    # gray 2
 hover = "#ddeaf814"   # gray a3

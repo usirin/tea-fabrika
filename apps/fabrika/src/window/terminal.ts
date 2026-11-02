@@ -162,11 +162,13 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * questions in them (where is the cursor?) must not reach tsh again, and ghostty-web answers as
 	 * it writes.
 	 *
-	 * Its wasm terminal is reset first, below the terminal, so what is written stays only what was
-	 * kept. Every tile's terminal lives in one Ghostty, and ghostty-web 0.4's wasm does not clear
-	 * the memory it hands out again: a terminal made after another was freed starts with the freed
-	 * one's rows, and a look change frees and makes one per tile. Without the reset, a tile showed
-	 * another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts).
+	 * Its wasm terminal is reset first, after the fit, below the terminal, so what is written stays
+	 * only what was kept. Every tile's terminal lives in one Ghostty, and ghostty-web 0.4's wasm
+	 * does not clear the memory it hands out again: a terminal made after another was freed starts
+	 * with the freed one's rows, and a look change frees and makes one per tile. Without the reset,
+	 * a tile showed another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts). It
+	 * comes after the fit, as the fit's resize can take up a freed terminal's rows again; for the
+	 * same reason it is not in the ghostty-web patch, where it would run before the fit.
 	 */
 	const open = () => {
 		term.open(screen);
@@ -202,7 +204,10 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		old.dispose();
 		if (!opened) return;
 		open();
-		if (focused) return term.focus();
+		if (focused) {
+			term.focus();
+			return;
+		}
 		const remade = term;
 		const nowhere = active === null || active === document.body;
 		const back = () => {
