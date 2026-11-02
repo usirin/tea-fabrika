@@ -208,6 +208,7 @@ Most of the order above is a choice. **These parts are not, and each says why:**
 4. **The door before the app, the app before the cloud.** The menu bar signs what the door checks, and the cloud proves the same flow. The terminal command `grant.ts` lets windows in until Approve exists.
 5. **The cloud before notes.** Real notes live on Cloudflare. Check 4 still proves the counter there, on data nobody minds losing.
 6. **Words and fact shapes are settled before real facts get written,** which is the first real note. A fact written then lives forever: `has`, `saw`, `as`, what `granted` keeps, and any OS or capability word.
+   - *Added 2026-11-01:* `seen` lands on every ledger entry before Tier 1's first real entry, and A3's `saw` moves into it ([saved state, S1](../direction/saved-state.md#s1-every-entry-says-what-its-writer-had-seen)). About 50 to 80 lines, 0.1 to 0.15 agent hours at the measured 600 an hour, a `0.25` on the scale (under 0.05 at 1,660), not in the total above.
 7. **Notes before chaos.** Chaos needs a real target, its drill dials through the MCP client, and doing it first would write its target list, driver and p39 twice (biggest call 10).
 8. **Backup right after notes.** Settled by the owner: once notes are real, a lost Mac would otherwise mean a new ledger.
 9. **Each new `next/` law lands before the code it checks.** The test writer's tests must fail first, on the base.

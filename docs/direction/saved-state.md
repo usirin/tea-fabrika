@@ -1,7 +1,9 @@
 # Saved state, replay and what a writer saw
 
-**Proposed 2026-11-01.** Nothing here is decided by the owner yet. It stands on points the owner
-already decided, each named where it is used: D3's entry with `said` and `at` (2026-10-30), A3's
+**Decided 2026-11-01 by the owner.** After a walk, the owner approved all six principles and the
+five smaller calls, each with its lean, S3's branch A included. Each lean keeps its number: one
+under 80% is decided but still names its doubt and what would settle it. It stands on points the
+owner already decided, each named where it is used: D3's entry with `said` and `at` (2026-10-30), A3's
 `saw` on window Msgs (2026-10-31), hot reload's H2 and H3 (2026-11-01), "no version number on each
 machine" ([an old host is named, then restarted](./an-old-host-is-named-then-restarted.md),
 2026-10-25), the pipeline guidelines' P4 to P7 (2026-11-01), and record wide (2026-11-01). The
@@ -20,7 +22,7 @@ experiment 190's links.
  said: "23:10:01", seen: 409, _tag: "commented", body: {text: "also fix the label"}}
 // S2: one law every machine runs. Stop at any step, load, go on: the same run as no stop.
 syncTest(lane, {state: Lane, msgs: laneMsgs, seed: 190});
-// S3, the owner picks: a saved model carries its shape's number, or the schema alone decides.
+// S3, branch A: a saved model carries its shape's number and a chain of named upgrades.
 // S5: the fold and the saved model disagree, so the first place they part is written down.
 {_tag: "diverged", body: {case: "fold_vs_saved", rev: 407, path: "carry.exam", fold: "5d38d582", saved: null}}
 ```
@@ -78,7 +80,7 @@ const place = (head: number, line: Line) =>
 
 ### S1: every entry says what its writer had seen
 
-**Lean, 85%.** One field, `seen`, on D3's envelope: the log's `rev` of the newest entry folded into
+**Decided 2026-11-01, 85%.** One field, `seen`, on D3's envelope: the log's `rev` of the newest entry folded into
 what the writer acted from.
 
 - **Who fills it:** libfabrika, never a program's author.
@@ -123,7 +125,7 @@ what the writer acted from.
 
 ### S2: every machine passes the sync test
 
-**Lean, 85%.** For any Msg list, with a fixed seed, at every step: encode the model with its state
+**Decided 2026-11-01, 85%.** For any Msg list, with a fixed seed, at every step: encode the model with its state
 schema, through text, decode it, boot with `init(loaded)`, fold the rest, and compare every later
 model and Cmd with the run that never stopped.
 
@@ -141,7 +143,7 @@ export const syncTest = <S, M, C>(machine: Machine<S, M, C>, opts: {state: Schem
 - **Measured, today's version:** today's lane passes it. 300 lists at seed 190, a stop at each of
   2,783 steps, every phase reached: 0 breaks, 88 ms. A planted field the schema drops broke 300 of
   300 ([experiment 190](../../experiments/190-saved-state.md#the-probe-ggpos-sync-test-on-todays-lane)).
-- **Where the helper lives:** lean, 70%, in tea's `@demlik/tea/pbt` beside `propertyInvariant`,
+- **Where the helper lives:** decided 2026-11-01, 70% (smaller call 4), in tea's `@demlik/tea/pbt` beside `propertyInvariant`,
   taking `encode` and `decode` as plain functions, so tea takes on no convention of ours. Until tea
   ships it, a 40 to 60 line helper in libfabrika's test kit, deleted when tea has it.
 - **Today's lane laws use the same shape:** `propertyInvariant` with a law per `{prev, msg, next,
@@ -156,9 +158,11 @@ export const syncTest = <S, M, C>(machine: Machine<S, M, C>, opts: {state: Schem
 - **Cost:** the helper, 40 to 60 lines, and one line per machine: under 0.2 agent hours.
 - **Today's ticket 117:** follows. Its lane passes.
 
-### S3: saved state carries its shape's number, or the schema alone decides
+### S3: saved state carries its shape's number and a chain of named upgrades
 
-**Clashes with a decided note. Lean, 60%: branch A. The owner picks.**
+**Decided 2026-11-01, 60%: branch A.** It walks back part of a decided note, for state carried
+forward: [an old host is named, then restarted](./an-old-host-is-named-then-restarted.md) and
+[hot reload](./hot-reload.md)'s H3 now say so.
 
 A saved model is carried forward by hot reload (H2, H3) and by a restart (C4). Today's rule,
 decided 2026-10-25: "No version number on each machine. The schema is the check. A version only
@@ -166,7 +170,7 @@ matters if old state must be carried forward, and tea's `upcast` is the place fo
 comes." H3 carries state forward, so "when it comes" is now.
 
 ```ts
-// Branch A: a number and a chain of named upgrades. The schema is still the last check.
+// Branch A, decided: a number and a chain of named upgrades. The schema is still the last check.
 export const state = {
 	v: 3,
 	schema: Schema.Struct({count: Schema.Number, step: Schema.Number}),
@@ -178,7 +182,7 @@ export const state = {
 // saved {v: 1, model: {n: 7}} -> n_to_count, add_step, then decode, then:
 {_tag: "state.upgraded", body: {program: "counter", from: 1, to: 3, ran: ["n_to_count", "add_step"]}}
 
-// Branch B: as decided. One upcast from the shape before, chosen by looking (H3's sketch).
+// Branch B, not picked: the rule before. One upcast from the shape before, chosen by looking.
 export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: raw.n} : raw);
 // a model two shapes back that no upcast fits: refused, [Restart counter-1]
 ```
@@ -192,17 +196,18 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
 | What it records | `v` on each saved model; `state.upgraded` with `ran` | nothing new |
 | Cost | 60 to 100 lines and a law (from every old number, the chain decodes); about 0.15 agent hours | none |
 
-- **Why the lean is A:** every engine that carries state forward numbers it, and hot reload makes a
-  shape change an everyday event in Tier 1's dev loop. Erlang names this case: "`Vsn` is fetched
+- **Why A:** every engine that carries state forward numbers it, and hot reload makes a shape
+  change an everyday event in Tier 1's dev loop. Erlang names this case: "`Vsn` is fetched
   from the 'original' version of the module, that is, the version you are upgrading from" [e2].
 - **Why only 60%:** Tier 1's states are small and a dev process is cheap to restart. Protobuf
   shows that additive change needs no number, and most of our shape changes may be additive.
 - **What would settle it:** in Tier 1's first two weeks, count shape changes per program, and
-  processes that crossed more than one shape at once. None crossing two: branch B.
-- **Either branch, lean 85%:** a saved model carries the `build` that wrote it. H6 puts `build` on
-  every entry; a saved model in the object's storage is not an entry. With `build`, a version can
-  be worked out later from the code kept by hash ([experiment 173](../../experiments/173-worker-loader.md)),
-  so branch B loses no fact for good. Without it, the shape a model was saved in is gone.
+  processes that crossed more than one shape at once. None crossing two: reopen it for branch B.
+- **The saved model carries its `build`, decided 2026-11-01, 85%** (smaller call 5). H6 puts
+  `build` on every entry; a saved model in the object's storage is not an entry. With `build`, a
+  version can be worked out later from the code kept by hash
+  ([experiment 173](../../experiments/173-worker-loader.md)), so a switch to branch B later loses
+  no fact for good. Without it, the shape a model was saved in is gone.
 - **Linear:** no Linear answer: Linear does not publish how its client upgrades a saved local
   store.
 - **Elm or OTP:** both branches cite one. Elm decodes and fails, never guesses (B's spirit, though
@@ -210,7 +215,7 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
 
 ### S4: a code step declares what it reads, and its key is built from that
 
-**Lean, 65%.** Effect's requirements already list the services a code step may call; a step that
+**Decided 2026-11-01, 65%.** Effect's requirements already list the services a code step may call; a step that
 calls one not listed does not compile. Each read's answer is recorded, and P7's key is the hash of
 those recorded reads. An agent step's key stays P7's hand list of what its brief named.
 
@@ -222,7 +227,7 @@ those recorded reads. An agent step's key stays P7's hand list of what its brief
 - **Why:** Bazel: "Without action sandboxing, Bazel doesn't know if a tool uses undeclared input
   files" [i7]. P7's own doubt is "an input left out of the key". A list made by the type system
   cannot leave one out.
-- **Writes too, lean 60%:** each step lists the fact kinds it writes, and a law checks that every
+- **Writes too, decided 2026-11-01, 60%:** each step lists the fact kinds it writes, and a law checks that every
   step's needs are some earlier step's writes (F.E.A.R.'s preconditions and effects, from 189).
   Then P4's resume point is a lookup. Listing the twelve steps' needs and writes by hand first
   settles whether the map is clean.
@@ -238,7 +243,7 @@ those recorded reads. An agent step's key stays P7's hand list of what its brief
 
 ### S5: when two folds that should agree do not, say the first place they part
 
-**Lean, 75%.** One fact and one bundle: the case, the field path, both values, and the rev of the
+**Decided 2026-11-01, 75%.** One fact and one bundle: the case, the field path, both values, and the rev of the
 fact that last set that field in the fold.
 
 ```ts
@@ -267,7 +272,7 @@ fact that last set that field in the fold.
 
 ### S6: a replay re-runs code, never an agent
 
-**Lean, 90%.** An agent's draft, a person's words and a check's result are recorded inputs. A
+**Decided 2026-11-01, 90%.** An agent's draft, a person's words and a check's result are recorded inputs. A
 replay folds them and re-runs code only.
 
 - **Why:** a game records each player's input because it cannot work it out again [g1]; Temporal
@@ -287,7 +292,9 @@ replay folds them and re-runs code only.
 
 ## The smaller calls
 
-1. **Where A3's `saw` goes.** Lean, 70%: (b).
+All five decided 2026-11-01, each with its lean.
+
+1. **Where A3's `saw` goes.** Decided 2026-11-01, 70%: (b).
 
    ```ts
    // (a) keep both: the program's view counter in the Msg, the log's rev on the envelope
@@ -300,14 +307,14 @@ replay folds them and re-runs code only.
    number for one idea, filled by code, checked by the referee. PR 223's counter keeps `saw` and
    never reads it (`next/src/programs/counter/program.ts:5-11`). Doubt: a program that compares
    with its own inbox `pos` needs one more lookup.
-2. **The name.** Lean, 70%: `seen`. `saw` is already a body field with other types: an object on a
+2. **The name.** Decided 2026-11-01, 70%: `seen`. `saw` is already a body field with other types: an object on a
    grant, a hash on an ask ([one ask](./one-ask-and-one-meter.md)). One word at two levels would
    mean two things. `base` stays the note's version. **No Linear answer.**
-3. **An agent's `seen`.** Lean, 65%: the newest rev any read answered it from, against the rev its
+3. **An agent's `seen`.** Decided 2026-11-01, 65%: the newest rev any read answered it from, against the rev its
    brief was built at. The first is what it could have known; the second undercounts a mid-run read.
-4. **Where the sync helper lives.** Lean, 70%: tea's `pbt`, as an issue in demlik; a stopgap in
+4. **Where the sync helper lives.** Decided 2026-11-01, 70%: tea's `pbt`, as an issue in demlik; a stopgap in
    libfabrika's test kit.
-5. **`build` beside each saved model.** Lean, 85%, in either branch of S3.
+5. **`build` beside each saved model.** Decided 2026-11-01, 85%, under S3 (above).
 
 ## What the ledger records
 
@@ -315,7 +322,7 @@ replay folds them and re-runs code only.
   without it, what its writer had seen. The deadline is Tier 1's first real note.
 - **New beside each saved model:** `build`. Lost without it: which code, so which shape, wrote it.
 - **New only when it happens:** `diverged`, with both values.
-- **Branch A only:** `v` on each saved model, and `state.upgraded` with `ran`.
+- **From S3's branch A:** `v` on each saved model, and `state.upgraded` with `ran`.
 - **Derived, so it waits:** `during`, staleness views, how far behind a writer was.
 
 ## A tryout in today's version
@@ -338,10 +345,11 @@ Offered for the self-fix plan's PR 5, not filed:
   "`saw` on a letter" and "the letter's `by`, `at`, `said` and `saw`" become `seen`.
 - **P5's `during` ([pipeline guidelines](./pipeline-guidelines.md)):** in `next/`, a fold over
   `seen`. Today's lane keeps it as written.
-- **[An old host is named, then restarted](./an-old-host-is-named-then-restarted.md):** branch A
-  of S3 undoes "No version number on each machine" for state carried forward. Branch B keeps it.
+- **[An old host is named, then restarted](./an-old-host-is-named-then-restarted.md):** S3's
+  branch A undoes "No version number on each machine" for state carried forward. That note says
+  so in a dated line.
 - **[Hot reload](./hot-reload.md) H3:** branch A replaces the shape-guess upcast with a numbered
-  chain.
+  chain. H3's sketch is marked as replaced.
 - **P7:** for code steps, the key's list comes from recorded reads, not by hand.
 - **Experiment 189:** its map called `seen` "nothing decided". It was half decided, as `saw`.
 
@@ -351,7 +359,7 @@ Offered for the self-fix plan's PR 5, not filed:
 |---|---|---|---|
 | S1 `seen` | 50 to 80 | 0.1 to 0.15 | before Tier 1's first real note |
 | S2 sync test | 40 to 60, plus a line per machine | under 0.2 | with Tier 1's first machines |
-| S3 branch A | 60 to 100 | about 0.15 | if picked, with hot reload |
+| S3 branch A | 60 to 100 | about 0.15 | with hot reload |
 | S4 declared reads | 100 to 200 | 0.2 to 0.35 | with `next/`'s lane |
 | S5 divergence report | 100 to 200 | 0.2 to 0.35 | 40 lines in PR 5, the rest later |
 | S6 replay Layer | 30 to 50 | under 0.1 | with the first replay |

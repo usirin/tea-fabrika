@@ -3,7 +3,8 @@
 Read 2026-11-01, against `main` at `7896ef38` and `next/` at PR 223's head `7c1d0730`. Mostly
 reading, plus **one probe that ran**: GGPO's sync test on today's lane machine
 (`190-saved-state.ts`, kept). It feeds [saved state, replay and what a writer saw](../docs/direction/saved-state.md),
-a proposed note, and a private page, "Saved state guidelines". It takes the top five ideas of
+a note the owner decided on 2026-11-01 with every lean and S3's branch A (it was proposed when this
+was written), and a private page, "Saved state guidelines". It takes the top five ideas of
 [experiment 189](./189-games-study.md) and checks each against what is settled.
 
 ## The answer
