@@ -49,17 +49,18 @@ import {
 } from "../messages.ts";
 import {
 	type Bound,
-	bottomLineShows,
+	EXPLAIN_ON,
 	FRAME,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
 	INFO,
 	keyGoesTo,
+	type MidKey,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
-import {Band, BottomLine, type FrameProps, ModeStatus, Over, TopBar} from "./frame.tsx";
+import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -256,7 +257,7 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
  * still out at the host (Ctrl-B, its answer not in yet) queues behind it in the hold, so it counts
  * as armed: `C-b J` typed fast still reaches the desk and closes the list.
  */
-const midKey = (): {readonly armed: boolean; readonly asking: boolean} => {
+const midKey = (): MidKey => {
 	const open = store.desk?.at === "open" ? store.desk : null;
 	return {
 		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
@@ -424,11 +425,7 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	if (e.key === "Escape") {
-		const {armed, asking} = midKey();
-		const forFrame = store.frame.over.kind !== "none" || !(armed || asking);
-		if (forFrame && frameStep({type: "escape"})) return swallow(e);
-	}
+	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
 	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
@@ -801,7 +798,6 @@ function App(): ReactNode {
 		step: frameStep,
 	};
 	const bare = store.frame.bare;
-	const bottom = bottomLineShows(store.frame, {armed: props.armed, asking: open?.ask != null});
 	const zoomed = ws?.layout.zoomed ?? null;
 	return (
 		<div
@@ -827,10 +823,8 @@ function App(): ReactNode {
 					)}
 				</div>
 			)}
-			{view.kind !== "instead" && bottom && <BottomLine {...props} />}
+			<BottomArea {...props} instead={view.kind === "instead"} />
 			<Over {...props} />
-			{/* Outside the bottom line, so it is heard whatever the bars and the link. */}
-			<ModeStatus frame={store.frame} />
 		</div>
 	);
 }
@@ -849,8 +843,7 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
-	window.addEventListener("pointerover", explainAt);
-	window.addEventListener("focusin", explainAt);
+	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
 	if (root !== null) createRoot(root).render(<App />);

@@ -717,15 +717,25 @@ export const modeWord = (f: Frame): string => {
 	return f.leftInfo ? "Info mode off." : "";
 };
 
+/** Is the desk mid-key: Ctrl-B armed, or its own question (`close t2? (y/n)`) waiting. */
+export interface MidKey {
+	readonly armed: boolean;
+	readonly asking: boolean;
+}
+
+/**
+ * The window events info mode explains on: the pointer moving over a part, and keyboard focus
+ * moving to one, so what a pointer can learn, a keyboard can too (WCAG 2.1.1).
+ */
+export const EXPLAIN_ON = ["pointerover", "focusin"] as const;
+
 /**
  * Whether the bottom line shows. With both bars hidden it still does while you are mid-key (the
  * prefix armed, or the desk's own question waiting), while a note is up, and in info mode, whose
  * word is said there: a mode is always seen (docs/direction/modes.md, M3).
  */
-export const bottomLineShows = (
-	f: Frame,
-	desk: {readonly armed: boolean; readonly asking: boolean},
-): boolean => !f.bare || desk.armed || desk.asking || f.note !== null || f.info;
+export const bottomLineShows = (f: Frame, desk: MidKey): boolean =>
+	!f.bare || desk.armed || desk.asking || f.note !== null || f.info;
 
 export type FrameMsg =
 	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`). */
@@ -740,8 +750,8 @@ export type FrameMsg =
 	| {readonly type: "explain"; readonly text: string | null}
 	| {readonly type: "unnote"}
 	| {readonly type: "close"}
-	/** Escape, as the page hands it on (desk.tsx, `onKey`): see `escaped`. */
-	| {readonly type: "escape"};
+	/** Escape, as the page hands it on (desk.tsx, `onKey`), with the desk mid-key or not: see `escaped`. */
+	| {readonly type: "escape"; readonly desk: MidKey};
 
 /** A thing over the desk opens, or closes when it is open already, as a menu does. */
 const toggle = (f: Frame, over: Over): Frame =>
@@ -758,11 +768,13 @@ const leftInfo = (f: Frame): Frame => ({...f, info: false, explained: null, left
 
 /**
  * What Escape does, one layer at a time, as Apple's HIG has one dismissed before the next: it
- * closes what lies over the desk; pressed again, it leaves info mode. With neither, it is not the
- * frame's, and the same frame comes back, so the key goes on to the tile.
+ * closes what lies over the desk; then, while the desk is mid-key, it is the desk's, to cancel its
+ * prefix or its question; only then does it leave info mode. When it is not the frame's, the same
+ * frame comes back, so the key goes on: to the desk, or to the tile.
  */
-const escaped = (f: Frame): Frame => {
+const escaped = (f: Frame, desk: MidKey): Frame => {
 	if (f.over.kind !== "none") return {...f, over: {kind: "none"}};
+	if (desk.armed || desk.asking) return f;
 	return f.info ? leftInfo(f) : f;
 };
 
@@ -800,7 +812,7 @@ export const keyGoesTo = (
 	over: Over,
 	key: string,
 	prefix: string,
-	desk: {readonly armed: boolean; readonly asking: boolean},
+	desk: MidKey,
 ): "over" | "desk" => {
 	if (over.kind === "none") return "desk";
 	if (over.kind === "palette") return "over";
@@ -833,6 +845,6 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "close":
 			return {...f, over: {kind: "none"}};
 		case "escape":
-			return escaped(f);
+			return escaped(f, m.desk);
 	}
 };

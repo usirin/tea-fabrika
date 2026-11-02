@@ -18,6 +18,7 @@ import {
 	asksWord,
 	type Bound,
 	bindingWord,
+	bottomLineShows,
 	clockWord,
 	commandsOf,
 	type Frame,
@@ -895,6 +896,22 @@ export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
 		<p className="mode-status" role="status">
 			{modeWord(props.frame)}
 		</p>
+	);
+}
+
+/**
+ * The desk's bottom area: the bottom line when `bottomLineShows` says so and no page stands
+ * `instead` of the desk (another link version), and the mode's status region always, outside the
+ * line, so it is heard whatever the bars and the link.
+ */
+export function BottomArea(props: FrameProps & {readonly instead: boolean}): ReactNode {
+	const {frame, desk, armed, instead} = props;
+	const shows = bottomLineShows(frame, {armed, asking: desk?.ask != null});
+	return (
+		<>
+			{!instead && shows && <BottomLine {...props} />}
+			<ModeStatus frame={frame} />
+		</>
 	);
 }
 
