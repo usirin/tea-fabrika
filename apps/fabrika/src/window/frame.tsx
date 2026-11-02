@@ -32,6 +32,7 @@ import {
 	lineIn,
 	matching,
 	middleFree,
+	modeWord,
 	nowhereNote,
 	opensOf,
 	type Part,
@@ -809,7 +810,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 				<span className="info">
 					<b>INFO</b>
 					<Sep />
-					{frame.explained ?? "point at anything to see what it is"}
+					{frame.explained ?? "point at anything, or tab to it"}
 				</span>
 			);
 		if (desk === null) return null;
@@ -862,6 +863,14 @@ export function BottomLine(props: FrameProps): ReactNode {
 				>
 					{keys ?? ""} keys
 				</Item>
+				{/* The way out, named last, as `esc cancels` is for the prefix. The item stays put, so a
+				    click where it turned on turns it off. */}
+				{frame.info && (
+					<>
+						<Sep />
+						<span className="quiet">esc leaves</span>
+					</>
+				)}
 			</>
 		);
 	};
@@ -870,6 +879,22 @@ export function BottomLine(props: FrameProps): ReactNode {
 			<div className="left">{left()}</div>
 			<div className="right">{right()}</div>
 		</footer>
+	);
+}
+
+/**
+ * The window's one status region for its mode: it says "Info mode on. Escape leaves." when info
+ * mode comes on and "Info mode off." when it goes, and nothing on each part explained (WCAG 4.1.3,
+ * docs/direction/modes.md, M3). `status` is polite and atomic, so it waits for a pause and reads
+ * the whole line. Out of sight: the bottom line says the same where the eye is. It is drawn
+ * whatever the bars, before it has anything to say, so a screen reader is listening when it
+ * changes, and "off" is heard with the bars hidden.
+ */
+export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
+	return (
+		<p className="mode-status" role="status">
+			{modeWord(props.frame)}
+		</p>
 	);
 }
 

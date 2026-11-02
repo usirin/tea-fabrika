@@ -49,6 +49,7 @@ import {
 } from "../messages.ts";
 import {
 	type Bound,
+	bottomLineShows,
 	FRAME,
 	type Frame,
 	type FrameMsg,
@@ -58,7 +59,7 @@ import {
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
-import {Band, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {Band, BottomLine, type FrameProps, ModeStatus, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -251,20 +252,26 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
 };
 
 /**
+ * Is the desk mid-key: Ctrl-B armed, or its own question waiting? A key pressed while one is
+ * still out at the host (Ctrl-B, its answer not in yet) queues behind it in the hold, so it counts
+ * as armed: `C-b J` typed fast still reaches the desk and closes the list.
+ */
+const midKey = (): {readonly armed: boolean; readonly asking: boolean} => {
+	const open = store.desk?.at === "open" ? store.desk : null;
+	return {
+		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		asking: open?.ask != null,
+	};
+};
+
+/**
  * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
  * over with focus outside it, so the key is dropped, never reaches a tile, and focus has moved in.
  * For a key pressed now and a key held for the host's answer alike: an over opens before that
  * answer is in, so a key can be held while it is already open.
  */
 const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
-	const open = store.desk?.at === "open" ? store.desk : null;
-	// A key pressed while one is still out at the host (Ctrl-B, its answer not in yet) queues
-	// behind it in the hold, so `C-b J` typed fast still reaches the desk and closes the list.
-	const desk = {
-		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
-		asking: open?.ask != null,
-	};
-	if (keyGoesTo(store.frame.over, name, store.prefix, desk) !== "over") return "desk";
+	if (keyGoesTo(store.frame.over, name, store.prefix, midKey()) !== "over") return "desk";
 	return focusOver(target);
 };
 
@@ -312,16 +319,20 @@ const holdStep = (msg: HoldMsg): boolean => {
 const NOTE_MS = 4000;
 let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Step the frame's own state (frame.ts), and draw it. A note goes after a while. */
-const frameStep = (m: FrameMsg) => {
+/**
+ * Step the frame's own state (frame.ts), and draw it. A note goes after a while. Answers whether
+ * the frame changed: a key it did not change goes on.
+ */
+const frameStep = (m: FrameMsg): boolean => {
 	const next = frameUpdate(store.frame, m);
-	if (next === store.frame) return;
+	if (next === store.frame) return false;
 	if (next.note !== null && next.note !== store.frame.note) {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
 	store.frame = next;
 	changed();
+	return true;
 };
 
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
@@ -380,8 +391,10 @@ const swallow = (e: KeyboardEvent) => {
 
 /**
  * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
- * focused tile's. Cmd-K opens the palette, as in Linear and VS Code; Escape closes what lies over
- * the desk. While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
+ * focused tile's. Cmd-K opens the palette, as in Linear and VS Code. Escape closes what lies over
+ * the desk; with nothing over it, it leaves info mode, unless the desk is mid-key, where it cancels
+ * the prefix or the question first; with neither, it goes on to the tile (frame.ts, `escaped`).
+ * While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
  * never to a tile: if focus is not in it, the key is dropped and focus moves in.
  *
  * A key the system or the menu owns goes by all of that. Electron offers a key to the menu only if
@@ -411,10 +424,10 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	const over = store.frame.over;
-	if (over.kind !== "none" && e.key === "Escape") {
-		swallow(e);
-		return frameStep({type: "close"});
+	if (e.key === "Escape") {
+		const {armed, asking} = midKey();
+		const forFrame = store.frame.over.kind !== "none" || !(armed || asking);
+		if (forFrame && frameStep({type: "escape"})) return swallow(e);
 	}
 	const name = keyName(pressed);
 	if (name === null) return;
@@ -433,8 +446,11 @@ const onKey = (e: KeyboardEvent) => {
 	swallow(e);
 };
 
-/** In info mode, what the pointer is over, said on the bottom line. */
-const onPointerOver = (e: PointerEvent) => {
+/**
+ * In info mode, what the pointer is over or keyboard focus moved to, said on the bottom line
+ * (WCAG 2.1.1: what a pointer can learn, a keyboard can too).
+ */
+const explainAt = (e: Event) => {
 	if (!store.frame.info) return;
 	const at = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-info]") : null;
 	frameStep({type: "explain", text: at?.dataset.info ?? null});
@@ -785,8 +801,7 @@ function App(): ReactNode {
 		step: frameStep,
 	};
 	const bare = store.frame.bare;
-	/** With both bars hidden, the bottom line still shows while you are mid-key. */
-	const keying = props.armed || open?.ask != null || store.frame.note !== null;
+	const bottom = bottomLineShows(store.frame, {armed: props.armed, asking: open?.ask != null});
 	const zoomed = ws?.layout.zoomed ?? null;
 	return (
 		<div
@@ -812,8 +827,10 @@ function App(): ReactNode {
 					)}
 				</div>
 			)}
-			{view.kind !== "instead" && (!bare || keying) && <BottomLine {...props} />}
+			{view.kind !== "instead" && bottom && <BottomLine {...props} />}
 			<Over {...props} />
+			{/* Outside the bottom line, so it is heard whatever the bars and the link. */}
+			<ModeStatus frame={store.frame} />
 		</div>
 	);
 }
@@ -832,7 +849,8 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
-	window.addEventListener("pointerover", onPointerOver);
+	window.addEventListener("pointerover", explainAt);
+	window.addEventListener("focusin", explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
 	if (root !== null) createRoot(root).render(<App />);
