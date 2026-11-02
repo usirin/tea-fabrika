@@ -22,6 +22,15 @@ export const SOL: Price = {
 	read: "2026-10-30",
 };
 
+/** gpt-6-luna, standard tier, short context: $0.10 input, $0.01 cached input, $0.50 output per 1M. */
+export const LUNA: Price = {
+	input: 0.1e-6,
+	cached: 0.01e-6,
+	output: 0.5e-6,
+	source: "https://developers.openai.com/api/docs/pricing",
+	read: "2026-10-31",
+};
+
 /** claude-haiku-5-5 up to 100k tokens of prompt: $0.10 input, $0.50 output per 1M; cache read guessed at a tenth. */
 export const HAIKU: Price = {
 	input: 0.1e-6,
