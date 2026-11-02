@@ -22,8 +22,11 @@ class FakeTerminal {
 	cols = 80;
 	rows = 24;
 	readonly buffer = {active: {length: 0, cursorY: 0, getLine: () => undefined}};
-	/** Where its keys are typed: what the page focuses, as ghostty-web's hidden textarea is. */
+	/** Re-focus timeouts still waiting, cleared after each test so none lands in the next. */
+	static timers: ReturnType<typeof setTimeout>[] = [];
+	/** ghostty-web's hidden textarea, where keys are typed. */
 	readonly textarea = {};
+	/** The element it was opened in: what its focus() focuses. */
 	element: object | undefined;
 	/** Who hears its keys and its new sizes. */
 	readonly keys: ((data: string) => void)[] = [];
@@ -34,9 +37,11 @@ class FakeTerminal {
 		FakeTerminal.made.push(this);
 	}
 	loadAddon() {}
+	/** As 0.4.0's open(): it ends by focusing itself. */
 	open(parent: object) {
 		this.opened = true;
 		this.element = parent;
+		this.focus();
 	}
 	onData(fn: (data: string) => void) {
 		this.keys.push(fn);
@@ -57,8 +62,16 @@ class FakeTerminal {
 	refresh() {}
 	resize() {}
 	scrollToBottom() {}
+	/** As 0.4.0's focus(): once open, its element now, and again after a zero timeout. */
 	focus() {
-		page.activeElement = this.textarea;
+		const at = this.element;
+		if (!this.opened || at === undefined) return;
+		page.activeElement = at;
+		FakeTerminal.timers.push(
+			setTimeout(() => {
+				page.activeElement = at;
+			}, 0),
+		);
 	}
 	dispose() {
 		this.disposed = true;
@@ -89,6 +102,9 @@ const element = (): Record<string, unknown> => {
 		},
 		remove: () => {
 			el["parentElement"] = null;
+		},
+		focus: () => {
+			page.activeElement = el;
 		},
 	};
 	return el;
@@ -170,8 +186,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	for (const timer of FakeTerminal.timers) clearTimeout(timer);
+	FakeTerminal.timers = [];
 	vi.unstubAllGlobals();
 });
+
+/** After the timeouts already queued, ghostty-web's re-focus among them. */
+const settled = () => new Promise((done) => setTimeout(done, 0));
 
 /** A tile's terminal, open in its slot, that has been sent `writes` (by default, `hello`). */
 const openTerminal = async (writes: readonly string[] = ["hello"]) => {
@@ -249,14 +270,43 @@ describe("an open terminal follows the system's look", () => {
 		]);
 	});
 
-	it("keeps focus: a focused terminal's remake is focused, an unfocused one's is not", async () => {
-		const term = await openTerminal();
-		term.focus();
-		switchTo("light");
-		expect(page.activeElement).toBe(showing()[0]?.textarea);
-		page.activeElement = undefined;
-		switchTo("dark");
-		expect(page.activeElement).toBeUndefined();
+	// ghostty-web 0.4.0's open() focuses the terminal, now and again after a zero timeout. A look
+	// change remakes every tile's terminal, so unless focus is put back, the last one remade takes
+	// it, and keys go to the wrong tile or leave the input a person is typing in.
+	describe("focus stays where it was across a look change", () => {
+		it("a focused terminal's remake is focused", async () => {
+			const term = await openTerminal();
+			term.focus();
+			switchTo("light");
+			await settled();
+			expect(page.activeElement).toBe(showing()[0]?.element);
+		});
+
+		it("an input outside any terminal keeps focus", async () => {
+			await openTerminal();
+			const input = {
+				name: "a tracker's input",
+				focus: () => {
+					page.activeElement = input;
+				},
+			};
+			page.activeElement = input;
+			switchTo("light");
+			await settled();
+			expect(page.activeElement).toBe(input);
+		});
+
+		it("an unfocused tile's terminal does not take focus from the focused one", async () => {
+			const {terminalFor} = await import("./terminal.ts");
+			const first = terminalFor({} as never, "t1" as never);
+			first.attach(element() as never);
+			terminalFor({} as never, "t2" as never).attach(element() as never);
+			first.focus();
+			const focused = page.activeElement;
+			switchTo("light");
+			await settled();
+			expect(page.activeElement).toBe(focused);
+		});
 	});
 
 	it("goes back to fabrika when the system turns dark again", async () => {
