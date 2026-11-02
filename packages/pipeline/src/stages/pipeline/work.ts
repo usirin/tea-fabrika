@@ -187,11 +187,12 @@ export class LaneWork extends Context.Service<
 		/** A branch of its own, from main, in a working copy of its own: the exam's. */
 		readonly side: (name: string) => Effect.Effect<Tree, Failed>;
 		readonly head: (folder: string) => Effect.Effect<string, Failed>;
-		/** Write `files` into `folder`, as they are. */
+		/** Write `files` into `folder`, as they are. A link in a file's place is replaced, never followed. */
 		readonly write: (folder: string, files: readonly PlainFile[]) => Effect.Effect<void, Failed>;
 		/**
 		 * The repository's `[format] run` on `files`, paths from `folder`'s root, run there as the install
-		 * is. No files: it runs nothing. Only a settings read that broke fails it.
+		 * is. A path that is gone, or that a link leads through, is skipped. No files left: it runs
+		 * nothing. Only a settings read that broke, or a folder that is not there, fails it.
 		 */
 		readonly format: (folder: string, files: readonly string[]) => Effect.Effect<Formatted, Failed>;
 		/** Write `files`, then commit everything changed in `folder`. Nothing changed: the head as it is. */
@@ -386,6 +387,13 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				for (const file of files) {
 					const to = path.join(folder, file.path);
+					// A link where the file goes, as a round the guard turned back can leave, is taken away
+					// first, so the file is written in the copy and never where the link points.
+					const linked = yield* fs.lstat(to).pipe(
+						Effect.map((info) => info.type === "SymbolicLink"),
+						Effect.orElseSucceed(() => false),
+					);
+					if (linked) yield* quiet(fs.remove(to));
 					yield* quiet(fs.makeDirectory(path.dirname(to), {recursive: true}));
 					yield* quiet(fs.writeFileString(to, file.text));
 				}
@@ -415,7 +423,16 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				const run = (yield* settings).format?.run;
 				if (run === undefined) return {_tag: "none"} as const;
-				const [first, ...rest] = files;
+				// The formatter runs outside the box, so a file reached through a link would be written
+				// where the link points. Only a file of the copy itself goes to it.
+				const root = yield* quiet(fs.realPath(folder));
+				const own = yield* Effect.filter(files, (file) =>
+					fs.realPath(path.join(root, file)).pipe(
+						Effect.map((real) => real === path.join(root, file)),
+						Effect.orElseSucceed(() => false),
+					),
+				);
+				const [first, ...rest] = own;
 				if (first === undefined) return {_tag: "formatted"} as const;
 				const [program, ...args] = formatCommand(run, [first, ...rest]);
 				const ran = yield* on(runChild(program, args, {cwd: folder, env: runEnv()}));

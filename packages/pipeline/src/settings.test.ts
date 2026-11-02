@@ -243,10 +243,22 @@ describe("fabrika.toml", () => {
 			expect(got).toContain(says);
 		});
 
-		it("{files} becomes each path, and a path that reads like an option is led by ./", () => {
+		it("{files} becomes each path, each led by ./ so none reads as an option or a pattern", () => {
 			expect(
-				formatCommand(["node", "fmt.mjs", "{files}", "--quiet"], ["src/a.ts", "-b.ts", "c d.ts"]),
-			).toEqual(["node", "fmt.mjs", "src/a.ts", "./-b.ts", "c d.ts", "--quiet"]);
+				formatCommand(
+					["node", "fmt.mjs", "{files}", "--quiet"],
+					["src/a.ts", "-b.ts", "c d.ts", "!e.ts", "./f.ts"],
+				),
+			).toEqual([
+				"node",
+				"fmt.mjs",
+				"./src/a.ts",
+				"./-b.ts",
+				"./c d.ts",
+				"./!e.ts",
+				"./f.ts",
+				"--quiet",
+			]);
 		});
 	});
 

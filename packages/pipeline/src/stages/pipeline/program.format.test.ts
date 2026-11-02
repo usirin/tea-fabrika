@@ -264,8 +264,9 @@ const crashesOnce = (seen: string) => ({
 	path: "fmt-once.mjs",
 	text: [
 		'import {appendFileSync, existsSync, readFileSync, writeFileSync} from "node:fs";',
+		'import {normalize} from "node:path";',
 		`const seen = ${JSON.stringify(seen)};`,
-		"const files = process.argv.slice(2);",
+		"const files = process.argv.slice(2).map((file) => normalize(file));",
 		`if (files.includes(${JSON.stringify(ANSWER)}) && !(existsSync(seen) && readFileSync(seen, "utf8").includes(${JSON.stringify(ANSWER)}))) {`,
 		`\tappendFileSync(seen, ${JSON.stringify(`${ANSWER}\n`)});`,
 		'\tprocess.stderr.write("crashed\\n");',

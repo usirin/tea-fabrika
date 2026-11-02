@@ -188,17 +188,18 @@ const FormatTable = Schema.Struct({
 
 /**
  * The formatter's command for `files`, each a path from the repository's root, in place of `{files}`.
- * A path that starts with `-` gets `./`, so it is never read as an option. It takes one file at least:
- * a formatter given no path formats the whole repository. Pure.
+ * Each path is led by `./`, so it is a path and nothing else: oxfmt reads a word that starts with `-`
+ * as an option, and one that starts with `!` as "every file but this". It takes one file at least: a
+ * formatter given no path formats the whole repository. Pure.
  *
- *   formatCommand(["node", "fmt.mjs", "{files}"], ["a.ts", "-b.ts"])   // ["node", "fmt.mjs", "a.ts", "./-b.ts"]
+ *   formatCommand(["node", "fmt.mjs", "{files}"], ["a.ts", "!b.ts"])   // ["node", "fmt.mjs", "./a.ts", "./!b.ts"]
  */
 export const formatCommand = (
 	run: FormatCommand,
 	files: readonly [string, ...string[]],
 ): readonly [string, ...string[]] => {
 	const [program, ...args] = run;
-	const paths = files.map((file) => (file.startsWith("-") ? `./${file}` : file));
+	const paths = files.map((file) => (file.startsWith("./") ? file : `./${file}`));
 	return [program, ...args.flatMap((word) => (word === FILES ? paths : [word]))];
 };
 

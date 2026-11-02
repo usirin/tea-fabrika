@@ -71,8 +71,6 @@ export const laneBuildWrites = Layer.effect(
 		const work = yield* LaneWork;
 		const now = yield* LaneNow;
 		const tickets = yield* Tickets;
-		const fs = yield* FileSystem.FileSystem;
-		const path = yield* Path.Path;
 		return {
 			copy: (_ticket, number) =>
 				Effect.gen(function* () {
@@ -96,12 +94,10 @@ export const laneBuildWrites = Layer.effect(
 							.pipe(Effect.ignore);
 						return yield* Effect.fail({_tag: "exam_touched" as const});
 					}
-					// The builder's files through the repository's formatter, the ones it took away aside. One
-					// that failed keeps what it wrote, and the ticket says so: the checks still judge the change.
-					const there = yield* Effect.filter(changed, (file) =>
-						fs.exists(path.join(copied.tree, file)).pipe(Effect.orElseSucceed(() => false)),
-					);
-					const formatted = yield* work.format(copied.tree, there);
+					// The builder's files through the repository's formatter, which leaves out the ones it took
+					// away and any a link leads through. One that failed keeps what it wrote, and the ticket says
+					// so: the checks still judge the change.
+					const formatted = yield* work.format(copied.tree, changed);
 					if (formatted._tag === "failed")
 						yield* tickets
 							.talk(numberOf(ticket), `format-build-failed/${copied.base}`, {
@@ -121,7 +117,7 @@ export const laneBuildWrites = Layer.effect(
 			},
 		};
 	}),
-).pipe(Layer.provide(nodeServices));
+);
 
 /**
  * The test command in a box with no login and no key, and vitest's report read back. srt hands its

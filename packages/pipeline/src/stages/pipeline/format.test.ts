@@ -5,6 +5,7 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
@@ -61,6 +62,18 @@ const LONG = {
 		"",
 	].join("\n"),
 };
+
+/** The repository's own formatter, oxfmt behind its pinned settings, for the cases that hang on how it reads its words. */
+const OXFMT = join(
+	import.meta.dirname,
+	"..",
+	"..",
+	"..",
+	"..",
+	"..",
+	"oxlint-plugins",
+	"format.ts",
+);
 
 const EXAM = "src/lower.test.ts";
 const SPACES = 'it("lowers", () => {\n  expect(lower("AB")).toBe("ab");\n});\n';
@@ -170,6 +183,22 @@ describe("the exam's format commit before a build round", () => {
 		expect(git("show", `${formatted}:${EXAM}`)).toBe(TABS.trim());
 		expect(base).toBe(formatted);
 		expect(git("status", "--porcelain", "--", "src/left.ts")).toBe("?? src/left.ts");
+	});
+
+	it("an exam file a turned-back round left as a link out of the copy: the link's target stays as it was", async () => {
+		const run = lane(["node", FORMATTER.path, "{files}"]);
+		const outside = join(dir, "outside.ts");
+		writeFileSync(outside, SPACES);
+		const {tree, formatted} = await run(
+			Effect.gen(function* () {
+				const {tree} = yield* examOnTree;
+				rmSync(join(tree, EXAM));
+				symlinkSync(outside, join(tree, EXAM));
+				return {tree, formatted: yield* formatExam(NUMBER, tree, [EXAM])};
+			}),
+		);
+		expect(readFileSync(outside, "utf8")).toBe(SPACES);
+		expect(gitIn(tree)("show", `${formatted}:${EXAM}`)).toBe(TABS.trim());
 	});
 
 	it("an exam file already formatted gets no commit", async () => {
@@ -284,6 +313,26 @@ describe("the builder's files before the build's commit", () => {
 			"src/slug.ts",
 		]);
 		expect(said).toEqual([]);
+	});
+
+	it("a file named with a leading ! is that file alone: oxfmt reads a bare one as everything else", async () => {
+		const run = lane(["node", OXFMT, "{files}"]);
+		const {tree, pushed} = await run(
+			round((tree) => writeFileSync(join(tree, "!x.ts"), "export const x  =   1\n")),
+		);
+		const git = gitIn(tree);
+		expect(git("show", "--format=", "--name-only", pushed.head)).toBe("!x.ts");
+		expect(git("show", `${pushed.head}:!x.ts`)).toBe("export const x = 1;");
+		expect(git("show", `${pushed.head}:${EXAM}`)).toBe(SPACES.trim());
+	});
+
+	it("a link the builder made to a file out of the copy: the formatter never reaches its target", async () => {
+		const run = lane(["node", FORMATTER.path, "{files}"]);
+		const outside = join(dir, "outside.ts");
+		writeFileSync(outside, SPACES);
+		const {pushed} = await run(round((tree) => symlinkSync(outside, join(tree, "src/link.ts"))));
+		expect(readFileSync(outside, "utf8")).toBe(SPACES);
+		expect(pushed.changed).toBe(true);
 	});
 
 	it("a formatter that fails: the change is still committed, and the ticket says what it said", async () => {
