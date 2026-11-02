@@ -21,11 +21,13 @@ already work against the cloud brain,** which is what "a browser is always a cli
 
 ## What is proposed
 
-- **Words before facts.** Facts live forever, and a Windows PC must not write `touch-id`.
-  Rename the capabilities `touch-id` to `check` and `keychain` to `seal`, and record the
-  OS in the hello, before PR D of [Tier 1](../plan/tier-1.md) writes real facts. This
-  differs from the Tier 1 plan as written, so it needs the owner's word. 75%: a menu may
-  want the vendor's name. One walk of the Approve screen settles it.
+- **Words before facts. Decided by the owner, 2026-11-02.** Facts live forever, and a
+  Windows PC must not write `touch-id`. The capabilities are renamed `touch-id` to `verify`
+  and `keychain` to `seal`, and the hello records the OS, before PR D of
+  [Tier 1](../plan/tier-1.md) writes real facts. `verify` is WebAuthn's word ("user
+  verification"); this note first said `check`, which the Tier 1 plan already uses for three
+  other things. A menu may still show the vendor's name, such as Touch ID or Windows Hello:
+  that is a label, not a fact.
 - **A `next-windows` CI job in the exam pull request.** Not blocking until its first green.
   Standard runners cost nothing in public repositories, and this one skips typecheck and
   lint, whose results do not depend on the OS. 70% on green by PR A. The doubt is Alchemy's
