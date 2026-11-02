@@ -473,7 +473,7 @@ const mergeWords = (carry: Carry): string => {
 };
 
 /** The rounds' question, by the step that sent the work back and whether the rounds ran out. Pure. */
-const spentWords = (s: Held, step: LaneStep): string => {
+const spentQuestion = (s: Held, step: LaneStep): string => {
 	const still =
 		step === "review"
 			? "the review still sends the work back"
@@ -495,7 +495,7 @@ const questionFor = (
 		exam_merge: titleOf(`Do you want to merge these rule changes: ${s.carry.rules.join(", ")}?`),
 		merge: titleOf(mergeWords(s.carry)),
 		step: titleOf(asks),
-		rounds_spent: titleOf(spentWords(s, step)),
+		rounds_spent: titleOf(spentQuestion(s, step)),
 	}[kind];
 	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
 	// the old count is safe too: that count was never more than the trail, and its answer added a row.

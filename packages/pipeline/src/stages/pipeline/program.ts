@@ -7,7 +7,7 @@ import {
 	type RefsOf,
 	type Send,
 } from "@kampus/fabrika-old";
-import {Clock, Effect, Exit, Schema, Stream} from "effect";
+import {Clock, Effect, Exit, Ref, Schema, Stream} from "effect";
 import {claim, newLane, release} from "../../asks/claims.ts";
 import {readFacts, sendFact} from "../../asks/ledger.ts";
 import {foldLedger} from "../../asks/rules.ts";
@@ -48,7 +48,7 @@ import type {PropertyId} from "../test-writer/brief.ts";
 import {answersChild, answersToTheEnd, testsChild, testsToTheEnd} from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
-import {listUsdOf, LaneNow, pickedFor, type Picked, stepStarted} from "./agents.ts";
+import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
 import {formatExam} from "./format.ts";
 import {
@@ -58,13 +58,13 @@ import {
 	jobsList,
 	mutantWords,
 	money,
-	redItems,
 	redWords,
 	ruleChangeLines,
 	spentWords,
 	throughWords,
 	untestedRows,
 	untestedWords,
+	withRed,
 } from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
 import {leaveBehind} from "./leave.ts";
@@ -592,7 +592,7 @@ const bodies = {
 				})
 				.pipe(Effect.ignore);
 			return {
-				...ended(end.outcome, {survived, open: redItems(failed, tail)}),
+				...ended(end.outcome, {survived, open: withRed(at.cmd.carry.open, failed, tail)}),
 				failed: failed.slice(0, FAILED_MOST),
 			};
 		}),
@@ -900,6 +900,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const run = `r-${cmd.step}-${cmd.count}`;
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
+			const seen = yield* Ref.make<Picked | null>(null);
 
 			const body = Effect.gen(function* () {
 				const {repo} = yield* work.origin;
@@ -943,24 +944,16 @@ const laneInterpret = ({send, machines}: Stages) => ({
 							? Effect.void
 							: now.set({picked, brief, slots, folder, access}),
 				};
-				const end: BodyEnd = yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
-				return {end, picked};
+				return yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
 			}).pipe(Effect.scoped);
 
 			const exit = yield* Effect.exit(body);
 			// The session id a write could not land when it opened, written now, so it is never lost.
 			const sessionLeft = now.session.left;
 			const spent = yield* now.take;
-			const picked = Exit.isSuccess(exit) ? exit.value.picked : null;
-			const listUsd =
-				picked === null
-					? 0
-					: listUsdOf(picked.model, {
-							input: spent.input,
-							cached: spent.cached,
-							output: spent.output,
-						});
-			const usd = picked?.harness === "claude" ? (spent.usd ?? 0) : (listUsd ?? 0);
+			// Who ran it, even when the step broke after it was picked: a price is never guessed as free.
+			const picked = yield* Ref.get(seen);
+			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
 			const write = (outcome: Outcome, failed?: readonly string[]) =>
 				tickets.write(cmd.number, `${run}/ended`, {
@@ -983,7 +976,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(failed === undefined ? {} : {failed}),
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems, after: past, failed} = exit.value.end;
+				const {outcome, carry, problems, after: past, failed} = exit.value;
 				yield* sessionLeft.pipe(Effect.ignore);
 				yield* write(outcome, failed);
 				yield* said(

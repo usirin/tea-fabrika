@@ -103,9 +103,27 @@ export const throughWords = ({findings, mutants}: Through = NOTHING): readonly s
 			]),
 ];
 
+/**
+ * `text` as one markdown code span, so nothing in it is read as markdown: a fence one backtick longer
+ * than the longest run inside it, and a space each side where it starts or ends with one
+ * (CommonMark 0.31, code spans). Still made inert, so no reference in it reaches a code host. Pure.
+ */
+const codeSpan = (text: string): string => {
+	const line = inert(text.replace(/\s+/g, " "));
+	const fence = "`".repeat(
+		Math.max(0, ...[...line.matchAll(/`+/g)].map((run) => run[0].length)) + 1,
+	);
+	const pad = line.startsWith("`") || line.endsWith("`") ? " " : "";
+	return `${fence}${pad}${line}${pad}${fence}`;
+};
+
+/** An open item as a person reads it: a failing test's name, the repository's text, as code. Pure. */
+const itemWords = (item: Item): string =>
+	item.from === "tests" ? codeSpan(item.text) : inert(item.text);
+
 /** What is still open as the rounds run out, for the person asked whether once more. Nothing open: nothing said. */
 export const openWords = (open: readonly Item[]): readonly string[] =>
-	open.length === 0 ? [] : ["Still open:", listed(open.map((item) => inert(item.text)))];
+	open.length === 0 ? [] : ["Still open:", listed(open.map(itemWords))];
 
 /** What the builder is told of a red head: each failing test, or with no name, the head as a whole. Pure. */
 export const redItems = (failed: readonly string[], tail: string): readonly Item[] =>
@@ -126,6 +144,19 @@ export const redItems = (failed: readonly string[], tail: string): readonly Item
 				where: [name.split(" > ")[0] ?? name],
 				wants: [],
 			}));
+
+/**
+ * What is open after a red head: what a review left open stays, beside each test that fails now. A
+ * last red's names go: only what fails now is open. Pure.
+ */
+export const withRed = (
+	open: readonly Item[],
+	failed: readonly string[],
+	tail: string,
+): readonly Item[] => [
+	...open.filter((item) => item.from !== "tests"),
+	...redItems(failed, tail).map((item) => ({...item, from: "tests" as const})),
+];
 
 /** The ticket's comment on a red head: each failing test by name, and the first lines of why. Pure. */
 export const redWords = (failed: readonly string[], tail: string, most: number): string =>

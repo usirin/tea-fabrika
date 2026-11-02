@@ -64,17 +64,34 @@ export const resultsOf = (
 			: [];
 	});
 
+/**
+ * The longest name or error line kept, in characters. Ours, with no source: long enough for a
+ * file, a few describes and a title, short enough that one name cannot fill a comment.
+ */
+export const NAME_MOST = 200;
+
+const CUT = "...";
+
+/** Text as one line of at most `NAME_MOST`: any run of spaces, tabs or newlines is one space. Pure. */
+const oneLine = (text: string): string => {
+	const line = text.replace(/\s+/g, " ").trim();
+	return line.length <= NAME_MOST ? line : `${line.slice(0, NAME_MOST - CUT.length)}${CUT}`;
+};
+
 /** The first line of an error that says something: vitest's own leads with the error's name. */
 const firstLine = (text: string | null | undefined): string =>
-	(text ?? "")
-		.split("\n")
-		.map((line) => line.trim())
-		.find((line) => line !== "") ?? "";
+	oneLine(
+		(text ?? "")
+			.split("\n")
+			.map((line) => line.trim())
+			.find((line) => line !== "") ?? "",
+	);
 
 /**
  * Each test that failed in a report, by name: its file from `root`, each `describe`, then its own
  * title, joined with ` > `. A file that did not load fails as a whole, by its path. `error`: the
- * first line of why. Pure.
+ * first line of why. A name is the repository's own text, bound for a public ticket and an agent's
+ * brief, so each is one line of at most `NAME_MOST`, here, before anything reads it. Pure.
  */
 export const failuresOf = (
 	report: Report,
@@ -85,8 +102,8 @@ export const failuresOf = (
 		const failed = file.assertionResults.filter((a) => a.status === "failed");
 		if (failed.length > 0)
 			return failed.map((a) => ({
-				name: [path, ...(a.ancestorTitles ?? []), a.title].join(" > "),
+				name: oneLine([path, ...(a.ancestorTitles ?? []), a.title].join(" > ")),
 				error: firstLine(a.failureMessages?.[0]),
 			}));
-		return file.status === "failed" ? [{name: path, error: firstLine(file.message)}] : [];
+		return file.status === "failed" ? [{name: oneLine(path), error: firstLine(file.message)}] : [];
 	});

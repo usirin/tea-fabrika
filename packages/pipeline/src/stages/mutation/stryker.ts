@@ -1,3 +1,4 @@
+import {homedir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
@@ -188,6 +189,16 @@ const ERRORS_SHOWN = 5;
 /** The last lines of a command's output: what tells why when no report names a test. Pure. */
 const lastLines = (text: string, most = 20): string =>
 	text.trimEnd().split("\n").slice(-most).join("\n");
+
+/**
+ * `text` with the copy's folder said as `.` and the home folder as `~`: the last lines go on a
+ * public ticket, and a path there would say whose machine ran them. The copy first, as it is in the
+ * home. Pure.
+ */
+export const tidyPaths = (text: string, folder: string, home: string): string => {
+	const copied = folder === "" ? text : text.replaceAll(folder, ".");
+	return home === "" ? copied : copied.replaceAll(home, "~");
+};
 
 const quiet = () => {};
 /** The instrumenter's logger: warnings and errors only. */
@@ -412,13 +423,15 @@ const services = (setup: StrykerSetup) =>
 					Effect.map((report) => failuresOf(report, folder)),
 					Effect.orElseSucceed(() => []),
 				);
-				const tail =
+				const said =
 					failures.length === 0
 						? lastLines(`${ran.out}${ran.err}`)
 						: failures
 								.slice(0, ERRORS_SHOWN)
 								.map(({name, error}) => `${name}: ${error}`)
 								.join("\n");
+				// The real folder and the one asked for: a temp folder is a link on macOS.
+				const tail = tidyPaths(tidyPaths(said, folder, ""), setup.folder(head), homedir());
 				return {result: "red", failed: failures.map((f) => f.name), tail} satisfies Tested;
 			});
 

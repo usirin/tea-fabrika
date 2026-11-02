@@ -94,6 +94,11 @@ export const Item = Schema.Struct({
 	where: Schema.Array(Schema.String),
 	/** What has to be true for it to close, one per finding. */
 	wants: Schema.Array(Schema.String),
+	/**
+	 * `tests`: a test that fails at the head, by name in `text`, the repository's own text. Left out:
+	 * a review's, a check's or a ship's, as before this key.
+	 */
+	from: Schema.optionalKey(Schema.Literal("tests")),
 });
 export type Item = typeof Item.Type;
 
