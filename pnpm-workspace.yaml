@@ -6,6 +6,7 @@
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
 # experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
 # experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
+# experiments/174-effect-on-cloudflare: one experiment's harness, so Effect's plumbing can be bundled into a Durable Object.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 packages:
   - apps/*
@@ -19,6 +20,7 @@ packages:
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader
+  - experiments/174-effect-on-cloudflare
 
 catalog:
   '@agentclientprotocol/sdk': 2.2.0
