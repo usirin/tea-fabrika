@@ -1,6 +1,6 @@
 # A free-form plan goes to the planner
 
-Decided by the owner 2026-11-01. Tier 1 goes this way once, with its last step by hand. The
+Decided 2026-11-01, with all its leans. Tier 1 goes this way once, with its last step by hand. The
 whole flow is built in `next/`.
 
 **The answer:** a person and an agent talk a plan through in free form. It goes in the
@@ -24,6 +24,10 @@ each small ticket runs its lane    plan, tests, build, ...          today's vers
   PR letters and order are what the planner reads, and it may change them.
 - **Tier 1's approval of 2026-11-01 covers what it builds and why.** It does not cover the
   breakdown. The owner approves the planner's plan before any builder starts.
+- **Before Tier 1's ticket is filed, the planner writes an `estimated` fact,** as
+  [agent hours](./agent-hours.md) decided. Today's planner does not write one yet, and tracker
+  ticket 150 adds it. The stop at the owner's yes also gets one rehearsal before Tier 1's ticket
+  is filed (see [what this cannot tell us](#what-this-cannot-tell-us)).
 - **Tier 1's split goes by hand, once, as a named exception.** After the owner's yes, an agent
   files each task as a ticket with the existing tracker command, `tracker`'s `file` input, and
   logs it in `field/`.
@@ -78,7 +82,9 @@ properties, an interface and exam changes (`stages/plan/plan.ts:167-175`, and th
 Teaching today's plan step to split, on today's version.
 
 - **What it would have cost, a guess:** about 7 files, 400 to 700 product lines, 450 to 750
-  test lines, 6 to 10 agent hours, at this repo's 150 lines an hour. Sure: 50%.
+  test lines, about 1.4 to 2.4 agent hours at the measured rate of about 600 written lines an
+  agent hour, a `2` on the 0.25 to 8 scale ([agent hours](./agent-hours.md), experiment 187,
+  restated 2026-11-01; *old guess, wrong: 6 to 10 agent hours, at 150 lines an hour*). Sure: 50%.
 - **Why not:** today's version is deleted when `next/` takes the job over. Tier 1 would wait
   for code that gets thrown away, to save one filing by hand.
 
@@ -103,8 +109,8 @@ a new one, so it could file every ticket again.
   likely above $1. The planner may return a breakdown worse than a careful person would write,
   and the owner's look is what catches that. Tiers 2 to 5 come before Tier 6, and each is a
   project, so each needs the owner's yes to split by hand, or the flow moves up.
-- **How sure:** 85% on the flow, since it reuses today's stage and the owner chose it. 70% on
-  Tier 6, since the order of Tiers 3 to 6 is only proposed. 60% that the planner does this well
+- **How sure:** Decided 2026-11-01, 85%: the flow, since it reuses today's stage and the owner
+  chose it. Decided 2026-11-01, 70%: Tier 6, since the order of Tiers 3 to 6 is only proposed. 60% that the planner does this well
   at this scale on its first try. Experiment 105 found 2 to 3 tasks an epic and weak lists of
   files. One run on Tier 1's text settles that.
 

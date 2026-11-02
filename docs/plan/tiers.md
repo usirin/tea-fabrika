@@ -39,7 +39,7 @@ will change. So is splitting the old Tier 4 into hands and agents, which makes s
 
 ### A requirement: the whole plan flow
 
-Tier 6 in `next/`, since that is where its pipeline stages land. How sure: 70%, since the order
+Tier 6 in `next/`, since that is where its pipeline stages land. Decided 2026-11-01, 70%, since the order
 of Tiers 3 to 6 is only proposed. It is built properly there:
 
 ```text
