@@ -1,4 +1,5 @@
 import {Effect, Schema} from "effect";
+import {sha256} from "../../tickets/approval.ts";
 import type {Hash} from "../../tickets/ticket.ts";
 import {LaneStep} from "./machine.ts";
 
@@ -9,7 +10,8 @@ import {LaneStep} from "./machine.ts";
 //   keyOf({step: "build", ticket: "sha256:…", plan: 1, base: "92740b74", exam: "5d38d582", ...})
 //   // "sha256:b3f1e9…", for these inputs, every time
 //
-// STUB, written by the test writer so the tests compile: the builder owns this file.
+// The hash is of one JSON array, the fields in `Inputs`' own order, so a null and a text that reads
+// "null" differ, and a new field joins the key by being a field.
 
 /** What a step read, by name. `null`: the step read no such thing. */
 export const Inputs = Schema.Struct({
@@ -35,6 +37,8 @@ export const Inputs = Schema.Struct({
 });
 export type Inputs = typeof Inputs.Type;
 
-/** The key of `inputs`. STUB: every input gives the same key, so the tests are red. */
-export const keyOf = (_inputs: Inputs): Effect.Effect<Hash> =>
-	Effect.succeed(`sha256:${"0".repeat(64)}`);
+const FIELDS = Object.keys(Inputs.fields).filter((name): name is keyof Inputs => name in Inputs.fields);
+
+/** The key of `inputs`: SHA-256 of their values, in the fields' order. */
+export const keyOf = (inputs: Inputs): Effect.Effect<Hash> =>
+	sha256(JSON.stringify(FIELDS.map((field) => inputs[field])));
