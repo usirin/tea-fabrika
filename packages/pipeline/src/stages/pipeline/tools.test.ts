@@ -156,9 +156,10 @@ describe("code's checks, as the repository's settings name them", () => {
 			}).pipe(Effect.provide(Layer.provideMerge(laneCheckRunner, work))),
 		);
 	/** The settings' `[build]` table, as `change` makes it. */
+	type Build = NonNullable<Settings["build"]>;
 	const buildWith =
-		(change: (build: NonNullable<Settings["build"]>) => Settings["build"]) =>
-		(work: LaneWork["Service"]) => ({
+		(change: (build: Build) => Build) =>
+		(work: LaneWork["Service"]): LaneWork["Service"] => ({
 			...work,
 			settings: Effect.map(work.settings, (s) => ({...s, build: change(s.build ?? {})})),
 		});
