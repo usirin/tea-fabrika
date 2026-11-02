@@ -30,7 +30,7 @@ import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {startHost} from "./start-host.ts";
-import {fabrika, fabrikaLight} from "./themes.ts";
+import {followLook, frameColor} from "./themes.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -192,7 +192,7 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
 		title: "fabrika",
 		icon,
 		// The desk's color in the system's look, so the window shows no other color before its page.
-		backgroundColor: (nativeTheme.shouldUseDarkColors ? fabrika : fabrikaLight).colors.desk,
+		backgroundColor: frameColor(nativeTheme),
 		...FRAME,
 		show: !quiet,
 		paintWhenInitiallyHidden: true,
@@ -205,6 +205,7 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
 			preload,
 		},
 	});
+	followLook(nativeTheme, window);
 	if (quiet) window.showInactive();
 	window
 		.loadURL(DESK)

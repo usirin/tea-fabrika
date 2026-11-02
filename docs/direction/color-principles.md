@@ -88,8 +88,6 @@ place it sits, hovered and selected rows included, not only on the page.
 - The grays and the state colors in `apps/fabrika/src/window/window.css` are Radix steps since
   ticket 144, and the terminal and the window's frame read them from `apps/fabrika/src/themes.ts`.
   The hues are still hand-written oklch: the line tints, the type colors and the service colors.
-- The editor's tables (`apps/fabrika/src/editor/screen.ts`) still print 24-bit colors tuned to the
-  old dark grays, so in the light look their strong text is near white.
 - Three of the six tints sit on amber, red and green, so they break principle 2.
 - Pipes have no second cue yet, so they break principle 3.
 

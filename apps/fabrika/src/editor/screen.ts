@@ -98,16 +98,20 @@ export const shown = (text: string): string =>
 		.join("");
 
 /**
- * How the app's terminal draws a table's tones, in its own palette (window/window.css), as 24-bit
- * color: strong is the first ink and bold, muted the faint text, faint the wire's gray, accent the
- * "your turn" blue, warning the amber. Plain text keeps the terminal's own ink, the second.
+ * A table's tones, named by the terminal's 16-color palette, never as 24-bit color: these bytes
+ * reach every viewer's terminal, and each draws them in its own look (docs/direction/themes.md,
+ * what a third-party program gets, point 6). Strong is the terminal's own ink, bold; muted and
+ * faint bright black (slate 11 in both built-ins); accent blue; warning yellow (amber). Plain text
+ * keeps the terminal's own ink. Each reads 4.5:1 on the terminal's background in fabrika and
+ * fabrika-light (screen.test.ts). This is Shell.ANSI with faint as muted: its `2;90` is drawn at
+ * half alpha, and reads under 3:1 in light.
  */
 const PALETTE: Shell.Palette = {
-	strong: "1;38;2;235;235;236", // --n-12, --text-primary
-	muted: "38;2;134;136;138", // --n-9, --text-faint
-	faint: "38;2;93;95;98", // between --n-8 and --n-9: a header is read, but last
-	accent: "38;2;164;189;245", // --a-11, --turn
-	warning: "38;2;229;190;119", // --running
+	strong: "1",
+	muted: "90",
+	faint: "90",
+	accent: "34",
+	warning: "33",
 };
 
 /**

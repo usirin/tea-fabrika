@@ -212,3 +212,33 @@ export const terminalTheme = ({terminal: t}: Theme) => {
 		brightWhite,
 	};
 };
+
+/** The system's look, as Electron's nativeTheme says it. */
+interface Look {
+	readonly shouldUseDarkColors: boolean;
+}
+
+/** The window's frame, what shows before the page draws and behind it as the window resizes. */
+export const frameColor = (look: Look) =>
+	(look.shouldUseDarkColors ? fabrika : fabrikaLight).colors.desk;
+
+/**
+ * Repaint a window's frame on each look change, as the page follows it with light-dark(), until the
+ * window closes. Electron's nativeTheme and BrowserWindow fit these shapes, so this runs on Node.
+ *
+ *   followLook(nativeTheme, window);
+ */
+export const followLook = (
+	look: Look & {
+		readonly on: (event: "updated", fn: () => void) => unknown;
+		readonly off: (event: "updated", fn: () => void) => unknown;
+	},
+	window: {
+		readonly setBackgroundColor: (color: string) => void;
+		readonly once: (event: "closed", fn: () => void) => unknown;
+	},
+) => {
+	const paint = () => window.setBackgroundColor(frameColor(look));
+	look.on("updated", paint);
+	window.once("closed", () => look.off("updated", paint));
+};
