@@ -381,7 +381,7 @@ describe("a head whose tests fail goes back to the builder", () => {
 		expect(step?.step).toBe("build");
 		expect(step?.round).toBe(2);
 		expect(step?.carry.open).toEqual([FAILED]);
-		expect(s.trail.at(-1)).toEqual({step: "mutation", said: "send:builder:tests_red"});
+		expect(running(s).trail.at(-1)).toEqual({step: "mutation", said: "send:builder:tests_red"});
 	});
 
 	it("once the rounds are spent, asks `rounds_spent` with again or stop, and names what is still red", () => {
@@ -389,7 +389,7 @@ describe("a head whose tests fail goes back to the builder", () => {
 		const {question} = asking(s);
 		expect(question.for).toBe("rounds_spent");
 		expect(question.picks).toEqual(["again", "stop"]);
-		expect(s.round).toBe(MAX_ROUNDS);
+		expect(asking(s).round).toBe(MAX_ROUNDS);
 		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
 		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
 		const words = [asked.what, ...(asked.also ?? []), ...(asked.does ?? [])].join("\n");
