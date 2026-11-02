@@ -150,6 +150,12 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   is recorded but must not be trusted, keep it out of the deciding code's
   types. Example: a ledger entry keeps the writer's own clock as `said` from day
   one, but leases and limits use only the referee's `at`.
+- **Record wide, read later.** Decided by the owner on 2026-11-01: record every measure we
+  can, even if nothing reads it yet, because we cannot know which question we will ask later.
+  A measure nobody reads costs little; one we wish we had is gone. The limits: it must not slow
+  the work in a way we can measure, and it never holds a secret. Content a person may want gone
+  stays deletable ([an agent run keeps its content](./docs/direction/an-agent-run-keeps-its-content.md)).
+  The industry's name is wide events (Honeycomb; Stripe's canonical log lines).
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
