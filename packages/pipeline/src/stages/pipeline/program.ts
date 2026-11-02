@@ -83,7 +83,7 @@ import {
 	withRed,
 } from "./found.ts";
 import {answerHeard, ticketUrlOf} from "./hosts.ts";
-import {keyOf} from "./key.ts";
+import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
 	askedFor,
@@ -1331,7 +1331,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 			const seen = yield* Ref.make<Picked | null>(null);
-			const keyed = yield* Ref.make<Hash | null>(null);
+			const keying = yield* Ref.make<{readonly key: Hash; readonly inputs: Inputs} | null>(null);
 
 			const body = Effect.gen(function* () {
 				const {repo} = yield* work.origin;
@@ -1343,23 +1343,22 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
 				const ticket = yield* tickets.read(cmd.number);
 				const first = ticket.timeline[0]?.fact;
-				// What the step reads, as its input key (P7): only known now.
-				yield* Ref.set(
-					keyed,
-					yield* keyOf({
-						step: cmd.step,
-						ticket: yield* hashOf(textOf(ticket)),
-						plan: cmd.carry.version,
-						base: cmd.carry.base,
-						exam: examHeadOf(ticket.timeline),
-						head: cmd.carry.head,
-						brief: brief?.hash ?? null,
-						harness: picked?.harness ?? null,
-						model: picked?.model ?? null,
-						effort: picked?.effort ?? null,
-						settings: yield* sha256(JSON.stringify(settings)),
-					}),
-				);
+				// What the step reads, as its input key (P7): only known now. The end keeps the inputs too, the
+				// same value the key is made of, so a later reader can say which one changed.
+				const inputs: Inputs = {
+					step: cmd.step,
+					ticket: yield* hashOf(textOf(ticket)),
+					plan: cmd.carry.version,
+					base: cmd.carry.base,
+					exam: examHeadOf(ticket.timeline),
+					head: cmd.carry.head,
+					brief: brief?.hash ?? null,
+					harness: picked?.harness ?? null,
+					model: picked?.model ?? null,
+					effort: picked?.effort ?? null,
+					settings: yield* sha256(JSON.stringify(settings)),
+				};
+				yield* Ref.set(keying, {key: yield* keyOf(inputs), inputs});
 				yield* now.exam.set(cmd.carry.exam);
 				const trace = yield* jobTraceId;
 				// Before any setup: the ticket shows the step running, and a crash leaves `started` behind.
@@ -1404,7 +1403,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const picked = yield* Ref.get(seen);
 			const {usd, listUsd} = priceOf(picked, spent);
 			const to = yield* Clock.currentTimeMillis;
-			const key = yield* Ref.get(keyed);
+			const keyed = yield* Ref.get(keying);
 			// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
 			const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
 				tickets.write(cmd.number, `${run}/ended`, {
@@ -1426,7 +1425,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
 					...(more.failed === undefined ? {} : {failed: more.failed}),
 					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
-					...(key === null ? {} : {key}),
+					...(keyed === null ? {} : keyed),
 					carry: more.carry,
 				} as CodeFact);
 			if (Exit.isSuccess(exit)) {

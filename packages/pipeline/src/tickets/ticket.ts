@@ -250,6 +250,14 @@ export const CodeFact = Schema.Union([
 		 */
 		key: Schema.optionalKey(Hash),
 		/**
+		 * What `key` was made of, by name: values and hashes only, never a path or a secret, so a later
+		 * reader can say which input changed. Its shape is `stages/pipeline/key.ts`'s `Inputs`, which
+		 * this file cannot name. Left out: an end written before this key, or one with no key.
+		 */
+		inputs: Schema.optionalKey(
+			Schema.Record(Schema.String, Schema.NullOr(Schema.Union([Schema.String, Schema.Finite]))),
+		),
+		/**
 		 * What the step left for the steps after it: the change to the lane's carry, which the lane's
 		 * fold reads back when its save is gone (self-fix PR 5, `stages/pipeline/restart.ts`). Only
 		 * known now. Its shape is the lane's own, which this file cannot name: the lane's types import

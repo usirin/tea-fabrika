@@ -5,8 +5,9 @@ import type {Hash} from "../../tickets/ticket.ts";
 import {LaneStep} from "./machine.ts";
 
 // A step's input key (self-fix PR 5, P7): a hash of what the step read. The same inputs always give
-// the same key, and a change to any one of them gives another. Each `done` fact keeps the key it ran
-// on; nothing reads it to skip a step yet, but a key not written now can never be worked out later.
+// the same key, and a change to any one of them gives another. Each `ended` fact keeps the key it ran
+// on and the inputs it was made of; nothing reads them to skip a step yet, but a key not written now
+// can never be worked out later, and a key alone never says which input changed.
 //
 //   keyOf({step: "build", ticket: "sha256:…", plan: 1, base: "92740b74", exam: "5d38d582", ...})
 //   // "sha256:b3f1e9…", for these inputs, every time
