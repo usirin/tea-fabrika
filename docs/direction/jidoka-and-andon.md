@@ -413,8 +413,11 @@ counts once.
 - Four judgment rows are `over_budget` spend asks. A standing project limit, as the
   [one meter](./one-ask-and-one-meter.md) note proposes, would make most of them rare.
 - The plan builds rows 5, 8, 10, 11, 12, 36, 42, 43, 44, 46, 47 and 50, plus the restart and
-  its ask `exam_conflict`, the unasked comment, the nudges and what the lane records now. The
-  other rows go in later pull requests, one tracker ticket each.
+  its ask `exam_conflict`, the unasked comment, the nudges and what the lane records now. Every
+  other machine-fixable and preventable row is built in its PRs 10 and 11, before ticket 117
+  restarts again (owner, 2026-11-02): PR 10 the exam pull request's rows, PR 11 the typed route
+  table of row 9 and the rest. Nothing waits for a ticket. *Old plan, reversed: one tracker
+  ticket each, in later pull requests.*
 
 ## Why
 
