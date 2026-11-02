@@ -43,6 +43,7 @@ import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
 import {listUsdOf, LaneNow, pickedFor, type Picked} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
+import {formatExam} from "./format.ts";
 import {
 	againstWords,
 	decidedWords,
@@ -478,6 +479,8 @@ const bodies = {
 			const settings = yield* work.settings;
 			const {carry, round} = at.cmd;
 			const tree = yield* work.tree(at.cmd.number);
+			// Before the builder's copy is read, so the round's base holds it and its diff never does.
+			const formatted = yield* formatExam(at.cmd.number, tree.tree, carry.exam);
 			const tests = propertiesOf(carry, round);
 			const pointers = carry.plan?.pointers ?? [];
 			const untested = carry.untested ?? [];
@@ -518,7 +521,7 @@ const bodies = {
 					body: saidOf(told),
 				});
 			const kept = {
-				head: end.report.head ?? carry.head,
+				head: end.report.head ?? formatted ?? carry.head,
 				deviations: end.report.built?.deviations ?? [],
 				left: end.report.built?.left ?? [],
 			};
@@ -586,11 +589,14 @@ const bodies = {
 			// are not exam, or a later round could not change them.
 			const files =
 				commit === null || commit === head ? [] : yield* work.filesOf(tree.tree, commit);
+			// The review comes next, with no build round before it to format these.
+			const formatted =
+				files.length === 0 ? null : yield* formatExam(at.cmd.number, tree.tree, files);
 			const answers = end.report.answered?.answers ?? [];
 			return ended(
 				end.outcome,
 				{
-					head: commit ?? head,
+					head: formatted ?? commit ?? head,
 					exam: [...carry.exam, ...files],
 					waiting: {
 						findings: [],

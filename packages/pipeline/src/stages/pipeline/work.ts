@@ -6,6 +6,7 @@ import {type Exited, runChild} from "../../child.ts";
 import {listedAt, textAt} from "../../git-read.ts";
 import {
 	DEFAULT_SETTINGS,
+	formatCommand,
 	readSettings,
 	SETTINGS_FILE,
 	SETTINGS_PATHS,
@@ -160,6 +161,18 @@ export interface PlainFile {
 	readonly text: string;
 }
 
+/**
+ * What the repository's formatter did to some files of a working copy, in place.
+ *
+ *   formatted   it ran and ended well
+ *   none        the repository names no formatter: the files are as written
+ *   failed      it ended badly, or could not start. What it wrote before that stays. `says`: its words
+ */
+export type Formatted =
+	| {readonly _tag: "formatted"}
+	| {readonly _tag: "none"}
+	| {readonly _tag: "failed"; readonly says: string};
+
 export class LaneWork extends Context.Service<
 	LaneWork,
 	{
@@ -174,10 +187,23 @@ export class LaneWork extends Context.Service<
 		/** A branch of its own, from main, in a working copy of its own: the exam's. */
 		readonly side: (name: string) => Effect.Effect<Tree, Failed>;
 		readonly head: (folder: string) => Effect.Effect<string, Failed>;
+		/** Write `files` into `folder`, as they are. */
+		readonly write: (folder: string, files: readonly PlainFile[]) => Effect.Effect<void, Failed>;
+		/**
+		 * The repository's `[format] run` on `files`, paths from `folder`'s root, run there as the install
+		 * is. No files: it runs nothing. Only a settings read that broke fails it.
+		 */
+		readonly format: (folder: string, files: readonly string[]) => Effect.Effect<Formatted, Failed>;
 		/** Write `files`, then commit everything changed in `folder`. Nothing changed: the head as it is. */
 		readonly commit: (
 			folder: string,
 			files: readonly PlainFile[],
+			message: string,
+		) => Effect.Effect<string, Failed>;
+		/** Commit `paths` alone, as `folder` has them: anything else changed there stays out. Nothing changed: the head. */
+		readonly commitOnly: (
+			folder: string,
+			paths: readonly string[],
 			message: string,
 		) => Effect.Effect<string, Failed>;
 		/** Stage everything, and name what differs from `from`: the agent's own commits count too. */
@@ -356,17 +382,49 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const head = (folder: string) => git(folder, ["rev-parse", "HEAD"]);
 
-		const commit = (folder: string, files: readonly PlainFile[], message: string) =>
+		const write = (folder: string, files: readonly PlainFile[]) =>
 			Effect.gen(function* () {
 				for (const file of files) {
 					const to = path.join(folder, file.path);
 					yield* quiet(fs.makeDirectory(path.dirname(to), {recursive: true}));
 					yield* quiet(fs.writeFileString(to, file.text));
 				}
+			});
+
+		const commit = (folder: string, files: readonly PlainFile[], message: string) =>
+			Effect.gen(function* () {
+				yield* write(folder, files);
 				yield* git(folder, ["add", "-A"]);
 				const same = yield* gitIn(folder, ["diff", "--cached", "--quiet"]);
 				if (same.code !== 0) yield* git(folder, ["commit", "--quiet", "-m", message]);
 				return yield* head(folder);
+			});
+
+		const commitOnly = (folder: string, paths: readonly string[], message: string) =>
+			Effect.gen(function* () {
+				if (paths.length === 0) return yield* head(folder);
+				const named = ["--", ...paths.map((file) => `:(literal)${file}`)];
+				yield* git(folder, ["add", ...named]);
+				const same = yield* gitIn(folder, ["diff", "--cached", "--quiet", "HEAD", ...named]);
+				if (same.code !== 0) yield* git(folder, ["commit", "--quiet", "-m", message, ...named]);
+				return yield* head(folder);
+			});
+
+		// As the install runs: the repository's own command, in the copy, as the person.
+		const format = (folder: string, files: readonly string[]) =>
+			Effect.gen(function* () {
+				const run = (yield* settings).format?.run;
+				if (run === undefined) return {_tag: "none"} as const;
+				const [first, ...rest] = files;
+				if (first === undefined) return {_tag: "formatted"} as const;
+				const [program, ...args] = formatCommand(run, [first, ...rest]);
+				const ran = yield* on(runChild(program, args, {cwd: folder, env: runEnv()}));
+				if (ran.code === 0) return {_tag: "formatted"} as const;
+				const says = (ran.err.trim() || ran.out.trim()).slice(0, 300);
+				return {
+					_tag: "failed",
+					says: `${run.join(" ")} ended with ${ran.code}${says === "" ? "" : `: ${says}`}`,
+				} as const;
 			});
 
 		const install = (tree: string) =>
@@ -605,7 +663,10 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				}),
 			side: (name) => made(name, name.replace(/-/, "/")),
 			head,
+			write,
+			format,
 			commit,
+			commitOnly,
 			staged: (folder, from) =>
 				Effect.gen(function* () {
 					yield* git(folder, ["add", "-A"]);

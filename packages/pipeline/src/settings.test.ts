@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest";
 import {
 	BUILD_GO_GONE,
 	DEFAULT_SETTINGS,
+	formatCommand,
 	JSONC_MOVED,
 	type Rules,
 	readSettings,
@@ -217,6 +218,38 @@ describe("fabrika.toml", () => {
 		});
 	});
 
+	describe("[format]: the repository's formatter", () => {
+		it("run names it, with {files} for the paths", async () => {
+			expect(await read('[format]\nrun = ["node", "fmt.mjs", "--quiet", "{files}"]')).toEqual({
+				packs: [],
+				pack: {},
+				format: {run: ["node", "fmt.mjs", "--quiet", "{files}"]},
+			});
+		});
+
+		it.each([
+			["[format]", "format.run: "],
+			['[format]\nrun = ["node", "fmt.mjs"]', "{files} once"],
+			['[format]\nrun = ["node", "fmt.mjs", "{files}", "{files}"]', "{files} once"],
+			['[format]\nrun = ["{files}"]', "{files} once"],
+			['[format]\nrun = ["node", "--files={files}"]', "{files} once"],
+			[
+				'[format]\nrun = ["node", "fmt.mjs", "{files}"]\ncheck = ["x"]',
+				"format.check: no such key",
+			],
+		])("refuses %s, saying %s", async (text, says) => {
+			const got = await read(text);
+			expect(got).toBeTypeOf("string");
+			expect(got).toContain(says);
+		});
+
+		it("{files} becomes each path, and a path that reads like an option is led by ./", () => {
+			expect(
+				formatCommand(["node", "fmt.mjs", "{files}", "--quiet"], ["src/a.ts", "-b.ts", "c d.ts"]),
+			).toEqual(["node", "fmt.mjs", "src/a.ts", "./-b.ts", "c d.ts", "--quiet"]);
+		});
+	});
+
 	describe("the review rules one side of a change holds", () => {
 		const NONE: Rules = {governed: [], ui: []};
 
@@ -296,6 +329,13 @@ describe("fabrika.toml", () => {
 				(file) => !existsSync(new URL(`${folder}/${file}`, ROOT)),
 			);
 			expect(missing).toEqual([]);
+		});
+
+		it("[format] run is the format half of pnpm lint, and a file it skips is no failure", async () => {
+			const run = (await loaded()).format?.run ?? [];
+			expect(run.slice(0, 2)).toEqual(["node", "oxlint-plugins/format.ts"]);
+			expect(run).toContain("--no-error-on-unmatched-pattern");
+			expect(existsSync(new URL(run[1] ?? "", ROOT))).toBe(true);
 		});
 
 		it("each [[checks.run]] installs before it runs: a fresh copy of a head has no node_modules", async () => {

@@ -20,6 +20,11 @@ run = ["node_modules/.bin/vitest", "run", "--maxWorkers=3", "--reporter=json", "
 tests = ["nice", "-n", "15", "pnpm", "exec", "vitest", "run", "--maxWorkers=3"]
 typecheck = ["nice", "-n", "15", "pnpm", "typecheck"]
 
+[format]
+# Code formats what an agent writes before it commits it: oxfmt with the repo's own settings, in place.
+# A file it skips, such as Markdown, is no failure.
+run = ["node", "oxlint-plugins/format.ts", "--no-error-on-unmatched-pattern", "{files}"]
+
 [review]
 rubrics = "packages/pipeline/rubrics"
 

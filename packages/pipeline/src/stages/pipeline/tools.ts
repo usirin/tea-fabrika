@@ -71,6 +71,8 @@ export const laneBuildWrites = Layer.effect(
 		const work = yield* LaneWork;
 		const now = yield* LaneNow;
 		const tickets = yield* Tickets;
+		const fs = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
 		return {
 			copy: (_ticket, number) =>
 				Effect.gen(function* () {
@@ -94,6 +96,21 @@ export const laneBuildWrites = Layer.effect(
 							.pipe(Effect.ignore);
 						return yield* Effect.fail({_tag: "exam_touched" as const});
 					}
+					// The builder's files through the repository's formatter, the ones it took away aside. One
+					// that failed keeps what it wrote, and the ticket says so: the checks still judge the change.
+					const there = yield* Effect.filter(changed, (file) =>
+						fs.exists(path.join(copied.tree, file)).pipe(Effect.orElseSucceed(() => false)),
+					);
+					const formatted = yield* work.format(copied.tree, there);
+					if (formatted._tag === "failed")
+						yield* tickets
+							.talk(numberOf(ticket), `format-build-failed/${copied.base}`, {
+								type: "commented",
+								body: saidOf(
+									`The formatter failed on the builder's files, so what it could not format is kept as the builder wrote it. ${formatted.says}`,
+								),
+							})
+							.pipe(Effect.ignore);
 					const head = yield* work.commit(copied.tree, [], message);
 					return {head, changed: head !== copied.base};
 				}),
@@ -104,7 +121,7 @@ export const laneBuildWrites = Layer.effect(
 			},
 		};
 	}),
-);
+).pipe(Layer.provide(nodeServices));
 
 /**
  * The test command in a box with no login and no key, and vitest's report read back. srt hands its
@@ -170,10 +187,17 @@ export const laneTestsWork = Layer.effect(
 					Effect.map((files) => files.filter(includedBy(includes))),
 					Effect.mapError(() => failed),
 				),
+			// Through the repository's formatter first. One that failed keeps what it wrote: the lane says so
+			// before the next build round, or after the mutants' answers, where it formats the exam again.
 			commit: (ticket, _base, files) =>
 				Effect.gen(function* () {
 					const {tree} = yield* work.tree(numberOf(ticket));
-					return yield* work.commit(tree, files, `tests for ${ticket}`);
+					yield* work.write(tree, files);
+					yield* work.format(
+						tree,
+						files.map((file) => file.path),
+					);
+					return yield* work.commit(tree, [], `tests for ${ticket}`);
 				}).pipe(Effect.mapError(() => failed)),
 			onBase: (commit, tests) =>
 				tested(commit).pipe(
