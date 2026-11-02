@@ -7,7 +7,8 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 
 - [ ] One top bar: the title, one line that says which version and "Proposed, not built", and a
   link text naming the note, the experiment and the pull request. A "Skip to the guideline" link
-  comes first.
+  comes first. Once the owner has decided the note, the line says "Decided DATE, not built"
+  instead of "Proposed, not built".
 - [ ] Three columns at 1280 wide: the list of views at the left, one view in the middle, the demo
   window at the right. Every view drives the same demo.
 - [ ] The list of views: Overview, then the principles numbered 1 to N, then a view for today's
@@ -49,7 +50,9 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 
 ## Your calls
 
-- [ ] "N picks are open. Each has a lean and how sure it is."
+- [ ] "N picks are open. Each has a lean and how sure it is." After the owner decides, this view
+  becomes "Decided": it shows each pick with the option chosen and its "Decided · NN%" mark, and
+  no open count.
 - [ ] Each call: a numbered question, then "NN% Lean: <answer>" or "No lean, the owner picks", then the options side by side,
   each labeled in words (the lean says so), then Why, Cost and Doubt rows.
 - [ ] Previous and Next buttons through the calls.
@@ -65,7 +68,8 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 ## Marks
 
 - [ ] State colors (below) always come with a word or shape: "done ✓", "running ●", "stuck ✕",
-  "your turn". A lean is "Lean · NN%" in a dashed outline. Decided is "Decided" in a solid outline. A
+  "your turn". A lean is "Lean · NN%" in a dashed outline. Decided is "Decided" in a solid outline. Once decided,
+  a lean's mark reads "Decided · NN%", with the number kept, as the note keeps its numbers. A
   breaks or follows verdict carries its word and a glyph. The word always carries the meaning.
 
 ## Page rules
@@ -177,9 +181,10 @@ pre.code {
 
 ## Not the model
 
-The pipeline page (PR 290) is one long column with no list of views, no demo, no Try it, no
-Your calls and no disclosures, on a light theme with code in plain mono. Build from the modes
-page's shape instead.
+The pipeline page (PR 290) now has views, the fabrika palette and highlighting, so its look is
+no longer the reason to avoid it. It is still not the model for the structure: it has no demo, no
+Try it and no disclosures. Build from the modes page's shape, and take the pipeline page's views
+and palette as a second reference.
 
 ## Test browser files
 

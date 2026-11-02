@@ -11,7 +11,7 @@ ends in a yes or a no.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
 Themes came first; the other three set the page's shape, and modes is the closest to it all:
-copy modes. Pipeline guidelines (PR 290) drifted, so it is not a model.
+copy modes. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
