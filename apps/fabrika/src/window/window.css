@@ -731,7 +731,7 @@ main.program > [role="alert"] {
 	background: var(--turn);
 }
 
-/* At least 26px: taller only while info mode's explanation wraps (below). */
+/* 26px, and two lines while info mode is on (below). */
 .bottomline {
 	justify-content: space-between;
 	gap: var(--s-4);
@@ -746,18 +746,27 @@ main.program > [role="alert"] {
 	text-overflow: ellipsis;
 }
 
-/* Info mode's explanation is never cut off: what does not fit wraps onto a second line, and the
-   line grows to hold it. The right side never shrinks and keeps its items, so the left gives way. */
+/*
+ * Info mode's explanation is never cut off: what does not fit wraps onto a second line. The right
+ * side never shrinks and keeps its items, so the left gives way. Two lines tall the whole time the
+ * mode is on, short explanation or long, so the desk is resized only as the mode comes on and goes
+ * off, never as the pointer or focus moves.
+ */
 .bottomline .left:has(> .info) {
+	height: 2lh;
 	padding: 4px 0;
 	line-height: 1.4;
 	white-space: normal;
 }
 
+/* Held to the line's bottom 26px, whatever its height, so its items never move as the mode comes
+   on: a second click where it turned on turns it off. */
 .bottomline .right {
 	display: flex;
 	flex: none;
+	align-self: flex-end;
 	align-items: center;
+	height: 26px;
 }
 
 .bottomline b {

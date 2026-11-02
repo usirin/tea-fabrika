@@ -149,6 +149,7 @@ function Item(props: {
 				type="button"
 				className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
 				data-info={props.info}
+				data-item={props.name}
 				aria-label={props.label}
 				aria-current={props.current}
 				aria-pressed={props.pressed}
@@ -842,6 +843,15 @@ export function BottomLine(props: FrameProps): ReactNode {
 		const on = frame.info.kind === "on";
 		return (
 			<>
+				{/* The way out, named first: the right side is pinned to the window's right edge, so a
+				    word after the items would push them left. First, it leaves them where they were, and
+				    a second click where the mode turned on turns it off. */}
+				{on && (
+					<>
+						<span className="quiet">esc leaves</span>
+						<Sep />
+					</>
+				)}
 				{/* A toggle button by the ARIA APG: its name stays "info", and aria-pressed says on or
 				    off. Clicked or pressed, the pointer or focus is on it, so it is what is explained first. */}
 				<Item
@@ -871,14 +881,6 @@ export function BottomLine(props: FrameProps): ReactNode {
 				>
 					{keys ?? ""} keys
 				</Item>
-				{/* The way out, named last, as `esc cancels` is for the prefix. The item stays put, so a
-				    click where it turned on turns it off. */}
-				{on && (
-					<>
-						<Sep />
-						<span className="quiet">esc leaves</span>
-					</>
-				)}
 			</>
 		);
 	};
