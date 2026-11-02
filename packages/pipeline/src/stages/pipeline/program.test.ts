@@ -24,6 +24,7 @@ import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
 import {TestsWork} from "../test-writer/program.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
+import {Inputs, keyOf} from "./key.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {Lane, PICKS} from "./machine.ts";
@@ -1571,6 +1572,52 @@ describe("a stopped lane, typed again", () => {
 			expect(written.tests).toEqual([
 				{property: "p1", file: "src/lower.test.ts", name: "lowers capitals"},
 			]);
+		},
+	);
+
+	// Record wide (AGENTS.md): a key alone never says which input changed, and an end written without
+	// its inputs never gets them. Each `ended` keeps the inputs its key was made of, as `inputs`.
+	it(
+		"each end keeps the inputs its key was made of: two builds on two test writer's commits show two `exam` inputs",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				queues: {exam_touched: ["test_wrong"]},
+				fake: {
+					writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
+					answers: REDO,
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			// Every end that keeps a key: a step that broke before it read anything keeps neither.
+			const ends = ran.facts.flatMap((f, at) =>
+				f.type === "ended" && f.key !== undefined ? [{f, at}] : [],
+			);
+			for (const {f} of ends) {
+				expect(f.inputs, `${String(f.stage)}'s end keeps no inputs`).toBeDefined();
+				const inputs = Schema.decodeUnknownSync(Inputs)(f.inputs);
+				expect(await Effect.runPromise(keyOf(inputs)), String(f.stage)).toBe(f.key);
+				// Values and hashes only: no path from this machine.
+				const paths = Object.values(inputs).filter((v) => typeof v === "string" && v.includes("/"));
+				expect(paths, String(f.stage)).toEqual([]);
+			}
+			// A build's `exam` is the commit the test writer's last end left before it.
+			const builds = ends.filter(({f}) => f.stage === "build");
+			expect(builds, said).toHaveLength(2);
+			const exams = builds.map(({f, at}) => {
+				const writer = ends.filter((e) => e.at < at && e.f.stage === "test_writer").at(-1);
+				const {head} = Schema.decodeUnknownSync(Schema.Struct({head: Schema.String}))(
+					writer?.f.carry,
+				);
+				const {exam} = Schema.decodeUnknownSync(Inputs)(f.inputs);
+				expect(exam).toBe(head);
+				return exam;
+			});
+			expect(exams[1]).not.toBe(exams[0]);
+			expect(builds[1]?.f.key).not.toBe(builds[0]?.f.key);
 		},
 	);
 
