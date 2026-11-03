@@ -3724,7 +3724,8 @@ main.program:has(> .view) {
 	font-size: var(--fs-small);
 }
 
-.trace-view .tv-end {
+/* `.wf` too: `.trace-view .wf td` sets every cell's start, and would win over the end here. */
+.trace-view .wf .tv-end {
 	padding-inline: var(--s-2) 6px;
 	text-align: end;
 	white-space: nowrap;
@@ -3735,6 +3736,12 @@ main.program:has(> .view) {
 
 .trace-view .tv-lane .tv-end {
 	color: var(--text-primary);
+	white-space: normal;
+}
+
+/* The dollars and "at list price" each stay whole: a narrow tile breaks only between them. */
+.trace-view .tv-usd {
+	white-space: nowrap;
 }
 
 /* A bar's colour is its state, and its words always say it too (WCAG 1.4.1). */

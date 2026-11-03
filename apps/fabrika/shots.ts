@@ -30,7 +30,7 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 //
 //   ticket.png         the ticket, with the map and the ticket's trace folded into strips beside it
 //   folded-column.png  the ticket beside a column of the map over the ticket's trace, the column folded
-//   folded-runs.png    the same column open, the ticket's trace folded into a strip under the map
+//   folded-trace.png   the same column open, the ticket's trace folded into a strip under the map
 //                      (before ticket 141 that strip was the `runs` program)
 //   side-by-side.png   the ticket beside the map over the ticket's trace
 //   job-trace.png      the job's trace as it first opens, the ticket, map and ticket's trace folded beside it
@@ -196,7 +196,7 @@ const shots = [
 		),
 	},
 	{name: "folded-column", desk: deskWith(column("t2", "t3"), "t1")},
-	{name: "folded-runs", desk: deskWith(column("t3"), "t2")},
+	{name: "folded-trace", desk: deskWith(column("t3"), "t2")},
 	{name: "side-by-side", desk: deskWith(column(), "t1")},
 	{name: "job-trace", desk: deskWith(traceRow("t4"), "t4")},
 	{name: "job-step", desk: deskWith(traceRow("t5"), "t5")},

@@ -279,6 +279,8 @@ const PRICED: Readonly<Record<Extract<Detail, {kind: "run"}>["priced"], string>>
 	known: "known, in its lane's line, at list price",
 	unknown: "no list price for this model",
 	none: "none: code ran it, no model",
+	pending: "not yet: it has not ended",
+	never: "none: it never ended, so no tokens were counted",
 };
 
 function Opened({detail}: {readonly detail: Detail}) {
@@ -450,7 +452,11 @@ function Opened({detail}: {readonly detail: Detail}) {
 						<dt>answer</dt>
 						<dd>
 							{detail.pick === null ? (
-								`none yet, waiting ${took(detail.took)} so far`
+								detail.state === "cut" ? (
+									"never answered: a newer lane began first"
+								) : (
+									`none yet, waiting ${took(detail.took)} so far`
+								)
 							) : (
 								<>
 									<b>{detail.pick}</b>
@@ -776,9 +782,25 @@ const summaryWords = (s: TicketShown["summary"]): readonly string[] => [
 			]),
 ];
 
-/** A lane's price, for its line: its known prices summed, or why there is none. */
-const laneUsd = (s: LaneShown["summary"]): string =>
-	s.usd === null ? (s.unknown === 0 ? "" : "no list price") : dollars(s.usd);
+/**
+ * A lane's price, for its line: its known prices summed, said in words to be at list price (decision
+ * 7), or why there is none. The words wrap under the dollars when the tile is narrow.
+ */
+function LanePrice({summary}: {readonly summary: LaneShown["summary"]}) {
+	if (summary.usd === null) return summary.unknown === 0 ? null : "no list price";
+	return (
+		<>
+			<span className="tv-usd">{dollars(summary.usd)}</span>{" "}
+			<span className="faint tv-usd">at list price</span>
+		</>
+	);
+}
+
+/**
+ * A lane that is one instant, as one whose only step never ended: a length or a ruler would say
+ * "1 ms", which nothing took, so it shows neither.
+ */
+const instant = (lane: LaneShown): boolean => !lane.live && lane.length <= 1;
 
 /** The replay: one fact back, one on, and back to live. */
 function Replay({ticket, send}: {readonly ticket: TicketShown; readonly send: Send}) {
@@ -893,27 +915,35 @@ const rowParts = (
 	switch (row.kind) {
 		case "step":
 			return {
-				label: `step ${row.stage}, ${row.outcome}, ${took(length)}`,
+				label: `step ${row.stage}, ${row.outcome}${row.state === "cut" ? "" : `, ${took(length)}`}`,
 				name: (
 					<>
 						<span className="tv-stage">{row.stage}</span>
 						<span className="faint tv-note">{row.model ?? "code"}</span>
 					</>
 				),
-				words: `${row.state === "running" ? soFar(length) : took(length)} · ${row.outcome}`,
+				words:
+					row.state === "cut"
+						? row.outcome
+						: `${row.state === "running" ? soFar(length) : took(length)} · ${row.outcome}`,
 				state: row.state,
 			};
 		case "wait":
 			return {
-				label: `wait on a person: ${row.what}, ${row.pick === null ? "not answered" : row.pick}`,
+				label: `wait on a person: ${row.what}, ${row.pick ?? (row.state === "cut" ? "never answered" : "not answered")}`,
 				name: (
 					<>
 						<span className="tv-stage">wait</span>
 						<span className="faint tv-note">{row.what}</span>
 					</>
 				),
-				words: row.pick === null ? `waiting · ${soFar(length)}` : `${row.pick} · ${took(length)}`,
-				state: row.pick === null ? "waiting" : "done",
+				words:
+					row.state === "waiting"
+						? `waiting · ${soFar(length)}`
+						: row.state === "cut"
+							? "never answered"
+							: `${row.pick} · ${took(length)}`,
+				state: row.state,
 			};
 		case "span":
 			return {
@@ -1040,13 +1070,18 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 														</span>
 														<b>Lane {lane.n}</b>
 														<span className="faint tv-note">
-															{hhmm(lane.at)} · {lane.live ? soFar(lane.length) : took(lane.length)}
+															{hhmm(lane.at)}
+															{instant(lane)
+																? ""
+																: ` · ${lane.live ? soFar(lane.length) : took(lane.length)}`}
 														</span>
 													</span>
 												</td>
 												<td className="wf-lane">
 													{lane.open ? (
-														<Ruler length={lane.length} />
+														instant(lane) ? null : (
+															<Ruler length={lane.length} />
+														)
 													) : (
 														<div className="wf-track">
 															<span className="tv-mini" aria-hidden="true">
@@ -1067,11 +1102,8 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 														</div>
 													)}
 												</td>
-												<td
-													className="tv-end"
-													title={lane.summary.usd === null ? undefined : "at list price"}
-												>
-													{laneUsd(lane.summary)}
+												<td className="tv-end">
+													<LanePrice summary={lane.summary} />
 												</td>
 											</tr>
 										</Fragment>

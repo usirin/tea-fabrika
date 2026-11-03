@@ -12,20 +12,23 @@ import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
 // A lane is one trace id, as its `started` facts give it, oldest first. A `restarted` belongs to
 // the next lane that begins after it. An ask sits in the lane its `trace` names, else in the lane
 // that last started a step before it. A lane's axis is its own facts only: a `filed` or a
-// `commented` days away never moves it. Replay is truncation: up to `upTo` is the facts up to
+// `commented` days away never moves it. Once a newer lane starts, an older lane is over: what it
+// left open never ended, and it ends at its own last fact. Replay is truncation: up to `upTo` is the facts up to
 // `upTo`, at `upTo`, as Elm's debugger replays a history.
 
 /** A step's end, as the ticket holds it. */
 export type Ended = FactOf<"ended">;
 
 /**
- * A step's price, in three cases: a known price in dollars, a model with no known price, or a step
- * that ran no model (code). Never a 0 standing in for unknown.
+ * A step's price, in four cases: a known price in dollars, a model with no known price, a step that
+ * ran no model (code), or a step with a model that has not ended, so its tokens are not known yet.
+ * Never a 0 standing in for unknown, and a step still running is never "no list price".
  */
 export type Price =
 	| {readonly kind: "usd"; readonly usd: number}
 	| {readonly kind: "unknown"}
-	| {readonly kind: "none"};
+	| {readonly kind: "none"}
+	| {readonly kind: "pending"};
 
 /** One row of a lane: a step it ran, or a wait on a person. */
 export type LaneRow =
@@ -56,9 +59,10 @@ export type Lane = {
 	readonly restart: {readonly at: number; readonly from: string} | null;
 	/** The restart's at, else its first started's at. */
 	readonly from: number;
-	/** Its last ended or answered, or now while open. */
+	/** Its last ended or answered, or now while open. A lane a newer one followed: its last fact. */
 	readonly to: number;
 	readonly rows: readonly LaneRow[];
+	/** A step not ended or an ask not answered, and no newer lane after it. */
 	readonly open: boolean;
 };
 
@@ -71,7 +75,7 @@ const STOPS: ReadonlySet<string> = new Set(["started", "ended", "asked", "answer
  */
 const priceOf = (model: string | null, harness: string | null, ended: Ended | null): Price => {
 	if (model === null) return {kind: "none"};
-	if (ended === null) return {kind: "unknown"};
+	if (ended === null) return {kind: "pending"};
 	if (typeof ended.listUsd === "number") return {kind: "usd", usd: ended.listUsd};
 	const derived = listUsdOf(model, {
 		input: ended.input,
@@ -139,7 +143,11 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 		}
 	}
 
-	return lanes.map((lane): Lane => {
+	return lanes.map((lane, i): Lane => {
+		// A newer lane began, so this one is over: a step it left running never ended, and an ask it
+		// left open was never answered. Each ends where it began, as nothing later is known of it, so
+		// the lane ends at its own last fact and never grows with now.
+		const over = i < lanes.length - 1;
 		const rows = lane.rows.map((row): LaneRow => {
 			if (row.kind === "wait") {
 				const answer = answers.get(row.asked.ask) ?? null;
@@ -148,7 +156,7 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 					ask: row.asked.ask,
 					what: row.asked.what,
 					from: row.at,
-					to: answer?.at ?? clock,
+					to: answer?.at ?? (over ? row.at : clock),
 					pick: answer?.pick ?? null,
 					by: answer?.by ?? null,
 				};
@@ -162,14 +170,15 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 				run: started.run,
 				stage: started.stage,
 				from: row.at,
-				to: end?.at ?? clock,
+				to: end?.at ?? (over ? row.at : clock),
 				ended: end?.fact ?? null,
 				model,
 				harness,
 				price: priceOf(model, harness, end?.fact ?? null),
 			};
 		});
-		const open = rows.some((r) => (r.kind === "step" ? r.ended === null : r.pick === null));
+		const open =
+			!over && rows.some((r) => (r.kind === "step" ? r.ended === null : r.pick === null));
 		const last = Math.max(...rows.map((r) => r.to));
 		return {
 			trace: lane.trace,

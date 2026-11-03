@@ -421,7 +421,7 @@ export const asksSections = (
 
 /**
  * The focused tile, said at the bottom left: its name, what it takes and sends, and its
- * neighbors in its line. `t2 ticket #7 · takes ticket · sends ticket · from tracker → runs`.
+ * neighbors in its line. `t2 ticket #7 · takes ticket · sends ticket · from tracker → trace`.
  */
 export const hereWord = (desk: Open, shapes: Shapes, tickets: TicketsShown): string => {
 	const tile = focusedOf(desk);

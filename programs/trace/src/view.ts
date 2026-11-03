@@ -83,11 +83,13 @@ export type Change = typeof Change.Type;
 
 /**
  * How a lane's step or wait stands, for its colour and its word: a step still running, a wait
- * still on a person, or how a step ended. Never colour alone: each comes with its word.
+ * still on a person, one a newer lane cut off (it never ended, or was never answered), or how a
+ * step ended. Never colour alone: each comes with its word.
  */
 export const State = Schema.Literals([
 	"running",
 	"waiting",
+	"cut",
 	"done",
 	"send",
 	"ask",
@@ -95,6 +97,10 @@ export const State = Schema.Literals([
 	"stuck",
 ]);
 export type State = typeof State.Type;
+
+/** How a wait on a person stands: still `waiting`, `done` once answered, `cut` when a newer lane began first. */
+export const WaitState = Schema.Literals(["waiting", "done", "cut"]);
+type WaitState = typeof WaitState.Type;
 
 /** A step's tokens, as its end says them: never a price (decision 7). */
 export const Tokens = Schema.Struct({
@@ -104,8 +110,11 @@ export const Tokens = Schema.Struct({
 });
 export type Tokens = typeof Tokens.Type;
 
-/** A step's price, without the figure: known (in its lane's sum), unknown, or none (code). */
-export const Priced = Schema.Literals(["known", "unknown", "none"]);
+/**
+ * A step's price, without the figure: known (in its lane's sum), unknown, none (code), pending
+ * (its model's step has not ended yet), or never (it never ended, so it has no tokens to price).
+ */
+export const Priced = Schema.Literals(["known", "unknown", "none", "pending", "never"]);
 
 /** The chosen row, opened: what Jaeger shows of a span, and Elm's debugger of a step. */
 export const Detail = Schema.Union([
@@ -191,6 +200,7 @@ export const Detail = Schema.Union([
 		took: Schema.Number,
 		pick: Schema.NullOr(Schema.String),
 		by: Schema.NullOr(Schema.String),
+		state: WaitState,
 	}),
 ]);
 export type Detail = typeof Detail.Type;
@@ -222,6 +232,7 @@ export const TicketRow = Schema.Union([
 		from: Schema.Number,
 		to: Schema.Number,
 		pick: Schema.NullOr(Schema.String),
+		state: WaitState,
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("span"),
@@ -465,6 +476,7 @@ const waiting = {
 // The ticket view.
 
 type StepRow = Extract<LaneRow, {readonly kind: "step"}>;
+type WaitRow = Extract<LaneRow, {readonly kind: "wait"}>;
 type Outcome = NonNullable<StepRow["ended"]>["outcome"];
 
 /** A code's words: `checks_red` reads "checks red". */
@@ -486,17 +498,36 @@ const outcomeWords = (o: Outcome): string => {
 	}
 };
 
-const stateOfStep = (row: StepRow): State => row.ended?.outcome.kind ?? "running";
+/** A step's state and words: how it ended, else running in an open lane, else cut off. */
+const stepShown = (row: StepRow, lane: Lane): {readonly state: State; readonly outcome: string} =>
+	row.ended !== null
+		? {state: row.ended.outcome.kind, outcome: outcomeWords(row.ended.outcome)}
+		: lane.open
+			? {state: "running", outcome: "running"}
+			: {state: "cut", outcome: "never ended"};
 
-/** A lane's state and its words: live, else as its last step ended. */
+/** A wait's state: answered, else waiting in an open lane, else cut off. */
+const waitState = (row: WaitRow, lane: Lane): WaitState =>
+	row.pick !== null ? "done" : lane.open ? "waiting" : "cut";
+
+/** A step's price, in words: a step a newer lane cut off never has one, as it has no tokens. */
+const pricedOf = (row: StepRow, lane: Lane): typeof Priced.Type =>
+	row.price.kind === "usd"
+		? "known"
+		: row.price.kind === "pending" && !lane.open
+			? "never"
+			: row.price.kind;
+
+/** A lane's state and its words: live, else as its last row was left, else as its last step ended. */
 const laneState = (lane: Lane): {readonly state: State; readonly outcome: string} => {
 	if (lane.open)
 		return lane.rows.some((r) => r.kind === "wait" && r.pick === null)
 			? {state: "waiting", outcome: "waiting on a person"}
 			: {state: "running", outcome: "running"};
+	const left = lane.rows.at(-1);
+	if (left?.kind === "wait" && left.pick === null) return {state: "cut", outcome: "never answered"};
 	const last = lane.rows.findLast((r): r is StepRow => r.kind === "step");
-	if (last === undefined || last.ended === null) return {state: "done", outcome: "done"};
-	return {state: stateOfStep(last), outcome: outcomeWords(last.ended.outcome)};
+	return last === undefined ? {state: "done", outcome: "done"} : stepShown(last, lane);
 };
 
 /** The HTTP client spans of a list: OpenTelemetry's `http.request.method` names one. */
@@ -600,6 +631,7 @@ const lanesShown = (
 						from: row.from - zero,
 						to: row.to - zero,
 						pick: row.pick,
+						state: waitState(row, lane),
 					});
 					continue;
 				}
@@ -614,8 +646,7 @@ const lanesShown = (
 					run: row.run,
 					from: row.from - zero,
 					to: row.to - zero,
-					state: stateOfStep(row),
-					outcome: row.ended === null ? "running" : outcomeWords(row.ended.outcome),
+					...stepShown(row, lane),
 					model: row.model,
 					tokens:
 						row.ended === null || row.model === null
@@ -637,7 +668,8 @@ const lanesShown = (
 				lane.restart === null
 					? null
 					: {
-							after: before === undefined ? 0 : lane.restart.at - before.to,
+							// Never below 0: a lane before it ends by its own last fact (./ticket.ts).
+							after: before === undefined ? 0 : Math.max(0, lane.restart.at - before.to),
 							from: lane.restart.from,
 						},
 			at: lane.from,
@@ -648,7 +680,7 @@ const lanesShown = (
 			bars: lane.rows.map((r) => ({
 				from: r.from - zero,
 				to: r.to - zero,
-				state: r.kind === "wait" ? (r.pick === null ? "waiting" : "done") : stateOfStep(r),
+				state: r.kind === "wait" ? waitState(r, lane) : stepShown(r, lane).state,
 			})),
 			rows,
 		};
@@ -673,15 +705,14 @@ const ticketDetail = (
 					stage: row.stage,
 					at: row.from,
 					took: row.to - row.from,
-					state: stateOfStep(row),
-					outcome: row.ended === null ? "running" : outcomeWords(row.ended.outcome),
+					...stepShown(row, lane),
 					model: row.model,
 					harness: row.harness,
 					tokens:
 						row.ended === null
 							? null
 							: {input: row.ended.input, cached: row.ended.cached ?? 0, output: row.ended.output},
-					priced: row.price.kind === "usd" ? "known" : row.price.kind,
+					priced: pricedOf(row, lane),
 				};
 			if (kind === "ask" && row.kind === "wait" && row.ask === id)
 				return {
@@ -693,6 +724,7 @@ const ticketDetail = (
 					took: row.to - row.from,
 					pick: row.pick,
 					by: row.by,
+					state: waitState(row, lane),
 				};
 		}
 	if (kind !== "span") return null;

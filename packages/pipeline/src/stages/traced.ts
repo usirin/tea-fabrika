@@ -44,8 +44,8 @@ const short = (head: string | null | undefined): Tags =>
  * The lane's own tag names (ticket 141): names only, never values a person typed. Only the lane
  * writes them, so they live here, not in fabrika's `ATTR`. "run a step" ends with `run`, `step`,
  * `tea.outcome` and, when a price is known, `tea.cost.usd`; "wait for the answer" ends with `ask`,
- * `pick` and `by`, never the note. What the ask was for is in the asking step's `tea.outcome`
- * (`ask:owner:approval`), so the wait does not say it again.
+ * `askFor`, `pick` and `by`, never the note. The wait says what it was for itself, so a view never
+ * has to tie it to the asking step by time.
  */
 export const LANE = {
 	/** "r-plan-8" */
@@ -54,6 +54,8 @@ export const LANE = {
 	step: "tea.lane.step",
 	/** "a-approve-8" */
 	ask: "tea.ask.id",
+	/** "approve": what the ask was for, one of the lane's own kinds of ask. */
+	askFor: "tea.ask.for",
 	/** "approve": one of the ask's own picks, never free text. */
 	pick: "tea.answer.pick",
 	/** The answerer's id, as the ledger entry's `by.id` has it. */
@@ -99,12 +101,13 @@ export const stepTags = (o: {
 			}),
 });
 
-/** The tags "wait for the answer" ends with: the ask, the pick and who picked. Never the note. */
+/** The tags "wait for the answer" ends with: the ask, what it was for, the pick and who picked. Never the note. */
 export const answerTags = (o: {
 	readonly ask: string;
+	readonly for: string;
 	readonly pick: string;
 	readonly by: string;
-}): Tags => ({[LANE.ask]: o.ask, [LANE.pick]: o.pick, [LANE.by]: o.by});
+}): Tags => ({[LANE.ask]: o.ask, [LANE.askFor]: o.for, [LANE.pick]: o.pick, [LANE.by]: o.by});
 
 /** One build round: the ticket, then the builder, then the push and the pull request. */
 export const buildDrawing = (ticket: string, round: number): DrawingOf<typeof build> => ({

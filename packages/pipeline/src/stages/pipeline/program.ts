@@ -87,6 +87,7 @@ import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
 	afterBuild,
+	type AnswerWait,
 	askedFor,
 	type askPerson,
 	type Carry,
@@ -1555,17 +1556,13 @@ const laneKind = kind({
 		ctx: undefined,
 		interpret: laneInterpret(stages),
 		subscribe: {
-			lane_answer: (sub: {
-				readonly deps: {
-					readonly number: number;
-					readonly ask: string;
-					readonly picks: readonly string[];
-				};
-			}) =>
-				// The wait's span ends tagged with the ask, the pick and who picked: the stream runs inside
-				// it. The note is a value a person typed, so it stays off.
+			lane_answer: (sub: {readonly deps: AnswerWait}) =>
+				// The wait's span ends tagged with the ask, what it was for, the pick and who picked: the
+				// stream runs inside it. The note is a value a person typed, so it stays off.
 				answerHeard(sub.deps.number, sub.deps.ask, sub.deps.picks).pipe(
-					Stream.tap((heard) => Effect.annotateCurrentSpan(answerTags(heard))),
+					Stream.tap((heard) =>
+						Effect.annotateCurrentSpan(answerTags({...heard, for: sub.deps.for})),
+					),
 					Stream.map((heard) => ({type: "lane_answered" as const, ...heard})),
 				),
 		},
