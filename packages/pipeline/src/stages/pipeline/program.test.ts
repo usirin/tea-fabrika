@@ -641,6 +641,22 @@ const onMain = (remote: string, path: string): string | null => {
 	}
 };
 
+/** Main's tip on the remote. */
+const onMainHead = (remote: string): string =>
+	execFileSync("git", ["--git-dir", remote, "rev-parse", "main"], {encoding: "utf8"}).trim();
+
+/** Does `newer` hold `older` in its history, on the remote? */
+const descends = (remote: string, older: string, newer: string): boolean => {
+	try {
+		execFileSync("git", ["--git-dir", remote, "merge-base", "--is-ancestor", older, newer], {
+			stdio: "pipe",
+		});
+		return true;
+	} catch {
+		return false;
+	}
+};
+
 const codexRuns = (dir: string) =>
 	existsSync(join(dir, "codex.log"))
 		? readFileSync(join(dir, "codex.log"), "utf8")
@@ -4349,6 +4365,41 @@ describe("the exam's pull request", () => {
 			expect(refused?.carry).toMatchObject({
 				examPull: {why: ["Ship refused the merge: send:builder:behind."]},
 			});
+		},
+	);
+
+	it(
+		"ship's conflicts at the exam's merge: the exam writer's redo stands on main, which it was told to write on",
+		{timeout: 300_000},
+		async () => {
+			let moved = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				// Main changes the rule file under the exam review's checks, the lane's first, once.
+				checksSay: (_head, nth, where) => {
+					if (nth === 0) {
+						pushToMain(where, [{path: RULE, text: '{"main": 1}\n'}]);
+						moved = onMainHead(where.remote);
+					}
+					return null;
+				},
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex((f) => f.stage === "exam_merge");
+			expect(ends[refused]?.outcome, said).toMatchObject({
+				kind: "send",
+				to: "builder",
+				why: "conflicts",
+			});
+			const redo = ends.slice(refused).find((f) => f.stage === "exam");
+			const head = (redo?.carry as {readonly examPull?: {readonly head: string}} | undefined)
+				?.examPull?.head;
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, head ?? "", head ?? ""), "the redo's head is pushed").toBe(true);
+			expect(descends(ran.remote, moved, head ?? ""), "the redo's head takes main").toBe(true);
 		},
 	);
 });
