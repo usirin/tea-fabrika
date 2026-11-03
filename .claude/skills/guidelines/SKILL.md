@@ -1,139 +1,95 @@
 ---
 name: guidelines
-description: Run this repo's guidelines study for one design area, from settled check to a decided note. Use on "guidelines for X", "we need X guidelines", "run the guidelines process", or "a guidelines study".
+description: Run this repo's guidelines study for one design area: build the screen first, look at it next to Linear, then write the guidelines it proves. Use on "guidelines for X", "we need X guidelines", "run the guidelines process", or "a guidelines study".
 ---
 
 # A guidelines study
 
-One design area becomes a few principles the owner can press, read and decide on. A study ends
-with one experiment, one note, one private page, one docs-only pull request, and a walk that
-ends in a yes or a no.
+The screen comes first. A guideline is something a good screen proved, written down after,
+not a rule written before anything was drawn.
 
-The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the page's shape, and modes is the closest to it all:
-copy modes. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+Why this order (2026-11-02): the ask desk study ran the old ten steps and spent most of its
+time on the write-up. Its screen was a small demo in the corner of a docs page, and it copied
+today's flaws: a left bar for the selected row, boxes inside boxes, mono meta text. One fresh
+agent with one paragraph and no skill made a better screen in 9 minutes, against about 40.
+That agent had one job: make a screen Linear's team would ship.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
 ## The steps
 
-### 1. Check what is settled
+### 1. Check what is settled (short)
 
-- Search `docs/direction/` (its README rows, then each note on the area), `experiments/README.md`
-  and `docs/plan/` (README, `tiers.md`, `tier-1.md`) for the area.
-- Write down each decided point with its source. A decided point is marked decided everywhere
-  and is never asked again.
-- Name the open pull requests on the same area and what they already lean.
-- **Done when** you can list, with a link each, what is decided, what is leaned, and what nobody
-  has touched.
+- Search `docs/direction/` (its README rows), `experiments/README.md` and `docs/plan/` for the
+  area. List what is decided, with a link each. Decided points are followed, never asked again.
+- The look is settled already. Follow it, don't relitigate it:
+  [color principles](../../../docs/direction/color-principles.md) and
+  [themes](../../../docs/direction/themes.md): Radix slate and indigo, every value a Radix step
+  used for its job, and **two text steps only** (12 and the low step). Rank comes from size and
+  weight. The program's own text is sans; mono is only for what a person types.
+- **Done when** you can list what is decided and what is open, in under 20 lines.
 
-### 2. Pick one running example
+### 2. Name the scope
 
-- One real case from today's code, read on main, with `file:line` for each claim. Modes used
-  info mode (`C-b i`). Pipeline used ticket 117's real run. Keybindings used today's key code.
-- It runs through the experiment, the note, the code block that opens the note, and the page's
-  demo. Every principle says whether today's case follows it or breaks it, and where.
-- Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`) or
-  `next/`.
+- Write one line: which program or part this study changes. Everything else stays exactly as it is
+  today.
+- The chassis (the top bar, the bottom line, each tile's title bar, the desk) is out of scope unless
+  the area *is* the chassis. Its font, size and lines stay as they are.
+- If the screen seems to need a change outside the scope, don't make it. Write it down as a
+  question for the owner.
 
-### 3. Lead with the known way
+### 3. Build the screen
 
-- Read about 10 to 15 makers and tools: the thinkers (papers, NN/g), the tools people use daily,
-  apps with a pointer (Apple's HIG, Linear, Figma), and WCAG. Public docs and source, not memory.
-- Look outside software too. Name two or three tools from another field that solved the same
-  shape of problem for people who work fast all day: music tools (Ableton Live folds devices in
-  place and marks every part that takes a key in Key Map mode, which gave us
-  [fold, not tabs](../../../docs/direction/fold-not-tabs.md) and
-  [configurable keys](../../../docs/direction/keybindings-are-configurable.md)), video editors,
-  game tools, a cockpit, a kitchen. Say what each one teaches and what does not carry over.
-- Quote short, checked against the page as fetched. Mark a claim from a summary page
-  **secondary**, and one found nowhere **guess**. Give each source a tag (`[t1]`, `[k3]`).
-- Write the plain way they agree on before any lean of ours. Where it clashes with a goal of
-  ours, say so in one line.
+- One job: the screen for this area that Linear's team would ship if they built it as a fabrika
+  program, with our pieces (programs in tiles, the desk, the top bar, pipes). Their taste and their
+  quality bar, on our pieces. Never copy a Linear screen.
+- Real content: real tickets, steps, programs and fact names from the repo. List anything made up.
+- Read today's code to learn which jobs exist, not how they look
+  ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)). Today's look isn't the
+  starting point.
+- Look outside software for one or two ideas: music tools (Ableton gave us
+  [fold, not tabs](../../../docs/direction/fold-not-tabs.md)), video editors, game tools, a
+  cockpit, a kitchen. One line each.
+- Draw it in today's app frame, with the real tokens (`apps/fabrika/src/themes.ts`), so the chassis
+  around it is the real one. It is clickable: keys and mouse both work.
+- Fewer boxes. If something already draws an edge, a second line, box or background goes. A
+  selected row is shown by a full-row fill and stronger text, never a colored bar on one side.
 
-### 4. Test every guideline three ways
+### 4. Look at it next to Linear
 
-- **Linear as the builder.** For every principle and every rule, not only screens: how would
-  Linear's team build this if they were building it as fabrika programs, with our pieces
-  (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
-  on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
-  what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
-  answer: <why>". Where we differ, say why.
-- **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
-  Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
-- **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
-  reader run.
+- Shoot it at each layout: one tile filling the window, two side by side, two stacked, a 2x2
+  grid, and a small window (about 1024x700). Put each shot beside today's app and beside the
+  closest Linear screen, taken from Linear's public docs or changelog.
+- Ask of each shot, and write the answer in one line: would Linear's team ship this? What looks
+  off: a box in a box, a gray that fights, a line nobody needs, text too loud, a cramped layout?
+- Fix what looks off and shoot again. Two or three rounds is normal. Stop when you would ship it.
+- Then show the owner the shots and the clickable screen, before any write-up. Their yes on the
+  look comes first. If they say no, go back to step 3.
 
-### 5. Write the experiment
+### 5. Write down what the screen proved
 
-`experiments/NN-<area>.md`, the next free number. Shape, from 182, 183 and 184:
+- About six principles, each one something the screen does and the shot shows. More than eight
+  means some are rules: group them.
+- Each principle gets one **kind**, so it gets checked the right way:
+  - **law**: a property the test writer can check (a key always does X, a selected row has
+    `aria-selected`);
+  - **lint**: a rule `pnpm lint` can hold;
+  - **taste**: checked only by a screenshot next to Linear.
+- For each, in a line or two: why, a short quoted source, the Elm or OTP answer where it fits, the
+  WCAG criterion it touches, the lean with how sure, and the doubt that would settle it.
 
-- The title is the question. Line one: the date read, and **"This is reading, not a
-  measurement."** unless something ran. It names the note and the private page "<Area>
-  guidelines" by title. Never put a page link in the repo.
-- **The answer** first: what the makers agree on, then how today's example follows and breaks it.
-- One small `text` block: how each tool does it, one line each.
-- `## What was read`, then one section per group of sources, at most one table each.
-- `## Today's <example>`: a what, today, where table, then the same case checked against each
-  principle (passes, breaks, half).
-- `## What this tells us for fabrika`, `## What it cannot tell us`, `## Links` with the tags.
-- Dollars spent, even when $0. A probe that ran says where, on what version, and if it was kept.
+### 6. Write it up and walk it
 
-### 6. Write the note
-
-`docs/direction/<area>.md`. Shape, from modes and hot reload:
-
-- **Status line first:** **Proposed DATE.**, then each point the owner already decided, named.
-- Built from experiment NN and the private page, "Neither is a measurement."
-- **A code block first:** the running example in the new shape, marked as a sketch, then a short
-  `text` trace of one press or one save, step by step.
-- `## Which version`: `next/` and today's version, one bullet each.
-- `## The shape`, if the area adds fields or types: the types, and how they were checked.
-- `## The N principles`: about six. Each is `### X1: <name>`, then **Lean, NN%.**, **No lean, the owner picks.** or
-  **Decided DATE.** on its own line, then bullets: what it means, why (a quoted source), the Linear row,
-  the Elm or OTP answer, what holds it (the type, test or refusal that enforces it), the doubt and what would settle it, the cost, and today's example
-  (follows or breaks, with `file:line`). More than eight principles means some are rules: group
-  them under a principle, as hot reload's six held seventeen rules.
-- The smaller calls, each with options as small code blocks, a lean and how sure (or "No lean,
-  the owner picks", as for a clash with Linear).
-- What the ledger records, or "nothing new", and what fact is lost if it is not recorded now.
-- `## A tryout in today's version`: small fixes offered, not filed (when the area has one), with a size in lines and
-  agent hours.
-- `## Where this differs from settled notes`, `## What it costs`, `## What it cannot tell us`.
-
-### 7. Add the index rows
-
-- One row in `docs/direction/README.md`: what the note says, then its status, `proposed`.
-- One row in `experiments/README.md`: number, question, files, date, the answer, $.
-
-### 8. Build and publish the page
-
-- Follow `references/page-structure.md`: the structure checklist, the page rules and the
-  highlight snippet. Every box on its list is checked before publishing. View every page at
-  1280 and 390 wide on a local copy first, then again after publishing.
-- Publish it as a private artifact titled "<Area> guidelines". Later changes republish to the
-  same URL. The page goes in no file in the repo.
-
-### 9. Open a docs-only pull request
-
-- Branch from `origin/main`. Stage the note, the experiment and the two index rows by name.
-- Run `pnpm format`, then `pnpm lint` once. Grep the added lines for names, machine paths and
-  keys, as `AGENTS.md`'s public repo rules say.
-- Title: `direction: <area>, proposed, with experiment NN`. The body, as PR 287: what is in it,
-  the principles with their leans (or "No lean, the owner picks"), the shape, today's example, what was decided, what other open
-  pull requests would change to match, open calls, what it cannot tell us.
-- Log the hand run in `field/` the same day. It lands by
-  [the plan's rule](../../../docs/plan/README.md#how-a-change-lands), after the owner's yes.
-
-### 10. Walk the owner through it
-
-- One step per message, titled `**Step N of M: <name>**`. Step one is the whole idea, then one
-  step per principle, then the smaller calls.
-- 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks". Then one everyday comparison.
-  End with "Say next." and wait.
-- The owner's answer on a lean changes the page first, then the note, then the pull request.
-- The last step asks one yes or no: merge it?
-- **Before the merge,** mark the note decided. Its status line becomes "**Decided DATE.** The
-  owner approved the N principles, the shape and the smaller calls below with their leans, after
-  a walk of each part. The leans' confidence numbers stay as written." Its README row says
-  `decided DATE`, and the page's marks change to match.
+- `experiments/NN-<area>.md`: the question as the title, the answer first, the shots, what was
+  read (one table), what it cannot tell us. Dollars, even when $0.
+- `docs/direction/<area>.md`: **Proposed DATE.**, a code block first (the screen's model, update
+  and view, as a sketch), the principles with their kinds and leans, the open calls, the cost, what
+  it cannot tell us. A row in `docs/direction/README.md` and one in `experiments/README.md`.
+- The private page "<Area> guidelines": the clickable screen first and full width, then the
+  principles under it. `references/page-structure.md` has the checklist.
+- One docs-only pull request: `direction: <area>, proposed, with experiment NN`. Run `pnpm format`
+  and `pnpm lint`, and grep the added lines for names, machine paths and keys. Log the hand run in
+  `field/` the same day.
+- Walk the owner through it one step per message, `**Step N of M: <name>**`, 3 to 5 bullets, one
+  everyday comparison, "Say next." An answer changes the page first, then the note, then the PR.
+  The last step asks: merge it? Before the merge, the note's status line becomes **Decided DATE.**

@@ -498,7 +498,7 @@ It is decided. These say what would change it, for each pick under 80%.
 | F6 does not stop on strips | 70% | Finding folded tiles from a terminal | A keyboard run with a screen reader |
 | Resize by keys only | 70% | APG expects a separator | A keyboard run with a screen reader |
 | Strip ring a8 | 75% | 3.03 is thin on a 22px strip, and it shares its step with the focused tile's edge | A look at the built app, with both in view |
-| Title bar in mono | 70% | [Popovers](./popovers.md) puts `t2` in sans | A shot beside a popover |
+| Title bar in mono | 70%, then settled | [Popovers](./popovers.md) puts `t2` in sans | Settled 2026-11-02 by the owner, from a shot of the title bars in sans: the title bars stay mono, as do the top bar and the bottom line. A study of one program never changes them. |
 | `C-b [` for a terminal's text | 70% | Reading one long block of text | A VoiceOver run |
 
 The rest stand at 80% or more: `--text-faint` at a11 85%, `header` not `button` 85%, one `main` 90%, F6 with
