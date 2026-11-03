@@ -23,7 +23,7 @@ import type {Price} from "./ticket.ts";
 export const NUMBER = 117;
 
 const LANE_WRITER: Writer = {kind: "agent", id: "lane", for: "owner"};
-const PEOPLE = ["owner", "brother"] as const;
+const PEOPLE = ["owner", "teammate"] as const;
 
 /** A lane's trace id: 32 hex characters, one per lane. */
 export const traceOfLane = (i: number): string => (i + 1).toString(16).padStart(2, "0").repeat(16);
