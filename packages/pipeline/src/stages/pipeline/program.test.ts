@@ -1826,6 +1826,47 @@ describe("a stopped lane, typed again", () => {
 		},
 	);
 
+	// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md): main moved in another file, so
+	// the merge of main into the pushed branch replays the reviewed diff cleanly. The review carries to
+	// the merged head, with a `carried` fact, and runs no second time. The push shows the merged head,
+	// then the merge is asked again, at that head.
+	it(
+		"main merged into a pushed branch, in another file: the review carries to the merged head and does not run again",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				queues: {merge: ["no", "merge"]},
+				again: [{between: moveMain}],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			expect(
+				codexRuns(ran.dir).filter((r) => r.step === "review"),
+				said,
+			).toHaveLength(1);
+			const restarted = ran.facts.findIndex((f) => f.type === "restarted");
+			expect(restarted, said).toBeGreaterThan(-1);
+			const after = ran.facts
+				.slice(restarted)
+				.filter((f) => f.type === "started")
+				.map((f) => String(f.stage));
+			expect(after, said).not.toContain("review");
+			expect(after.indexOf("push"), said).toBeGreaterThan(-1);
+			expect(after.indexOf("push")).toBeLessThan(after.indexOf("merge"));
+			const pushed = ran.facts.filter((f) => f.type === "pushed").map((f) => String(f.head));
+			expect(pushed, said).toHaveLength(2);
+			expect(
+				ran.facts.filter((f) => f.type === "carried"),
+				said,
+			).toContainEqual(expect.objectContaining({from: pushed[0], to: pushed[1], why: "replayed"}));
+			expect(onMain(ran.remote, "docs/elsewhere.md")).toContain("Written elsewhere.");
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+		},
+	);
+
 	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
 
 	it(

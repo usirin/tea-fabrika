@@ -16,6 +16,7 @@ import {LaneId} from "../../ids.ts";
 import type {Outcome} from "../../tickets/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {SHIP_NAMES} from "../ship/outcome.ts";
+import type {Carried} from "./carry.ts";
 import {
 	AskFor,
 	askedFor,
@@ -1645,6 +1646,59 @@ describe("a stopped lane goes on, case by case", () => {
 		expect(first === undefined ? -1 : cmds.indexOf(first)).toBeGreaterThan(fresh);
 		expect(first?.step).toBe("mutation");
 		expect(first?.carry).toMatchObject(moved);
+	});
+
+	// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). A pushed branch takes main in
+	// by a merge, so its head moves. The fresh read runs `carry` from what the review judged to the
+	// merged head, and says so in `review`. Only a review that does not stand there sends the lane back
+	// to review. One that stands goes to the push, so the pull request shows the merged head, then on.
+	// A glance stands no more than a stale one: nobody answered its question here.
+	describe("a pushed branch with main merged in, by what `carry` says of its review", () => {
+		const MERGED = "6".repeat(40);
+		const moved = {base: ONTO, head: MERGED, checked: {...GREEN_CARRY.checked, head: MERGED}};
+		const SAYS: readonly {readonly review: Carried; readonly first: StepName}[] = [
+			{review: {_tag: "kept", why: "same_head"}, first: "push"},
+			{review: {_tag: "kept", why: "replayed"}, first: "push"},
+			{review: {_tag: "kept", why: "formatted"}, first: "push"},
+			{review: {_tag: "glance", range: "1:  abc = 1:  abc"}, first: "review"},
+			{review: {_tag: "stale"}, first: "review"},
+		];
+		/** The first step the restart runs, after the lane stopped at `stopped` and main was merged in. */
+		const restartedAt = (stopped: StepName, review: Carried) => {
+			const {over} = stoppedAt(stopped, STUCK_END);
+			const {moves} = drive(over, RESTART, {
+				...ROUTED,
+				fresh: {_tag: "merged", carry: moved, review},
+			});
+			return stepsIn(cmdsOf(moves))[0];
+		};
+
+		for (const stopped of ["push", "merge"] as const)
+			for (const {review, first} of SAYS)
+				it(`stopped at ${stopped}, the review ${review._tag === "kept" ? `kept, ${review.why}` : review._tag}: the restart runs ${first} first`, () => {
+					const start = restartedAt(stopped, review);
+					expect(start?.step).toBe(first);
+					expect(start?.carry).toMatchObject(moved);
+				});
+
+		it("a review that stands runs no review before the merge: push, then merge", () => {
+			const {over} = stoppedAt("merge", STUCK_END);
+			const {moves} = drive(over, RESTART, {
+				...ROUTED,
+				fresh: {_tag: "merged", carry: moved, review: {_tag: "kept", why: "replayed"}},
+			});
+			expect(stepsIn(cmdsOf(moves)).map((c) => c.step)).toEqual(["push", "merge"]);
+		});
+
+		it("a review that stands is no excuse for red checks at the merged head: the builder gets them", () => {
+			const {over} = stoppedAt("merge", STUCK_END);
+			const red = {...moved, checked: {...moved.checked, result: "red" as const}};
+			const {moves} = drive(over, RESTART, {
+				...ROUTED,
+				fresh: {_tag: "merged", carry: red, review: {_tag: "kept", why: "replayed"}},
+			});
+			expect(stepsIn(cmdsOf(moves))[0]?.step).toBe("build");
+		});
 	});
 
 	it("a build that changed the test writer's files asks which was wrong; each pick is a next round", () => {
