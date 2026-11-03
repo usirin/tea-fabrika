@@ -92,7 +92,7 @@ const recorded = (file: string) =>
 		});
 
 /** The clone's worktrees, by path, as git lists them. */
-const worktreesOf = (home: string) =>
+const worktreeList = (home: string) =>
 	git(join(home, "work", "clone"), "worktree", "list", "--porcelain")
 		.split("\n")
 		.filter((line) => line.startsWith("worktree "))
@@ -142,12 +142,12 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 		).pipe(Layer.provide(real));
 		return Layer.provideMerge(laneCheckRunner, work);
 	};
-	const homeOf = () => makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+	const newHome = () => makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 
 	// The law: whatever head the lane checks, its checks run at the top of a git repository whose
 	// `HEAD` is that head. Over main's tip and two commits of the lane's own on top of it.
 	it("is a git repository whose HEAD is the head it checks, at every head", async () => {
-		const made = homeOf();
+		const made = newHome();
 		const ranIn = join(dir, "ran-in");
 		const {heads, runs} = await Effect.runPromise(
 			Effect.gen(function* () {
@@ -191,7 +191,7 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 			],
 		],
 	])("a check that calls git ends with 0: %s", async (_, command) => {
-		const made = homeOf();
+		const made = newHome();
 		const checked = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {base} = yield* (yield* LaneWork).tree(1);
@@ -208,7 +208,7 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 			["green", (ranIn) => [folderTo(ranIn)], "green"],
 			["red", (ranIn) => [folderTo(ranIn), ["false"]], "red"],
 		])("%s", async (_, commands, result) => {
-			const made = homeOf();
+			const made = newHome();
 			const ranIn = join(dir, "ran-in");
 			const checked = await Effect.runPromise(
 				Effect.gen(function* () {
@@ -220,12 +220,12 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 			const [folder = ""] = foldersIn(ranIn);
 			expect(folder).not.toBe("");
 			expect(existsSync(folder), `${folder} is still there`).toBe(false);
-			expect(worktreesOf(made.home)).not.toContain(folder);
+			expect(worktreeList(made.home)).not.toContain(folder);
 			expect(unpruned(made.home)).toBe("");
 		});
 
 		it("when the lane is stopped mid-check", {timeout: 60_000}, async () => {
-			const made = homeOf();
+			const made = newHome();
 			const ranIn = join(dir, "ran-in");
 			const slow = folderTo(ranIn, 30);
 			await Effect.runPromise(
@@ -241,7 +241,7 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 			const folder = readFileSync(ranIn, "utf8").trim();
 			expect(folder).not.toBe("");
 			expect(existsSync(folder), `${folder} is still there`).toBe(false);
-			expect(worktreesOf(made.home)).not.toContain(folder);
+			expect(worktreeList(made.home)).not.toContain(folder);
 			expect(unpruned(made.home)).toBe("");
 		});
 	});
@@ -253,7 +253,7 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 		const overlapping = (ranIn: string): readonly Command[] => [folderTo(ranIn, 2)];
 
 		it("for two lanes at the same head at once", {timeout: 60_000}, async () => {
-			const made = homeOf();
+			const made = newHome();
 			const ranIn = join(dir, "ran-in");
 			// The clone and main's tip, made first: two lanes cloning at once is not what this test asks.
 			const base = await Effect.runPromise(
@@ -279,7 +279,7 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 		});
 
 		it("for one lane at the same head twice at once", {timeout: 60_000}, async () => {
-			const made = homeOf();
+			const made = newHome();
 			const ranIn = join(dir, "ran-in");
 			const runs = await Effect.runPromise(
 				Effect.gen(function* () {
