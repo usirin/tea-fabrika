@@ -31,12 +31,13 @@ PR 10 the exam PR is formatted, reviewed and         on PR 5
       fixed by the lane; a yes binds to the diff
 PR 11 every outcome has a route; a fixable stop      on PR 10
       never stops; a stop says why on the ticket
-      -> ticket 117 restarts again                   needs PRs 10 and 11
+      -> ticket 117 restarts again                   needs PR 10; pauses at a hole PR 11 fixes
 ```
 
 Merge order: 1, 2 and 7 in any order, then 3, 4, 5. Then ticket 117 restarts. PRs 6, 8 and 9
-can land before or after the restart. Then 10, then 11, and ticket 117 restarts again from
-`exam_merge`, where it is saved. PR 7 goes first because what it records exists only while
+can land before or after the restart. Then 10, and ticket 117 restarts again from
+`exam_merge`, where it is saved. It does not wait for PR 11 (owner, 2026-11-03). If it reaches
+a hole PR 11 fixes, it pauses there and restarts when PR 11 lands. PR 7 goes first because what it records exists only while
 a run happens, so every run before it, the by-hand runs of PRs 3 to 5 included, loses it.
 
 ## What happened on ticket 117
@@ -357,13 +358,16 @@ What this costs: one more plan, one more yes, one more test writer run and one m
 before the lane is where it stopped. A lane planned after PR 7 keeps its plan in its ends'
 carry, so its fold names the step that broke, and none of this runs again.
 
-### Ticket 117 restarts again, after PRs 10 and 11
+### Ticket 117 restarts again, after PR 10
 
 **Proposed, with PRs 10 and 11.** Ticket 117 restarted on 2026-11-02. It ran the plan, the yes,
 the exam and its question, and stopped at `exam_merge` twice: first `send:builder:checks_red`,
-then, after a person's format commit, `send:reviewer:no_review`. It is saved there, at
+then `send:reviewer:no_review`, after the session driving the run pushed a whitespace fix to the
+exam branch by hand (commit `27bec63`), under the owner's git name. It is saved there, at
 `{_tag: "run", step: "exam_merge"}`, with its `Held`. Nothing in that save changes. The owner's
-rule: the holes it found are fixed in the pipeline, never by hand, and both PRs land first.
+rule: the holes it found are fixed in the pipeline, never by hand. Changed by the owner
+2026-11-03: it restarts once PR 10 lands, without waiting for PR 11. If it reaches a hole PR 11
+fixes, it pauses there and restarts when PR 11 lands.
 
 ```text
 pipeline --ticket 117 | runs
@@ -379,7 +383,7 @@ What happens then, in order (a sketch; the review's result is made up):
 
 - The same line claims the ticket, reads main fresh and runs `exam_merge`. Ship answers
   `no_review` again, which now routes to `exam_review` (PR 10). A `behind` lands there too.
-- `exam_review` reads the exam branch's head on GitHub, `27bec63`, the person's commit, and moves
+- `exam_review` reads the exam branch's head on GitHub, `27bec63`, the hand-pushed fix, and moves
   the side tree there. It merges main in, formats (nothing changes), runs the checks, and runs the
   review against code-made criteria. The verdicts post on PR 313.
 - The person said `merge` at `39041df`, before PR 10, so that answer keeps no `head`, `base` or
@@ -537,14 +541,15 @@ exam -> exam_review -> (yes) -> exam_merge -> test_writer
 - **On ticket 117.** The exam step's one new file was not formatted, so CI's `check` job went red
   on oxfmt alone. PR 1 formats what the test writer, the mutants job and the builder write, not
   what the exam step writes. The owner said `merge`, ship ended `send:builder:checks_red`, and
-  `after()` turned that into `stuck:sent_back` (`machine.ts:571`). A person pushed a format commit
-  and the line was typed again. Ship then ended `send:reviewer:no_review` (`ship/gate.ts:84`,
+  `after()` turned that into `stuck:sent_back` (`machine.ts:571`). The session driving the run
+  pushed a whitespace fix by hand (commit `27bec63`), under the owner's git name, and the line was
+  typed again. Ship then ended `send:reviewer:no_review` (`ship/gate.ts:84`,
   `:88`).
   - Why `no_review`, read from the code: nothing reviews an exam pull request. The lane fakes it.
     `reviewsFrom` answers `governance: passed` for any exam pull (`pulls.ts:212`), and
     `laneRecord` gives it one made-up criterion, "A person read these rule changes and said yes",
     passed at the side tree's head once the person says `merge` (`pulls.ts:429-447`). Both are
-    tied to the head the lane pushed. The person's commit moved the head from `39041df` to
+    tied to the head the lane pushed. The hand-pushed fix moved the head from `39041df` to
     `27bec63`, so `laneFactsOver` marked the review `missing` (`github.ts`, `notJudged`).
   - Part 1 alone would have saved this run. Parts 2 and 3 are what the owner's rules ask for:
     every pull request gets one fresh review by its own agent, and a fix with no meaning to judge
@@ -980,6 +985,11 @@ PR 11:  ROUTES[step][name]   one row per outcome; a missing or an extra row does
       "more": the step runs again with a new limit, in its saved session where the harness keeps
       one (PR 7 records the id), else from the working copy as it stands. "stop": a saved pause at
       that step. See the open questions.
+  - **A push from anyone else is a new head (owner, 2026-11-03).** A push to a lane's branch from
+    anyone other than the lane is a new head. The lane reads it, runs the checks and the review on
+    the new diff, and goes on. A changed test shows in that diff like any other change; tests need
+    no rule of their own. This closes the test writer's gap 3 on
+    [PR 345](https://github.com/usirin/tea-fabrika/pull/345): no `exam_touched` ask for it.
   - **The record holes ride along.** Each exists only when the run happens, so each is written
     then:
     - **A stop says why on the ticket.** Today a stop writes nothing there
@@ -1111,8 +1121,8 @@ scale (0.25 to 8) that holds the middle of its range at that rate. The old hours
 as an old guess that turned out wrong: they implied about 100 lines an hour, with no source.
 
 Total: about 140 file changes (some files change in more than one pull request), 6,480 to
-8,980 lines, **about 11 to 15 agent hours** at 600 an hour (4 to 5.5 at 1,660). Before ticket
-117 restarts again (PRs 10 and 11, added 2026-11-02): 3,600 to 4,850 lines, **about 6 to 8 agent
+8,980 lines, **about 11 to 15 agent hours** at 600 an hour (4 to 5.5 at 1,660). PRs 10 and 11,
+added 2026-11-02: 3,600 to 4,850 lines, **about 6 to 8 agent
 hours** (2.2 to 2.9 at 1,660). Before its first restart (PRs 1, 2, 3, 4, 5 and 7): 2,230 to 3,180
 lines, about 4 to 5.5 agent hours (1.3 to 2 at 1,660). The steps add up to 15.25, more than the
 range, since each rounds up to a step. PRs 10 and 11 were sized from experiment 193's rows, not
@@ -1142,8 +1152,9 @@ writer or mutation step. Each PR's own `spent` settles it.
 
 - *Old plan, reversed by the owner 2026-11-02: the other rows of the table were to get one
   tracker ticket each, after ticket 117.* Now PRs 10 and 11 build every machine-fixable and
-  preventable row of [the table](../direction/jidoka-and-andon.md#every-place-todays-lane-stops-or-asks),
-  before ticket 117 restarts again. Nothing waits for a ticket.
+  preventable row of [the table](../direction/jidoka-and-andon.md#every-place-todays-lane-stops-or-asks).
+  Ticket 117 restarts again after PR 10, and pauses at any hole PR 11 fixes until it lands.
+  Nothing waits for a ticket.
 - Checkpoint commits: tracker ticket 145, after ticket 117 restarts ([PR 7](#pr-7-the-lane-records-wide)).
 - Reading the input key to skip a step whose inputs did not change. PR 5 writes it; a later
   ticket reads it, once restarts show how often keys match.
@@ -1188,7 +1199,9 @@ pause; unasked comment with `during`; red goes back by default, setting to turn 
 Settled 2026-11-02 by the owner's scope for PRs 10 and 11, kept for the record: the main `merge`
 step's routes go in PR 11, not later; a format-only commit keeps the yes (the diff rule, `kept`,
 `formatted`); PR 10's Part 1 rides in PR 10, since nothing runs before both land; no table row
-waits for a ticket.
+waits for a ticket. Changed by the owner 2026-11-03: ticket 117 restarts after PR 10, without
+waiting for PR 11, and pauses at any hole PR 11 fixes until it lands. Question 15's "both before
+117" is replaced by that.
 
 Questions 8 to 15 below: **the owner took every lean, 2026-11-02.** Kept as asked, for the
 record. PR 11 is two pull requests, 11a (routes and the law) and 11b (waits and records).
