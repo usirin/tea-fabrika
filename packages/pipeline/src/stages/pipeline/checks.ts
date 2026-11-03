@@ -18,11 +18,12 @@ import {failuresOf, Report} from "../test-writer/results.ts";
 //   one cannot start, and again on one more    not_run: nothing says whether the head holds, so it
 //   try, or runs past `within`                 is never green. A command that hangs is not tried again
 //
-// Each command runs in the head's own copy, as the settings write it (with their own `nice`), with
-// `runEnv`: no login in reach. `{out}` is a file in a folder of its own outside the copy, gone after
-// the run, so the copy holds nothing new and a second run at the same head sees what the first did.
-// `commands` keeps each as the settings say it, `{out}` and all, with its exit code and time. `tail`
-// has the copy's folder as `.`, the home as `~` and each key cut: it goes on a public ticket.
+// Each command runs in the head's own copy (in the lane, a git worktree made for the run), as the
+// settings write it (with their own `nice`), with `runEnv`: no login in reach. `{out}` is a file in
+// a folder of its own outside the copy, gone after the run, so the copy holds nothing new and a
+// second run at the same head sees what the first did. `commands` keeps each as the settings say it,
+// `{out}` and all, with its exit code and time. `tail` has the copy's folder as `.`, the home as `~`
+// and each key cut: it goes on a public ticket.
 
 type Command = readonly [string, ...string[]];
 
