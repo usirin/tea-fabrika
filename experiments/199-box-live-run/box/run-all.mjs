@@ -4,7 +4,9 @@
 //   clone    git clone --filter=blob:none of the public repo, no token, then the commit it is given
 //   install  pnpm install --frozen-lockfile, as CI does
 //   sets     181's `sets`: the planted bugs of 121's seed-119120 sample, found again in today's code
-//   sample   181's `run <set> fast`: one real Stryker run of that sample, CONCURRENCY workers
+//   probe    what the box's user may do: capabilities, and whether bwrap (the OS sandbox) starts
+//   sample   181's `run <set> fast`: one real Stryker run of that sample, CONCURRENCY workers.
+//            SET=auto picks ship121 when bwrap starts, else lane139 (see main)
 //   suite    the whole vitest suite once
 //
 // Per phase: wall time, the box's CPU seconds (from /proc/stat), GNU time's user and system time and
@@ -225,6 +227,14 @@ const post = async (path, body) => {
 const main = async () => {
 	state.began = await post("/began", {});
 	save();
+	// The OS sandbox: the first live run's tests said "bwrap: Unexpected capabilities but not
+	// setuid". What this user holds, and whether bwrap starts at all.
+	await phase("probe", "sh", [
+		"-c",
+		"id; grep Cap /proc/self/status; ls -l /usr/bin/bwrap; cat /proc/sys/user/max_user_namespaces /proc/sys/kernel/unprivileged_userns_clone 2>&1; " +
+			"bwrap --ro-bind / / --dev /dev --proc /proc true 2>&1 && echo BWRAP_OK || echo BWRAP_FAIL; " +
+			"unshare -U true 2>&1 && echo UNSHARE_OK || echo UNSHARE_FAIL",
+	]);
 	const clone = await phase("clone", "sh", [
 		"-c",
 		`git clone --quiet --filter=blob:none ${REPO} ${DIR} && git -C ${DIR} checkout --quiet ${COMMIT || "HEAD"} && git -C ${DIR} rev-parse HEAD`,
@@ -251,15 +261,27 @@ const main = async () => {
 			env: env181,
 		},
 	);
-	if (sets.code === 0 && SET !== "skip") {
-		const stream = `${OUT}/stream.jsonl`;
+	// SET "auto": ship121 when the OS sandbox works here (its tests need it), else lane139, whose
+	// tests do not. A first sample that gets no answer is followed by lane139.
+	const sandbox = state.phases.find((x) => x.name === "probe")?.tail?.includes("BWRAP_OK");
+	const first = SET === "auto" ? (sandbox ? "ship121" : "lane139") : SET;
+	const order = SET === "auto" && first !== "lane139" ? [first, "lane139"] : [first];
+	for (const [i, set] of order.entries()) {
+		if (sets.code !== 0 || set === "skip") break;
+		const stream = `${OUT}/stream-${set}.jsonl`;
 		const sample = await phase(
-			"sample",
+			`sample-${set}`,
 			"node",
-			["experiments/181-fast-and-daily-mutation.ts", "run", DIR, SET, ARM],
+			["experiments/181-fast-and-daily-mutation.ts", "run", DIR, set, ARM],
 			{
 				cwd: DIR,
-				env: {...env181, EXTRA: JSON.stringify({concurrency: CONCURRENCY}), STREAM: stream},
+				env: {
+					...env181,
+					// fileLogLevel "info": Stryker's own log, to see why a run ends early. Not "debug":
+					// at debug its vitest runner throws on a circular config (seen locally).
+					EXTRA: JSON.stringify({concurrency: CONCURRENCY, fileLogLevel: "info"}),
+					STREAM: stream,
+				},
 			},
 		);
 		const answers = (read(stream) ?? "")
@@ -270,11 +292,16 @@ const main = async () => {
 		sample.firstAnswerMs = answers.length > 0 ? answers[0].at - startAt : null;
 		sample.lastAnswerMs = answers.length > 0 ? answers.at(-1).at - startAt : null;
 		sample.answers = answers.length;
-		sample.report = summarize(`${OUT181}/report-${SET}-${ARM}.json`);
+		sample.report = summarize(`${OUT181}/report-${set}-${ARM}.json`);
+		sample.strykerErrors = await sh(
+			"grep -E 'ERROR|failed in the initial' stryker.log | head -20 | cut -c1-300",
+			DIR,
+		);
 		// Stryker runs in place and puts files back; check, and put back anything it did not.
 		state.leftByStryker = await sh("git status --porcelain --untracked-files=no | wc -l", DIR);
-		await sh("git checkout -- .", DIR);
+		await sh("git checkout -- . && rm -f stryker.log", DIR);
 		save();
+		if (answers.length > 0 && i === 0) break;
 	}
 	if (SUITE !== "skip") {
 		const files = SUITE === "all" ? [] : SUITE.split(" ");

@@ -9,6 +9,10 @@
 //   CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node experiments/199-box-live-run.ts plan|live|sweep
 //     the live part (199-box-live-run/live.ts): the dry step, the run, or only the cleanup
 //
+// The second live run, and its laptop twin:
+//   SET=auto SUITE=skip RUN=2 COMMIT=<sha> ... node experiments/199-box-live-run.ts live
+//   SET=lane139 COMMIT=<sha> ... nice -n 15 node experiments/199-box-live-run.ts laptop
+//
 // Every mode takes COMMIT (default: origin/main). Before a Docker build or the laptop sample it
 // waits while the laptop's 1-minute load is above 8. Results go to experiments/results/199-*.json,
 // with machine paths taken out.
@@ -23,6 +27,8 @@ const here = join(import.meta.dirname, "199-box-live-run");
 const root = join(import.meta.dirname, "..");
 const resultsDir = join(import.meta.dirname, "results");
 const mode = process.argv[2] ?? "";
+/** The laptop sample's set: ship121 by default, lane139 for the second live run's comparison. */
+const SET = process.env.SET ?? "ship121";
 const commit =
 	process.env.COMMIT ??
 	execFileSync("git", ["rev-parse", "origin/main"], {cwd: root, encoding: "utf8"}).trim();
@@ -210,7 +216,7 @@ const laptop = async () => {
 		const t = Date.now();
 		const sample = await run(
 			"/usr/bin/time",
-			["-l", "node", "experiments/181-fast-and-daily-mutation.ts", "run", copy, "ship121", "fast"],
+			["-l", "node", "experiments/181-fast-and-daily-mutation.ts", "run", copy, SET, "fast"],
 			{cwd: copy, env: {...env, EXTRA: JSON.stringify({concurrency: 3}), STREAM: stream}},
 		);
 		clearInterval(sampler);
@@ -233,7 +239,7 @@ const laptop = async () => {
 			firstAnswerMs: answers.length > 0 ? (answers[0]?.at ?? t) - t : null,
 			lastAnswerMs: answers.length > 0 ? (answers.at(-1)?.at ?? t) - t : null,
 			answers: answers.length,
-			report: summarize(join(out, "report-ship121-fast.json")),
+			report: summarize(join(out, `report-${SET}-fast.json`)),
 			laptop: {
 				cpu: execFileSync("sysctl", ["-n", "machdep.cpu.brand_string"], {encoding: "utf8"}).trim(),
 				cores: Number(execFileSync("sysctl", ["-n", "hw.ncpu"], {encoding: "utf8"}).trim()),
@@ -249,7 +255,7 @@ const laptop = async () => {
 	}
 	mkdirSync(resultsDir, {recursive: true});
 	writeFileSync(
-		join(resultsDir, "199-box-live-run-laptop.json"),
+		join(resultsDir, `199-box-live-run-laptop${SET === "ship121" ? "" : `-${SET}`}.json`),
 		`${scrubPaths(JSON.stringify(results, null, "\t"), [copy, out])}\n`,
 	);
 	const {report: _r, ...small} = results.sample as Record<string, unknown>;

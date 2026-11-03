@@ -27,6 +27,11 @@ import {PREFIX, RUN_CAP_MS, stackOf} from "./stack.ts";
 
 const mode = process.argv[2] ?? "";
 const commit = process.env.COMMIT ?? "";
+/** The box's sample set ("auto": ship121 if the OS sandbox starts, else lane139), the suite, and a
+ * suffix for the results file. The first live run used ship121, all and none. */
+const SET = process.env.SET ?? "ship121";
+const SUITE = process.env.SUITE ?? "all";
+const RUN = process.env.RUN ? `-${process.env.RUN}` : "";
 const work = process.cwd();
 const account = process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
 const token = process.env.CLOUDFLARE_API_TOKEN ?? "";
@@ -85,11 +90,23 @@ const secrets = ConfigProvider.layer(
 );
 const stack = stackOf(secrets);
 
+/** One line per resource: what it is and what a deploy does to it. */
+const linesOf = (p: Plan.Plan) =>
+	Object.keys(p.resources)
+		.sort()
+		.map((id) => {
+			const node = p.resources[id];
+			// Alchemy beta.84's own printPlan coerces `resource.type`, an Output before deploy, and throws.
+			const type = [node?.resource?.Type, node?.resource?.type].find((t) => typeof t === "string");
+			return `${node?.action ?? "?"} ${id} (${type ?? "unknown"})`;
+		})
+		.join("\n");
+
 /** The dry step: what a deploy would make, from the same empty state the deploy starts on. */
 const plan = async () => {
 	await buildWorker();
 	const printed = await Effect.runPromise(
-		evalStack(stack, (s) => Plan.make(s).pipe(Effect.map((p) => Plan.printPlan(p))), {
+		evalStack(stack, (s) => Plan.make(s).pipe(Effect.map(linesOf)), {
 			stage: "cloud",
 		}).pipe(Effect.provide(engine)),
 	);
@@ -153,7 +170,7 @@ const live = async () => {
 		begunAt = Date.now();
 		const begun = await call("/begin", {
 			method: "POST",
-			body: JSON.stringify({commit, set: "ship121", concurrency: 4, suite: "all"}),
+			body: JSON.stringify({commit, set: SET, concurrency: 4, suite: SUITE}),
 		});
 		note("begin", {ms: Date.now() - begunAt, ...begun});
 		let last: Progress | null = null;
@@ -220,7 +237,7 @@ const live = async () => {
 		note("cost", {boxSeconds: boxS, activeCpuSeconds: cpuS, listPrice: listPrice(boxS, cpuS)});
 		mkdirSync(join(import.meta.dirname, "..", "results"), {recursive: true});
 		writeFileSync(
-			join(import.meta.dirname, "..", "results", "199-box-live-run.json"),
+			join(import.meta.dirname, "..", "results", `199-box-live-run${RUN}.json`),
 			`${JSON.stringify(results, null, "\t")}\n`,
 		);
 		// Alchemy's state holds the account id and the address in plain text (experiment 144).
